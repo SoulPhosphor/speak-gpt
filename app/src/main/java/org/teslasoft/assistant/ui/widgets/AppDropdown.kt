@@ -55,6 +55,7 @@ object AppDropdown {
         anchor: TextView,
         labels: List<String>,
         selectedIndex: Int = labels.indexOf(anchor.text.toString()),
+        isOptionEnabled: (Int) -> Boolean = { true },
         onPick: (Int) -> Unit
     ) {
         if (labels.isEmpty() || !anchor.isEnabled) return
@@ -74,9 +75,17 @@ object AppDropdown {
             R.layout.view_dropdown_option,
             menuOptions.map { it.second }
         ) {
+            override fun areAllItemsEnabled(): Boolean =
+                menuOptions.all { (originalIndex, _) -> isOptionEnabled(originalIndex) }
+
+            override fun isEnabled(position: Int): Boolean =
+                isOptionEnabled(menuOptions[position].first)
+
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                 val textView = super.getView(position, convertView, parent) as TextView
                 textView.setTypeface(textView.typeface, Typeface.NORMAL)
+                textView.isEnabled = isEnabled(position)
+                textView.alpha = if (textView.isEnabled) 1f else 0.38f
                 return textView
             }
         }
@@ -93,8 +102,10 @@ object AppDropdown {
         popup.setBackgroundDrawable(AppCompatResources.getDrawable(context, R.drawable.bg_dropdown_menu))
         popup.setAdapter(adapter)
         popup.setOnItemClickListener { _, _, position, _ ->
+            val originalIndex = menuOptions[position].first
+            if (!isOptionEnabled(originalIndex)) return@setOnItemClickListener
             popup.dismiss()
-            onPick(menuOptions[position].first)
+            onPick(originalIndex)
         }
         popup.setOnDismissListener {
             anchor.background = AppCompatResources.getDrawable(context, R.drawable.bg_dropdown_closed)

@@ -763,6 +763,24 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- Fixed-width gallery filter. It preserves the compact floating Filter
+         label while resolving the box, chevron, text, and disabled state from
+         the same semantic theme roles as the canonical dropdown. -->
+    <style name="Widget.App.Dropdown.GalleryFilter" parent="App.ExposedTextField">
+        <item name="boxBackgroundColor">?attr/appDropdownBackgroundColor</item>
+        <item name="boxCornerRadiusBottomEnd">5dp</item>
+        <item name="boxCornerRadiusBottomStart">5dp</item>
+        <item name="boxCornerRadiusTopEnd">5dp</item>
+        <item name="boxCornerRadiusTopStart">5dp</item>
+        <item name="boxStrokeColor">@color/gallery_dropdown_stroke</item>
+        <item name="boxStrokeWidth">1dp</item>
+        <item name="boxStrokeWidthFocused">1dp</item>
+        <item name="endIconDrawable">@drawable/ic_chevron_down</item>
+        <item name="endIconTint">@color/dropdown_text</item>
+        <item name="hintTextColor">?attr/appDropdownLabelColor</item>
+        <item name="android:textColorHint">?attr/appDropdownLabelColor</item>
+    </style>
+
     <style name="Widget.App.Dropdown.Option" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">40dp</item>

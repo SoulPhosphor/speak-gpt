@@ -93,22 +93,14 @@
                 android:layout_marginEnd="24dp"
                 android:text="@string/choose_provider_routing_subtext" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/layout_routing_type"
-                style="@style/App.ExposedTextField"
+            <!-- Approved full-width stacked-field dropdown. -->
+            <TextView
+                android:id="@+id/field_routing_type"
+                style="@style/Widget.App.Dropdown.CanonicalValue"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="12dp"
-                android:layout_marginEnd="24dp">
-
-                <com.google.android.material.textfield.MaterialAutoCompleteTextView
-                    android:id="@+id/field_routing_type"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="none"
-                    android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
+                android:layout_marginEnd="24dp" />
 
             <!-- Choose Model: section title, the favorites chooser box, then the
                  View All Models button that opens the full model picker. The
@@ -119,23 +111,13 @@
                 android:layout_marginEnd="24dp"
                 android:text="@string/choose_provider_choose_model_title" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/layout_choose_model"
-                style="@style/App.ExposedTextField"
+            <TextView
+                android:id="@+id/field_choose_model"
+                style="@style/Widget.App.Dropdown.CanonicalValue"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="12dp"
-                android:layout_marginEnd="24dp"
-                android:hint="@string/choose_provider_choose_model_title">
-
-                <com.google.android.material.textfield.MaterialAutoCompleteTextView
-                    android:id="@+id/field_choose_model"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="none"
-                    android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
+                android:layout_marginEnd="24dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_view_all_models"

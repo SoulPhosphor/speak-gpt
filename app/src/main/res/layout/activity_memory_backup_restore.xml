@@ -374,17 +374,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="vertical">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/recovery_type_label" />
 
                 <TextView
                     android:id="@+id/btn_recovery_type"
-                    style="@style/Widget.App.Dropdown.Value"
-                    android:layout_weight="1" />
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="8dp" />
             </LinearLayout>
 
             <!-- Portable recovery (format v2) entry — the owner-approved
@@ -409,17 +409,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="vertical">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/restore_type_label" />
 
                 <TextView
                     android:id="@+id/btn_restore_type"
-                    style="@style/Widget.App.Dropdown.Value"
-                    android:layout_weight="1" />
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="8dp" />
             </LinearLayout>
 
             <!-- One familiar restore entry. It opens the same restore chooser
@@ -504,12 +504,14 @@
                 android:orientation="horizontal">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/backup_readable_scope_label" />
 
                 <TextView
                     android:id="@+id/btn_readable_scope"
-                    style="@style/Widget.App.Dropdown.Value"
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
                     android:text="@string/backup_readable_scope_all" />
             </LinearLayout>
@@ -522,12 +524,14 @@
                 android:orientation="horizontal">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/backup_readable_format_label" />
 
                 <TextView
                     android:id="@+id/btn_readable_format"
-                    style="@style/Widget.App.Dropdown.Value"
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1"
                     android:text="@string/backup_readable_format_text" />
             </LinearLayout>
@@ -645,12 +649,14 @@
                 android:orientation="horizontal">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/backup_auto_frequency_label" />
 
                 <TextView
                     android:id="@+id/btn_auto_frequency"
-                    style="@style/Widget.App.Dropdown.Value"
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
                     android:layout_weight="1" />
             </LinearLayout>
 

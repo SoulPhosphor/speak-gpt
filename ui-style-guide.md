@@ -445,7 +445,8 @@ styles the short names.
 - In a labeled row, let the label use its natural width, leave the shared gap,
   and make the control fill the remaining row width up to the trailing edit
   action or the row's proper outer edge. This gives every option a stable,
-  predictable text area.
+  predictable text area. Memory Backup & Repair's Backup Style, Format, and
+  Backup Frequency use this placement.
 - Only a standalone dropdown with no label sizes itself to the longest available
   option plus the shared internal padding and chevron space. Cap that measured
   width at the available screen width and ellipsize an option that cannot fit.
@@ -462,9 +463,29 @@ styles the short names.
   line with the dropdown up to a trailing edit action or the proper right edge.
 - When no label belongs on the line, center the correctly measured dropdown.
   Choose Provider is an example of this standalone arrangement.
+- A form screen may explicitly approve a full-width stacked-field dropdown.
+  Keep its existing label and help text above the control, then fill the form's
+  content column between its standard left and right margins. Edit Companion's
+  Activation Prompt and Core Lorebook fields, plus Choose Provider's Routing
+  Type and Choose Model fields, and Memory Backup & Repair's Recovery Type and
+  Database Type to Restore fields are canonical examples. This is a placement
+  exception only, not permission to make unrelated dropdowns full width.
+- A managed stacked field may place its dropdown on the line beneath its title
+  and help text, filling the space up to a trailing management icon. The
+  dropdown changes the selection in place; the icon alone opens the selected
+  item's editor or the broader management picker. Memory Assistant Advanced
+  Settings uses this arrangement for Endpoint and Model.
 - Layout containers may differ to support a trailing edit action or other
   approved screen structure. Those differences are placement only; the control
   must still inherit the canonical dropdown appearance and behavior.
+- The profile-image gallery filter is a compact, fixed-width exception. Use
+  `Widget.App.Dropdown.GalleryFilter` so its floating `Filter` label may remain
+  inside the outline while its faint 1dp box, background, text, V chevron, and
+  disabled colors use the canonical dropdown theme roles. Preserve the
+  gallery's approved width; do not expand this filter to fill its row. The same
+  shared gallery layout serves Default AI Avatar, Default Personal Avatar, and
+  Avatar Image Gallery, so this variant must not be copied into separate
+  screen-specific styles.
 
 #### Open control
 

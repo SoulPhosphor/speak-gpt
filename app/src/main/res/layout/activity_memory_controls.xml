@@ -171,7 +171,10 @@
 
             <LinearLayout
                 android:id="@+id/row_memory_engine"
-                style="@style/Widget.App.Row.WithSubtitle">
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:background="@null"
+                android:clickable="false"
+                android:focusable="false">
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
@@ -187,8 +190,9 @@
 
                 <TextView
                     android:id="@+id/text_memory_engine_value"
-                    style="@style/Widget.App.Dropdown.Value"
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
                     android:layout_width="wrap_content"
+                    android:layout_marginStart="12dp"
                     android:text="@string/memory_controls_engine_lorebooks" />
             </LinearLayout>
 

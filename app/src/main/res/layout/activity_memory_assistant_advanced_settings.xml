@@ -119,9 +119,16 @@
 
             <LinearLayout
                 android:id="@+id/row_archivist_endpoint"
-                style="@style/Widget.App.Row.WithSubtitle">
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp">
 
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
 
                     <TextView
                         style="@style/Widget.App.Row.Title"
@@ -133,18 +140,43 @@
                         android:text="@string/memory_controls_row_assistant_endpoint_hint" />
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/text_archivist_endpoint_value"
-                    style="@style/Widget.App.Dropdown.Value"
-                    android:layout_width="wrap_content"
-                    android:text="@string/label_endpoint_none" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/text_archivist_endpoint_value"
+                        style="@style/Widget.App.Dropdown.CanonicalValue"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:text="@string/dropdown_select" />
+
+                    <ImageButton
+                        android:id="@+id/btn_edit_archivist_endpoint"
+                        style="@style/Widget.App.QuickTile.EditButton"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginEnd="0dp"
+                        android:contentDescription="@string/memory_assistant_edit_endpoint_desc"
+                        android:src="@drawable/ic_settings"
+                        android:tooltipText="@string/memory_assistant_edit_endpoint_desc" />
+                </LinearLayout>
             </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/row_archivist_model"
-                style="@style/Widget.App.Row.WithSubtitle">
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp">
 
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
 
                     <TextView
                         style="@style/Widget.App.Row.Title"
@@ -156,11 +188,29 @@
                         android:text="@string/memory_controls_row_assistant_model_hint" />
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/text_archivist_model_value"
-                    style="@style/Widget.App.Dropdown.Value"
-                    android:layout_width="wrap_content"
-                    android:text="@string/label_archivist_model_none" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/text_archivist_model_value"
+                        style="@style/Widget.App.Dropdown.CanonicalValue"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:text="@string/dropdown_select" />
+
+                    <ImageButton
+                        android:id="@+id/btn_choose_archivist_model"
+                        style="@style/Widget.App.QuickTile.EditButton"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginEnd="0dp"
+                        android:contentDescription="@string/memory_assistant_choose_model_desc"
+                        android:src="@drawable/ic_settings"
+                        android:tooltipText="@string/memory_assistant_choose_model_desc" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- ============ Temperature ============ -->
@@ -208,7 +258,10 @@
             <!-- ============ Minimum Importance ============ -->
             <LinearLayout
                 android:id="@+id/row_min_importance"
-                style="@style/Widget.App.Row.WithSubtitle">
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:background="@null"
+                android:clickable="false"
+                android:focusable="false">
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
@@ -224,7 +277,7 @@
 
                 <TextView
                     android:id="@+id/text_min_importance_value"
-                    style="@style/Widget.App.Dropdown.Value"
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
                     android:layout_width="wrap_content" />
             </LinearLayout>
 

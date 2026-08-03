@@ -189,7 +189,7 @@
 
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/filter_dropdown_layout"
-            style="@style/App.ExposedTextField"
+            style="@style/Widget.App.Dropdown.GalleryFilter"
             android:layout_width="130dp"
             android:layout_height="wrap_content"
             android:hint="@string/profile_image_filter_label">
@@ -199,7 +199,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:gravity="center"
-                android:inputType="none" />
+                android:inputType="none"
+                android:textColor="@color/dropdown_text" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <View

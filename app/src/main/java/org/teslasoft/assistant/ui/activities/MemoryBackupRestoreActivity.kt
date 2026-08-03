@@ -25,14 +25,12 @@ import android.os.Bundle
 import android.text.InputType
 import android.view.View
 import android.view.WindowInsets
-import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -73,6 +71,7 @@ import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemorySeedCodec
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
@@ -946,25 +945,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         super.onDestroy()
     }
 
-    /* ------------------------------ Widget.App.Dropdown.* shared helper ------------------------------ */
+    /* ------------------------------ Canonical dropdown shared helper ------------------------------ */
 
-    /** Anchored dropdown list (Widget.App.Dropdown.* contract) - a real
-     *  dropdown attached to the tapped value, matching the Summoning Circle
-     *  tiles' `showTileDropdown`, minus an edit button - never the centered
-     *  picker dialog. Shared by every Widget.App.Dropdown.* field on this
-     *  screen (Recovery Type, Backup Style, Format). */
+    /** Shared canonical dropdown behavior for every selector on this screen. */
     private fun showFieldDropdown(anchor: View, labels: List<String>, onPick: (Int) -> Unit) {
-        if (isFinishing || labels.isEmpty()) return
-        val popup = ListPopupWindow(this)
-        popup.anchorView = anchor
-        popup.isModal = true
-        popup.width = anchor.width
-        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
-        popup.setOnItemClickListener { _, _, position, _ ->
-            popup.dismiss()
-            onPick(position)
-        }
-        popup.show()
+        if (isFinishing) return
+        val dropdown = anchor as? TextView ?: return
+        AppDropdown.show(dropdown, labels, onPick = onPick)
     }
 
     /* ------------------------------ 3. recovery backup (manual) ------------------------------ */

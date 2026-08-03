@@ -25,7 +25,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
-import android.widget.ArrayAdapter
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -43,7 +42,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.radiobutton.MaterialRadioButton
-import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -54,6 +52,7 @@ import org.teslasoft.assistant.providers.ProviderEndpointsParser
 import org.teslasoft.assistant.providers.ProviderFilterState
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.core.api.network.RequestNetwork
 
 /**
@@ -132,8 +131,8 @@ class ChooseProviderActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var btnSave: ImageButton? = null
-    private var fieldRoutingType: MaterialAutoCompleteTextView? = null
-    private var fieldChooseModel: MaterialAutoCompleteTextView? = null
+    private var fieldRoutingType: TextView? = null
+    private var fieldChooseModel: TextView? = null
     private var btnViewAllModels: MaterialButton? = null
     private var rowAllowFallbacks: View? = null
     private var switchAllowFallbacks: MaterialSwitch? = null
@@ -315,11 +314,9 @@ class ChooseProviderActivity : FragmentActivity() {
     }
 
     private fun loadValues() {
-        favorites = favoriteModelsPreferences?.getFavoriteModels(endpointId)
-            ?.mapNotNull { it["modelId"] }
-            ?: emptyList()
+        favorites = endpointFavoriteModels()
 
-        fieldRoutingType?.setText(routingLabel(selectedRoutingType), false)
+        fieldRoutingType?.text = routingLabel(selectedRoutingType)
         updateModelBox()
         updateModeViews()
     }
@@ -346,34 +343,39 @@ class ChooseProviderActivity : FragmentActivity() {
     }
 
     /**
-     * Both selectors are proper dropdown menus (App.ExposedTextField), not
-     * pop-up dialogs. Routing type lists Automatic / Preferred / Only; Choose
-     * Model lists this endpoint's favorite models ("None" is not offered — the
-     * screen sets routing for a real model, and the full catalog is reached
-     * through View All Models below).
+     * Both selectors use the canonical full-width dropdown. Routing type lists
+     * Automatic / Preferred / Only. Choose Model rebuilds its options from this
+     * endpoint's favorites whenever it opens; the full catalog remains under
+     * View All Models.
      */
     private fun setupDropdowns() {
-        val routingLabels = routingTypes.map { routingLabel(it) }.toTypedArray()
-        fieldRoutingType?.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, routingLabels))
-        fieldRoutingType?.setText(routingLabel(selectedRoutingType), false)
-        fieldRoutingType?.setOnItemClickListener { _, _, position, _ ->
-            selectedRoutingType = routingTypes[position]
-            updateModeViews()
-            renderChart()
+        val routingLabels = routingTypes.map { routingLabel(it) }
+        fieldRoutingType?.setOnClickListener {
+            val dropdown = fieldRoutingType ?: return@setOnClickListener
+            val current = routingTypes.indexOf(selectedRoutingType).coerceAtLeast(0)
+            AppDropdown.show(dropdown, routingLabels, current) { position ->
+                selectedRoutingType = routingTypes[position]
+                dropdown.text = routingLabel(selectedRoutingType)
+                updateModeViews()
+                renderChart()
+            }
         }
 
-        refreshModelDropdown()
-        fieldChooseModel?.setOnItemClickListener { _, _, position, _ ->
-            onModelChanged(favorites[position])
+        fieldChooseModel?.setOnClickListener {
+            val dropdown = fieldChooseModel ?: return@setOnClickListener
+            favorites = endpointFavoriteModels()
+            AppDropdown.show(dropdown, favorites, favorites.indexOf(selectedModel)) { position ->
+                onModelChanged(favorites[position])
+            }
         }
     }
 
-    /** (Re)fill the Choose Model dropdown with this endpoint's favorites. */
-    private fun refreshModelDropdown() {
-        fieldChooseModel?.setAdapter(
-            ArrayAdapter(this, android.R.layout.simple_list_item_1, favorites.toTypedArray())
-        )
-    }
+    /** Every valid, distinct favorite belonging to this exact API endpoint. */
+    private fun endpointFavoriteModels(): List<String> =
+        favoriteModelsPreferences?.getFavoriteModels(endpointId)
+            ?.mapNotNull { it["modelId"]?.takeIf { modelId -> modelId.isNotBlank() } }
+            ?.distinct()
+            ?: emptyList()
 
     private fun openFullModelPicker() {
         val modelDialog = AdvancedModelSelectorDialogFragment.newInstance(selectedModel, "", endpointId)
@@ -403,8 +405,7 @@ class ChooseProviderActivity : FragmentActivity() {
     }
 
     private fun updateModelBox() {
-        // The selected model, or empty so the field's "Choose Model" hint shows.
-        fieldChooseModel?.setText(selectedModel, false)
+        fieldChooseModel?.text = selectedModel.ifBlank { getString(R.string.dropdown_select) }
     }
 
     /** Load the model's saved provider memory (rides on its favorite). A model
@@ -421,7 +422,7 @@ class ChooseProviderActivity : FragmentActivity() {
         switchAllowFallbacks?.isChecked = favorite?.allowFallbacks ?: true
         if (favorite != null && favorite.routingType in routingTypes) {
             selectedRoutingType = favorite.routingType
-            fieldRoutingType?.setText(routingLabel(selectedRoutingType), false)
+            fieldRoutingType?.text = routingLabel(selectedRoutingType)
         }
         updateOrderBox()
     }
