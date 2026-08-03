@@ -482,18 +482,22 @@ later, but it is not required for the first working computer-review route.
 
 *(Owner-approved rulings recorded 2026-08-03. Scope: the Associative
 Memories Pending area and its Possible Match resolution. Lorebook review is
-out of scope and unchanged by this ruling. No Pending or comparison screen is
-built from this ruling yet — it records the approved behavior and governs the
-data and service work that will support it.)*
+out of scope and unchanged by this ruling. The data and matching foundation is
+built on the Step 1.5 branch; the Pending and comparison UI is not built yet.)*
 
 **Pending shows the full proposed Associative Memory** — the whole proposed
-memory, not a shortened summary.
+memory, not a shortened summary. Pending remains a mode inside the existing
+Memory Browser and reuses the normal memory-card visual language where
+practical.
 
 **A suggestion with no possible conflict:**
 
-- can be approved or discarded directly from Pending;
-- carries an Information control that shows where the suggestion came from
-  (its provenance).
+- can be handled completely from Pending without opening another review screen;
+- carries an Information control that shows its source, provenance, and
+  available evidence;
+- uses the app's existing save/disk icon to approve the suggestion;
+- uses an X to discard the suggestion;
+- shows no caution icon and no Review action.
 
 **A suggestion with a possible conflict** (another memory must be compared):
 
@@ -502,7 +506,8 @@ memory, not a shortened summary.
 - the caution icon is never labeled: no explanatory words are placed beside
   it;
 - has its direct approve/discard controls replaced by a single labeled
-  Review action.
+  **Review** action. There is no save icon or discard X on that Pending card;
+  the proposal stays pending until the comparison is resolved.
 
 **Review opens a dedicated comparison screen:**
 
@@ -511,8 +516,11 @@ memory, not a shortened summary.
   scrolling;
 - the existing possible matches appear below it, each shown using the normal
   memory format;
+- the proposed memory and each existing possible match have an Information
+  control for their available source, provenance, and evidence;
 - the screen may include a short explanation at the top or a help control,
-  but that never changes the Pending caution icon, which remains unlabeled.
+  but it must be understandable without opening help, and that never changes
+  the Pending caution icon, which remains unlabeled.
 
 **When there is exactly one existing match**, the available resolutions are:
 
@@ -525,12 +533,19 @@ memory, not a shortened summary.
 
 **Superseded means history only.** A superseded memory is never supplied to a
 chat model, but it remains browsable, restorable, and permanently deletable by
-the user.
+the user. The Memory Browser's **Superseded Memories** filter supports **Hide**
+(the default), **Include**, and **Only**.
 
 **When there are multiple possible matches:**
 
-- each existing memory carries a checkbox;
-- the chosen operation applies to the checked memories;
+- each existing memory carries a checkbox near its top-left corner;
+- the matcher may pre-check the memories it recommends, but the user may change
+  every selection;
+- **Save & Replace** permanently deletes all checked old memories;
+- **Save & Supersede** marks all checked old memories superseded and records
+  them as replaced by the new memory;
+- **Save & Edit Old Memory** is available only when exactly one existing memory
+  is selected. It is not offered as a bulk action for several checked memories;
 - there is no second, separate selection screen.
 
 **How matches are found (owner ruling, 2026-08-03).** Exact duplicates and the
@@ -547,7 +562,14 @@ archived and superseded ones, so a proposal can be compared against history you
 have set aside. This never puts archived or superseded memories back into your
 chats — they stay out of what is sent to a chat model. Comparison and chat
 memory are two separate uses of the same on-device model, kept deliberately
-apart.
+apart. Active memories may use their stored vectors for comparison; archived
+and superseded memories may be embedded temporarily for comparison and then
+discarded. Their vectors are never persisted merely to support Possible Match.
+
+Semantic comparison must not eagerly embed every archive for every Pending card
+when the browser opens. Compute it lazily when the suggestion needs comparison,
+and a short-lived in-memory cache may reuse temporary vectors during that
+session. This cache is comparison-only and never changes chat retrieval.
 
 ## What's left — in any order, or never
 
