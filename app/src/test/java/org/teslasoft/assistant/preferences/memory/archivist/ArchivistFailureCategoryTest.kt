@@ -57,11 +57,14 @@ class ArchivistFailureCategoryTest {
         assertEquals(ArchivistFailureCategory.TIMEOUT, ArchivistFailureCategory.of(null, gen(GenErrorCode.N4)))
     }
 
-    @Test fun rejectedCauses() {
-        assertEquals(ArchivistFailureCategory.REJECTED, ArchivistFailureCategory.of(null, gen(GenErrorCode.A1, 401)))
-        assertEquals(ArchivistFailureCategory.REJECTED, ArchivistFailureCategory.of(null, gen(GenErrorCode.S3)))
-        // 403 access-denied folds into Request Rejected.
-        assertEquals(ArchivistFailureCategory.REJECTED, ArchivistFailureCategory.of(null, gen(GenErrorCode.U0, 403)))
+    @Test fun rejectionCausesSplitIntoDetectableSubtypes() {
+        // API key rejected, content refused, and a genuine 403 access-denied
+        // response are three distinct subtypes (owner ruling, Aug 3 2026); the
+        // generic REJECTED bucket is a UI-level fallback for a run whose
+        // rejections don't all share one of these, never returned directly here.
+        assertEquals(ArchivistFailureCategory.API_KEY_REJECTED, ArchivistFailureCategory.of(null, gen(GenErrorCode.A1, 401)))
+        assertEquals(ArchivistFailureCategory.CONTENT_REFUSED, ArchivistFailureCategory.of(null, gen(GenErrorCode.S3)))
+        assertEquals(ArchivistFailureCategory.ACCESS_DENIED, ArchivistFailureCategory.of(null, gen(GenErrorCode.U0, 403)))
     }
 
     @Test fun rateLimitUsageLimitAndCreditsAreSeparate() {

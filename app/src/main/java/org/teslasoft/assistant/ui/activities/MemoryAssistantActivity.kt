@@ -525,7 +525,7 @@ class MemoryAssistantActivity : FragmentActivity() {
                     // uses Lorebook Analysis Incomplete with a short breakdown.
                     // The saved count is reported separately (owner ruling).
                     val counts = o.failureCategoryCounts
-                    val category = if (counts.keys.size == 1) counts.keys.first() else null
+                    val category = resolvePartialCategory(counts)
                     val (titleRes, msgRes) = if (category != null) lorePartialStrings(category)
                         else R.string.mem_arch_part_incomplete_title to R.string.mem_arch_part_incomplete_msg
                     val foundLine = getString(R.string.memory_assistant_lore_found, o.memoriesFound)
@@ -569,7 +569,10 @@ class MemoryAssistantActivity : FragmentActivity() {
                     // block beneath it (Function: Archiving). Configuration,
                     // model, and rejection causes point at settings; the rest
                     // offer a retry.
-                    val category = ArchivistFailureCategory.of(o.failureReason, o.genError)
+                    val category = resolveRejectionCategory(
+                        ArchivistFailureCategory.of(o.failureReason, o.genError),
+                        o.failureCategoryCounts
+                    )
                     val (titleRes, msgRes) = loreFailureStrings(category)
                     val settingsRelated = category in LORE_FAIL_SETTINGS
                     showStatus(
@@ -683,6 +686,32 @@ class MemoryAssistantActivity : FragmentActivity() {
     private fun neutralLabelColor(): Int =
         ResourcesCompat.getColor(resources, R.color.text_title, theme)
 
+    /** Full failure: [category] is the run's already-chosen dominant reason. If
+     *  it is one of the three rejection subtypes but the run's failed
+     *  conversations show more than one distinct rejection subtype, downgrade
+     *  to the generic Request Rejected state (owner ruling, Aug 3 2026) —
+     *  otherwise the subtype stands as-is. Categories outside the rejection
+     *  family are untouched. */
+    private fun resolveRejectionCategory(category: String, counts: Map<String, Int>): String {
+        if (category !in REJECTION_SUBTYPES) return category
+        return if (counts.keys.count { it in REJECTION_SUBTYPES } <= 1) category
+        else ArchivistFailureCategory.REJECTED
+    }
+
+    /** Partial failure: a specific title requires every failed conversation to
+     *  share ONE category. A run whose failures are uniformly within the
+     *  rejection family but differ in subtype uses the generic Some Requests
+     *  Were Rejected state (owner ruling, Aug 3 2026) rather than the
+     *  mixed-cause Lorebook Analysis Incomplete state, which stays reserved for
+     *  a mix that includes a non-rejection cause. Null means genuinely mixed —
+     *  the caller falls back to Incomplete. */
+    private fun resolvePartialCategory(counts: Map<String, Int>): String? = when {
+        counts.keys.size == 1 -> counts.keys.first()
+        counts.keys.isNotEmpty() && counts.keys.all { it in REJECTION_SUBTYPES } ->
+            ArchivistFailureCategory.REJECTED
+        else -> null
+    }
+
     /** The owner-approved Lorebook full-failure title + subtitle for a mapped
      *  failure category (Aug 1 2026). */
     private fun loreFailureStrings(category: String): Pair<Int, Int> = when (category) {
@@ -692,6 +721,12 @@ class MemoryAssistantActivity : FragmentActivity() {
             R.string.mem_arch_fail_timeout_title to R.string.mem_arch_fail_timeout_msg
         ArchivistFailureCategory.REJECTED ->
             R.string.mem_arch_fail_rejected_title to R.string.mem_arch_fail_rejected_msg
+        ArchivistFailureCategory.API_KEY_REJECTED ->
+            R.string.mem_arch_fail_api_key_title to R.string.mem_arch_fail_api_key_msg
+        ArchivistFailureCategory.ACCESS_DENIED ->
+            R.string.mem_arch_fail_access_denied_title to R.string.mem_arch_fail_access_denied_msg
+        ArchivistFailureCategory.CONTENT_REFUSED ->
+            R.string.mem_arch_fail_content_refused_title to R.string.mem_arch_fail_content_refused_msg
         ArchivistFailureCategory.RATE_LIMIT ->
             R.string.mem_arch_fail_rate_limit_title to R.string.mem_arch_fail_rate_limit_msg
         ArchivistFailureCategory.USAGE_LIMIT ->
@@ -728,6 +763,12 @@ class MemoryAssistantActivity : FragmentActivity() {
             R.string.mem_arch_part_timeout_title to R.string.mem_arch_part_timeout_msg
         ArchivistFailureCategory.REJECTED ->
             R.string.mem_arch_part_rejected_title to R.string.mem_arch_part_rejected_msg
+        ArchivistFailureCategory.API_KEY_REJECTED ->
+            R.string.mem_arch_part_api_key_title to R.string.mem_arch_part_api_key_msg
+        ArchivistFailureCategory.ACCESS_DENIED ->
+            R.string.mem_arch_part_access_denied_title to R.string.mem_arch_part_access_denied_msg
+        ArchivistFailureCategory.CONTENT_REFUSED ->
+            R.string.mem_arch_part_content_refused_title to R.string.mem_arch_part_content_refused_msg
         ArchivistFailureCategory.RATE_LIMIT ->
             R.string.mem_arch_part_rate_limit_title to R.string.mem_arch_part_rate_limit_msg
         ArchivistFailureCategory.USAGE_LIMIT ->
@@ -774,8 +815,18 @@ class MemoryAssistantActivity : FragmentActivity() {
      *  singular/plural agreement, e.g. "1 request timed out, 2 requests were
      *  rejected, and 1 result could not be saved." Save failures are placed
      *  last so a lost save is the memorable tail (owner ruling: a mixed failure
-     *  with a save failure must explicitly mention it). */
+     *  with a save failure must explicitly mention it). This breakdown only
+     *  renders when the run is genuinely mixed across DIFFERENT failure
+     *  families (resolvePartialCategory returned null); the three rejection
+     *  subtypes are collapsed back into the single generic "rejected" clause
+     *  here so the mixed-cause wording stays exactly as before (owner ruling,
+     *  Aug 3 2026: sub-reason detail is shown only in the uniform case). */
     private fun loreBreakdown(counts: Map<String, Int>): String {
+        val merged = HashMap<String, Int>()
+        for ((key, n) in counts) {
+            val bucket = if (key in REJECTION_SUBTYPES) ArchivistFailureCategory.REJECTED else key
+            merged[bucket] = (merged[bucket] ?: 0) + n
+        }
         val order = listOf(
             ArchivistFailureCategory.CONNECTION, ArchivistFailureCategory.TIMEOUT,
             ArchivistFailureCategory.REJECTED, ArchivistFailureCategory.RATE_LIMIT,
@@ -786,8 +837,8 @@ class MemoryAssistantActivity : FragmentActivity() {
             ArchivistFailureCategory.PROCESS_LOCAL, ArchivistFailureCategory.UNKNOWN,
             ArchivistFailureCategory.SAVE_FAILED
         )
-        val parts = order.filter { counts.containsKey(it) }.map {
-            val n = counts.getValue(it)
+        val parts = order.filter { merged.containsKey(it) }.map {
+            val n = merged.getValue(it)
             resources.getQuantityString(breakdownPluralRes(it), n, n)
         }
         val sentence = when {
@@ -1055,8 +1106,21 @@ class MemoryAssistantActivity : FragmentActivity() {
             ArchivistFailureCategory.CONFIG,
             ArchivistFailureCategory.MODEL_UNAVAILABLE,
             ArchivistFailureCategory.REJECTED,
+            ArchivistFailureCategory.API_KEY_REJECTED,
+            ArchivistFailureCategory.ACCESS_DENIED,
+            ArchivistFailureCategory.CONTENT_REFUSED,
             // Request Too Large: the fix is choosing a larger-context model.
             ArchivistFailureCategory.REQUEST_TOO_LARGE
+        )
+
+        /** The three rejection subtypes a specific title can name (owner
+         *  ruling, Aug 3 2026); [ArchivistFailureCategory.REJECTED] itself is
+         *  the generic fallback shown when a run's rejections don't all share
+         *  one of these. */
+        private val REJECTION_SUBTYPES = setOf(
+            ArchivistFailureCategory.API_KEY_REJECTED,
+            ArchivistFailureCategory.ACCESS_DENIED,
+            ArchivistFailureCategory.CONTENT_REFUSED
         )
     }
 }

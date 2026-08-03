@@ -1060,6 +1060,17 @@
     <string name="mem_arch_fail_timeout_msg">The provider did not finish the request in time. Try again, or choose a model that responds more reliably.</string>
     <string name="mem_arch_fail_rejected_title">Request Rejected</string>
     <string name="mem_arch_fail_rejected_msg">The provider rejected the analysis request. Check the provider response and the selected model’s settings before trying again.</string>
+
+    <!-- Rejection sub-reasons (owner-approved, Aug 3 2026): shown instead of the
+         generic Request Rejected state when every conversation in a full-failure
+         run failed with the same detectable rejection subtype. -->
+    <string name="mem_arch_fail_api_key_title">API Key Rejected</string>
+    <string name="mem_arch_fail_api_key_msg">The provider rejected the API key. Check the API key saved for the selected endpoint.</string>
+    <string name="mem_arch_fail_access_denied_title">Access Denied</string>
+    <string name="mem_arch_fail_access_denied_msg">The provider denied access to the analysis requests. Check the selected model and the account’s access permissions.</string>
+    <string name="mem_arch_fail_content_refused_title">Content Refused</string>
+    <string name="mem_arch_fail_content_refused_msg">The provider refused the analysis requests because of its content rules.</string>
+
     <string name="mem_arch_fail_usage_limit_title">Usage Limit Reached</string>
     <string name="mem_arch_fail_usage_limit_msg">The provider would not run the analysis because an account limit, spending limit, or usage cap was reached.</string>
     <string name="mem_arch_fail_credits_title">Insufficient Credits</string>
@@ -1115,6 +1126,18 @@
     <string name="mem_arch_part_timeout_msg">The provider did not finish one or more analysis requests in time. Suggestions returned successfully by other requests were saved.</string>
     <string name="mem_arch_part_rejected_title">Some Requests Were Rejected</string>
     <string name="mem_arch_part_rejected_msg">The provider rejected one or more requests before the full analysis finished. Suggestions from requests that completed successfully were saved.</string>
+
+    <!-- Rejection sub-reasons, partial failure (owner-approved, Aug 3 2026):
+         shown instead of the generic Some Requests Were Rejected state when
+         every REJECTED conversation in the run shares the same detectable
+         subtype. -->
+    <string name="mem_arch_part_api_key_title">Some API Requests Had an Invalid Key</string>
+    <string name="mem_arch_part_api_key_msg">The provider rejected the API key for some requests. Check the API key saved for the selected endpoint.</string>
+    <string name="mem_arch_part_access_denied_title">Some Requests Were Denied Access</string>
+    <string name="mem_arch_part_access_denied_msg">The provider denied access for some requests. Check the selected model and the account’s access permissions.</string>
+    <string name="mem_arch_part_content_refused_title">Some Requests Were Refused for Content</string>
+    <string name="mem_arch_part_content_refused_msg">The provider refused some analysis requests because of its content rules.</string>
+
     <string name="mem_arch_part_rate_limit_title">Rate Limit Interrupted Analysis</string>
     <string name="mem_arch_part_rate_limit_msg">The provider temporarily stopped accepting requests because too many were sent within its allowed time window. Suggestions created before the limit was reached were saved.</string>
     <string name="mem_arch_part_usage_limit_title">Usage Limit Reached During Analysis</string>

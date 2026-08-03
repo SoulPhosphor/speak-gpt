@@ -40,7 +40,19 @@ object ArchivistFailureCategory {
 
     const val CONNECTION = "connection"
     const val TIMEOUT = "timeout"
+    /** Generic fallback within the rejection family: the UI shows this when a
+     *  run's rejected requests do not all share the same detectable subtype
+     *  below (owner ruling, Aug 3 2026). Never returned directly by [of] —
+     *  every rejection path below now resolves to one of the three specific
+     *  subtypes; the caller collapses them back to this when they are not
+     *  uniform across the run. */
     const val REJECTED = "rejected"
+    /** The provider rejected the API key (401 / auth failure). */
+    const val API_KEY_REJECTED = "api_key_rejected"
+    /** A genuine provider access-denied response (narrow: HTTP 403 only). */
+    const val ACCESS_DENIED = "access_denied"
+    /** The provider refused the request as inappropriate content. */
+    const val CONTENT_REFUSED = "content_refused"
     const val RATE_LIMIT = "rate_limit"
     const val USAGE_LIMIT = "usage_limit"
     const val CREDITS = "credits"
@@ -85,16 +97,17 @@ object ArchivistFailureCategory {
             ProviderLimitKind.REQUEST_BODY -> return REQUEST_TOO_LARGE
             null -> { /* not a limit */ }
         }
-        // 403: the credentials are valid but not allowed here — folded into the
-        // single "Request Rejected" state the owner approved.
-        if (gen.httpStatus == 403) return REJECTED
+        // 403: the credentials are valid but not allowed here. Narrow signal —
+        // only a genuine HTTP 403 response counts, never a text guess (owner
+        // ruling, Aug 3 2026).
+        if (gen.httpStatus == 403) return ACCESS_DENIED
         // A gateway timeout is a timeout, not a generic provider error.
         if (gen.httpStatus == 504) return TIMEOUT
         return when (gen.code) {
             GenErrorCode.N1, GenErrorCode.N3 -> CONNECTION
             GenErrorCode.N2, GenErrorCode.N4 -> TIMEOUT
-            GenErrorCode.A1 -> REJECTED
-            GenErrorCode.S3 -> REJECTED
+            GenErrorCode.A1 -> API_KEY_REJECTED
+            GenErrorCode.S3 -> CONTENT_REFUSED
             GenErrorCode.S2 -> UNREADABLE
             GenErrorCode.M1 -> CONFIG
             // Only a response that names the MODEL as missing is Model
