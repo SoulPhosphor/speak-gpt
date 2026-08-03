@@ -1054,7 +1054,7 @@
     <string name="title_memory_manager">Memory Manager</string>
     <string name="row_memory_browser_title">Memory Browser</string>
     <string name="row_memory_browser_subtitle">View, search, edit, approve, or remove saved and pending memories.</string>
-    <string name="row_memory_assistant_title">Memory Assistant</string>
+    <string name="row_memory_assistant_title">API Memory Assistant</string>
     <string name="row_memory_assistant_subtitle">Analyze conversation history and review pending memories.</string>
     <string name="row_lorebooks_subtitle">Simple memory notes triggered invisibly by keywords for your companion.</string>
     <!-- Memory Manager hub, fourth row (memory_settings_reorg_spec.md placement
@@ -1543,7 +1543,7 @@
 
     <!-- Memory system Phase 4: enforcer assembly debug view (shown above the lorebook debug log) -->
     <string name="memory_debug_assembly_header">Memory assembly (full engine)</string>
-    <string name="lorebook_debug_records_header">Lore book injections</string>
+    <string name="lorebook_debug_records_header">Lorebook injections</string>
     <string name="memory_debug_companion_fmt">Companion: %1$s</string>
     <string name="memory_debug_eligibility_fmt">Room: %1$s</string>
     <string name="memory_debug_injected_header">Injected:</string>
@@ -1552,8 +1552,8 @@
     <string name="memory_debug_scene_fmt">Scene: %1$s</string>
     <string name="memory_debug_notes_header">Notes:</string>
     <string name="memory_degraded_notice">Memory unavailable this turn — continuing without it</string>
-    <string name="lorebook_debug_store_unavailable">Lore books were unavailable this turn (see the Event log)</string>
-    <string name="lorebook_debug_no_active_books">No active lore books to search — check the persona\'s linked books and the Quick Settings checklist</string>
+    <string name="lorebook_debug_store_unavailable">Lorebooks were unavailable this turn (see the Event log)</string>
+    <string name="lorebook_debug_no_active_books">No active lorebooks to search — check the persona\'s linked books and the Quick Settings checklist</string>
     <string name="lorebook_debug_searched_fmt">Searched %1$d active book(s)</string>
 
     <!-- ============ Phase 5: memory manager UI ============ -->
