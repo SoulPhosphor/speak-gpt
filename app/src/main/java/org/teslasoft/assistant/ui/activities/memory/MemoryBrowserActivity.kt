@@ -53,6 +53,12 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     /** Distinct tags across the loaded set, for the filter panel's Tags picker. */
     @Volatile private var availableTags: List<String> = emptyList()
 
+    /** Distinct scopes / types present in the loaded set, so the filter panel
+     *  can mark options that don't exist here as unavailable (owner ruling,
+     *  Aug 3 2026 — an absent scope/type shows greyed and can't be picked). */
+    @Volatile private var availableScopes: Set<String> = emptySet()
+    @Volatile private var availableTypes: Set<String> = emptySet()
+
     /** Draft count in the current (global or scoped) view, for the count line
      *  under the Memories | Pending toggle (owner design, July 8 2026
      *  evening — hidden when nothing is pending). */
@@ -84,6 +90,8 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         val intent = Intent(this, MemoryFilterPanelActivity::class.java)
             .putExtra("chatId", chatId)
             .putExtra(MemoryFilterPanelActivity.EXTRA_AVAILABLE_TAGS, availableTags.toTypedArray())
+            .putExtra(MemoryFilterPanelActivity.EXTRA_AVAILABLE_SCOPES, availableScopes.toTypedArray())
+            .putExtra(MemoryFilterPanelActivity.EXTRA_AVAILABLE_TYPES, availableTypes.toTypedArray())
         startActivity(intent)
         // Pair with the panel's slide-out on close so the transition matches.
         @Suppress("DEPRECATION")
@@ -175,6 +183,8 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             else -> store.browseMemories(null, true, 1000)
         }
         availableTags = base.flatMap { parseTags(it.tagsJson) }.distinct().sortedBy { it.lowercase() }
+        availableScopes = base.map { it.scope }.toSet()
+        availableTypes = base.map { it.kind }.toSet()
         pendingCount = base.count { it.status == "draft" }
 
         val f = MemoryBrowserFilterState

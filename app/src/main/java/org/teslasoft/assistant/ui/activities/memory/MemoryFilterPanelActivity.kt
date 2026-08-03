@@ -20,7 +20,6 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
-import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
@@ -36,7 +35,6 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
@@ -69,10 +67,13 @@ class MemoryFilterPanelActivity : FragmentActivity() {
     private var btnClose: ImageButton? = null
     private var sectionsContainer: LinearLayout? = null
 
-    /** Tags that exist in the browser's current base set — supplied by the
-     *  browser via an intent extra so the picker matches what the user can
-     *  actually see. Empty if the browser had none. */
+    /** Tags / scopes / types that exist in the browser's current base set —
+     *  supplied by the browser via intent extras so the pickers match what the
+     *  user can actually see. Scope and Type options that are NOT present here
+     *  render as unavailable (greyed, not selectable). */
     private var availableTags: List<String> = emptyList()
+    private var availableScopes: Set<String> = emptySet()
+    private var availableTypes: Set<String> = emptySet()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,6 +82,8 @@ class MemoryFilterPanelActivity : FragmentActivity() {
 
         preferences = Preferences.getPreferences(this, "")
         availableTags = intent.getStringArrayExtra(EXTRA_AVAILABLE_TAGS)?.toList() ?: emptyList()
+        availableScopes = intent.getStringArrayExtra(EXTRA_AVAILABLE_SCOPES)?.toSet() ?: emptySet()
+        availableTypes = intent.getStringArrayExtra(EXTRA_AVAILABLE_TYPES)?.toSet() ?: emptySet()
 
         actionBar = findViewById(R.id.action_bar)
         btnClose = findViewById(R.id.btn_close)
@@ -184,20 +187,21 @@ class MemoryFilterPanelActivity : FragmentActivity() {
             apply = { MemoryBrowserFilterState.source = it }
         )
 
-        // Scope, Type, and Tags keep their current multi-select interaction
-        // (owner: a different style comes next); only their filled row
-        // background was removed.
-        addMultiSection(
+        // Scope, Type, and Tags are multi-select dropdowns (owner ruling, Aug 3
+        // 2026): the value stays "Select", each pick drops into a chip below,
+        // and a picked option leaves the list until its chip is removed. Scope
+        // and Type additionally grey out options absent from the loaded set.
+        addMultiDropdownSection(
             root, getString(R.string.mem_edit_label_scope),
             options = SCOPE_KEYS.map { it to scopeLabel(it) },
-            allLabel = getString(R.string.mem_filter_option_all),
+            available = availableScopes,
             selection = MemoryBrowserFilterState.scope
         )
 
-        addMultiSection(
+        addMultiDropdownSection(
             root, getString(R.string.mem_edit_label_type),
             options = TYPE_KEYS.map { it to typeLabel(it) },
-            allLabel = getString(R.string.mem_filter_option_all),
+            available = availableTypes,
             selection = MemoryBrowserFilterState.type
         )
 
@@ -219,10 +223,12 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         // Status filter here was a duplicate. FilterState.status remains as
         // the entry-point plumbing the toggle reads.
 
-        addMultiSection(
+        // Tags are already only the tags that exist in the loaded set, so every
+        // listed option is available.
+        addMultiDropdownSection(
             root, getString(R.string.mem_filter_tags),
             options = availableTags.map { it to it },
-            allLabel = getString(R.string.mem_filter_option_any),
+            available = availableTags.toSet(),
             selection = MemoryBrowserFilterState.tags
         )
     }
@@ -274,49 +280,32 @@ class MemoryFilterPanelActivity : FragmentActivity() {
     }
 
     /**
-     * Multi-select section. The row on top shows the label + a summary
-     * ("All" / "Any" when empty, otherwise the count). Below sits a ChipGroup
-     * with pills for each selected value; the + on the row and a chip's × keep
-     * the two views in sync via [rebuildPills].
+     * A multi-select dropdown section in the shared Widget.App.Dropdown style.
+     * The value stays "Select" (it is the add-another control); each pick drops
+     * into a chip below and leaves the dropdown list until its chip's × returns
+     * it. Options absent from [available] render greyed + italic and cannot be
+     * picked (owner ruling, Aug 3 2026).
      */
-    private fun addMultiSection(
+    private fun addMultiDropdownSection(
         root: LinearLayout,
         label: String,
         options: List<Pair<String, String>>,
-        allLabel: String,
+        available: Set<String>,
         selection: MutableSet<String>
     ) {
         val section = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(12); bottomMargin = dp(6) }
+            )
         }
 
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            // No filled row background (owner ruling, Aug 3 2026): each filter
-            // row reads as plain text, not a tile.
-            setPadding(dp(4), dp(8), dp(8), dp(8))
-            isClickable = true
-            isFocusable = true
-        }
-
-        val labelView = TextView(this).apply {
-            text = label
-            textSize = 15f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setTextColor(resources.getColor(R.color.text, theme))
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            setPadding(dp(8), 0, 0, 0)
-        }
-
-        val valueView = TextView(this).apply {
-            textSize = 14f
-            setTextColor(resources.getColor(R.color.text_subtitle, theme))
-            setPadding(dp(8), 0, dp(4), 0)
-        }
+        val row = layoutInflater.inflate(R.layout.view_memory_filter_dropdown, section, false)
+        row.findViewById<TextView>(R.id.label).text = label
+        // The value never changes — it is the "add another" affordance; the
+        // chips below carry the current selection (owner ruling, Aug 3 2026).
+        row.findViewById<TextView>(R.id.value).text = getString(R.string.mem_dropdown_select)
+        val valueView = row.findViewById<TextView>(R.id.value)
 
         val pills = ChipGroup(this).apply {
             chipSpacingHorizontal = dp(6)
@@ -327,23 +316,19 @@ class MemoryFilterPanelActivity : FragmentActivity() {
             ).apply { topMargin = dp(4); leftMargin = dp(8) }
         }
 
-        fun refreshSummary() {
-            valueView.text = if (selection.isEmpty()) allLabel else "${selection.size}"
-        }
-
         fun rebuildPills() {
             pills.removeAllViews()
             for (key in selection) {
-                val label2 = options.firstOrNull { it.first == key }?.second ?: key
+                val chipLabel = options.firstOrNull { it.first == key }?.second ?: key
                 val chip = Chip(this).apply {
-                    text = label2
+                    text = chipLabel
                     isCloseIconVisible = true
                     setChipBackgroundColorResource(R.color.accent_100)
                     chipCornerRadius = dp(10).toFloat()
                     setOnCloseIconClickListener {
+                        // Removing a chip returns its option to the dropdown list.
                         selection.remove(key)
                         rebuildPills()
-                        refreshSummary()
                     }
                 }
                 pills.addView(chip)
@@ -351,34 +336,65 @@ class MemoryFilterPanelActivity : FragmentActivity() {
             pills.visibility = if (selection.isEmpty()) View.GONE else View.VISIBLE
         }
 
-        row.addView(labelView)
-        row.addView(valueView)
-        row.setOnClickListener {
-            if (options.isEmpty()) {
-                // Tags picker with no tags in the loaded set → nothing to show.
-                return@setOnClickListener
+        valueView.setOnClickListener { anchor ->
+            // Only offer what is not already chosen; picking removes it from the
+            // list until the chip is closed.
+            val remaining = options.filter { it.first !in selection }
+            if (remaining.isEmpty()) return@setOnClickListener
+            showMultiDropdown(anchor, remaining, available) { key ->
+                selection.add(key)
+                rebuildPills()
             }
-            val labels = options.map { it.second }.toTypedArray()
-            val checked = BooleanArray(options.size) { selection.contains(options[it].first) }
-            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setTitle(label)
-                .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
-                    val key = options[which].first
-                    if (isChecked) selection.add(key) else selection.remove(key)
-                }
-                .setPositiveButton(android.R.string.ok) { _, _ ->
-                    rebuildPills()
-                    refreshSummary()
-                }
-                .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-                .show()
         }
 
-        refreshSummary()
         rebuildPills()
         section.addView(row)
         section.addView(pills)
         root.addView(section)
+    }
+
+    /** The multi-select dropdown list: an anchored ListPopupWindow of the
+     *  not-yet-chosen options. Options absent from [available] show italic +
+     *  lighter and are disabled, so a tap adds nothing. */
+    private fun showMultiDropdown(
+        anchor: View,
+        remaining: List<Pair<String, String>>,
+        available: Set<String>,
+        onPick: (String) -> Unit
+    ) {
+        if (isFinishing) return
+        val popup = ListPopupWindow(this)
+        popup.anchorView = anchor
+        popup.isModal = true
+        popup.width = anchor.width
+        val adapter = object : ArrayAdapter<String>(
+            this, android.R.layout.simple_list_item_1, remaining.map { it.second }
+        ) {
+            override fun areAllItemsEnabled(): Boolean = false
+            override fun isEnabled(position: Int): Boolean = remaining[position].first in available
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val view = super.getView(position, convertView, parent) as TextView
+                if (remaining[position].first in available) {
+                    view.setTypeface(null, android.graphics.Typeface.NORMAL)
+                    view.setTextColor(resources.getColor(R.color.text, theme))
+                    view.alpha = 1f
+                } else {
+                    view.setTypeface(null, android.graphics.Typeface.ITALIC)
+                    view.setTextColor(resources.getColor(R.color.text_subtitle, theme))
+                    view.alpha = 0.6f
+                }
+                return view
+            }
+        }
+        popup.setAdapter(adapter)
+        popup.setOnItemClickListener { _, _, position, _ ->
+            // Disabled (unavailable) rows do not fire this; guard anyway.
+            if (remaining[position].first in available) {
+                popup.dismiss()
+                onPick(remaining[position].first)
+            }
+        }
+        popup.show()
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
@@ -406,6 +422,8 @@ class MemoryFilterPanelActivity : FragmentActivity() {
 
     companion object {
         const val EXTRA_AVAILABLE_TAGS = "availableTags"
+        const val EXTRA_AVAILABLE_SCOPES = "availableScopes"
+        const val EXTRA_AVAILABLE_TYPES = "availableTypes"
 
         private val SCOPE_KEYS = listOf(
             "global", "real_life", "companion", "project", "world", "campaign", "rp_character"
