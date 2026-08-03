@@ -39,10 +39,15 @@ import org.teslasoft.assistant.preferences.memory.librarian.VectorMath
  *  - No online or external AI request is ever made — only the on-device model
  *    already used for Associative Search.
  *
- * Only ACTIVE memories carry current vectors (the archive rule drops a vector
- * when a memory leaves active), so the semantic layer compares against active
- * memories in a comparable placement; archived/superseded matches remain the
- * deterministic layer's responsibility.
+ * Two distinct embedding uses, kept separate on purpose (owner ruling, Step
+ * 1.5):
+ *  - Chat retrieval stays ACTIVE-ONLY and reads the STORED index.
+ *  - Possible Match comparison may reach ACTIVE, ARCHIVED, and SUPERSEDED
+ *    memories. Active rows are scored from their stored vectors; archived and
+ *    superseded rows carry no stored vector (the archive rule), so the finder
+ *    regenerates one ON DEMAND from the same semantic document — purely for
+ *    comparison. Nothing is persisted, and archived/superseded memories stay
+ *    barred from chat injection regardless.
  */
 object PossibleMatchFinder {
 
@@ -90,14 +95,29 @@ object PossibleMatchFinder {
             ?: return Result(deterministic, semanticAvailable = false)
 
         val alreadyMatched = deterministic.mapTo(HashSet()) { it.memoryId }
-        val candidateIds = store.comparableActiveMemoryIds(draftId).filter { it !in alreadyMatched }
-        val vectors = store.embeddingsForMemories(candidateIds, RetrievalDocument.effectiveKey(tag))
-
         val semantic = ArrayList<MemoryMatch.Match>()
-        for ((id, blob) in vectors) {
-            val sim = VectorMath.cosine(queryVec, VectorMath.fromBlob(blob))
-            if (sim >= SEMANTIC_COSINE_THRESHOLD) {
+
+        // Active comparable memories: score from the STORED index (fast, no
+        // re-embedding). An active memory missing its vector — a transiently
+        // incomplete index — is simply absent here, exactly as it would be
+        // absent from chat retrieval until the repair job re-embeds it.
+        val activeIds = store.comparableActiveMemoryIds(draftId).filter { it !in alreadyMatched }
+        val activeVectors = store.embeddingsForMemories(activeIds, RetrievalDocument.effectiveKey(tag))
+        for ((id, blob) in activeVectors) {
+            if (VectorMath.cosine(queryVec, VectorMath.fromBlob(blob)) >= SEMANTIC_COSINE_THRESHOLD) {
                 semantic.add(MemoryMatch.Match(id, MemoryMatch.Relation.SEMANTIC_NEAR))
+            }
+        }
+
+        // Archived / superseded comparable memories: no stored vector exists, so
+        // regenerate one ON DEMAND from the same semantic document and compare.
+        // Nothing is persisted; these memories remain barred from chat retrieval.
+        for (cmp in store.comparableInactiveDocsForDraft(draftId)) {
+            if (cmp.memoryId in alreadyMatched) continue
+            val text = RetrievalDocument.semanticDocument(cmp.title, cmp.content, cmp.embeddingText, parseTags(cmp.tagsJson))
+            val vec = librarian.embedOrNull(text, isQuery = false) ?: continue
+            if (VectorMath.cosine(queryVec, vec) >= SEMANTIC_COSINE_THRESHOLD) {
+                semantic.add(MemoryMatch.Match(cmp.memoryId, MemoryMatch.Relation.SEMANTIC_NEAR))
             }
         }
         return Result(deterministic + semantic, semanticAvailable = true)

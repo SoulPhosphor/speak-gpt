@@ -5411,10 +5411,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     /** Active memory ids whose placement is comparable to the draft's (same
      *  scope, sharing a target or both untargeted) — the bounded working set the
-     *  embedding layer scores for semantic Possible Matches. Only active rows
-     *  carry current vectors (the archive rule), so archived/superseded matches
-     *  stay the deterministic path's job. Excludes the draft itself; empty for a
-     *  non-existent draft. */
+     *  embedding layer scores for semantic Possible Matches using the STORED
+     *  index. Excludes the draft itself; empty for a non-existent draft. */
     fun comparableActiveMemoryIds(draftId: String): List<String> {
         val m = getMemory(draftId) ?: return emptyList()
         val cTargets = unionTargets(m)
@@ -5429,6 +5427,42 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 if (id == draftId) continue
                 if (MemoryMatch.comparablePlacement(m.scope, cTargets, m.scope, allTargetIds(db, id))) {
                     out.add(id)
+                }
+            }
+        }
+        return out
+    }
+
+    /** Archived and superseded memories whose placement is comparable to the
+     *  draft's — the Possible Match comparison is allowed to reach them (owner
+     *  ruling, Step 1.5), even though they are barred from chat retrieval. They
+     *  hold NO stored vector (the archive rule), so their embedding text rides
+     *  along for the finder to regenerate a vector on demand, purely for
+     *  comparison; nothing is persisted and their retrieval-eligibility is
+     *  untouched. Excludes the draft; empty for a non-existent draft. */
+    fun comparableInactiveDocsForDraft(draftId: String): List<MemoryComparisonDoc> {
+        val m = getMemory(draftId) ?: return emptyList()
+        val cTargets = unionTargets(m)
+        val db = readableDatabase
+        val out = ArrayList<MemoryComparisonDoc>()
+        db.rawQuery(
+            "SELECT memory_id, title, content, embedding_text, tags_json FROM memories " +
+                "WHERE scope = ? AND status IN ('archived','superseded')",
+            arrayOf(m.scope)
+        ).use {
+            while (it.moveToNext()) {
+                val id = it.getString(0)
+                if (id == draftId) continue
+                if (MemoryMatch.comparablePlacement(m.scope, cTargets, m.scope, allTargetIds(db, id))) {
+                    out.add(
+                        MemoryComparisonDoc(
+                            memoryId = id,
+                            title = it.getString(1),
+                            content = it.getString(2),
+                            embeddingText = it.getStringOrNull("embedding_text"),
+                            tagsJson = it.getStringOrNull("tags_json") ?: "[]"
+                        )
+                    )
                 }
             }
         }

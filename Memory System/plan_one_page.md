@@ -542,6 +542,13 @@ matching still works without one. No online or external AI is ever used to find
 matches, and a suggested match never merges, replaces, deletes, or supersedes
 anything on its own — it is only shown for you to decide.
 
+Possible Match comparison may look at your active memories **and** your
+archived and superseded ones, so a proposal can be compared against history you
+have set aside. This never puts archived or superseded memories back into your
+chats — they stay out of what is sent to a chat model. Comparison and chat
+memory are two separate uses of the same on-device model, kept deliberately
+apart.
+
 ## What's left — in any order, or never
 
 - **Self-repairing search** — background housekeeping so search stays
