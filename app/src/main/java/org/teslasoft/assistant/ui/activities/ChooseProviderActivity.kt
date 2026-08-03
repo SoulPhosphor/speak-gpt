@@ -25,6 +25,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
+import android.widget.ArrayAdapter
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -42,7 +43,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.radiobutton.MaterialRadioButton
-import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -131,8 +132,8 @@ class ChooseProviderActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var btnSave: ImageButton? = null
-    private var fieldRoutingType: TextInputEditText? = null
-    private var fieldChooseModel: TextInputEditText? = null
+    private var fieldRoutingType: MaterialAutoCompleteTextView? = null
+    private var fieldChooseModel: MaterialAutoCompleteTextView? = null
     private var btnViewAllModels: MaterialButton? = null
     private var rowAllowFallbacks: View? = null
     private var switchAllowFallbacks: MaterialSwitch? = null
@@ -318,7 +319,7 @@ class ChooseProviderActivity : FragmentActivity() {
             ?.mapNotNull { it["modelId"] }
             ?: emptyList()
 
-        fieldRoutingType?.setText(routingLabel(selectedRoutingType))
+        fieldRoutingType?.setText(routingLabel(selectedRoutingType), false)
         updateModelBox()
         updateModeViews()
     }
@@ -327,8 +328,7 @@ class ChooseProviderActivity : FragmentActivity() {
         btnBack?.setOnClickListener { cancelAndFinish() }
         btnSave?.setOnClickListener { saveAndFinish() }
 
-        fieldRoutingType?.setOnClickListener { showRoutingChooser() }
-        fieldChooseModel?.setOnClickListener { showModelChooser() }
+        setupDropdowns()
         btnViewAllModels?.setOnClickListener { openFullModelPicker() }
         btnProviderFilters?.setOnClickListener { openFilterPanel() }
 
@@ -345,46 +345,34 @@ class ChooseProviderActivity : FragmentActivity() {
         else -> getString(R.string.choose_provider_routing_automatic)
     }
 
-    private fun showRoutingChooser() {
-        val labels = routingTypes.map { routingLabel(it) }.toTypedArray()
-        val current = routingTypes.indexOf(selectedRoutingType).coerceAtLeast(0)
+    /**
+     * Both selectors are proper dropdown menus (App.ExposedTextField), not
+     * pop-up dialogs. Routing type lists Automatic / Preferred / Only; Choose
+     * Model lists this endpoint's favorite models ("None" is not offered — the
+     * screen sets routing for a real model, and the full catalog is reached
+     * through View All Models below).
+     */
+    private fun setupDropdowns() {
+        val routingLabels = routingTypes.map { routingLabel(it) }.toTypedArray()
+        fieldRoutingType?.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, routingLabels))
+        fieldRoutingType?.setText(routingLabel(selectedRoutingType), false)
+        fieldRoutingType?.setOnItemClickListener { _, _, position, _ ->
+            selectedRoutingType = routingTypes[position]
+            updateModeViews()
+            renderChart()
+        }
 
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.choose_provider_routing_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                selectedRoutingType = routingTypes[which]
-                fieldRoutingType?.setText(routingLabel(selectedRoutingType))
-                updateModeViews()
-                renderChart()
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        refreshModelDropdown()
+        fieldChooseModel?.setOnItemClickListener { _, _, position, _ ->
+            onModelChanged(favorites[position])
+        }
     }
 
-    /**
-     * Quick-pick from this endpoint's favorite models. "None" is not offered —
-     * this screen sets routing for a chosen model, so the picker only lists real
-     * models. The full catalog is reached through View All Models; when the
-     * endpoint has no favorites yet there is nothing to quick-pick, so this opens
-     * the full picker directly.
-     */
-    private fun showModelChooser() {
-        if (favorites.isEmpty()) {
-            openFullModelPicker()
-            return
-        }
-        val labels = favorites.toTypedArray()
-        val current = favorites.indexOf(selectedModel)
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.choose_provider_choose_model_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                onModelChanged(favorites[which])
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+    /** (Re)fill the Choose Model dropdown with this endpoint's favorites. */
+    private fun refreshModelDropdown() {
+        fieldChooseModel?.setAdapter(
+            ArrayAdapter(this, android.R.layout.simple_list_item_1, favorites.toTypedArray())
+        )
     }
 
     private fun openFullModelPicker() {
@@ -415,12 +403,8 @@ class ChooseProviderActivity : FragmentActivity() {
     }
 
     private fun updateModelBox() {
-        val text = when {
-            selectedModel.isNotBlank() -> selectedModel
-            favorites.isEmpty() -> getString(R.string.choose_provider_model_none_available)
-            else -> getString(R.string.choose_provider_model_use_none)
-        }
-        fieldChooseModel?.setText(text)
+        // The selected model, or empty so the field's "Choose Model" hint shows.
+        fieldChooseModel?.setText(selectedModel, false)
     }
 
     /** Load the model's saved provider memory (rides on its favorite). A model
@@ -437,7 +421,7 @@ class ChooseProviderActivity : FragmentActivity() {
         switchAllowFallbacks?.isChecked = favorite?.allowFallbacks ?: true
         if (favorite != null && favorite.routingType in routingTypes) {
             selectedRoutingType = favorite.routingType
-            fieldRoutingType?.setText(routingLabel(selectedRoutingType))
+            fieldRoutingType?.setText(routingLabel(selectedRoutingType), false)
         }
         updateOrderBox()
     }

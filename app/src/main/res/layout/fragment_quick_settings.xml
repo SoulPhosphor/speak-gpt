@@ -1085,8 +1085,6 @@
                             android:id="@+id/dropdown_provider_mode"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:cursorVisible="false"
-                            android:focusable="false"
                             android:inputType="none"
                             android:text="@string/choose_provider_routing_automatic" />
                     </com.google.android.material.textfield.TextInputLayout>
