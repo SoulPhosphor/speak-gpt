@@ -1,5 +1,9 @@
 package org.teslasoft.assistant.util
 
+import com.aallam.openai.api.chat.ChatMessage
+import com.aallam.openai.api.chat.ChatRole
+import com.aallam.openai.api.chat.ImagePart
+import com.aallam.openai.api.chat.TextPart
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -7,9 +11,12 @@ import org.junit.Test
 
 class RequestCapacityTest {
 
-    private fun payload(content: String = "hello") = FrozenChatPayload(
+    private fun payload(
+        content: String = "hello",
+        message: FrozenPayloadMessage = FrozenPayloadMessage("user", content)
+    ) = FrozenChatPayload(
         model = "exact-model-id",
-        messages = listOf(FrozenPayloadMessage("user", content)),
+        messages = listOf(message),
         maximumResponseTokens = 1500,
         temperature = null,
         topP = null,
@@ -24,6 +31,50 @@ class RequestCapacityTest {
         val measured = RequestCapacity.measure(payload("line one\n漢😀"))
         val expected =
             """{"model":"exact-model-id","max_tokens":1500,"messages":[{"role":"user","content":"line one\n漢😀"}],"stream":true}"""
+        assertEquals(expected.length.toLong(), measured.requestCharacters)
+        assertEquals(
+            expected.toByteArray(Charsets.UTF_8).size.toLong(),
+            measured.serializedUtf8Bytes
+        )
+    }
+
+    @Test
+    fun `multimodal message freezes without using text-only content accessor`() {
+        val message = ChatMessage(
+            role = ChatRole.User,
+            content = listOf(
+                TextPart("what is this?"),
+                ImagePart("data:image/png;base64,YWJj", detail = "low")
+            )
+        )
+
+        assertEquals(
+            FrozenPayloadMessage(
+                role = "user",
+                content = "",
+                parts = listOf(
+                    FrozenTextPayloadPart("what is this?"),
+                    FrozenImagePayloadPart("data:image/png;base64,YWJj", "low")
+                )
+            ),
+            RequestMessageSnapshot.freeze("user", message)
+        )
+    }
+
+    @Test
+    fun `measurement counts multimodal content as structured JSON`() {
+        val message = FrozenPayloadMessage(
+            role = "user",
+            content = "",
+            parts = listOf(
+                FrozenTextPayloadPart("look"),
+                FrozenImagePayloadPart("data:image/png;base64,YWJj", "low")
+            )
+        )
+        val measured = RequestCapacity.measure(payload(message = message))
+        val expected =
+            """{"model":"exact-model-id","max_tokens":1500,"messages":[{"role":"user","content":[{"type":"text","text":"look"},{"type":"image_url","image_url":{"url":"data:image/png;base64,YWJj","detail":"low"}}]}],"stream":true}"""
+
         assertEquals(expected.length.toLong(), measured.requestCharacters)
         assertEquals(
             expected.toByteArray(Charsets.UTF_8).size.toLong(),

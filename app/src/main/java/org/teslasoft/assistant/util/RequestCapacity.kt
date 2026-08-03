@@ -10,10 +10,55 @@
 
 package org.teslasoft.assistant.util
 
+import com.aallam.openai.api.chat.ChatMessage
+import com.aallam.openai.api.chat.ImagePart
+import com.aallam.openai.api.chat.ListContent
+import com.aallam.openai.api.chat.TextContent
+import com.aallam.openai.api.chat.TextPart
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
 
-/** Immutable, provider-neutral text message in a frozen chat request. */
-data class FrozenPayloadMessage(val role: String, val content: String)
+sealed interface FrozenPayloadPart
+
+data class FrozenTextPayloadPart(val text: String) : FrozenPayloadPart
+
+data class FrozenImagePayloadPart(
+    val url: String,
+    val detail: String? = null
+) : FrozenPayloadPart
+
+/** Immutable, provider-neutral message in a frozen chat request. */
+data class FrozenPayloadMessage(
+    val role: String,
+    val content: String,
+    val parts: List<FrozenPayloadPart>? = null
+) {
+    val frozenParts: List<FrozenPayloadPart>? = parts?.toList()
+}
+
+/**
+ * Copies Aallam message content without using ChatMessage.content, whose
+ * text-only accessor throws for multimodal messages.
+ */
+object RequestMessageSnapshot {
+    fun freeze(role: String, message: ChatMessage): FrozenPayloadMessage =
+        when (val messageContent = message.messageContent) {
+            null -> FrozenPayloadMessage(role, "")
+            is TextContent -> FrozenPayloadMessage(role, messageContent.content)
+            is ListContent -> FrozenPayloadMessage(
+                role = role,
+                content = "",
+                parts = messageContent.content.map { part ->
+                    when (part) {
+                        is TextPart -> FrozenTextPayloadPart(part.text)
+                        is ImagePart -> FrozenImagePayloadPart(
+                            url = part.imageUrl.url,
+                            detail = part.imageUrl.detail
+                        )
+                    }
+                }
+            )
+        }
+}
 
 /**
  * All fields SpeakGPT sends for a normal streaming chat request.
@@ -79,7 +124,41 @@ object RequestCapacity {
             counter.string(message.role)
             counter.ascii(',')
             counter.fieldName("content")
-            counter.string(message.content)
+            val parts = message.frozenParts
+            if (parts == null) {
+                counter.string(message.content)
+            } else {
+                counter.ascii('[')
+                parts.forEachIndexed { partIndex, part ->
+                    if (partIndex > 0) counter.ascii(',')
+                    counter.ascii('{')
+                    counter.fieldName("type")
+                    when (part) {
+                        is FrozenTextPayloadPart -> {
+                            counter.string("text")
+                            counter.ascii(',')
+                            counter.fieldName("text")
+                            counter.string(part.text)
+                        }
+                        is FrozenImagePayloadPart -> {
+                            counter.string("image_url")
+                            counter.ascii(',')
+                            counter.fieldName("image_url")
+                            counter.ascii('{')
+                            counter.fieldName("url")
+                            counter.string(part.url)
+                            part.detail?.let {
+                                counter.ascii(',')
+                                counter.fieldName("detail")
+                                counter.string(it)
+                            }
+                            counter.ascii('}')
+                        }
+                    }
+                    counter.ascii('}')
+                }
+                counter.ascii(']')
+            }
             counter.ascii('}')
         }
         counter.ascii(']')
@@ -156,7 +235,16 @@ object RequestCapacity {
     fun approximateInputTokens(payload: FrozenChatPayload): TokenMeasurement {
         var total = 0L
         for (message in payload.frozenMessages) {
-            total += IncludeTextPolicy.estimateTokens(message.content).toLong()
+            val parts = message.frozenParts
+            if (parts == null) {
+                total += IncludeTextPolicy.estimateTokens(message.content).toLong()
+            } else {
+                for (part in parts) {
+                    if (part is FrozenTextPayloadPart) {
+                        total += IncludeTextPolicy.estimateTokens(part.text).toLong()
+                    }
+                }
+            }
             // Approximate role and per-message framing, never presented exact.
             total += IncludeTextPolicy.estimateTokens(message.role).toLong() + 4L
         }

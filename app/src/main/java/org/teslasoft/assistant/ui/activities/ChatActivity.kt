@@ -222,7 +222,6 @@ import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.GenErrorResult
 import org.teslasoft.assistant.util.FrozenChatPayload
-import org.teslasoft.assistant.util.FrozenPayloadMessage
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.imagegen.CreateImageTool
 import org.teslasoft.assistant.imagegen.ImageConfirmationSpeech
@@ -246,6 +245,7 @@ import org.teslasoft.assistant.util.LocaleParser
 import org.teslasoft.assistant.util.ModelContextCapacity
 import org.teslasoft.assistant.util.ModelContextDecision
 import org.teslasoft.assistant.util.RequestCapacity
+import org.teslasoft.assistant.util.RequestMessageSnapshot
 import org.teslasoft.assistant.util.RequestHeapState
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.assistant.util.chatMessage
@@ -8117,7 +8117,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 ChatRole.Tool -> "tool"
                 else -> message.role.toString().lowercase(Locale.ROOT)
             }
-            FrozenPayloadMessage(role, message.content?.toString().orEmpty())
+            RequestMessageSnapshot.freeze(role, message)
         }
         val payload = FrozenChatPayload(
             model = selectedModel,
