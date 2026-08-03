@@ -1,349 +1,596 @@
-# Project Plan
+# Roadmap
 
-*Status recorded 2026-08-03. This is the only active plan for this project.
-It replaces the roadmap in `Memory System/plan_one_page.md`, the phase list
-in `memory-system-integration-plan.md`, and the Step 1.1–1.7 delivery list
-in `Memory System/external_memory_analysis_counterplan.md`. Those files are
-no longer plans: the one-page file remains the record of owner-approved
-wording and behavior rulings that this plan cites; the other two remain
-historical/technical reference only. Agents: keep THIS file true and do not
-resurrect a superseded roadmap.*
+*Recorded 2026-08-03. This is the only active planning document in this
+repository.*
 
-## How this plan works
+The structure of truth is fixed:
 
-- **One stage at a time.** A stage is started only when the previous one is
-  finished. Nothing is built ahead, in parallel, or "while we're in there."
-- **A stage is finished only when** (1) the change is pushed and the Android
-  Checks workflow is green, and (2) the owner confirms the stage's "Done
-  means" result on the test device. Code that compiles is not a finished
-  stage.
-- **Nothing user-facing is "already decided" unless a recorded owner ruling
-  says so.** Each stage below lists which rulings it builds from and which
-  decisions are still open. An open decision is a stop point: the agent asks
-  in chat, one question at a time, before writing anything that encodes it.
-  UI layout, wording, defaults, and behavior are never invented because a
-  plan seemed to imply them.
-- **Difficulty and model.** Every stage carries a rating:
-  - **Easy → Sonnet** — mechanical, well-specified, low blast radius.
-  - **Medium → Opus** — real design-in-the-small or multi-file work.
-  - **Hard → Fable** — fragile paths (chat generation, capture, migrations,
-    import trust boundaries) or work where a wrong choice is expensive.
-- **Stage order within a phase is fixed. Phase order after Phase 2 is the
-  owner's choice** — say the word and Phases 3, 4, and 5 reorder.
+- **Current code on `main`** is the truth about what already exists.
+- **This roadmap** is the truth about what remains and the order it will be
+  built.
+- **Narrowly relevant technical specifications** (in `Memory System/`) are
+  implementation reference only.
 
-## Current verified status (owner-supplied analysis, 2026-08-03)
+No other document may call itself the roadmap, canonical plan, single
+source of truth, current phase list, or execution plan.
 
-Built: progress rework (old 1.3), self-repairing search (old 1.4), Possible
-Match machinery and Review screen (old 1.5), faster Lorebooks and logs
-(old 1.6), no-model mode and Lorebook Pending (old 1.7).
+## Ground rules
 
-Partial: Archive This Chat behavior (old 1.1), Memory Manager rows,
-Lorebook one-word cleanup.
+**Built features are closed.** Everything already built stays as it is —
+including the Memory Browser, the Pending systems, Possible Match review,
+Lorebook Pending, search repair, analysis progress behavior, and the faster
+Lorebook work. No agent reopens, redesigns, inventories, audits, or
+"reconciles" them, and no agent asks the owner to rule on them again. The
+owner's own use of the app is the audit. If the owner finds a problem, the
+owner will report that specific problem; it is fixed then, narrowly.
 
-Not built: Memory Budget Calculator, computer review package, computer
-proof run, import and reconciliation, Memory Auditor.
+**One feature at a time.** Exactly one feature from the list below may be
+active. Future features are locked: no work on them, no preparation for
+them, no refactoring for them, until the active feature is fully working
+end to end, tested, merged into `main`, and confirmed by the owner.
 
-Stage 1.1 verifies the "Built" claims before anything relies on them.
+**A feature ships whole.** A feature is complete only when its entire
+user-facing workflow works from beginning to end. Never deliver: empty
+rows, placeholder screens, controls that lead to unfinished workflows,
+export without working import, import without working Pending handling,
+shared foundations shipped alone and called completed, or preparation for
+later features. The lettered internal steps inside each feature are build
+order on that feature's branch — they are not independently shipped
+roadmap stages and are not reported as separate accomplishments. The
+feature branch merges to `main` only when the whole workflow works.
 
----
+**Internal refactors** are allowed only when the active feature requires
+them. They are part of that feature's work, not separate accomplishments.
 
-## Phase 1 — Make what exists true and finished
+**Wording.** All approved user-facing wording for the remaining features is
+inlined below, verbatim. Where this document says wording is **not
+approved**, that is a stop point: the agent asks the owner in chat before
+writing that text into any file, in any form. Nothing user-facing beyond
+what is written here is invented.
 
-The prior plans marked steps finished that were missing the wiring to make
-them functional. Phase 1 closes that gap before any new feature starts.
+**Models.** The assignments below are the owner's and are not downgraded
+without asking:
 
-### 1.1 Verify the "Built" claims end to end
+- Existing Memory Assistant Corrections — archive behavior: **High, Fable**;
+  naming and wording corrections: **Low, Sonnet**
+- Memory Budget Calculator: **High, Fable**
+- Computer Memory Review: **Hardest, Fable**
+- Memory Auditor: **Hardest, Fable**
+- Final verification of each completed feature: **Opus**
 
-**Goal:** Confirm on the device that each item marked Built actually works
-as a user experiences it — analysis progress, self-repairing search,
-Possible Match review, Lorebook speed/logs, no-model mode with Lorebook
-Pending. Produce a short gap list of anything that exists in code but is
-not reachable, not wired, or not behaving as the recorded rulings describe.
+## Feature order — fixed
 
-**Done means:** the owner has a one-page checklist of what was tested and
-the result, and every gap found is either fixed in this stage (if small and
-already-ruled) or added to this plan as its own numbered stage. No gap is
-fixed by inventing behavior.
+1. **Existing Memory Assistant Corrections**
+2. **Memory Budget Calculator**
+3. **Computer Memory Review**
+4. **Memory Auditor**
 
-**Open decisions:** none expected; any found gap whose fix needs a ruling
-stops and asks.
-
-**Difficulty: Medium → Opus.**
-
-### 1.2 Finish Archive This Chat behavior
-
-**Goal:** Complete the partially built archive toggle semantics exactly as
-already ruled (recorded in the one-page rulings file, "Binding owner
-corrections"): turning Archive This Chat off pauses archiving without
-erasing, resetting, advancing, or replacing the last truthful archive
-bookmark; turning it back on silently processes every eligible message not
-already fully processed; no "Include Earlier Messages?" prompt or any
-equivalent choice ever appears.
-
-**Done means:** the owner can flip the toggle off, chat, flip it on, run
-analysis, and see exactly the unprocessed messages get reviewed — nothing
-lost, nothing double-processed, no prompt.
-
-**Open decisions:** none — the behavior is fully ruled. Anything ambiguous
-found in the code stops and asks rather than guessing.
-
-**Difficulty: Hard → Fable** (touches transcript capture next to the chat
-generation path, where regressions land on the owner's daily driver).
-
-### 1.3 Rename the Memory Assistant row
-
-**Goal:** Rename the existing **Memory Assistant** row in Memory Manager to
-**API Memory Assistant** (approved wording). The other two approved rows —
-**Computer Memory Review** and **Memory Auditor** — are NOT added here:
-a row must never appear before its screen exists, so each row lands in the
-stage that builds its screen (4.1 and 5.1).
-
-**Done means:** the Memory Manager list shows **API Memory Assistant** and
-everything behind the row works unchanged.
-
-**Open decisions:** none.
-
-**Difficulty: Easy → Sonnet.**
-
-### 1.4 Lorebook one-word cleanup
-
-**Goal:** Finish the approved ruling that **Lorebook** is always one word in
-user-facing text everywhere in the app — including plurals and compounds
-(**Lorebooks**, **Lorebook Memories**, **Lorebook Suggestions**). Sweep all
-user-facing strings; fix remaining two-word occurrences. Code identifiers
-and internal logs are not user-facing and are left alone.
-
-**Done means:** no screen, dialog, notification, or helper text anywhere
-shows "lore book" or "lore books."
-
-**Open decisions:** none.
-
-**Difficulty: Easy → Sonnet.**
+Why this order is technically necessary: the archive bookmark rules in
+Feature 1 define which messages are *eligible* for review, and Computer
+Memory Review freezes eligible messages into its export package — building
+the package on unfinished archive semantics would bake wrong eligibility
+into every exported package; the rename must also land before later
+screens reference the name "API Memory Assistant." The Memory Budget
+Calculator shares no machinery with the file workflow, so it sits before
+the two file features rather than between them, keeping them adjacent.
+Memory Auditor is last because its computer route reuses the package
+format, import validation, durable import ledger, and Pending staging that
+Computer Memory Review builds; building the Auditor first would mean
+building that machinery inside the wrong feature.
 
 ---
 
-## Phase 2 — UI and UX reconciliation
+## Feature 1 — Existing Memory Assistant Corrections
 
-The owner was told UI/UX was decided. It was not. Screens shipped with
-designs an AI chose on its own. This phase finds every such choice and puts
-the owner back in charge of each one — without rebuilding anything before
-the owner has ruled.
+Three narrow, known corrections to already-shipped behavior. Nothing else
+about the Memory Assistant is touched.
 
-### 2.1 Inventory of undecided design choices
+### Internal steps
 
-**Goal:** Walk every screen the memory work created or changed (Memory
-Manager, Memory Browser and filters, Pending, Review/comparison, Memory
-Settings, Advanced Memory Settings, Memory Controls, API Memory Assistant,
-Lorebooks including Pending, roleplay card editors, Quick Settings memory
-rows). For each screen, list which visible choices are backed by a recorded
-owner ruling and which were AI-invented (layout, controls, wording, icons,
-defaults). This is a document only — no code changes.
+**A. Finish Archive This Chat behavior** *(High, Fable)* — the approved
+semantics, already ruled:
 
-**Done means:** the owner has a screen-by-screen list, in product language,
-of what was actually decided versus what was assumed. Each undecided item
-is a one-line question the owner can answer with a sentence.
+- Turning **Archive This Chat** off pauses archiving without erasing,
+  resetting, advancing, or replacing the last truthful archive bookmark.
+- Turning it back on silently processes every eligible message not already
+  fully processed.
+- Never show an **Include Earlier Messages?** prompt or any equivalent
+  choice.
 
-**Open decisions:** the inventory produces them; it does not answer them.
+The standing law that storage and injection are independent
+(`Memory System/owner_approved_rules.md`) governs: whether memories enter
+a chat and whether a chat may be archived are separate controls.
 
-**Difficulty: Medium → Opus.**
+**B. Rename the row** *(Low, Sonnet)* — the Memory Manager row **Memory
+Assistant** becomes **API Memory Assistant**. Row title only; the screen
+behind it is unchanged. (The approved end state of the Memory Manager list
+is three rows — API Memory Assistant, Computer Memory Review directly
+beneath it, and a separate Memory Auditor row — but the two new rows land
+inside Features 3 and 4 respectively, because a row never appears before
+its workflow works.)
 
-### 2.2 Owner rulings, one screen at a time
+**C. Lorebook one-word cleanup** *(Low, Sonnet)* — finish the ruled sweep:
+**Lorebook** is always one word in user-facing text throughout the app,
+including plurals and compound labels: **Lorebook**, **Lorebooks**,
+**Lorebook Memories**, **Lorebook Suggestions**. Never display **lore
+book** or **lore books** as two words. Code identifiers and internal logs
+are not user-facing and are left alone.
 
-**Goal:** The owner goes through the 2.1 inventory in chat at their own
-pace — one screen, sometimes one item, per exchange. Rulings are recorded
-in the rulings file. No code changes in this stage.
+**D. Final verification** *(Opus)* — on device: toggle Archive off, chat,
+toggle it on, run analysis, and confirm exactly the unprocessed messages
+are reviewed with nothing lost, nothing double-processed, and no prompt;
+confirm the renamed row; confirm no two-word "lore book" remains anywhere
+user-facing.
 
-**Done means:** every item in the inventory is either ruled on or
-explicitly deferred by the owner.
+### Complete when
 
-**Difficulty: — (conversation, no agent build work).**
-
-### 2.3 Apply the rulings, screen by screen
-
-**Goal:** Implement the 2.2 rulings. Each screen is its own bounded
-sub-stage (2.3.1, 2.3.2, … in the order the owner ruled), finished and
-confirmed on device before the next screen starts.
-
-**Done means:** per screen — the screen matches the rulings, CI is green,
-and the owner confirms it on the device.
-
-**Open decisions:** none by construction; only ruled items are built.
-
-**Difficulty: Easy → Sonnet per screen; any screen touching ChatActivity
-or Quick Settings generation-adjacent code escalates to Hard → Fable.**
+All three corrections work as ruled, CI is green, the branch is merged to
+`main`, and the owner has confirmed on the device.
 
 ---
 
-## Phase 3 — Memory Budget Calculator
+## Feature 2 — Memory Budget Calculator
 
-The calculator is fully specified by recorded rulings (screen text, live
-total, debounce behavior, section list and order, Revert/Save, the
-Discard-all confirmation, and the shared-editor requirement). No design
-decisions remain — only implementation.
+*(High, Fable; final verification Opus.)* Fully specified by owner
+rulings; no design decisions remain. The full approved specification:
 
-### 3.1 Shared card-editor component
+Remove only the proposed active-scene word or token feature from Chat →
+Quick Settings. Quick Settings itself remains unchanged. Do not add an
+**Always-active scene** total or memory-budget notice there. The dedicated
+calculator below is the only approved location for this feature.
 
-**Goal:** Make the existing card editors usable as an embedded component,
-so the calculator shows each selected item using the same fields, labels,
-styling, and validation as the real editor — with no copied second layout
-and no duplicated line-height values, per the ruling. No visible change to
-the existing card screens.
+Add a row at the bottom of the **Roleplay** screen:
 
-**Done means:** the card editors look and behave exactly as before, and the
-same component can be hosted inside another screen.
+- Title: **Memory Budget Calculator**
+- Tapping the row opens a dedicated calculator and editor screen.
 
-**Open decisions:** none user-facing. If a card editor turns out to be
-structurally impossible to reuse without visible change, stop and present
-the tradeoff.
+Screen introduction, verbatim:
 
-**Difficulty: Medium → Opus.**
+> Estimate the token footprint of static memories included in every prompt.
+> Select active Lorebooks, worlds, or characters below to preview their text
+> and calculate their combined impact on your context window.
 
-### 3.2 The calculator screen
+Directly beneath the introduction and before the selectable sections, show
+a live total using the app's title-size text style:
 
-**Goal:** Build the Roleplay screen row and the calculator exactly per the
-recorded ruling: intro text verbatim, live **Total Estimated Tokens**,
-the six selectors in the ruled order (Glamour last), per-section token
-counts using the app's shared token-estimation utility, Revert/Save per
-section, and the Save All / Discard All / Continue Editing confirmation.
+> **Total Estimated Tokens: X**
 
-**Done means:** the owner can open the calculator, select items, see live
-totals, edit and save a card there, and see the change reflected on the
-normal card screen.
+The total reflects the current on-screen selections and text, including
+edits that have not been saved yet. Saving is not required for the preview
+total to change. Dropdown selection changes update it immediately. Text
+edits trigger an event-driven recalculation after a 300 ms debounce from
+the most recent edit; do not continuously poll or recalculate on every
+keystroke. Revert and Save also update the total immediately.
 
-**Open decisions:** none — wording and behavior are ruled.
+The selectable sections appear vertically, one beneath another. Every
+selector starts at **None** and lists the existing named items currently
+available in the app:
 
-**Difficulty: Medium → Opus.**
+1. **Lorebooks**
+2. **World**
+3. **Campaign**
+4. **Roleplay Character**
+5. **Party Members**
+6. **Glamour** — place this selector last.
+
+Use the app's existing selection behavior for each type. Types that
+currently allow one active item remain single-select; types that currently
+allow several active items retain their existing multi-selection behavior.
+
+Only static text that would be included every turn is counted. For
+Lorebooks, count only always-active or core text. Keyword-triggered entries
+are excluded from the static total because they are not present in every
+prompt.
+
+When an item is selected, immediately show its editable data using the same
+field order, section layout, labels, text styling, spacing, line height,
+validation, and behavior as its actual card editor. Example section header:
+
+> **World: Sparktown**    **500 Tokens**
+
+Each selected section shows its own live approximate token count. The
+per-section counts and the combined total use the app's shared
+token-estimation utility rather than introducing a separate counting
+formula.
+
+Each selected section has:
+
+- **Revert** — discard unsaved edits in that section and restore the last
+  saved card data.
+- **Save** — save that section's changes to the underlying card so the
+  normal card screen and all other uses immediately reflect them.
+
+If the user tries to leave the calculator or replace a selection while any
+section contains unsaved edits, show a dedicated confirmation box:
+
+> **Discard all changes?**
+>
+> The following sections have unsaved changes:
+>
+> [Each affected section appears on its own row.]
+
+Actions:
+
+1. **Save All** — save every listed section, then continue the action the
+   user attempted.
+2. **Discard All** — discard every listed section's unsaved edits, then
+   continue the action the user attempted.
+3. **Continue Editing** — close the box, cancel the attempted navigation or
+   selection change, and return to the calculator exactly as it was.
+   Nothing is saved, discarded, or otherwise changed.
+
+The calculator must not contain a copied second version of the card layout
+or hard-coded duplicate line-height values. Reuse the same card-editor
+component where practical, or the same shared field and text styles where a
+shared component is not possible. A later card-layout or line-height change
+must update both the normal card and calculator without separate
+maintenance.
+
+### Internal steps
+
+**A.** Make the existing card editors hostable as an embedded component
+with no visible change to their normal screens (required by the
+no-duplicate-layout rule above; this refactor is part of this feature).
+
+**B.** The Roleplay row and the calculator screen: introduction, live
+total, the six selectors in the ruled order.
+
+**C.** Per-section embedded editors with live token counts, Revert and
+Save wired to the real cards.
+
+**D.** The unsaved-changes confirmation and navigation guard.
+
+**E. Final verification** *(Opus)* — on device: select items, watch totals
+update per the debounce rules, edit and save a card in the calculator, and
+confirm the change on the normal card screen; confirm the discard dialog's
+three actions behave exactly as ruled.
+
+### Complete when
+
+The whole calculator workflow works as specified, CI is green, merged to
+`main`, owner-confirmed on device.
 
 ---
 
-## Phase 4 — Computer Memory Review (the file feature)
+## Feature 3 — Computer Memory Review
 
-Lets the owner use a computer AI they already pay for instead of API
+*(Hardest, Fable; final verification Opus.)* Lets the owner use an AI on
+their computer — the subscription already paid for — instead of API
 tokens: export a review package, have the computer AI propose memories,
-import the result into Pending. Approved wording and screen structure are
-recorded; the export/import machinery is specified in the counterplan's
-technical sections (reference only — its roadmap is superseded).
+import the results into Pending. The feature is complete only when the
+entire export → computer review → import → Pending path works.
 
-### 4.1 Export: the review package
+### Approved requirements (verbatim rulings)
 
-**Goal:** The **Computer Memory Review** row and screen (approved wording),
-with the export function producing the `.sgmemory` package: eligible
-conversations, the searchable existing-memories reference, target catalog
-with stable IDs, and the package's own README and AI instructions. Includes
-the approved Memory Analysis Type picker controlling whether the package
-asks for Associative Memories or Lorebook Memories. Exported conversations
-are claimed/frozen so the phone and the package cannot disagree about what
-was reviewed.
+The Memory Manager gains the row **Computer Memory Review**, directly
+beneath **API Memory Assistant** (the row lands with this feature, never
+before the workflow works). Subtitle:
 
-**Done means:** the owner can export a package, open it on a computer, and
-see readable instructions and data; the app shows the outstanding package
-truthfully.
+> **Use an AI on your computer to review chats.**
 
-**Open decisions:** export-completion and failure wording is NOT approved
-(recorded as awaiting approval) — stop and ask before writing any terminal
-status text.
+Introduction at the top of the screen, shown as two paragraphs with
+visible spacing between them:
 
-**Difficulty: Medium → Opus.**
+> Create a review package for an AI on your computer. It can review chats
+> for new memories.
+>
+> Once complete, import the result file. Your memory manager will organize
+> all flagged suggestions into their respective slots so you can review and
+> confirm them at your own pace.
 
-### 4.2 Import and reconciliation
+The screen order:
 
-**Goal:** Import the result file: strict validation (file type, version,
-package match, size, already-imported), evidence checks against the frozen
-conversations, duplicate and Possible Match checks through the same filing
-boundary the API route uses, per-item durable import ledger so an
-interrupted import resumes honestly and a repeat import never duplicates,
-and staging into the correct Pending area. The approved plain-language
-import error list is already ruled and is used verbatim.
+1. The existing export function at the top.
+2. The import function directly below it.
 
-**Done means:** a valid result file lands as Pending suggestions with
-**Potential Memories Found: N** and **View**; every bad-file case shows its
-ruled error message under the Import button; importing twice changes
-nothing.
+Do not redesign the existing conversation export flow. Retain the
+already-decided eligible-chat selection and package-export behavior.
 
-**Open decisions:** none expected beyond already-ruled text; anything new
-stops and asks.
+The export area uses the approved two-column **Memory Analysis Type**
+picker, matching the **Memory Engine** row's two-column settings-row
+pattern rather than creating a new layout:
 
-**Difficulty: Hard → Fable** (a trust boundary writing into the memory
-store; the most expensive place in the project to be wrong).
+- Left column title: **Memory Analysis Type**
+- Left column subtitle, shown as three paragraphs with visible spacing
+  between them:
 
-### 4.3 Proof run
+  **Choose which memory system this analysis should create suggestions
+  for.**
 
-**Goal:** Prove the loop end to end with a real file-capable AI on a real
-computer: export, run, import. Fix what the proof exposes (instruction
-clarity, schema friction, validation gaps) within existing rulings.
+  **Associative Memories use an embedding model to surface memories
+  connected to the ideas and topics being discussed.**
 
-**Done means:** the owner (or the agent, documented step by step) has
-completed one real export → computer review → import → Pending cycle, and
-the friction found is fixed or filed as new stages.
+  **Lorebook Memories are activated by specific keywords and do not
+  require an embedding model.**
 
-**Open decisions:** any fix needing new wording or behavior stops and asks.
+- Right-hand column: a drop-down aligned at the top with exactly two
+  choices: **Associative Memories** and **Lorebook Memories**.
+- **Associative Memories** is the default.
 
-**Difficulty: Medium → Opus.**
+There is no **Both** option: one run creates one kind of suggestion. The
+selected type determines whether the exported review package asks the
+computer AI to create **Associative Memories** or **Lorebook Memories**.
+
+The exported `.sgmemory` package includes its own README, AI workflow
+instructions, safety and scope instructions, result schema, and proposals
+template. The user does not need to invent separate instructions for the
+AI.
+
+Import section — title:
+
+> **Import**
+
+Helper text:
+
+> Upload the result file created by the external AI to add its suggestions
+> to Pending.
+
+Button:
+
+> **Import**
+
+After the user chooses a result file, reuse the same inline progress
+pattern as the API Memory Assistant. Disable the button and show an
+indeterminate spinner with:
+
+> **Importing Memories…**
+
+Do not say **Importing Conversations**. Conversations remain in the review
+package and are not imported into the app.
+
+When import and validation finish successfully, remove the spinner and
+show:
+
+> **Potential Memories Found: N**
+
+Show a **View** button beside or directly beneath the result. **View**
+opens the appropriate Pending area based on the result file's declared
+analysis type:
+
+- Associative-memory results open **Memories → Pending**.
+- Lorebook-memory results open **Lorebooks → Pending**.
+
+Every import error appears directly beneath the Import button in plain
+language and remains visible until the user chooses another file or
+retries. Use the most specific plain-language import error available:
+
+- **Wrong file type. Select the JSON result file created by the external
+  AI.**
+- **This file does not contain any recognizable memories.**
+- **This result file could not be read. It may be incomplete or damaged.**
+- **This result file does not match a review package created by this
+  app.**
+- **This result file uses a version this app cannot import.**
+- **This result file is too large to import.**
+- **This result file has already been imported.**
+
+Do not rely only on a toast, snackbar, dialog, or log. Never expose raw
+JSON, enum names, stack traces, or exception text in this area. If a
+structurally valid result contains both valid and invalid proposals,
+import the valid proposals rather than failing the entire file; show how
+many suggestions could not be imported and provide access to details.
+
+The import may finish quickly, but the app must still validate the file,
+IDs, placements, evidence, duplicates, and current phone state before
+creating Pending items. The computer never writes directly into the memory
+store, and nothing is approved automatically.
+
+Creating a review package and importing a result are durable operations:
+the screen does not need to stay open, verified progress and completion
+remain visible when the user returns, and a resumed or repeated import
+must not create duplicate Pending proposals.
+
+**Wording NOT approved (stop point):** the exact success, no-findings,
+export-completion, interruption, and failure messages for review-package
+creation. Ask the owner before writing any terminal-state wording.
+
+### Technical requirements (preserved from the retired planning documents)
+
+- Exported conversation rows are claimed/frozen in one transaction; new
+  turns go to new rows and are simply not in the package. One outstanding
+  computer review package at a time; this does not block an API run over
+  other, unclaimed rows.
+- A packet ledger plus a per-conversation item ledger (item status:
+  awaiting / committed / failed / stale) makes partial and repeated
+  imports honest: replay is a true no-op and an interrupted import knows
+  exactly what committed.
+- Import funnels through the same complete filing boundary as the API
+  route — duplicate check, rejected-draft check, target resolution and
+  validation, provenance stamping — never through backup import. External
+  results cannot bypass any check the API route applies.
+- The result contract references targets by stable ID only; the importer
+  validates IDs against the exported catalog and current state. Every
+  proposed memory carries evidence (package item ID, frozen conversation
+  row IDs, a short excerpt) verified at import.
+- Package instructions treat every conversation and memory excerpt as
+  untrusted data, never as instructions to the importing app.
+- The package contains no API keys, no database file, and no embeddings.
+  Export shows a plain privacy disclosure: the package is the user's
+  conversations and memory list in readable plaintext, and what happens to
+  it depends entirely on the tool that reads it.
+
+### Internal steps
+
+**A.** Define and generate the package.
+**B.** Create the screen and controls.
+**C.** Test the computer-AI instructions with a real file-capable AI.
+**D.** Build validation and import.
+**E.** Send valid results to Pending (both destinations).
+**F.** Test the complete export-to-import path end to end.
+**G. Final verification** *(Opus)* — a full real cycle on device:
+export, computer review, import, review in Pending; every error message
+verified reachable and correct.
+
+### Complete when
+
+The entire export → computer → import → Pending workflow works with a real
+computer AI, CI is green, merged to `main`, owner-confirmed on device.
 
 ---
 
-## Phase 5 — Memory Auditor
+## Feature 4 — Memory Auditor
 
-Housekeeping for existing memories — duplicates, conflicts, outdated
-records — never a second review of conversations. Row subtitle, screen
-introduction, both routes, progress presentation, and import error
-handling are already ruled; terminal-state wording is not.
+*(Hardest, Fable; final verification Opus.)* Housekeeping for existing
+memories — never a second review of conversations. Complete only when both
+audit routes work end to end.
 
-### 5.1 Audit with the Memory Assistant model
+### Approved requirements (verbatim rulings)
 
-**Goal:** The **Memory Auditor** row and screen (approved wording), and the
-API route: freeze a snapshot of the associative-memory catalog, audit it in
-fixed batches under the same durable foreground-service pattern as API
-Memory Assistant (approved notification title **Auditing Memories**,
-percentage rules as ruled), and stage every finding into
-**Memories → Pending** as proposals.
+The Memory Manager gains a separate row titled **Memory Auditor** (the row
+lands with this feature). Row subtitle:
 
-**Done means:** the owner can start an audit, leave the screen, come back,
-watch truthful progress, and review the findings in Pending. Nothing is
-ever applied automatically.
+> **Review existing memories for possible duplicates, conflicts, outdated
+> information, and other cleanup suggestions.**
 
-**Open decisions:** success / no-findings / interruption / failure wording
-is NOT approved — stop and ask before writing any of it.
+Screen introduction:
 
-**Difficulty: Hard → Fable** (durable background run plus proposals that
-target existing records).
+> Audit your existing associative memories for possible duplicates,
+> conflicts, outdated information, unclear wording, or items that may need
+> to be edited, merged, archived, or split. All findings are sent to
+> Pending for review.
 
-### 5.2 Audit with a computer AI
+Directly beneath the introduction, show:
 
-**Goal:** The export/import audit route, reusing Phase 4's package and
-import machinery: export existing memories with read-only reference
-material and the ruled instructions, import `proposals.json` through the
-same validation and ledger, stage to Pending. Approved helper text and
-button labels are used verbatim.
+> **You may continue using the app and move between screens while the
+> audit runs. It will continue working in the foreground as long as the
+> app remains open.**
 
-**Done means:** one real export → computer audit → import → Pending cycle
-works, with the ruled error messages on bad files.
+Both audit routes inspect the existing associative-memory catalog itself.
+They do not analyze current, new, eligible, unprocessed, or archived
+conversations for new-memory discovery. Lorebooks and roleplay cards may
+be included only as read-only comparison material so overlap can be
+detected; this job does not edit them.
 
-**Open decisions:** same terminal-wording stop point as 5.1.
+Memory Auditor has no **Memory Analysis Type** picker. Both audit routes
+work on associative memories only, so there is no type to choose.
 
-**Difficulty: Medium → Opus.**
+The auditor may flag possible duplicates, contradictions, records that
+appear superseded, unclear wording, weak placement, missing evidence, or
+memories that may need to be edited, merged, archived, or split. These are
+proposals, not declarations of truth. Both records and their evidence
+remain visible for review, and the user decides what is correct.
+
+**Route 1 — Analyze Using the Memory Assistant Model.** Helper text:
+
+> **Use your selected Memory Assistant model to inspect your existing
+> memories and recommend possible changes.**
+
+Button:
+
+> **Audit**
+
+Show all live status directly beneath this section. While active, show:
+
+- an indeterminate spinner;
+- **Auditing Memories**;
+- once the frozen memory snapshot is divided into fixed audit batches, a
+  determinate progress bar;
+- **X%** beneath the bar.
+
+Before the total number of batches is known, do not invent a percentage.
+The percentage is completed audit batches divided by the fixed total in
+the frozen snapshot. Do not advance it on a timer or estimate model-token
+progress. Reaching 100% is not success until final parsing, validation,
+duplicate checking, and Pending staging finish.
+
+The audit uses the same durable foreground-service pattern as API Memory
+Assistant. The user may leave the screen, continue chatting, or turn the
+screen off without cancelling the audit. A durable run recovers after
+process interruption. If the process is force-stopped or dies, the durable
+record recovers the unfinished audit when the app starts again; the UI
+must not claim that work continued while the process was dead.
+
+The Android foreground-service notification uses:
+
+- Title: **Auditing Memories**
+- Indeterminate progress before the total is known.
+- A determinate progress bar with **X% complete** once the total is known.
+- Tapping the notification opens **Memory Auditor**.
+- No separate completion notification.
+
+**Route 2 — Audit Using AI on Computer.** Helper text:
+
+> **Export your existing memories with instructions for a file-capable AI.
+> The AI will create a JSON result file for you to import below.**
+
+Button:
+
+> **Export Memories for Audit**
+
+Show export status directly beneath this section. The exported `.sgmemory`
+package contains the existing memories and relevant read-only audit
+reference material, not conversations for new-memory discovery. It
+includes:
+
+- `README.md`;
+- `instructions/agent_workflow.md`;
+- `instructions/safety_and_scope.md`;
+- the result schema and proposals template.
+
+After export, show:
+
+> **Give this package to a file-capable AI and ask it to open the package,
+> read README.md, follow instructions/agent_workflow.md, and create
+> proposals.json.**
+
+**Import Memory Audit Results.** Helper text:
+
+> **Import the JSON result file created by the external AI. Suggested
+> changes will be added to Pending for review.**
+
+Button:
+
+> **Import**
+
+After the user selects a result file, disable the button and show the
+spinner and active button text:
+
+> **Importing Memories…**
+
+Show all status and errors directly beneath this section. The same
+plain-language import error list and visibility rules as Feature 3 apply
+verbatim. When import and validation finish successfully, show:
+
+> **Potential Memories Found: N**
+
+Show **View**, which opens **Memories → Pending**.
+
+The result file contains proposals only. The phone validates and organizes
+them into Pending cards for the user to review, correct, accept, or
+reject. Nothing is applied automatically.
+
+Creating an audit package and importing an audit result are durable
+operations. The screen does not need to stay open, and verified progress
+and completion remain visible when the user returns. A resumed or repeated
+import must not create duplicate Pending proposals.
+
+**Wording NOT approved (stop point):** the exact success, no-findings,
+export-completion, interruption, and failure messages for the audit
+sections. Ask the owner before writing any terminal-state wording.
+
+### Internal steps
+
+**A.** API-model audit route: frozen snapshot, fixed batches, durable
+foreground service, findings staged to Pending.
+**B.** Computer audit route export, reusing Feature 3's package machinery.
+**C.** Audit-result import through the same validation and ledger; no
+duplicate Pending items on resume or retry.
+**D.** End-to-end proof of both routes with real runs.
+**E. Final verification** *(Opus)* — both routes exercised on device,
+findings reviewed in Pending, error messages verified.
+
+### Complete when
+
+Both audit routes work end to end, CI is green, merged to `main`,
+owner-confirmed on device.
 
 ---
 
-## Parked — not scheduled, not forgotten
+## Not on this roadmap
 
-These exist as specs or rulings but are not in the active phases. None may
-be started without the owner scheduling them:
-
-- **AMOLED / theme / palette work** — paused by owner ruling (July 26
-  2026) until reinstated.
-- **Broad UI redesign** (`ui-redesign-plan.md`) — separate later effort;
-  Phase 2 here is reconciliation of what shipped, not the redesign.
-- **Android ⇄ Windows sync** — file-based sync design is recorded in the
-  superseded integration plan (D10); build only on owner request.
-- **Local speech** (`whisper-local-plan.md`), **document includes**
-  (`document-includes-plan.md`), **image generation rebuild**
-  (`image-generation-rebuild-plan.md`), **profile images**
-  (`profile-images-plan.md`) — separate feature specs, scheduled only when
-  the owner says so.
-
-## How to start anything
-
-One line in chat, in your words: *"do 1.1"*, *"start the calculator"*,
-*"skip to the computer feature."* The agent maps it to the stage, works
-that one stage to its "Done means," and stops at every open decision.
+Parked feature specs elsewhere in the repository (`ui-redesign-plan.md`,
+`whisper-local-plan.md`, `document-includes-plan.md`,
+`image-generation-rebuild-plan.md`, profile-images documents) are not
+scheduled and are not to be started, prepared for, or refactored toward.
+AMOLED/theme work remains paused by owner ruling. New work enters this
+roadmap only when the owner adds it in chat.
