@@ -172,6 +172,12 @@ import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.ResponseLifecycle
 import org.teslasoft.assistant.preferences.ResponseLifecycleRecorder
+import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.providers.ProviderRoutingBlockedException
+import org.teslasoft.assistant.providers.ProviderRoutingDiagnostics
+import org.teslasoft.assistant.providers.ProviderRoutingResolver
+import org.teslasoft.assistant.providers.ProviderRoutingSerializer
+import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.DocumentImporter
@@ -248,7 +254,13 @@ import org.teslasoft.assistant.util.providerLimitMessage
 import org.teslasoft.assistant.util.reachedServer
 import org.teslasoft.assistant.util.ProviderErrorInfo
 import io.ktor.client.plugins.observer.ResponseObserver
+import io.ktor.client.plugins.api.Send
+import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.content.TextContent
 import io.ktor.http.isSuccess
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
@@ -4951,6 +4963,88 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return if (full.endsWith(marker)) full.removeSuffix(marker) else base
     }
 
+    /** The saved favorite for [model] on the active endpoint, or null. */
+    private fun favoriteForActiveEndpoint(model: String): org.teslasoft.assistant.preferences.dto.FavoriteModelObject? {
+        val endpoint = apiEndpointObject ?: return null
+        return FavoriteModelsPreferences.getPreferences(this).getFavorite(model, endpoint.id)
+    }
+
+    /**
+     * Just-before-send hook body. For a JSON Chat Completions request on an
+     * OpenRouter-identity endpoint it either:
+     *  - throws [ProviderRoutingBlockedException] when the saved routing cannot
+     *    be satisfied (e.g. Only with no usable provider) — so the request is
+     *    never silently sent unrestricted; or
+     *  - sets the resolved `provider` object on the body, overwriting any
+     *    existing one so a re-sent request (tool continuation / retry) never
+     *    carries two.
+     * Every other case (generic endpoint, non-chat body, parse issue, Automatic
+     * with no exclusions) leaves the request byte-for-byte unchanged.
+     */
+    private fun augmentRequestWithProviderRouting(request: HttpRequestBuilder) {
+        if (apiEndpointObject?.isOpenRouterRouting() != true) return
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val text = content.text
+
+        // Only a chat request carries a messages array; skip anything else, and
+        // degrade to "do nothing" on any parse failure.
+        val model = try {
+            val root = com.google.gson.JsonParser.parseString(text).asJsonObject
+            if (root.has("messages")) root.get("model")?.takeIf { !it.isJsonNull }?.asString else null
+        } catch (_: Exception) {
+            null
+        } ?: return
+
+        val resolution = ProviderRoutingResolver.resolve(true, favoriteForActiveEndpoint(model))
+
+        // Block BEFORE dispatch — deliberately thrown so the send fails cleanly
+        // through the existing error path rather than going out unrestricted.
+        if (resolution.block != RoutingBlock.NONE) {
+            lastRoutingAttachment = "BLOCKED (not sent)"
+            throw ProviderRoutingBlockedException(providerBlockMessage(resolution.block))
+        }
+
+        val providerJson = resolution.providerJson
+        if (providerJson == null) {
+            // OpenRouter, but Automatic / no saved routing — nothing to attach.
+            lastRoutingAttachment = "no provider object (Automatic / no saved routing)"
+            return
+        }
+        try {
+            val augmented = ProviderRoutingSerializer.augmentBody(text, providerJson)
+            request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
+            // Recorded ONLY after the body was actually replaced.
+            lastRoutingAttachment = "provider object attached"
+        } catch (_: Exception) {
+            // Injection is best-effort; report honestly that it was not confirmed.
+            lastRoutingAttachment = "attachment requested (mutation failed)"
+        }
+    }
+
+    /** Existing user-facing wording for a blocked routing configuration. */
+    private fun providerBlockMessage(block: RoutingBlock): String = when (block) {
+        RoutingBlock.ONLY_PROVIDER_NOT_SELECTED,
+        RoutingBlock.ONLY_PROVIDER_UNAVAILABLE -> getString(R.string.provider_only_mode_error)
+        RoutingBlock.NO_PREFERRED_AVAILABLE -> getString(R.string.provider_no_preferred_message)
+        RoutingBlock.NONE -> ""
+    }
+
+    /**
+     * The "Provider Routing" line appended to a Response Lifecycle entry. The
+     * attachment status is the interceptor's ACTUAL result for this request
+     * ([lastRoutingAttachment], set only after a confirmed body replacement),
+     * never re-derived from the routing decision. If the send hook never ran,
+     * it stays null and the line honestly reads "attachment requested…" rather
+     * than claiming the provider object was attached.
+     */
+    private fun providerRoutingLogLine(model: String): String {
+        val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
+        val favorite = favoriteForActiveEndpoint(model)
+        val status = lastRoutingAttachment ?: "attachment requested (send hook did not run)"
+        return "\nProvider Routing: " + ProviderRoutingDiagnostics.describe(isOpenRouter, favorite, status)
+    }
+
     private fun initAI() {
         if (key == null) {
             startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
@@ -5010,6 +5104,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             } catch (_: Exception) { /* best effort; never disturb the failure path */ }
                         }
                     }
+                    // OpenRouter provider routing: structurally add the resolved
+                    // `provider` object to the outgoing Chat Completions body just
+                    // before it is sent. Applies to every request on THIS chat
+                    // client — the primary turn, tool-result continuations, and
+                    // no-tools retries — so routing carries through all of them.
+                    // Fully fail-safe: any error, a non-OpenRouter endpoint, a
+                    // non-chat body, or Automatic-with-no-exclusions leaves the
+                    // request byte-for-byte unchanged, so normal chat can never be
+                    // broken by this hook.
+                    install(createClientPlugin("OpenRouterProviderRouting") {
+                        on(Send) { request ->
+                            try {
+                                augmentRequestWithProviderRouting(request)
+                            } catch (blocked: ProviderRoutingBlockedException) {
+                                // Deliberate: abort dispatch for an unsatisfiable
+                                // config rather than send it unrestricted.
+                                throw blocked
+                            } catch (_: Exception) {
+                                // Any other issue is non-fatal: send unmodified.
+                            }
+                            proceed(request)
+                        }
+                    })
                 }
             )
 
@@ -6065,6 +6182,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // share [currentLifecycleTurnId]. Capture is entirely gated on the toggle:
     // when it is off, [currentLifecycle] stays null and these helpers no-op.
     private var currentLifecycle: ResponseLifecycleRecorder? = null
+
+    /** The provider-routing send hook's ACTUAL result for the in-flight
+     *  request, written on the send thread and read when the lifecycle entry is
+     *  finalized. Reset to null when each streamed request begins, so a hook
+     *  that never runs is reported as unconfirmed rather than "attached". */
+    @Volatile
+    private var lastRoutingAttachment: String? = null
     private var currentLifecycleTurnId: String = ""
     private var lifecycleTurnCounter: Int = 0
 
@@ -6085,6 +6209,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 ResponseLifecycle.Termination.STREAM_CLOSED, "superseded by a new request"
             )
         }
+        // Reset for THIS request (after any superseded entry above is written
+        // with its own result), so the send hook's actual outcome is recorded
+        // fresh and a hook that never runs never reports a stale attachment.
+        lastRoutingAttachment = null
         if (preferences?.getResponseLifecycleLogging() != true) {
             currentLifecycle = null
             return
@@ -6145,7 +6273,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             completionTokens = r.completionTokens, totalTokens = r.totalTokens,
             receivedCharacters = r.receivedCharacters, durationMs = durationMs,
             generationId = r.generationId, errorText = errorText
-        )
+        ) + providerRoutingLogLine(r.model)
         currentLifecycle = null
         org.teslasoft.assistant.preferences.Logger.logResponseLifecycleAsync(this, body)
     }

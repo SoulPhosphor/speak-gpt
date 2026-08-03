@@ -25,6 +25,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
+import android.widget.ArrayAdapter
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -42,7 +43,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.radiobutton.MaterialRadioButton
-import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -61,20 +62,22 @@ import org.teslasoft.core.api.network.RequestNetwork
  * endpoint.
  *
  * Top to bottom: routing type (Automatic / Preferred / Only, default
- * Automatic), model pick (same model the editor's Model box sets), the Make
- * Favorite toggle, the Preferred-mode extras (fallbacks toggle + ordered
- * provider list), and the provider discovery area — a Filters pull-out and a
- * horizontally scrollable chart of every provider endpoint serving the model,
- * fetched from the endpoint's provider-discovery path when a model is chosen.
+ * Automatic), model pick (same model the editor's Model box sets), the
+ * Preferred-mode extras (fallbacks toggle + ordered provider list), and the
+ * provider discovery area — a Filters pull-out and a horizontally scrollable
+ * chart of every provider endpoint serving the model, fetched from the
+ * endpoint's provider-discovery path when a model is chosen.
  *
  * Chart selection column by mode: Only → radio buttons (exactly one provider);
  * Preferred → checkboxes that append to / remove from the ordered list;
  * Automatic → none. The Ignore column is active in every mode.
  *
- * Nothing writes to disk here. Save returns the choices to the editor, which
- * applies them to the favorites store when the endpoint profile is saved —
- * favoriting is what makes the provider memory permanent, and removing the
- * favorite removes it (owner ruling). Back / cancel returns nothing.
+ * Saving always makes the chosen model a favorite — the favorite is the box
+ * that stores this model's provider-routing memory, and removing the favorite
+ * removes it (owner ruling). Two entry points: from the endpoint editor Save
+ * returns the choices to the editor, which favorites the model on its own
+ * save; from the Favorite AI Models list's routing gear ([EXTRA_PERSIST_DIRECTLY])
+ * Save writes the favorite straight to the store. Back / cancel returns nothing.
  */
 class ChooseProviderActivity : FragmentActivity() {
 
@@ -82,7 +85,6 @@ class ChooseProviderActivity : FragmentActivity() {
         const val EXTRA_ENDPOINT_ID = "endpointId"
         const val EXTRA_MODEL = "model"
         const val EXTRA_ROUTING_TYPE = "routingType"
-        const val EXTRA_MAKE_FAVORITE = "makeFavorite"
         const val EXTRA_HOST = "host"
         const val EXTRA_API_KEY = "apiKey"
         const val EXTRA_AUTH_TYPE = "authType"
@@ -91,6 +93,13 @@ class ChooseProviderActivity : FragmentActivity() {
         const val EXTRA_ALLOW_FALLBACKS = "allowFallbacks"
         const val EXTRA_PROVIDER_ORDER = "providerOrder"
         const val EXTRA_IGNORED_PROVIDERS = "ignoredProviders"
+
+        /** When true the screen writes the chosen routing straight to the
+         *  favorites store on Save (used when opened from the Favorite AI
+         *  Models list's routing gear, where there is no endpoint-editor save
+         *  to ride on). When absent/false the choices are returned to the
+         *  caller, which applies them on its own save. */
+        const val EXTRA_PERSIST_DIRECTLY = "persistDirectly"
 
         private val routingTypes = arrayOf(
             FavoriteModelObject.ROUTING_AUTOMATIC,
@@ -123,10 +132,9 @@ class ChooseProviderActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var btnSave: ImageButton? = null
-    private var fieldRoutingType: TextInputEditText? = null
-    private var fieldChooseModel: TextInputEditText? = null
+    private var fieldRoutingType: MaterialAutoCompleteTextView? = null
+    private var fieldChooseModel: MaterialAutoCompleteTextView? = null
     private var btnViewAllModels: MaterialButton? = null
-    private var switchMakeFavorite: MaterialSwitch? = null
     private var rowAllowFallbacks: View? = null
     private var switchAllowFallbacks: MaterialSwitch? = null
     private var sectionPreferredOrder: View? = null
@@ -140,6 +148,7 @@ class ChooseProviderActivity : FragmentActivity() {
     private var chartRows: LinearLayout? = null
 
     private var endpointId: String = ""
+    private var persistDirectly: Boolean = false
     private var host: String = ""
     private var apiKey: String = ""
     private var authType: String = ApiEndpointObject.AUTH_BEARER
@@ -229,6 +238,7 @@ class ChooseProviderActivity : FragmentActivity() {
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(this)
 
         endpointId = intent.getStringExtra(EXTRA_ENDPOINT_ID) ?: ""
+        persistDirectly = intent.getBooleanExtra(EXTRA_PERSIST_DIRECTLY, false)
         host = intent.getStringExtra(EXTRA_HOST) ?: ""
         apiKey = intent.getStringExtra(EXTRA_API_KEY) ?: ""
         authType = intent.getStringExtra(EXTRA_AUTH_TYPE) ?: ApiEndpointObject.AUTH_BEARER
@@ -264,7 +274,6 @@ class ChooseProviderActivity : FragmentActivity() {
         fieldRoutingType = findViewById(R.id.field_routing_type)
         fieldChooseModel = findViewById(R.id.field_choose_model)
         btnViewAllModels = findViewById(R.id.btn_view_all_models)
-        switchMakeFavorite = findViewById(R.id.switch_make_favorite)
         rowAllowFallbacks = findViewById(R.id.row_allow_fallbacks)
         switchAllowFallbacks = findViewById(R.id.switch_allow_fallbacks)
         sectionPreferredOrder = findViewById(R.id.section_preferred_order)
@@ -310,7 +319,7 @@ class ChooseProviderActivity : FragmentActivity() {
             ?.mapNotNull { it["modelId"] }
             ?: emptyList()
 
-        fieldRoutingType?.setText(routingLabel(selectedRoutingType))
+        fieldRoutingType?.setText(routingLabel(selectedRoutingType), false)
         updateModelBox()
         updateModeViews()
     }
@@ -319,8 +328,7 @@ class ChooseProviderActivity : FragmentActivity() {
         btnBack?.setOnClickListener { cancelAndFinish() }
         btnSave?.setOnClickListener { saveAndFinish() }
 
-        fieldRoutingType?.setOnClickListener { showRoutingChooser() }
-        fieldChooseModel?.setOnClickListener { showModelChooser() }
+        setupDropdowns()
         btnViewAllModels?.setOnClickListener { openFullModelPicker() }
         btnProviderFilters?.setOnClickListener { openFilterPanel() }
 
@@ -337,41 +345,34 @@ class ChooseProviderActivity : FragmentActivity() {
         else -> getString(R.string.choose_provider_routing_automatic)
     }
 
-    private fun showRoutingChooser() {
-        val labels = routingTypes.map { routingLabel(it) }.toTypedArray()
-        val current = routingTypes.indexOf(selectedRoutingType).coerceAtLeast(0)
+    /**
+     * Both selectors are proper dropdown menus (App.ExposedTextField), not
+     * pop-up dialogs. Routing type lists Automatic / Preferred / Only; Choose
+     * Model lists this endpoint's favorite models ("None" is not offered — the
+     * screen sets routing for a real model, and the full catalog is reached
+     * through View All Models below).
+     */
+    private fun setupDropdowns() {
+        val routingLabels = routingTypes.map { routingLabel(it) }.toTypedArray()
+        fieldRoutingType?.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, routingLabels))
+        fieldRoutingType?.setText(routingLabel(selectedRoutingType), false)
+        fieldRoutingType?.setOnItemClickListener { _, _, position, _ ->
+            selectedRoutingType = routingTypes[position]
+            updateModeViews()
+            renderChart()
+        }
 
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.choose_provider_routing_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                selectedRoutingType = routingTypes[which]
-                fieldRoutingType?.setText(routingLabel(selectedRoutingType))
-                updateModeViews()
-                renderChart()
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        refreshModelDropdown()
+        fieldChooseModel?.setOnItemClickListener { _, _, position, _ ->
+            onModelChanged(favorites[position])
+        }
     }
 
-    /**
-     * Quick-pick from this endpoint's favorites. The first entry always clears
-     * the selection ("Use None"); the rest are the favorites. When the endpoint
-     * has no favorites yet the box reads "None Available" and this chooser only
-     * offers "Use None" — the full catalog is reached through View All Models.
-     */
-    private fun showModelChooser() {
-        val labels = (listOf(getString(R.string.choose_provider_model_use_none)) + favorites).toTypedArray()
-        val current = if (selectedModel.isBlank()) 0 else favorites.indexOf(selectedModel).let { if (it >= 0) it + 1 else -1 }
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.choose_provider_choose_model_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                onModelChanged(if (which == 0) "" else favorites[which - 1])
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+    /** (Re)fill the Choose Model dropdown with this endpoint's favorites. */
+    private fun refreshModelDropdown() {
+        fieldChooseModel?.setAdapter(
+            ArrayAdapter(this, android.R.layout.simple_list_item_1, favorites.toTypedArray())
+        )
     }
 
     private fun openFullModelPicker() {
@@ -402,12 +403,8 @@ class ChooseProviderActivity : FragmentActivity() {
     }
 
     private fun updateModelBox() {
-        val text = when {
-            selectedModel.isNotBlank() -> selectedModel
-            favorites.isEmpty() -> getString(R.string.choose_provider_model_none_available)
-            else -> getString(R.string.choose_provider_model_use_none)
-        }
-        fieldChooseModel?.setText(text)
+        // The selected model, or empty so the field's "Choose Model" hint shows.
+        fieldChooseModel?.setText(selectedModel, false)
     }
 
     /** Load the model's saved provider memory (rides on its favorite). A model
@@ -424,7 +421,7 @@ class ChooseProviderActivity : FragmentActivity() {
         switchAllowFallbacks?.isChecked = favorite?.allowFallbacks ?: true
         if (favorite != null && favorite.routingType in routingTypes) {
             selectedRoutingType = favorite.routingType
-            fieldRoutingType?.setText(routingLabel(selectedRoutingType))
+            fieldRoutingType?.setText(routingLabel(selectedRoutingType), false)
         }
         updateOrderBox()
     }
@@ -905,10 +902,29 @@ class ChooseProviderActivity : FragmentActivity() {
             return
         }
 
+        // Saving here always makes the model a favorite — the favorite is the
+        // box that stores this model's routing settings (owner ruling). When
+        // opened from the routing gear there is no editor save to ride on, so
+        // the favorite is written straight to the store; otherwise the choices
+        // are handed back to the caller, which favorites the model on its save.
+        if (persistDirectly) {
+            if (selectedModel.isNotBlank()) {
+                favoriteModelsPreferences?.addFavoriteModel(
+                    FavoriteModelObject(
+                        selectedModel, endpointId, selectedRoutingType,
+                        selectedProvider, switchAllowFallbacks?.isChecked != false,
+                        ArrayList(orderList), ArrayList(ignored)
+                    )
+                )
+            }
+            setResult(RESULT_OK)
+            finish()
+            return
+        }
+
         val data = Intent()
         data.putExtra(EXTRA_MODEL, selectedModel)
         data.putExtra(EXTRA_ROUTING_TYPE, selectedRoutingType)
-        data.putExtra(EXTRA_MAKE_FAVORITE, switchMakeFavorite?.isChecked == true)
         data.putExtra(EXTRA_SELECTED_PROVIDER, selectedProvider)
         data.putExtra(EXTRA_ALLOW_FALLBACKS, switchAllowFallbacks?.isChecked != false)
         data.putStringArrayListExtra(EXTRA_PROVIDER_ORDER, ArrayList(orderList))

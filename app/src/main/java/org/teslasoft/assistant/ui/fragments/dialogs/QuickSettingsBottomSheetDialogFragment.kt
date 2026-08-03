@@ -41,6 +41,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.checkbox.MaterialCheckBox
+import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
@@ -51,6 +52,7 @@ import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SystemPromptsPreferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -90,7 +92,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     private var btnSelectModel: ConstraintLayout? = null
-    private var btnSelectSystemMessage: ConstraintLayout? = null
+    private var providerModeTile: ConstraintLayout? = null
+    private var dropdownProviderMode: MaterialAutoCompleteTextView? = null
     private var btnSelectSystemPrompt: ConstraintLayout? = null
     private var textSystemPrompt: TextView? = null
     private var systemPromptsPreferences: SystemPromptsPreferences? = null
@@ -283,8 +286,23 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 apiEndpoint = apiEndpointPreferences?.getApiEndpoint(requireContext(), apiEndpointId)
                 textHost?.text = if (apiEndpoint?.label != "") apiEndpoint?.label ?: getString(R.string.label_tap_to_set) else getString(R.string.label_tap_to_set)
                 shouldForceUpdate = true
+                // Provider Mode is OpenRouter-only and reflects the active
+                // model on this endpoint, so re-evaluate it when the endpoint
+                // changes.
+                refreshProviderModeTile()
             }
         }
+    }
+
+    /** Return from the Choose Provider screen opened by the Provider Mode
+     *  set-up dialog. That screen persists the favorite itself, so just
+     *  re-sync the dropdown to whatever routing is now stored (a save applies
+     *  the new mode; a cancel leaves the old one, reverting the dropdown). */
+    private val chooseProviderLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (!isAdded) return@registerForActivityResult
+        updateListener?.onUpdate()
+        shouldForceUpdate = true
+        refreshProviderModeDisplay()
     }
 
     private var personaActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -578,6 +596,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updateListener?.onUpdate()
         shouldForceUpdate = true
         textModel?.text = model
+        // The Provider Mode dropdown reflects the active model's routing.
+        refreshProviderModeDisplay()
     }
 
     private var modelSelectedListenerV2: AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener = AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener { model, endpointId ->
@@ -587,6 +607,109 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updateListener?.onUpdate()
         shouldForceUpdate = true
         textModel?.text = model
+        // Model and endpoint may both have changed; re-evaluate the tile.
+        refreshProviderModeTile()
+    }
+
+    /* ------------------------------ Provider Mode (OpenRouter) ------------------------------ */
+
+    private val providerModeOrder = arrayOf(
+        FavoriteModelObject.ROUTING_AUTOMATIC,
+        FavoriteModelObject.ROUTING_PREFERRED,
+        FavoriteModelObject.ROUTING_ONLY
+    )
+
+    private fun providerModeLabel(mode: String): String = when (mode) {
+        FavoriteModelObject.ROUTING_PREFERRED -> getString(R.string.choose_provider_routing_preferred)
+        FavoriteModelObject.ROUTING_ONLY -> getString(R.string.choose_provider_routing_only)
+        else -> getString(R.string.choose_provider_routing_automatic)
+    }
+
+    private fun setupProviderModeDropdown() {
+        val dropdown = dropdownProviderMode ?: return
+        val labels = providerModeOrder.map { providerModeLabel(it) }.toTypedArray()
+        dropdown.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, labels))
+        dropdown.setOnItemClickListener { _, _, position, _ ->
+            onProviderModePicked(providerModeOrder[position])
+        }
+    }
+
+    /** Show the Provider Mode tile only for an OpenRouter endpoint (host-based,
+     *  never the profile name), and sync the dropdown to the active model. */
+    private fun refreshProviderModeTile() {
+        val endpointId = preferences?.getApiEndpointId() ?: ""
+        val endpoint = if (endpointId.isBlank()) null
+            else apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId)
+        val isOpenRouter = endpoint != null && endpoint.isOpenRouterRouting()
+        providerModeTile?.visibility = if (isOpenRouter) View.VISIBLE else View.GONE
+        if (isOpenRouter) refreshProviderModeDisplay()
+    }
+
+    /** Set the dropdown to the active model's stored routing mode. setText with
+     *  filter = false does not fire the selection handler, so this never loops. */
+    private fun refreshProviderModeDisplay() {
+        val endpointId = preferences?.getApiEndpointId() ?: return
+        val model = preferences?.getModel() ?: return
+        val mode = favoriteModelsPreferences?.getRoutingType(model, endpointId)
+            ?: FavoriteModelObject.ROUTING_AUTOMATIC
+        dropdownProviderMode?.setText(providerModeLabel(mode), false)
+    }
+
+    private fun onProviderModePicked(mode: String) {
+        val endpointId = preferences?.getApiEndpointId() ?: return
+        val model = preferences?.getModel() ?: return
+        if (model.isBlank()) return
+        val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
+        val needsSetup = when (mode) {
+            FavoriteModelObject.ROUTING_PREFERRED -> favorite == null || favorite.providerOrder.isEmpty()
+            FavoriteModelObject.ROUTING_ONLY -> favorite == null || favorite.selectedProvider.isBlank()
+            else -> false
+        }
+        if (needsSetup) showProviderModeSetupDialog(mode) else applyProviderMode(mode)
+    }
+
+    /** Apply a mode that needs no new setup: Automatic always, or Preferred/Only
+     *  when the model already has the providers it needs. Writes straight to the
+     *  favorite (the single source of truth). Automatic on a model that isn't a
+     *  favorite stays the default and stores nothing. */
+    private fun applyProviderMode(mode: String) {
+        val endpointId = preferences?.getApiEndpointId() ?: return
+        val model = preferences?.getModel() ?: return
+        if (model.isBlank()) return
+        val existing = favoriteModelsPreferences?.getFavorite(model, endpointId)
+        if (!(mode == FavoriteModelObject.ROUTING_AUTOMATIC && existing == null)) {
+            val favorite = existing ?: FavoriteModelObject(model, endpointId)
+            favorite.routingType = mode
+            favoriteModelsPreferences?.addFavoriteModel(favorite)
+        }
+        updateListener?.onUpdate()
+        shouldForceUpdate = true
+        refreshProviderModeDisplay()
+    }
+
+    /** Preferred/Only picked but not set up yet: confirm before leaving Quick
+     *  Settings. Set up opens the Choose Provider screen for the active model
+     *  with the chosen mode preselected; Cancel or dismiss reverts the dropdown
+     *  to the stored mode. */
+    private fun showProviderModeSetupDialog(mode: String) {
+        var launched = false
+        val dialog = MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.provider_mode_setup_title)
+            .setMessage(R.string.provider_mode_setup_message)
+            .setPositiveButton(R.string.provider_mode_setup_confirm) { _, _ ->
+                val endpointId = preferences?.getApiEndpointId() ?: return@setPositiveButton
+                val model = preferences?.getModel() ?: return@setPositiveButton
+                val prefs = apiEndpointPreferences ?: return@setPositiveButton
+                val favPrefs = favoriteModelsPreferences ?: return@setPositiveButton
+                FavoriteRoutingActions.buildRoutingIntent(requireContext(), prefs, favPrefs, model, endpointId, mode)?.let {
+                    launched = true
+                    chooseProviderLauncher.launch(it)
+                }
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .create()
+        dialog.setOnDismissListener { if (!launched) refreshProviderModeDisplay() }
+        dialog.show()
     }
 
     @SuppressLint("SetTextI18n", "DefaultLocale")
@@ -685,7 +808,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         systemPromptsPreferences = SystemPromptsPreferences.getSystemPromptsPreferences(requireContext())
 
         btnSelectModel = view.findViewById(R.id.btn_select_model)
-        btnSelectSystemMessage = view.findViewById(R.id.btn_select_system)
+        providerModeTile = view.findViewById(R.id.provider_mode_tile)
+        dropdownProviderMode = view.findViewById(R.id.dropdown_provider_mode)
         btnSelectSystemPrompt = view.findViewById(R.id.btn_select_system_prompt)
         textSystemPrompt = view.findViewById(R.id.text_system_prompt)
         btnSelectLogitBias = view.findViewById(R.id.btn_set_logit_biases)
@@ -772,7 +896,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
         usageCost?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectModel?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        btnSelectSystemMessage?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
+        providerModeTile?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectLogitBias?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectApiEndpoint?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectPersona?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
@@ -848,6 +972,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             dialog.setModelSelectedListener(modelSelectedListener)
             dialog.show(parentFragmentManager, "AdvancedModelSelectorDialogFragment")
         }
+
+        setupProviderModeDropdown()
+        refreshProviderModeTile()
 
         // System Prompt tile: the value is an inline dropdown of saved prompts;
         // the edit button opens the library. NOTE: a "None" (send no system

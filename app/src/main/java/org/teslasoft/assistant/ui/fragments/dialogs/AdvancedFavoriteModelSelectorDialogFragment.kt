@@ -23,6 +23,7 @@ import android.text.TextWatcher
 import android.view.View
 import android.widget.ListView
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -33,7 +34,6 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
-import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.ui.adapters.FavoriteModelListAdapter
 
 class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
@@ -82,6 +82,13 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
         dismiss()
     }
 
+    /** Return from the Choose Provider screen opened by a row's routing gear.
+     *  It persists the favorite itself, so we just refresh the list (a gear can
+     *  flip outline → filled once routing is set up). */
+    private val chooseProviderLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { refreshFavorites() }
+
     private var modelClickListener = object : FavoriteModelListAdapter.OnItemClickListener {
         override fun onItemClick(model: String, endpointId: String) {
             // Which preference this belongs to (the chat's own endpoint, or a
@@ -92,15 +99,32 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
         }
 
         override fun onActionClick(model: String, endpointId: String, position: Int) {
-            val modelObject = FavoriteModelObject(model, endpointId)
-            availableModels.remove(hashMapOf("modelId" to modelObject.modelId, "endpointId" to modelObject.endpointId))
-            availableModelsProjection.remove(hashMapOf("modelId" to modelObject.modelId, "endpointId" to modelObject.endpointId))
-            // Remove just this one entry from the whole store — never rewrite the
-            // store from this endpoint's filtered view, which would drop other
-            // profiles' favorites.
-            favoriteModelsPreferences?.removeFavoriteModel(modelObject.modelId, modelObject.endpointId)
-            modelListAdapter?.notifyDataSetChanged()
+            // Removing a favorite also clears its provider-routing preferences,
+            // so confirm first instead of deleting on the single tap (owner
+            // ruling). "Okay" removes just this one entry from the whole store
+            // — never rewritten from this endpoint's filtered view, which would
+            // drop other profiles' favorites.
+            FavoriteRoutingActions.confirmRemove(requireContext()) {
+                favoriteModelsPreferences?.removeFavoriteModel(model, endpointId)
+                refreshFavorites()
+            }
         }
+
+        override fun onSettingsClick(model: String, endpointId: String) {
+            val prefs = apiEndpointPreferences ?: return
+            val favPrefs = favoriteModelsPreferences ?: return
+            FavoriteRoutingActions.buildRoutingIntent(requireActivity(), prefs, favPrefs, model, endpointId)
+                ?.let { chooseProviderLauncher.launch(it) }
+        }
+    }
+
+    /** Rebuild the list from the store (used after a gear round-trip may have
+     *  changed a favorite), keeping the current search query. */
+    private fun refreshFavorites() {
+        availableModels.clear()
+        val list = favoriteModelsPreferences?.getFavoriteModels(resolvedEndpointId)
+        if (list != null) availableModels.addAll(list)
+        updateProjection(fieldSearch?.text?.toString()?.trim() ?: "")
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -164,7 +188,7 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
 
         updateProjection("")
 
-        modelListAdapter = FavoriteModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString())
+        modelListAdapter = FavoriteModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), showRoutingGear = true)
         modelListAdapter?.setOnItemClickListener(modelClickListener)
         modelList?.adapter = modelListAdapter
         modelListAdapter?.notifyDataSetChanged()
@@ -192,7 +216,7 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
             availableModelsProjection = availableModels.filter { item -> item["modelId"].toString() == query || item["modelId"].toString().contains(query) || query.contains(item["modelId"].toString())} as ArrayList<Map<String, String>>
         }
 
-        modelListAdapter = FavoriteModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString())
+        modelListAdapter = FavoriteModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), showRoutingGear = true)
         modelListAdapter?.setOnItemClickListener(modelClickListener)
         modelList?.adapter = modelListAdapter
         modelListAdapter?.notifyDataSetChanged()

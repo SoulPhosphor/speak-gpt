@@ -364,7 +364,7 @@
     <string name="endpoint_provider_discovery_path_title">Provider Discovery Path</string>
     <string name="endpoint_provider_discovery_path_subtitle">Only change this if using a custom API proxy.</string>
     <string name="endpoint_provider_discovery_path_hint_openrouter">/models/{model}/endpoints</string>
-    <string name="choose_provider_intro">Here you can select preferred model provider.</string>
+    <string name="choose_provider_intro">Here you can select preferred model provider. Saving settings here will automatically favorite this model. Unfavoriting it will clear your custom routing preferences.</string>
     <string name="choose_provider_routing_title">Select Preferred Routing Type:</string>
     <string name="choose_provider_routing_picker_title">Select Preferred Routing Type</string>
     <string name="choose_provider_routing_subtext">Automatic will allow the API service provider to choose for you. This may result in different providers each turn.\n\nPreferred will use this provider whenever possible, while keeping automatic backups active to prevent downtime.\n\nOnly guarantees you will only receive your selected provider. If your chosen provider is having issues, you can change your preferred routing type in the Summoning Circle on each chat.</string>
@@ -375,8 +375,6 @@
     <string name="choose_provider_model_use_none">Use None</string>
     <string name="choose_provider_model_none_available">None Available</string>
     <string name="choose_provider_view_all_models">View All Models</string>
-    <string name="choose_provider_make_favorite_title">Make Favorite?</string>
-    <string name="choose_provider_make_favorite_subtext">Model preferences are only permanently saved if they are a favorite. Your decisions will not be remembered if you switch between models using this API service.</string>
     <string name="provider_allow_fallbacks">Allow Other Providers if Preferred Fail</string>
     <string name="provider_preferred_order_title">Preferred Provider Order</string>
     <string name="provider_preferred_order_subtext">Instructs the API to provide you the providers with the priority you specify here. Lower is less preferred.</string>
@@ -798,6 +796,14 @@
     <string name="label_untitled_chat">Untitled chat</string>
     <string name="label_remove_from_favorites">Remove from favorites</string>
     <string name="label_add_to_favorites">Add to favorites</string>
+    <string name="favorite_remove_title">Remove favorite model?</string>
+    <string name="favorite_remove_message">This will delete any associated provider routing preferences.</string>
+    <string name="favorite_routing_settings_desc">Provider routing preferences for %1$s</string>
+    <string name="quick_provider_mode_title">Provider Mode:</string>
+    <string name="quick_provider_mode_subtext">Models having provider routing preferences will be created as model favorites.</string>
+    <string name="provider_mode_setup_title">Set up provider routing?</string>
+    <string name="provider_mode_setup_message">Preferred and Only modes need you to choose providers for this model first.</string>
+    <string name="provider_mode_setup_confirm">Set up</string>
     <string name="chat_error_empty">Please fill name field</string>
     <string name="chat_error_unique">Name must be unique</string>
     <string name="label_audio_error">Audio error</string>

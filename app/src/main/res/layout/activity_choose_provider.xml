@@ -20,10 +20,9 @@
   Choose Provider screen (OpenRouter). Reached from the Choose Provider row on
   the API endpoint editor. Full-screen with a save icon at the trailing edge of
   the header, the same header shape as the editor. The screen lets the user set
-  a preferred model-provider routing type, pick or change the model (the same
-  model the editor's Model box sets), and choose whether to make the model a
-  favorite — favoriting is what makes the routing choice permanent
-  (ChooseProviderActivity).
+  a preferred model-provider routing type and pick or change the model (the same
+  model the editor's Model box sets). Saving always makes the model a favorite —
+  the favorite is what stores the routing choice (ChooseProviderActivity).
 -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -94,17 +93,22 @@
                 android:layout_marginEnd="24dp"
                 android:text="@string/choose_provider_routing_subtext" />
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_routing_type"
-                style="@style/Widget.App.Field.Box"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_routing_type"
+                style="@style/App.ExposedTextField"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="12dp"
-                android:layout_marginEnd="24dp"
-                android:clickable="true"
-                android:cursorVisible="false"
-                android:focusable="false"
-                android:focusableInTouchMode="false"
-                android:singleLine="true" />
+                android:layout_marginEnd="24dp">
+
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                    android:id="@+id/field_routing_type"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Choose Model: section title, the favorites chooser box, then the
                  View All Models button that opens the full model picker. The
@@ -115,17 +119,23 @@
                 android:layout_marginEnd="24dp"
                 android:text="@string/choose_provider_choose_model_title" />
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/field_choose_model"
-                style="@style/Widget.App.Field.Box"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_choose_model"
+                style="@style/App.ExposedTextField"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
                 android:layout_marginTop="12dp"
                 android:layout_marginEnd="24dp"
-                android:clickable="true"
-                android:cursorVisible="false"
-                android:focusable="false"
-                android:focusableInTouchMode="false"
-                android:singleLine="true" />
+                android:hint="@string/choose_provider_choose_model_title">
+
+                <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                    android:id="@+id/field_choose_model"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_view_all_models"
@@ -137,38 +147,6 @@
                 android:layout_marginEnd="24dp"
                 android:text="@string/choose_provider_view_all_models" />
 
-            <!-- Make Favorite? Default on. Favoriting the model is what makes the
-                 routing choice above permanent; removing the favorite later
-                 removes that memory. Shared toggle-row pieces; the subtitle keeps
-                 its own wrapping since the two-sentence text would be cut by the
-                 style's single-line ellipsis. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:layout_marginBottom="16dp"
-                style="@style/Widget.App.Row.Toggle">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/choose_provider_make_favorite_title" />
-
-                    <TextView
-                        style="@style/Widget.App.Row.Subtitle"
-                        android:ellipsize="none"
-                        android:maxLines="6"
-                        android:text="@string/choose_provider_make_favorite_subtext" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_make_favorite"
-                    style="@style/Widget.App.Row.Switch"
-                    android:checked="true" />
-            </LinearLayout>
-
             <!-- Preferred mode only: whether the API may fall back to other
                  providers when the preferred ones fail. Default on. -->
             <LinearLayout
@@ -177,6 +155,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
+                android:layout_marginTop="16dp"
                 android:layout_marginEnd="24dp"
                 android:visibility="gone">
 
