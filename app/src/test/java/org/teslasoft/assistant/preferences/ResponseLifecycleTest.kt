@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.preferences
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -25,6 +26,17 @@ import org.junit.Test
  * reads and that drive the red "Outcome: Incomplete" line.
  */
 class ResponseLifecycleTest {
+
+    @Test fun actualProviderStartsUnknownAndOnlyChangesFromObservedValue() {
+        val recorder = ResponseLifecycleRecorder(
+            turnId = "T-provider", phase = ResponseLifecycle.PHASE_PRIMARY,
+            apiProvider = "Open Router", apiEndpoint = "https://openrouter.ai/api/v1/",
+            model = "google/gemma", requestedMaxOutput = 8000, startUptimeMs = 0L
+        )
+        assertNull(recorder.actualModelProvider)
+        recorder.noteActualModelProvider("  Open Inference  ")
+        assertEquals("Open Inference", recorder.actualModelProvider)
+    }
 
     @Test fun noFinishReasonIsIncompleteAndStreamClosed() {
         val r = ResponseLifecycle.classifyNormalCompletion(null, receivedCharacters = 100)
@@ -85,7 +97,8 @@ class ResponseLifecycleTest {
     @Test fun emptyOutcomeLineIsRed() {
         val body = ResponseLifecycle.format(
             turnId = "T3-1", phase = ResponseLifecycle.PHASE_PRIMARY,
-            provider = "openrouter.ai", model = "LongCat",
+            apiProvider = "Open Router", apiEndpoint = "https://openrouter.ai/api/v1/",
+            actualModelProvider = "Open Inference", model = "LongCat",
             outcome = ResponseLifecycle.Outcome.EMPTY, finishReasonDisplay = "stop",
             streamClosed = false, termination = ResponseLifecycle.Termination.PROVIDER_DONE,
             requestedMaxOutput = 8000, promptTokens = 30, completionTokens = 0,
@@ -100,7 +113,8 @@ class ResponseLifecycleTest {
     @Test fun incompleteLineMatchesTheRedRenderExactly() {
         val body = ResponseLifecycle.format(
             turnId = "T1-1", phase = ResponseLifecycle.PHASE_PRIMARY,
-            provider = "openrouter.ai", model = "LongCat",
+            apiProvider = "Open Router", apiEndpoint = "https://openrouter.ai/api/v1/",
+            actualModelProvider = "Open Inference", model = "LongCat",
             outcome = ResponseLifecycle.Outcome.INCOMPLETE, finishReasonDisplay = "missing",
             streamClosed = true, termination = ResponseLifecycle.Termination.STREAM_CLOSED,
             requestedMaxOutput = 8000, promptTokens = null, completionTokens = 742,
@@ -118,6 +132,9 @@ class ResponseLifecycleTest {
         // A null token count reads "not reported", never 0.
         assertTrue(body.contains("Prompt Tokens: not reported"))
         assertTrue(body.contains("Completion Tokens: 742"))
+        assertTrue(body.contains("Configured API Provider: Open Router"))
+        assertTrue(body.contains("API Endpoint: https://openrouter.ai/api/v1/"))
+        assertTrue(body.contains("Actual Model Provider (API response): Open Inference"))
         // No error means the honest "none reported", and the body carries no
         // leading timestamp (Logger prepends the header).
         assertTrue(body.contains("Error: none reported"))
@@ -127,7 +144,8 @@ class ResponseLifecycleTest {
     @Test fun completeEntryReadsComplete() {
         val body = ResponseLifecycle.format(
             turnId = "T2-1", phase = ResponseLifecycle.PHASE_TOOL_CONTINUATION,
-            provider = "openrouter.ai", model = "LongCat",
+            apiProvider = "OpenAI", apiEndpoint = "https://api.openai.com/v1/",
+            actualModelProvider = null, model = "LongCat",
             outcome = ResponseLifecycle.Outcome.COMPLETE, finishReasonDisplay = "stop",
             streamClosed = false, termination = ResponseLifecycle.Termination.PROVIDER_DONE,
             requestedMaxOutput = 8000, promptTokens = 30, completionTokens = 40,
@@ -137,6 +155,7 @@ class ResponseLifecycleTest {
         assertTrue(body.contains("Outcome: Complete"))
         assertTrue(body.contains("Finish Reason: stop"))
         assertTrue(body.contains("Phase: tool_continuation"))
+        assertTrue(body.contains("Actual Model Provider (API response): not reported by API"))
         // A Complete entry must never trip the red-incomplete matcher.
         assertTrue(!Regex("(?m)^Outcome: Incomplete$").containsMatchIn(body))
     }

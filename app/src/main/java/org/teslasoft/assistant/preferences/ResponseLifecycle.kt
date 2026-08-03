@@ -16,6 +16,9 @@
 
 package org.teslasoft.assistant.preferences
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
+
 /**
  * Response Lifecycle diagnostics — the temporary, opt-in record of how each
  * user-visible AI reply ended. One entry is written per actual streamed
@@ -57,6 +60,7 @@ object ResponseLifecycle {
 
     // Fields the current client library cannot surface.
     const val NOT_REPORTED = "not reported"
+    const val NOT_REPORTED_BY_API = "not reported by API"
     const val NONE_REPORTED = "none reported"
 
     /** The terminal outcomes. [INCOMPLETE] and [EMPTY] are shown in red. */
@@ -136,7 +140,9 @@ object ResponseLifecycle {
     fun format(
         turnId: String,
         phase: String,
-        provider: String,
+        apiProvider: String,
+        apiEndpoint: String,
+        actualModelProvider: String?,
         model: String,
         outcome: Outcome,
         finishReasonDisplay: String,
@@ -156,7 +162,11 @@ object ResponseLifecycle {
         return buildString {
             append("Turn ID: ").append(turnId).append('\n')
             append("Phase: ").append(phase).append('\n')
-            append("Provider: ").append(provider.ifBlank { NOT_REPORTED }).append('\n')
+            append("Configured API Provider: ").append(apiProvider.ifBlank { NOT_REPORTED }).append('\n')
+            append("API Endpoint: ").append(apiEndpoint.ifBlank { NOT_REPORTED }).append('\n')
+            append("Actual Model Provider (API response): ")
+                .append(actualModelProvider?.trim()?.ifBlank { null } ?: NOT_REPORTED_BY_API)
+                .append('\n')
             append("Model: ").append(model.ifBlank { NOT_REPORTED }).append('\n')
             append("Outcome: ").append(outcome.display).append('\n')
             append("Finish Reason: ").append(finishReasonDisplay).append('\n')
@@ -183,18 +193,26 @@ object ResponseLifecycle {
  * A recorder is finalized exactly once; [finalized] guards the streaming sites'
  * success path and the shared error/cancel funnel from double-writing.
  *
- * Not thread-confined by itself: the chat screen only touches it from the
- * generation coroutine (main-confined resumption), matching how the rest of
- * that turn's mutable state is handled.
+ * Most fields are confined to the generation coroutine. The actual provider is
+ * the one exception: Ktor's split-response observer fills it from the API's raw
+ * response stream while the normal typed stream continues unchanged.
  */
 class ResponseLifecycleRecorder(
     val turnId: String,
     val phase: String,
-    val provider: String,
+    val apiProvider: String,
+    val apiEndpoint: String,
     val model: String,
     val requestedMaxOutput: Int?,
     val startUptimeMs: Long
 ) {
+    @Volatile
+    var actualModelProvider: String? = null
+        private set
+    @Volatile
+    private var providerObservationExpected: Boolean = false
+    private val providerObservationFinished = CompletableDeferred<Unit>()
+
     var lastFinishReason: String? = null
         private set
     var generationId: String? = null
@@ -231,6 +249,24 @@ class ResponseLifecycleRecorder(
         promptTokens?.let { this.promptTokens = it }
         completionTokens?.let { this.completionTokens = it }
         totalTokens?.let { this.totalTokens = it }
+    }
+
+    fun beginProviderObservation() {
+        providerObservationExpected = true
+    }
+
+    fun noteActualModelProvider(value: String?) {
+        value?.trim()?.ifBlank { null }?.let { actualModelProvider = it }
+    }
+
+    fun finishProviderObservation() {
+        providerObservationFinished.complete(Unit)
+    }
+
+    /** Close the small observer/main-stream scheduling race on very short replies. */
+    suspend fun awaitProviderObservation(timeoutMs: Long) {
+        if (!providerObservationExpected || providerObservationFinished.isCompleted) return
+        withTimeoutOrNull(timeoutMs) { providerObservationFinished.await() }
     }
 
     fun markFinalized() { finalized = true }

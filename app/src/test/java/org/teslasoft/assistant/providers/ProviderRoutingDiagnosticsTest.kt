@@ -22,7 +22,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 
-/** The one-line routing summary written to the Response Lifecycle log. */
+/** The clearly labeled routing-request summary written to the lifecycle log. */
 class ProviderRoutingDiagnosticsTest {
 
     private fun favorite(
@@ -36,7 +36,7 @@ class ProviderRoutingDiagnosticsTest {
     @Test
     fun genericEndpointReadsNotApplied() {
         assertEquals(
-            "generic endpoint — not applied",
+            "Provider Routing: not applicable (direct endpoint)",
             ProviderRoutingDiagnostics.describe(false, favorite(FavoriteModelObject.ROUTING_ONLY, "deepinfra"), "provider object attached")
         )
     }
@@ -44,9 +44,9 @@ class ProviderRoutingDiagnosticsTest {
     @Test
     fun onlyModeShowsProviderAndTheCallerSuppliedStatus() {
         val s = ProviderRoutingDiagnostics.describe(true, favorite(FavoriteModelObject.ROUTING_ONLY, "deepinfra"), "provider object attached")
-        assertTrue(s.contains("mode=only"))
-        assertTrue(s.contains("provider=deepinfra"))
-        assertTrue(s.contains("provider object attached"))
+        assertTrue(s.contains("Provider Routing Mode: only"))
+        assertTrue(s.contains("Requested Model Provider: deepinfra"))
+        assertTrue(s.contains("Routing Request Status: provider object attached"))
     }
 
     @Test
@@ -56,10 +56,10 @@ class ProviderRoutingDiagnosticsTest {
             favorite(FavoriteModelObject.ROUTING_PREFERRED, fallbacks = false, order = listOf("deepinfra", "together"), ignored = listOf("openai")),
             "provider object attached"
         )
-        assertTrue(s.contains("mode=preferred"))
-        assertTrue(s.contains("order=[deepinfra,together]"))
-        assertTrue(s.contains("fallbacks=false"))
-        assertTrue(s.contains("excluded=[openai]"))
+        assertTrue(s.contains("Provider Routing Mode: preferred"))
+        assertTrue(s.contains("Requested Provider Order: deepinfra, together"))
+        assertTrue(s.contains("Fallbacks Allowed: false"))
+        assertTrue(s.contains("Excluded Model Providers: openai"))
     }
 
     @Test
@@ -71,5 +71,15 @@ class ProviderRoutingDiagnosticsTest {
 
         val blocked = ProviderRoutingDiagnostics.describe(true, favorite(FavoriteModelObject.ROUTING_ONLY, ""), "BLOCKED (not sent)")
         assertTrue(blocked.contains("BLOCKED (not sent)"))
+    }
+
+    @Test
+    fun automaticIsExplicitlyARequestAndNeverMasqueradesAsActualProvider() {
+        val s = ProviderRoutingDiagnostics.describe(
+            true, favorite(FavoriteModelObject.ROUTING_AUTOMATIC),
+            "no provider object (Automatic / no saved routing)"
+        )
+        assertTrue(s.contains("Requested Model Provider: automatic selection"))
+        assertFalse(s.contains("Actual Model Provider"))
     }
 }

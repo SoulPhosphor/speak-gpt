@@ -177,6 +177,7 @@ import org.teslasoft.assistant.providers.ProviderRoutingBlockedException
 import org.teslasoft.assistant.providers.ProviderRoutingDiagnostics
 import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
+import org.teslasoft.assistant.providers.ReportedProviderParser
 import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.includes.ChatInclude
@@ -262,6 +263,8 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.content.TextContent
 import io.ktor.http.isSuccess
+import io.ktor.util.AttributeKey
+import io.ktor.utils.io.readUTF8Line
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -312,6 +315,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         /** How much of a document the bookmark-writing request sees. Enough
          *  to say what the file IS, without paying to send it all again. */
         private const val ARTIFACT_EXCERPT_CHARS = 2000
+
+        /** Pins a split raw response to the lifecycle recorder for that exact request. */
+        private val responseLifecycleRecorderAttribute =
+            AttributeKey<ResponseLifecycleRecorder>("ResponseLifecycleRecorder")
+
     }
 
     // Init UI
@@ -4978,11 +4986,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  - sets the resolved `provider` object on the body, overwriting any
      *    existing one so a re-sent request (tool continuation / retry) never
      *    carries two.
-     * Every other case (generic endpoint, non-chat body, parse issue, Automatic
-     * with no exclusions) leaves the request byte-for-byte unchanged.
+     * While Response Lifecycle logging is active it also opts this OpenRouter
+     * request into official response-side router metadata, which reports the
+     * endpoint actually marked selected. Every other request BODY (generic
+     * endpoint, non-chat body, parse issue, Automatic with no exclusions)
+     * remains byte-for-byte unchanged.
      */
     private fun augmentRequestWithProviderRouting(request: HttpRequestBuilder) {
         if (apiEndpointObject?.isOpenRouterRouting() != true) return
+        if (currentLifecycle != null) {
+            // Official OpenRouter audit metadata, delivered on the final stream
+            // chunk. This is the response authority for Automatic routing; the
+            // app's requested provider settings are never substituted for it.
+            request.headers.remove("X-OpenRouter-Metadata")
+            request.headers.append("X-OpenRouter-Metadata", "enabled")
+        }
         val content = request.body as? TextContent ?: return
         if (content.contentType?.match(ContentType.Application.Json) != true) return
         val text = content.text
@@ -5031,7 +5049,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /**
-     * The "Provider Routing" line appended to a Response Lifecycle entry. The
+     * The clearly labeled provider-routing request lines appended to a Response
+     * Lifecycle entry. The
      * attachment status is the interceptor's ACTUAL result for this request
      * ([lastRoutingAttachment], set only after a confirmed body replacement),
      * never re-derived from the routing decision. If the send hook never ran,
@@ -5042,7 +5061,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
         val favorite = favoriteForActiveEndpoint(model)
         val status = lastRoutingAttachment ?: "attachment requested (send hook did not run)"
-        return "\nProvider Routing: " + ProviderRoutingDiagnostics.describe(isOpenRouter, favorite, status)
+        return "\n" + ProviderRoutingDiagnostics.describe(isOpenRouter, favorite, status)
     }
 
     private fun initAI() {
@@ -5089,18 +5108,56 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 host = OpenAIHost(composeChatHost(apiEndpointObject?.host, apiEndpointObject?.chatEndpoint)),
                 proxy = null,
                 retry = RetryStrategy(maxRetries = 0),
-                // Capture the raw error-response body for a failed request so the
-                // failure handler can name the upstream provider (OpenRouter puts
-                // it in a non-standard metadata field the client otherwise drops).
-                // The filter restricts observation to error responses ONLY, so a
-                // successful streaming response is never buffered — streaming is
-                // untouched.
+                // Capture failed-response detail and, while Response Lifecycle
+                // logging is active, tap a split COPY of successful generation
+                // streams for official router metadata or an API-reported
+                // top-level provider. Ktor's
+                // ResponseObserver preserves streaming: the OpenAI-compatible
+                // client receives the original channel unchanged and unbuffered.
                 httpClientConfig = {
                     install(ResponseObserver) {
-                        filter { call -> !call.response.status.isSuccess() }
+                        filter { call ->
+                            if (!call.response.status.isSuccess()) {
+                                true
+                            } else {
+                                // Observe successful generation streams only
+                                // while lifecycle logging owns a recorder. The
+                                // observer receives a split copy, so the normal
+                                // typed stream is neither buffered nor consumed.
+                                val recorder = currentLifecycle
+                                if (recorder == null) {
+                                    false
+                                } else {
+                                    recorder.beginProviderObservation()
+                                    if (!call.attributes.contains(responseLifecycleRecorderAttribute)) {
+                                        call.attributes.put(responseLifecycleRecorderAttribute, recorder)
+                                    }
+                                    true
+                                }
+                            }
+                        }
                         onResponse { response ->
                             try {
-                                capturedProviderErrorBody = response.bodyAsText()
+                                if (!response.status.isSuccess()) {
+                                    capturedProviderErrorBody = response.bodyAsText()
+                                } else if (response.call.attributes.contains(responseLifecycleRecorderAttribute)) {
+                                    val recorder = response.call.attributes[responseLifecycleRecorderAttribute]
+                                    try {
+                                        while (true) {
+                                            val line = response.content.readUTF8Line() ?: break
+                                            val reported = ReportedProviderParser.fromResponseLine(line)
+                                            if (reported != null) {
+                                                // Response-derived only. Never
+                                                // substitute the configured or
+                                                // requested provider here.
+                                                recorder.noteActualModelProvider(reported)
+                                                break
+                                            }
+                                        }
+                                    } finally {
+                                        recorder.finishProviderObservation()
+                                    }
+                                }
                             } catch (_: Exception) { /* best effort; never disturb the failure path */ }
                         }
                     }
@@ -6181,6 +6238,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // stream and an interrupted continuation are two comparable entries that
     // share [currentLifecycleTurnId]. Capture is entirely gated on the toggle:
     // when it is off, [currentLifecycle] stays null and these helpers no-op.
+    @Volatile
     private var currentLifecycle: ResponseLifecycleRecorder? = null
 
     /** The provider-routing send hook's ACTUAL result for the in-flight
@@ -6202,7 +6260,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Begin recording one streamed request when Response Lifecycle logging is
      *  on. A still-pending recorder (e.g. the §8 first attempt that is about to
      *  be retried) is closed first so its record is never dropped. */
-    private fun startLifecycle(phase: String, requestedMaxOutput: Int?) {
+    private suspend fun startLifecycle(phase: String, requestedMaxOutput: Int?) {
         currentLifecycle?.let {
             if (!it.finalized) finalizeLifecycleTerminal(
                 ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
@@ -6218,10 +6276,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
         if (currentLifecycleTurnId.isBlank()) beginLifecycleTurn()
+        val endpoint = apiEndpointObject
+        val apiProvider = endpoint?.provider?.trim()?.ifBlank { null }
+            ?: endpoint?.label?.trim()?.ifBlank { null }
+            ?: endpoint?.host?.trim().orEmpty()
         currentLifecycle = ResponseLifecycleRecorder(
             turnId = currentLifecycleTurnId,
             phase = phase,
-            provider = apiEndpointObject?.host ?: "",
+            apiProvider = apiProvider,
+            apiEndpoint = endpoint?.host ?: "",
             model = model,
             requestedMaxOutput = requestedMaxOutput,
             startUptimeMs = android.os.SystemClock.uptimeMillis()
@@ -6240,7 +6303,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Finalize a stream that ended on its own (the flow completed without
      *  throwing): the outcome is decided only from the finish reason actually
      *  seen — text having arrived is never treated as completion. */
-    private fun finalizeLifecycleSuccess() {
+    private suspend fun finalizeLifecycleSuccess() {
         val r = currentLifecycle ?: return
         if (r.finalized) return
         val n = ResponseLifecycle.classifyNormalCompletion(r.lastFinishReason, r.receivedCharacters)
@@ -6249,7 +6312,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Finalize a stream cut short by an error, a user stop, or an app cancel —
      *  the terminal values are decided by the caller from what it caught. */
-    private fun finalizeLifecycleTerminal(
+    private suspend fun finalizeLifecycleTerminal(
         outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
         streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
     ) {
@@ -6258,15 +6321,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
     }
 
-    private fun writeLifecycle(
+    private suspend fun writeLifecycle(
         r: ResponseLifecycleRecorder, outcome: ResponseLifecycle.Outcome,
         finishReasonDisplay: String, streamClosed: Boolean,
         termination: ResponseLifecycle.Termination, errorText: String?
     ) {
         r.markFinalized()
         val durationMs = android.os.SystemClock.uptimeMillis() - r.startUptimeMs
+        // The response observer usually records the provider from the first SSE
+        // chunk. This bounded wait only closes a scheduling race on extremely
+        // short replies, and applies solely while this opt-in log is active.
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            r.awaitProviderObservation(250L)
+        }
         val body = ResponseLifecycle.format(
-            turnId = r.turnId, phase = r.phase, provider = r.provider, model = r.model,
+            turnId = r.turnId, phase = r.phase, apiProvider = r.apiProvider,
+            apiEndpoint = r.apiEndpoint, actualModelProvider = r.actualModelProvider,
+            model = r.model,
             outcome = outcome, finishReasonDisplay = finishReasonDisplay,
             streamClosed = streamClosed, termination = termination,
             requestedMaxOutput = r.requestedMaxOutput, promptTokens = r.promptTokens,
@@ -7295,6 +7366,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val appExplanation = genError.providerLimitMessage(this)
                 ?: genError.chatMessage(this)
             val providerInfo = ProviderErrorInfo.parse(capturedProviderErrorBody)
+            // Error responses sometimes report the upstream provider even when
+            // no successful SSE stream began. Preserve it as actual only because
+            // it came from the response body parsed above.
+            currentLifecycle?.noteActualModelProvider(providerInfo.providerName)
             // Expanded provider detail (owner ruling, Aug 1 2026): the connection
             // profile's name, the upstream model service the server reported (or
             // "Not Reported" for a direct provider that names none), the model,

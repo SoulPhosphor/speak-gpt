@@ -19,10 +19,9 @@ package org.teslasoft.assistant.providers
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 
 /**
- * One-line, human-readable summary of the provider-routing decision for a
- * single request, for the Response Lifecycle log — so the resolved routing and
- * whether a provider object was attached are visible on the app's own
- * diagnostic surface, not just Logcat. Pure and unit-tested.
+ * Clearly labeled summary of the provider-routing REQUEST for one lifecycle
+ * entry. This deliberately says what the app requested, never who actually
+ * served the response; that separate fact must come from the API response.
  */
 object ProviderRoutingDiagnostics {
 
@@ -38,23 +37,24 @@ object ProviderRoutingDiagnostics {
         favorite: FavoriteModelObject?,
         attachmentStatus: String
     ): String {
-        if (!endpointIsOpenRouter) return "generic endpoint — not applied"
+        if (!endpointIsOpenRouter) return "Provider Routing: not applicable (direct endpoint)"
 
         val mode = favorite?.routingType ?: FavoriteModelObject.ROUTING_AUTOMATIC
-        val parts = mutableListOf("mode=$mode")
+        val lines = mutableListOf("Provider Routing Mode: $mode")
         when (mode) {
             FavoriteModelObject.ROUTING_ONLY ->
-                parts.add("provider=${favorite?.selectedProvider?.ifBlank { "(none)" } ?: "(none)"}")
+                lines.add("Requested Model Provider: ${favorite?.selectedProvider?.ifBlank { "(none)" } ?: "(none)"}")
             FavoriteModelObject.ROUTING_PREFERRED -> {
                 val order = favorite?.providerOrder ?: emptyList()
-                parts.add("order=[${order.joinToString(",")}]")
-                parts.add("fallbacks=${favorite?.allowFallbacks ?: true}")
+                lines.add("Requested Provider Order: ${order.ifEmpty { listOf("(none)") }.joinToString(", ")}")
+                lines.add("Fallbacks Allowed: ${favorite?.allowFallbacks ?: true}")
             }
+            else -> lines.add("Requested Model Provider: automatic selection")
         }
         val excluded = favorite?.ignoredProviders ?: emptyList()
-        if (excluded.isNotEmpty()) parts.add("excluded=[${excluded.joinToString(",")}]")
+        if (excluded.isNotEmpty()) lines.add("Excluded Model Providers: ${excluded.joinToString(", ")}")
 
-        parts.add(attachmentStatus)
-        return parts.joinToString("; ")
+        lines.add("Routing Request Status: $attachmentStatus")
+        return lines.joinToString("\n")
     }
 }
