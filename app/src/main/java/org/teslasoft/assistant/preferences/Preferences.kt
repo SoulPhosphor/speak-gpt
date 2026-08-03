@@ -18,8 +18,9 @@ package org.teslasoft.assistant.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
-import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
+import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.util.Hash
 
 class Preferences private constructor(private var preferences: SharedPreferences, private var gp: SharedPreferences, private var chatId: String) {
     companion object {
@@ -271,10 +272,14 @@ class Preferences private constructor(private var preferences: SharedPreferences
     /**
      * Retrieves the max tokens value from the shared preferences.
      *
-     * @return The maximum token value or 1500 if not found.
+     * @return The positive maximum token value, or the endpoint default if the
+     * stored value is missing or invalid.
      */
     fun getMaxTokens() : Int {
-        return getString("max_tokens", "1500").toInt()
+        return getString("max_tokens", ApiEndpointObject.DEFAULT_MAX_TOKENS.toString())
+            .toIntOrNull()
+            ?.takeIf { it > 0 }
+            ?: ApiEndpointObject.DEFAULT_MAX_TOKENS
     }
 
     /**

@@ -26,6 +26,24 @@ import org.junit.Test
  */
 class ResponseLifecycleTest {
 
+    @Test fun streamedVisibleTextProducesNonzeroReceivedCharacters() {
+        val recorder = ResponseLifecycleRecorder(
+            turnId = "T-visible-1",
+            phase = ResponseLifecycle.PHASE_PRIMARY,
+            provider = "openrouter.ai",
+            model = "LongCat",
+            requestedMaxOutput = 8_000,
+            startUptimeMs = 0
+        )
+        var visibleResponse = ""
+        recorder.noteChunk("stop", "gen-visible", 10, 4, 14)
+        visibleResponse += "Visible streamed text"
+        recorder.noteVisibleResponse(visibleResponse)
+
+        assertEquals(visibleResponse.length, recorder.receivedCharacters)
+        assertTrue(recorder.receivedCharacters > 0)
+    }
+
     @Test fun noFinishReasonIsIncompleteAndStreamClosed() {
         val r = ResponseLifecycle.classifyNormalCompletion(null, receivedCharacters = 100)
         // A stream that closed without a terminal finish reason is never treated

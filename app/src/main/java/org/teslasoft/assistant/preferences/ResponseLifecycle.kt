@@ -213,24 +213,30 @@ class ResponseLifecycleRecorder(
     /**
      * Record one chunk. The finish reason is kept as the LAST one seen (the
      * parser keeps consuming after a finish reason, since usage can arrive in a
-     * later chunk), the generation id as the FIRST seen, and received characters
-     * as the running length of the visible text the app actually obtained —
-     * which is compared against the provider's completion-token count.
+     * later chunk), and the generation id as the FIRST seen.
      */
     fun noteChunk(
         finishReason: String?,
         id: String?,
-        contentLength: Int,
         promptTokens: Int?,
         completionTokens: Int?,
         totalTokens: Int?
     ) {
         finishReason?.trim()?.ifBlank { null }?.let { lastFinishReason = it }
         if (generationId == null) id?.trim()?.ifBlank { null }?.let { generationId = it }
-        if (contentLength > 0) receivedCharacters += contentLength
         promptTokens?.let { this.promptTokens = it }
         completionTokens?.let { this.completionTokens = it }
         totalTokens?.let { this.totalTokens = it }
+    }
+
+    /**
+     * Snapshot the same accumulated assistant text used by the chat bubble and
+     * TTS. Replacing the count on every visible update makes the final value
+     * correct for success, partial failure, and interruption without trying to
+     * reconstruct the reply from transport chunks.
+     */
+    fun noteVisibleResponse(visibleResponse: String) {
+        receivedCharacters = visibleResponse.length
     }
 
     fun markFinalized() { finalized = true }

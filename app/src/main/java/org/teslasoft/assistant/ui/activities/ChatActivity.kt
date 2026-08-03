@@ -241,6 +241,7 @@ import org.teslasoft.assistant.util.ModelContextCapacity
 import org.teslasoft.assistant.util.ModelContextDecision
 import org.teslasoft.assistant.util.RequestCapacity
 import org.teslasoft.assistant.util.RequestHeapState
+import org.teslasoft.assistant.util.VisibleChatRequestConfig
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.assistant.util.chatMessage
 import org.teslasoft.assistant.util.providerDetailBlock
@@ -3463,7 +3464,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (condenseModel.isBlank()) {
             return Result.failure(IllegalStateException("No selected model"))
         }
-        val outputLimit = preferences?.getMaxTokens() ?: 1500
+        val outputLimit = preferences?.getMaxTokens() ?: ApiEndpointObject.DEFAULT_MAX_TOKENS
 
         return try {
             val text = withContext(Dispatchers.IO) {
@@ -3610,7 +3611,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (reduceModel.isBlank()) {
             return Result.failure(IllegalStateException("No selected model"))
         }
-        val outputLimit = preferences?.getMaxTokens() ?: 1500
+        val outputLimit = preferences?.getMaxTokens() ?: ApiEndpointObject.DEFAULT_MAX_TOKENS
         val userText = accompanyingUserMessage(include.id)
 
         return try {
@@ -6031,12 +6032,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val choice = v.choices.firstOrNull()
             noteLifecycleChunk(
                 choice?.finishReason?.value, v.id,
-                (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
                 v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
             )
             val delta = choice?.delta?.content
             if (delta != null && delta != "null") {
                 response += delta
+                noteLifecycleVisibleResponse(response)
                 messages[messages.size - 1]["message"] = response
                 adapter?.notifyItemChanged(messages.size - 1)
                 scroll(false)
@@ -6101,13 +6102,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun noteLifecycleChunk(
-        finishReason: String?, id: String?, contentLength: Int,
+        finishReason: String?, id: String?,
         promptTokens: Int?, completionTokens: Int?, totalTokens: Int?
     ) {
         val r = currentLifecycle ?: return
         if (r.finalized) return
-        r.noteChunk(finishReason, id, contentLength, promptTokens, completionTokens, totalTokens)
+        r.noteChunk(finishReason, id, promptTokens, completionTokens, totalTokens)
     }
+
+    private fun noteLifecycleVisibleResponse(response: String) {
+        val r = currentLifecycle ?: return
+        if (r.finalized) return
+        r.noteVisibleResponse(response)
+    }
+
+    /** The active endpoint profile drives every visible streamed reply. */
+    private fun visibleResponseMaxTokens(): Int =
+        VisibleChatRequestConfig.maximumResponseTokens(
+            apiEndpointObject?.maxTokens,
+            preferences?.getMaxTokens()
+        )
 
     /** Finalize a stream that ended on its own (the flow completed without
      *  throwing): the outcome is decided only from the finish reason actually
@@ -6279,7 +6293,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val historyIncludesSnapshot = chatMessageIncludes.toList()
         val selectedModel = model
         val endpointId = preferences?.getApiEndpointId().orEmpty()
-        val maximumResponseTokens = preferences?.getMaxTokens() ?: 0
+        val maximumResponseTokens = visibleResponseMaxTokens()
         val storedMessage = prefix + rawMessage + endSeparator
         val sentIncludes = pendingSnapshot.map { it.forSentMessage() }
         val sentIncludesJson = ChatInclude.listToJson(sentIncludes)
@@ -7001,11 +7015,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (model.contains(":ft") || model.contains("ft:")) {
                 putMessage("", true)
                 markLastAssistantStreaming()
-                startLifecycle(ResponseLifecycle.PHASE_PRIMARY, preferences?.getMaxTokens())
+                val maximumResponseTokens = visibleResponseMaxTokens()
+                startLifecycle(ResponseLifecycle.PHASE_PRIMARY, maximumResponseTokens)
                 val completionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
                     CompletionRequest(
                         model = ModelId(model),
-                        maxTokens = preferences!!.getMaxTokens(),
+                        maxTokens = maximumResponseTokens,
                         temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                         topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                         frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -7017,7 +7032,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 } else {
                     CompletionRequest(
                         model = ModelId(model),
-                        maxTokens = preferences!!.getMaxTokens(),
+                        maxTokens = maximumResponseTokens,
                         temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                         topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                         frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -7035,11 +7050,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         val choice = v.choices.firstOrNull()
                         noteLifecycleChunk(
                             choice?.finishReason?.value, v.id,
-                            (choice?.text?.takeIf { it != "null" }?.length ?: 0),
                             v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
                         )
                         if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
                             response += v.choices[0].text
+                            noteLifecycleVisibleResponse(response)
                             messages[messages.size - 1]["message"] = response
                             if (messages.size > 2) {
                                 adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
@@ -8265,10 +8280,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             null
         }
 
+        val maximumResponseTokens = visibleResponseMaxTokens()
         chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
             ChatCompletionRequest(
                 model = ModelId(model),
-                maxTokens = preferences!!.getMaxTokens(),
+                maxTokens = maximumResponseTokens,
                 temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                 topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                 frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -8284,7 +8300,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } else {
             ChatCompletionRequest(
                 model = ModelId(model),
-                maxTokens = preferences!!.getMaxTokens(),
+                maxTokens = maximumResponseTokens,
                 temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
                 topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                 frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
@@ -8325,7 +8341,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // null-safe — the old v.choices[0] would throw on that chunk.
                 noteLifecycleChunk(
                     choice?.finishReason?.value, v.id,
-                    (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
                     v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
                 )
                 choice?.delta?.toolCalls?.forEach { fragment ->
@@ -8339,6 +8354,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val deltaContent = choice?.delta?.content
                 if (deltaContent != null && deltaContent != "null") {
                     response += deltaContent
+                    noteLifecycleVisibleResponse(response)
                     messages[messages.size - 1]["message"] = response
                     if (messages.size > 2) {
                         adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)

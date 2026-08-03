@@ -119,7 +119,7 @@ class ApiEndpointObject(
         const val DEFAULT_TOP_P = 1.0f
         const val DEFAULT_FREQUENCY_PENALTY = 0.0f
         const val DEFAULT_PRESENCE_PENALTY = 0.0f
-        const val DEFAULT_MAX_TOKENS = 1500
+        const val DEFAULT_MAX_TOKENS = 8000
 
         /* Connection-timeout bounds. Default matches the value that was
          * hard-coded app-wide before this became configurable. */

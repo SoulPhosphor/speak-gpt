@@ -97,7 +97,9 @@ class ApiEndpointPreferences private constructor(
             ?: ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY
         val presencePenalty = getString(id + "_presence_penalty", ApiEndpointObject.DEFAULT_PRESENCE_PENALTY.toString()).toFloatOrNull()
             ?: ApiEndpointObject.DEFAULT_PRESENCE_PENALTY
-        val maxTokens = getString(id + "_max_tokens", ApiEndpointObject.DEFAULT_MAX_TOKENS.toString()).toIntOrNull()
+        val maxTokens = getString(id + "_max_tokens", ApiEndpointObject.DEFAULT_MAX_TOKENS.toString())
+            .toIntOrNull()
+            ?.takeIf { it > 0 }
             ?: ApiEndpointObject.DEFAULT_MAX_TOKENS
         val storedContextModel = getString(id + "_context_window_model", "")
         val contextWindowTokens = getString(id + "_context_window_tokens", "")
