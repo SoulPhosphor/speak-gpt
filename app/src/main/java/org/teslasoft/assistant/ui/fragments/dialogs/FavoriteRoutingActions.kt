@@ -79,12 +79,16 @@ object FavoriteRoutingActions {
         apiEndpointPreferences: ApiEndpointPreferences,
         favoriteModelsPreferences: FavoriteModelsPreferences,
         modelId: String,
-        endpointId: String
+        endpointId: String,
+        /** When non-null, preselect this routing type on the screen instead of
+         *  the model's stored one (used by the Quick Settings Provider Mode
+         *  dropdown, which opens the screen on the mode the user just picked). */
+        routingTypeOverride: String? = null
     ): Intent? {
         val endpoint = apiEndpointPreferences.getApiEndpoint(context, endpointId)
         if (!ImageProviderAdapters.isOpenRouter(endpoint)) return null
 
-        val routingType = favoriteModelsPreferences.getRoutingType(modelId, endpointId)
+        val routingType = routingTypeOverride ?: favoriteModelsPreferences.getRoutingType(modelId, endpointId)
 
         return Intent(context, ChooseProviderActivity::class.java)
             .putExtra(ChooseProviderActivity.EXTRA_PERSIST_DIRECTLY, true)

@@ -967,108 +967,130 @@
                     </LinearLayout>
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
-                <LinearLayout
-                    android:id="@+id/linearLayout25"
+                <!-- AI Model: full-width tile (owner redesign). Title on the
+                     left, the selected model right-aligned; tap opens the model
+                     picker. btn_accent_top rounds BOTH top corners so it reads
+                     as the rounded top of the settings card. -->
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/btn_select_model"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="24dp"
                     android:layout_marginTop="16dp"
                     android:layout_marginEnd="24dp"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal"
-                    android:weightSum="2"
-                    android:layoutDirection="ltr"
+                    android:background="@drawable/btn_accent_top"
+                    android:backgroundTint="?attr/colorSecondaryContainer"
+                    android:paddingTop="14dp"
+                    android:paddingBottom="14dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@+id/card_summarizer">
 
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/btn_select_model"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="1dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/btn_accent_top_left"
-                        android:backgroundTint="?attr/colorSecondaryContainer"
-                        android:paddingBottom="8dp">
+                    <TextView
+                        android:id="@+id/textView71"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:text="@string/label_ai_model"
+                        android:textColor="?attr/colorPrimary"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
 
-                        <TextView
-                            android:id="@+id/textView71"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="16dp"
-                            android:layout_marginTop="12dp"
-                            android:layout_marginEnd="16dp"
-                            android:text="@string/label_ai_model"
-                            android:textColor="?attr/colorPrimary"
-                            android:textSize="16sp"
-                            android:textStyle="bold"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toTopOf="parent" />
-
-                        <TextView
-                            android:id="@+id/text_model"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="16dp"
-                            android:layout_marginEnd="16dp"
-                            android:ellipsize="marquee"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:freezesText="true"
-                            android:marqueeRepeatLimit="marquee_forever"
-                            android:scrollHorizontally="true"
-                            android:singleLine="true"
-                            android:text="debug.model.name"
-                            android:textColor="@color/text"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toBottomOf="@+id/textView71" />
-
-                    </androidx.constraintlayout.widget.ConstraintLayout>
-
-                    <!-- System message moved up beneath Activation. This cell is
-                         intentionally left blank for now (owner: leave a blank
-                         spot here even if it looks bad). -->
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/btn_select_system"
+                    <TextView
+                        android:id="@+id/text_model"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="1dp"
-                        android:layout_weight="1"
-                        android:paddingBottom="8dp"
-                        android:visibility="invisible">
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="16dp"
+                        android:ellipsize="marquee"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:freezesText="true"
+                        android:gravity="end"
+                        android:marqueeRepeatLimit="marquee_forever"
+                        android:scrollHorizontally="true"
+                        android:singleLine="true"
+                        android:text="debug.model.name"
+                        android:textColor="@color/text"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toEndOf="@+id/textView71"
+                        app:layout_constraintTop_toTopOf="parent" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+                <!-- Provider Mode: full-width, square-cornered tile shown ONLY
+                     for OpenRouter endpoints (host-based detection in the
+                     fragment, never the profile name). Title + subtext column on
+                     the left, the routing-mode dropdown on the right. Visibility
+                     and the dropdown value are set in code. -->
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/provider_mode_tile"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginEnd="24dp"
+                    android:background="@drawable/btn_accent_center"
+                    android:backgroundTint="?attr/colorSecondaryContainer"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="12dp"
+                    android:visibility="gone"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/btn_select_model">
+
+                    <LinearLayout
+                        android:id="@+id/provider_mode_text_col"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:orientation="vertical"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/layout_provider_mode"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent">
 
                         <TextView
-                            android:id="@+id/textView73"
-                            android:layout_width="0dp"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="16dp"
-                            android:layout_marginTop="12dp"
-                            android:layout_marginEnd="16dp"
-                            android:text="@string/label_system_message"
+                            android:text="@string/quick_provider_mode_title"
                             android:textColor="?attr/colorPrimary"
                             android:textSize="16sp"
-                            android:textStyle="bold"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toTopOf="parent" />
+                            android:textStyle="bold" />
 
                         <TextView
-                            android:id="@+id/textView74"
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="16dp"
-                            android:layout_marginEnd="16dp"
-                            android:text="@string/label_tap_to_edit"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/quick_provider_mode_subtext"
                             android:textColor="@color/text"
-                            app:layout_constraintEnd_toEndOf="parent"
-                            app:layout_constraintStart_toStartOf="parent"
-                            app:layout_constraintTop_toBottomOf="@+id/textView73" />
+                            android:textSize="13sp" />
+                    </LinearLayout>
 
-                    </androidx.constraintlayout.widget.ConstraintLayout>
-                </LinearLayout>
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/layout_provider_mode"
+                        style="@style/App.ExposedTextField"
+                        android:layout_width="140dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_marginEnd="16dp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent">
+
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/dropdown_provider_mode"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:cursorVisible="false"
+                            android:focusable="false"
+                            android:inputType="none"
+                            android:text="@string/choose_provider_routing_automatic" />
+                    </com.google.android.material.textfield.TextInputLayout>
+                </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <LinearLayout
                     android:id="@+id/linearLayout26"
@@ -1082,7 +1104,8 @@
                     android:weightSum="2"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/linearLayout25">
+                    app:layout_constraintTop_toBottomOf="@+id/provider_mode_tile"
+                    app:layout_goneMarginTop="2dp">
 
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:id="@+id/btn_set_logit_biases"

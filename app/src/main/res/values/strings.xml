@@ -792,6 +792,11 @@
     <string name="favorite_remove_title">Remove favorite model?</string>
     <string name="favorite_remove_message">This will delete any associated provider routing preferences.</string>
     <string name="favorite_routing_settings_desc">Provider routing preferences for %1$s</string>
+    <string name="quick_provider_mode_title">Provider Mode:</string>
+    <string name="quick_provider_mode_subtext">Models having provider routing preferences will be created as model favorites.</string>
+    <string name="provider_mode_setup_title">Set up provider routing?</string>
+    <string name="provider_mode_setup_message">Preferred and Only modes need you to choose providers for this model first.</string>
+    <string name="provider_mode_setup_confirm">Set up</string>
     <string name="chat_error_empty">Please fill name field</string>
     <string name="chat_error_unique">Name must be unique</string>
     <string name="label_audio_error">Audio error</string>
