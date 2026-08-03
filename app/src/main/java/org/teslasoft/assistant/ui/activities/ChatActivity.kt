@@ -4985,25 +4985,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (apiEndpointObject?.isOpenRouterRouting() != true) return
         val content = request.body as? TextContent ?: return
         if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val text = content.text
 
-        // Parse + resolve defensively; any failure here degrades to "do nothing".
-        val resolved: Pair<ProviderRoutingResolver.Resolution, String>? = try {
-            val text = content.text
+        // Only a chat request carries a messages array; skip anything else, and
+        // degrade to "do nothing" on any parse failure.
+        val model = try {
             val root = com.google.gson.JsonParser.parseString(text).asJsonObject
-            // Only a chat request carries a messages array; skip anything else.
-            val model = if (root.has("messages")) {
-                root.get("model")?.takeIf { !it.isJsonNull }?.asString
-            } else {
-                null
-            }
-            if (model == null) null
-            else ProviderRoutingResolver.resolve(true, favoriteForActiveEndpoint(model)) to text
+            if (root.has("messages")) root.get("model")?.takeIf { !it.isJsonNull }?.asString else null
         } catch (_: Exception) {
             null
-        }
+        } ?: return
 
-        resolved ?: return
-        val (resolution, text) = resolved
+        val resolution = ProviderRoutingResolver.resolve(true, favoriteForActiveEndpoint(model))
 
         // Block BEFORE dispatch — deliberately thrown so the send fails cleanly
         // through the existing error path rather than going out unrestricted.
