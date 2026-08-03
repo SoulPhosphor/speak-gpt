@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**************************************************************************
+* Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+**************************************************************************/
+-->
+<!-- One Memory Filters dropdown row: a bold label on the left and the current
+     value on the right, using the shared Widget.App.Dropdown family (the same
+     pattern the Provider Filters panel uses). The value is the tap target and
+     opens an anchored ListPopupWindow. The row carries NO filled background —
+     only the value's own tap ripple. The value overrides the style's 0dp width
+     with an explicit weight so it fills the row inside this LinearLayout. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="12dp"
+    android:layout_marginBottom="6dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/label"
+        style="@style/Widget.App.Dropdown.Label" />
+
+    <TextView
+        android:id="@+id/value"
+        style="@style/Widget.App.Dropdown.Value"
+        android:layout_width="0dp"
+        android:layout_weight="1" />
+</LinearLayout>

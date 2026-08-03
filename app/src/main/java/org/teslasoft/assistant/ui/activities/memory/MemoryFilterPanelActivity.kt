@@ -24,13 +24,16 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
+import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -85,6 +88,16 @@ class MemoryFilterPanelActivity : FragmentActivity() {
 
         applyTheme()
         btnClose?.setOnClickListener { finish() }
+
+        // Reset Filters: shared destructive button, one third of the screen
+        // width (its label centers inside it on its own).
+        findViewById<MaterialButton>(R.id.btn_reset_filters)?.apply {
+            layoutParams = layoutParams.apply { width = resources.displayMetrics.widthPixels / 3 }
+            setOnClickListener {
+                MemoryBrowserFilterState.reset()
+                buildSections()
+            }
+        }
 
         buildSections()
     }
@@ -148,7 +161,9 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         val root = sectionsContainer ?: return
         root.removeAllViews()
 
-        addSingleSection(
+        // Sort and Source use the shared dropdown style (anchored ListPopupWindow),
+        // with Source directly under Sort (owner ruling, Aug 3 2026).
+        addDropdownSection(
             root, getString(R.string.mem_filter_sort),
             options = listOf(
                 "newest" to getString(R.string.mem_filter_sort_newest),
@@ -158,6 +173,20 @@ class MemoryFilterPanelActivity : FragmentActivity() {
             apply = { MemoryBrowserFilterState.sort = it }
         )
 
+        addDropdownSection(
+            root, getString(R.string.mem_filter_source),
+            options = listOf(
+                "all" to getString(R.string.mem_filter_option_all),
+                "hand" to getString(R.string.mem_source_hand),
+                "learned" to getString(R.string.mem_source_learned)
+            ),
+            currentKey = { MemoryBrowserFilterState.source },
+            apply = { MemoryBrowserFilterState.source = it }
+        )
+
+        // Scope, Type, and Tags keep their current multi-select interaction
+        // (owner: a different style comes next); only their filled row
+        // background was removed.
         addMultiSection(
             root, getString(R.string.mem_edit_label_scope),
             options = SCOPE_KEYS.map { it to scopeLabel(it) },
@@ -177,90 +206,58 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         // Status filter here was a duplicate. FilterState.status remains as
         // the entry-point plumbing the toggle reads.
 
-        addSingleSection(
-            root, getString(R.string.mem_filter_source),
-            options = listOf(
-                "all" to getString(R.string.mem_filter_option_all),
-                "hand" to getString(R.string.mem_source_hand),
-                "learned" to getString(R.string.mem_source_learned)
-            ),
-            currentKey = { MemoryBrowserFilterState.source },
-            apply = { MemoryBrowserFilterState.source = it }
-        )
-
         addMultiSection(
             root, getString(R.string.mem_filter_tags),
             options = availableTags.map { it to it },
             allLabel = getString(R.string.mem_filter_option_any),
             selection = MemoryBrowserFilterState.tags
         )
-
-        addResetRow(root)
     }
 
     /**
-     * Section with a single-value picker on the right of the label. No pills;
-     * the current value is displayed inline (Sort → Newest, Source → All).
+     * A single-value dropdown row in the shared Widget.App.Dropdown style: bold
+     * label on the left, current value on the right. Tapping the value opens an
+     * anchored ListPopupWindow (the shared dropdown, not a dialog). No filled
+     * row background.
      */
-    private fun addSingleSection(
+    private fun addDropdownSection(
         root: LinearLayout,
         label: String,
         options: List<Pair<String, String>>,
         currentKey: () -> String,
         apply: (String) -> Unit
     ) {
-        val section = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(12); bottomMargin = dp(6) }
+        val row = layoutInflater.inflate(R.layout.view_memory_filter_dropdown, root, false)
+        val labelView = row.findViewById<TextView>(R.id.label)
+        val valueView = row.findViewById<TextView>(R.id.value)
+
+        labelView.text = label
+        valueView.text = options.firstOrNull { it.first == currentKey() }?.second ?: currentKey()
+
+        valueView.setOnClickListener { anchor ->
+            showDropdown(anchor, options.map { it.second }) { index ->
+                apply(options[index].first)
+                valueView.text = options[index].second
+            }
         }
 
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = androidx.core.content.ContextCompat.getDrawable(
-                this@MemoryFilterPanelActivity, R.drawable.btn_accent_tonal_selector_v3
-            )
-            setPadding(dp(4), dp(8), dp(8), dp(8))
-            isClickable = true
-            isFocusable = true
-        }
+        root.addView(row)
+    }
 
-        val labelView = TextView(this).apply {
-            text = label
-            textSize = 15f
-            setTypeface(typeface, android.graphics.Typeface.BOLD)
-            setTextColor(resources.getColor(R.color.text, theme))
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            setPadding(dp(8), 0, 0, 0)
+    /** The shared dropdown: an anchored ListPopupWindow the width of its value,
+     *  matching the Provider Filters panel. */
+    private fun showDropdown(anchor: View, labels: List<String>, onPick: (Int) -> Unit) {
+        if (isFinishing) return
+        val popup = ListPopupWindow(this)
+        popup.anchorView = anchor
+        popup.isModal = true
+        popup.width = anchor.width
+        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
+        popup.setOnItemClickListener { _, _, position, _ ->
+            popup.dismiss()
+            onPick(position)
         }
-
-        val valueView = TextView(this).apply {
-            text = options.firstOrNull { it.first == currentKey() }?.second ?: currentKey()
-            textSize = 14f
-            setTextColor(resources.getColor(R.color.text_subtitle, theme))
-            setPadding(dp(8), 0, dp(4), 0)
-        }
-
-        row.addView(labelView)
-        row.addView(valueView)
-        row.setOnClickListener {
-            val labels = options.map { it.second }.toTypedArray()
-            val idx = options.indexOfFirst { it.first == currentKey() }.coerceAtLeast(0)
-            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setTitle(label)
-                .setSingleChoiceItems(labels, idx) { d, which ->
-                    apply(options[which].first)
-                    valueView.text = options[which].second
-                    d.dismiss()
-                }
-                .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-                .show()
-        }
-
-        section.addView(row)
-        root.addView(section)
+        popup.show()
     }
 
     /**
@@ -286,9 +283,8 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = androidx.core.content.ContextCompat.getDrawable(
-                this@MemoryFilterPanelActivity, R.drawable.btn_accent_tonal_selector_v3
-            )
+            // No filled row background (owner ruling, Aug 3 2026): each filter
+            // row reads as plain text, not a tile.
             setPadding(dp(4), dp(8), dp(8), dp(8))
             isClickable = true
             isFocusable = true
@@ -370,28 +366,6 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         section.addView(row)
         section.addView(pills)
         root.addView(section)
-    }
-
-    private fun addResetRow(root: LinearLayout) {
-        val row = TextView(this).apply {
-            text = getString(R.string.mem_filter_reset_full)
-            textSize = 14f
-            setTextColor(resources.getColor(R.color.accent_900, theme))
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            isClickable = true
-            isFocusable = true
-            background = androidx.core.content.ContextCompat.getDrawable(
-                this@MemoryFilterPanelActivity, R.drawable.btn_accent_tonal_selector_v3
-            )
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(24) }
-            setOnClickListener {
-                MemoryBrowserFilterState.reset()
-                buildSections()
-            }
-        }
-        root.addView(row)
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
