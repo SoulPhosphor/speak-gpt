@@ -22,7 +22,6 @@ import android.view.LayoutInflater
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.imagegen.ImageProviderAdapters
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
@@ -86,7 +85,7 @@ object FavoriteRoutingActions {
         routingTypeOverride: String? = null
     ): Intent? {
         val endpoint = apiEndpointPreferences.getApiEndpoint(context, endpointId)
-        if (!ImageProviderAdapters.isOpenRouter(endpoint)) return null
+        if (!endpoint.isOpenRouterRouting()) return null
 
         val routingType = routingTypeOverride ?: favoriteModelsPreferences.getRoutingType(modelId, endpointId)
 

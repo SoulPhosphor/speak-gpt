@@ -29,7 +29,6 @@ import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.imagegen.ImageProviderAdapters
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -128,7 +127,7 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
         }
 
         val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
-        if (!ImageProviderAdapters.isOpenRouter(endpoint)) {
+        if (!endpoint.isOpenRouterRouting()) {
             viewHolder.routingSettings.visibility = View.GONE
             viewHolder.routingSettings.setOnClickListener(null)
             return

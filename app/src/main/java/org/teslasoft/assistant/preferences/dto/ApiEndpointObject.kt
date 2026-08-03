@@ -97,9 +97,34 @@ class ApiEndpointObject(
      * endpoint editor's Advanced Options section for custom API proxies. Kept
      * at the END of the constructor so existing positional callers stay valid.
      */
-    var providerDiscoveryPath: String = ""
+    var providerDiscoveryPath: String = "",
+    /**
+     * Persisted routing identity of this endpoint: [IDENTITY_GENERIC] or
+     * [IDENTITY_OPENROUTER]. It is established once — a recognized standard
+     * OpenRouter base URL marks the endpoint OPENROUTER on save (or on
+     * migration of an existing profile) — and is STICKY: later base-URL edits
+     * never demote it. Only OPENROUTER endpoints expose provider routing and
+     * ever serialize an OpenRouter `provider` object; a GENERIC endpoint (e.g.
+     * a plain custom proxy created from scratch) never does. Distinct from the
+     * image-generation host check in ImageProviderAdapters, which is unrelated
+     * and unchanged. Kept at the END of the constructor so existing positional
+     * callers stay valid.
+     */
+    var identity: String = IDENTITY_GENERIC
 ) {
+    /** True when this endpoint carries OpenRouter routing identity. */
+    fun isOpenRouterRouting(): Boolean = identity == IDENTITY_OPENROUTER
+
     companion object {
+        const val IDENTITY_GENERIC = "generic"
+        const val IDENTITY_OPENROUTER = "openrouter"
+
+        /** The recognition rule for a standard OpenRouter base URL. Matches the
+         *  rest of the app's host check so identity lines up with it. */
+        fun isRecognizedOpenRouterUrl(host: String): Boolean =
+            host.contains("openrouter.ai", ignoreCase = true)
+
+
         /* Reserved, fixed id for the built-in "Default" endpoint. It is NOT a
          * name-derived identity in the mutable sense: the profile keeps this id
          * even if the user renames its label, and it is the value every

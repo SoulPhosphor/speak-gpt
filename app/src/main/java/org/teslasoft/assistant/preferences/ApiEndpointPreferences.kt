@@ -117,6 +117,18 @@ class ApiEndpointPreferences private constructor(
         val imageCapabilityByModel = getString(id + "_image_capability_by_model", "")
         val toolCapabilityByModel = getString(id + "_tool_capability_by_model", "")
         val providerDiscoveryPath = getString(id + "_provider_discovery_path", "")
+        // Routing identity. A stored value wins (and is sticky). When absent —
+        // an older profile saved before identity existed — it is derived once
+        // from the base URL: a recognized OpenRouter URL migrates to OPENROUTER,
+        // everything else is GENERIC. The derived value is persisted on the
+        // endpoint's next save (setApiEndpoint), which also enforces stickiness.
+        val identity = getString(id + "_identity", "").ifBlank {
+            if (ApiEndpointObject.isRecognizedOpenRouterUrl(host)) {
+                ApiEndpointObject.IDENTITY_OPENROUTER
+            } else {
+                ApiEndpointObject.IDENTITY_GENERIC
+            }
+        }
 
         return ApiEndpointObject(
             label, host, apiKey, chatEndpoint, authType,
@@ -125,7 +137,7 @@ class ApiEndpointPreferences private constructor(
             connectTimeoutSeconds, responseTimeoutSeconds, id,
             contextWindowTokens, storedContextModel,
             imageCapabilityByModel, toolCapabilityByModel,
-            providerDiscoveryPath
+            providerDiscoveryPath, identity
         )
     }
 
@@ -152,6 +164,7 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_image_capability_by_model") }
         preferences.edit { remove(id + "_tool_capability_by_model") }
         preferences.edit { remove(id + "_provider_discovery_path") }
+        preferences.edit { remove(id + "_identity") }
         secrets.set(id + "_api_key", "null")
 
         for (listener in listeners) {
@@ -224,6 +237,20 @@ class ApiEndpointPreferences private constructor(
             putString(id + "_provider_discovery_path", endpoint.providerDiscoveryPath)
         }
         secrets.set(id + "_api_key", endpoint.apiKey)
+        // Routing identity is established once and never demoted: an endpoint
+        // already marked OPENROUTER stays OPENROUTER regardless of later
+        // base-URL edits; otherwise a recognized OpenRouter URL promotes it.
+        // A plain custom proxy (unrecognized URL) stays GENERIC.
+        val existingIdentity = getString(id + "_identity", "")
+        val identity = if (existingIdentity == ApiEndpointObject.IDENTITY_OPENROUTER ||
+            ApiEndpointObject.isRecognizedOpenRouterUrl(endpoint.host)
+        ) {
+            ApiEndpointObject.IDENTITY_OPENROUTER
+        } else {
+            ApiEndpointObject.IDENTITY_GENERIC
+        }
+        putString(id + "_identity", identity)
+        endpoint.identity = identity
 
         for (listener in listeners) {
             listener.onApiEndpointChange()

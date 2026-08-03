@@ -156,6 +156,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var rowChooseProvider: View? = null
     private var sectionAdvancedOptions: View? = null
     private var fieldProviderDiscoveryPath: TextInputEditText? = null
+    /** Sticky routing identity of the profile being edited (see loadValues). */
+    private var loadedIdentity: String = ApiEndpointObject.IDENTITY_GENERIC
     private var sliderTemperature: Slider? = null
     private var sliderTopP: Slider? = null
     private var sliderFrequencyPenalty: Slider? = null
@@ -332,6 +334,11 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldModel?.setText(selectedModel)
 
         currentProvider = endpoint.provider
+
+        // Sticky routing identity of the profile being edited. Once OPENROUTER,
+        // the provider controls stay visible even if the base URL is later
+        // edited to something unrecognized.
+        loadedIdentity = endpoint.identity
 
         // Prefilled with OpenRouter's default discovery path when the profile
         // has no custom value; visible only on OpenRouter endpoints.
@@ -586,14 +593,17 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     }
 
     /**
-     * Show the OpenRouter-only rows (Choose Provider, Advanced Options) only
-     * while the Base URL points at an OpenRouter endpoint, using the same rule
-     * the rest of the app applies (ImageProviderAdapters.isOpenRouter): the host
-     * contains "openrouter.ai". Called on load and live as the host is edited,
-     * so the rows appear or disappear as soon as the URL matches.
+     * Show the OpenRouter-only rows (Choose Provider, and the OpenRouter
+     * Advanced Options — the provider discovery path; the general Advanced
+     * Options controls live outside this section and are never gated). Shown
+     * when this endpoint carries sticky OPENROUTER identity, OR while the Base
+     * URL currently looks like an OpenRouter URL (so a brand-new endpoint
+     * reveals the controls as its URL is typed, before the save that persists
+     * identity). Once saved as OPENROUTER, later URL edits do not hide them.
      */
     private fun updateOpenRouterSections() {
-        val isOpenRouter = fieldHost?.text.toString().contains("openrouter.ai", ignoreCase = true)
+        val isOpenRouter = loadedIdentity == ApiEndpointObject.IDENTITY_OPENROUTER ||
+            ApiEndpointObject.isRecognizedOpenRouterUrl(fieldHost?.text.toString())
         val visibility = if (isOpenRouter) View.VISIBLE else View.GONE
         rowChooseProvider?.visibility = visibility
         sectionAdvancedOptions?.visibility = visibility

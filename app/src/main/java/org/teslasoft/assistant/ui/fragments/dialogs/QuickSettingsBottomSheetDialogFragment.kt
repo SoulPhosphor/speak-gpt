@@ -44,7 +44,6 @@ import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.imagegen.ImageProviderAdapters
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
@@ -641,7 +640,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val endpointId = preferences?.getApiEndpointId() ?: ""
         val endpoint = if (endpointId.isBlank()) null
             else apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId)
-        val isOpenRouter = endpoint != null && ImageProviderAdapters.isOpenRouter(endpoint)
+        val isOpenRouter = endpoint != null && endpoint.isOpenRouterRouting()
         providerModeTile?.visibility = if (isOpenRouter) View.VISIBLE else View.GONE
         if (isOpenRouter) refreshProviderModeDisplay()
     }
