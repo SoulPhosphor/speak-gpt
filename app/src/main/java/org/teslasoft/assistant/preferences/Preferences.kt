@@ -1794,6 +1794,23 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Memory Analysis Type (owner ruling, plan_one_page.md): which memory
+     * system one Memory Assistant run creates suggestions for. "associative"
+     * (default) files saved-memory drafts exactly as before; "lorebook" files
+     * keyword-triggered lore book entry suggestions into the Lorebooks Pending
+     * area instead. One run only ever creates one kind — there is no "both".
+     * Global and sticky, defaulting to associative.
+     */
+    fun getMemoryAnalysisType() : String {
+        val stored = getGlobalString("memory_analysis_type", "associative")
+        return if (stored == "lorebook") "lorebook" else "associative"
+    }
+
+    fun setMemoryAnalysisType(type: String) {
+        putGlobalString("memory_analysis_type", if (type == "lorebook") "lorebook" else "associative")
+    }
+
+    /**
      * Archivist model (global, decision D7): an endpoint profile id from
      * ApiEndpointPreferences plus a model name. Phase 4 uses it for the
      * standing-packet compressor; Phase 6's Archivist runs use the same
@@ -1859,13 +1876,25 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("archivist_card_suggestions", value.toString())
     }
 
-    /** Custom extraction prompt; "" = use the built-in ArchivistPrompt.SYSTEM
-     *  (the Reset Prompt action clears back to ""). */
+    /** Custom Associative Memory (extraction) prompt; "" = use the built-in
+     *  ArchivistPrompt.SYSTEM (that type's Reset action clears back to ""). */
     fun getArchivistCustomPrompt(): String =
         getGlobalString("archivist_custom_prompt", "")
 
     fun setArchivistCustomPrompt(value: String) {
         putGlobalString("archivist_custom_prompt", value)
+    }
+
+    /** Custom Lorebook Memory prompt; "" = use the built-in
+     *  ArchivistPrompt.LOREBOOK_SYSTEM (that type's Reset action clears back to
+     *  ""). Stored separately from the Associative prompt because the two
+     *  analysis types require different output schemas — the Associative prompt
+     *  is never used for a Lorebook run. */
+    fun getArchivistLorebookPrompt(): String =
+        getGlobalString("archivist_lorebook_prompt", "")
+
+    fun setArchivistLorebookPrompt(value: String) {
+        putGlobalString("archivist_lorebook_prompt", value)
     }
 
     /**

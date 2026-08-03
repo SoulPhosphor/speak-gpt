@@ -846,13 +846,20 @@
     <string name="provider_rate_limit">The reply failed because the service hit a rate or throughput limit. Wait a moment and retry, or switch models.</string>
     <string name="provider_quota_limit">The reply failed because the account reached its usage or spending limit on the service. Check the account\'s usage and billing limits.</string>
     <string name="provider_out_of_credits">The reply failed because the service reports the account is out of credits. Add credits with the service, then retry.</string>
-    <!-- Raw provider detail shown beneath the app's own failure explanation.
-         Labels are Title Case; the placeholder values are full sentences. -->
+    <!-- Raw provider detail shown beneath the app's own failure explanation
+         (owner ruling, Aug 1 2026). Below the Client Error and Provider Error
+         lines it now names the connection, the upstream model service, the
+         model, and the function. Labels are Title Case; unknown values say
+         "Not Reported" rather than blank. -->
     <string name="provider_error_line">Provider Error: %1$s</string>
-    <string name="provider_name_line">Provider: %1$s</string>
+    <string name="provider_api_provider_line">API Provider: %1$s</string>
+    <string name="provider_model_service_line">Model Service Provider: %1$s</string>
+    <string name="provider_model_line">Model: %1$s</string>
+    <string name="provider_function_line">Function: %1$s</string>
     <string name="provider_error_no_response">No response received from the server.</string>
     <string name="provider_error_none">None provided by the server.</string>
-    <string name="provider_name_none">No provider reported.</string>
+    <string name="provider_value_not_reported">Not Reported</string>
+    <string name="provider_function_chat">Chat</string>
     <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried. Technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>
     <string name="label_permission_denied">Permission denied</string>
@@ -1113,6 +1120,228 @@
     <string name="mem_arch_row_completed">Completed</string>
     <string name="mem_arch_deleted_badge">Some Memories Deleted Later</string>
     <string name="mem_arch_deleted_explain">This run created memories that no longer exist because they were deleted after extraction.</string>
+
+    <!-- Archivist full-failure states (owner-approved wording, Aug 1 2026).
+         Title + subtitle per cause; shown beneath the run button, above the
+         expanded provider-detail block (Function: Archiving) and logged to the
+         Provider Failure Log. Cause-to-state mapping is wired separately. -->
+    <string name="mem_arch_fail_connection_title">Connection Failed</string>
+    <string name="mem_arch_fail_connection_msg">The app could not connect to the selected provider. Check your internet connection and endpoint settings, then try again.</string>
+    <string name="mem_arch_fail_timeout_title">Request Timed Out</string>
+    <string name="mem_arch_fail_timeout_msg">The provider did not finish the request in time. Try again, or choose a model that responds more reliably.</string>
+    <string name="mem_arch_fail_rejected_title">Request Rejected</string>
+    <string name="mem_arch_fail_rejected_msg">The provider rejected the analysis request. Check the provider response and the selected model’s settings before trying again.</string>
+
+    <!-- Rejection sub-reasons (owner-approved, Aug 3 2026): shown instead of the
+         generic Request Rejected state when every conversation in a full-failure
+         run failed with the same detectable rejection subtype. -->
+    <string name="mem_arch_fail_api_key_title">API Key Rejected</string>
+    <string name="mem_arch_fail_api_key_msg">The provider rejected the API key. Check the API key saved for the selected endpoint.</string>
+    <string name="mem_arch_fail_access_denied_title">Access Denied</string>
+    <string name="mem_arch_fail_access_denied_msg">The provider denied access to the analysis requests. Check the selected model and the account’s access permissions.</string>
+    <string name="mem_arch_fail_content_refused_title">Content Refused</string>
+    <string name="mem_arch_fail_content_refused_msg">The provider refused the analysis requests because of its content rules.</string>
+
+    <string name="mem_arch_fail_usage_limit_title">Usage Limit Reached</string>
+    <string name="mem_arch_fail_usage_limit_msg">The provider would not run the analysis because an account limit, spending limit, or usage cap was reached.</string>
+    <string name="mem_arch_fail_credits_title">Insufficient Credits</string>
+    <string name="mem_arch_fail_credits_msg">The provider could not run the analysis because the account does not have enough credits.</string>
+    <string name="mem_arch_fail_model_unavailable_title">Model Unavailable</string>
+    <string name="mem_arch_fail_model_unavailable_msg">The selected model is currently unavailable or could not be found. Choose another model or check the endpoint’s model list.</string>
+    <string name="mem_arch_fail_config_title">Invalid Configuration</string>
+    <string name="mem_arch_fail_config_msg">The selected model or endpoint is not configured correctly. Check the Memory Assistant settings, then try again.</string>
+    <string name="mem_arch_fail_unreadable_title">Response Could Not Be Read</string>
+    <string name="mem_arch_fail_unreadable_msg">The provider returned a response the app could not understand. No Lorebook suggestions were saved.</string>
+    <string name="mem_arch_fail_invalid_result_title">Invalid Analysis Result</string>
+    <string name="mem_arch_fail_invalid_result_msg">The model completed the request but did not return a usable Lorebook analysis result. No suggestions were saved.</string>
+    <string name="mem_arch_fail_interrupted_title">Analysis Interrupted</string>
+    <string name="mem_arch_fail_interrupted_msg">The analysis stopped before it completed and could not be resumed. Try again to restart the run.</string>
+    <string name="mem_arch_fail_cancelled_title">Analysis Cancelled</string>
+    <string name="mem_arch_fail_cancelled_msg">The Lorebook analysis was cancelled by the system before it completed. No suggestions were saved.</string>
+    <string name="mem_arch_fail_unavailable_title">Lorebook Analysis Unavailable</string>
+    <string name="mem_arch_fail_unavailable_msg">The selected model or endpoint cannot perform this type of analysis. Choose a different model or endpoint.</string>
+    <string name="mem_arch_fail_unknown_title">Unexpected Analysis Error</string>
+    <string name="mem_arch_fail_unknown_msg">The analysis could not be completed, and the app could not determine the specific cause. Try again or review the error details.</string>
+    <string name="mem_arch_function_archiving">Archiving</string>
+
+    <!-- Rate limit as a distinct full-failure state (owner ruling, Aug 1 2026):
+         a temporary throttle is kept separate from a usage/spending cap. -->
+    <string name="mem_arch_fail_rate_limit_title">Rate Limit Reached</string>
+    <string name="mem_arch_fail_rate_limit_msg">The provider is temporarily limiting requests. Wait a moment, then try again.</string>
+
+    <!-- Run stopped in-process by the system (owner-approved, Aug 1 2026). The
+         Android 15+ dataSync runtime limit uses the Time Limit variant; any
+         other system stop uses the generic Stopped Early. -->
+    <string name="mem_arch_stopped_early_title">Analysis Stopped Early</string>
+    <string name="mem_arch_stopped_early_msg">The analysis stopped before every conversation could be reviewed. Any Lorebook suggestions found before it stopped were saved to Pending.</string>
+    <string name="mem_arch_time_limit_title">Analysis Time Limit Reached</string>
+    <string name="mem_arch_time_limit_msg">The analysis reached its allowed running time before every conversation could be reviewed. Any Lorebook suggestions found before it stopped were saved to Pending.</string>
+
+    <!-- User cancellation is neutral, never an error (owner ruling). Title
+         reuses mem_arch_fail_cancelled_title ("Analysis Cancelled"); the count
+         is reported on the shared "Potential Lorebook Memories found" line. -->
+    <string name="mem_arch_cancel_saved_msg">The analysis was stopped. Any Lorebook suggestions found before cancellation were saved to Pending.</string>
+    <string name="mem_arch_cancel_none_msg">The analysis was stopped before it finished. No Lorebook suggestions were saved.</string>
+    <string name="mem_arch_btn_done">Done</string>
+
+    <!-- Partial-failure states (owner-approved, Aug 1 2026): some conversations
+         were analyzed and some failed. A specific title is used when every
+         failed conversation shares one cause; a mix uses Lorebook Analysis
+         Incomplete with a short breakdown. The saved count is reported on the
+         shared "Potential Lorebook Memories found" line. -->
+    <string name="mem_arch_part_incomplete_title">Lorebook Analysis Incomplete</string>
+    <string name="mem_arch_part_incomplete_msg">Some conversations were analyzed successfully, but the full run could not be completed.</string>
+    <string name="mem_arch_part_connection_title">Connection Failed During Analysis</string>
+    <string name="mem_arch_part_connection_msg">The app could not connect to the provider for some requests, or the connection ended before they finished. Any Lorebook suggestions found before those failures were saved to Pending.</string>
+    <string name="mem_arch_part_timeout_title">Some Requests Timed Out</string>
+    <string name="mem_arch_part_timeout_msg">The provider did not finish one or more analysis requests in time. Suggestions returned successfully by other requests were saved.</string>
+    <string name="mem_arch_part_rejected_title">Some Requests Were Rejected</string>
+    <string name="mem_arch_part_rejected_msg">The provider rejected one or more requests before the full analysis finished. Suggestions from requests that completed successfully were saved.</string>
+
+    <!-- Rejection sub-reasons, partial failure (owner-approved, Aug 3 2026):
+         shown instead of the generic Some Requests Were Rejected state when
+         every REJECTED conversation in the run shares the same detectable
+         subtype. -->
+    <string name="mem_arch_part_api_key_title">Some API Requests Had an Invalid Key</string>
+    <string name="mem_arch_part_api_key_msg">The provider rejected the API key for some requests. Check the API key saved for the selected endpoint.</string>
+    <string name="mem_arch_part_access_denied_title">Some Requests Were Denied Access</string>
+    <string name="mem_arch_part_access_denied_msg">The provider denied access for some requests. Check the selected model and the account’s access permissions.</string>
+    <string name="mem_arch_part_content_refused_title">Some Requests Were Refused for Content</string>
+    <string name="mem_arch_part_content_refused_msg">The provider refused some analysis requests because of its content rules.</string>
+
+    <string name="mem_arch_part_rate_limit_title">Rate Limit Interrupted Analysis</string>
+    <string name="mem_arch_part_rate_limit_msg">The provider temporarily stopped accepting requests because too many were sent within its allowed time window. Suggestions created before the limit was reached were saved.</string>
+    <string name="mem_arch_part_usage_limit_title">Usage Limit Reached During Analysis</string>
+    <string name="mem_arch_part_usage_limit_msg">The provider stopped the run because an account, spending, or usage limit was reached. Suggestions created before the limit was reached were saved.</string>
+    <string name="mem_arch_part_credits_title">Credits Ran Out During Analysis</string>
+    <string name="mem_arch_part_credits_msg">The provider stopped processing requests because the account ran out of credits. Suggestions created before the balance was exhausted were saved.</string>
+    <string name="mem_arch_part_model_title">Model Unavailable During Analysis</string>
+    <string name="mem_arch_part_model_msg">The provider reported that the selected model was unavailable before the analysis finished. Any Lorebook suggestions found before that were saved to Pending.</string>
+    <string name="mem_arch_part_unreadable_title">Some Responses Could Not Be Read</string>
+    <string name="mem_arch_part_unreadable_msg">The provider returned one or more responses the app could not understand. Suggestions from readable responses were saved.</string>
+    <string name="mem_arch_part_invalid_title">Some Analysis Results Could Not Be Used</string>
+    <string name="mem_arch_part_invalid_msg">One or more responses did not contain valid Lorebook suggestions. Valid suggestions from the rest of the run were saved.</string>
+    <string name="mem_arch_part_process_title">Some Conversations Could Not Be Processed</string>
+    <string name="mem_arch_part_process_msg">The app could not prepare or analyze one or more selected conversations. Suggestions from conversations processed successfully were saved.</string>
+    <string name="mem_arch_part_save_title">Some Suggestions Could Not Be Saved</string>
+    <string name="mem_arch_part_save_msg">The analysis produced additional Lorebook suggestions, but the app could not save all of them to Pending. Suggestions saved successfully are still available.</string>
+    <string name="mem_arch_part_interrupted_title">Analysis Was Interrupted</string>
+    <string name="mem_arch_part_interrupted_msg">The run stopped before every conversation was analyzed and could not resume from where it ended. Suggestions completed before the interruption were saved.</string>
+
+    <!-- Mixed-cause breakdown clauses (owner-approved, Aug 1 2026): each is a
+         grammatical counted clause with singular/plural agreement, joined into
+         e.g. "1 request timed out, 2 requests were rejected, and 1 result could
+         not be saved." -->
+    <plurals name="mem_arch_break_connection">
+        <item quantity="one">%1$d request could not connect</item>
+        <item quantity="other">%1$d requests could not connect</item>
+    </plurals>
+    <plurals name="mem_arch_break_timeout">
+        <item quantity="one">%1$d request timed out</item>
+        <item quantity="other">%1$d requests timed out</item>
+    </plurals>
+    <plurals name="mem_arch_break_rejected">
+        <item quantity="one">%1$d request was rejected</item>
+        <item quantity="other">%1$d requests were rejected</item>
+    </plurals>
+    <plurals name="mem_arch_break_rate_limit">
+        <item quantity="one">%1$d request was rate-limited</item>
+        <item quantity="other">%1$d requests were rate-limited</item>
+    </plurals>
+    <plurals name="mem_arch_break_usage_limit">
+        <item quantity="one">%1$d request hit a usage limit</item>
+        <item quantity="other">%1$d requests hit a usage limit</item>
+    </plurals>
+    <plurals name="mem_arch_break_credits">
+        <item quantity="one">%1$d request ran out of credits</item>
+        <item quantity="other">%1$d requests ran out of credits</item>
+    </plurals>
+    <plurals name="mem_arch_break_model">
+        <item quantity="one">%1$d request found the model unavailable</item>
+        <item quantity="other">%1$d requests found the model unavailable</item>
+    </plurals>
+    <plurals name="mem_arch_break_config">
+        <item quantity="one">%1$d request had a configuration problem</item>
+        <item quantity="other">%1$d requests had a configuration problem</item>
+    </plurals>
+    <plurals name="mem_arch_break_unreadable">
+        <item quantity="one">%1$d response could not be read</item>
+        <item quantity="other">%1$d responses could not be read</item>
+    </plurals>
+    <plurals name="mem_arch_break_invalid">
+        <item quantity="one">%1$d result could not be used</item>
+        <item quantity="other">%1$d results could not be used</item>
+    </plurals>
+    <plurals name="mem_arch_break_save">
+        <item quantity="one">%1$d result could not be saved</item>
+        <item quantity="other">%1$d results could not be saved</item>
+    </plurals>
+    <plurals name="mem_arch_break_unknown">
+        <item quantity="one">%1$d request could not be processed</item>
+        <item quantity="other">%1$d requests could not be processed</item>
+    </plurals>
+    <plurals name="mem_arch_break_provider_error">
+        <item quantity="one">%1$d request returned a server error</item>
+        <item quantity="other">%1$d requests returned a server error</item>
+    </plurals>
+    <plurals name="mem_arch_break_too_large">
+        <item quantity="one">%1$d conversation was too large</item>
+        <item quantity="other">%1$d conversations were too large</item>
+    </plurals>
+
+    <!-- Four additional failure states (owner-approved, Aug 1 2026): a 5xx
+         server error, a request over the input/context limit, and the
+         full-failure counterparts of the save and local-processing partials. -->
+    <string name="mem_arch_fail_provider_error_title">Provider Error</string>
+    <string name="mem_arch_fail_provider_error_msg">The provider encountered a server error and could not complete the analysis. Wait a moment, then try again.</string>
+    <string name="mem_arch_fail_too_large_title">Request Too Large</string>
+    <string name="mem_arch_fail_too_large_msg">The conversation exceeded the selected model or provider\'s input limit and could not be analyzed. Choose a model with a larger context window or reduce the amount of content, then try again.</string>
+    <string name="mem_arch_fail_save_title">Suggestions Could Not Be Saved</string>
+    <string name="mem_arch_fail_save_msg">The analysis produced Lorebook suggestions, but the app could not save them to Pending. Check the device\'s available storage, then try again.</string>
+    <string name="mem_arch_fail_process_title">Conversations Could Not Be Processed</string>
+    <string name="mem_arch_fail_process_msg">The app could not read or prepare the conversations for analysis. No conversations were sent to the provider.</string>
+    <string name="mem_arch_part_provider_error_title">Provider Error During Analysis</string>
+    <string name="mem_arch_part_provider_error_msg">The provider encountered errors before every conversation could be analyzed. Any Lorebook suggestions found before those errors were saved to Pending.</string>
+    <string name="mem_arch_part_too_large_title">Some Conversations Were Too Large</string>
+    <string name="mem_arch_part_too_large_msg">One or more conversations exceeded the selected model or provider\'s input limit. Other conversations were analyzed, and any Lorebook suggestions found were saved to Pending.</string>
+
+    <!-- Memory Analysis Type control (Step 1.7 — plan_one_page.md, owner
+         approved). Two-column settings row on the Memory Assistant screen,
+         matching the Memory Engine row. The subtitle is three paragraphs shown
+         with visible spacing between them. -->
+    <string name="memory_analysis_type_title">Memory Analysis Type</string>
+    <string name="memory_analysis_type_p1">Choose which memory system this analysis should create suggestions for.</string>
+    <string name="memory_analysis_type_p2">Associative Memories use an embedding model to surface memories connected to the ideas and topics being discussed.</string>
+    <string name="memory_analysis_type_p3">Lorebook Memories are activated by specific keywords and do not require an embedding model.</string>
+    <string name="memory_analysis_type_associative">Associative Memories</string>
+    <string name="memory_analysis_type_lorebook">Lorebook Memories</string>
+
+    <!-- Lorebook analysis result on the Memory Assistant (Step 1.7 — owner
+         approved). Shown when a Lorebook Memories run finds suggestions; View
+         opens the Lorebooks area on Pending. -->
+    <string name="memory_assistant_lore_found">Potential Lorebook Memories found: %1$d</string>
+    <string name="memory_assistant_view_lore_pending">View</string>
+
+    <!-- Lorebooks Pending review (Step 1.7 — owner approved). The split control
+         at the top of the Lorebooks screen while suggestions are pending. -->
+    <string name="lore_mode_lorebooks">Lorebooks</string>
+    <string name="lore_mode_pending">Pending</string>
+    <string name="lore_suggestion_triggers">Triggers: %1$s</string>
+    <string name="lore_suggestion_assign">Assign Lorebook</string>
+    <string name="lore_suggestion_create_new">Create new Lorebook…</string>
+    <string name="lore_suggestion_edit">Edit</string>
+    <string name="lore_suggestion_approve">Approve</string>
+    <string name="lore_suggestion_delete">Delete</string>
+    <string name="lore_suggestion_needs_book">Assign a Lorebook before approving.</string>
+    <string name="lore_suggestion_edit_title">Edit suggestion</string>
+    <string name="lore_suggestion_edit_content_hint">Lorebook entry text</string>
+    <string name="lore_suggestion_edit_triggers_hint">Trigger keywords, separated by commas</string>
+
+    <!-- Memory Browser reminder while no embedding model is installed (Step 1.7
+         — owner approved, plan_one_page.md). A dismissible per-visit reminder,
+         never a permanent banner. -->
+    <string name="lore_no_model_reminder">Associative Search can\'t be used in chats until an embedding model is installed.</string>
+    <string name="lore_no_model_reminder_ok">Okay</string>
 
     <!-- Two-mode memory browser + pending actions (owner design, July 8 2026
          evening — phase6_owner_answers_2026-07-08.md; owner wording). -->
@@ -1874,10 +2103,13 @@
     <string name="memory_assistant_adv_reset_temperature">Reset to Recommended</string>
     <string name="memory_assistant_adv_min_importance">Minimum Importance</string>
     <string name="memory_assistant_adv_min_importance_hint">Only create memory drafts at or above this importance level.</string>
-    <string name="memory_assistant_adv_extraction_prompt">Extraction Prompt</string>
+    <!-- Step 1.7: each analysis type has its own editable prompt slot. The two
+         labels are the owner-specified names of the slots. -->
+    <string name="memory_assistant_adv_associative_prompt">Associative Memory Prompt</string>
+    <string name="memory_assistant_adv_lorebook_prompt">Lorebook Memory Prompt</string>
     <string name="memory_assistant_adv_extraction_prompt_hint">Instructs AI how to analyze conversation history.</string>
     <string name="memory_assistant_adv_reset_prompt">Reset Prompt</string>
-    <string name="memory_assistant_adv_reset_prompt_confirm">Restore default extraction prompt?</string>
+    <string name="memory_assistant_adv_reset_prompt_confirm">Restore the default prompt?</string>
     <string name="memory_assistant_adv_saved">Advanced settings saved.</string>
 
     <!-- Advanced Memory Settings (spec §3) -->

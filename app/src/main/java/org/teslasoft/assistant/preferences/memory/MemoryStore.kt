@@ -61,7 +61,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 17
+        private const val DATABASE_VERSION = 19
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -560,7 +560,42 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "error TEXT, " +
                 "outcome TEXT, " +
                 "failure_reason TEXT, " +
-                "transport TEXT NOT NULL DEFAULT 'api')"
+                "transport TEXT NOT NULL DEFAULT 'api', " +
+                "analysis_type TEXT NOT NULL DEFAULT 'associative')"
+        )
+
+        // Lorebook suggestions (Step 1.7, DB v18): a Memory Assistant run in
+        // "Lorebook Memories" analysis type files its proposed keyword-triggered
+        // lore book entries here instead of as memory drafts. Lives in the same
+        // database as transcripts/archivist_runs so a suggestion is filed and
+        // its source conversation marked processed under the run's own
+        // durability, exactly like a memory draft. Reviewed in the Lorebooks
+        // Pending area; nothing reaches a real lore book until the user approves
+        // an individual suggestion (which writes a LoreBookEntry and consumes
+        // the row). assigned_lorebook_id is the destination the user picked at
+        // review time (NULL until assigned). Device-local operational data.
+        db.execSQL(
+            "CREATE TABLE lorebook_suggestions (" +
+                "suggestion_id TEXT PRIMARY KEY, " +
+                "run_id TEXT, " +
+                "content TEXT NOT NULL, " +
+                "triggers_json TEXT NOT NULL DEFAULT '[]', " +
+                "source_chat_id TEXT, " +
+                "source_chat_name TEXT, " +
+                "assigned_lorebook_id TEXT, " +
+                "created_at TEXT NOT NULL)"
+        )
+
+        // Rejected lorebook suggestions (Step 1.7, DB v18): deleting a pending
+        // lore book suggestion rejects it, so a rerun of the same conversation
+        // does not refile the exact same suggestion. Mirrors rejected_drafts —
+        // exact content hash + the source chat id (rename-safe). Never exported.
+        db.execSQL(
+            "CREATE TABLE rejected_lore_suggestions (" +
+                "content_hash TEXT NOT NULL, " +
+                "chat_key TEXT NOT NULL, " +
+                "deleted_at TEXT NOT NULL, " +
+                "PRIMARY KEY (content_hash, chat_key))"
         )
 
         db.execSQL(
@@ -1329,6 +1364,50 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "17")
+            )
+        }
+        if (oldVersion < 18) {
+            // v18 (Step 1.7): the Lorebook Memories analysis type. A run in
+            // that mode files keyword-triggered lore book entry suggestions
+            // into lorebook_suggestions (reviewed in the Lorebooks Pending
+            // area) instead of memory drafts; rejected_lore_suggestions is the
+            // rename-safe rejection anchor so a rerun never refiles a deleted
+            // suggestion. Both additive; existing installs get empty tables.
+            db.execSQL(
+                "CREATE TABLE lorebook_suggestions (" +
+                    "suggestion_id TEXT PRIMARY KEY, " +
+                    "run_id TEXT, " +
+                    "content TEXT NOT NULL, " +
+                    "triggers_json TEXT NOT NULL DEFAULT '[]', " +
+                    "source_chat_id TEXT, " +
+                    "source_chat_name TEXT, " +
+                    "assigned_lorebook_id TEXT, " +
+                    "created_at TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "CREATE TABLE rejected_lore_suggestions (" +
+                    "content_hash TEXT NOT NULL, " +
+                    "chat_key TEXT NOT NULL, " +
+                    "deleted_at TEXT NOT NULL, " +
+                    "PRIMARY KEY (content_hash, chat_key))"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "18")
+            )
+        }
+        if (oldVersion < 19) {
+            // v19 (Step 1.7): each run row records which analysis type produced
+            // it — 'associative' (saved-memory drafts) or 'lorebook' (keyword-
+            // triggered lore book entry suggestions). The Recent Memory Analysis
+            // list and Rerun read the run's OWN type instead of the picker's
+            // current selection, so a Lorebook run always reads back as one and a
+            // rerun never silently converts. Additive; every pre-existing run
+            // predates the Lorebook type and is therefore 'associative'.
+            db.execSQL("ALTER TABLE archivist_runs ADD COLUMN analysis_type TEXT NOT NULL DEFAULT 'associative'")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "19")
             )
         }
     }
@@ -2689,6 +2768,150 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         ).use { return it.moveToNext() }
     }
 
+    /* ---------------------------------------------------------------------- */
+    /* lorebook suggestions (Step 1.7 — the Lorebook Memories analysis type)  */
+    /* ---------------------------------------------------------------------- */
+
+    /** File one pending lore book suggestion (Step 1.7). Called by the
+     *  Archivist run in Lorebook Memories mode, under the same run durability
+     *  as a memory draft. */
+    fun insertLorebookSuggestion(s: LorebookSuggestionRecord) {
+        writableDatabase.insertOrThrow("lorebook_suggestions", null, ContentValues().apply {
+            put("suggestion_id", s.suggestionId)
+            put("run_id", s.runId)
+            put("content", s.content)
+            put("triggers_json", stringsToJson(s.triggers))
+            put("source_chat_id", s.sourceChatId)
+            put("source_chat_name", s.sourceChatName)
+            put("assigned_lorebook_id", s.assignedLorebookId)
+            put("created_at", s.createdAt)
+        })
+    }
+
+    /** All pending lore book suggestions, newest first (the Pending list). */
+    fun getLorebookSuggestions(): List<LorebookSuggestionRecord> {
+        val out = ArrayList<LorebookSuggestionRecord>()
+        readableDatabase.query(
+            "lorebook_suggestions", null, null, null, null, null,
+            "created_at DESC, suggestion_id ASC"
+        ).use { while (it.moveToNext()) out.add(readLorebookSuggestion(it)) }
+        return out
+    }
+
+    /** How many lore book suggestions are pending — drives the Lorebooks split
+     *  control and the Memory Assistant "Potential Lorebook Memories found: N"
+     *  result. */
+    fun lorebookSuggestionCount(): Int {
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM lorebook_suggestions", emptyArray()).use {
+            return if (it.moveToFirst()) it.getInt(0) else 0
+        }
+    }
+
+    fun getLorebookSuggestion(id: String): LorebookSuggestionRecord? {
+        readableDatabase.query(
+            "lorebook_suggestions", null, "suggestion_id = ?", arrayOf(id), null, null, null
+        ).use { return if (it.moveToFirst()) readLorebookSuggestion(it) else null }
+    }
+
+    /** Edit a suggestion's proposed text and triggers in place (review-time
+     *  edit; nothing is written to a real book until approval). */
+    fun updateLorebookSuggestion(id: String, content: String, triggers: List<String>) {
+        writableDatabase.update("lorebook_suggestions", ContentValues().apply {
+            put("content", content)
+            put("triggers_json", stringsToJson(triggers))
+        }, "suggestion_id = ?", arrayOf(id))
+    }
+
+    /** Record the destination book the user assigned to a suggestion. */
+    fun assignLorebookSuggestion(id: String, lorebookId: String?) {
+        writableDatabase.update("lorebook_suggestions", ContentValues().apply {
+            if (lorebookId.isNullOrBlank()) putNull("assigned_lorebook_id")
+            else put("assigned_lorebook_id", lorebookId)
+        }, "suggestion_id = ?", arrayOf(id))
+    }
+
+    /** Approval consumes the suggestion without recording a rejection — the
+     *  caller has already written the LoreBookEntry into the chosen book. */
+    fun consumeLorebookSuggestion(id: String) {
+        writableDatabase.delete("lorebook_suggestions", "suggestion_id = ?", arrayOf(id))
+    }
+
+    /** Deleting a pending suggestion rejects it: the row is removed AND a
+     *  rejection is recorded so a rerun of the same conversation does not
+     *  refile the exact same suggestion (mirrors the memory-draft rule). */
+    fun rejectLorebookSuggestion(id: String) {
+        val s = getLorebookSuggestion(id) ?: return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            if (!s.sourceChatId.isNullOrBlank()) {
+                db.execSQL(
+                    "INSERT OR REPLACE INTO rejected_lore_suggestions (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
+                    arrayOf(loreSuggestionHash(s.content), s.sourceChatId, nowIso())
+                )
+            }
+            db.delete("lorebook_suggestions", "suggestion_id = ?", arrayOf(id))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** True when this exact suggestion text from this chat was already
+     *  rejected — the run must not refile it. */
+    fun isLorebookSuggestionRejected(content: String, chatKey: String): Boolean {
+        readableDatabase.query(
+            "rejected_lore_suggestions", arrayOf("content_hash"),
+            "content_hash = ? AND chat_key = ?",
+            arrayOf(loreSuggestionHash(content), chatKey), null, null, null
+        ).use { return it.moveToNext() }
+    }
+
+    /** Content-level dedup so an interrupted-then-rerun conversation doesn't
+     *  file the same suggestion twice: true when a pending suggestion with
+     *  this exact text from the same chat already exists. */
+    fun lorebookSuggestionExists(content: String, chatKey: String): Boolean {
+        readableDatabase.query(
+            "lorebook_suggestions", arrayOf("suggestion_id"),
+            "content = ? AND source_chat_id = ?",
+            arrayOf(content, chatKey), null, null, null
+        ).use { return it.moveToNext() }
+    }
+
+    private fun readLorebookSuggestion(c: android.database.Cursor): LorebookSuggestionRecord =
+        LorebookSuggestionRecord(
+            suggestionId = c.getString(c.getColumnIndexOrThrow("suggestion_id")),
+            runId = c.getString(c.getColumnIndexOrThrow("run_id")),
+            content = c.getString(c.getColumnIndexOrThrow("content")),
+            triggers = jsonToStrings(c.getString(c.getColumnIndexOrThrow("triggers_json"))),
+            sourceChatId = c.getString(c.getColumnIndexOrThrow("source_chat_id")),
+            sourceChatName = c.getString(c.getColumnIndexOrThrow("source_chat_name")),
+            assignedLorebookId = c.getString(c.getColumnIndexOrThrow("assigned_lorebook_id")),
+            createdAt = c.getString(c.getColumnIndexOrThrow("created_at"))
+        )
+
+    private fun loreSuggestionHash(content: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(content.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun stringsToJson(items: List<String>): String {
+        val arr = org.json.JSONArray()
+        for (i in items) arr.put(i)
+        return arr.toString()
+    }
+
+    private fun jsonToStrings(json: String?): List<String> {
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            val arr = org.json.JSONArray(json)
+            (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotEmpty() } }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     private fun archivistRunValues(run: ArchivistRunRecord) = ContentValues().apply {
         put("run_id", run.runId)
         put("started_at", run.startedAt)
@@ -2704,6 +2927,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("outcome", run.outcome)
         put("failure_reason", run.failureReason)
         put("transport", run.transport)
+        put("analysis_type", run.analysisType)
     }
 
     /** Insert-or-replace one run row. Since v17 this is also the incremental
@@ -2712,6 +2936,25 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     fun insertArchivistRun(run: ArchivistRunRecord) {
         writableDatabase.insertWithOnConflict(
             "archivist_runs", null, archivistRunValues(run), SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
+    /** Persist a refined terminal outcome onto a run the engine already
+     *  finalized (Step 1.7, Fix #6). The engine reports every in-process stop
+     *  as the generic 'cancelled'; only the service knows whether it was the
+     *  user's Cancel ('cancelled_user') or the Android 15+ runtime limit
+     *  ('stopped_time_limit'), and it learns that after the engine returns. This
+     *  writes that distinction back so the Recent Memory Analysis history shows
+     *  what really happened instead of a generic stop. [failureReason] is
+     *  cleared for a neutral user cancel — a user stop is not a failure. */
+    fun updateArchivistRunOutcome(runId: String, outcome: String, failureReason: String?) {
+        writableDatabase.update(
+            "archivist_runs",
+            ContentValues().apply {
+                put("outcome", outcome)
+                put("failure_reason", failureReason)
+            },
+            "run_id = ?", arrayOf(runId)
         )
     }
 
@@ -2739,7 +2982,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         error = it.getStringOrNull("error"),
                         outcome = it.getStringOrNull("outcome"),
                         failureReason = it.getStringOrNull("failure_reason"),
-                        transport = it.getStringOrNull("transport") ?: "api"
+                        transport = it.getStringOrNull("transport") ?: "api",
+                        analysisType = it.getStringOrNull("analysis_type") ?: "associative"
                     )
                 )
             }
@@ -3460,6 +3704,18 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             )
             db.execSQL(
                 "UPDATE memories SET source_chat_id = ? WHERE source_chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            // Step 1.7: pending lore book suggestions and their rejection
+            // anchors are keyed by the same name-derived chat id and must ride
+            // a rename too, or a rerun after rename would refile a rejected
+            // suggestion (same reasoning as the memory-draft rows above).
+            db.execSQL(
+                "UPDATE lorebook_suggestions SET source_chat_id = ? WHERE source_chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            db.execSQL(
+                "UPDATE OR REPLACE rejected_lore_suggestions SET chat_key = ? WHERE chat_key = ?",
                 arrayOf(newChatId, oldChatId)
             )
             db.setTransactionSuccessful()
@@ -4728,6 +4984,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             // the rejected-draft record.
             db.delete("archivist_runs", null, null)
             db.delete("rejected_drafts", null, null)
+            // Step 1.7: pending lore book suggestions and their rejection
+            // record describe conversations that no longer exist after a
+            // reset — they empty with everything else.
+            db.delete("lorebook_suggestions", null, null)
+            db.delete("rejected_lore_suggestions", null, null)
             db.update("app_state", ContentValues().apply {
                 putNull("active_companion_id"); putNull("active_world_id")
                 putNull("active_roleplay_character_id"); putNull("active_user_persona_id")

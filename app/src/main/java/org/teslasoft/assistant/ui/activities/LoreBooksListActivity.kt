@@ -21,8 +21,11 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.view.WindowInsets
+import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
@@ -35,6 +38,7 @@ import androidx.core.view.marginRight
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
@@ -43,9 +47,13 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.LoreBook
+import org.teslasoft.assistant.preferences.dto.LoreBookEntry
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
+import org.teslasoft.assistant.preferences.memory.LorebookSuggestionRecord
+import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.LoreBookAdapter
+import org.teslasoft.assistant.ui.adapters.LoreSuggestionAdapter
 import org.teslasoft.assistant.ui.fragments.dialogs.EditLoreBookDialogFragment
 
 /**
@@ -62,6 +70,10 @@ class LoreBooksListActivity : FragmentActivity() {
     companion object {
         const val EXTRA_PICK_MODE = "pickMode"
         const val EXTRA_SELECTED_IDS = "selectedLoreBookIds"
+        /** Open straight into the Pending review of Lorebook Memory suggestions
+         *  (Step 1.7) — used by the Memory Assistant's lorebook result View
+         *  link. Ignored in pick mode. */
+        const val EXTRA_OPEN_PENDING = "openPending"
     }
 
     private var btnAdd: ExtendedFloatingActionButton? = null
@@ -72,6 +84,10 @@ class LoreBooksListActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var fieldSearch: TextInputEditText? = null
     private var btnFilterTag: MaterialButton? = null
+    private var filterBar: View? = null
+    private var modeToggleContainer: LinearLayout? = null
+    private var btnModeLorebooks: TextView? = null
+    private var btnModePending: TextView? = null
 
     private var allBooks: ArrayList<LoreBook> = arrayListOf()
     private var list: ArrayList<LoreBook> = arrayListOf()
@@ -85,6 +101,12 @@ class LoreBooksListActivity : FragmentActivity() {
     private var selectedIds: HashSet<String> = hashSetOf()
 
     private var store: LoreBookStore? = null
+
+    /** "lorebooks" (the normal book list) or "pending" (Step 1.7 lorebook
+     *  suggestion review). Pending only exists while suggestions are pending. */
+    private var mode: String = "lorebooks"
+    private var suggestions: List<LorebookSuggestionRecord> = emptyList()
+    private var suggestionAdapter: LoreSuggestionAdapter? = null
 
     private fun openEntries(position: Int) {
         val book = list[position]
@@ -142,6 +164,139 @@ class LoreBooksListActivity : FragmentActivity() {
         }
     }
 
+    /* ------------------- lorebook suggestion review (Step 1.7) ------------- */
+
+    private fun memStore(): MemoryStore = MemoryStore.getInstance(this)
+
+    private val suggestionListener = object : LoreSuggestionAdapter.Listener {
+        override fun onAssign(position: Int) = showAssignChooser(position)
+        override fun onEdit(position: Int) = showEditSuggestionDialog(position)
+        override fun onApprove(position: Int) = approveSuggestion(position)
+        override fun onDelete(position: Int) = deleteSuggestion(position)
+    }
+
+    /** Choose the destination book for a suggestion, or create a new one
+     *  through the normal full-page flow. Nothing is written to a book here —
+     *  only the chosen destination is recorded. */
+    private fun showAssignChooser(position: Int) {
+        val s = suggestions.getOrNull(position) ?: return
+        val labels = ArrayList<String>()
+        for (b in allBooks) labels.add(b.name)
+        labels.add(getString(R.string.lore_suggestion_create_new))
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.lore_suggestion_assign)
+            .setItems(labels.toTypedArray()) { dialog, which ->
+                dialog.dismiss()
+                if (which == allBooks.size) {
+                    openCreateBookForSuggestion(s.suggestionId)
+                } else {
+                    memStore().assignLorebookSuggestion(s.suggestionId, allBooks[which].id)
+                    reloadList()
+                }
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    /** Create a new lore book through the normal full-page flow, then assign
+     *  the just-created book as this suggestion's destination. */
+    private fun openCreateBookForSuggestion(suggestionId: String) {
+        val dialog = EditLoreBookDialogFragment.newInstance(LoreBook(), -1)
+        dialog.setListener(object : EditLoreBookDialogFragment.StateChangesListener {
+            override fun onAdd(book: LoreBook) {
+                val saved = store!!.saveBook(book)
+                memStore().assignLorebookSuggestion(suggestionId, saved.id)
+                reloadList()
+            }
+            override fun onEdit(book: LoreBook, position: Int) { store!!.saveBook(book); reloadList() }
+            override fun onDelete(position: Int, id: String) { reloadList() }
+            override fun onError(message: String, position: Int) {
+                Toast.makeText(this@LoreBooksListActivity, message, Toast.LENGTH_SHORT).show()
+                openCreateBookForSuggestion(suggestionId)
+            }
+        })
+        dialog.setCancelable(false)
+        dialog.show(supportFragmentManager, "EditLoreBookDialogFragment")
+    }
+
+    /** Edit a suggestion's proposed text and trigger keywords before approval.
+     *  Nothing is written to a real book — only the pending suggestion. */
+    private fun showEditSuggestionDialog(position: Int) {
+        val s = suggestions.getOrNull(position) ?: return
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, 0)
+        }
+        val contentField = EditText(this).apply {
+            setText(s.content)
+            hint = getString(R.string.lore_suggestion_edit_content_hint)
+            setSingleLine(false)
+        }
+        val triggersField = EditText(this).apply {
+            setText(s.triggers.joinToString(", "))
+            hint = getString(R.string.lore_suggestion_edit_triggers_hint)
+            setSingleLine(true)
+        }
+        container.addView(contentField)
+        container.addView(triggersField)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.lore_suggestion_edit_title)
+            .setView(container)
+            .setPositiveButton(R.string.btn_save) { _, _ ->
+                val content = contentField.text.toString().trim()
+                val triggers = triggersField.text.toString()
+                    .split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+                if (content.isNotEmpty() && triggers.isNotEmpty()) {
+                    memStore().updateLorebookSuggestion(s.suggestionId, content, triggers)
+                    reloadList()
+                }
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    /** Approve a suggestion: write it as a new entry into the assigned book,
+     *  then consume the suggestion. Requires a destination — approval never
+     *  guesses a book. This flow only ever adds a new entry; it never edits or
+     *  deletes existing books or entries. */
+    private fun approveSuggestion(position: Int) {
+        val s = suggestions.getOrNull(position) ?: return
+        val bookId = s.assignedLorebookId
+        if (bookId.isNullOrBlank() || store!!.getBook(bookId) == null) {
+            Toast.makeText(this, R.string.lore_suggestion_needs_book, Toast.LENGTH_SHORT).show()
+            showAssignChooser(position)
+            return
+        }
+        // A lore book entry needs a short label for its management list; the
+        // suggestion has no title, so derive one from its first trigger keyword
+        // (falling back to a content snippet). The user can rename it later in
+        // the normal entry editor.
+        val label = s.triggers.firstOrNull()?.takeIf { it.isNotBlank() }
+            ?: s.content.take(40).trim()
+        store!!.saveEntry(
+            LoreBookEntry(
+                id = "",
+                lorebookId = bookId,
+                label = label,
+                content = s.content,
+                sourceText = "",
+                triggers = ArrayList(s.triggers),
+                enabled = true
+            )
+        )
+        memStore().consumeLorebookSuggestion(s.suggestionId)
+        reloadList()
+    }
+
+    /** Delete (reject) a suggestion so a rerun of the same conversation does
+     *  not refile it. */
+    private fun deleteSuggestion(position: Int) {
+        val s = suggestions.getOrNull(position) ?: return
+        memStore().rejectLorebookSuggestion(s.suggestionId)
+        reloadList()
+    }
+
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -157,6 +312,10 @@ class LoreBooksListActivity : FragmentActivity() {
         actionBar = findViewById(R.id.action_bar)
         fieldSearch = findViewById(R.id.field_search)
         btnFilterTag = findViewById(R.id.btn_filter_tag)
+        filterBar = findViewById(R.id.filter_bar)
+        modeToggleContainer = findViewById(R.id.mode_toggle_container)
+        btnModeLorebooks = findViewById(R.id.btn_mode_lorebooks)
+        btnModePending = findViewById(R.id.btn_mode_pending)
 
         pickMode = intent.getBooleanExtra(EXTRA_PICK_MODE, false)
         if (pickMode) {
@@ -242,7 +401,47 @@ class LoreBooksListActivity : FragmentActivity() {
         for (book in allBooks) {
             counts[book.id] = store!!.getEntryCount(book.id)
         }
-        applyFilters()
+        // Step 1.7: pending Lorebook Memory suggestions live in the memory
+        // store. The Pending mode and its split control exist only while at
+        // least one is pending; never in pick mode (that is a book picker).
+        suggestions = if (!pickMode && MemoryStore.isProvisioned(this))
+            MemoryStore.getInstance(this).getLorebookSuggestions() else emptyList()
+        if (suggestions.isEmpty() && mode == "pending") mode = "lorebooks"
+        refreshModeChrome()
+        if (mode == "pending") renderSuggestions() else applyFilters()
+    }
+
+    /** Show or hide the split control and the book-only chrome (search, tag
+     *  filter, the New-Lorebook FAB) for the current mode. */
+    private fun refreshModeChrome() {
+        val showToggle = !pickMode && suggestions.isNotEmpty()
+        modeToggleContainer?.visibility = if (showToggle) View.VISIBLE else View.GONE
+        val pending = mode == "pending"
+        filterBar?.visibility = if (pending) View.GONE else View.VISIBLE
+        btnAdd?.visibility = if (pending) View.GONE else View.VISIBLE
+        val selected = MaterialColors.getColor(
+            btnModeLorebooks ?: return, androidx.appcompat.R.attr.colorPrimary
+        )
+        val unselected = ResourcesCompat.getColor(resources, R.color.text_subtitle, theme)
+        btnModeLorebooks?.setTextColor(if (pending) unselected else selected)
+        btnModePending?.setTextColor(if (pending) selected else unselected)
+    }
+
+    private fun setMode(newMode: String) {
+        if (mode == newMode) return
+        mode = newMode
+        reloadList()
+    }
+
+    /** Render the pending suggestions into the shared list. */
+    private fun renderSuggestions() {
+        val bookNames = HashMap<String, String>()
+        for (b in allBooks) bookNames[b.id] = b.name
+        val a = LoreSuggestionAdapter(suggestions, bookNames, this)
+        a.setListener(suggestionListener)
+        suggestionAdapter = a
+        listView!!.adapter = a
+        a.notifyDataSetChanged()
     }
 
     private fun applyFilters() {
@@ -285,6 +484,15 @@ class LoreBooksListActivity : FragmentActivity() {
     }
 
     private fun initialize() {
+        // Step 1.7: the Memory Assistant's lorebook result View link opens
+        // straight into Pending. reloadList falls back to the book list if no
+        // suggestions are actually pending, so this is safe when the queue is
+        // empty.
+        if (!pickMode && intent.getBooleanExtra(EXTRA_OPEN_PENDING, false)) mode = "pending"
+
+        btnModeLorebooks?.setOnClickListener { setMode("lorebooks") }
+        btnModePending?.setOnClickListener { setMode("pending") }
+
         reloadList()
 
         btnBack!!.setOnClickListener {

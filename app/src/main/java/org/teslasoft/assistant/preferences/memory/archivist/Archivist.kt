@@ -37,11 +37,20 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
 import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
+import org.teslasoft.assistant.preferences.memory.LorebookSuggestionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
+import org.teslasoft.assistant.R
+import org.teslasoft.assistant.util.GenErrorResult
+import org.teslasoft.assistant.util.GenerationErrorClassifier
+import org.teslasoft.assistant.util.ProviderErrorInfo
+import org.teslasoft.assistant.util.reachedServer
+import io.ktor.client.plugins.observer.ResponseObserver
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.isSuccess
 import org.teslasoft.assistant.util.Hash
 import java.time.Instant
 import kotlin.time.Duration.Companion.seconds
@@ -99,7 +108,30 @@ object Archivist {
          *  fact; the user turn beside it is still sent). In-memory run
          *  diagnostic only — not persisted, logged, or shown. */
         val incompleteTurnsExcluded: Int = 0,
-        val error: String? = null
+        val error: String? = null,
+        /** Which analysis type produced this run (Step 1.7): "associative"
+         *  (saved-memory drafts) or "lorebook" (lore book entry suggestions).
+         *  The Memory Assistant uses it to show the matching result surface —
+         *  memoriesFound counts whichever kind the run created. */
+        val analysisType: String = "associative",
+        /** Classified transport/provider result for a failed run (Aug 1 2026),
+         *  reused from the chat funnel so the Memory Assistant can name the
+         *  precise failure and render the same provider-detail block. Null when
+         *  the run did not fail against a provider. */
+        val genError: GenErrorResult? = null,
+        /** The connection profile's name (API Provider line). */
+        val apiProvider: String? = null,
+        /** The upstream model service the provider reported (Model Service
+         *  Provider line); null when none was reported. */
+        val upstreamProvider: String? = null,
+        /** The server's own error message, when captured. */
+        val providerMessage: String? = null,
+        /** The model the run used (Model line). */
+        val model: String? = null,
+        /** For a partial failure, how many failed conversations fell into each
+         *  ArchivistFailureCategory — the screen uses a specific title when they
+         *  all share one cause, or a mixed-cause breakdown otherwise. */
+        val failureCategoryCounts: Map<String, Int> = emptyMap()
     ) {
         val notConfigured: Boolean get() = outcome == "not_configured"
     }
@@ -155,6 +187,14 @@ object Archivist {
      *  but two live runs would still fight over progress bookkeeping. */
     private val liveRun = java.util.concurrent.atomic.AtomicBoolean(false)
 
+    /** Raw error-response body of the most recent failed request in the live
+     *  run (Aug 1 2026), captured by the client's ResponseObserver so the
+     *  failure surface can name the upstream provider and quote the server's
+     *  own message — exactly the chat funnel's approach. One run at a time
+     *  (the liveRun gate), reset before each request. */
+    @Volatile
+    private var capturedErrorBody: String? = null
+
     /**
      * Startup recovery entry point (counterplan §4(a)): reconcile dead runs
      * behind the same in-process gate the runs use, so a reconcile can never
@@ -176,36 +216,53 @@ object Archivist {
      *  number — owner answer 4; size batching happens inside). Eligibility is
      *  re-derived and atomically claimed inside the run, after stale-run
      *  reconciliation, so the run analyzes exactly what it sealed. */
-    suspend fun analyze(context: Context, onProgress: (Progress) -> Unit): RunOutcome =
-        run(context, { eligibleConversations(context) }, markProcessed = true, onProgress = onProgress)
+    suspend fun analyze(
+        context: Context,
+        analysisType: String,
+        onProgress: (Progress) -> Unit
+    ): RunOutcome =
+        run(context, { eligibleConversations(context) }, markProcessed = true,
+            analysisType = analysisType, onProgress = onProgress)
 
     /** Re-analyze a past run's conversations (the Rerun row action): re-feeds
      *  exactly the transcript rows that run stored, for chats that still
      *  exist. Files any NEW findings as drafts (existing identical drafts are
      *  deduplicated); records a fresh run row. Rerun rows are already
      *  processed, so nothing is claimed or re-marked. */
-    suspend fun rerun(context: Context, runId: String, onProgress: (Progress) -> Unit): RunOutcome {
+    suspend fun rerun(
+        context: Context,
+        runId: String,
+        analysisType: String,
+        onProgress: (Progress) -> Unit
+    ): RunOutcome {
         val store = MemoryStore.getInstance(context)
         val past = store.getArchivistRun(runId)
             ?: return RunOutcome(
                 null, 0, 0, 0, 0, emptyList(),
                 outcome = "full_failed", failureReason = ArchivistFailure.UNKNOWN,
-                error = "run not found"
+                error = "run not found",
+                analysisType = analysisType
             )
         val ids = jsonToList(past.transcriptIdsJson)
+        // A rerun always re-runs the ORIGINAL run's stored analysis type (owner
+        // ruling, Step 1.7): a Lorebook rerun stays Lorebook even if the picker
+        // now shows Associative, and vice versa — a rerun is never silently
+        // converted. The passed-in type is only the display fallback for the
+        // run-not-found case above.
         return run(context, {
             val liveChats = liveChatNamesById(context)
             store.transcriptsByIds(ids)
                 .filter { it.chatId != null && liveChats.containsKey(it.chatId) }
                 .groupBy { it.chatId!! }
                 .map { (chatId, rows) -> Conversation(chatId, liveChats[chatId] ?: chatId, rows) }
-        }, markProcessed = false, onProgress = onProgress)
+        }, markProcessed = false, analysisType = past.analysisType, onProgress = onProgress)
     }
 
     private suspend fun run(
         context: Context,
         selectConversations: () -> List<Conversation>,
         markProcessed: Boolean,
+        analysisType: String,
         onProgress: (Progress) -> Unit
     ): RunOutcome {
         val prefs = Preferences.getPreferences(context, "")
@@ -217,13 +274,13 @@ object Archivist {
             MemoryLog.logAlways(context, "Archivist", "warn",
                 "Archivist Not Ready — Memory Archivist needs a model before it can run. " +
                     "Missing: ${if (endpointId.isBlank()) "endpoint profile not selected" else "endpoint host empty"}")
-            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
         }
         val model = prefs.getArchivistModel().ifBlank { endpoint.model }
         if (model.isBlank()) {
             MemoryLog.logAlways(context, "Archivist", "warn",
                 "Archivist Not Ready — Memory Archivist needs a model before it can run. Missing: model name")
-            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
         }
 
         // One live run at a time (§4(a)). The in-process gate must be held
@@ -232,10 +289,10 @@ object Archivist {
         if (!liveRun.compareAndSet(false, true)) {
             MemoryLog.logAlways(context, "Archivist", "warn",
                 "duplicate start ignored — an analysis run is already in progress")
-            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "already_running")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "already_running", analysisType = analysisType)
         }
         try {
-            return runLocked(context, selectConversations, markProcessed, onProgress, prefs, endpoint, model)
+            return runLocked(context, selectConversations, markProcessed, analysisType, onProgress, prefs, endpoint, model)
         } finally {
             liveRun.set(false)
         }
@@ -245,11 +302,13 @@ object Archivist {
         context: Context,
         selectConversations: () -> List<Conversation>,
         markProcessed: Boolean,
+        analysisType: String,
         onProgress: (Progress) -> Unit,
         prefs: Preferences,
         endpoint: ApiEndpointObject,
         model: String
     ): RunOutcome {
+        val lorebookMode = analysisType == "lorebook"
         val store = MemoryStore.getInstance(context)
 
         // Recover-at-startup, applied at next-run too (§4(a)): any 'running'
@@ -285,7 +344,8 @@ object Archivist {
             error = null,
             outcome = null,
             failureReason = null,
-            transport = "api"
+            transport = "api",
+            analysisType = analysisType
         )
         if (markProcessed) {
             val claimed = store.beginAnalysisRun(
@@ -309,7 +369,18 @@ object Archivist {
         val maxSuggestions = prefs.getArchivistMaxSuggestions()
         val minImportance = prefs.getArchivistMinImportance()
         val temperature = prefs.getArchivistTemperature().toDouble()
-        val systemPrompt = prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM }
+        // Each analysis type sends its OWN editable prompt (Step 1.7): the
+        // saved prompt for that type, or its built-in default when the saved
+        // prompt is empty. The two are kept strictly separate — a Lorebook run
+        // never borrows the Associative prompt, because the two require
+        // different output schemas. Whatever text is shown in the matching field
+        // on the Advanced Memory Assistant Settings screen is exactly what is
+        // sent here; nothing is appended or substituted (the cap and importance
+        // floor are response-side filters, not prompt text).
+        val systemPrompt = if (lorebookMode)
+            prefs.getArchivistLorebookPrompt().ifBlank { ArchivistPrompt.LOREBOOK_SYSTEM }
+        else
+            prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM }
         // The card-append toggle (§2, ON by default): off discards any
         // proposed placements — the memories themselves still file.
         val cardSuggestionsOn = prefs.getArchivistCardSuggestions()
@@ -318,6 +389,10 @@ object Archivist {
         val ruleIds = ArrayList<String>()
         val failedChats = ArrayList<String>()
         val failedReasons = ArrayList<ArchivistFailure>()
+        // Chat-funnel classification of each failure and the last captured
+        // provider error body, for the precise failure surface (Aug 1 2026).
+        val genResults = ArrayList<GenErrorResult>()
+        var failureBody: String? = null
         val analyzedChatIds = ArrayList<String>()
         val fedTranscriptIds = ArrayList<String>()
         var duplicatesSkipped = 0
@@ -361,6 +436,10 @@ object Archivist {
                                 conversation.chatName, companionName, rows
                             )
                             incompleteTurnsExcluded += rendered.incompleteAssistantTurnsDropped
+                            // Fresh capture window per request: the observer only
+                            // writes on an error response, so a success leaves
+                            // this null.
+                            capturedErrorBody = null
                             val response = ai.chatCompletion(
                                 ChatCompletionRequest(
                                     model = ModelId(model),
@@ -375,6 +454,36 @@ object Archivist {
                                 )
                             )
                             val raw = response.choices.firstOrNull()?.message?.content.orEmpty()
+                            if (lorebookMode) {
+                                // Lorebook Memories analysis (Step 1.7): parse
+                                // lore book entries and file them as pending
+                                // suggestions instead of memory drafts. The
+                                // per-conversation cap still applies; there is
+                                // no importance floor (lore entries carry none).
+                                val parsedLore = try {
+                                    ArchivistResponseParser.parseLore(raw)
+                                } catch (e: Exception) {
+                                    throw TaggedArchivistException(ArchivistFailure.UNREADABLE, e)
+                                }
+                                if (parsedLore.dropped > 0) {
+                                    MemoryLog.log(context, "Archivist", "warn",
+                                        "chat=${conversation.chatId}: ${parsedLore.dropped} lore proposal(s) failed validation and were dropped")
+                                }
+                                var loreCandidates = parsedLore.entries
+                                if (maxSuggestions > 0) {
+                                    val room = (maxSuggestions - filedThisConversation).coerceAtLeast(0)
+                                    if (loreCandidates.size > room) {
+                                        MemoryLog.log(context, "Archivist", "info",
+                                            "chat=${conversation.chatId}: cap $maxSuggestions reached, ${loreCandidates.size - room} lore suggestion(s) not filed")
+                                        loreCandidates = loreCandidates.take(room)
+                                    }
+                                }
+                                val before = memoryIds.size
+                                duplicatesSkipped += fileLorebookSuggestions(
+                                    context, store, conversation, runId, loreCandidates, memoryIds
+                                )
+                                filedThisConversation += memoryIds.size - before
+                            } else {
                             // A parse failure is reason D (unreadable result) —
                             // tag it so the generic classifier can't misfile it.
                             val parsed = try {
@@ -409,6 +518,7 @@ object Archivist {
                             )
                             filedThisConversation += memoryIds.size - before
                             fileRuleDrafts(context, store, conversation, parsed.rules, ruleIds)
+                            }
                         }
                         if (markProcessed) {
                             // Only rows still carrying THIS run's claim stamp
@@ -449,6 +559,8 @@ object Archivist {
                         val reason = ArchivistFailure.classify(e)
                         failedChats.add(conversation.chatId)
                         failedReasons.add(reason)
+                        genResults.add(GenerationErrorClassifier.classify(e))
+                        capturedErrorBody?.let { failureBody = it }
                         MemoryLog.logAlways(context, "Archivist", "error",
                             "chat=${conversation.chatId} failed (${reason.key}): ${e.message}")
                     }
@@ -466,16 +578,29 @@ object Archivist {
         } catch (e: Exception) {
             runError = e.message ?: e.javaClass.simpleName
             runErrorFailure = ArchivistFailure.classify(e)
+            genResults.add(GenerationErrorClassifier.classify(e))
+            capturedErrorBody?.let { failureBody = it }
         }
 
         // Display outcome (archivist_status_wording_spec.md). A partial
         // success is never called a full failure; "no new" is not an error.
         val selected = conversations.size
+        // A run that saved at least one draft/suggestion before a later failure
+        // is NEVER a full failure (owner ruling, Fix #5): full failure requires
+        // that nothing completed AND nothing was saved. Anything saved before an
+        // engine-level abort or an all-conversations-failed run is reported as a
+        // partial/incomplete run so the saved items are acknowledged, never
+        // denied.
+        val anySaved = memoryIds.isNotEmpty()
         val outcome = when {
-            interrupted -> "interrupted"
-            runError != null -> "full_failed"
+            // An in-process stop (the Cancel button, or the Android 15+ dataSync
+            // timeout) is reported as "cancelled". A process DEATH is recovered
+            // separately by the startup reconcile as "interrupted" — the two are
+            // kept distinct so the screen can say which happened.
+            interrupted -> "cancelled"
+            runError != null -> if (anySaved) "partial_failed" else "full_failed"
             selected == 0 -> "nothing"
-            failedChats.size >= selected -> "full_failed"
+            failedChats.size >= selected -> if (anySaved) "partial_failed" else "full_failed"
             failedChats.isNotEmpty() -> "partial_failed"
             memoryIds.isEmpty() -> "no_new"
             else -> "completed"
@@ -485,6 +610,53 @@ object Archivist {
         val dominantReason: ArchivistFailure? = runErrorFailure
             ?: failedReasons.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
             ?: if (outcome == "full_failed") ArchivistFailure.UNKNOWN else null
+
+        // Precise failure surface (Aug 1 2026): the dominant chat-funnel
+        // classification, the provider detail captured from the failed request,
+        // and the connection/model this run used. Only meaningful for a full
+        // failure; the Memory Assistant maps these to the owner-approved state
+        // and renders the shared provider-detail block (Function: Archiving).
+        val dominantGen: GenErrorResult? = if (outcome == "full_failed") {
+            genResults.groupingBy { it.code }.eachCount().maxByOrNull { it.value }?.key
+                ?.let { code -> genResults.firstOrNull { it.code == code } }
+        } else null
+        val providerInfo = ProviderErrorInfo.parse(failureBody)
+        val apiProviderName = endpoint.label.trim().ifBlank { null } ?: endpoint.host.trim().ifBlank { null }
+        val runModel = model.trim().ifBlank { null } ?: endpoint.model.trim().ifBlank { null }
+        // Per-failed-conversation categories for the partial-failure surface:
+        // one specific title when every failed conversation shares a cause, or
+        // a mixed-cause breakdown otherwise (aligned lists — a reason and a
+        // classified result are recorded together for each failed conversation).
+        val failureCategoryCounts: Map<String, Int> =
+            failedReasons.zip(genResults)
+                .map { ArchivistFailureCategory.of(it.first, it.second) }
+                .groupingBy { it }.eachCount()
+
+        // Record archivist provider failures to the SAME Provider Failure Log as
+        // chat (owner ruling, Aug 1 2026) — when logging is on and the server
+        // actually answered — with Function: Archiving. Background, so a failure
+        // is logged even when no screen is watching.
+        if (outcome == "full_failed" && dominantGen != null && dominantGen.reachedServer() &&
+            prefs.getLogChatFailures()
+        ) {
+            try {
+                val notReported = context.getString(R.string.provider_value_not_reported)
+                val raw = listOfNotNull(
+                    dominantGen.httpStatus?.toString(),
+                    (providerInfo.message ?: runError)?.trim()?.ifBlank { null }
+                ).joinToString(" ").ifBlank { "(no message)" }
+                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                    context,
+                    apiProviderName ?: notReported,
+                    providerInfo.providerName?.trim()?.ifBlank { null } ?: notReported,
+                    runModel ?: notReported,
+                    context.getString(R.string.mem_arch_function_archiving),
+                    raw
+                )
+            } catch (e: Exception) {
+                MemoryLog.log(context, "Archivist", "error", "provider failure log write failed: ${e.message}")
+            }
+        }
 
         // Failure and partial-failure records are ALWAYS written to the
         // Memory Debug Log (owner rule — recovery information, not optional
@@ -503,9 +675,9 @@ object Archivist {
                     "reasons=${failedReasons.map { it.key }.distinct()} selected=$selected " +
                     "processed=${analyzedChatIds.size} skipped=${failedChats.size} " +
                     "memories=${memoryIds.size} failedChats=$failedChats")
-            "interrupted" -> MemoryLog.logAlways(context, "Archivist", "warn",
-                "Run Interrupted — Memory extraction was interrupted before it could finish. " +
-                    "cause=coroutine cancellation (screen closed or system stop) selected=$selected " +
+            "cancelled" -> MemoryLog.logAlways(context, "Archivist", "warn",
+                "Run Cancelled — analysis was stopped before it could finish. " +
+                    "cause=coroutine cancellation (Cancel button or system stop) selected=$selected " +
                     "processed=${analyzedChatIds.size} memories=${memoryIds.size}")
         }
 
@@ -521,7 +693,7 @@ object Archivist {
             store.insertArchivistRun(
                 runningRow.copy(
                     finishedAt = Instant.now().toString(),
-                    status = if (outcome == "full_failed" || outcome == "interrupted") "failed" else "complete",
+                    status = if (outcome == "full_failed" || outcome == "interrupted" || outcome == "cancelled") "failed" else "complete",
                     chatIdsJson = listToJson(analyzedChatIds),
                     transcriptIdsJson = listToJson(fedTranscriptIds),
                     memoryIdsJson = listToJson(memoryIds),
@@ -547,8 +719,64 @@ object Archivist {
             failureReason = dominantReason,
             duplicatesSkipped = duplicatesSkipped,
             incompleteTurnsExcluded = incompleteTurnsExcluded,
-            error = runError
+            error = runError,
+            analysisType = analysisType,
+            genError = dominantGen,
+            apiProvider = apiProviderName,
+            upstreamProvider = providerInfo.providerName?.trim()?.ifBlank { null },
+            providerMessage = providerInfo.message?.trim()?.ifBlank { null },
+            model = runModel,
+            failureCategoryCounts = failureCategoryCounts
         )
+    }
+
+    /**
+     * File the run's proposed lore book entries as pending suggestions (Step
+     * 1.7, Lorebook Memories analysis type). Mirrors [fileMemoryDrafts]'s
+     * durability rules: an identical pending suggestion from the same chat is
+     * skipped (content dedup, so an interrupted-then-rerun conversation never
+     * doubles up), and a suggestion the user already deleted from this chat is
+     * not refiled (rejection dedup). Returns how many candidates were skipped
+     * as duplicates. A store insert failure aborts the conversation as reason E
+     * (save failed), exactly like the memory path.
+     */
+    private fun fileLorebookSuggestions(
+        context: Context,
+        store: MemoryStore,
+        conversation: Conversation,
+        runId: String,
+        entries: List<ArchivistResponseParser.DraftLoreEntry>,
+        collectedIds: MutableList<String>
+    ): Int {
+        if (entries.isEmpty()) return 0
+        var duplicates = 0
+        val now = Instant.now().toString()
+        for (e in entries) {
+            if (store.lorebookSuggestionExists(e.content, conversation.chatId)) { duplicates++; continue }
+            if (store.isLorebookSuggestionRejected(e.content, conversation.chatId)) {
+                MemoryLog.log(context, "Archivist", "info",
+                    "chat=${conversation.chatId}: previously rejected lore suggestion not refiled")
+                continue
+            }
+            val record = LorebookSuggestionRecord(
+                suggestionId = MemoryStore.newId("ls-"),
+                runId = runId,
+                content = e.content,
+                triggers = e.triggers,
+                sourceChatId = conversation.chatId,
+                sourceChatName = conversation.chatName,
+                assignedLorebookId = null,
+                createdAt = now
+            )
+            try {
+                store.insertLorebookSuggestion(record)
+                collectedIds.add(record.suggestionId)
+            } catch (ex: Exception) {
+                MemoryLog.logAlways(context, "Archivist", "error", "lore suggestion insert failed: ${ex.message}")
+                throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, ex)
+            }
+        }
+        return duplicates
     }
 
     /** Returns how many candidates were skipped as duplicates of memories
@@ -732,7 +960,21 @@ object Archivist {
                 headers = extraHeaders,
                 host = OpenAIHost(composeChatHost(endpoint.host, endpoint.chatEndpoint)),
                 proxy = null,
-                retry = RetryStrategy()
+                retry = RetryStrategy(),
+                // Capture the raw error-response body of a failed request (error
+                // responses only — a success is never buffered) so the failure
+                // surface can name the upstream provider and quote the server's
+                // message, the same way the chat funnel does.
+                httpClientConfig = {
+                    install(ResponseObserver) {
+                        filter { call -> !call.response.status.isSuccess() }
+                        onResponse { response ->
+                            try {
+                                capturedErrorBody = response.bodyAsText()
+                            } catch (_: Exception) { /* best effort; never disturb the failure path */ }
+                        }
+                    }
+                }
             )
         )
     }

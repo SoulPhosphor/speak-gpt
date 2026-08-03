@@ -31,11 +31,13 @@ import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.memory.MemoryLog
+import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.archivist.Archivist
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistFailure
 import org.teslasoft.assistant.ui.activities.MemoryAssistantActivity
@@ -77,18 +79,55 @@ class MemoryAnalysisForegroundService : Service() {
         private const val NOTIFICATION_ID = 9923
         private const val WAKE_LOCK_TAG = "PhosphorShines:MemoryAnalysis"
         private const val EXTRA_RERUN_ID = "rerunOfRunId"
+        private const val EXTRA_ANALYSIS_TYPE = "analysisType"
+        private const val ACTION_CANCEL = "org.teslasoft.assistant.action.CANCEL_ANALYSIS"
 
         val state = MutableStateFlow<MemoryAnalysisState?>(null)
 
+        /** True while a cancel came from the user (the Cancel button), false for
+         *  a system-driven stop (the Android 15+ dataSync timeout). It lets the
+         *  finished state distinguish "you cancelled it" (no error) from
+         *  "the system cancelled it" (Analysis Cancelled). */
+        @Volatile
+        private var userCancelRequested = false
+
+        /** True when the in-process stop was the Android 15+ dataSync runtime
+         *  limit (onTimeout), so the screen can say "Analysis Time Limit
+         *  Reached" rather than the generic "Analysis Stopped Early". */
+        @Volatile
+        private var timeLimitReached = false
+
         /**
-         * Launch an analysis run inside the service. Returns false when the
-         * platform refuses to start the service — in that case no run began,
-         * no rows were claimed, and the caller must show a durable failure
-         * (never fall back to an Activity-owned run).
+         * Ask the running analysis to stop at the user's request. Delivered as a
+         * service command so it reaches the live service instance; the run's own
+         * cancellation path keeps any filed drafts and releases its claims. A
+         * no-op when nothing is running.
          */
-        fun start(context: Context, rerunOfRunId: String?): Boolean {
+        fun requestCancel(context: Context) {
+            val intent = Intent(context, MemoryAnalysisForegroundService::class.java)
+                .setAction(ACTION_CANCEL)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (_: Exception) { /* nothing running to cancel */ }
+        }
+
+        /**
+         * Launch an analysis run inside the service. [analysisType] is the
+         * Memory Analysis Type the run should create suggestions for (Step
+         * 1.7): "associative" (saved-memory drafts) or "lorebook" (lore book
+         * entry suggestions). Returns false when the platform refuses to start
+         * the service — in that case no run began, no rows were claimed, and
+         * the caller must show a durable failure (never fall back to an
+         * Activity-owned run).
+         */
+        fun start(context: Context, rerunOfRunId: String?, analysisType: String): Boolean {
             val intent = Intent(context, MemoryAnalysisForegroundService::class.java)
                 .putExtra(EXTRA_RERUN_ID, rerunOfRunId)
+                .putExtra(EXTRA_ANALYSIS_TYPE, analysisType)
             return try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
@@ -110,6 +149,7 @@ class MemoryAnalysisForegroundService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val runActive = AtomicBoolean(false)
     private var wakeLock: PowerManager.WakeLock? = null
+    private var runJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -133,8 +173,22 @@ class MemoryAnalysisForegroundService : Service() {
                     "startForeground failed: ${e.javaClass.simpleName}: ${e.message} — " +
                         "no run began, no rows were claimed; retry remains available")
             } catch (_: Throwable) { /* best effort */ }
-            state.value = MemoryAnalysisState.Finished(serviceFailureOutcome(e))
+            state.value = MemoryAnalysisState.Finished(
+                serviceFailureOutcome(e, intent?.getStringExtra(EXTRA_ANALYSIS_TYPE) ?: "associative")
+            )
             stopSelf()
+            return START_NOT_STICKY
+        }
+
+        // Cancel command (the Memory Assistant's Cancel button): mark the stop
+        // as user-driven and cancel the live run. The run's own cancellation
+        // path keeps any filed drafts and releases claims; its completion tail
+        // delivers the finished state and stops the service. If nothing is
+        // running, stop now (startForeground above must be matched by a stop).
+        if (intent?.action == ACTION_CANCEL) {
+            userCancelRequested = true
+            val job = runJob
+            if (job != null && job.isActive) job.cancel() else stopSelf()
             return START_NOT_STICKY
         }
 
@@ -145,24 +199,64 @@ class MemoryAnalysisForegroundService : Service() {
         // stopping the live one's foreground state).
         if (runActive.compareAndSet(false, true)) {
             acquireWakeLock()
+            userCancelRequested = false
+            timeLimitReached = false
             val rerunOfRunId = intent?.getStringExtra(EXTRA_RERUN_ID)
+            val analysisType = intent?.getStringExtra(EXTRA_ANALYSIS_TYPE) ?: "associative"
             state.value = MemoryAnalysisState.Running(null)
-            scope.launch {
+            runJob = scope.launch {
                 val onProgress: (Archivist.Progress) -> Unit = { p ->
                     state.value = MemoryAnalysisState.Running(p)
                     updateNotification(p)
                 }
                 val appContext = applicationContext
-                val outcome = try {
-                    if (rerunOfRunId == null) Archivist.analyze(appContext, onProgress)
-                    else Archivist.rerun(appContext, rerunOfRunId, onProgress)
+                var outcome = try {
+                    if (rerunOfRunId == null) Archivist.analyze(appContext, analysisType, onProgress)
+                    else Archivist.rerun(appContext, rerunOfRunId, analysisType, onProgress)
                 } catch (e: Exception) {
                     Archivist.RunOutcome(
                         null, 0, 0, 0, 0, emptyList(),
                         outcome = "full_failed",
                         failureReason = ArchivistFailure.classify(e),
-                        error = e.message
+                        error = e.message,
+                        // Carry the requested analysis type through this service-
+                        // level failure (Fix #3): a Lorebook run that dies here
+                        // must not read back as Associative.
+                        analysisType = analysisType
                     )
+                }
+                // The Archivist reports any in-process stop as the generic
+                // "cancelled". Refine it (owner rulings, Aug 1 2026): the user's
+                // Cancel is a neutral stop, the Android 15+ dataSync runtime limit
+                // is its own state, and anything else stays the generic system
+                // stop. The refined value is persisted back onto the durable run
+                // record (Fix #6) so the Recent Memory Analysis history keeps the
+                // distinction instead of the engine's generic "cancelled" — a
+                // runtime-limit or system stop must never read as if the user
+                // pressed Cancel.
+                if (outcome.outcome == "cancelled") {
+                    val refined = when {
+                        userCancelRequested -> "cancelled_user"
+                        timeLimitReached -> "stopped_time_limit"
+                        else -> "cancelled"
+                    }
+                    if (refined != "cancelled") {
+                        outcome = outcome.copy(outcome = refined)
+                        outcome.runId?.let { id ->
+                            try {
+                                // A user cancel or runtime-limit stop is neutral,
+                                // so the engine's "interrupted" failure reason is
+                                // cleared.
+                                MemoryStore.getInstance(appContext)
+                                    .updateArchivistRunOutcome(id, refined, null)
+                            } catch (e: Exception) {
+                                try {
+                                    MemoryLog.log(appContext, "Archivist", "error",
+                                        "refined stop outcome write failed: ${e.message}")
+                                } catch (_: Throwable) { /* best effort */ }
+                            }
+                        }
+                    }
                 }
                 // "already_running" should be unreachable from here (the
                 // gates above), but if it ever happens the LIVE run owns the
@@ -184,19 +278,25 @@ class MemoryAnalysisForegroundService : Service() {
     override fun onTimeout(startId: Int, fgsType: Int) {
         try {
             MemoryLog.logAlways(applicationContext, "Archivist", "warn",
-                "analysis service timed out (system dataSync limit) — run interrupted; " +
-                    "unfinished conversations remain available to analyze again")
+                "analysis service timed out (system dataSync limit) — run stopped at the " +
+                    "runtime limit; unfinished conversations remain available to analyze again")
         } catch (_: Throwable) { /* best effort */ }
+        // This stop is specifically the runtime limit, not a generic system
+        // stop, so the screen can say "Analysis Time Limit Reached".
+        timeLimitReached = true
         scope.cancel()
         stopSelf()
     }
 
-    private fun serviceFailureOutcome(e: Exception): Archivist.RunOutcome =
+    private fun serviceFailureOutcome(e: Exception, analysisType: String): Archivist.RunOutcome =
         Archivist.RunOutcome(
             null, 0, 0, 0, 0, emptyList(),
             outcome = "full_failed",
             failureReason = ArchivistFailure.UNKNOWN,
-            error = "analysis service could not start: ${e.message}"
+            error = "analysis service could not start: ${e.message}",
+            // Carry the requested analysis type through the startForeground
+            // failure (Fix #3): never default this path to Associative.
+            analysisType = analysisType
         )
 
     private fun acquireWakeLock() {

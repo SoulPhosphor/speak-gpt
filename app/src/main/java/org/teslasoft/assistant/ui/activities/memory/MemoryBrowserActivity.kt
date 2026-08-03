@@ -27,6 +27,7 @@ import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
 
@@ -135,6 +136,25 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         // View Pending Memories link) opens straight into Pending view.
         mode = if (MemoryBrowserFilterState.status == setOf("draft")) "pending" else "memories"
         super.onCreate(savedInstanceState)
+    }
+
+    /** Step 1.7 (owner ruling, plan_one_page.md): each time the Memory Browser
+     *  opens without an embedding model installed, show a dismissible reminder
+     *  for that visit — never a permanent inline banner. It reappears on the
+     *  next visit while the model is still missing. Shown once per visit so
+     *  returning from a child screen does not re-prompt. */
+    private var noModelReminderShown = false
+
+    override fun onResume() {
+        super.onResume()
+        if (!noModelReminderShown &&
+            EmbeddingModelStorage.activeModel(this) == null) {
+            noModelReminderShown = true
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setMessage(R.string.lore_no_model_reminder)
+                .setPositiveButton(R.string.lore_no_model_reminder_ok) { d, _ -> d.dismiss() }
+                .show()
+        }
     }
 
     /* ------------------------------ data ------------------------------ */

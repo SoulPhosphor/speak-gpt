@@ -7167,9 +7167,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val appExplanation = genError.providerLimitMessage(this)
                 ?: genError.chatMessage(this)
             val providerInfo = ProviderErrorInfo.parse(capturedProviderErrorBody)
+            // Expanded provider detail (owner ruling, Aug 1 2026): the connection
+            // profile's name, the upstream model service the server reported (or
+            // "Not Reported" for a direct provider that names none), the model,
+            // and the function. Resolved once so the on-screen block and the
+            // Provider Failure Log entry are identical.
+            val notReported = getString(R.string.provider_value_not_reported)
+            val apiProviderName = apiEndpointObject?.label?.trim()?.ifBlank { null }
+                ?: apiEndpointObject?.host?.trim()?.ifBlank { null } ?: notReported
+            val modelServiceProvider = providerInfo.providerName?.trim()?.ifBlank { null } ?: notReported
+            val modelName = model.trim().ifBlank { null }
+                ?: apiEndpointObject?.model?.trim()?.ifBlank { null } ?: notReported
+            val functionLabel = getString(R.string.provider_function_chat)
             val response = appExplanation + "\n" +
                 genError.providerDetailBlock(
-                    this, e.message, providerInfo.providerName, providerInfo.message
+                    this, e.message, apiProviderName, modelServiceProvider, modelName, functionLabel, providerInfo.message
                 )
 
             // Lifecycle: an errored reply is Incomplete. The termination source
@@ -7195,20 +7207,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             // Record to the Provider Failure Log when enabled AND the server
             // actually answered — a user stop or a request that never reached a
-            // server is not a provider fault and is never logged. Raw only: the
-            // provider name (or the configured endpoint host when none is
-            // reported) and the server's own error, no app interpretation.
+            // server is not a provider fault and is never logged. The same
+            // expanded fields the user sees, plus the server's own error.
             if (preferences?.getLogChatFailures() == true && genError.reachedServer()) {
-                val provider = providerInfo.providerName?.trim()?.ifBlank { null }
-                    ?: apiEndpointObject?.host?.trim()?.ifBlank { null }
-                if (provider != null) {
-                    val providerErrorRaw = listOfNotNull(
-                        genError.httpStatus?.toString(),
-                        (providerInfo.message ?: e.message)?.trim()?.ifBlank { null }
-                    ).joinToString(" ").ifBlank { "(no message)" }
-                    org.teslasoft.assistant.preferences.Logger
-                        .logProviderFailure(this, provider, providerErrorRaw)
-                }
+                val providerErrorRaw = listOfNotNull(
+                    genError.httpStatus?.toString(),
+                    (providerInfo.message ?: e.message)?.trim()?.ifBlank { null }
+                ).joinToString(" ").ifBlank { "(no message)" }
+                org.teslasoft.assistant.preferences.Logger
+                    .logProviderFailure(this, apiProviderName, modelServiceProvider, modelName, functionLabel, providerErrorRaw)
             }
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {

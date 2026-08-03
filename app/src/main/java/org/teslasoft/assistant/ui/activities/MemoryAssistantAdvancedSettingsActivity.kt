@@ -58,10 +58,10 @@ import java.util.Locale
  * "Advanced Memory Assistant Settings" — suggestion cap, endpoint/model
  * selection, and AI extraction tuning. Reached from the Memory Manager hub.
  *
- * Temperature, Minimum Importance, and Extraction Prompt are persisted only
- * on Save (spec §2). Maximum Suggestions, endpoint, and model save
- * immediately on change (consistent with their prior behavior in Memory
- * Controls).
+ * Temperature, Minimum Importance, and the two analysis-type prompts (the
+ * Associative Memory Prompt and the Lorebook Memory Prompt) are persisted only
+ * on Save (spec §2). Maximum Suggestions, endpoint, and model save immediately
+ * on change (consistent with their prior behavior in Memory Controls).
  *
  * User-facing name is "Memory Assistant"; the `Preferences.getArchivist*`
  * accessors keep the internal code name.
@@ -91,6 +91,8 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     private var textMinImportanceValue: TextView? = null
     private var fieldExtractionPrompt: TextInputEditText? = null
     private var btnResetPrompt: MaterialButton? = null
+    private var fieldLorebookPrompt: TextInputEditText? = null
+    private var btnResetLorebookPrompt: MaterialButton? = null
     private var btnSave: MaterialButton? = null
 
     /** Guards the suggestion field's TextWatcher while we set text programmatically. */
@@ -146,6 +148,8 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         textMinImportanceValue = findViewById(R.id.text_min_importance_value)
         fieldExtractionPrompt = findViewById(R.id.field_extraction_prompt)
         btnResetPrompt = findViewById(R.id.btn_reset_prompt)
+        fieldLorebookPrompt = findViewById(R.id.field_lorebook_prompt)
+        btnResetLorebookPrompt = findViewById(R.id.btn_reset_lorebook_prompt)
         btnSave = findViewById(R.id.btn_save)
     }
 
@@ -204,10 +208,20 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         rowMinImportance?.setOnClickListener { showImportancePicker() }
         textMinImportanceValue?.setOnClickListener { showImportancePicker() }
 
-        /* ---- Extraction Prompt ---- */
-        val stored = preferences?.getArchivistCustomPrompt().orEmpty()
-        fieldExtractionPrompt?.setText(stored.ifEmpty { ArchivistPrompt.SYSTEM })
-        btnResetPrompt?.setOnClickListener { showResetPromptDialog() }
+        /* ---- Associative Memory Prompt ---- */
+        // The field shows exactly what an Associative run will send: the saved
+        // prompt, or the built-in default when nothing is saved.
+        val storedAssociative = preferences?.getArchivistCustomPrompt().orEmpty()
+        fieldExtractionPrompt?.setText(storedAssociative.ifEmpty { ArchivistPrompt.SYSTEM })
+        btnResetPrompt?.setOnClickListener { showResetAssociativePromptDialog() }
+
+        /* ---- Lorebook Memory Prompt ---- */
+        // Independent slot for the Lorebook analysis type: the field shows
+        // exactly what a Lorebook run will send (saved prompt, or its own
+        // built-in default). Never the Associative prompt — the schemas differ.
+        val storedLorebook = preferences?.getArchivistLorebookPrompt().orEmpty()
+        fieldLorebookPrompt?.setText(storedLorebook.ifEmpty { ArchivistPrompt.LOREBOOK_SYSTEM })
+        btnResetLorebookPrompt?.setOnClickListener { showResetLorebookPromptDialog() }
 
         btnSave?.setOnClickListener { save() }
     }
@@ -342,14 +356,29 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         popup.show()
     }
 
-    /* ------------------------------ Extraction Prompt ------------------------------ */
+    /* ------------------------------ Prompts ------------------------------ */
 
-    private fun showResetPromptDialog() {
+    /** Reset restores this type's built-in default: clear the saved prompt and
+     *  show the built-in text (which is what an Associative run will then send). */
+    private fun showResetAssociativePromptDialog() {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.memory_assistant_adv_reset_prompt_confirm)
             .setPositiveButton(R.string.memory_assistant_adv_reset_prompt) { _, _ ->
                 preferences?.setArchivistCustomPrompt("")
                 fieldExtractionPrompt?.setText(ArchivistPrompt.SYSTEM)
+            }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    /** The Lorebook slot's own Reset: restores the built-in Lorebook default,
+     *  independent of the Associative prompt. */
+    private fun showResetLorebookPromptDialog() {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.memory_assistant_adv_reset_prompt_confirm)
+            .setPositiveButton(R.string.memory_assistant_adv_reset_prompt) { _, _ ->
+                preferences?.setArchivistLorebookPrompt("")
+                fieldLorebookPrompt?.setText(ArchivistPrompt.LOREBOOK_SYSTEM)
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> }
             .show()
@@ -361,8 +390,14 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         preferences?.setArchivistTemperature(sliderTemperature?.value ?: RECOMMENDED_TEMPERATURE)
         preferences?.setArchivistMinImportance(selectedImportance)
 
+        // Each prompt saves independently. Storing "" when the field still holds
+        // the built-in default keeps the "empty = built-in" contract, so a later
+        // change to the default text is picked up rather than frozen in.
         val text = fieldExtractionPrompt?.text?.toString()?.trim().orEmpty()
         preferences?.setArchivistCustomPrompt(if (text.isEmpty() || text == ArchivistPrompt.SYSTEM.trim()) "" else text)
+
+        val loreText = fieldLorebookPrompt?.text?.toString()?.trim().orEmpty()
+        preferences?.setArchivistLorebookPrompt(if (loreText.isEmpty() || loreText == ArchivistPrompt.LOREBOOK_SYSTEM.trim()) "" else loreText)
 
         Toast.makeText(this, R.string.memory_assistant_adv_saved, Toast.LENGTH_SHORT).show()
     }

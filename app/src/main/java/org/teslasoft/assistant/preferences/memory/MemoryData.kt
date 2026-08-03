@@ -533,7 +533,35 @@ data class ArchivistRunRecord(
      *  the startup reconcile auto-releases only dead 'api' claims
      *  (counterplan §4(a)); an exported package's claims wait for import,
      *  cancel, or replacement. */
-    val transport: String = "api"
+    val transport: String = "api",
+    /** Which analysis type produced this run (DB v19, Step 1.7): 'associative'
+     *  (saved-memory drafts) or 'lorebook' (keyword-triggered lore book entry
+     *  suggestions). Stored at run begin and preserved through progress,
+     *  completion, failure, and process-death reconciliation so the Recent
+     *  Memory Analysis list and Rerun use the run's OWN type, never whatever
+     *  the picker currently shows. Legacy rows default to 'associative'. */
+    val analysisType: String = "associative"
+)
+
+/**
+ * One pending Lorebook Memory suggestion (Step 1.7). A Memory Assistant run in
+ * the "Lorebook Memories" analysis type proposes keyword-triggered lore book
+ * entries — the [content] to inject and its [triggers] — which land here for
+ * review in the Lorebooks Pending area. [assignedLorebookId] is the destination
+ * book the user picks at review time (null until assigned); approval writes a
+ * real LoreBookEntry into that book and consumes this row. [sourceChatId] is
+ * the rename-safe provenance anchor used for rejection dedup, matching the
+ * memory-draft path.
+ */
+data class LorebookSuggestionRecord(
+    val suggestionId: String,
+    val runId: String?,
+    val content: String,
+    val triggers: List<String>,
+    val sourceChatId: String?,
+    val sourceChatName: String?,
+    val assignedLorebookId: String? = null,
+    val createdAt: String
 )
 
 /**
