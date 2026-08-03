@@ -2,22 +2,28 @@
 
 A layered, model-agnostic memory system for AI companions: global and per-companion memories, protected topics with handling instructions, communication modes, roleplay worlds and characters, and an AI "Archivist" that maintains it all under user-controlled autonomy dials. Design is complete; this package is the full specification for the coding phase.
 
-> **⚠️ DOCUMENT HIERARCHY (July 2026 — read this before anything else in
-> this folder).** The eleven v1.11 package documents below are the
-> ORIGINAL design and are now pre-revision in places. The current
-> authority order is:
-> 1. **`owner_approved_rules.md`** (Revision 4) — outranks everything.
-> 2. **`roleplay_cards_and_tags_spec.md`** — authoritative roleplay
->    card + tag detail, incorporated into the rules as Revision 4.
-> 3. **`phase5_rework_work_order.md`** and **`rag_engine_work_order.md`**
->    — the build paths (stages 1–2 built; 3.0–3.5 built; 3.6 rescoped).
-> 4. The v1.11 package below — background and still-valid mechanics,
->    each file carrying its own ⚠️ banner naming what's superseded.
->    (`companion_memory_schema.json` / `seed_public_template.json` are
->    the v1.11 export shape — the codec still reads schema-shaped JSON,
->    but retired concepts inside them — modes, directives, entities,
->    owner_profile, always_load — are dormant fields, not features to
->    build.)
+> **⚠️ DOCUMENT HIERARCHY (2026-08-03 — read this before anything else in
+> this folder).** The current authority order is:
+> 1. **`project-plan.md`** at the repository root — the only active
+>    roadmap. It covers all remaining work (unfinished features only) and
+>    inlines every still-binding requirement a builder needs. Old phase
+>    lists and work orders (`memory-system-integration-plan.md`,
+>    `plan_one_page.md`, `external_memory_analysis_counterplan.md`,
+>    `phase5_rework_work_order.md`, `rag_engine_work_order.md`, and other
+>    build-plan/work-order/design documents formerly in this folder) are
+>    superseded and archived in **`legacy/`** at the repository root —
+>    historical record only, not to be followed as a plan.
+> 2. **`owner_approved_rules.md`** (Revision 4) — outranks everything for
+>    the memory-system behavior it covers.
+> 3. **`roleplay_cards_and_tags_spec.md`** — authoritative roleplay
+>    card + tag detail, incorporated into the rules as Revision 4. BUILT.
+> 4. The v1.11 package below — background and still-valid mechanics for
+>    what is already built, each file carrying its own ⚠️ banner naming
+>    what's superseded. (`companion_memory_schema.json` /
+>    `seed_public_template.json` are the v1.11 export shape — the codec
+>    still reads schema-shaped JSON, but retired concepts inside them —
+>    modes, directives, entities, owner_profile, always_load — are
+>    dormant fields, not features to build.)
 
 1. **README.md** (this file) — orientation and glossary.
 2. **memory_system_guide.md** — plain-language tour of the concepts.
@@ -26,7 +32,7 @@ A layered, model-agnostic memory system for AI companions: global and per-compan
 5. **archivist_spec.md** — job description for the AI that reviews conversations and maintains memory.
 6. **sqlite_table_plan.md** — the Android storage shape. The DDL has been executed and verified.
 7. **enforcer_librarian_spec.md** — the runtime: retrieval, prompt assembly, change-set application, integration with the existing app (characters, activation prompts, lore books, multi-API switching).
-8. **app_adaptation_notes.md** — the concrete changes the existing app needs (settings, sync hooks, new UI areas, transcript capture).
+8. **app_adaptation_notes.md** (now archived in `legacy/`) — the concrete changes the app needed (settings, sync hooks, new UI areas, transcript capture) — already built.
 9. **archivist_prompt.md** — the literal operational prompt sent to the Archivist model, with its JSON output contract.
 10. **prompt_assembly_template.md** — the literal system-prompt skeleton the enforcer fills each turn, plus the standing-packet compressor prompt.
 11. **troubleshooting_guide.md** — symptom-level guide for the user: what problems look like in daily use, where to look, how to fix.

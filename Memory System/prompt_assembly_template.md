@@ -4,9 +4,12 @@
 > standing packet, model note, hard-limits render, mode block, and
 > always-load material below were retired by the owner's rulings
 > (July 6–7 2026) and removed from the built enforcer in Stage 3.4.
-> The current prompt-layer contract lives at the top of
-> `rag_engine_work_order.md`; the current rules are
-> `owner_approved_rules.md` (Revision 4) + `roleplay_cards_and_tags_spec.md`.
+> The prompt-layer contract that was built lives at the top of
+> `rag_engine_work_order.md` (now archived in `legacy/` — the built
+> contract is the actual runtime, this is historical record); the current
+> rules are `owner_approved_rules.md` (Revision 4) +
+> `roleplay_cards_and_tags_spec.md`; current remaining work is
+> `project-plan.md` at the repo root.
 > Still valid here: the hand-written-notes-outrank-memories rule.
 > **The HANDLE WITH CARE / protection pattern was RETIRED July 8 2026**
 > (see the addendum in `owner_approved_rules.md`): sensitive care-notes now

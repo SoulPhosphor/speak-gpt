@@ -1,4 +1,9 @@
-# Companion Memory System — Integration Plan
+# Companion Memory System — Integration Plan (SUPERSEDED)
+
+> **This file is no longer a plan (2026-08-03).** The single active plan is
+> `project-plan.md` at the repository root. Keep this file only as
+> historical/technical reference (architecture decisions D1–D10, what
+> shipped when). Do not pick phases from here.
 
 Status: **approved by the owner (July 2026) — execution in progress.**
 Written against the complete design package in `Memory System/` (schema v1.11,

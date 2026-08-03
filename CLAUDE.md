@@ -465,10 +465,21 @@ Read only the documents relevant to the current task.
 
 Examples:
 
+- **current roadmap and remaining work, any feature: `project-plan.md`**
+  at the repository root — the only active plan. Built features are
+  closed and are not reopened, audited, or redesigned from this file or
+  any other; the owner reports a problem with something built only if
+  they hit one.
 - UI style definitions and composition: `ui-style-guide.md`
 - current UI conversion and legacy status: `ui-style-adoption.md`
 - broad UI redesign work: `ui-redesign-plan.md`
-- memory-system work: `Memory System/owner_approved_rules.md` plus the current relevant work order or feature spec
+- memory-system behavior rulings: `Memory System/owner_approved_rules.md`
+- memory-system technical reference (schema, prompts, runtime spec):
+  `Memory System/` — `project-plan.md` inlines what a builder needs for
+  remaining work; consult these only for implementation depth
+- superseded memory-system roadmaps, work orders, and designs for
+  already-built work: archived in `legacy/` at the repository root —
+  historical reference only, never a plan to follow
 - document attachment work: `document-includes-plan.md`
 - local speech work: `whisper-local-plan.md`
 
