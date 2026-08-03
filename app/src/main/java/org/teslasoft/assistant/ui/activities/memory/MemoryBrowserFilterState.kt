@@ -40,6 +40,12 @@ object MemoryBrowserFilterState {
     /** Source: single-value. "all" | "hand" | "learned". */
     var source: String = "all"
 
+    /** Superseded memories: single-value. "hide" (default — active + archived,
+     *  no old versions) | "include" (active + archived + superseded together) |
+     *  "only" (just superseded). Applies to the Memories view only; the
+     *  Pending view is drafts, which are never superseded. */
+    var superseded: String = "hide"
+
     /** Scope: multi-select. Empty = match anything.
      *  Keys: global | real_life | companion | project | world | campaign | rp_character. */
     val scope: MutableSet<String> = mutableSetOf()
@@ -60,6 +66,7 @@ object MemoryBrowserFilterState {
     fun reset() {
         sort = "newest"
         source = "all"
+        superseded = "hide"
         scope.clear()
         type.clear()
         status.clear(); status.add("active")

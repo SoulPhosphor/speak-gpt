@@ -1645,6 +1645,13 @@
          first letter capitalised, per the style guide. -->
     <string name="title_memory_filters">Memory Filters</string>
     <string name="mem_filter_tags">Tags</string>
+    <!-- Superseded Memories filter (owner ruling, Aug 3 2026). Hide is the
+         default: normal browsing without old versions. Include mixes active,
+         archived, and superseded together; Only browses just superseded. -->
+    <string name="mem_filter_superseded">Superseded Memories</string>
+    <string name="mem_filter_superseded_hide">Hide</string>
+    <string name="mem_filter_superseded_include">Include</string>
+    <string name="mem_filter_superseded_only">Only</string>
     <string name="mem_filter_reset_full">Reset Filters</string>
     <string name="mem_filter_open">Open Memory Filters</string>
     <string name="mem_filter_close">Close Memory Filters</string>

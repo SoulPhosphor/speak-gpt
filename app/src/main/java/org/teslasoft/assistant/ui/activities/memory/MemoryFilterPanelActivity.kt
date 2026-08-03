@@ -201,6 +201,19 @@ class MemoryFilterPanelActivity : FragmentActivity() {
             selection = MemoryBrowserFilterState.type
         )
 
+        // Superseded Memories: single-value dropdown directly beneath Type
+        // (owner ruling, Aug 3 2026). Hide is the default.
+        addDropdownSection(
+            root, getString(R.string.mem_filter_superseded),
+            options = listOf(
+                "hide" to getString(R.string.mem_filter_superseded_hide),
+                "include" to getString(R.string.mem_filter_superseded_include),
+                "only" to getString(R.string.mem_filter_superseded_only)
+            ),
+            currentKey = { MemoryBrowserFilterState.superseded },
+            apply = { MemoryBrowserFilterState.superseded = it }
+        )
+
         // The Status section is REMOVED (owner ruling, July 8 2026 evening):
         // the browser's Memories | Pending toggle owns the status split, so a
         // Status filter here was a duplicate. FilterState.status remains as

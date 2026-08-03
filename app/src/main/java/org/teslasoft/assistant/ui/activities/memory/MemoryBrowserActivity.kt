@@ -183,12 +183,21 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         if (q.isNotEmpty()) list = list.filter { it.title.lowercase().contains(q) || it.content.lowercase().contains(q) }
         if (!isScoped() && f.scope.isNotEmpty()) list = list.filter { it.scope in f.scope }
         if (f.type.isNotEmpty()) list = list.filter { it.kind in f.type }
-        // The mode toggle IS the status split (owner design, July 8 2026
-        // evening — the filter panel's Status section was removed as a
-        // duplicate): Memories = everything approved (non-draft; archived and
-        // superseded keep their row badges), Pending = drafts only.
-        list = if (mode == "pending") list.filter { it.status == "draft" }
-        else list.filter { it.status != "draft" }
+        // The mode toggle IS the draft split (owner design, July 8 2026
+        // evening): Pending = drafts only; Memories = everything approved
+        // (non-draft). Within Memories, the Superseded Memories filter (owner
+        // ruling, Aug 3 2026) decides whether old versions show: Hide =
+        // active + archived only (the default), Include = active + archived +
+        // superseded together, Only = just superseded.
+        list = if (mode == "pending") {
+            list.filter { it.status == "draft" }
+        } else {
+            when (MemoryBrowserFilterState.superseded) {
+                "only" -> list.filter { it.status == "superseded" }
+                "include" -> list.filter { it.status != "draft" }
+                else -> list.filter { it.status != "draft" && it.status != "superseded" }
+            }
+        }
         if (f.source != "all") list = list.filter { sourceKey(it.provenanceSource) == f.source }
         if (f.tags.isNotEmpty()) {
             val lowered = f.tags.map { it.lowercase() }.toSet()
