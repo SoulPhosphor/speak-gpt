@@ -25,14 +25,12 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.view.WindowInsets
-import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -50,8 +48,8 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistPrompt
 import org.teslasoft.assistant.theme.ThemeManager
-import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedFavoriteModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 import java.util.Locale
 
 /**
@@ -79,15 +77,14 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     private var switchMaxSuggestions: MaterialSwitch? = null
     private var fieldMaxSuggestions: TextInputEditText? = null
 
-    private var rowArchivistEndpoint: LinearLayout? = null
     private var textArchivistEndpointValue: TextView? = null
-    private var rowArchivistModel: LinearLayout? = null
+    private var btnEditArchivistEndpoint: ImageButton? = null
     private var textArchivistModelValue: TextView? = null
+    private var btnChooseArchivistModel: ImageButton? = null
 
     private var sliderTemperature: Slider? = null
     private var textTemperatureValue: TextView? = null
     private var btnResetTemperature: MaterialButton? = null
-    private var rowMinImportance: LinearLayout? = null
     private var textMinImportanceValue: TextView? = null
     private var fieldExtractionPrompt: TextInputEditText? = null
     private var btnResetPrompt: MaterialButton? = null
@@ -101,13 +98,13 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     /** Held until Save (spec §2 has an explicit Save button). */
     private var selectedImportance = 1
 
-    // Opens the full endpoint list (same screen the main chat uses to pick its
-    // own endpoint); picking a profile there makes it the Memory Assistant's
-    // endpoint.
-    private val archivistEndpointLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            val id = result.data?.getStringExtra("apiEndpointId")
-            if (id != null) preferences?.setArchivistEndpointId(id)
+    // The endpoint gear edits only the currently selected stable-id profile.
+    // Selection itself stays in this screen's dropdown and never opens a new
+    // activity. A deleted selected profile clears its now-invalid model too.
+    private val archivistEndpointEditorLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK && result.data?.getBooleanExtra("deleted", false) == true) {
+            preferences?.setArchivistEndpointId("")
+            preferences?.setArchivistModel("")
         }
         refreshArchivistRows()
     }
@@ -137,14 +134,13 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         btnBack = findViewById(R.id.btn_back)
         switchMaxSuggestions = findViewById(R.id.switch_max_suggestions)
         fieldMaxSuggestions = findViewById(R.id.field_max_suggestions)
-        rowArchivistEndpoint = findViewById(R.id.row_archivist_endpoint)
         textArchivistEndpointValue = findViewById(R.id.text_archivist_endpoint_value)
-        rowArchivistModel = findViewById(R.id.row_archivist_model)
+        btnEditArchivistEndpoint = findViewById(R.id.btn_edit_archivist_endpoint)
         textArchivistModelValue = findViewById(R.id.text_archivist_model_value)
+        btnChooseArchivistModel = findViewById(R.id.btn_choose_archivist_model)
         sliderTemperature = findViewById(R.id.slider_temperature)
         textTemperatureValue = findViewById(R.id.text_temperature_value)
         btnResetTemperature = findViewById(R.id.btn_reset_temperature)
-        rowMinImportance = findViewById(R.id.row_min_importance)
         textMinImportanceValue = findViewById(R.id.text_min_importance_value)
         fieldExtractionPrompt = findViewById(R.id.field_extraction_prompt)
         btnResetPrompt = findViewById(R.id.btn_reset_prompt)
@@ -184,12 +180,10 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
         /* ---- Memory Assistant Endpoint & Model ---- */
         refreshArchivistRows()
-        // The Dropdown.Value style makes the value clickable, so it consumes
-        // taps instead of passing them to the row — it needs its own listener.
-        rowArchivistEndpoint?.setOnClickListener { openArchivistEndpointPicker() }
-        textArchivistEndpointValue?.setOnClickListener { openArchivistEndpointPicker() }
-        rowArchivistModel?.setOnClickListener { openArchivistModelChooser() }
-        textArchivistModelValue?.setOnClickListener { openArchivistModelChooser() }
+        textArchivistEndpointValue?.setOnClickListener { showArchivistEndpointDropdown() }
+        btnEditArchivistEndpoint?.setOnClickListener { openSelectedArchivistEndpointEditor() }
+        textArchivistModelValue?.setOnClickListener { showArchivistModelDropdown() }
+        btnChooseArchivistModel?.setOnClickListener { openArchivistModelChooser() }
 
         /* ---- Temperature ---- */
         val temperature = (preferences?.getArchivistTemperature() ?: RECOMMENDED_TEMPERATURE)
@@ -205,7 +199,6 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         /* ---- Minimum Importance ---- */
         selectedImportance = (preferences?.getArchivistMinImportance() ?: 1).coerceIn(1, 5)
         updateImportanceLabel()
-        rowMinImportance?.setOnClickListener { showImportancePicker() }
         textMinImportanceValue?.setOnClickListener { showImportancePicker() }
 
         /* ---- Associative Memory Prompt ---- */
@@ -267,38 +260,83 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
     /* ------------------------------ Memory Assistant Endpoint & Model ------------------------------ */
 
+    private fun endpointProfiles(): List<ApiEndpointObject> =
+        (apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf())
+            .filter { it.id.isNotBlank() && it.label.isNotBlank() }
+            .distinctBy { it.id }
+            .sortedBy { it.label.lowercase(Locale.getDefault()) }
+
+    private fun endpointFavoriteModels(endpointId: String): List<String> =
+        favoriteModelsPreferences?.getFavoriteModels(endpointId)
+            ?.mapNotNull { it["modelId"]?.takeIf { modelId -> modelId.isNotBlank() } }
+            ?.distinct()
+            ?: emptyList()
+
     private fun refreshArchivistRows() {
         val endpointId = preferences?.getArchivistEndpointId().orEmpty()
-        textArchivistEndpointValue?.text = if (endpointId.isEmpty()) {
-            getString(R.string.label_endpoint_none)
-        } else {
-            val endpoints = apiEndpointPreferences?.getApiEndpointsList(this) ?: arrayListOf()
-            val label = endpoints.firstOrNull { it.id == endpointId }?.label
-            if (!label.isNullOrEmpty()) label else getString(R.string.label_endpoint_none)
-        }
+        val endpoint = endpointProfiles().firstOrNull { it.id == endpointId }
+        textArchivistEndpointValue?.text = endpoint?.label ?: getString(R.string.dropdown_select)
+        btnEditArchivistEndpoint?.isEnabled = endpoint != null
+        btnEditArchivistEndpoint?.alpha = if (endpoint != null) 1f else 0.38f
 
         val model = preferences?.getArchivistModel().orEmpty()
-        textArchivistModelValue?.text = model.ifEmpty { getString(R.string.label_archivist_model_none) }
+        textArchivistModelValue?.text = model.ifEmpty { getString(R.string.dropdown_select) }
+        btnChooseArchivistModel?.isEnabled = endpoint != null
+        btnChooseArchivistModel?.alpha = if (endpoint != null) 1f else 0.38f
     }
 
-    /** Opens the same full endpoint list the main chat uses to pick its own
-     *  endpoint. Picking a profile there makes it the Memory Assistant's. */
-    private fun openArchivistEndpointPicker() {
-        archivistEndpointLauncher.launch(Intent(this, ApiEndpointsListActivity::class.java))
+    /** Select a saved user-defined endpoint in place; no navigation. */
+    private fun showArchivistEndpointDropdown() {
+        val dropdown = textArchivistEndpointValue ?: return
+        val endpoints = endpointProfiles()
+        val labels = endpoints.map { it.label }
+        val currentId = preferences?.getArchivistEndpointId().orEmpty()
+        AppDropdown.show(dropdown, labels, endpoints.indexOfFirst { it.id == currentId }) { position ->
+            val pickedId = endpoints[position].id
+            if (pickedId != currentId) {
+                preferences?.setArchivistEndpointId(pickedId)
+                // A model override belongs to its endpoint. Do not silently
+                // carry a prior endpoint's model into the newly selected one.
+                preferences?.setArchivistModel("")
+            }
+            refreshArchivistRows()
+        }
+    }
+
+    /** The gear is management, not selection: edit the selected profile. */
+    private fun openSelectedArchivistEndpointEditor() {
+        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
+        val endpoints = endpointProfiles()
+        val position = endpoints.indexOfFirst { it.id == endpointId }
+        if (position < 0) return
+        archivistEndpointEditorLauncher.launch(
+            Intent(this, ApiEndpointEditorActivity::class.java)
+                .putExtra("position", position)
+                .putExtra("id", endpointId)
+        )
+    }
+
+    /** Quick model selection is limited to favorites for the selected endpoint. */
+    private fun showArchivistModelDropdown() {
+        val dropdown = textArchivistModelValue ?: return
+        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
+        if (endpointId.isEmpty()) return
+        val models = endpointFavoriteModels(endpointId)
+        val current = preferences?.getArchivistModel().orEmpty()
+        AppDropdown.show(dropdown, models, models.indexOf(current)) { position ->
+            preferences?.setArchivistModel(models[position])
+            refreshArchivistRows()
+        }
     }
 
     /** Opens the same model picker the main chat's Quick Settings uses: your
      *  favorited models first (with a "All models" fallback to search), or
      *  straight to the live searchable list if you have no favorites yet.
      *  Either way it fetches from the Memory Assistant's own endpoint. If no
-     *  endpoint has been chosen yet, there's nothing to fetch models from —
-     *  send the user to pick one first instead. */
+     *  endpoint has been chosen yet, the disabled gear cannot open it. */
     private fun openArchivistModelChooser() {
         val endpointId = preferences?.getArchivistEndpointId().orEmpty()
-        if (endpointId.isEmpty()) {
-            openArchivistEndpointPicker()
-            return
-        }
+        if (endpointId.isEmpty()) return
 
         val current = preferences?.getArchivistModel().orEmpty()
         // One full-screen selector, scoped to the Archivist's own endpoint: it
@@ -330,7 +368,12 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     }
 
     private fun updateImportanceLabel() {
-        textMinImportanceValue?.text = importanceLabel(selectedImportance)
+        val anchor = textMinImportanceValue ?: return
+        val labels = (1..5).map { importanceLabel(it) }
+        anchor.text = importanceLabel(selectedImportance)
+        AppDropdown.sizeToOptions(anchor, labels) {
+            (anchor.parent as? View)?.width ?: resources.displayMetrics.widthPixels
+        }
     }
 
     private fun showImportancePicker() {
@@ -343,17 +386,10 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
             getString(R.string.mem_importance_5)
         )
 
-        val popup = ListPopupWindow(this)
-        popup.anchorView = anchor
-        popup.isModal = true
-        popup.width = anchor.width
-        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
-        popup.setOnItemClickListener { _, _, position, _ ->
-            popup.dismiss()
+        AppDropdown.show(anchor, labels, selectedImportance - 1) { position ->
             selectedImportance = (position + 1).coerceIn(1, 5)
             updateImportanceLabel()
         }
-        popup.show()
     }
 
     /* ------------------------------ Prompts ------------------------------ */

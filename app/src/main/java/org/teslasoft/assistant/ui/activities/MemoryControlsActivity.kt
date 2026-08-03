@@ -21,14 +21,10 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowInsets
-import android.widget.ArrayAdapter
 import android.widget.ImageButton
-import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -40,6 +36,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 
 /**
  * "Memory Controls" — the normal user-facing controls page from the Memory
@@ -70,7 +67,6 @@ class MemoryControlsActivity : FragmentActivity() {
 
     private var switchCardSuggestions: MaterialSwitch? = null
 
-    private var rowMemoryEngine: LinearLayout? = null
     private var textMemoryEngineValue: TextView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,7 +94,6 @@ class MemoryControlsActivity : FragmentActivity() {
         switchCompanionInRoleplay = findViewById(R.id.switch_companion_in_roleplay)
         switchChatListMemoryStatus = findViewById(R.id.switch_chat_list_memory_status)
         switchCardSuggestions = findViewById(R.id.switch_card_suggestions)
-        rowMemoryEngine = findViewById(R.id.row_memory_engine)
         textMemoryEngineValue = findViewById(R.id.text_memory_engine_value)
     }
 
@@ -159,9 +154,6 @@ class MemoryControlsActivity : FragmentActivity() {
 
         /* ---- Memory Engine ---- */
         refreshEngineRow()
-        // The Dropdown.Value style makes the value clickable, so it consumes
-        // taps instead of passing them to the row — it needs its own listener.
-        rowMemoryEngine?.setOnClickListener { showMemoryEnginePicker() }
         textMemoryEngineValue?.setOnClickListener { showMemoryEnginePicker() }
     }
 
@@ -175,7 +167,12 @@ class MemoryControlsActivity : FragmentActivity() {
     }
 
     private fun refreshEngineRow() {
-        textMemoryEngineValue?.text = engineLabel(preferences?.getMemoryEngine() ?: "lorebooks")
+        val anchor = textMemoryEngineValue ?: return
+        val labels = listOf("none", "lorebooks", "associative", "both").map { engineLabel(it) }
+        anchor.text = engineLabel(preferences?.getMemoryEngine() ?: "lorebooks")
+        AppDropdown.sizeToOptions(anchor, labels) {
+            (anchor.parent as? View)?.width ?: resources.displayMetrics.widthPixels
+        }
         val hasEmbedding = EmbeddingModelStorage.activeModel(this) != null
         findViewById<TextView>(R.id.text_engine_needs_model)
             ?.visibility = if (hasEmbedding) View.GONE else View.VISIBLE
@@ -183,8 +180,8 @@ class MemoryControlsActivity : FragmentActivity() {
 
     private fun showMemoryEnginePicker() {
         val anchor = textMemoryEngineValue ?: return
-        val engines = arrayOf("none", "lorebooks", "associative", "both")
-        val labels = arrayOf(
+        val engines = listOf("none", "lorebooks", "associative", "both")
+        val labels = listOf(
             getString(R.string.memory_controls_engine_none),
             getString(R.string.memory_controls_engine_lorebooks),
             getString(R.string.memory_controls_engine_associative),
@@ -192,23 +189,14 @@ class MemoryControlsActivity : FragmentActivity() {
         )
         val hasEmbedding = EmbeddingModelStorage.activeModel(this) != null
         val disabled = if (hasEmbedding) emptySet() else setOf(2, 3)
-
-        val adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
-            override fun isEnabled(position: Int): Boolean = position !in disabled
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val view = super.getView(position, convertView, parent)
-                view.isEnabled = position !in disabled
-                return view
-            }
-        }
-
-        val popup = ListPopupWindow(this)
-        popup.anchorView = anchor
-        popup.isModal = true
-        popup.width = ListPopupWindow.WRAP_CONTENT
-        popup.setAdapter(adapter)
-        popup.setOnItemClickListener { _, _, position, _ ->
-            popup.dismiss()
+        val current = engines.indexOf(preferences?.getMemoryEngine() ?: "lorebooks")
+            .coerceAtLeast(0)
+        AppDropdown.show(
+            anchor,
+            labels,
+            selectedIndex = current,
+            isOptionEnabled = { position -> position !in disabled }
+        ) { position ->
             val picked = engines[position]
             preferences?.setMemoryEngine(picked)
             refreshEngineRow()
@@ -228,7 +216,6 @@ class MemoryControlsActivity : FragmentActivity() {
                 }.start()
             }
         }
-        popup.show()
     }
 
     override fun onAttachedToWindow() {

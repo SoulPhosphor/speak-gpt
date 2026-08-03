@@ -202,17 +202,15 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/label_field_activation_prompt" />
 
-            <com.google.android.material.textfield.TextInputEditText
+            <!-- Full-width stacked-field dropdown: the label/help remain above
+                 this form control, while its visuals and open behavior come
+                 entirely from the canonical dropdown family. -->
+            <TextView
                 android:id="@+id/field_activation_prompt"
-                style="@style/Widget.App.Field.Box"
+                style="@style/Widget.App.Dropdown.CanonicalValue"
                 android:layout_width="0dp"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:clickable="true"
-                android:cursorVisible="false"
-                android:focusable="false"
-                android:focusableInTouchMode="false"
-                android:singleLine="true"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/hint_field_activation_prompt" />
@@ -240,17 +238,12 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/label_field_core_lorebook" />
 
-            <com.google.android.material.textfield.TextInputEditText
+            <TextView
                 android:id="@+id/field_core_lorebook"
-                style="@style/Widget.App.Field.Box"
+                style="@style/Widget.App.Dropdown.CanonicalValue"
                 android:layout_width="0dp"
                 android:layout_marginStart="24dp"
                 android:layout_marginEnd="24dp"
-                android:clickable="true"
-                android:cursorVisible="false"
-                android:focusable="false"
-                android:focusableInTouchMode="false"
-                android:singleLine="true"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/hint_field_core_lorebook" />

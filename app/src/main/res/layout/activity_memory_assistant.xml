@@ -197,6 +197,9 @@
                 android:id="@+id/row_analysis_type"
                 style="@style/Widget.App.Row.WithSubtitle"
                 android:layout_marginTop="20dp"
+                android:background="@null"
+                android:clickable="false"
+                android:focusable="false"
                 android:gravity="top">
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
@@ -226,7 +229,7 @@
 
                 <TextView
                     android:id="@+id/text_analysis_type_value"
-                    style="@style/Widget.App.Dropdown.Value"
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
                     android:layout_width="wrap_content"
                     android:text="@string/memory_analysis_type_associative" />
             </LinearLayout>

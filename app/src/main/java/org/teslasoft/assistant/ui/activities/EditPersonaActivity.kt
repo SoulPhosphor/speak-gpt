@@ -51,6 +51,7 @@ import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.util.ProfileImageBinder
 
 /**
@@ -129,8 +130,8 @@ class EditPersonaActivity : FragmentActivity() {
     private var fieldLabelError: TextView? = null
     private var fieldLabel: TextInputEditText? = null
     private var fieldPrompt: TextInputEditText? = null
-    private var fieldActivationPrompt: TextInputEditText? = null
-    private var fieldCoreLoreBook: TextInputEditText? = null
+    private var fieldActivationPrompt: TextView? = null
+    private var fieldCoreLoreBook: TextView? = null
     private var additionalLoreBooksList: LinearLayout? = null
     private var btnAddLoreBooks: MaterialButton? = null
     private var checkboxAutoload: MaterialCheckBox? = null
@@ -332,15 +333,11 @@ class EditPersonaActivity : FragmentActivity() {
 
         val current = ids.indexOf(selectedActivationPromptId).coerceAtLeast(0)
 
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.persona_activation_hint)
-            .setSingleChoiceItems(labels.toTypedArray(), current) { dialog, which ->
-                selectedActivationPromptId = ids[which]
-                fieldActivationPrompt?.setText(activationPromptLabel(selectedActivationPromptId))
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        val dropdown = fieldActivationPrompt ?: return
+        AppDropdown.show(dropdown, labels, current) { which ->
+            selectedActivationPromptId = ids[which]
+            dropdown.text = activationPromptLabel(selectedActivationPromptId)
+        }
     }
 
     /** The lorebook store, or null while it is refused (Build Phase 3
@@ -388,15 +385,11 @@ class EditPersonaActivity : FragmentActivity() {
 
         val current = ids.indexOf(selectedCoreLoreBookId).coerceAtLeast(0)
 
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.persona_core_lorebook_hint)
-            .setSingleChoiceItems(labels.toTypedArray(), current) { dialog, which ->
-                selectedCoreLoreBookId = ids[which]
-                fieldCoreLoreBook?.setText(coreLoreBookLabel(selectedCoreLoreBookId))
-                dialog.dismiss()
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        val dropdown = fieldCoreLoreBook ?: return
+        AppDropdown.show(dropdown, labels, current) { which ->
+            selectedCoreLoreBookId = ids[which]
+            dropdown.text = coreLoreBookLabel(selectedCoreLoreBookId)
+        }
     }
 
     private fun renderAdditionalLoreBooks() {

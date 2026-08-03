@@ -372,6 +372,7 @@
     <string name="choose_provider_routing_preferred">Preferred</string>
     <string name="choose_provider_routing_only">Only</string>
     <string name="choose_provider_choose_model_title">Choose Model</string>
+    <string name="dropdown_select">Select</string>
     <string name="choose_provider_model_use_none">Use None</string>
     <string name="choose_provider_model_none_available">None Available</string>
     <string name="choose_provider_view_all_models">View All Models</string>
@@ -1768,6 +1769,8 @@
     <string name="memory_controls_row_assistant_endpoint_hint">Choose which saved AI endpoint analyzes history and drafts memory items.</string>
     <string name="memory_controls_row_assistant_model">Memory Assistant Model</string>
     <string name="memory_controls_row_assistant_model_hint">Model name used by Memory Assistant.</string>
+    <string name="memory_assistant_edit_endpoint_desc">Edit selected endpoint</string>
+    <string name="memory_assistant_choose_model_desc">Choose from all models</string>
     <string name="memory_controls_section_backups">Backups</string>
     <string name="memory_controls_auto_backup">Automatic Daily Backup</string>
     <string name="memory_controls_auto_backup_hint">Save a rotating local backup once a day.</string>

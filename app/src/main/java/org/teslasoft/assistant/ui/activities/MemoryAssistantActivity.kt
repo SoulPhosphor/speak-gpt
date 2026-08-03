@@ -24,10 +24,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowInsets
-import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.LinearLayout
-import android.widget.ListPopupWindow
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
@@ -59,6 +57,7 @@ import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.ui.activities.memory.MemoryBrowserActivity
 import org.teslasoft.assistant.ui.activities.memory.MemoryBrowserFilterState
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -91,7 +90,6 @@ class MemoryAssistantActivity : FragmentActivity() {
     private var btnSetup: MaterialButton? = null
     private var btnAnalyze: MaterialButton? = null
     private var btnCancel: MaterialButton? = null
-    private var rowAnalysisType: LinearLayout? = null
     private var textAnalysisTypeValue: TextView? = null
     /** True when the run whose outcome is currently shown was a Lorebook
      *  Memories run — routes the View link to the Lorebooks Pending area. */
@@ -135,7 +133,6 @@ class MemoryAssistantActivity : FragmentActivity() {
         btnSetup = findViewById(R.id.btn_setup)
         btnAnalyze = findViewById(R.id.btn_analyze)
         btnCancel = findViewById(R.id.btn_cancel)
-        rowAnalysisType = findViewById(R.id.row_analysis_type)
         textAnalysisTypeValue = findViewById(R.id.text_analysis_type_value)
         analysisProgressContainer = findViewById(R.id.analysis_progress_container)
         analysisBar = findViewById(R.id.analysis_bar)
@@ -168,7 +165,6 @@ class MemoryAssistantActivity : FragmentActivity() {
         linkViewPending?.setOnClickListener {
             if (lastOutcomeLorebook) openLorebookPending() else openPendingBrowser()
         }
-        rowAnalysisType?.setOnClickListener { showAnalysisTypePicker() }
         textAnalysisTypeValue?.setOnClickListener { showAnalysisTypePicker() }
         refreshAnalysisTypeRow()
         // The A3 buttons act on the memory database — the store the Archivist
@@ -1005,7 +1001,15 @@ class MemoryAssistantActivity : FragmentActivity() {
 
     private fun refreshAnalysisTypeRow() {
         val type = Preferences.getPreferences(this, "").getMemoryAnalysisType()
-        textAnalysisTypeValue?.text = analysisTypeLabel(type)
+        val anchor = textAnalysisTypeValue ?: return
+        val labels = listOf(
+            getString(R.string.memory_analysis_type_associative),
+            getString(R.string.memory_analysis_type_lorebook)
+        )
+        anchor.text = analysisTypeLabel(type)
+        AppDropdown.sizeToOptions(anchor, labels) {
+            (anchor.parent as? View)?.width ?: resources.displayMetrics.widthPixels
+        }
     }
 
     /** The Memory Analysis Type dropdown (owner design): exactly two choices —
@@ -1013,22 +1017,17 @@ class MemoryAssistantActivity : FragmentActivity() {
      *  one kind; there is no "Both". */
     private fun showAnalysisTypePicker() {
         val anchor = textAnalysisTypeValue ?: return
-        val types = arrayOf("associative", "lorebook")
-        val labels = arrayOf(
+        val types = listOf("associative", "lorebook")
+        val labels = listOf(
             getString(R.string.memory_analysis_type_associative),
             getString(R.string.memory_analysis_type_lorebook)
         )
-        val popup = ListPopupWindow(this)
-        popup.anchorView = anchor
-        popup.isModal = true
-        popup.width = ListPopupWindow.WRAP_CONTENT
-        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
-        popup.setOnItemClickListener { _, _, position, _ ->
-            popup.dismiss()
+        val current = types.indexOf(Preferences.getPreferences(this, "").getMemoryAnalysisType())
+            .coerceAtLeast(0)
+        AppDropdown.show(anchor, labels, current) { position ->
             Preferences.getPreferences(this, "").setMemoryAnalysisType(types[position])
             refreshAnalysisTypeRow()
         }
-        popup.show()
     }
 
     private fun jsonIds(json: String): List<String> = try {
