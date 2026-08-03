@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.providers
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
@@ -36,16 +37,16 @@ class ProviderRoutingDiagnosticsTest {
     fun genericEndpointReadsNotApplied() {
         assertEquals(
             "generic endpoint — not applied",
-            ProviderRoutingDiagnostics.describe(false, favorite(FavoriteModelObject.ROUTING_ONLY, "deepinfra"), false, false)
+            ProviderRoutingDiagnostics.describe(false, favorite(FavoriteModelObject.ROUTING_ONLY, "deepinfra"), "provider object attached")
         )
     }
 
     @Test
-    fun onlyModeShowsProviderAndAttachment() {
-        val s = ProviderRoutingDiagnostics.describe(true, favorite(FavoriteModelObject.ROUTING_ONLY, "deepinfra"), true, false)
+    fun onlyModeShowsProviderAndTheCallerSuppliedStatus() {
+        val s = ProviderRoutingDiagnostics.describe(true, favorite(FavoriteModelObject.ROUTING_ONLY, "deepinfra"), "provider object attached")
         assertTrue(s.contains("mode=only"))
         assertTrue(s.contains("provider=deepinfra"))
-        assertTrue(s.contains("provider object attached=true"))
+        assertTrue(s.contains("provider object attached"))
     }
 
     @Test
@@ -53,8 +54,7 @@ class ProviderRoutingDiagnosticsTest {
         val s = ProviderRoutingDiagnostics.describe(
             true,
             favorite(FavoriteModelObject.ROUTING_PREFERRED, fallbacks = false, order = listOf("deepinfra", "together"), ignored = listOf("openai")),
-            true,
-            false
+            "provider object attached"
         )
         assertTrue(s.contains("mode=preferred"))
         assertTrue(s.contains("order=[deepinfra,together]"))
@@ -63,8 +63,13 @@ class ProviderRoutingDiagnosticsTest {
     }
 
     @Test
-    fun blockedReadsBlockedNotSent() {
-        val s = ProviderRoutingDiagnostics.describe(true, favorite(FavoriteModelObject.ROUTING_ONLY, ""), false, true)
-        assertTrue(s.contains("BLOCKED (not sent)"))
+    fun rendersTheExactStatusPhraseItIsGiven() {
+        // The describer never infers attachment; it prints the caller's phrase.
+        val requested = ProviderRoutingDiagnostics.describe(true, favorite(FavoriteModelObject.ROUTING_ONLY, "deepinfra"), "attachment requested (send hook did not run)")
+        assertTrue(requested.contains("attachment requested (send hook did not run)"))
+        assertFalse(requested.contains("attached"))
+
+        val blocked = ProviderRoutingDiagnostics.describe(true, favorite(FavoriteModelObject.ROUTING_ONLY, ""), "BLOCKED (not sent)")
+        assertTrue(blocked.contains("BLOCKED (not sent)"))
     }
 }

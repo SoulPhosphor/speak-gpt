@@ -26,11 +26,17 @@ import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
  */
 object ProviderRoutingDiagnostics {
 
+    /**
+     * [attachmentStatus] is the caller's TRUTHFUL account of what actually
+     * happened to the outgoing request — e.g. "provider object attached" only
+     * once the interceptor confirmed it replaced the body, or "attachment
+     * requested (…)" when it could not be confirmed. This function never infers
+     * attachment from the routing decision; it only renders what it is told.
+     */
     fun describe(
         endpointIsOpenRouter: Boolean,
         favorite: FavoriteModelObject?,
-        providerAttached: Boolean,
-        blocked: Boolean
+        attachmentStatus: String
     ): String {
         if (!endpointIsOpenRouter) return "generic endpoint — not applied"
 
@@ -48,7 +54,7 @@ object ProviderRoutingDiagnostics {
         val excluded = favorite?.ignoredProviders ?: emptyList()
         if (excluded.isNotEmpty()) parts.add("excluded=[${excluded.joinToString(",")}]")
 
-        parts.add(if (blocked) "BLOCKED (not sent)" else "provider object attached=$providerAttached")
+        parts.add(attachmentStatus)
         return parts.joinToString("; ")
     }
 }

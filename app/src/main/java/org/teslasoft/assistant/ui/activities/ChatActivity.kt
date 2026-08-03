@@ -5008,14 +5008,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Block BEFORE dispatch — deliberately thrown so the send fails cleanly
         // through the existing error path rather than going out unrestricted.
         if (resolution.block != RoutingBlock.NONE) {
+            lastRoutingAttachment = "BLOCKED (not sent)"
             throw ProviderRoutingBlockedException(providerBlockMessage(resolution.block))
         }
 
-        val providerJson = resolution.providerJson ?: return
+        val providerJson = resolution.providerJson
+        if (providerJson == null) {
+            // OpenRouter, but Automatic / no saved routing — nothing to attach.
+            lastRoutingAttachment = "no provider object (Automatic / no saved routing)"
+            return
+        }
         try {
             val augmented = ProviderRoutingSerializer.augmentBody(text, providerJson)
             request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
-        } catch (_: Exception) { /* injection is best-effort; never break the send */ }
+            // Recorded ONLY after the body was actually replaced.
+            lastRoutingAttachment = "provider object attached"
+        } catch (_: Exception) {
+            // Injection is best-effort; report honestly that it was not confirmed.
+            lastRoutingAttachment = "attachment requested (mutation failed)"
+        }
     }
 
     /** Existing user-facing wording for a blocked routing configuration. */
@@ -5026,17 +5037,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         RoutingBlock.NONE -> ""
     }
 
-    /** The "Provider Routing" line appended to a Response Lifecycle entry. */
+    /**
+     * The "Provider Routing" line appended to a Response Lifecycle entry. The
+     * attachment status is the interceptor's ACTUAL result for this request
+     * ([lastRoutingAttachment], set only after a confirmed body replacement),
+     * never re-derived from the routing decision. If the send hook never ran,
+     * it stays null and the line honestly reads "attachment requested…" rather
+     * than claiming the provider object was attached.
+     */
     private fun providerRoutingLogLine(model: String): String {
         val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
         val favorite = favoriteForActiveEndpoint(model)
-        val resolution = ProviderRoutingResolver.resolve(isOpenRouter, favorite)
-        val summary = ProviderRoutingDiagnostics.describe(
-            isOpenRouter, favorite,
-            providerAttached = resolution.providerJson != null,
-            blocked = resolution.block != RoutingBlock.NONE
-        )
-        return "\nProvider Routing: $summary"
+        val status = lastRoutingAttachment ?: "attachment requested (send hook did not run)"
+        return "\nProvider Routing: " + ProviderRoutingDiagnostics.describe(isOpenRouter, favorite, status)
     }
 
     private fun initAI() {
@@ -6176,6 +6189,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // share [currentLifecycleTurnId]. Capture is entirely gated on the toggle:
     // when it is off, [currentLifecycle] stays null and these helpers no-op.
     private var currentLifecycle: ResponseLifecycleRecorder? = null
+
+    /** The provider-routing send hook's ACTUAL result for the in-flight
+     *  request, written on the send thread and read when the lifecycle entry is
+     *  finalized. Reset to null when each streamed request begins, so a hook
+     *  that never runs is reported as unconfirmed rather than "attached". */
+    @Volatile
+    private var lastRoutingAttachment: String? = null
     private var currentLifecycleTurnId: String = ""
     private var lifecycleTurnCounter: Int = 0
 
@@ -6196,6 +6216,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 ResponseLifecycle.Termination.STREAM_CLOSED, "superseded by a new request"
             )
         }
+        // Reset for THIS request (after any superseded entry above is written
+        // with its own result), so the send hook's actual outcome is recorded
+        // fresh and a hook that never runs never reports a stale attachment.
+        lastRoutingAttachment = null
         if (preferences?.getResponseLifecycleLogging() != true) {
             currentLifecycle = null
             return
