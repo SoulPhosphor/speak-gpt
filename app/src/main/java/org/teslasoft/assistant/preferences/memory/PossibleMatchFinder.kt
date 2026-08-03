@@ -91,7 +91,7 @@ object PossibleMatchFinder {
         val doc = RetrievalDocument.semanticDocument(
             draft.title, draft.content, draft.embeddingText, parseTags(draft.tagsJson)
         )
-        val queryVec = librarian.embedOrNull(doc, isQuery = false)
+        val queryVec = librarian.embedComparisonCached(doc)
             ?: return Result(deterministic, semanticAvailable = false)
 
         val alreadyMatched = deterministic.mapTo(HashSet()) { it.memoryId }
@@ -115,7 +115,7 @@ object PossibleMatchFinder {
         for (cmp in store.comparableInactiveDocsForDraft(draftId)) {
             if (cmp.memoryId in alreadyMatched) continue
             val text = RetrievalDocument.semanticDocument(cmp.title, cmp.content, cmp.embeddingText, parseTags(cmp.tagsJson))
-            val vec = librarian.embedOrNull(text, isQuery = false) ?: continue
+            val vec = librarian.embedComparisonCached(text) ?: continue
             if (VectorMath.cosine(queryVec, vec) >= SEMANTIC_COSINE_THRESHOLD) {
                 semantic.add(MemoryMatch.Match(cmp.memoryId, MemoryMatch.Relation.SEMANTIC_NEAR))
             }

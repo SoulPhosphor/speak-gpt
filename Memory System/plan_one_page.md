@@ -482,8 +482,11 @@ later, but it is not required for the first working computer-review route.
 
 *(Owner-approved rulings recorded 2026-08-03. Scope: the Associative
 Memories Pending area and its Possible Match resolution. Lorebook review is
-out of scope and unchanged by this ruling. The data and matching foundation is
-built on the Step 1.5 branch; the Pending and comparison UI is not built yet.)*
+out of scope and unchanged by this ruling. Status: the matching foundation, the
+Pending cards, and the Review comparison screen are all built on the Step 1.5
+branch. The new Pending card (full memory · caution/info/save/discard/Review)
+serves the ordinary associative scopes; roleplay-scoped drafts keep their
+existing pending row — Accept/Delete/Edit/Add to Card — unchanged.)*
 
 **Pending shows the full proposed Associative Memory** — the whole proposed
 memory, not a shortened summary. Pending remains a mode inside the existing
@@ -575,11 +578,12 @@ session. This cache is comparison-only and never changes chat retrieval.
 
 - **Self-repairing search** — background housekeeping so search stays
   fast and fixes its own index. Needs nothing from you.
-- **Possible Match review** — when a proposed memory may conflict with one
-  you already have, a Review screen to compare and resolve it. The approved
-  behavior is recorded above under *Associative Memory Pending and Possible
-  Match review* (Save & Edit Old Memory, Save & Replace, or Save & Supersede,
-  for one or several matches at once).
+- ~~**Possible Match review**~~ — **built.** When a proposed memory may
+  conflict with one you already have, the Pending card shows a caution icon and
+  a Review action that opens the comparison screen (Save & Edit Old Memory,
+  Save & Replace, or Save & Supersede, for one or several matches at once). The
+  approved behavior is recorded above under *Associative Memory Pending and
+  Possible Match review*.
 - **Faster Lorebooks** — speed and better logs. Needs nothing from you.
 - **The computer feature** — export eligible chats as a review package, let an
   AI on a computer suggest new Associative Memories or Lorebook Memories, and

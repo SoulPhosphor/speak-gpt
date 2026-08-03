@@ -398,6 +398,11 @@
             android:label="@string/mem_edit_title_new" />
 
         <activity
+            android:name=".ui.activities.memory.MemoryPossibleMatchReviewActivity"
+            android:exported="false"
+            android:label="@string/mem_review_title" />
+
+        <activity
             android:name=".ui.activities.memory.RoleplayHubActivity"
             android:exported="false"
             android:label="@string/title_roleplay">

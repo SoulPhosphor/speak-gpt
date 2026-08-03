@@ -27,9 +27,11 @@ import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.PossibleMatchFinder
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
+import org.teslasoft.assistant.ui.adapters.memory.MemoryRowAdapter
 
 /**
  * The memory browser/editor: search (semantic when a model is installed, plus
@@ -76,6 +78,19 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     private var presetCampaignId: String? = null
     private var presetRoleplayCharacterId: String? = null
     private var titleOverride: String? = null
+
+    /** Per-draft Possible Match state for the pending cards (Step 1.5), keyed by
+     *  draft id. Computed lazily on first bind and kept for the current Memory
+     *  Browser session so scrolling never recomputes; cleared when the library
+     *  changes (a save/discard/edit or a return from Review) so it can never go
+     *  stale. Keyed by draft id — never by view — so a recycled card is always
+     *  re-bound from current data and a late result can't touch the wrong card. */
+    private val matchState = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private var currentAdapter: MemoryRowAdapter? = null
+
+    /** Set when launching a screen that may change the library (the editor, the
+     *  Review screen), so the match cache is refreshed on return. */
+    private var invalidateMatchesOnResume = false
 
     override fun screenTitle(): String = titleOverride ?: getString(R.string.title_memories)
     override fun showSearch(): Boolean = true
@@ -154,6 +169,12 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     private var noModelReminderShown = false
 
     override fun onResume() {
+        // Refresh the match cache after a screen that may have changed the
+        // library, so a returning pending card re-checks against current state.
+        if (invalidateMatchesOnResume) {
+            matchState.clear()
+            invalidateMatchesOnResume = false
+        }
         super.onResume()
         if (!noModelReminderShown &&
             EmbeddingModelStorage.activeModel(this) == null) {
@@ -239,15 +260,24 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         val roleplay = m.scope in ROLEPLAY_SCOPES
         val needsTarget = roleplay &&
             m.worldIds.isEmpty() && m.campaignIds.isEmpty() && m.roleplayCharacterIds.isEmpty()
+        // Step 1.5: the new Associative Memory Pending card (full memory, caution/
+        // info/save/discard/Review + lazy Possible Match detection) is used for
+        // the ordinary associative scopes. Roleplay-scoped drafts keep their
+        // existing pending row (Accept/Delete/Edit/Add to Card + needs-target) so
+        // that unrelated roleplay behavior is unchanged.
+        val usePendingCard = pending && !roleplay
         return MemoryRow(
             id = m.memoryId,
             title = m.title,
-            subtitle = firstLine.ifEmpty { null },
+            // The pending card shows the FULL proposed memory; the ordinary
+            // rows keep the one-line content preview.
+            subtitle = if (usePendingCard) m.content.trim().ifEmpty { null } else firstLine.ifEmpty { null },
             tagsLine = tagsLine,
             badge = badge,
             hasAction = !pending,
             iconRes = iconForScope(m.scope, isOnCard(m)),
-            pendingActions = pending,
+            pendingActions = pending && roleplay,
+            pendingCard = usePendingCard,
             // Owner design: roleplay memories additionally get Add to Card —
             // but only once they have a target.
             showAddToCard = pending && roleplay && !needsTarget,
@@ -391,6 +421,8 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     // scope/targets, so no preset is sent. The browser reloads on resume, so
     // returning refreshes the list.
     private fun openEditor(memoryId: String?) {
+        // Editing any memory can change the library; refresh matches on return.
+        invalidateMatchesOnResume = true
         val intent = Intent(this, MemoryEditorActivity::class.java)
             .putExtra("chatId", chatId)
         if (memoryId != null) {
@@ -411,6 +443,9 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     /* ------------------------------ actions ------------------------------ */
 
     private fun setStatus(memoryId: String, status: String) {
+        // The library is changing, so any cached Possible Match results may now
+        // be stale — drop them; the pending cards re-check on the next bind.
+        matchState.clear()
         runOffThread {
             val store = MemoryStore.getInstance(this)
             store.setMemoryStatus(memoryId, status, getString(R.string.memory_change_status))
@@ -424,6 +459,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             .setTitle(R.string.memory_delete_confirm_title)
             .setMessage(getString(R.string.memory_delete_confirm_msg, m.title))
             .setPositiveButton(R.string.btn_delete) { _, _ ->
+                matchState.clear()
                 runOffThread {
                     MemoryStore.getInstance(this).deleteMemory(m.memoryId)
                     runOnUiThread {
@@ -453,6 +489,81 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
                     .show()
             }
         }
+    }
+
+    /* -------------------- Step 1.5 pending cards + Possible Match -------------------- */
+
+    // Capture the live adapter so a late match result can refresh the visible
+    // cards (notifyDataSetChanged re-binds from [matchState], keyed by draft id).
+    override fun buildListAdapter(rows: List<MemoryRow>): android.widget.ListAdapter {
+        val adapter = MemoryRowAdapter(rows, this)
+        adapter.setOnRowListener(this)
+        currentAdapter = adapter
+        return adapter
+    }
+
+    // Lazy per-suggestion detection: a pending card asks for its state at bind;
+    // the first ask starts the check (once per draft) and shows the spinner.
+    override fun pendingMatchState(row: MemoryRow): Int {
+        matchState[row.id]?.let { return it }
+        if (matchState.putIfAbsent(row.id, MemoryRowAdapter.MATCH_LOADING) == null) {
+            detectMatches(row.id)
+        }
+        return MemoryRowAdapter.MATCH_LOADING
+    }
+
+    private fun detectMatches(draftId: String) {
+        Thread {
+            val state = try {
+                // A failure must never read as "no possible match": only an empty
+                // result from a successful check is MATCH_NONE.
+                if (PossibleMatchFinder.find(this, draftId).matches.isNotEmpty()) {
+                    MemoryRowAdapter.MATCH_CONFLICT
+                } else {
+                    MemoryRowAdapter.MATCH_NONE
+                }
+            } catch (e: Exception) {
+                MemoryRowAdapter.MATCH_FAILED
+            }
+            matchState[draftId] = state
+            runOnUiThread { currentAdapter?.notifyDataSetChanged() }
+        }.start()
+    }
+
+    override fun onInfo(row: MemoryRow) {
+        runOffThread {
+            val m = MemoryStore.getInstance(this).getMemory(row.id) ?: return@runOffThread
+            runOnUiThread { MemoryInfoDialog.show(this, m) }
+        }
+    }
+
+    // Approve a conflict-free suggestion through the existing safe operation
+    // (activate + reindex). setStatus clears the match cache and reloads.
+    override fun onSave(row: MemoryRow) {
+        setStatus(row.id, "active")
+    }
+
+    // Discard reuses the app's existing permanent-delete confirmation.
+    override fun onDiscard(row: MemoryRow) {
+        runOffThread {
+            val m = MemoryStore.getInstance(this).getMemory(row.id) ?: return@runOffThread
+            runOnUiThread { confirmDelete(m) }
+        }
+    }
+
+    override fun onReview(row: MemoryRow) {
+        invalidateMatchesOnResume = true
+        startActivity(
+            Intent(this, MemoryPossibleMatchReviewActivity::class.java)
+                .putExtra("chatId", chatId)
+                .putExtra("draftId", row.id)
+        )
+    }
+
+    override fun onRetry(row: MemoryRow) {
+        matchState[row.id] = MemoryRowAdapter.MATCH_LOADING
+        currentAdapter?.notifyDataSetChanged()
+        detectMatches(row.id)
     }
 
     /* -------------------- pending actions (owner design) -------------------- */

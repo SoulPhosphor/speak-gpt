@@ -1638,6 +1638,46 @@
     <string name="mem_status_superseded">Superseded</string>
     <string name="mem_source_hand">Entered by hand</string>
     <string name="mem_source_learned">Learned from chat</string>
+    <string name="mem_source_imported">Imported</string>
+
+    <!-- Associative Memory Pending + Possible Match review (Step 1.5, owner
+         placement spec). Icon-only controls carry accessible labels; the
+         caution icon has NO visible label beside it (this string is only its
+         screen-reader description). -->
+    <string name="mem_info_action">Source and evidence</string>
+    <string name="mem_pending_caution_desc">Possible match found — review before saving</string>
+    <string name="mem_pending_checking">Checking for possible matches</string>
+    <string name="mem_pending_save">Approve suggestion</string>
+    <string name="mem_pending_discard">Discard suggestion</string>
+    <string name="mem_pending_review">Review</string>
+    <string name="mem_pending_retry">Retry</string>
+    <string name="mem_pending_check_failed">Couldn\'t check for possible matches</string>
+
+    <!-- Info control content. -->
+    <string name="mem_info_title">Source and evidence</string>
+    <string name="mem_info_source">Source: %1$s</string>
+    <string name="mem_info_from_chat">From chat: %1$s</string>
+    <string name="mem_info_noted">Noted: %1$s</string>
+    <string name="mem_info_confidence">Confidence: %1$s</string>
+    <string name="mem_info_none">No additional source information is recorded for this memory.</string>
+    <string name="mem_conf_certain">Stated by you</string>
+    <string name="mem_conf_likely">Likely</string>
+    <string name="mem_conf_tentative">Tentative</string>
+
+    <!-- Possible Match Review screen. -->
+    <string name="mem_review_title">Possible Match Review</string>
+    <string name="mem_review_intro">This suggestion may overlap memories you already have. Compare them below and choose what to keep. Nothing changes until you pick an option.</string>
+    <string name="mem_review_proposed_header">Proposed memory</string>
+    <string name="mem_review_existing_header">Existing possible matches</string>
+    <string name="mem_review_save_edit">Save &amp; Edit Old Memory</string>
+    <string name="mem_review_save_supersede">Save &amp; Supersede</string>
+    <string name="mem_review_save_replace">Save &amp; Replace</string>
+    <string name="mem_review_edit_save">Save Changes</string>
+    <string name="mem_review_select_hint">Select the memories this operation applies to.</string>
+    <string name="mem_review_match_select">Select this memory</string>
+    <string name="mem_review_stale">This suggestion or a selected memory changed. Nothing was applied — please review again.</string>
+    <string name="mem_review_gone">This suggestion is no longer pending. Nothing was applied.</string>
+    <string name="mem_review_no_matches">No possible matches remain for this suggestion.</string>
 
     <!-- Memory Filters slide-out panel (owner-approved wording, July 8 2026).
          Category labels reuse the existing "Sort/Scope/Type/Status/Source"
