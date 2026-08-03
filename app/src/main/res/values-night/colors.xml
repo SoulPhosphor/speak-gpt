@@ -37,6 +37,8 @@
     <color name="error">#FF6060</color>
     <color name="success">#DFFFDA</color>
     <color name="text">#eeffffff</color>
+    <color name="dropdown_border">#26FFFFFF</color>
+    <color name="dropdown_disabled_border">#14FFFFFF</color>
     <color name="hint">#aaffffff</color>
     <color name="tip1">#F3FFED</color>
     <color name="tip">#15E4FFD6</color>

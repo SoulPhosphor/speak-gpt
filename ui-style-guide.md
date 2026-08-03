@@ -404,17 +404,96 @@ Distinct from `Widget.App.Section.Title`/`Widget.App.Section.Hint`, which are a 
 
 ## Multiple-choice dropdowns
 
-### Standard dropdown field
+### Canonical dropdown control
 
-`Widget.App.Dropdown.Label`
+`Widget.App.Dropdown.CanonicalLabel`
 
-`Widget.App.Dropdown.Value`
+`Widget.App.Dropdown.CanonicalValue`
 
-Use for a normal multiple-choice field where a label and current selection appear on the same line.
+Every dropdown in the app uses this one visual family. A screen may arrange the
+control differently when its context requires it, but it must not fork the
+dropdown's border, background, height, typography, spacing, chevron, open-state
+geometry, disabled treatment, or interaction feedback.
 
-The value is the tap target and should open an anchored `ListPopupWindow`. This pattern has no separate edit button.
+`Widget.App.Dropdown.CanonicalValue` is the closed control and tap target. It uses the
+shared dropdown background drawable and opens the shared anchored dropdown
+menu behavior. `Widget.App.Dropdown.CanonicalLabel` is the optional field label.
 
-### Summoning Circle quick tiles
+Migration is deliberately screen-by-screen. The older
+`Widget.App.Dropdown.Label` and `Widget.App.Dropdown.Value` names temporarily
+preserve the existing appearance on screens that have not yet been reviewed.
+Do not use those legacy styles for new work. Once every dropdown has been
+reviewed and migrated, remove the legacy definitions and give the canonical
+styles the short names.
+
+#### Closed control
+
+- Draw one static, faint 1dp border around the complete control, including the
+  value and chevron. The border color must come from the canonical dropdown
+  theme role; never hardcode a light/dark color in a layout or screen.
+- Use the app's default background color through a theme role. All dropdowns
+  use the same background; do not derive it from the surrounding card, row, or
+  tile.
+- Use one shared height everywhere.
+- Left-align the value with deliberate internal breathing room on the left.
+  Reserve separate space on the right for the chevron so text can never overlap
+  it.
+- Use a downward-facing V chevron. Do not use a filled triangle or the Material
+  `arrow_drop_down` glyph.
+- Provide no ripple, pressed color, row highlight, selection flash, or other
+  touch feedback.
+- Size the control to the longest available option plus the shared internal
+  padding and chevron space. Cap that measured width at the available screen
+  width; ellipsize an option that cannot fit within the cap. Do not make a
+  dropdown full width merely to fill its parent.
+- Show the actual current value. When the field has a default, show that default
+  from the beginning. Never invent a placeholder in place of a default.
+- Use `Select` only when a single-choice field is genuinely neutral until the
+  user chooses an option. A multi-select dropdown may keep `Select` as its
+  permanent closed-control text.
+
+#### Placement
+
+- When a label is present, keep the label and dropdown on the same line. Align
+  the label to the left and the dropdown to the right, with shared outer spacing
+  so neither touches the screen edge.
+- When no label belongs on the line, center the correctly measured dropdown.
+  Choose Provider is an example of this standalone arrangement.
+- Layout containers may differ to support a trailing edit action or other
+  approved screen structure. Those differences are placement only; the control
+  must still inherit the canonical dropdown appearance and behavior.
+
+#### Open control
+
+The anchor and its option list read as one continuous outlined rectangle:
+
+- while open, remove the anchor's bottom stroke and bottom corner rounding;
+- attach the option list directly beneath the anchor with no visual gap;
+- continue the same 1dp border down the menu's left and right sides;
+- draw the bottom stroke and bottom corners only beneath the final option;
+- do not draw borders or divider lines between individual options;
+- give options the same background as the closed control;
+- render the currently selected option with slightly bolder text and no
+  background highlight;
+- provide no ripple, pressed color, highlight flash, or other touch feedback on
+  menu options.
+
+#### Disabled control
+
+Keep the same size, border shape, and background so disabling a field never
+shifts the layout. Mute the value text, chevron, and border through canonical
+disabled theme roles. A disabled control is not clickable and provides no touch
+feedback.
+
+#### Theme contract
+
+Dropdown border, background, value/chevron, label, and disabled colors are
+semantic theme roles. Every base theme and every palette overlay must define
+them. Dropdown drawables and styles resolve only those roles; layouts and Kotlin
+must not supply local dropdown colors. This is what allows a palette to restyle
+every closed dropdown and open menu without editing individual screens.
+
+### Summoning Circle placement
 
 `Widget.App.QuickTile.Label`
 
@@ -422,9 +501,16 @@ The value is the tap target and should open an anchored `ListPopupWindow`. This 
 
 `Widget.App.QuickTile.EditButton`
 
-Use only for the established Summoning Circle tile pattern: category label, current selection, and a separate edit button that opens the manager for that category.
+The Summoning Circle has an approved separate edit button that opens the manager
+for that category. Its label, dropdown, and edit button therefore need local
+layout constraints, but this is not a separate dropdown design.
 
-Do not use the QuickTile family as the general app-wide dropdown pattern. General multiple-choice fields use `Widget.App.Dropdown.*`.
+`Widget.App.QuickTile.Label` and `Widget.App.QuickTile.Value` must inherit the
+canonical `Widget.App.Dropdown` label and value appearance. They may contain
+only placement differences required by the edit-button column. Never duplicate
+or override dropdown colors, border, background, height, internal padding,
+chevron, sizing rules, open-state behavior, disabled treatment, or touch
+feedback in the QuickTile family.
 
 ## Provider chart
 

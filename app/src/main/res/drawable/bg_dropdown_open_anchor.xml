@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The bottom 1dp overlay removes the anchor's lower stroke while its menu is
+     open, making anchor and options read as one continuous rectangle. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="?attr/appDropdownBackgroundColor" />
+            <stroke android:width="1dp" android:color="?attr/appDropdownBorderColor" />
+            <corners android:topLeftRadius="5dp" android:topRightRadius="5dp" />
+        </shape>
+    </item>
+    <item android:gravity="bottom" android:height="1dp">
+        <shape android:shape="rectangle">
+            <solid android:color="?attr/appDropdownBackgroundColor" />
+        </shape>
+    </item>
+</layer-list>

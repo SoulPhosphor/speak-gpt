@@ -210,6 +210,11 @@
          designed - change it here in one place. -->
     <color name="quick_tile_border">#26FFFFFF</color>
 
+    <!-- Canonical dropdown borders: the same faint relative strength in both
+         light and dark modes. values-night supplies the light-on-dark pair. -->
+    <color name="dropdown_border">#26000000</color>
+    <color name="dropdown_disabled_border">#14000000</color>
+
 
     <color name="light_1">#05000000</color>
     <color name="light_2">#17000000</color>

@@ -11,6 +11,12 @@
         <item name="appTextColor">@color/text</item>
         <item name="appSubtleTextColor">@color/text_subtitle</item>
         <item name="appTitleTextColor">@color/text_title</item>
+        <item name="appDropdownBorderColor">@color/dropdown_border</item>
+        <item name="appDropdownBackgroundColor">@color/window_background</item>
+        <item name="appDropdownTextColor">@color/text</item>
+        <item name="appDropdownLabelColor">?attr/colorPrimary</item>
+        <item name="appDropdownDisabledTextColor">@color/text_subtitle</item>
+        <item name="appDropdownDisabledBorderColor">@color/dropdown_disabled_border</item>
         <item name="android:windowContentTransitions">true</item>
         <item name="android:statusBarColor">@color/window_background</item>
         <item name="android:windowLightStatusBar">false</item>
@@ -33,6 +39,12 @@
         <item name="appTextColor">@color/text</item>
         <item name="appSubtleTextColor">@color/text_subtitle</item>
         <item name="appTitleTextColor">@color/text_title</item>
+        <item name="appDropdownBorderColor">@color/dropdown_border</item>
+        <item name="appDropdownBackgroundColor">@color/window_background</item>
+        <item name="appDropdownTextColor">@color/text</item>
+        <item name="appDropdownLabelColor">?attr/colorPrimary</item>
+        <item name="appDropdownDisabledTextColor">@color/text_subtitle</item>
+        <item name="appDropdownDisabledBorderColor">@color/dropdown_disabled_border</item>
         <item name="android:typeface">sans</item>
         <item name="android:fontFamily">@font/default_font</item>
         <item name="android:backgroundDimAmount">0.4</item>

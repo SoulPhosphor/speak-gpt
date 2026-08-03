@@ -62,11 +62,8 @@
                 <!-- Summoning Circle container block (owner ruling, July 21
                      2026): Companion (top-rounded) -> Glamour (square) ->
                      Activation (square) -> System Prompt (bottom-rounded), read
-                     as one bordered container. Each tile is now a label + an
-                     inline dropdown value (tap it for an anchored list, not a
-                     centered picker) + an edit button that opens that category's
-                     manager. Repeated look lives in the Widget.App.QuickTile.*
-                     styles; per-tile shape/border/constraints stay here. -->
+                     as one bordered container. Each line is label -> right-
+                     aligned canonical dropdown -> edit button. -->
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/btn_select_persona"
                     android:layout_width="0dp"
@@ -77,7 +74,7 @@
                     android:background="@drawable/btn_accent_top"
                     android:backgroundTint="?attr/colorSecondaryContainer"
                     android:foreground="@drawable/border_quick_tile_top"
-                    android:paddingBottom="8dp"
+                    android:paddingVertical="8dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@+id/textView65">
@@ -86,25 +83,27 @@
                         android:id="@+id/textView_persona_title"
                         style="@style/Widget.App.QuickTile.Label"
                         android:text="@string/label_persona"
-                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
 
                     <TextView
                         android:id="@+id/text_persona"
                         style="@style/Widget.App.QuickTile.Value"
-                        android:text="@string/label_tap_to_set"
+                        android:text="@string/label_persona_none"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toStartOf="@+id/btn_edit_persona"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/textView_persona_title" />
+                        app:layout_constraintHorizontal_bias="1"
+                        app:layout_constraintStart_toEndOf="@+id/textView_persona_title"
+                        app:layout_constraintTop_toTopOf="parent" />
 
                     <ImageView
                         android:id="@+id/btn_edit_persona"
                         style="@style/Widget.App.QuickTile.EditButton"
                         android:contentDescription="@string/qs_edit_companions_desc"
-                        app:layout_constraintBottom_toBottomOf="@+id/text_persona"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="@+id/text_persona" />
+                        app:layout_constraintTop_toTopOf="parent" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -117,7 +116,7 @@
                     android:background="@drawable/btn_accent_4"
                     android:backgroundTint="?attr/colorSecondaryContainer"
                     android:foreground="@drawable/border_quick_tile_middle"
-                    android:paddingBottom="8dp"
+                    android:paddingVertical="8dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@+id/btn_select_persona">
@@ -126,7 +125,7 @@
                         android:id="@+id/textView_glamour_title"
                         style="@style/Widget.App.QuickTile.Label"
                         android:text="@string/label_glamour"
-                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
 
@@ -134,17 +133,19 @@
                         android:id="@+id/text_glamour"
                         style="@style/Widget.App.QuickTile.Value"
                         android:text="@string/label_user_persona_none"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toStartOf="@+id/btn_edit_glamour"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/textView_glamour_title" />
+                        app:layout_constraintHorizontal_bias="1"
+                        app:layout_constraintStart_toEndOf="@+id/textView_glamour_title"
+                        app:layout_constraintTop_toTopOf="parent" />
 
                     <ImageView
                         android:id="@+id/btn_edit_glamour"
                         style="@style/Widget.App.QuickTile.EditButton"
                         android:contentDescription="@string/qs_edit_glamours_desc"
-                        app:layout_constraintBottom_toBottomOf="@+id/text_glamour"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="@+id/text_glamour" />
+                        app:layout_constraintTop_toTopOf="parent" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -157,7 +158,7 @@
                     android:background="@drawable/btn_accent_4"
                     android:backgroundTint="?attr/colorSecondaryContainer"
                     android:foreground="@drawable/border_quick_tile_middle"
-                    android:paddingBottom="8dp"
+                    android:paddingVertical="8dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@+id/btn_select_glamour">
@@ -166,25 +167,27 @@
                         android:id="@+id/textView_activation_title"
                         style="@style/Widget.App.QuickTile.Label"
                         android:text="@string/label_activation"
-                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
 
                     <TextView
                         android:id="@+id/text_activation"
                         style="@style/Widget.App.QuickTile.Value"
-                        android:text="@string/label_tap_to_set"
+                        android:text="@string/label_activation_none"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toStartOf="@+id/btn_edit_activation"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/textView_activation_title" />
+                        app:layout_constraintHorizontal_bias="1"
+                        app:layout_constraintStart_toEndOf="@+id/textView_activation_title"
+                        app:layout_constraintTop_toTopOf="parent" />
 
                     <ImageView
                         android:id="@+id/btn_edit_activation"
                         style="@style/Widget.App.QuickTile.EditButton"
                         android:contentDescription="@string/qs_edit_activation_desc"
-                        app:layout_constraintBottom_toBottomOf="@+id/text_activation"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="@+id/text_activation" />
+                        app:layout_constraintTop_toTopOf="parent" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <!-- System Prompt: bottom-rounded, closing the container block.
@@ -199,7 +202,7 @@
                     android:background="@drawable/btn_accent_bottom"
                     android:backgroundTint="?attr/colorSecondaryContainer"
                     android:foreground="@drawable/border_quick_tile_bottom"
-                    android:paddingBottom="8dp"
+                    android:paddingVertical="8dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@+id/btn_select_activation">
@@ -208,7 +211,7 @@
                         android:id="@+id/textView_system_prompt_title"
                         style="@style/Widget.App.QuickTile.Label"
                         android:text="@string/label_system_prompt"
-                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
 
@@ -216,17 +219,19 @@
                         android:id="@+id/text_system_prompt"
                         style="@style/Widget.App.QuickTile.Value"
                         android:text="@string/system_prompt_none"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toStartOf="@+id/btn_edit_system_prompt"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/textView_system_prompt_title" />
+                        app:layout_constraintHorizontal_bias="1"
+                        app:layout_constraintStart_toEndOf="@+id/textView_system_prompt_title"
+                        app:layout_constraintTop_toTopOf="parent" />
 
                     <ImageView
                         android:id="@+id/btn_edit_system_prompt"
                         style="@style/Widget.App.QuickTile.EditButton"
                         android:contentDescription="@string/qs_edit_system_prompts_desc"
-                        app:layout_constraintBottom_toBottomOf="@+id/text_system_prompt"
+                        app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="@+id/text_system_prompt" />
+                        app:layout_constraintTop_toTopOf="parent" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -440,28 +445,21 @@
                             android:layout_marginStart="16dp"
                             android:layout_marginTop="12dp"
                             android:layout_marginEnd="16dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
                             <TextView
+                                android:id="@+id/label_chat_world"
+                                style="@style/Widget.App.Dropdown.CanonicalLabel"
                                 android:layout_width="0dp"
-                                android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="@string/label_chat_world"
-                                android:textColor="@color/text"
-                                android:textSize="15sp" />
+                                android:text="@string/label_chat_world" />
 
                             <TextView
                                 android:id="@+id/text_chat_world"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
+                                style="@style/Widget.App.Dropdown.CanonicalValue"
                                 android:layout_marginStart="12dp"
-                                android:text="@string/label_world_none"
-                                android:textColor="@color/text_subtitle"
-                                android:textSize="14sp" />
+                                android:text="@string/label_world_none" />
                         </LinearLayout>
 
                         <LinearLayout
@@ -471,28 +469,21 @@
                             android:layout_marginStart="16dp"
                             android:layout_marginTop="8dp"
                             android:layout_marginEnd="16dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
                             <TextView
+                                android:id="@+id/label_chat_campaign"
+                                style="@style/Widget.App.Dropdown.CanonicalLabel"
                                 android:layout_width="0dp"
-                                android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="@string/label_chat_campaign"
-                                android:textColor="@color/text"
-                                android:textSize="15sp" />
+                                android:text="@string/label_chat_campaign" />
 
                             <TextView
                                 android:id="@+id/text_chat_campaign"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
+                                style="@style/Widget.App.Dropdown.CanonicalValue"
                                 android:layout_marginStart="12dp"
-                                android:text="@string/label_campaign_none"
-                                android:textColor="@color/text_subtitle"
-                                android:textSize="14sp" />
+                                android:text="@string/label_campaign_none" />
                         </LinearLayout>
 
                         <LinearLayout
@@ -502,28 +493,21 @@
                             android:layout_marginStart="16dp"
                             android:layout_marginTop="8dp"
                             android:layout_marginEnd="16dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
                             <TextView
+                                android:id="@+id/label_chat_playing_as"
+                                style="@style/Widget.App.Dropdown.CanonicalLabel"
                                 android:layout_width="0dp"
-                                android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="@string/label_chat_playing_as"
-                                android:textColor="@color/text"
-                                android:textSize="15sp" />
+                                android:text="@string/label_chat_playing_as" />
 
                             <TextView
                                 android:id="@+id/text_chat_roleplay_character"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
+                                style="@style/Widget.App.Dropdown.CanonicalValue"
                                 android:layout_marginStart="12dp"
-                                android:text="@string/label_roleplay_character_none"
-                                android:textColor="@color/text_subtitle"
-                                android:textSize="14sp" />
+                                android:text="@string/label_roleplay_character_none" />
                         </LinearLayout>
 
                         <LinearLayout
@@ -531,30 +515,24 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginStart="16dp"
+                            android:layout_marginTop="8dp"
                             android:layout_marginEnd="16dp"
                             android:layout_marginBottom="8dp"
-                            android:background="?attr/selectableItemBackground"
-                            android:clickable="true"
-                            android:focusable="true"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
 
                             <TextView
+                                android:id="@+id/label_chat_project"
+                                style="@style/Widget.App.Dropdown.CanonicalLabel"
                                 android:layout_width="0dp"
-                                android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="@string/label_chat_project"
-                                android:textColor="@color/text"
-                                android:textSize="15sp" />
+                                android:text="@string/label_chat_project" />
 
                             <TextView
                                 android:id="@+id/text_chat_project"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
+                                style="@style/Widget.App.Dropdown.CanonicalValue"
                                 android:layout_marginStart="12dp"
-                                android:text="@string/label_project_none"
-                                android:textColor="@color/text_subtitle"
-                                android:textSize="14sp" />
+                                android:text="@string/label_project_none" />
                         </LinearLayout>
                     </LinearLayout>
                 </androidx.constraintlayout.widget.ConstraintLayout>
@@ -1049,7 +1027,7 @@
                         android:layout_marginStart="16dp"
                         android:orientation="vertical"
                         app:layout_constraintBottom_toBottomOf="parent"
-                        app:layout_constraintEnd_toStartOf="@+id/layout_provider_mode"
+                        app:layout_constraintEnd_toStartOf="@+id/dropdown_provider_mode"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent">
 
@@ -1070,24 +1048,15 @@
                             android:textSize="13sp" />
                     </LinearLayout>
 
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/layout_provider_mode"
-                        style="@style/App.ExposedTextField"
-                        android:layout_width="140dp"
-                        android:layout_height="wrap_content"
+                    <TextView
+                        android:id="@+id/dropdown_provider_mode"
+                        style="@style/Widget.App.Dropdown.CanonicalValue"
                         android:layout_marginStart="12dp"
                         android:layout_marginEnd="16dp"
+                        android:text="@string/choose_provider_routing_automatic"
                         app:layout_constraintBottom_toBottomOf="parent"
                         app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent">
-
-                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
-                            android:id="@+id/dropdown_provider_mode"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:text="@string/choose_provider_routing_automatic" />
-                    </com.google.android.material.textfield.TextInputLayout>
+                        app:layout_constraintTop_toTopOf="parent" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <LinearLayout

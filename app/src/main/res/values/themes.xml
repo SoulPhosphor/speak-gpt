@@ -11,6 +11,12 @@
         <item name="appTextColor">@color/text</item>
         <item name="appSubtleTextColor">@color/text_subtitle</item>
         <item name="appTitleTextColor">@color/text_title</item>
+        <item name="appDropdownBorderColor">@color/dropdown_border</item>
+        <item name="appDropdownBackgroundColor">@color/window_background</item>
+        <item name="appDropdownTextColor">@color/text</item>
+        <item name="appDropdownLabelColor">?attr/colorPrimary</item>
+        <item name="appDropdownDisabledTextColor">@color/text_subtitle</item>
+        <item name="appDropdownDisabledBorderColor">@color/dropdown_disabled_border</item>
         <item name="android:windowContentTransitions">true</item>
         <item name="android:statusBarColor">@color/window_background</item>
         <item name="android:windowLightStatusBar">true</item>
@@ -677,43 +683,15 @@
         <item name="android:textSize">14sp</item>
     </style>
 
-    <!-- Summoning Circle tile pieces (owner ruling, July 21 2026). The four
-         container tiles (Companion / Glamour / Activation / System Prompt) each
-         show a bold label, an inline dropdown value, and an edit button. These
-         styles own the repeated look so the coming theming pass can restyle all
-         four (and any future tile) in one place - see ui-style-guide.md. Per-tile
-         constraints (which tile sits above/below, the border foreground) stay on
-         the instance since they differ per tile. -->
-    <style name="Widget.App.QuickTile.Label" parent="">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
+    <!-- Summoning Circle placement variants. They inherit the canonical
+         dropdown visuals and add only spacing for the trailing edit button. -->
+    <style name="Widget.App.QuickTile.Label" parent="Widget.App.Dropdown.CanonicalLabel">
         <item name="android:layout_marginStart">16dp</item>
-        <item name="android:layout_marginTop">12dp</item>
-        <item name="android:layout_marginEnd">16dp</item>
-        <item name="android:textColor">?attr/colorPrimary</item>
-        <item name="android:textSize">16sp</item>
-        <item name="android:textStyle">bold</item>
     </style>
 
-    <!-- The current selection, doubling as the dropdown trigger: a trailing
-         caret marks it tappable and it opens an anchored ListPopupWindow (not
-         the centered picker dialog the roleplay rows use). -->
-    <style name="Widget.App.QuickTile.Value" parent="">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginStart">12dp</item>
-        <item name="android:layout_marginTop">2dp</item>
-        <item name="android:background">?attr/selectableItemBackground</item>
-        <item name="android:clickable">true</item>
-        <item name="android:focusable">true</item>
-        <item name="android:drawableEnd">@drawable/ic_arrow_drop_down</item>
-        <item name="android:drawableTint">?attr/appTextColor</item>
-        <item name="android:drawablePadding">2dp</item>
-        <item name="android:ellipsize">end</item>
-        <item name="android:maxLines">1</item>
-        <item name="android:paddingVertical">6dp</item>
-        <item name="android:paddingStart">4dp</item>
-        <item name="android:textColor">?attr/appTextColor</item>
+    <style name="Widget.App.QuickTile.Value" parent="Widget.App.Dropdown.CanonicalValue">
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:layout_marginEnd">4dp</item>
     </style>
 
     <!-- Trailing edit button: opens that category's manager screen. -->
@@ -728,20 +706,8 @@
         <item name="android:tint">?attr/colorPrimary</item>
     </style>
 
-    <!-- Standard multiple-choice dropdown field (owner ruling, July 22 2026):
-         the shape for every future label + tap-to-select dropdown pair where
-         the user picks one of several options. Label and dropdown value sit
-         on the SAME LINE - Label first, dropdown right after it - unlike the
-         Summoning Circle's four tiles (Widget.App.QuickTile.* above), which
-         stack the label above the value. That stacked layout was done
-         incorrectly and stays as-is - do not touch it, and do not restyle it
-         to match this pattern. The chevron and value text here match
-         Widget.App.QuickTile.Value exactly (same ic_arrow_drop_down caret,
-         same text color/size) since that is the correct look for a dropdown
-         trigger in this app; this pair just never gets a trailing edit
-         button - tapping the value is the field's only action. Label text is
-         authored in Title Case, matching this app's Title Case rule for
-         screen/menu labels. -->
+    <!-- Legacy dropdown styles remain visually unchanged while screens migrate
+         one controlled batch at a time. Do not use these for new work. -->
     <style name="Widget.App.Dropdown.Label" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
@@ -750,11 +716,6 @@
         <item name="android:textStyle">bold</item>
     </style>
 
-    <!-- The current selection, on the same line as Widget.App.Dropdown.Label
-         and immediately after it, doubling as the dropdown trigger - same
-         caret/text styling as Widget.App.QuickTile.Value. Width is 0dp so it
-         fills the remaining space on the line and ellipsizes a long value
-         instead of wrapping, with the caret always visible at the end. -->
     <style name="Widget.App.Dropdown.Value" parent="">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">wrap_content</item>
@@ -770,6 +731,47 @@
         <item name="android:paddingVertical">6dp</item>
         <item name="android:paddingStart">4dp</item>
         <item name="android:textColor">?attr/appTextColor</item>
+    </style>
+
+    <!-- Canonical dropdown visual family used by screens already migrated to
+         the approved contract. Placement belongs to the containing layout. -->
+    <style name="Widget.App.Dropdown.CanonicalLabel" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/appDropdownLabelColor</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Width is measured from the longest option by AppDropdown;
+         wrap_content is only its safe inflation default. -->
+    <style name="Widget.App.Dropdown.CanonicalValue" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:background">@drawable/bg_dropdown_closed</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:drawableEnd">@drawable/ic_chevron_down</item>
+        <item name="android:drawableTint">@color/dropdown_text</item>
+        <item name="android:drawablePadding">6dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:gravity">center_vertical|start</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textColor">@color/dropdown_text</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="Widget.App.Dropdown.Option" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:background">?attr/appDropdownBackgroundColor</item>
+        <item name="android:gravity">center_vertical|start</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">38dp</item>
+        <item name="android:textColor">?attr/appDropdownTextColor</item>
+        <item name="android:textSize">14sp</item>
     </style>
 
     <!-- Provider chart (Choose Provider screen, owner spec Aug 2 2026): a
@@ -884,6 +886,12 @@
         <item name="appTextColor">@color/text</item>
         <item name="appSubtleTextColor">@color/text_subtitle</item>
         <item name="appTitleTextColor">@color/text_title</item>
+        <item name="appDropdownBorderColor">@color/dropdown_border</item>
+        <item name="appDropdownBackgroundColor">@color/window_background</item>
+        <item name="appDropdownTextColor">@color/text</item>
+        <item name="appDropdownLabelColor">?attr/colorPrimary</item>
+        <item name="appDropdownDisabledTextColor">@color/text_subtitle</item>
+        <item name="appDropdownDisabledBorderColor">@color/dropdown_disabled_border</item>
         <item name="android:windowAnimationStyle">@style/AssistantWindowAnimation</item>
         <item name="android:typeface">sans</item>
         <item name="android:fontFamily">@font/default_font</item>
@@ -933,6 +941,12 @@
         <item name="appTextColor">@color/text</item>
         <item name="appSubtleTextColor">@color/text_subtitle</item>
         <item name="appTitleTextColor">@color/text_title</item>
+        <item name="appDropdownBorderColor">@color/dropdown_border</item>
+        <item name="appDropdownBackgroundColor">@color/window_background</item>
+        <item name="appDropdownTextColor">@color/text</item>
+        <item name="appDropdownLabelColor">?attr/colorPrimary</item>
+        <item name="appDropdownDisabledTextColor">@color/text_subtitle</item>
+        <item name="appDropdownDisabledBorderColor">@color/dropdown_disabled_border</item>
         <item name="android:typeface">sans</item>
         <item name="android:fontFamily">@font/default_font</item>
     </style>
@@ -1012,5 +1026,11 @@
         <item name="appTextColor">@color/text</item>
         <item name="appSubtleTextColor">@color/text_subtitle</item>
         <item name="appTitleTextColor">@color/text_title</item>
+        <item name="appDropdownBorderColor">@color/dropdown_border</item>
+        <item name="appDropdownBackgroundColor">@color/window_background</item>
+        <item name="appDropdownTextColor">@color/text</item>
+        <item name="appDropdownLabelColor">?attr/colorPrimary</item>
+        <item name="appDropdownDisabledTextColor">@color/text_subtitle</item>
+        <item name="appDropdownDisabledBorderColor">@color/dropdown_disabled_border</item>
     </style>
 </resources>

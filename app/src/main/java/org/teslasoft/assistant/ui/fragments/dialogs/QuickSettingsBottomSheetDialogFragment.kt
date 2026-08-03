@@ -31,9 +31,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
-import android.widget.ArrayAdapter
 import android.widget.ImageView
-import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.widget.addTextChangedListener
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -41,7 +39,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.checkbox.MaterialCheckBox
-import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
@@ -72,6 +69,7 @@ import org.teslasoft.assistant.ui.activities.LoreBookEntriesActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.activities.PersonasListActivity
 import org.teslasoft.assistant.ui.activities.SystemPromptsListActivity
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.core.api.network.RequestNetwork
 
 class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
@@ -93,7 +91,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
     private var btnSelectModel: ConstraintLayout? = null
     private var providerModeTile: ConstraintLayout? = null
-    private var dropdownProviderMode: MaterialAutoCompleteTextView? = null
+    private var dropdownProviderMode: TextView? = null
     private var btnSelectSystemPrompt: ConstraintLayout? = null
     private var textSystemPrompt: TextView? = null
     private var systemPromptsPreferences: SystemPromptsPreferences? = null
@@ -150,13 +148,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     // persona). Only shown once the chat's memory switch is on and the store
     // exists — before that there is nothing meaningful to pick from.
     private var containerMemoryScene: LinearLayout? = null
-    private var rowChatWorld: LinearLayout? = null
     private var textChatWorld: TextView? = null
-    private var rowChatCampaign: LinearLayout? = null
     private var textChatCampaign: TextView? = null
-    private var rowChatRoleplayCharacter: LinearLayout? = null
     private var textChatRoleplayCharacter: TextView? = null
-    private var rowChatProject: LinearLayout? = null
     private var textChatProject: TextView? = null
 
     // Model rules (Stage 4, owner_approved_rules §11 Revision 5): the per-chat
@@ -490,25 +484,64 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updatePersonaLabel(preferences?.getPersonaId() ?: "")
         updateActivationLabel(preferences?.getActivationPromptId() ?: "")
         updateSystemPromptLabel()
+        refreshSummoningDropdownWidths()
         loadUserPersonasForGlamour()
     }
 
     /* ------------------------------ Summoning Circle dropdowns ------------------------------ */
 
-    /** Anchored dropdown list (owner ruling, July 21 2026) - a real dropdown
-     *  attached to the tapped value, not the centered picker dialog. */
+    /** Canonical anchored dropdown shared with Provider Mode. */
     private fun showTileDropdown(anchor: View, labels: List<String>, onPick: (Int) -> Unit) {
-        if (labels.isEmpty()) return
-        val popup = ListPopupWindow(requireContext())
-        popup.anchorView = anchor
-        popup.isModal = true
-        popup.width = anchor.width
-        popup.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, labels))
-        popup.setOnItemClickListener { _, _, position, _ ->
-            popup.dismiss()
-            onPick(position)
+        val dropdown = anchor as? TextView ?: return
+        AppDropdown.show(dropdown, labels, onPick = onPick)
+    }
+
+    private fun sizeSummoningDropdown(
+        anchor: TextView?,
+        labelId: Int,
+        editId: Int,
+        labels: List<String>
+    ) {
+        val dropdown = anchor ?: return
+        val root = view ?: return
+        val label = root.findViewById<View>(labelId)
+        val edit = root.findViewById<View>(editId)
+        AppDropdown.sizeToOptions(dropdown, labels) {
+            val margins = dropdown.layoutParams as? ViewGroup.MarginLayoutParams
+            val marginWidth = (margins?.marginStart ?: 0) + (margins?.marginEnd ?: 0)
+            (edit.left - label.right - marginWidth).coerceAtLeast(0)
         }
-        popup.show()
+    }
+
+    /** Re-measure after list edits and after the async Glamour store read. */
+    private fun refreshSummoningDropdownWidths() {
+        val personas = personaPreferences?.getPersonasList().orEmpty()
+        sizeSummoningDropdown(
+            textPersona,
+            R.id.textView_persona_title,
+            R.id.btn_edit_persona,
+            personas.map { it.label }
+        )
+        sizeSummoningDropdown(
+            textGlamour,
+            R.id.textView_glamour_title,
+            R.id.btn_edit_glamour,
+            listOf(getString(R.string.label_user_persona_none)) + cachedUserPersonas.map { it.name }
+        )
+        val activations = activationPromptPreferences?.getActivationPromptsList().orEmpty()
+        sizeSummoningDropdown(
+            textActivation,
+            R.id.textView_activation_title,
+            R.id.btn_edit_activation,
+            listOf(getString(R.string.label_activation_none)) + activations.map { it.label }
+        )
+        val systemPrompts = systemPromptsPreferences?.getSystemPrompts().orEmpty()
+        sizeSummoningDropdown(
+            textSystemPrompt,
+            R.id.textView_system_prompt_title,
+            R.id.btn_edit_system_prompt,
+            systemPrompts.map { it.title }
+        )
     }
 
     /** Companion has no None (a chat always has a companion). */
@@ -587,6 +620,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 if (!isAdded) return@runOnUiThread
                 cachedUserPersonas = personas
                 updateGlamourLabel()
+                refreshSummoningDropdownWidths()
             }
         }.start()
     }
@@ -627,10 +661,20 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
     private fun setupProviderModeDropdown() {
         val dropdown = dropdownProviderMode ?: return
-        val labels = providerModeOrder.map { providerModeLabel(it) }.toTypedArray()
-        dropdown.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, labels))
-        dropdown.setOnItemClickListener { _, _, position, _ ->
-            onProviderModePicked(providerModeOrder[position])
+        val labels = providerModeOrder.map { providerModeLabel(it) }
+        dropdown.setOnClickListener {
+            AppDropdown.show(dropdown, labels) { position ->
+                onProviderModePicked(providerModeOrder[position])
+            }
+        }
+    }
+
+    private fun sizeProviderModeDropdown() {
+        val dropdown = dropdownProviderMode ?: return
+        val labels = providerModeOrder.map { providerModeLabel(it) }
+        AppDropdown.sizeToOptions(dropdown, labels) {
+            ((dropdown.parent as? View)?.width ?: resources.displayMetrics.widthPixels) -
+                (32 * resources.displayMetrics.density).toInt()
         }
     }
 
@@ -642,7 +686,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             else apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId)
         val isOpenRouter = endpoint != null && endpoint.isOpenRouterRouting()
         providerModeTile?.visibility = if (isOpenRouter) View.VISIBLE else View.GONE
-        if (isOpenRouter) refreshProviderModeDisplay()
+        if (isOpenRouter) {
+            refreshProviderModeDisplay()
+            sizeProviderModeDropdown()
+        }
     }
 
     /** Set the dropdown to the active model's stored routing mode. setText with
@@ -652,7 +699,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val model = preferences?.getModel() ?: return
         val mode = favoriteModelsPreferences?.getRoutingType(model, endpointId)
             ?: FavoriteModelObject.ROUTING_AUTOMATIC
-        dropdownProviderMode?.setText(providerModeLabel(mode), false)
+        dropdownProviderMode?.text = providerModeLabel(mode)
     }
 
     private fun onProviderModePicked(mode: String) {
@@ -844,13 +891,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         switchChatMemory = view.findViewById(R.id.switch_chat_memory)
         switchChatExcluded = view.findViewById(R.id.switch_chat_excluded)
         containerMemoryScene = view.findViewById(R.id.container_memory_scene)
-        rowChatWorld = view.findViewById(R.id.row_chat_world)
         textChatWorld = view.findViewById(R.id.text_chat_world)
-        rowChatCampaign = view.findViewById(R.id.row_chat_campaign)
         textChatCampaign = view.findViewById(R.id.text_chat_campaign)
-        rowChatRoleplayCharacter = view.findViewById(R.id.row_chat_roleplay_character)
         textChatRoleplayCharacter = view.findViewById(R.id.text_chat_roleplay_character)
-        rowChatProject = view.findViewById(R.id.row_chat_project)
         textChatProject = view.findViewById(R.id.text_chat_project)
         rowChatModelRules = view.findViewById(R.id.row_chat_model_rules)
         switchChatModelRules = view.findViewById(R.id.switch_chat_model_rules)
@@ -925,6 +968,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // it, then show the effective (chosen or top) prompt's title.
         preferences?.let { systemPromptsPreferences?.migrateExistingSystemMessage(it) }
         updateSystemPromptLabel()
+        refreshSummoningDropdownWidths()
         renderLoreBookList()
         textLogitBiasesConfig?.text = if (preferences?.getLogitBiasesConfigId() != "") {
             logitBiasConfigPreferences?.getConfigById(preferences?.getLogitBiasesConfigId()!!)?.get("label") ?: getString(R.string.label_tap_to_set)
@@ -1078,11 +1122,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updateChatCampaignLabel()
         updateChatRoleplayCharacterLabel()
         updateChatProjectLabel()
+        refreshMemorySceneDropdownWidths()
 
-        rowChatWorld?.setOnClickListener { showWorldPicker() }
-        rowChatCampaign?.setOnClickListener { showCampaignPicker() }
-        rowChatRoleplayCharacter?.setOnClickListener { showRoleplayCharacterPicker() }
-        rowChatProject?.setOnClickListener { showProjectPicker() }
+        textChatWorld?.setOnClickListener { showWorldPicker() }
+        textChatCampaign?.setOnClickListener { showCampaignPicker() }
+        textChatRoleplayCharacter?.setOnClickListener { showRoleplayCharacterPicker() }
+        textChatProject?.setOnClickListener { showProjectPicker() }
 
         loadMemorySceneLists()
     }
@@ -1113,6 +1158,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                     updateChatCampaignLabel()
                     updateChatRoleplayCharacterLabel()
                     updateChatProjectLabel()
+                    refreshMemorySceneDropdownWidths()
                 }
             } catch (_: Exception) { /* the rows keep working, just empty until the store is reachable */ }
         }.start()
@@ -1123,6 +1169,43 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val id = preferences?.getChatCampaignId().orEmpty()
         if (id.isEmpty()) return null
         return cachedCampaigns.firstOrNull { it.campaignId == id }
+    }
+
+    private fun sizeMemorySceneDropdown(anchor: TextView?, labelId: Int, labels: List<String>) {
+        val dropdown = anchor ?: return
+        val row = dropdown.parent as? View ?: return
+        val label = row.findViewById<TextView>(labelId)
+        AppDropdown.sizeToOptions(dropdown, labels) {
+            val margins = dropdown.layoutParams as? ViewGroup.MarginLayoutParams
+            val marginWidth = (margins?.marginStart ?: 0) + (margins?.marginEnd ?: 0)
+            val labelWidth = label.paint.measureText(label.text.toString()).toInt() +
+                label.paddingStart + label.paddingEnd
+            (row.width - labelWidth - marginWidth).coerceAtLeast(0)
+        }
+    }
+
+    private fun refreshMemorySceneDropdownWidths() {
+        val worldLabels = if (selectedCampaign() != null) {
+            cachedWorlds.map { it.name }
+        } else {
+            listOf(getString(R.string.label_world_none)) + cachedWorlds.map { it.name }
+        }
+        sizeMemorySceneDropdown(textChatWorld, R.id.label_chat_world, worldLabels)
+        sizeMemorySceneDropdown(
+            textChatCampaign,
+            R.id.label_chat_campaign,
+            listOf(getString(R.string.label_campaign_none)) + cachedCampaigns.map { it.name }
+        )
+        sizeMemorySceneDropdown(
+            textChatRoleplayCharacter,
+            R.id.label_chat_playing_as,
+            listOf(getString(R.string.label_roleplay_character_none)) + cachedRoleplayCharacters.map { it.name }
+        )
+        sizeMemorySceneDropdown(
+            textChatProject,
+            R.id.label_chat_project,
+            listOf(getString(R.string.label_project_none)) + cachedProjects.map { it.name }
+        )
     }
 
     private fun updateChatWorldLabel() {
@@ -1156,23 +1239,20 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     // engine reads — campaign memories join, and the campaign's GM companion
     // defines the narrator path for companion memories in roleplay.
     private fun showCampaignPicker() {
+        val dropdown = textChatCampaign ?: return
         val ids = listOf("") + cachedCampaigns.map { it.campaignId }
-        val labels = (listOf(getString(R.string.label_campaign_none)) + cachedCampaigns.map { it.name }).toTypedArray()
+        val labels = listOf(getString(R.string.label_campaign_none)) + cachedCampaigns.map { it.name }
         val current = ids.indexOf(preferences?.getChatCampaignId().orEmpty()).coerceAtLeast(0)
 
-        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_scene_campaign_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                preferences?.setChatCampaignId(ids[which])
-                updateChatCampaignLabel()
-                // Auto-fill the world/character slots from the campaign's
-                // links, visibly (3.6c, spec §2/§8b).
-                updateChatWorldLabel()
-                updateChatRoleplayCharacterLabel()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+        AppDropdown.show(dropdown, labels, current) { which ->
+            preferences?.setChatCampaignId(ids[which])
+            updateChatCampaignLabel()
+            // Auto-fill the world/character slots from the campaign's links,
+            // visibly (3.6c, spec §2/§8b).
+            updateChatWorldLabel()
+            updateChatRoleplayCharacterLabel()
+            refreshMemorySceneDropdownWidths()
+        }
     }
 
     private fun updateChatRoleplayCharacterLabel() {
@@ -1206,19 +1286,15 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     // ranking; with none selected, project memories still retrieve on
     // relevance in ordinary chats. Never an eligibility gate.
     private fun showProjectPicker() {
+        val dropdown = textChatProject ?: return
         val ids = listOf("") + cachedProjects.map { it.projectId }
-        val labels = (listOf(getString(R.string.label_project_none)) + cachedProjects.map { it.name }).toTypedArray()
+        val labels = listOf(getString(R.string.label_project_none)) + cachedProjects.map { it.name }
         val current = ids.indexOf(preferences?.getChatProjectId().orEmpty()).coerceAtLeast(0)
 
-        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_scene_project_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                preferences?.setChatProjectId(ids[which])
-                updateChatProjectLabel()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+        AppDropdown.show(dropdown, labels, current) { which ->
+            preferences?.setChatProjectId(ids[which])
+            updateChatProjectLabel()
+        }
     }
 
     /* ------------------------------ conversation summarizer ------------------------------ */
@@ -1288,6 +1364,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     private fun showWorldPicker() {
+        val dropdown = textChatWorld ?: return
         // 3.6c (spec §2/§8b): while a campaign is selected there is no
         // per-chat world override — the slot is the campaign's fact. Picking
         // a different world asks the owner-worded continue-in-new-world
@@ -1295,33 +1372,23 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val campaign = selectedCampaign()
         if (campaign != null) {
             val ids = cachedWorlds.map { it.worldId }
-            val labels = cachedWorlds.map { it.name }.toTypedArray()
+            val labels = cachedWorlds.map { it.name }
             if (ids.isEmpty()) return
-            MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
-                .setTitle(R.string.memory_scene_world_picker_title)
-                .setSingleChoiceItems(labels, ids.indexOf(campaign.worldId)) { dialog, which ->
-                    dialog.dismiss()
-                    val picked = ids[which]
-                    if (picked != campaign.worldId) confirmWorldMove(campaign, picked)
-                }
-                .setNegativeButton(android.R.string.cancel) { _, _ -> }
-                .show()
+            AppDropdown.show(dropdown, labels, ids.indexOf(campaign.worldId)) { which ->
+                val picked = ids[which]
+                if (picked != campaign.worldId) confirmWorldMove(campaign, picked)
+            }
             return
         }
 
         val ids = listOf("") + cachedWorlds.map { it.worldId }
-        val labels = (listOf(getString(R.string.label_world_none)) + cachedWorlds.map { it.name }).toTypedArray()
+        val labels = listOf(getString(R.string.label_world_none)) + cachedWorlds.map { it.name }
         val current = ids.indexOf(preferences?.getChatWorldId().orEmpty()).coerceAtLeast(0)
 
-        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_scene_world_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                preferences?.setChatWorldId(ids[which])
-                updateChatWorldLabel()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+        AppDropdown.show(dropdown, labels, current) { which ->
+            preferences?.setChatWorldId(ids[which])
+            updateChatWorldLabel()
+        }
     }
 
     /** The owner-worded 3.6c dialog (spec §8b): optional "what happened?"
@@ -1432,19 +1499,15 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             return
         }
 
+        val dropdown = textChatRoleplayCharacter ?: return
         val ids = listOf("") + cachedRoleplayCharacters.map { it.roleplayCharacterId }
-        val labels = (listOf(getString(R.string.label_roleplay_character_none)) + cachedRoleplayCharacters.map { it.name }).toTypedArray()
+        val labels = listOf(getString(R.string.label_roleplay_character_none)) + cachedRoleplayCharacters.map { it.name }
         val current = ids.indexOf(preferences?.getChatRoleplayCharacterId().orEmpty()).coerceAtLeast(0)
 
-        MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.memory_scene_playing_as_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                preferences?.setChatRoleplayCharacterId(ids[which])
-                updateChatRoleplayCharacterLabel()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+        AppDropdown.show(dropdown, labels, current) { which ->
+            preferences?.setChatRoleplayCharacterId(ids[which])
+            updateChatRoleplayCharacterLabel()
+        }
     }
 
     private fun saveCurrentSettingsToProfile() {

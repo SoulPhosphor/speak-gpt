@@ -33,4 +33,13 @@
     <attr name="appTextColor" format="color" />
     <attr name="appSubtleTextColor" format="color" />
     <attr name="appTitleTextColor" format="color" />
+
+    <!-- Canonical dropdown roles. Every palette defines these so dropdown
+         drawables never hardcode a light- or dark-theme assumption. -->
+    <attr name="appDropdownBorderColor" format="color" />
+    <attr name="appDropdownBackgroundColor" format="color" />
+    <attr name="appDropdownTextColor" format="color" />
+    <attr name="appDropdownLabelColor" format="color" />
+    <attr name="appDropdownDisabledTextColor" format="color" />
+    <attr name="appDropdownDisabledBorderColor" format="color" />
 </resources>
