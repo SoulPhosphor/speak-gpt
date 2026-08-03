@@ -1,4 +1,11 @@
-# The Memory Plan — the only page the owner needs
+# Owner-Approved Rulings Record (formerly the one-page memory plan)
+
+> **This file is no longer a plan (2026-08-03).** The single active plan is
+> `project-plan.md` at the repository root. This file remains in force as
+> the **record of owner-approved wording and behavior rulings** that the
+> plan cites — the rulings below are still binding. Ignore this file's
+> roadmap/status sections ("What already works", "What's left"); status
+> lives in the plan now.
 
 The long counterplan file in this folder is agent machinery. Agents read
 it. The owner never has to open it, and no agent may send her to it,

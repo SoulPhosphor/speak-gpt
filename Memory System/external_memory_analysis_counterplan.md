@@ -1,4 +1,11 @@
-# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 9, numbered phases)
+# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 9, numbered phases) (ROADMAP SUPERSEDED)
+
+> **The roadmap in this file (Phases 1–4, Steps 1.1–1.7, §10, §15) is
+> superseded (2026-08-03)** by `project-plan.md` at the repository root —
+> the single active plan. The technical audit material here (verified
+> findings, package/import contracts, RAG corrections) remains valid
+> reference for the stages that cite it. Do not pick work from this file's
+> step lists.
 
 > **Agents: this file is not for the owner.** The owner reads
 > `plan_one_page.md` in this folder — nothing else. Never send her here,
