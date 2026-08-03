@@ -2538,34 +2538,55 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
     /**
      * "Archive this chat" toggle: excluding pauses review for every
      * unprocessed pending row; re-including re-queues unprocessed excluded
-     * rows as pending, so the whole paused backlog rejoins the next normal
+     * rows as pending, so the paused backlog rejoins the next normal
      * analysis with no prompt. Processed rows are the archive bookmark —
-     * history the toggle never touches in either direction. Each row moves
-     * (or stays put) per [TranscriptReviewTransitions.statusAfterArchiveToggle].
+     * history the toggle never touches in either direction. A row whose
+     * companion currently opts out of memory (memory_participation 'none')
+     * is excluded by that opt-out, not by the archive pause, so re-enabling
+     * archiving leaves it excluded. Each row moves (or stays put) per
+     * [TranscriptReviewTransitions.statusAfterArchiveToggle].
      */
     fun setChatTranscriptsExcluded(chatId: String, excluded: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            val updates = ArrayList<Pair<String, String>>()
+            data class ToggleRow(
+                val id: String, val status: String, val processed: Boolean, val companionId: String?
+            )
+            val rows = ArrayList<ToggleRow>()
             db.query(
-                "transcripts", arrayOf("transcript_id", "review_status", "processed_at"),
+                "transcripts",
+                arrayOf("transcript_id", "review_status", "processed_at", "companion_id"),
                 "chat_id = ?", arrayOf(chatId), null, null, null
             ).use {
                 while (it.moveToNext()) {
-                    val next = TranscriptReviewTransitions.statusAfterArchiveToggle(
-                        archiveOff = excluded,
-                        reviewStatus = it.getString(1),
-                        processed = it.getStringOrNull("processed_at") != null
-                    )
-                    if (next != null) updates.add(it.getString(0) to next)
+                    rows.add(ToggleRow(
+                        it.getString(0), it.getString(1),
+                        it.getStringOrNull("processed_at") != null,
+                        it.getStringOrNull("companion_id")
+                    ))
                 }
             }
-            for ((id, status) in updates) {
+            val participationByCompanion = HashMap<String, String>()
+            for (row in rows) {
+                val participation = row.companionId?.let { id ->
+                    participationByCompanion.getOrPut(id) {
+                        db.query(
+                            "companions", arrayOf("memory_participation"),
+                            "companion_id = ?", arrayOf(id), null, null, null
+                        ).use { c -> if (c.moveToFirst()) c.getString(0) else "full" }
+                    }
+                }
+                val next = TranscriptReviewTransitions.statusAfterArchiveToggle(
+                    archiveOff = excluded,
+                    reviewStatus = row.status,
+                    processed = row.processed,
+                    companionBlocksReview = participation == "none"
+                ) ?: continue
                 db.update(
                     "transcripts",
-                    ContentValues().apply { put("review_status", status) },
-                    "transcript_id = ?", arrayOf(id)
+                    ContentValues().apply { put("review_status", next) },
+                    "transcript_id = ?", arrayOf(row.id)
                 )
             }
             db.setTransactionSuccessful()

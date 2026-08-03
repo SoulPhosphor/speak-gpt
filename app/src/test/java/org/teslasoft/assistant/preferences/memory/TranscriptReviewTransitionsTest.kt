@@ -43,12 +43,13 @@ class TranscriptReviewTransitionsTest {
         var reviewStatus: String,
         var processedAt: String? = null,
         var claimRunId: String? = null,
-        val chatId: String? = "chat-1"
+        val chatId: String? = "chat-1",
+        val companionBlocksReview: Boolean = false
     )
 
     private fun Row.applyToggle(archiveOff: Boolean) {
         TranscriptReviewTransitions.statusAfterArchiveToggle(
-            archiveOff, reviewStatus, processedAt != null
+            archiveOff, reviewStatus, processedAt != null, companionBlocksReview
         )?.let { reviewStatus = it }
     }
 
@@ -60,13 +61,37 @@ class TranscriptReviewTransitionsTest {
     /** 1. Turning archive off (or on) does not change the bookmark. */
     @Test
     fun togglingArchiveNeverTouchesProcessedRows() {
-        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(true, "processed", true))
-        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(false, "processed", true))
+        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(true, "processed", true, false))
+        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(false, "processed", true, false))
         // Belt: even an inconsistent row is protected by either marker alone.
-        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(true, "pending", true))
-        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(false, "excluded", true))
-        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(true, "processed", false))
-        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(false, "processed", false))
+        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(true, "pending", true, false))
+        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(false, "excluded", true, false))
+        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(true, "processed", false, false))
+        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(false, "processed", false, false))
+    }
+
+    /** A companion opt-out is its own exclusion: an Archive off/on round
+     *  trip must not re-queue rows whose companion blocks review. */
+    @Test
+    fun archiveToggleRoundTripNeverReenablesCompanionOptOutRows() {
+        val optOutRow = Row("t-1", "excluded", companionBlocksReview = true)
+        val pausedRow = Row("t-2", "excluded", companionBlocksReview = false)
+
+        optOutRow.applyToggle(archiveOff = true)
+        pausedRow.applyToggle(archiveOff = true)
+        optOutRow.applyToggle(archiveOff = false)
+        pausedRow.applyToggle(archiveOff = false)
+
+        // Only the row the archive pause excluded returns to the queue.
+        assertEquals("excluded", optOutRow.reviewStatus)
+        assertFalse(optOutRow.eligible())
+        assertEquals("pending", pausedRow.reviewStatus)
+        assertTrue(pausedRow.eligible())
+
+        // Direct check of the re-include transition as well.
+        assertNull(TranscriptReviewTransitions.statusAfterArchiveToggle(false, "excluded", false, true))
+        assertEquals("pending",
+            TranscriptReviewTransitions.statusAfterArchiveToggle(false, "excluded", false, false))
     }
 
     /** 2. Messages accumulated while off remain unprocessed and eligible. */

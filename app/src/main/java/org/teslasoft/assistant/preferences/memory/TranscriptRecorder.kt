@@ -36,7 +36,9 @@ import org.teslasoft.assistant.util.Hash
  *    (do-not-review), so nothing sent while the toggle is off is lost.
  *    Re-enabling re-queues the chat's unprocessed excluded rows as pending
  *    (MemoryStore.setChatTranscriptsExcluded) and the next normal analysis
- *    run picks the whole backlog up — silently, never via a prompt.
+ *    run picks the whole backlog up — silently, never via a prompt. Rows
+ *    whose companion currently opts out (memory_participation 'none') are
+ *    excluded by that opt-out, not the pause, and stay excluded.
  *  - Companion memory_participation 'none' -> captured but marked excluded
  *    (the spec: such transcripts "arrive pre-excluded"). 'global_only' is a
  *    Archivist-side rule and captures normally.

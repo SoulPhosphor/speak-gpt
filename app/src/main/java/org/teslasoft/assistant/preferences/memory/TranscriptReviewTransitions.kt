@@ -28,8 +28,10 @@ package org.teslasoft.assistant.preferences.memory
  *    replaces, or otherwise alters it.
  *  - An unprocessed row only moves between 'pending' (review-eligible) and
  *    'excluded' (paused, do-not-review). Turning archiving back on returns
- *    the whole paused backlog to 'pending' — silently, with no prompt and
- *    no per-message choice.
+ *    the paused backlog to 'pending' — silently, with no prompt and no
+ *    per-message choice. A companion opt-out (memory_participation 'none')
+ *    is its own exclusion, not an archive pause: the archive toggle never
+ *    re-queues a row whose companion currently blocks review.
  *  - A row advances to processed ONLY while it still carries the claim
  *    stamp of the run that read it. A released, reclaimed, or never-taken
  *    claim (an interrupted or partial run) can never mark unseen text.
@@ -41,16 +43,21 @@ object TranscriptReviewTransitions {
      * new review_status, or null when the toggle must leave the row alone.
      * [processed] outranks everything: a processed row is the bookmark and
      * never changes, whichever way the toggle moves.
+     * [companionBlocksReview] is the row's companion's CURRENT
+     * memory_participation == 'none': such a row is excluded by the
+     * companion's own opt-out, so re-enabling archiving must not re-queue
+     * it — only rows the archive pause excluded return to pending.
      */
     fun statusAfterArchiveToggle(
         archiveOff: Boolean,
         reviewStatus: String,
-        processed: Boolean
+        processed: Boolean,
+        companionBlocksReview: Boolean
     ): String? {
         if (processed || reviewStatus == "processed") return null
         return when {
             archiveOff && reviewStatus == "pending" -> "excluded"
-            !archiveOff && reviewStatus == "excluded" -> "pending"
+            !archiveOff && reviewStatus == "excluded" && !companionBlocksReview -> "pending"
             else -> null
         }
     }
