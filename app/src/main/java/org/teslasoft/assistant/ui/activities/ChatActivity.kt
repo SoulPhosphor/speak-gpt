@@ -172,6 +172,12 @@ import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.ResponseLifecycle
 import org.teslasoft.assistant.preferences.ResponseLifecycleRecorder
+import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.providers.ProviderRoutingBlockedException
+import org.teslasoft.assistant.providers.ProviderRoutingDiagnostics
+import org.teslasoft.assistant.providers.ProviderRoutingResolver
+import org.teslasoft.assistant.providers.ProviderRoutingSerializer
+import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.DocumentImporter
@@ -4957,51 +4963,80 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return if (full.endsWith(marker)) full.removeSuffix(marker) else base
     }
 
-    /**
-     * Resolve the OpenRouter `provider` object for [model] on the active
-     * endpoint, or null when nothing should be sent: a non-OpenRouter endpoint,
-     * a model with no saved routing, a blocked configuration, or Automatic with
-     * no exclusions. Availability is unknown at request time, so the enforcer
-     * sends the saved lists as-is and OpenRouter's own rejection is surfaced by
-     * the existing error path. Derives everything from its inputs — no shared
-     * state — so routing can never leak between requests or chats.
-     */
-    private fun resolveProviderRoutingJson(model: String): com.google.gson.JsonObject? {
+    /** The saved favorite for [model] on the active endpoint, or null. */
+    private fun favoriteForActiveEndpoint(model: String): org.teslasoft.assistant.preferences.dto.FavoriteModelObject? {
         val endpoint = apiEndpointObject ?: return null
-        if (!endpoint.isOpenRouterRouting()) return null
-        val favorite = org.teslasoft.assistant.preferences.FavoriteModelsPreferences
-            .getPreferences(this).getFavorite(model, endpoint.id) ?: return null
-        val decision = org.teslasoft.assistant.providers.ProviderRoutingEnforcer.decide(favorite, null)
-        return if (decision.allowed) {
-            org.teslasoft.assistant.providers.ProviderRoutingSerializer.providerObject(decision)
-        } else {
-            null
-        }
+        return FavoriteModelsPreferences.getPreferences(this).getFavorite(model, endpoint.id)
     }
 
     /**
-     * Just-before-send hook body: if this is a JSON Chat Completions request on
-     * an OpenRouter-identity endpoint, set the resolved `provider` object on it
-     * (overwriting any existing one, so a re-sent request never carries two).
-     * Anything unexpected returns early and leaves the request untouched.
+     * Just-before-send hook body. For a JSON Chat Completions request on an
+     * OpenRouter-identity endpoint it either:
+     *  - throws [ProviderRoutingBlockedException] when the saved routing cannot
+     *    be satisfied (e.g. Only with no usable provider) — so the request is
+     *    never silently sent unrestricted; or
+     *  - sets the resolved `provider` object on the body, overwriting any
+     *    existing one so a re-sent request (tool continuation / retry) never
+     *    carries two.
+     * Every other case (generic endpoint, non-chat body, parse issue, Automatic
+     * with no exclusions) leaves the request byte-for-byte unchanged.
      */
     private fun augmentRequestWithProviderRouting(request: HttpRequestBuilder) {
         if (apiEndpointObject?.isOpenRouterRouting() != true) return
         val content = request.body as? TextContent ?: return
         if (content.contentType?.match(ContentType.Application.Json) != true) return
-        val text = content.text
-        val root = try {
-            com.google.gson.JsonParser.parseString(text).asJsonObject
+
+        // Parse + resolve defensively; any failure here degrades to "do nothing".
+        val resolved: Pair<ProviderRoutingResolver.Resolution, String>? = try {
+            val text = content.text
+            val root = com.google.gson.JsonParser.parseString(text).asJsonObject
+            // Only a chat request carries a messages array; skip anything else.
+            val model = if (root.has("messages")) {
+                root.get("model")?.takeIf { !it.isJsonNull }?.asString
+            } else {
+                null
+            }
+            if (model == null) null
+            else ProviderRoutingResolver.resolve(true, favoriteForActiveEndpoint(model)) to text
         } catch (_: Exception) {
-            return
+            null
         }
-        // Only a chat request carries a messages array; skip anything else.
-        if (!root.has("messages")) return
-        val model = root.get("model")?.takeIf { !it.isJsonNull }?.asString ?: return
-        val providerJson = resolveProviderRoutingJson(model) ?: return
-        val augmented = org.teslasoft.assistant.providers.ProviderRoutingSerializer.augmentBody(text, providerJson)
-        request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
-        android.util.Log.d("ProviderRouting", "Attached provider routing for model=$model")
+
+        resolved ?: return
+        val (resolution, text) = resolved
+
+        // Block BEFORE dispatch — deliberately thrown so the send fails cleanly
+        // through the existing error path rather than going out unrestricted.
+        if (resolution.block != RoutingBlock.NONE) {
+            throw ProviderRoutingBlockedException(providerBlockMessage(resolution.block))
+        }
+
+        val providerJson = resolution.providerJson ?: return
+        try {
+            val augmented = ProviderRoutingSerializer.augmentBody(text, providerJson)
+            request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
+        } catch (_: Exception) { /* injection is best-effort; never break the send */ }
+    }
+
+    /** Existing user-facing wording for a blocked routing configuration. */
+    private fun providerBlockMessage(block: RoutingBlock): String = when (block) {
+        RoutingBlock.ONLY_PROVIDER_NOT_SELECTED,
+        RoutingBlock.ONLY_PROVIDER_UNAVAILABLE -> getString(R.string.provider_only_mode_error)
+        RoutingBlock.NO_PREFERRED_AVAILABLE -> getString(R.string.provider_no_preferred_message)
+        RoutingBlock.NONE -> ""
+    }
+
+    /** The "Provider Routing" line appended to a Response Lifecycle entry. */
+    private fun providerRoutingLogLine(model: String): String {
+        val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
+        val favorite = favoriteForActiveEndpoint(model)
+        val resolution = ProviderRoutingResolver.resolve(isOpenRouter, favorite)
+        val summary = ProviderRoutingDiagnostics.describe(
+            isOpenRouter, favorite,
+            providerAttached = resolution.providerJson != null,
+            blocked = resolution.block != RoutingBlock.NONE
+        )
+        return "\nProvider Routing: $summary"
     }
 
     private fun initAI() {
@@ -5076,7 +5111,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         on(Send) { request ->
                             try {
                                 augmentRequestWithProviderRouting(request)
-                            } catch (_: Exception) { /* leave the request as-is */ }
+                            } catch (blocked: ProviderRoutingBlockedException) {
+                                // Deliberate: abort dispatch for an unsatisfiable
+                                // config rather than send it unrestricted.
+                                throw blocked
+                            } catch (_: Exception) {
+                                // Any other issue is non-fatal: send unmodified.
+                            }
                             proceed(request)
                         }
                     })
@@ -6215,7 +6256,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             completionTokens = r.completionTokens, totalTokens = r.totalTokens,
             receivedCharacters = r.receivedCharacters, durationMs = durationMs,
             generationId = r.generationId, errorText = errorText
-        )
+        ) + providerRoutingLogLine(r.model)
         currentLifecycle = null
         org.teslasoft.assistant.preferences.Logger.logResponseLifecycleAsync(this, body)
     }
