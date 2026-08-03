@@ -484,7 +484,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updatePersonaLabel(preferences?.getPersonaId() ?: "")
         updateActivationLabel(preferences?.getActivationPromptId() ?: "")
         updateSystemPromptLabel()
-        refreshSummoningDropdownWidths()
         loadUserPersonasForGlamour()
     }
 
@@ -494,54 +493,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private fun showTileDropdown(anchor: View, labels: List<String>, onPick: (Int) -> Unit) {
         val dropdown = anchor as? TextView ?: return
         AppDropdown.show(dropdown, labels, onPick = onPick)
-    }
-
-    private fun sizeSummoningDropdown(
-        anchor: TextView?,
-        labelId: Int,
-        editId: Int,
-        labels: List<String>
-    ) {
-        val dropdown = anchor ?: return
-        val root = view ?: return
-        val label = root.findViewById<View>(labelId)
-        val edit = root.findViewById<View>(editId)
-        AppDropdown.sizeToOptions(dropdown, labels) {
-            val margins = dropdown.layoutParams as? ViewGroup.MarginLayoutParams
-            val marginWidth = (margins?.marginStart ?: 0) + (margins?.marginEnd ?: 0)
-            (edit.left - label.right - marginWidth).coerceAtLeast(0)
-        }
-    }
-
-    /** Re-measure after list edits and after the async Glamour store read. */
-    private fun refreshSummoningDropdownWidths() {
-        val personas = personaPreferences?.getPersonasList().orEmpty()
-        sizeSummoningDropdown(
-            textPersona,
-            R.id.textView_persona_title,
-            R.id.btn_edit_persona,
-            personas.map { it.label }
-        )
-        sizeSummoningDropdown(
-            textGlamour,
-            R.id.textView_glamour_title,
-            R.id.btn_edit_glamour,
-            listOf(getString(R.string.label_user_persona_none)) + cachedUserPersonas.map { it.name }
-        )
-        val activations = activationPromptPreferences?.getActivationPromptsList().orEmpty()
-        sizeSummoningDropdown(
-            textActivation,
-            R.id.textView_activation_title,
-            R.id.btn_edit_activation,
-            listOf(getString(R.string.label_activation_none)) + activations.map { it.label }
-        )
-        val systemPrompts = systemPromptsPreferences?.getSystemPrompts().orEmpty()
-        sizeSummoningDropdown(
-            textSystemPrompt,
-            R.id.textView_system_prompt_title,
-            R.id.btn_edit_system_prompt,
-            systemPrompts.map { it.title }
-        )
     }
 
     /** Companion has no None (a chat always has a companion). */
@@ -620,7 +571,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 if (!isAdded) return@runOnUiThread
                 cachedUserPersonas = personas
                 updateGlamourLabel()
-                refreshSummoningDropdownWidths()
             }
         }.start()
     }
@@ -669,15 +619,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
-    private fun sizeProviderModeDropdown() {
-        val dropdown = dropdownProviderMode ?: return
-        val labels = providerModeOrder.map { providerModeLabel(it) }
-        AppDropdown.sizeToOptions(dropdown, labels) {
-            ((dropdown.parent as? View)?.width ?: resources.displayMetrics.widthPixels) -
-                (32 * resources.displayMetrics.density).toInt()
-        }
-    }
-
     /** Show the Provider Mode tile only for an OpenRouter endpoint (host-based,
      *  never the profile name), and sync the dropdown to the active model. */
     private fun refreshProviderModeTile() {
@@ -688,7 +629,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         providerModeTile?.visibility = if (isOpenRouter) View.VISIBLE else View.GONE
         if (isOpenRouter) {
             refreshProviderModeDisplay()
-            sizeProviderModeDropdown()
         }
     }
 
@@ -968,7 +908,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // it, then show the effective (chosen or top) prompt's title.
         preferences?.let { systemPromptsPreferences?.migrateExistingSystemMessage(it) }
         updateSystemPromptLabel()
-        refreshSummoningDropdownWidths()
         renderLoreBookList()
         textLogitBiasesConfig?.text = if (preferences?.getLogitBiasesConfigId() != "") {
             logitBiasConfigPreferences?.getConfigById(preferences?.getLogitBiasesConfigId()!!)?.get("label") ?: getString(R.string.label_tap_to_set)
@@ -1122,7 +1061,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updateChatCampaignLabel()
         updateChatRoleplayCharacterLabel()
         updateChatProjectLabel()
-        refreshMemorySceneDropdownWidths()
 
         textChatWorld?.setOnClickListener { showWorldPicker() }
         textChatCampaign?.setOnClickListener { showCampaignPicker() }
@@ -1158,7 +1096,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                     updateChatCampaignLabel()
                     updateChatRoleplayCharacterLabel()
                     updateChatProjectLabel()
-                    refreshMemorySceneDropdownWidths()
                 }
             } catch (_: Exception) { /* the rows keep working, just empty until the store is reachable */ }
         }.start()
@@ -1169,43 +1106,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val id = preferences?.getChatCampaignId().orEmpty()
         if (id.isEmpty()) return null
         return cachedCampaigns.firstOrNull { it.campaignId == id }
-    }
-
-    private fun sizeMemorySceneDropdown(anchor: TextView?, labelId: Int, labels: List<String>) {
-        val dropdown = anchor ?: return
-        val row = dropdown.parent as? View ?: return
-        val label = row.findViewById<TextView>(labelId)
-        AppDropdown.sizeToOptions(dropdown, labels) {
-            val margins = dropdown.layoutParams as? ViewGroup.MarginLayoutParams
-            val marginWidth = (margins?.marginStart ?: 0) + (margins?.marginEnd ?: 0)
-            val labelWidth = label.paint.measureText(label.text.toString()).toInt() +
-                label.paddingStart + label.paddingEnd
-            (row.width - labelWidth - marginWidth).coerceAtLeast(0)
-        }
-    }
-
-    private fun refreshMemorySceneDropdownWidths() {
-        val worldLabels = if (selectedCampaign() != null) {
-            cachedWorlds.map { it.name }
-        } else {
-            listOf(getString(R.string.label_world_none)) + cachedWorlds.map { it.name }
-        }
-        sizeMemorySceneDropdown(textChatWorld, R.id.label_chat_world, worldLabels)
-        sizeMemorySceneDropdown(
-            textChatCampaign,
-            R.id.label_chat_campaign,
-            listOf(getString(R.string.label_campaign_none)) + cachedCampaigns.map { it.name }
-        )
-        sizeMemorySceneDropdown(
-            textChatRoleplayCharacter,
-            R.id.label_chat_playing_as,
-            listOf(getString(R.string.label_roleplay_character_none)) + cachedRoleplayCharacters.map { it.name }
-        )
-        sizeMemorySceneDropdown(
-            textChatProject,
-            R.id.label_chat_project,
-            listOf(getString(R.string.label_project_none)) + cachedProjects.map { it.name }
-        )
     }
 
     private fun updateChatWorldLabel() {
@@ -1251,7 +1151,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             // visibly (3.6c, spec §2/§8b).
             updateChatWorldLabel()
             updateChatRoleplayCharacterLabel()
-            refreshMemorySceneDropdownWidths()
         }
     }
 
