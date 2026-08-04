@@ -94,6 +94,21 @@ object PerChatSettingKeys {
         "memory_user_persona_id",
         "memory_project_id",
 
+        // Conversation-level memory policy (canonical recovery plan §4.4/§4.5,
+        // Phase 1): retrieval access per pool, extraction streams, do-not-
+        // analyze, analysis note, use-default-vs-custom, and processing method.
+        // Ordinary conversation metadata — separate from memories, never
+        // provenance.
+        "memory_general_access",
+        "memory_companion_access",
+        "analyze_general",
+        "analyze_companion",
+        "analyze_model_rules",
+        "analysis_do_not",
+        "analysis_note",
+        "conversation_policy_mode",
+        "analysis_processing_method",
+
         // Attachments (documents/images awaiting send)
         "pending_includes",
         "apply_model_rules",

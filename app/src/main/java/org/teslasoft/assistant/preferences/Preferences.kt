@@ -1547,6 +1547,22 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * The persistent "Use Importance Ratings" master toggle (canonical recovery
+     * plan §7.1). Off by default: while Off, importance controls are hidden,
+     * retrieval ignores every importance value, and new memories store the
+     * neutral 0 — but stored values are never erased, so turning it back On
+     * restores them. Enforcement lands in later phases; Phase 1 only persists
+     * the setting.
+     */
+    fun getUseImportanceRatings() : Boolean {
+        return getGlobalBoolean("use_importance_ratings", false)
+    }
+
+    fun setUseImportanceRatings(enabled: Boolean) {
+        putGlobalBoolean("use_importance_ratings", enabled, false)
+    }
+
+    /**
      * Display-only preference for the review/archive status line beneath chat
      * rows. It does not enable, disable, or modify any memory processing.
      */
@@ -1775,6 +1791,75 @@ class Preferences private constructor(private var preferences: SharedPreferences
     fun setChatExcludedFromMemory(excluded: Boolean) {
         putBoolean("memory_excluded", excluded)
     }
+
+    /* ---------------------------------------------------------------------- *
+     * Conversation-level memory policy (canonical recovery plan §4.4/§4.5,
+     * Phase 1 item 12). This is ordinary conversation metadata, stored in the
+     * chat's own settings file — separate from memories and never memory
+     * provenance (item 13); it is never copied into a Pending or Active memory.
+     *
+     * Phase 1 only PERSISTS these. Retrieval and analysis do not yet read them,
+     * so defaults resolve to "use the app/batch default" and current behavior
+     * is unchanged. Enforcement lands in the retrieval and archiver phases.
+     *
+     * The access/extraction values are tri-states like [getChatMemoryEnabled]:
+     * "" (unset → follow the effective default), "true", or "false". The empty
+     * default is what keeps behavior unchanged until a later phase reads them.
+     * ---------------------------------------------------------------------- */
+
+    /** "Memories Used in This Conversation" — General pool On/Off (§4.4). */
+    fun getChatMemoryGeneralAccessRaw() : String = getString("memory_general_access", "")
+
+    fun setChatMemoryGeneralAccessRaw(value: String) { putString("memory_general_access", value) }
+
+    /** "Memories Used in This Conversation" — current-companion pool On/Off
+     *  (§4.4), meaningful only while a valid companion is assigned. */
+    fun getChatMemoryCompanionAccessRaw() : String = getString("memory_companion_access", "")
+
+    fun setChatMemoryCompanionAccessRaw(value: String) { putString("memory_companion_access", value) }
+
+    /** "Create From This Conversation" — General Memories extraction (§4.5). */
+    fun getChatAnalyzeGeneralRaw() : String = getString("analyze_general", "")
+
+    fun setChatAnalyzeGeneralRaw(value: String) { putString("analyze_general", value) }
+
+    /** "Create From This Conversation" — Companion Memories extraction (§4.5). */
+    fun getChatAnalyzeCompanionRaw() : String = getString("analyze_companion", "")
+
+    fun setChatAnalyzeCompanionRaw(value: String) { putString("analyze_companion", value) }
+
+    /** "Create From This Conversation" — Model Rules extraction (§4.5). */
+    fun getChatAnalyzeModelRulesRaw() : String = getString("analyze_model_rules", "")
+
+    fun setChatAnalyzeModelRulesRaw(value: String) { putString("analyze_model_rules", value) }
+
+    /** "Do Not Analyze This Conversation" (§4.5): prevents single or batch
+     *  analysis until changed. Distinct from the capture-time exclusion above
+     *  ([isChatExcludedFromMemory]); stored separately per the plan's list. */
+    fun isChatDoNotAnalyze() : Boolean = getBoolean("analysis_do_not", false)
+
+    fun setChatDoNotAnalyze(value: Boolean) { putBoolean("analysis_do_not", value) }
+
+    /** Optional Analysis Note (§4.5): extraction-only guidance for an
+     *  exceptional conversation. Sent only to the analyzer, never injected into
+     *  chat, never saved as memory or displayed as provenance. Empty = none. */
+    fun getChatAnalysisNote() : String = getString("analysis_note", "")
+
+    fun setChatAnalysisNote(value: String) { putString("analysis_note", value) }
+
+    /** Use Default vs Custom for this conversation's analysis policy (§4.5):
+     *  "" (or "default") inherits the current app/batch defaults; "custom"
+     *  stores this conversation's own selected streams. */
+    fun getChatConversationPolicyMode() : String = getString("conversation_policy_mode", "")
+
+    fun setChatConversationPolicyMode(value: String) { putString("conversation_policy_mode", value) }
+
+    /** Preferred processing method for this conversation's analysis where
+     *  approved (§8.2.2): "" (unset → ask/app default), "api", "computer", or
+     *  "ask". Stored only; the run UI resolves it in a later phase. */
+    fun getChatProcessingMethod() : String = getString("analysis_processing_method", "")
+
+    fun setChatProcessingMethod(value: String) { putString("analysis_processing_method", value) }
 
     /**
      * Memory engine tier (global): "none" = character config + activation

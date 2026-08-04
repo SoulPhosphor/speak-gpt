@@ -43,6 +43,7 @@ import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryMatch
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.MemoryTypeMigration
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
 import org.teslasoft.assistant.R
@@ -911,12 +912,20 @@ object Archivist {
             val record = MemoryRecord(
                 memoryId = MemoryStore.newId("m-"),
                 scope = d.scope,
+                // Legacy kind stays for compatibility; the user-owned Type is
+                // resolved from it (recognized starter kind → seeded Type,
+                // lore/unknown → No Type) so the Pending card shows a real Type
+                // (§5). No importance is assigned here (§7.2) — that stays 0.
                 kind = d.kind,
+                typeId = MemoryTypeMigration.typeIdForLegacyKind(d.kind),
                 title = d.title,
                 content = d.content,
                 embeddingText = null,
                 tagsJson = listToJson(d.tags),
-                importance = d.importance,
+                // Every generated proposal starts at the neutral 0 (§7.2): the
+                // Memory Assistant does not assign importance. The user sets it
+                // while reviewing Pending, only when importance ratings are On.
+                importance = 0,
                 worldIds = worldIds,
                 roleplayCharacterIds = rpCharIds,
                 campaignIds = campaignIds,
@@ -926,11 +935,12 @@ object Archivist {
                 provenanceSource = if (d.stated) "user_stated" else "inferred",
                 provenanceConfidence = if (d.stated) "certain" else "tentative",
                 provenanceNotedOn = now,
-                // §14: the editor shows which chat a draft came from and when.
-                provenanceContext = conversation.chatName,
-                // Rename-safe source anchor (§4(c)): repointChat keeps this
-                // current, so a rejection registered at deletion time always
-                // matches the chat id a rerun looks up.
+                // Source-chat identity is not attached to new memories (canonical
+                // recovery plan §3.2, Phase 1 item 9): the chat NAME is never
+                // stored on a Pending or saved memory. The rename-safe chat id
+                // below stays only as device-local rejected-draft dedup
+                // bookkeeping (§8.10) — never exported, embedded, or shown.
+                provenanceContext = null,
                 sourceChatId = conversation.chatId,
                 createdAt = now,
                 updatedAt = null,

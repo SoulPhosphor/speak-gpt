@@ -402,13 +402,36 @@ data class ChangeLogEntry(
     val priorStateJson: String?           // device-local undo snapshot; not exported
 )
 
+/**
+ * A user-owned Memory Type (canonical recovery plan §5, Phase 1). Types are a
+ * human-owned category system with a stable internal id, so a rename edits
+ * only [name] and every associated memory reflects it without rewriting the
+ * memory rows. The five starter Types ship seeded ([MemoryTypeMigration]);
+ * the user may add, rename, or delete their own. A memory carries zero or one
+ * Type via [MemoryRecord.typeId]; No Type is a valid state.
+ */
+data class MemoryTypeRecord(
+    val typeId: String,
+    val name: String,
+    val createdAt: String
+)
+
 data class MemoryRecord(
     val memoryId: String,
     // Primary scope category (owner_approved_rules §1/§2): global | real_life |
     // companion | project | world | campaign | rp_character. Targets ride the
     // link columns below (companion via memory_companions).
     val scope: String,
-    val kind: String,                     // Type: fact|preference|event|status|instruction|lore
+    // Legacy fixed-enumeration Type value (fact|preference|event|status|
+    // instruction|lore). Phase 1 (§5) replaces this with the user-owned
+    // [typeId]; `kind` stays as inert compatibility baggage — it is no longer
+    // the source of truth for a memory's Type and must not drive product
+    // behavior. New memories carry an empty kind and their Type in [typeId].
+    val kind: String,
+    // Compatibility baggage only (§3.1): no Associative Memory has a title.
+    // Never generated, displayed, embedded, ranked, or exported in the revised
+    // memory path; kept solely because the legacy column is NOT NULL. New
+    // memories store an inert empty placeholder.
     val title: String,
     val content: String,
     val embeddingText: String?,
@@ -450,7 +473,13 @@ data class MemoryRecord(
      *  provenance_context keeps the display name captured at filing, this
      *  keeps the id, and `repointChat` carries it across renames. Null for
      *  user-authored memories and legacy drafts. Device-local, not exported. */
-    val sourceChatId: String? = null
+    val sourceChatId: String? = null,
+    /** The memory's user-owned Type id (canonical recovery plan §5), or null
+     *  for No Type. References memory_types(type_id). This is the source of
+     *  truth for a memory's Type; the legacy [kind] column is inert
+     *  compatibility baggage. Migrated from [kind] for pre-Phase-1 rows
+     *  (recognized starter kind → its seeded id; `lore`/unknown → No Type). */
+    val typeId: String? = null
 )
 
 data class ModeRecord(
@@ -627,7 +656,12 @@ data class MemoryStoreData(
     // ride every backup like everything else the user typed in.
     val modelRules: List<ModelRuleRecord> = emptyList(),
     val modelRuleTags: List<ModelRuleTagRecord> = emptyList(),
-    val modelRuleTagLinks: List<ModelRuleTagLink> = emptyList()
+    val modelRuleTagLinks: List<ModelRuleTagLink> = emptyList(),
+    // User-owned Memory Types (canonical recovery plan §5, Phase 1). Ride every
+    // backup so a restore preserves the user's category system and each
+    // memory's type_id resolves to a real Type after import. Absent in
+    // pre-Phase-1 backups → the store keeps its seeded starter Types.
+    val memoryTypes: List<MemoryTypeRecord> = emptyList()
 )
 
 /**

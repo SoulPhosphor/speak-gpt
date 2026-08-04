@@ -93,9 +93,16 @@ class MemorySeedCodecTest {
         val serialized = MemorySeedCodec.serialize(first)
         val second = MemorySeedCodec.parse(serialized)
 
-        // Data-class equality covers every field of every record, including the
-        // raw-JSON passthrough columns and origin (both sides normalized by org.json).
-        assertEquals(first, second)
+        // Titles are retired (§3.1): they are deliberately not written to a
+        // revised-model export, so a legacy title does not survive the trip.
+        // Every other field must be preserved exactly. Normalize the one
+        // intentionally-dropped field, then assert strict data-class equality.
+        val stripTitles = { d: MemoryStoreData ->
+            d.copy(memories = d.memories.map { it.copy(title = "") })
+        }
+        assertEquals("only the retired title differs", stripTitles(first), second)
+        // And prove the drop is real, not accidental preservation.
+        assertEquals("", second.memories.first().title)
     }
 
     @Test
@@ -142,9 +149,10 @@ class MemorySeedCodecTest {
         // Legacy single "campaign_id" key parses into the multi-select set (§2).
         assertEquals(listOf("camp-1"), data.memories.first().campaignIds)
 
-        // Lossless round-trip including the new columns.
+        // Round-trip preserving the new columns; the retired title is the only
+        // field intentionally not carried across (§3.1).
         val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
-        assertEquals(data, back)
+        assertEquals(data.copy(memories = data.memories.map { it.copy(title = "") }), back)
         assertEquals(listOf("camp-1"), back.memories.first().campaignIds)
         assertEquals("It began in the rain.", back.campaigns.first().storySoFar)
     }
@@ -422,5 +430,136 @@ class MemorySeedCodecTest {
         MemorySeedCodec.parse(
             MemorySeedCodec.serialize(data, appChats = JSONArray(), appChatsComplete = false)
         )
+    }
+
+    /* --------------------- Phase 1: Types / importance --------------------- */
+
+    /** A pre-Phase-1 backup: memories carry the legacy six-value `kind` (no
+     *  `type_id`), meaningful `title`s, and 1–5 importance. */
+    private fun legacyBackupJson(): String = """
+        {
+          "schema_version": "1.11.0",
+          "companions": [], "entities": [], "modes": [], "directives": [],
+          "worlds": [], "user_personas": [], "roleplay_characters": [], "proposals": [],
+          "memories": [
+            { "memory_id": "m-fact", "scope": "global", "kind": "fact",
+              "title": "A fact title", "content": "The sky is blue.",
+              "importance": 4, "created_at": "2026-07-05T00:00:00Z", "status": "active" },
+            { "memory_id": "m-inst", "scope": "companion", "kind": "instruction",
+              "companion_ids": ["c-1"], "title": "An instruction",
+              "content": "Avoid unsolicited checklists.",
+              "importance": 5, "created_at": "2026-07-05T00:00:00Z", "status": "active" },
+            { "memory_id": "m-lore", "scope": "world", "kind": "lore",
+              "world_ids": ["w-1"], "title": "Lore title", "content": "Three moons hang overhead.",
+              "importance": 2, "created_at": "2026-07-05T00:00:00Z", "status": "active" }
+          ]
+        }
+    """.trimIndent()
+
+    @Test
+    fun legacyKindMapsToSeededTypeOnImportAndLoreBecomesNoType() {
+        val data = MemorySeedCodec.parse(legacyBackupJson())
+        val byId = data.memories.associateBy { it.memoryId }
+
+        // Recognized starter kinds map to their seeded Type ids.
+        assertEquals("mtype-fact", byId["m-fact"]!!.typeId)
+        assertEquals("mtype-instruction", byId["m-inst"]!!.typeId)
+        // Legacy lore is not a Type — it becomes No Type (null), without
+        // touching the memory's scope/targets/content.
+        assertEquals(null, byId["m-lore"]!!.typeId)
+        assertEquals("world", byId["m-lore"]!!.scope)
+        assertEquals(listOf("w-1"), byId["m-lore"]!!.worldIds)
+        assertEquals("Three moons hang overhead.", byId["m-lore"]!!.content)
+    }
+
+    @Test
+    fun legacyImportanceValuesArePreservedOnImport() {
+        val byId = MemorySeedCodec.parse(legacyBackupJson()).memories.associateBy { it.memoryId }
+        assertEquals(4, byId["m-fact"]!!.importance)
+        assertEquals(5, byId["m-inst"]!!.importance)
+        assertEquals(2, byId["m-lore"]!!.importance)
+    }
+
+    @Test
+    fun revisedExportOmitsTitlesAndCarriesTypeId() {
+        val data = MemorySeedCodec.parse(legacyBackupJson())
+        val out = JSONObject(MemorySeedCodec.serialize(data))
+        val mems = out.getJSONArray("memories")
+        var checkedFact = false
+        for (i in 0 until mems.length()) {
+            val m = mems.getJSONObject(i)
+            // No memory carries a title in a revised-model export (§3.1).
+            assertFalse("titles must not be exported", m.has("title"))
+            if (m.getString("memory_id") == "m-fact") {
+                assertEquals("mtype-fact", m.getString("type_id"))
+                checkedFact = true
+            }
+            // A No Type memory omits type_id entirely (putIfNotNull).
+            if (m.getString("memory_id") == "m-lore") {
+                assertFalse(m.has("type_id"))
+            }
+        }
+        assertTrue(checkedFact)
+    }
+
+    @Test
+    fun explicitTypeIdWinsOverLegacyKindOnImport() {
+        // A Phase 1+ backup carries an explicit type_id; it takes precedence
+        // over any legacy kind that may still ride along as baggage.
+        val json = """
+            {
+              "schema_version": "1.11.0",
+              "companions": [], "entities": [], "modes": [], "directives": [],
+              "worlds": [], "user_personas": [], "roleplay_characters": [], "proposals": [],
+              "memory_types": [
+                { "type_id": "mtype-classic-cars", "name": "Classic Cars",
+                  "created_at": "2026-08-04T00:00:00Z" }
+              ],
+              "memories": [
+                { "memory_id": "m-1", "scope": "global", "kind": "fact",
+                  "type_id": "mtype-classic-cars", "content": "A 1967 Mustang.",
+                  "importance": 0, "created_at": "2026-08-04T00:00:00Z", "status": "active" }
+              ]
+            }
+        """.trimIndent()
+        val data = MemorySeedCodec.parse(json)
+        assertEquals("mtype-classic-cars", data.memories.first().typeId)
+        // The user-owned Type rides the backup.
+        assertEquals(1, data.memoryTypes.size)
+        assertEquals("Classic Cars", data.memoryTypes.first().name)
+    }
+
+    @Test
+    fun memoryTypesRoundTrip() {
+        val json = """
+            {
+              "schema_version": "1.11.0",
+              "companions": [], "entities": [], "modes": [], "directives": [],
+              "worlds": [], "user_personas": [], "roleplay_characters": [], "proposals": [],
+              "memory_types": [
+                { "type_id": "mtype-fact", "name": "Fact", "created_at": "2026-08-04T00:00:00Z" },
+                { "type_id": "mtype-pets", "name": "Pets", "created_at": "2026-08-04T00:00:00Z" }
+              ],
+              "memories": [
+                { "memory_id": "m-1", "scope": "global", "type_id": "mtype-pets",
+                  "content": "The cat's name is Biscuit.", "importance": 0,
+                  "created_at": "2026-08-04T00:00:00Z", "status": "active" }
+              ]
+            }
+        """.trimIndent()
+        val data = MemorySeedCodec.parse(json)
+        val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
+        assertEquals(data.memoryTypes, back.memoryTypes)
+        assertEquals("mtype-pets", back.memories.first().typeId)
+        // A memory with no legacy kind and no title stays clean across the trip.
+        assertEquals("", back.memories.first().kind)
+        assertEquals("", back.memories.first().title)
+    }
+
+    @Test
+    fun prePhase1BackupHasNoMemoryTypes() {
+        // Older backups carry no memory_types array; it parses to empty and the
+        // store keeps its seeded starter Types.
+        assertTrue(MemorySeedCodec.parse(legacyBackupJson()).memoryTypes.isEmpty())
     }
 }

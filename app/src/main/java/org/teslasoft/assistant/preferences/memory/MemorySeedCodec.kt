@@ -149,15 +149,24 @@ object MemorySeedCodec {
 
         val memories = each(root, "memories").map { m ->
             val prov = if (m.has("provenance") && !m.isNull("provenance")) m.getJSONObject("provenance") else null
+            // Legacy kind stays as inert baggage; the Type comes from an explicit
+            // type_id when present, otherwise from mapping the legacy kind
+            // (recognized starter kind → seeded id, lore/unknown → No Type). §5.
+            val legacyKind = m.str("kind") ?: ""
             MemoryRecord(
                 memoryId = m.reqStr("memory_id"),
                 scope = m.reqStr("scope"),
-                kind = m.reqStr("kind"),
-                title = m.reqStr("title"),
+                kind = legacyKind,
+                typeId = m.str("type_id") ?: MemoryTypeMigration.typeIdForLegacyKind(legacyKind),
+                // Titles are retired (§3.1); tolerate their absence in revised
+                // backups and keep any legacy value only as inert baggage.
+                title = m.str("title") ?: "",
                 content = m.reqStr("content"),
                 embeddingText = m.str("embedding_text"),
                 tagsJson = m.arrText("tags"),
-                importance = m.optInt("importance", 3),
+                // 0 = neutral, the default for new memories (§7). Existing 1–5
+                // values in older backups are always present and preserved.
+                importance = m.optInt("importance", 0),
                 worldIds = m.targetSet("world_ids", "world_id"),
                 roleplayCharacterIds = m.targetSet("roleplay_character_ids", "roleplay_character_id"),
                 campaignIds = m.targetSet("campaign_ids", "campaign_id"),
@@ -419,6 +428,18 @@ object MemorySeedCodec {
             )
         }
 
+        // User-owned Memory Types (§5). Absent in pre-Phase-1 backups → empty;
+        // the store keeps its seeded starter Types and legacy memories map by
+        // kind. A Type's created_at is optional (defaults blank; the store
+        // stamps one on import).
+        val memoryTypes = each(root, "memory_types").map { t ->
+            MemoryTypeRecord(
+                typeId = t.reqStr("type_id"),
+                name = t.reqStr("name"),
+                createdAt = t.str("created_at") ?: ""
+            )
+        }
+
         return MemoryStoreData(
             schemaVersion = root.str("schema_version") ?: "1.11.0",
             ownerProfile = owner,
@@ -441,7 +462,8 @@ object MemorySeedCodec {
             rpTags = rpTags,
             modelRules = modelRules,
             modelRuleTags = modelRuleTags,
-            modelRuleTagLinks = modelRuleTagLinks
+            modelRuleTagLinks = modelRuleTagLinks,
+            memoryTypes = memoryTypes
         )
     }
 
@@ -525,8 +547,11 @@ object MemorySeedCodec {
                     if (m.roleplayCharacterIds.isNotEmpty()) put("roleplay_character_ids", JSONArray(m.roleplayCharacterIds))
                     if (m.campaignIds.isNotEmpty()) put("campaign_ids", JSONArray(m.campaignIds))
                     if (m.projectIds.isNotEmpty()) put("project_ids", JSONArray(m.projectIds))
-                    put("kind", m.kind)
-                    put("title", m.title)
+                    // Legacy kind is written only when a pre-Phase-1 value is
+                    // still present (inert baggage); the Type of record is the
+                    // user-owned type_id. Titles are never exported (§3.1).
+                    if (m.kind.isNotEmpty()) put("kind", m.kind)
+                    putIfNotNull("type_id", m.typeId)
                     put("content", m.content)
                     putIfNotNull("embedding_text", m.embeddingText)
                     put("tags", jsonArrayOrEmpty(m.tagsJson))
@@ -775,6 +800,20 @@ object MemorySeedCodec {
                     put(JSONObject().apply {
                         put("rule_id", l.ruleId)
                         put("tag_id", l.tagId)
+                    })
+                }
+            })
+        }
+
+        // User-owned Memory Types (§5): carried so a restore preserves the
+        // user's category system and every memory's type_id resolves.
+        if (data.memoryTypes.isNotEmpty()) {
+            root.put("memory_types", JSONArray().apply {
+                data.memoryTypes.forEach { t ->
+                    put(JSONObject().apply {
+                        put("type_id", t.typeId)
+                        put("name", t.name)
+                        if (t.createdAt.isNotEmpty()) put("created_at", t.createdAt)
                     })
                 }
             })

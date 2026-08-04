@@ -61,7 +61,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 20
+        private const val DATABASE_VERSION = 21
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -348,19 +348,43 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "updated_at TEXT)"
         )
 
-        // scope holds the primary scope category (§1/§2); status gains 'draft'
-        // (§9). always_load is retired (§10) — the column stays but nothing reads
-        // or writes it. kind holds the Type (§5).
+        // The user-owned Memory Types table (§5) is defined here, immediately
+        // before `memories`, because memories.type_id references it.
+        db.execSQL(
+            // User-owned Memory Types (canonical recovery plan §5, Phase 1):
+            // a human-owned category system with a stable internal id. Rename
+            // edits only `name`; every memory's type_id keeps resolving. Seeded
+            // once with the five starter Types (Fact/Preference/Event/Status/
+            // Instruction); Lore is deliberately not a Type. A memory carries
+            // zero or one Type (memories.type_id, nullable = No Type).
+            "CREATE TABLE memory_types (" +
+                "type_id TEXT PRIMARY KEY, " +
+                "name TEXT NOT NULL, " +
+                "created_at TEXT NOT NULL)"
+        )
+
         db.execSQL(
             "CREATE TABLE memories (" +
                 "memory_id TEXT PRIMARY KEY, " +
                 "scope TEXT NOT NULL CHECK (scope IN ('global','real_life','companion','project','world','campaign','rp_character')), " +
-                "kind TEXT NOT NULL, " +
-                "title TEXT NOT NULL, " +
+                // Legacy fixed-Type enumeration, now inert compatibility baggage
+                // (§5): the user-owned type_id below is the source of truth for
+                // a memory's Type. New memories store an empty kind.
+                "kind TEXT NOT NULL DEFAULT '', " +
+                // User-owned Type (§5): nullable = No Type. Migrated from the
+                // legacy kind for pre-Phase-1 rows.
+                "type_id TEXT REFERENCES memory_types(type_id), " +
+                // Compatibility baggage only (§3.1): no Associative Memory has a
+                // title. Never generated, shown, embedded, ranked, or exported
+                // in the revised path; the DEFAULT keeps the NOT NULL column
+                // inert for new title-less memories.
+                "title TEXT NOT NULL DEFAULT '', " +
                 "content TEXT NOT NULL, " +
                 "embedding_text TEXT, " +
                 "tags_json TEXT DEFAULT '[]', " +
-                "importance INTEGER NOT NULL DEFAULT 3, " +
+                // Optional importance 0–5 (§7): 0 = neutral, the default for
+                // new memories. Existing values are preserved across migration.
+                "importance INTEGER NOT NULL DEFAULT 0, " +
                 "always_load INTEGER NOT NULL DEFAULT 0, " +
                 "world_id TEXT REFERENCES worlds(world_id), " +
                 "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
@@ -580,6 +604,52 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "analysis_type TEXT NOT NULL DEFAULT 'associative')"
         )
 
+        // Minimal temporary analysis-run storage (canonical recovery plan
+        // §8.10, Phase 1 item 14). This is NOT a provenance subsystem: it holds
+        // only what is needed to finish or safely recover a run — the frozen
+        // end marker, effective policy, budgets, chunk progress — and is
+        // cleared after successful filing or explicit cancellation. It is
+        // device-local, never embedded, never exported, and never copied into a
+        // Pending or saved memory. `filed` flips true only once the run's
+        // consolidated candidates are safely in Pending and the bookmark
+        // advanced; an unfiled row is an interrupted run whose candidates are
+        // discarded on the next startup (see AnalysisRunReconciler).
+        db.execSQL(
+            "CREATE TABLE analysis_run_state (" +
+                "run_id TEXT PRIMARY KEY, " +
+                "chat_id TEXT, " +
+                "frozen_end_marker TEXT, " +
+                "effective_policy_json TEXT, " +
+                "processing_method TEXT, " +
+                "prompt_profile TEXT, " +
+                "chunk_setting TEXT, " +
+                "budgets_json TEXT, " +
+                "chunk_ordinal INTEGER NOT NULL DEFAULT 0, " +
+                "chunk_success_json TEXT NOT NULL DEFAULT '[]', " +
+                "retry_count INTEGER NOT NULL DEFAULT 0, " +
+                "filed INTEGER NOT NULL DEFAULT 0, " +
+                "created_at TEXT NOT NULL, " +
+                "updated_at TEXT)"
+        )
+
+        // Temporary validated candidates for an in-flight run (§8.10): held
+        // outside visible Pending until the whole frozen range succeeds, so a
+        // failed final chunk cannot leave a half-analysis in Pending. target_type
+        // /target_id let a companion deletion atomically discard candidates aimed
+        // at that companion (Phase 1 item 15). candidate_hash is the exact-dup
+        // key. Cleared with its run; never exported.
+        db.execSQL(
+            "CREATE TABLE analysis_candidates (" +
+                "candidate_id TEXT PRIMARY KEY, " +
+                "run_id TEXT NOT NULL REFERENCES analysis_run_state(run_id) ON DELETE CASCADE, " +
+                "stream TEXT NOT NULL DEFAULT 'general', " +
+                "target_type TEXT, " +
+                "target_id TEXT, " +
+                "candidate_hash TEXT, " +
+                "payload_json TEXT NOT NULL, " +
+                "created_at TEXT NOT NULL)"
+        )
+
         // Lorebook suggestions (Step 1.7, DB v18): a Memory Assistant run in
         // "Lorebook Memories" analysis type files its proposed keyword-triggered
         // lore book entries here instead of as memory drafts. Lives in the same
@@ -776,6 +846,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         )
 
         db.execSQL("CREATE INDEX idx_memories_status ON memories(status)")
+        db.execSQL("CREATE INDEX idx_memories_type ON memories(type_id)")
+        db.execSQL("CREATE INDEX idx_analysis_candidates_target ON analysis_candidates(target_type, target_id)")
+        db.execSQL("CREATE INDEX idx_analysis_candidates_run ON analysis_candidates(run_id)")
         db.execSQL("CREATE INDEX idx_memories_always_load ON memories(always_load) WHERE always_load = 1")
         db.execSQL("CREATE INDEX idx_memories_world ON memories(world_id)")
         db.execSQL("CREATE INDEX idx_memories_rp_character ON memories(roleplay_character_id)")
@@ -816,6 +889,26 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "Defaults created at first launch ($now); a seed import replaces these."
             )
         )
+        // Seed the five starter Memory Types once (§5.1). Fresh installs get
+        // them here; upgraded installs get them in the v21 migration block.
+        seedStarterMemoryTypes(db, now)
+    }
+
+    /**
+     * Insert the five starter Memory Types (§5.1) if they are not already
+     * present. Idempotent (INSERT OR IGNORE on the stable ids), so it is safe
+     * to call from both onCreate and the v21 migration, and a re-run never
+     * duplicates or overwrites a Type the user has since renamed. Types the
+     * user later deletes are NOT re-seeded — the starter list is a one-time
+     * convenience, not a permanent ontology.
+     */
+    private fun seedStarterMemoryTypes(db: SQLiteDatabase, now: String) {
+        for (t in MemoryTypeMigration.STARTER_TYPES) {
+            db.execSQL(
+                "INSERT OR IGNORE INTO memory_types (type_id, name, created_at) VALUES (?, ?, ?)",
+                arrayOf(t.typeId, t.name, now)
+            )
+        }
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -1447,6 +1540,81 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 arrayOf(META_DB_MIGRATION, "20")
             )
         }
+        if (oldVersion < 21) {
+            // v21 (Phase 1: Storage Compatibility, canonical recovery plan §5,
+            // §7, §8.10). Additive, non-destructive: no memory row is deleted or
+            // rewritten, every existing importance value and target relationship
+            // is preserved, and the legacy `kind`/`title` columns stay intact as
+            // inert compatibility baggage.
+            val now = nowIso()
+
+            // 1) User-owned Memory Types, seeded with the five starters (§5.1).
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS memory_types (" +
+                    "type_id TEXT PRIMARY KEY, " +
+                    "name TEXT NOT NULL, " +
+                    "created_at TEXT NOT NULL)"
+            )
+            seedStarterMemoryTypes(db, now)
+
+            // 2) memories.type_id (nullable = No Type). ADD COLUMN keeps the
+            //    table and all its child-table foreign keys in place — no rebuild.
+            db.execSQL("ALTER TABLE memories ADD COLUMN type_id TEXT REFERENCES memory_types(type_id)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type_id)")
+
+            // 3) Migrate legacy `kind` → type_id. Recognized starter kinds map
+            //    to their seeded Type id; legacy `lore` and any unrecognized or
+            //    blank kind stay type_id = NULL (No Type) — memory text, scope,
+            //    targets, tags, lifecycle, and timestamps untouched (§5, item 4).
+            //    The `kind` column itself is left as-is (inert baggage). This
+            //    mapping mirrors MemoryTypeMigration.typeIdForLegacyKind exactly.
+            for (t in MemoryTypeMigration.STARTER_TYPES) {
+                val legacyKind = t.name.lowercase()
+                db.execSQL(
+                    "UPDATE memories SET type_id = ? WHERE lower(trim(kind)) = ?",
+                    arrayOf(t.typeId, legacyKind)
+                )
+            }
+
+            // 4) Minimal temporary analysis-run storage (§8.10). Empty until the
+            //    archiver rework populates it; present now so companion deletion
+            //    can already cascade temporary candidates.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS analysis_run_state (" +
+                    "run_id TEXT PRIMARY KEY, " +
+                    "chat_id TEXT, " +
+                    "frozen_end_marker TEXT, " +
+                    "effective_policy_json TEXT, " +
+                    "processing_method TEXT, " +
+                    "prompt_profile TEXT, " +
+                    "chunk_setting TEXT, " +
+                    "budgets_json TEXT, " +
+                    "chunk_ordinal INTEGER NOT NULL DEFAULT 0, " +
+                    "chunk_success_json TEXT NOT NULL DEFAULT '[]', " +
+                    "retry_count INTEGER NOT NULL DEFAULT 0, " +
+                    "filed INTEGER NOT NULL DEFAULT 0, " +
+                    "created_at TEXT NOT NULL, " +
+                    "updated_at TEXT)"
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS analysis_candidates (" +
+                    "candidate_id TEXT PRIMARY KEY, " +
+                    "run_id TEXT NOT NULL REFERENCES analysis_run_state(run_id) ON DELETE CASCADE, " +
+                    "stream TEXT NOT NULL DEFAULT 'general', " +
+                    "target_type TEXT, " +
+                    "target_id TEXT, " +
+                    "candidate_hash TEXT, " +
+                    "payload_json TEXT NOT NULL, " +
+                    "created_at TEXT NOT NULL)"
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_analysis_candidates_target ON analysis_candidates(target_type, target_id)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_analysis_candidates_run ON analysis_candidates(run_id)")
+
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "21")
+            )
+        }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -1743,6 +1911,26 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 }
             }
 
+            // Memory Types before memories (§5): a memory's type_id must resolve
+            // to a real Type. A backup's own Types are upserted by stable id (a
+            // renamed Type keeps its id, so associated memories stay correct);
+            // pre-Phase-1 backups carry none and the seeded starter Types remain.
+            for (t in data.memoryTypes) {
+                db.execSQL(
+                    "INSERT INTO memory_types (type_id, name, created_at) VALUES (?, ?, ?) " +
+                        "ON CONFLICT(type_id) DO UPDATE SET name = excluded.name",
+                    arrayOf(t.typeId, t.name, t.createdAt.ifBlank { nowIso() })
+                )
+            }
+            // The set of Type ids that actually exist after the import: a memory
+            // whose resolved Type is not among these degrades to No Type rather
+            // than failing the import (§5.2 — an invalid Type never drops a
+            // memory).
+            val knownTypeIds = HashSet<String>()
+            db.query("memory_types", arrayOf("type_id"), null, null, null, null, null).use {
+                while (it.moveToNext()) knownTypeIds.add(it.getString(0))
+            }
+
             for (c in data.companions) {
                 if (rowExists(db, "companions", "companion_id", c.companionId)) {
                     report.addSkipped("companions"); continue
@@ -1881,10 +2069,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 if (rowExists(db, "memories", "memory_id", m.memoryId)) {
                     report.addSkipped("memories"); continue
                 }
+                // Resolve the memory's Type (§5): an explicit type_id from the
+                // backup wins; otherwise derive it from the legacy kind
+                // (recognized starter kind → seeded id, lore/unknown → No Type).
+                // A resolved id that no longer exists degrades to No Type.
+                val resolvedTypeId = (m.typeId ?: MemoryTypeMigration.typeIdForLegacyKind(m.kind))
+                    ?.takeIf { it in knownTypeIds }
                 db.insert("memories", null, ContentValues().apply {
                     put("memory_id", m.memoryId)
                     put("scope", m.scope)
                     put("kind", m.kind)
+                    put("type_id", resolvedTypeId)
                     put("title", m.title)
                     put("content", m.content)
                     put("embedding_text", m.embeddingText)
@@ -2378,7 +2573,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             rpTags = rpTags,
             modelRules = modelRules,
             modelRuleTags = modelRuleTags,
-            modelRuleTagLinks = modelRuleTagLinks
+            modelRuleTagLinks = modelRuleTagLinks,
+            memoryTypes = getMemoryTypes()
         )
     }
 
@@ -2729,6 +2925,28 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                 "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id LIKE 'run-%' " +
                     "AND claim_run_id NOT IN (SELECT run_id FROM archivist_runs)"
             )
+            // Minimal temporary analysis-run recovery (§8.10): an unfiled run
+            // is interrupted — discard its temporary candidates and state so
+            // nothing half-analysed is left behind and the frozen range is
+            // reanalysed cleanly. A filed run's temporary rows are also cleared
+            // (finished bookkeeping). The decision is the pure
+            // AnalysisRunReconciler so it is unit-tested off-device.
+            val tempRuns = ArrayList<AnalysisRunReconciler.RunState>()
+            db.query(
+                "analysis_run_state", arrayOf("run_id", "filed"), null, null, null, null, null
+            ).use {
+                while (it.moveToNext()) {
+                    tempRuns.add(AnalysisRunReconciler.RunState(it.getString(0), it.getInt(1) != 0))
+                }
+            }
+            // Both interrupted and completed temporary runs are removed here;
+            // candidates cascade with their run_state row (ON DELETE CASCADE),
+            // and are deleted explicitly as a belt in case enforcement is off.
+            for (runId in AnalysisRunReconciler.interruptedRunIds(tempRuns) +
+                AnalysisRunReconciler.completedRunIds(tempRuns)) {
+                db.delete("analysis_candidates", "run_id = ?", arrayOf(runId))
+                db.delete("analysis_run_state", "run_id = ?", arrayOf(runId))
+            }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -3899,12 +4117,62 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             // memories' rows plus any stragglers) so no memory references a
             // companion that no longer exists.
             db.delete("memory_companions", "companion_id = ?", arrayOf(companionId))
+            // Discard any in-flight temporary analysis candidates aimed at this
+            // companion (§8.10 / Phase 1 item 15): they must never survive the
+            // companion or later file as an orphaned draft. General candidates
+            // (no companion target) are untouched.
+            db.delete("analysis_candidates", "target_type = ? AND target_id = ?", arrayOf("companion", companionId))
             db.delete("companions", "companion_id = ?", arrayOf(companionId))
             recordDeletionTx(db, "companion", companionId)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
+    }
+
+    /**
+     * How many memories are targeted to this companion, across every lifecycle
+     * state (Pending/draft, Active, Archived, Superseded). Backs the destructive
+     * deletion confirmation's count (§4.6) and is the count a companion deletion
+     * would cascade. Reads the memory_companions join — the source of truth for
+     * companion ownership.
+     */
+    fun companionMemoryCount(companionId: String): Int {
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM memory_companions WHERE companion_id = ?", arrayOf(companionId)
+        ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    /* -------- memory types (§5) -------- */
+
+    /** Every user-owned Memory Type, seed order preserved by created_at then
+     *  name so the starter Types lead and user additions follow. */
+    fun getMemoryTypes(): List<MemoryTypeRecord> {
+        val out = ArrayList<MemoryTypeRecord>()
+        readableDatabase.query(
+            "memory_types", null, null, null, null, null, "created_at ASC, name ASC"
+        ).use {
+            while (it.moveToNext()) {
+                out.add(
+                    MemoryTypeRecord(
+                        typeId = it.getString(it.getColumnIndexOrThrow("type_id")),
+                        name = it.getString(it.getColumnIndexOrThrow("name")),
+                        createdAt = it.getString(it.getColumnIndexOrThrow("created_at"))
+                    )
+                )
+            }
+        }
+        return out
+    }
+
+    /** Insert or update a Memory Type by its stable id. Used by backup/restore
+     *  import; a rename keeps the id so associated memories are unaffected. */
+    fun upsertMemoryType(type: MemoryTypeRecord) {
+        writableDatabase.execSQL(
+            "INSERT INTO memory_types (type_id, name, created_at) VALUES (?, ?, ?) " +
+                "ON CONFLICT(type_id) DO UPDATE SET name = excluded.name",
+            arrayOf(type.typeId, type.name, type.createdAt.ifBlank { nowIso() })
+        )
     }
 
     /* -------- entities -------- */
@@ -5124,7 +5392,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             suggestedCardType = it.getStringOrNull("suggested_card_type"),
             suggestedCardId = it.getStringOrNull("suggested_card_id"),
             suggestedSection = it.getStringOrNull("suggested_section"),
-            sourceChatId = it.getStringOrNull("source_chat_id")
+            sourceChatId = it.getStringOrNull("source_chat_id"),
+            typeId = it.getStringOrNull("type_id")
         )
     }
 
@@ -5132,6 +5401,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         put("memory_id", m.memoryId)
         put("scope", m.scope)
         put("kind", m.kind)
+        // User-owned Type (§5); null = No Type. Source of truth for the Type;
+        // `kind` above is inert legacy baggage.
+        put("type_id", m.typeId)
         put("title", m.title)
         put("content", m.content)
         put("embedding_text", m.embeddingText)

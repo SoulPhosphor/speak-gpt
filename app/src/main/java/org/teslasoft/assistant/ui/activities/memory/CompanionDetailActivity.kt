@@ -22,7 +22,6 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
-import android.widget.CheckBox
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -216,31 +215,46 @@ class CompanionDetailActivity : FragmentActivity() {
         )
     }
 
-    /** Material confirm that spells out what disappears and lets the user pick,
-     *  per deletion, whether this companion's memories go too (checkbox, off by
-     *  default — deleting the memories is the more destructive choice). The
-     *  persona/character card is app-owned and never touched. */
+    /** Destructive confirm that states the consequence before deletion and
+     *  includes the current companion-memory count (canonical recovery plan
+     *  §4.6). Deleting a companion permanently deletes every memory targeted to
+     *  it — there is no opt-out: orphaning companion memories is not a valid
+     *  outcome, so every companion-deletion path performs the same cascade. The
+     *  persona/character card is app-owned and never touched here. */
     private fun confirmDelete() {
         val name = record?.currentName ?: textName?.text?.toString().orEmpty()
-        val view = layoutInflater.inflate(R.layout.dialog_delete_companion, null)
-        view.findViewById<TextView>(R.id.text_delete_body).text =
-            getString(R.string.mem_comp_delete_body, name)
-        val checkDeleteMemories = view.findViewById<CheckBox>(R.id.check_delete_memories)
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_comp_delete_title)
-            .setView(view)
-            .setPositiveButton(R.string.mem_comp_delete) { _, _ ->
-                deleteCompanion(checkDeleteMemories.isChecked)
+        val id = companionId
+        // The count is a store read, so resolve it off the main thread, then
+        // show the dialog on the UI thread. A read failure degrades to a
+        // no-count body rather than blocking deletion (the memory-UI contract).
+        runOffThread {
+            val count = try {
+                MemoryStore.getInstance(this).companionMemoryCount(id)
+            } catch (_: Exception) {
+                -1
             }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+            runOnUiThread {
+                val body = if (count >= 0) {
+                    resources.getQuantityString(R.plurals.mem_comp_delete_body_count, count, name, count)
+                } else {
+                    getString(R.string.mem_comp_delete_body, name)
+                }
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.mem_comp_delete_title)
+                    .setMessage(body)
+                    .setPositiveButton(R.string.mem_comp_delete) { _, _ -> deleteCompanion() }
+                    .setNegativeButton(android.R.string.cancel) { _, _ -> }
+                    .show()
+            }
+        }
     }
 
-    private fun deleteCompanion(deleteMemories: Boolean) {
+    private fun deleteCompanion() {
         val id = companionId
         runOffThread {
-            MemoryStore.getInstance(this).deleteCompanion(id, deleteMemories)
+            // Always cascade companion-targeted memories (§4.6): a companion
+            // deletion never leaves its memories orphaned.
+            MemoryStore.getInstance(this).deleteCompanion(id, deleteMemories = true)
             runOnUiThread {
                 Toast.makeText(this, R.string.mem_comp_deleted_toast, Toast.LENGTH_SHORT).show()
                 finish()
