@@ -1,6 +1,6 @@
 # Speak-GPT Memory Systems: Canonical Recovery Plan
 
-**Revision 19, 2026-08-04**
+**Revision 20, 2026-08-04**
 
 This is the active memory-system plan. It records the owner's decisions and a small implementation baseline. Existing code is evidence of what was built, not proof that the behavior was approved.
 
@@ -71,29 +71,44 @@ Do not attach or expose:
 
 Temporary run bookkeeping may exist outside the memory only long enough to finish or safely recover analysis/import. It does not become part of the memory.
 
-## 4. Scope and Roleplay separation
+## 4. Existing scopes determine Roleplay grouping
 
-Roleplay is determined by **scope**, not Type.
+Do not create a new generic `roleplay` scope.
 
-Scope is the hard context boundary used before retrieval and Possible Match. At minimum, it separates:
+The app already has the scopes that identify roleplay memory. A memory is grouped into the **Roleplay** side of the Memory Browser when its existing scope is any of:
 
-- Roleplay memory;
-- non-roleplay memory.
+- **World** (`world`);
+- **Roleplay Character** (`rp_character`);
+- **Campaign** (`campaign`).
+
+This is a derived browser and retrieval grouping rule, not a fourth roleplay scope stored on the memory.
+
+All other existing scopes remain in the non-roleplay side unless the owner later changes a specific scope's meaning.
 
 The Memory Browser has a dedicated **Roleplay** tab and a separate non-roleplay tab.
 
-- all Roleplay Pending, Active, Archived, and Superseded memories belong in the Roleplay tab;
-- non-roleplay memories belong in the other tab;
-- searching, filtering, bulk actions, Possible Match, and chat retrieval remain inside the selected scope;
-- the embedding search does not compare or retrieve across the Roleplay boundary;
-- API and computer-created Roleplay suggestions use the same Roleplay Pending area;
-- Type names never decide which tab a memory belongs in.
+- Pending, Active, Archived, and Superseded memories with World, Roleplay Character, or Campaign scope appear in the Roleplay tab;
+- memories with other scopes appear in the non-roleplay tab;
+- API and computer-created suggestions use the same rule;
+- Type names and tags never decide which tab a memory belongs in;
+- changing a Type never moves a memory between Roleplay and non-roleplay;
+- the final label for the non-roleplay tab remains a user-facing wording decision.
 
-Types may still be fantasy-specific. A user may create Types such as Character Detail, Quest, Spell, Campaign Note, or anything else, but those names do not create or remove Roleplay scope.
+### 4.1 The Roleplay tab is a grouping, not a collapsed scope
 
-The final label for the non-roleplay tab remains a user-facing wording decision.
+The three underlying scopes retain their own meanings inside the Roleplay tab.
 
-Internal links to companions, projects, worlds, campaigns, or characters may remain only where needed to prevent unrelated contexts from bleeding together. They do not automatically justify a new visible scope taxonomy or a required scope dropdown on every memory card.
+- a World memory remains a World memory;
+- a Roleplay Character memory remains tied to the appropriate roleplay character;
+- a Campaign memory remains tied to the appropriate campaign;
+- unrelated worlds, characters, and campaigns must not be compared or retrieved as though they share one generic roleplay context;
+- duplicate display names must not silently select the first target.
+
+Searching and filtering may operate across the visible Roleplay tab for the human, but chat retrieval and Possible Match must continue to respect the actual scope and target boundaries required to prevent fictional contexts from bleeding together.
+
+Types may still be fantasy-specific. A user may create Types such as Character Detail, Quest, Spell, Campaign Note, or anything else, but those names do not create or remove Roleplay grouping.
+
+Internal links to companions, projects, worlds, campaigns, or characters may remain only where needed to preserve their existing context. They do not automatically justify a new visible scope taxonomy or a required scope dropdown on every memory card.
 
 ## 5. User-owned Types
 
@@ -111,7 +126,7 @@ Speak-GPT ships with:
 
 **Lore** is not an Associative Memory Type.
 
-**Roleplay** is not a required Type because Roleplay routing is controlled by scope. A user may create a Type named Roleplay or any more specific fantasy category if they find it useful, but it remains an ordinary Type.
+**Roleplay** is not a required Type because the Roleplay tab is derived from World, Roleplay Character, and Campaign scopes. A user may create a Type named Roleplay or any more specific fantasy category if they find it useful, but it remains an ordinary Type.
 
 These are starter choices, not a permanent ontology. A user may create categories such as Likes, Dislikes, Classic Cars, Health, Writing, Pets, Character Detail, Quest, or anything else useful to them.
 
@@ -123,7 +138,7 @@ These are starter choices, not a permanent ontology. A user may create categorie
 - the user can change or remove the Type before saving;
 - ordinary memory editing can change or remove the Type;
 - Type is available for human browsing and filtering;
-- Type does not determine scope;
+- Type does not determine scope or Roleplay grouping;
 - Type does not determine whether a memory is true, important, or authoritative;
 - Type does not automatically change a memory into a special command or alter how the receiving model must obey it;
 - a mistaken Type must not make Accept All dangerous.
@@ -137,7 +152,7 @@ For example, a Type named **Classic Cars** may help related memories cluster tog
 However:
 
 - the memory text remains the primary semantic content;
-- scope is applied as a hard boundary before semantic ranking;
+- actual scope and target eligibility are applied before semantic ranking;
 - Type is not a hard retrieval gate;
 - Type cannot override a poor textual match;
 - Type does not receive a separate ranking bonus;
@@ -179,7 +194,7 @@ Tags are not Types.
 - one memory has zero or one Type but may have multiple tags;
 - Types provide broad user-owned organization;
 - tags provide smaller cross-cutting words or themes;
-- tags do not determine Roleplay scope;
+- tags do not determine scope or Roleplay grouping;
 - Type management and tag management remain separate;
 - neither tags nor Types may become mandatory ranking weights that overpower semantic relevance.
 
@@ -230,7 +245,7 @@ Importance is not included in the embedding document and does not require re-emb
 When importance ratings are On:
 
 - semantic relevance remains the primary retrieval signal;
-- scope eligibility is applied first;
+- actual scope and target eligibility are applied first;
 - a relevance floor is applied before importance;
 - importance may act only as a bounded secondary ordering signal among already relevant memories;
 - importance cannot make an irrelevant memory eligible;
@@ -271,7 +286,8 @@ It does not use:
 
 Retrieval rules:
 
-- choose Roleplay or non-roleplay scope first;
+- derive the Roleplay or non-roleplay browser group from the memory's existing scope;
+- preserve the actual World, Roleplay Character, Campaign, or other scope and target boundaries during eligibility filtering;
 - retrieve Active memories only;
 - semantic relevance is the primary signal;
 - no title bonus, source bonus, or fixed-Type bonus;
@@ -285,7 +301,8 @@ Possible Match finds candidates. It does not decide whether something is a dupli
 
 - exact normalized text matching works without an embedding model;
 - differently worded related memories use the local embedding model;
-- comparisons stay within Roleplay or non-roleplay scope;
+- a proposal is shown in the Roleplay tab when its scope is World, Roleplay Character, or Campaign;
+- candidates must still respect the proposal's actual scope and target context rather than comparing every Roleplay-tab memory together;
 - Active memories may use stored vectors;
 - Archived and Superseded memories may be embedded temporarily and immediately discarded;
 - inactive comparison vectors never become retrieval-eligible;
@@ -411,7 +428,8 @@ It has the same:
 
 - memory shape;
 - suggested Type behavior;
-- scope destination;
+- existing scope and target behavior;
+- Roleplay-tab grouping derived from scope;
 - importance default of 0;
 - card and Review UI;
 - Possible Match rules;
@@ -432,12 +450,14 @@ Audit current code for every use of:
 - AI-assigned importance;
 - hard-coded Type lists;
 - `lore` or `roleplay` treated as a routing Type;
+- a newly invented generic `roleplay` scope instead of deriving the tab from World, Roleplay Character, and Campaign;
+- Roleplay-tab grouping that accidentally collapses underlying scope or target boundaries;
 - Type-dependent authority behavior;
 - tags or Types used as excessive ranking bonuses;
 - title bonuses;
 - source-chat lineage attached to memories;
 - permanent transcript processing states where one bookmark would suffice;
-- mixed Roleplay and non-roleplay scope in UI or search corpora;
+- World, Roleplay Character, or Campaign memories appearing in the non-roleplay tab;
 - API/computer origin shown in memory UI.
 
 For each item, report:
@@ -460,12 +480,14 @@ Future agents must not claim:
 - a second default-zero toggle is required;
 - the starter Type list is permanently fixed;
 - Lore is an Associative Memory Type;
-- Type determines Roleplay scope;
+- Type determines Roleplay grouping;
+- Roleplay requires a new generic `roleplay` scope;
+- the Roleplay tab allows unrelated worlds, characters, or campaigns to share retrieval context;
 - users cannot create arbitrary Types;
 - every memory must have a Type;
 - a Type must control model obedience or truth;
 - tags and Types are the same system;
-- Roleplay belongs mixed with non-roleplay memory;
+- World, Roleplay Character, or Campaign memories belong mixed into the non-roleplay tab;
 - a computer-imported memory needs different UI;
 - every transcript row needs permanent processing states;
 - existing code retroactively proves approval.
@@ -477,7 +499,8 @@ A memory feature is complete only when:
 - its full user workflow exists;
 - all data the user is approving is visible in the review flow;
 - Type is user-owned;
-- Roleplay and non-roleplay scope remain separated;
+- the Roleplay tab is derived from World, Roleplay Character, and Campaign scopes;
+- underlying fictional scope and target boundaries remain intact;
 - optional importance can be disabled without losing stored values;
 - generated changes remain proposals until approved;
 - focused tests pass;
