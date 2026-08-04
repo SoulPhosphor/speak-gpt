@@ -1,8 +1,8 @@
 # Speak-GPT Memory Systems: Canonical Recovery Plan
 
-**Revision 23, 2026-08-04**
+**Revision 24, 2026-08-04**
 
-This is the active memory-system plan. It records the owner's decisions, the required implementation order, the archiver contract, and the completion gates for each phase. Existing code is evidence of what was built, not proof that the behavior was approved.
+This is the active memory-system plan. It records the owner's decisions, the required implementation order, the archiver contract, companion-memory behavior, conversation-level memory policies, and the completion gates for each phase. Existing code is evidence of what was built, not proof that the behavior was approved.
 
 ## 1. Product Goal
 
@@ -11,13 +11,15 @@ The memory system should reduce work, not create a second job.
 It must:
 
 1. review new conversation material after the last successful bookmark;
-2. propose useful memories and, when selected, Model Rules;
+2. propose useful General memories, companion-specific memories, and, when selected, Model Rules;
 3. check the existing database before filing duplicates or updates;
 4. show everything the user is approving directly in Pending for fast scanning;
-5. retrieve relevant approved memories during chats with the on-device embedding model;
+5. retrieve several relevant approved memories during chats with the on-device embedding model, within a bounded memory-context budget;
 6. keep roleplay memory separate from non-roleplay memory;
-7. work reliably with ordinary, less-expensive models and provider limits rather than assuming the largest advertised context window;
-8. make analysis size, expected request count, and selected analysis purpose visible before a run.
+7. keep companion-specific continuity and behavior guidance isolated to the intended companion;
+8. let each conversation control which memory pools it may use and which proposal streams may be extracted from it;
+9. work reliably with ordinary, less-expensive models and provider limits rather than assuming the largest advertised context window;
+10. make analysis size, expected request count, selected analysis purpose, and processing method visible before a run.
 
 Any field or mechanism that does not materially help those goals must not become required product behavior.
 
@@ -34,6 +36,8 @@ Any field or mechanism that does not materially help those goals must not become
 9. Speak-GPT remains the authority for storage, scope, Pending review, Possible Match, lifecycle, and human approval.
 10. Do not claim parity with another project's hosted product, benchmark, or proprietary implementation.
 11. If code or prompt text is copied rather than independently reproduced, preserve the source project's license and attribution requirements and record the exact source path and revision.
+12. Companion-memory routing must not be hidden in a companion-profile default. Conversation-level policy and visible per-run choices control analysis and retrieval.
+13. Deleting a companion permanently deletes every memory targeted specifically to that companion after an explicit destructive confirmation. Do not orphan, silently convert, or reassign those memories.
 
 ## Ordered Implementation Roadmap
 
@@ -43,7 +47,7 @@ This section is the required execution order. The detailed product rules later i
 
 - Implement one phase at a time on a dedicated feature branch.
 - Do not begin the next phase until the current phase's tests pass and its completion gate is satisfied.
-- Keep migrations additive and reversible where practical. Never delete existing user data merely to simplify implementation.
+- Keep migrations additive and reversible where practical. Never delete existing user data merely to simplify implementation, except where the approved companion-deletion action explicitly performs a confirmed permanent cascade.
 - When legacy storage conflicts with the approved product, first stop the legacy field from affecting prompts, UI, matching, embeddings, and retrieval. Physical column removal comes later.
 - If a phase encounters a genuine product decision not answered here, stop only that decision path and return one focused question. Continue unrelated work within the approved phase.
 - At the end of every phase, record changed files, migrations, tests, unresolved items, and the exact commit.
@@ -67,7 +71,13 @@ Required work:
    - permanent transcript row processing states;
    - API/computer origin distinctions;
    - roleplay-specific Pending actions;
-   - scope and target eligibility.
+   - scope and target eligibility;
+   - companion scope and companion target joins;
+   - companion-memory retrieval and prompt placement;
+   - companion deletion and its existing confirmation dialog;
+   - conversation-level memory access settings;
+   - conversation-level analysis settings or markers;
+   - any conversation-level exclusion from memory retrieval or analysis.
 2. Trace the full current archiver path:
    - conversation selection;
    - bookmark and frozen range behavior;
@@ -83,13 +93,15 @@ Required work:
    - retry behavior;
    - partial filing behavior;
    - duplicate handling;
+   - General versus companion target assignment;
    - Model Rule extraction and destination;
    - cancellation and process-death recovery.
-3. Identify every hard-coded archiver assumption, including the current 200,000-character request ceiling and any fixed output count.
-4. Identify the current database version and every upgrade path that touches the memory tables.
-5. Identify all backup, restore, seed, export, and import formats that contain affected fields.
-6. Identify tests that already protect memory and archiver behavior and gaps requiring new tests.
-7. Commit a concise audit report at `Memory System/memory_implementation_audit.md` containing:
+3. Trace every current entry point for analysis, including batch analysis, Memory Assistant settings, conversation menus, and computer export/import.
+4. Identify every hard-coded archiver assumption, including the current 200,000-character request ceiling and any fixed output count.
+5. Identify the current database version and every upgrade path that touches the memory tables, companion tables, conversation metadata, and deletion cascades.
+6. Identify all backup, restore, seed, export, and import formats that contain affected fields.
+7. Identify tests that already protect memory, companion deletion, conversation metadata, and archiver behavior and gaps requiring new tests.
+8. Commit a concise audit report at `Memory System/memory_implementation_audit.md` containing:
    - current behavior;
    - approved target behavior;
    - safe migration approach;
@@ -97,7 +109,9 @@ Required work:
    - risks and rollback notes;
    - current archiver request/response flow;
    - current maximum raw input, estimated token use, and output reserve;
-   - every point where a failed chunk can create partial visible results.
+   - every point where a failed chunk can create partial visible results;
+   - the current companion deletion dialog and every data class it deletes;
+   - whether conversations already store any memory-use or analysis policy.
 
 Restrictions:
 
@@ -106,14 +120,15 @@ Restrictions:
 - No automatic conversion of legacy `lore` into Roleplay scope.
 - Do not remove existing roleplay `Add to Card` behavior during the audit.
 - Do not replace the current chunk constant with another arbitrary “large enough” constant during the audit.
+- Do not alter companion deletion until the existing approved cascade and dialog are fully traced.
 
-**Completion Gate:** The audit report exists, every affected code path is accounted for, the current archiver is diagrammed from transcript selection through Pending filing, and no destructive migration remains unexplained.
+**Completion Gate:** The audit report exists, every affected code path is accounted for, the current archiver is diagrammed from transcript selection through Pending filing, the companion deletion path is documented, and no destructive migration remains unexplained.
 
 ### Phase 1: Storage Compatibility and Database Migration
 
 **Status:** [ ] Not Started
 
-**Goal:** Make the database capable of representing the approved memory shape without losing existing data.
+**Goal:** Make the database capable of representing the approved memory shape and conversation policies without losing existing data.
 
 Required work:
 
@@ -139,17 +154,30 @@ Required work:
    - if a legacy NOT NULL column temporarily requires a placeholder, it must remain internal and inert.
 9. Stop attaching source-chat identity to new Pending or saved memories. Existing legacy source fields remain inert until cleanup.
 10. Preserve current scope and target relationships, including multi-target joins.
-11. Add only the minimal short-lived run storage required by Section 8.10. Do not create a permanent provenance subsystem.
-12. Add migration tests for:
+11. Preserve and validate the existing Companion scope as a target-specific non-roleplay scope.
+12. Store conversation-level policy separately from memories:
+   - memory access: General memories On/Off and current-companion memories On/Off;
+   - extraction: General Memories, Companion Memories, and Model Rules as independent selections;
+   - `Do Not Analyze This Conversation`;
+   - optional Analysis Note;
+   - Use Default versus custom conversation policy;
+   - preferred processing method where approved: API, Computer, or Ask Every Time.
+13. A conversation policy is ordinary conversation metadata. It is not memory provenance and is never copied into a Pending or Active memory.
+14. Add only the minimal short-lived run storage required by Section 8.10. Do not create a permanent provenance subsystem.
+15. Ensure companion deletion can atomically cascade through Pending, Active, Archived, and Superseded memories targeted to that companion, their embeddings, target joins, and temporary candidates.
+16. General memories remain untouched when a companion is deleted, even if they were proposed from that companion's conversations.
+17. Add migration tests for:
    - a fresh install;
    - an existing database with every legacy Type;
    - existing importance values;
    - No Type;
-   - General and Roleplay scopes;
+   - General, Companion, and Roleplay scopes;
+   - conversation policy defaults and custom overrides;
    - interrupted temporary analysis state;
+   - companion deletion cascade;
    - backup/restore compatibility.
 
-**Completion Gate:** Fresh and upgraded databases open successfully, no memory is lost, Types are user-owned in storage, importance supports 0, titles/source lineage are behaviorally inert, and temporary run state cannot become permanent memory metadata.
+**Completion Gate:** Fresh and upgraded databases open successfully, no memory is lost, Types are user-owned in storage, importance supports 0, titles/source lineage are behaviorally inert, conversation policy is distinct from memory data, temporary run state cannot become permanent memory metadata, and confirmed companion deletion leaves no companion-targeted memory behind.
 
 ### Phase 2: Memory Domain Services and Shared Filing Path
 
@@ -170,27 +198,31 @@ Required work:
 3. Implement importance-setting access so Off makes the ranking contribution exactly zero without changing stored values.
 4. Implement one canonical helper that derives browser grouping:
    - `world`, `campaign`, and `rp_character` appear in Roleplay;
-   - every other existing scope appears in General.
-5. Preserve underlying target boundaries. The Roleplay tab is not a generic retrieval scope.
-6. Create one canonical Pending filing path used by:
+   - every other existing scope, including Companion, appears in General.
+5. Preserve underlying target boundaries. The Roleplay tab is not a generic retrieval scope, and Companion memories are not generic General memories during eligibility filtering.
+6. Define Companion memory as an Associative Memory with Companion scope and one specific companion target.
+7. A Companion memory may use any ordinary Type, including Instruction. It may contain shared history, companion-specific facts, relationship context, terminology, preferences, or behavior guidance intended to be retrieved only for that companion.
+8. Create one canonical Pending filing path used by:
    - API Memory Assistant suggestions;
    - validated computer imports;
    - manual creation where applicable.
-7. The canonical Pending object must contain the same approved fields regardless of origin.
-8. Do not expose API/computer origin in the memory object or visible card.
-9. Define separate validated candidate objects for:
-   - Associative Memory proposals;
+9. The canonical Pending object must contain the same approved fields regardless of origin.
+10. Do not expose API/computer origin in the memory object or visible card.
+11. Define separate validated candidate objects for:
+   - General Associative Memory proposals;
+   - Companion-targeted Associative Memory proposals;
    - Model Rule proposals.
-10. Model Rules must not be disguised as Associative Memories, Types, or importance-rated facts.
-11. Audit the existing Model Rule storage, review, and application path before changing it. Preserve approved behavior and return a focused question if the visible review contract is not already defined.
+12. Model Rules must not be disguised as Associative Memories, Types, or importance-rated facts.
+13. Audit the existing Model Rule storage, review, and application path before changing it. Preserve approved behavior and return a focused question if the visible review contract is not already defined.
+14. Implement one atomic companion-deletion service used by every UI path. It must count and delete all companion-targeted memories and related embeddings/joins after confirmation.
 
-**Completion Gate:** Unit tests prove that all origins create the same Pending memory object, Type CRUD preserves memories, scope grouping does not collapse target boundaries, and Model Rule proposals remain a separate validated output stream.
+**Completion Gate:** Unit tests prove that all origins create the same Pending memory object, Type CRUD preserves memories, scope grouping does not collapse target boundaries, companion candidates cannot leak to another companion, Model Rule proposals remain a separate validated output stream, and every companion deletion route performs the same confirmed cascade.
 
 ### Phase 3: Archiver Evaluation Harness and Provisional Defaults
 
 **Status:** [ ] Not Started
 
-**Goal:** Test extraction quality, chunk sizes, schemas, and prompt profiles before choosing production defaults.
+**Goal:** Test extraction quality, chunk sizes, schemas, conversation policies, and prompt profiles before choosing production defaults.
 
 Required work:
 
@@ -202,26 +234,36 @@ Required work:
    - preferences;
    - contradictions;
    - projects and plans;
+   - companion-specific shared history;
+   - companion-specific behavior guidance;
+   - a conversation where the companion should not form memories about itself;
+   - a sensitive or isolated conversation marked Do Not Analyze;
+   - a conversation with General extraction enabled but Companion extraction disabled;
+   - a conversation with Companion extraction enabled but General extraction disabled;
    - roleplay worlds, characters, and campaigns;
    - Model Rules;
-   - mixed Memories + Model Rules;
+   - mixed General Memories + Companion Memories + Model Rules;
    - conversations with almost nothing worth saving;
    - malformed, fenced, truncated, and prose-wrapped JSON responses.
 3. Define expected facts and rules for each fixture without requiring identical model wording.
 4. Test at least:
    - Broad, Balanced, and Conservative prompt profiles;
-   - Memories, Memories + Model Rules, and Model Rules Only;
+   - each extraction stream alone and in combinations;
    - multiple token-based chunk targets;
    - a lower-cost model and a stronger model where available;
-   - structured output and plain-JSON fallback where supported.
+   - structured output and plain-JSON fallback where supported;
+   - API package and computer package validation where practical.
 5. Record:
-   - useful memories found;
+   - useful General memories found;
+   - useful companion memories found;
    - missed memories;
    - invented or overinterpreted memories;
+   - incorrect General versus Companion placement;
    - duplicates;
    - wrong scope or target;
    - invalid or unknown Type suggestions;
    - useful and noisy Model Rules;
+   - violations of Do Not Analyze or Analysis Note;
    - malformed and truncated responses;
    - request count;
    - input and output token estimates;
@@ -229,7 +271,8 @@ Required work:
    - estimated cost where the provider exposes pricing.
 6. Preserve the current extraction prompt as a testable **Broad** candidate rather than deleting it before comparison.
 7. Do not finalize the token values behind Small, Standard, or Large until the harness produces evidence.
-8. Commit the fixture definitions, scoring method, and results summary under `Memory System/archiver_evaluation/`.
+8. Test retrieval with several simultaneously relevant General and companion memories under bounded token budgets.
+9. Commit the fixture definitions, scoring method, and results summary under `Memory System/archiver_evaluation/`.
 
 Restrictions:
 
@@ -237,8 +280,9 @@ Restrictions:
 - A model accepting a large context window is not evidence that large chunks extract reliably.
 - Do not choose defaults from one conversation or one model.
 - Do not treat exact wording mismatch as automatic failure when the same supported memory was captured accurately.
+- Do not treat companion-specific behavior guidance as automatically equivalent to a global Model Rule.
 
-**Completion Gate:** The harness can compare prompt profiles, modes, chunk sizes, and models; the provisional production defaults are documented with evidence; and failures are visible rather than collapsed into “no memories.”
+**Completion Gate:** The harness can compare prompt profiles, extraction streams, conversation policies, chunk sizes, and models; the provisional production defaults are documented with evidence; retrieval can combine several relevant memories without scope leakage; and failures are visible rather than collapsed into “no memories.”
 
 ### Phase 4: Archiver Request, Chunking, Consolidation, and Run UI
 
@@ -248,45 +292,67 @@ Restrictions:
 
 Required work:
 
-1. Add the per-run **Analyze For** choices:
-   - Memories;
-   - Memories + Model Rules;
-   - Model Rules Only.
-2. Remember the previous choice for convenience without removing the per-run control.
-3. Add **Prompt Profile** choices:
+1. Add an **Analyze Conversation** action to every conversation.
+2. The action opens one analysis setup screen rather than immediately spending API credit or exporting a package.
+3. Replace fixed combination choices with independent **Analyze For** selections:
+   - General Memories;
+   - Companion Memories · `{current companion name}`, only when the conversation has a valid companion target;
+   - Model Rules.
+4. Allow any combination of the available streams, including one, two, or all three. At least one stream must be selected for a run.
+5. Selecting both General and Companion does not create two copies of every fact. The extractor must assign each supported proposal to the appropriate destination.
+6. Add **Do Not Analyze This Conversation** as a conversation-level exclusion. It overrides batch defaults and prevents analysis until the user changes it.
+7. Add an optional **Analysis Note** for exceptional conversations. It guides only extraction and is never copied into memory, retrieval prompts, or provenance.
+8. Add conversation policy inheritance:
+   - Use Default;
+   - Custom for this conversation.
+9. App or batch defaults may select any combination of General Memories, Companion Memories, and Model Rules. A custom conversation policy overrides those defaults.
+10. Remember visible prior choices for convenience without hiding them in a companion profile.
+11. Add **Prompt Profile** choices:
    - Balanced;
    - Broad;
    - Conservative;
    - Custom.
-4. Preserve separate editable custom instructions for memory extraction and Model Rule extraction where both are used.
-5. Keep the response schema app-owned. Custom instructions may change what the model notices, but cannot replace the required output envelope or validation rules.
-6. Add **Conversation Amount Per Request** choices:
+12. Preserve separate editable custom instructions for memory extraction and Model Rule extraction where both are used.
+13. Keep the response schema app-owned. Custom instructions and Analysis Notes may change what the model notices, but cannot replace the required output envelope or validation rules.
+14. Add **Conversation Amount Per Request** choices:
    - Auto;
    - Small;
    - Standard;
    - Large;
    - Custom.
-7. Show before the run:
+15. Add **Processing Method**:
+   - API;
+   - Computer;
+   - Ask Every Time as an app-level default option.
+16. The processing method remains visible and changeable before each run. Do not hide it in companion configuration.
+17. Show before the run:
    - selected message count;
    - approximate transcript tokens;
-   - approximate request count;
+   - approximate request count for the selected method where calculable;
    - selected model's known context limit, when available;
    - known provider request limit, when available;
    - a clear notice when a conservative fallback is being used.
-8. Replace character-based chunking with the token-budget rules in Section 8.5.
-9. Preserve whole messages whenever possible. Handle one oversized message according to Section 8.6.
-10. Collect every chunk's validated candidates in temporary run storage before filing anything into visible Pending.
-11. Apply deterministic validation and exact deduplication first.
-12. Consolidate overlapping candidates across chunks using the bounded process in Section 8.8.
-13. Compare consolidated memory proposals with relevant existing memories and route candidates through Possible Match. The model may not directly mutate existing memories.
-14. Use provider-supported structured output where available and the resilient JSON fallback in Section 8.7 everywhere else.
-15. Distinguish truncation, malformed JSON, provider rejection, cancellation, and semantic no-result outcomes.
-16. Retry only under the bounded rules in Section 8.9.
-17. File the complete valid set through the Phase 2 canonical Pending path only after all required chunks and consolidation succeed.
-18. Leave the bookmark unchanged after failure, cancellation, or process death.
-19. Delete temporary run data after successful filing or explicit cancellation, subject to narrow interrupted-run recovery.
-20. Add tests for:
-   - each analysis mode;
+18. If API is selected but no valid endpoint/model is configured, open the relevant setup rather than failing cryptically.
+19. If Computer is selected, prepare the validated computer-analysis package and use a button label such as **Prepare Computer Analysis** rather than pretending the phone completed the remote work.
+20. Replace character-based chunking with the token-budget rules in Section 8.5.
+21. Preserve whole messages whenever possible. Handle one oversized message according to Section 8.6.
+22. Collect every chunk's validated candidates in temporary run storage before filing anything into visible Pending.
+23. Apply deterministic validation and exact deduplication first.
+24. Consolidate overlapping candidates across chunks using the bounded process in Section 8.8.
+25. Compare consolidated memory proposals with relevant existing memories and route candidates through Possible Match. The model may not directly mutate existing memories.
+26. Use provider-supported structured output where available and the resilient JSON fallback in Section 8.7 everywhere else.
+27. Distinguish truncation, malformed JSON, provider rejection, cancellation, and semantic no-result outcomes.
+28. Retry only under the bounded rules in Section 8.9.
+29. File the complete valid set through the Phase 2 canonical Pending path only after all required chunks and consolidation succeed.
+30. Leave the bookmark unchanged after failure, cancellation, or process death.
+31. Delete temporary run data after successful filing or explicit cancellation, subject to narrow interrupted-run recovery.
+32. Add tests for:
+   - every extraction stream alone and in combinations;
+   - default and custom conversation policies;
+   - Do Not Analyze;
+   - Analysis Note isolation;
+   - conversation with and without a companion;
+   - API and Computer processing choices;
    - each prompt profile;
    - each chunk choice;
    - known and unknown model/provider limits;
@@ -297,7 +363,7 @@ Required work:
    - no partial visible filing;
    - duplicate candidates across chunk boundaries.
 
-**Completion Gate:** The user can see and select the purpose and approximate size of an analysis run, lower-cost models can operate within conservative limits, malformed or truncated output cannot masquerade as no result, and a failed final chunk cannot leave a half-analysis in Pending.
+**Completion Gate:** The user can launch analysis from any conversation, choose General, companion, and Model Rule streams independently, choose API or Computer processing, see the approximate size and cost shape of the run, preserve exceptional per-conversation policy, and trust that a failed final chunk cannot leave a half-analysis in Pending.
 
 ### Phase 5: Embeddings, Retrieval, and Ranking
 
@@ -315,29 +381,47 @@ Required work:
    - title;
    - importance;
    - source-chat identity;
-   - API/computer origin.
+   - API/computer origin;
+   - conversation memory-access policy;
+   - conversation analysis policy.
 3. Apply actual scope and target eligibility before semantic ranking.
 4. Retrieve Active memories only for ordinary chats.
 5. Keep Pending, Archived, and Superseded memories out of ordinary chat retrieval.
 6. Remove fixed-Type authority behavior. A Type does not automatically transform a memory into a command.
-7. Remove title, source, and fixed-Type ranking bonuses.
-8. When `Use Importance Ratings` is On:
+7. Companion memories may include behavior guidance, but they remain semantically retrieved suggestions, not fixed companion-profile instructions and not global Model Rules.
+8. For a conversation with a companion, eligible retrieval pools are independently controlled by **Memories Used in This Conversation**:
+   - General Memories On/Off;
+   - Companion Memories · `{current companion name}` On/Off.
+9. A conversation may use either pool, both pools, or neither pool.
+10. A conversation without a valid companion target cannot retrieve Companion memories.
+11. Retrieve several relevant memories at once within a bounded memory-context token budget. Do not hard-code retrieval to one General and one Companion memory.
+12. Protect a tested portion of the budget for relevant companion memories when that pool is enabled so a large General result set cannot always crowd out companion continuity. Unused protected capacity may spill over to the other enabled pool.
+13. Rank within actual scope and target eligibility. A memory targeted to Ash must never be eligible for Slate merely because their text is similar.
+14. Insert retrieved memories as a dedicated context block after fixed app safety and companion identity instructions and before the conversation transcript. Retrieved memory must not outrank or rewrite fixed system/developer rules.
+15. Label General and companion memory groups clearly inside the generated context when both are present.
+16. Remove title, source, and fixed-Type ranking bonuses.
+17. When `Use Importance Ratings` is On:
    - apply a relevance floor first;
    - use importance only as a bounded secondary ordering signal among already relevant memories;
    - 0 adds no boost;
    - importance cannot make an irrelevant memory eligible.
-9. When the setting is Off, the importance contribution is exactly zero.
-10. Importance does not affect exact duplicate detection or Possible Match candidate generation.
-11. Report embedding failure honestly. Do not silently present a semantic failure as no match.
-12. Add focused tests for:
+18. When the setting is Off, the importance contribution is exactly zero.
+19. Importance does not affect exact duplicate detection or Possible Match candidate generation.
+20. Report embedding failure honestly. Do not silently present a semantic failure as no match.
+21. Add focused tests for:
    - General and Roleplay eligibility;
+   - companion target isolation;
+   - General-only, Companion-only, both, and neither conversation access;
+   - several simultaneously relevant memories;
+   - memory-context budget and protected companion capacity;
+   - companion behavior guidance retrieved only when relevant;
    - target isolation between worlds, campaigns, and characters;
    - Type soft clues;
    - importance On and Off;
    - inactive lifecycle exclusion;
    - embedding failure.
 
-**Completion Gate:** Retrieval tests demonstrate relevant memory application, target isolation, and optional importance behavior without title/source influence.
+**Completion Gate:** Retrieval tests demonstrate relevant multi-memory application, companion target isolation, conversation-level access control, protected but bounded companion continuity, and optional importance behavior without title/source influence.
 
 ### Phase 6: Memory Controls UI
 
@@ -374,8 +458,9 @@ Required work:
 
 1. Add the **General** and **Roleplay** tabs.
 2. Derive Roleplay membership only from World, Roleplay Character, and Campaign scopes.
-3. Keep actual scope and target visible on every card.
-4. Every ordinary Pending card shows:
+3. Companion-scoped memories appear in General but keep their actual Companion scope and target visible.
+4. Keep actual scope and target visible on every card.
+5. Every ordinary Pending card shows:
    - complete memory text;
    - actual scope and target;
    - Type or No Type;
@@ -383,29 +468,29 @@ Required work:
    - importance only when enabled;
    - Information;
    - the approved actions.
-5. No title appears.
-6. No-match card actions remain:
+6. No title appears.
+7. No-match card actions remain:
    - Information top-right;
    - discard X immediately left of save/disk;
    - save/disk at far right;
    - no caution icon;
    - no Review button.
-7. Possible-Match card actions remain:
+8. Possible-Match card actions remain:
    - caution icon top-left;
    - Information top-right;
    - Review bottom-right;
    - no save/disk;
    - no discard X.
-8. Implement **Accept All** only for visible, ordinary, conflict-free proposals with valid placement.
-9. Accept All never bypasses Possible Match Review or hidden unresolved data.
-10. API and computer-imported proposals render identically.
-11. Audit existing roleplay-specific `Add to Card` behavior before changing it:
+9. Implement **Accept All** only for visible, ordinary, conflict-free proposals with valid placement.
+10. Accept All never bypasses Possible Match Review or hidden unresolved data.
+11. API and computer-imported proposals render identically.
+12. Audit existing roleplay-specific `Add to Card` behavior before changing it:
    - do not remove it by implication;
    - if the new card layout conflicts with it, return one focused decision before altering that action.
-12. Keep Model Rule review separate from ordinary memory cards unless an existing approved UI explicitly combines them.
-13. Add UI tests for both tabs, card variants, direct field visibility, and Accept All exclusions.
+13. Keep Model Rule review separate from ordinary memory cards unless an existing approved UI explicitly combines them.
+14. Add UI tests for both tabs, companion target display, card variants, direct field visibility, and Accept All exclusions.
 
-**Completion Gate:** The user can scan and safely approve ordinary Pending memories, while conflict cards, Model Rules, and roleplay-specific actions remain protected.
+**Completion Gate:** The user can scan and safely approve ordinary General, Companion, and Roleplay memories, while conflict cards, Model Rules, and roleplay-specific actions remain protected.
 
 ### Phase 8: Possible Match Review and Lifecycle Actions
 
@@ -418,25 +503,26 @@ Required work:
 1. Run exact normalized text matching without requiring embeddings.
 2. Use the local embedding model for differently worded related memories.
 3. Respect actual scope and target context when generating candidates.
-4. Keep Type as only the same soft embedding clue used elsewhere.
-5. Ignore importance during candidate generation.
-6. Use temporary comparison vectors for Archived and Superseded memories and discard them immediately.
-7. Never make inactive comparison vectors chat-retrievable.
-8. Implement the approved Review page:
+4. A Companion proposal may compare only with eligible memories for the same companion target and lifecycle search rules.
+5. Keep Type as only the same soft embedding clue used elsewhere.
+6. Ignore importance during candidate generation.
+7. Use temporary comparison vectors for Archived and Superseded memories and discard them immediately.
+8. Never make inactive comparison vectors chat-retrievable.
+9. Implement the approved Review page:
    - proposal first;
    - complete visible metadata;
    - matches below with checkboxes;
    - scrolling actions after the final card;
    - no floating or hidden controls.
-9. Implement the approved actions atomically:
+10. Implement the approved actions atomically:
    - Save & Edit Old Memory;
    - Save & Supersede;
    - Save & Replace.
-10. Revalidate the proposal and selected memories before committing.
-11. Backing out leaves the proposal Pending.
-12. Add tests for one and many matches, lifecycle transitions, restore history, permanent replacement, stale selections, and transaction rollback.
+11. Revalidate the proposal and selected memories before committing.
+12. Backing out leaves the proposal Pending.
+13. Add tests for one and many matches, companion target isolation, lifecycle transitions, restore history, permanent replacement, stale selections, and transaction rollback.
 
-**Completion Gate:** Possible Match reliably surfaces database conflicts and every resolution is atomic, user-controlled, and correctly reflected in lifecycle state.
+**Completion Gate:** Possible Match reliably surfaces database conflicts without cross-companion leakage and every resolution is atomic, user-controlled, and correctly reflected in lifecycle state.
 
 ### Phase 9: Conversation Bookmark, API Analysis, and Computer Import
 
@@ -452,15 +538,19 @@ Required work:
 4. Advance the bookmark only after all valid suggestions from the frozen range are safely filed into Pending.
 5. Do not advance after failure, cancellation, or process death.
 6. Use short-lived run bookkeeping only for locking, chunk status, retry safety, duplicate prevention, and interrupted-run recovery.
-7. Never copy the bookmark, chat ID, transcript row IDs, excerpts, source timestamps, run ID, chunk number, or candidate hash into a memory.
+7. Never copy the bookmark, chat ID, transcript row IDs, excerpts, source timestamps, run ID, chunk number, candidate hash, Analysis Note, or conversation policy into a memory.
 8. API analysis and computer import both call the canonical Pending filing path from Phase 2.
-9. Strictly validate computer packages before filing.
-10. A valid imported suggestion receives no import badge, source label, special card, or separate review path.
-11. Keep Lorebook import and retrieval separate from Associative Memory. Do not merge the two systems while repairing this route.
-12. Apply the same fixed candidate schemas and validation rules to imported packages where applicable.
-13. Add tests for retry, cancellation, process death, duplicate import, messages arriving during analysis, and identical API/computer results.
+9. The **Analyze Conversation** action uses the same frozen range, policy, prompt profile, and chunk plan whether API or Computer is selected.
+10. API processing runs the bounded analysis on the configured endpoint/model.
+11. Computer processing prepares a package containing only the information required to run the same selected extraction contract, then strictly validates the returned package before filing.
+12. A valid imported suggestion receives no import badge, source label, special card, or separate review path.
+13. Keep Lorebook import and retrieval separate from Associative Memory. Do not merge the two systems while repairing this route.
+14. Apply the same fixed candidate schemas and validation rules to imported packages where applicable.
+15. Batch analysis uses app/batch defaults only for conversations marked Use Default. Custom conversation policies override the batch defaults. Do Not Analyze conversations are skipped.
+16. The batch progress/result screen reports skipped conversations without inventing or exposing sensitive topic labels.
+17. Add tests for retry, cancellation, process death, duplicate import, messages arriving during analysis, API/computer equivalence, default/custom policies, and skipped conversations.
 
-**Completion Gate:** Analysis resumes from the correct bookmark, failures do not skip material, and API/computer suggestions become identical Pending memories.
+**Completion Gate:** Analysis resumes from the correct bookmark, failures do not skip material, per-conversation policy is respected in single and batch analysis, and API/computer suggestions become identical Pending memories.
 
 ### Phase 10: Legacy Cleanup, Backup Compatibility, and Release Verification
 
@@ -479,29 +569,40 @@ Required work:
    - transcript row processing states made unnecessary by the bookmark;
    - the 200,000-character archiver ceiling;
    - obsolete archiver schemas and prompt fields;
-   - partial filing from incomplete analysis runs.
+   - partial filing from incomplete analysis runs;
+   - hidden companion-profile memory-routing defaults;
+   - any retrieval path that ignores conversation memory-access policy;
+   - any companion deletion path that leaves targeted memories behind.
 3. Remove or migrate physical database columns only when:
    - no approved behavior depends on them;
    - upgrade and rollback behavior is documented;
    - backup, restore, seed, export, and import tests pass.
-4. Confirm older backups import without creating visible titles, invalid Types, or source-chat memories.
+4. Confirm older backups import without creating visible titles, invalid Types, source-chat memories, or broken companion targets.
 5. Confirm new backups preserve:
    - user Types;
    - No Type;
    - tags;
    - importance values even while disabled;
    - scope and target relationships;
+   - companion-specific memories;
+   - conversation memory-access and analysis policies;
    - lifecycle and supersession history;
    - user prompt profiles and custom instructions;
-   - archiver chunk preference and last Analyze For choice where intended;
+   - archiver chunk preference and previous visible selections where intended;
+   - processing-method preference;
    - no abandoned temporary run state as permanent memory data.
-6. Run focused unit, migration, instrumentation, parser, archiver, and UI tests.
+6. Run focused unit, migration, instrumentation, parser, archiver, deletion, retrieval, and UI tests.
 7. Run Android Checks and require green CI.
 8. Exercise the full device path:
    - analyze a short chat;
    - analyze a long dense chat with a lower-cost model;
    - inspect estimated tokens and request count;
-   - run Memories, Memories + Model Rules, and Model Rules Only;
+   - run General Memories, Companion Memories, and Model Rules alone and in combinations;
+   - mark a conversation Do Not Analyze and confirm batch analysis skips it;
+   - set a custom Analysis Note and confirm it does not become memory metadata;
+   - switch conversation memory access between General only, Companion only, both, and neither;
+   - retrieve several relevant General and companion memories in one conversation;
+   - prepare a Computer analysis package and import its result;
    - interrupt and resume an analysis;
    - review ordinary Pending memories;
    - use Accept All;
@@ -509,10 +610,11 @@ Required work:
    - verify General and Roleplay separation;
    - toggle importance Off and On;
    - add, rename, and delete a Type;
+   - delete a companion and verify the confirmation count and complete companion-memory cascade;
    - export and restore.
 9. Update the phase statuses and commit the final implementation report.
 
-**Completion Gate:** CI is green, the owner has exercised the relevant device paths, long-conversation analysis is bounded and visible, backups are safe, and no legacy field or archiver assumption influences the revised product.
+**Completion Gate:** CI is green, the owner has exercised the relevant device paths, long-conversation analysis is bounded and visible, companion memory is isolated and deletable with its companion, conversation policies are respected, backups are safe, and no legacy field or archiver assumption influences the revised product.
 
 ### Decisions That Do Not Block the Early Phases
 
@@ -523,9 +625,11 @@ These may remain open until the phase that touches them:
 - additional editable placement fields in Save & Edit Old Memory;
 - any change to roleplay-specific Add to Card behavior;
 - the exact Small, Standard, and Large token targets until Phase 3 evaluation;
-- the exact UI component used for the three Analyze For choices;
+- the exact checkbox, switch, or row component used for the independent Analyze For streams;
 - the final wording of Balanced, Broad, and Conservative prompts until Phase 3 evaluation;
-- additional visible Model Rule review fields if the existing implementation does not already settle them.
+- additional visible Model Rule review fields if the existing implementation does not already settle them;
+- the exact memory-context token budget and protected companion share until Phase 3 evaluation;
+- whether conversation policy receives a small visible marker in the conversation header or list, provided the settings remain discoverable from the conversation.
 
 An implementation agent must not silently decide these.
 
@@ -542,7 +646,7 @@ An Associative Memory contains:
 - its lifecycle state;
 - only the minimum existing placement information needed to prevent unrelated contexts from bleeding together.
 
-It does not contain a title, a durable source-chat history, a run ID, a chunk ID, or evidence excerpts.
+It does not contain a title, a durable source-chat history, a run ID, a chunk ID, evidence excerpts, or the conversation policy that allowed it to be proposed.
 
 ### 3.1 No Titles
 
@@ -573,7 +677,9 @@ Do not attach or expose:
 - analysis run IDs;
 - chunk numbers;
 - candidate hashes;
-- API/computer origin.
+- API/computer origin;
+- the conversation's Analysis Note;
+- the conversation's memory access or extraction policy.
 
 Do not build a “provenance” subsystem merely because temporary retry bookkeeping is useful. Minimal run bookkeeping may exist outside the memory only long enough to finish or safely recover analysis/import. It does not become part of the candidate shown to the user or the saved memory.
 
@@ -589,7 +695,7 @@ The app already has the scopes that identify roleplay memory. A memory is groupe
 
 This is a derived browser and retrieval grouping rule, not a fourth roleplay scope stored on the memory.
 
-All other existing scopes remain in the **General** side unless the owner later changes a specific scope's meaning.
+All other existing scopes, including Companion, remain in the **General** side unless the owner later changes a specific scope's meaning.
 
 The Memory Browser has two tabs:
 
@@ -617,6 +723,132 @@ Searching and filtering may operate across the visible Roleplay tab for the huma
 Types may still be fantasy-specific. A user may create Types such as Character Detail, Quest, Spell, Campaign Note, or anything else, but those names do not create or remove Roleplay grouping.
 
 Internal links to companions, projects, worlds, campaigns, or characters may remain only where needed to preserve their existing context. They do not automatically justify a new visible scope taxonomy or a required scope dropdown on every memory card.
+
+### 4.2 Companion Memories
+
+A Companion memory is an Associative Memory with:
+
+- Companion scope;
+- one specific companion target;
+- ordinary memory text;
+- any optional user-owned Type and tags.
+
+A Companion memory is eligible only while speaking with its target companion and only when that conversation allows Companion Memories.
+
+Companion memories may be used creatively. They may contain:
+
+- shared history;
+- relationship continuity;
+- terms, rituals, jokes, and agreements;
+- facts learned by that companion;
+- companion-specific preferences;
+- behavior guidance that should surface only when semantically relevant to that companion.
+
+For example, an Instruction memory scoped to Ash may suggest that Ash avoid unsolicited checklists when the user is overwhelmed. It is retrieved when relevant rather than injected into every Ash turn.
+
+A Companion memory is not:
+
+- a hidden edit to the companion profile;
+- a global Model Rule;
+- automatically authoritative merely because its Type is Instruction;
+- available to another companion;
+- duplicated into General unless the analyzer separately finds a genuinely General memory.
+
+Companion memories appear in the General browser tab because Companion is not a Roleplay scope, but the card must show the actual companion target.
+
+### 4.3 Multiple Memories and Prompt Placement
+
+A chat may receive several relevant memories from every enabled and eligible pool, subject to a bounded token budget.
+
+- do not limit retrieval to one General and one Companion memory;
+- use semantic relevance as the primary signal;
+- keep a tested protected capacity for relevant companion memories when enabled;
+- allow unused protected capacity to spill into another enabled pool;
+- keep fixed app safety, developer rules, and fixed companion identity above retrieved memory context;
+- place retrieved memory in a dedicated context block before the conversation transcript;
+- clearly distinguish General and companion-specific groups when both are present;
+- treat retrieved memory as context for the model, not as permission to overwrite higher-priority instructions.
+
+### 4.4 Conversation Memory Access
+
+Each conversation may control which approved memories can be retrieved into it.
+
+**Memories Used in This Conversation:**
+
+- General Memories On/Off;
+- Companion Memories · `{current companion name}` On/Off, only when a valid companion is assigned.
+
+A conversation may enable:
+
+- both;
+- General only;
+- Companion only;
+- neither.
+
+This controls live retrieval only. It does not decide what the analyzer may extract from the conversation.
+
+Use cases include:
+
+- ordinary companion chats using both pools;
+- a temporary conversation that uses General information but no companion continuity;
+- a companion-specific continuity chat that avoids unrelated General context;
+- an isolated or sensitive conversation that uses neither pool.
+
+### 4.5 Conversation Analysis Policy
+
+Each conversation separately controls which proposals may be created from it.
+
+**Create From This Conversation:**
+
+- General Memories;
+- Companion Memories · `{current companion name}`, only when a valid companion is assigned;
+- Model Rules.
+
+These are independent selections. Any combination is valid.
+
+Additional controls:
+
+- **Use Default** applies the current app or batch defaults;
+- **Custom for This Conversation** stores the selected streams for that conversation;
+- **Do Not Analyze This Conversation** prevents single or batch analysis until changed;
+- optional **Analysis Note** gives extraction-only guidance for an exceptional conversation.
+
+The Analysis Note:
+
+- may say, for example, not to treat a fictional scenario as user information or not to create memories about the companion's identity;
+- is sent only to the analyzer;
+- is never injected into ordinary chat;
+- is never saved as memory or Model Rule;
+- is never displayed as provenance;
+- cannot redefine the response schema or lifecycle permissions.
+
+Do not require topic labels such as sexual, medical, private, or sensitive. The user may exclude or guide a conversation without telling the app why.
+
+Conversation policy belongs to the conversation, not the companion profile. The same companion may have different policies in different conversations.
+
+### 4.6 Companion Deletion
+
+Deleting a companion permanently deletes every memory targeted specifically to that companion.
+
+The destructive confirmation must state the consequence before deletion and include the current count where available. Base wording:
+
+> **Delete {Companion Name}?**  
+> This will permanently delete {Companion Name} and {count} companion memories. This cannot be undone.
+
+Use correct singular and plural wording. If current approved deletion also removes conversations, avatars, cards, or other companion-owned data, keep those consequences in the same confirmation rather than replacing them with a narrower message.
+
+The deletion transaction must include:
+
+- Pending companion memories;
+- Active companion memories;
+- Archived companion memories;
+- Superseded companion memories;
+- embeddings and target joins for those memories;
+- temporary analysis candidates targeting that companion.
+
+It must not delete General memories merely because they were extracted from conversations with that companion.
+
+Do not orphan, silently convert to General, or silently reassign companion memories.
 
 ## 5. User-Owned Types
 
@@ -648,6 +880,7 @@ These are starter choices, not a permanent ontology. A user may create categorie
 - ordinary memory editing can change or remove the Type;
 - Type is available for human browsing and filtering;
 - Type does not determine scope or Roleplay grouping;
+- Type does not determine whether a memory is General or companion-specific;
 - Type does not determine whether a memory is true, important, or authoritative;
 - Type does not automatically change a memory into a special command or alter how the receiving model must obey it;
 - a mistaken Type must not make Accept All dangerous.
@@ -720,7 +953,7 @@ Tags are not Types.
 - one memory has zero or one Type but may have multiple tags;
 - Types provide broad user-owned organization;
 - tags provide smaller cross-cutting words or themes;
-- tags do not determine scope or Roleplay grouping;
+- tags do not determine scope, companion target, or Roleplay grouping;
 - Type management and tag management remain separate;
 - neither tags nor Types may become mandatory ranking weights that overpower semantic relevance.
 
@@ -798,7 +1031,7 @@ Speak-GPT does not import the Python packages into Android. It reproduces the re
 
 ### 8.1 Analysis Is Additive and Human-Reviewed
 
-The model may propose new memory candidates and Model Rules.
+The model may propose new General memory candidates, companion-targeted memory candidates, and Model Rules.
 
 It may not automatically:
 
@@ -813,15 +1046,39 @@ A proposal that may conflict with an existing memory is routed through Possible 
 
 ### 8.2 Analyze For
 
-Each analysis pass offers:
+Each analysis pass uses independent selections:
 
-- **Memories**;
-- **Memories + Model Rules**;
-- **Model Rules Only**.
+- **General Memories**;
+- **Companion Memories · `{current companion name}`**, when available;
+- **Model Rules**.
 
-The app remembers the previous choice but keeps it visible and changeable for every pass.
+Any combination is allowed. At least one available stream must be selected unless the conversation is marked Do Not Analyze.
+
+The app may remember prior visible choices for convenience but keeps them visible and changeable for every pass. It must not silently derive them from the companion profile.
+
+General and Companion selection means classify proposals by destination, not duplicate every candidate into both pools.
 
 Model Rules are procedural behavior instructions. They remain separate from Associative Memories and do not receive a Memory Type or importance rating merely because they came from the same conversation.
+
+#### 8.2.1 Conversation Defaults and Overrides
+
+- app or batch defaults may select any combination of the available extraction streams;
+- a conversation marked Use Default inherits current defaults;
+- a custom conversation policy overrides those defaults;
+- Do Not Analyze overrides every batch selection;
+- Analysis Note is applied only to that conversation's extraction;
+- single-conversation analysis shows the effective policy before starting.
+
+#### 8.2.2 Processing Method
+
+Each run offers:
+
+- **API**;
+- **Computer**.
+
+The app-level default may be API, Computer, or Ask Every Time. The selected method remains visible before every run.
+
+API uses the configured endpoint/model. Computer prepares a package for external processing and later validates the returned package through the same schema and Pending path.
 
 ### 8.3 Prompt Profiles
 
@@ -843,7 +1100,7 @@ Intent:
 
 Custom instructions control what the model looks for. They do not control the JSON envelope, required field names, validation, retry policy, bookmark behavior, lifecycle, or permission to mutate the database.
 
-Where both Memories and Model Rules are selected, the app may use separate instructions for each output stream while keeping one user-visible Prompt Profile selection.
+Where several streams are selected, the app may use separate instructions for General memories, companion memories, and Model Rules while keeping one user-visible Prompt Profile selection.
 
 ### 8.4 Conversation Amount Per Request
 
@@ -866,6 +1123,7 @@ Before starting, show:
 - selected message count;
 - approximate transcript tokens;
 - approximate request count;
+- selected processing method;
 - known model context limit, when available;
 - known provider request limit, when available;
 - whether a conservative fallback is being used.
@@ -886,6 +1144,7 @@ Then subtract:
 - system and developer prompt estimate;
 - output-token reservation;
 - tool or structured-output overhead;
+- Analysis Note estimate where used;
 - a conservative safety margin.
 
 Do not use the model's advertised context limit as the target chunk size.
@@ -916,12 +1175,20 @@ The logical combined response envelope is:
 
 ```json
 {
-  "memories": [
+  "general_memories": [
     {
       "content": "The user prefers...",
       "scope": "real_life",
       "target": null,
       "suggested_type": "Preference",
+      "tags": []
+    }
+  ],
+  "companion_memories": [
+    {
+      "content": "When the user is overwhelmed, avoid unsolicited checklists.",
+      "companion_target": "current_companion_id",
+      "suggested_type": "Instruction",
       "tags": []
     }
   ],
@@ -933,6 +1200,8 @@ The logical combined response envelope is:
 }
 ```
 
+The exact serialized target representation may use a validated internal ID or package-safe reference. It must never silently target a companion by ambiguous display-name matching.
+
 Rules:
 
 - omit or return an empty array for an output stream not selected by Analyze For;
@@ -940,11 +1209,13 @@ Rules:
 - no AI importance;
 - no provenance or source field;
 - no chat ID, row ID, quote, evidence excerpt, run ID, or chunk ID;
+- no Analysis Note or conversation policy in a candidate;
 - no automatic lifecycle action;
-- no card placement field in the initial Associative Memory contract;
+- no card placement field beyond the approved validated scope/target contract;
 - `suggested_type` may be null and may only name a current user Type;
 - an invalid or unknown Type becomes No Type rather than deleting an otherwise valid candidate;
 - scope and target must pass existing placement validation;
+- companion proposals must target the conversation's current valid companion and cannot select an unrelated companion;
 - invalid placement cannot be accepted by Accept All;
 - tags are normalized and validated independently from Type;
 - a schema or safety cap must never silently discard excess valid output. If output is incomplete, report it and retry with smaller work units.
@@ -959,15 +1230,17 @@ For one frozen conversation range:
 
 1. validate every chunk response;
 2. hold candidates in temporary run storage;
-3. normalize whitespace and exact-match keys;
-4. remove exact duplicates, including duplicates caused by overlap;
-5. group strongly related candidates with scope and target boundaries preserved;
-6. consolidate only the grouped candidate text, not the entire raw conversation again;
-7. keep genuinely separate facts separate;
-8. compare final memory candidates with relevant existing memories;
-9. mark Possible Match candidates without allowing the model to decide the resolution;
-10. file the complete valid set through the canonical Pending path;
-11. advance the bookmark only after filing succeeds.
+3. preserve General, companion, and Model Rule streams separately;
+4. normalize whitespace and exact-match keys;
+5. remove exact duplicates, including duplicates caused by overlap;
+6. group strongly related candidates with scope and target boundaries preserved;
+7. never consolidate a General candidate and companion candidate merely because their wording is similar;
+8. consolidate only the grouped candidate text, not the entire raw conversation again;
+9. keep genuinely separate facts separate;
+10. compare final memory candidates with relevant existing memories;
+11. mark Possible Match candidates without allowing the model to decide the resolution;
+12. file the complete valid set through the canonical Pending and Model Rule review paths;
+13. advance the bookmark only after filing succeeds.
 
 Deterministic exact deduplication happens before model-assisted or semantic consolidation.
 
@@ -982,6 +1255,7 @@ The app must distinguish:
 - a response truncated by output limit;
 - a request rejected for context or payload size;
 - provider/model failure;
+- computer package validation failure;
 - cancellation;
 - process death.
 
@@ -1001,8 +1275,9 @@ Temporary analysis state may contain only what is needed to finish or recover th
 
 - run ID;
 - chat ID and frozen end marker outside the memory object;
-- selected mode and prompt profile;
-- selected chunk setting and calculated budgets;
+- effective conversation policy;
+- selected processing method, prompt profile, and chunk setting;
+- calculated budgets;
 - chunk ordinal and success state;
 - temporary validated candidates;
 - candidate hashes for deduplication;
@@ -1014,7 +1289,7 @@ Temporary run data:
 
 - is not shown as memory metadata;
 - is not embedded;
-- is not exported as part of a memory;
+- is not exported as part of a saved memory;
 - is not copied into Pending or Active memories;
 - is removed after successful filing or explicit cancellation;
 - may persist narrowly across process death only to prevent skipped or duplicated work.
@@ -1023,9 +1298,9 @@ Temporary run data:
 
 Production defaults must be supported by Phase 3 evidence across multiple conversation styles and at least one lower-cost model.
 
-Evaluate extraction quality and operational cost together. A profile that finds slightly more memories but doubles hallucinations, malformed output, or request cost is not automatically better.
+Evaluate extraction quality and operational cost together. A profile that finds slightly more memories but doubles hallucinations, malformed output, incorrect General/Companion placement, or request cost is not automatically better.
 
-Keep the evaluation harness available for future prompt, provider, and model changes.
+Keep the evaluation harness available for future prompt, provider, model, and retrieval-budget changes.
 
 ## 9. Conversation Review Uses a Bookmark
 
@@ -1034,9 +1309,10 @@ For each chat:
 1. store one bookmark representing the last message successfully reviewed and safely filed;
 2. read from immediately after that bookmark through a frozen end point captured when the run begins;
 3. leave messages added after the frozen end point for the next run;
-4. advance the bookmark only after every required chunk succeeds, candidates are consolidated, and valid suggestions are safely filed into Pending;
-5. do not advance it after failure, cancellation, or process death;
-6. never copy the bookmark or source-chat identity into a memory.
+4. apply the effective conversation analysis policy to the frozen range;
+5. advance the bookmark only after every required chunk succeeds, candidates are consolidated, and valid suggestions are safely filed into Pending and the Model Rule review destination;
+6. do not advance it after failure, cancellation, or process death;
+7. never copy the bookmark, source-chat identity, conversation policy, or Analysis Note into a memory.
 
 Do not require permanent per-row pending, processed, excluded, or claimed states merely to know where analysis stopped. A short-lived run lock, frozen end marker, and chunk-state record may exist invisibly while a run is active or recoverable.
 
@@ -1054,13 +1330,18 @@ It does not use:
 - importance;
 - source-chat identity;
 - API/computer origin;
-- analysis mode, prompt profile, run ID, or chunk information.
+- analysis mode, prompt profile, run ID, or chunk information;
+- conversation memory-access or analysis policy;
+- Analysis Note.
 
 Retrieval rules:
 
 - derive the General or Roleplay browser group from the memory's existing scope;
-- preserve the actual World, Roleplay Character, Campaign, or other scope and target boundaries during eligibility filtering;
+- preserve actual Companion, World, Roleplay Character, Campaign, and other scope/target boundaries during eligibility filtering;
+- apply the conversation's enabled memory pools before ranking;
 - retrieve Active memories only;
+- retrieve several relevant memories within the tested memory-context token budget;
+- preserve tested capacity for relevant companion memories when enabled;
 - semantic relevance is the primary signal;
 - no title bonus, source bonus, or fixed-Type bonus;
 - optional importance is applied only under Section 7;
@@ -1075,7 +1356,8 @@ Possible Match finds candidates. It does not decide whether something is a dupli
 - exact candidate deduplication occurs before semantic comparison;
 - differently worded related memories use the local embedding model;
 - a proposal is shown in the Roleplay tab when its scope is World, Roleplay Character, or Campaign;
-- candidates must still respect the proposal's actual scope and target context rather than comparing every Roleplay-tab memory together;
+- a Companion proposal appears in General but compares only within the same companion target and allowed lifecycle set;
+- candidates must respect the proposal's actual scope and target context;
 - Active memories may use stored vectors;
 - Archived and Superseded memories may be embedded temporarily and immediately discarded;
 - inactive comparison vectors never become retrieval-eligible;
@@ -1091,7 +1373,7 @@ Possible Match finds candidates. It does not decide whether something is a dupli
 | State | Meaning | Enters Normal Chats? |
 |---|---|---:|
 | **Pending** | Proposal awaiting the user. | No. |
-| **Active** | Approved current memory. | Yes, when eligible. |
+| **Active** | Approved current memory. | Yes, when eligible and allowed by the conversation. |
 | **Archived** | Shelved memory. | No. |
 | **Superseded** | Retained historical version replaced by a newer memory. | No. |
 | **Deleted** | Permanently removed. | No. |
@@ -1104,6 +1386,8 @@ The Superseded Memories filter remains:
 - **Include**;
 - **Only**.
 
+Companion deletion is a separate confirmed cascade. It permanently deletes every lifecycle state targeted to that companion.
+
 ## 13. Pending Is Designed for Fast Scanning
 
 The Pending screen shows all user-relevant data that will be saved. It must not hide fields behind endless per-memory editing screens.
@@ -1113,12 +1397,12 @@ Every ordinary card shows:
 - complete memory text;
 - selected Type or No Type;
 - tags, when present;
-- its actual scope and target;
+- its actual scope and target, including companion name where applicable;
 - its General/Roleplay destination through the tab it appears in;
 - importance only when **Use Importance Ratings** is On;
 - all other approved visible fields that will be saved;
 - no title;
-- no source-chat or analysis-run metadata.
+- no source-chat, Analysis Note, conversation-policy, or analysis-run metadata.
 
 The Type, tags, and visible importance value can be corrected directly without leaving the review flow.
 
@@ -1153,6 +1437,7 @@ Model Rule proposals use their existing separate review destination. They do not
 - dedicated full-page screen;
 - proposal first, full width, no checkbox, Information at top-right;
 - proposal scrolls normally and is not pinned;
+- actual scope and target, including companion target, remain visible;
 - proposed Type and tags are visible and editable;
 - importance is visible and editable only when the master toggle is On;
 - existing matches below in normal full-width cards;
@@ -1178,6 +1463,7 @@ No resolution is allowed with zero selected memories.
 - edit the old memory on the Review screen;
 - allow Type and tags to be edited;
 - allow importance to be edited only when the master toggle is On;
+- preserve valid scope and target boundaries;
 - no title field;
 - any other editable placement fields require a focused decision rather than an implementation guess.
 
@@ -1200,11 +1486,29 @@ All resolutions are atomic and revalidated. Backing out leaves the proposal Pend
 
 ## 15. API and Computer Workflows
 
+Every conversation offers **Analyze Conversation**. The setup screen uses the same conversation policy, prompt profile, chunk plan, fixed schema, and Pending path regardless of processing method.
+
+### API
+
+- use the configured endpoint and model;
+- show estimated transcript tokens and request count before starting;
+- run the bounded chunking, consolidation, and validation pipeline;
+- if configuration is incomplete, route to setup instead of issuing a doomed request.
+
+### Computer
+
+- freeze the same conversation range;
+- include the effective extraction selections, prompt instructions, Analysis Note, token/chunk guidance, and fixed response schema in the package as needed for processing;
+- do not treat package metadata as permanent memory provenance;
+- strictly validate the returned package;
+- run the same deduplication, Possible Match, and Pending filing steps;
+- allow computer processing to remain export/import based unless a separately approved desktop automation system exists.
+
 After strict import validation, a computer-created suggestion becomes the same Pending object as an API Memory Assistant suggestion.
 
 It has the same:
 
-- memory shape;
+- General or companion memory shape;
 - suggested Type behavior;
 - existing scope and target behavior;
 - Roleplay-tab grouping derived from scope;
@@ -1286,6 +1590,15 @@ The Phase 0 report must account for every use of:
 - `lore` or `roleplay` treated as a routing Type;
 - a newly invented generic `roleplay` scope instead of deriving the tab from World, Roleplay Character, and Campaign;
 - Roleplay-tab grouping that accidentally collapses underlying scope or target boundaries;
+- Companion scope or target handling;
+- companion memories retrieved for the wrong companion;
+- companion-specific behavior forced into every prompt instead of semantically retrieved;
+- hidden companion-profile memory-routing defaults;
+- companion deletion that orphans, converts, or fails to delete targeted memories;
+- a deletion dialog that omits companion-memory consequences;
+- conversation memory-access settings or their absence;
+- conversation analysis policy, Do Not Analyze, and Analysis Note storage or their absence;
+- batch analysis that ignores custom conversation policy;
 - Type-dependent authority behavior;
 - tags or Types used as excessive ranking bonuses;
 - title bonuses;
@@ -1302,18 +1615,18 @@ The Phase 0 report must account for every use of:
 - fixed candidate limits that silently discard output;
 - successful early chunks filed before the complete conversation range succeeds;
 - Model Rules mixed into ordinary memories;
-- analysis controls that hide approximate tokens or expected request count;
+- analysis controls that hide approximate tokens, expected request count, or processing method;
 - any provenance subsystem beyond minimal temporary run bookkeeping.
 
 For each item, report:
 
 1. where it exists;
-2. what visible, extraction, or retrieval behavior it changes;
+2. what visible, extraction, deletion, or retrieval behavior it changes;
 3. whether it can be neutralized without a database migration;
 4. the narrow safe implementation or migration path;
 5. the test that will prove the old behavior is gone.
 
-Do not delete database columns blindly. First stop unapproved fields from affecting prompts, UI, matching, embedding, ranking, chunking, and filing.
+Do not delete database columns blindly. First stop unapproved fields from affecting prompts, UI, matching, embedding, ranking, chunking, filing, conversation policy, and companion deletion.
 
 ## 18. Explicitly Forbidden Claims
 
@@ -1327,6 +1640,7 @@ Future agents must not claim:
 - the starter Type list is permanently fixed;
 - Lore is an Associative Memory Type;
 - Type determines Roleplay grouping;
+- Type determines whether a memory is General or companion-specific;
 - Roleplay requires a new generic `roleplay` scope;
 - the Roleplay tab allows unrelated worlds, characters, or campaigns to share retrieval context;
 - users cannot create arbitrary Types;
@@ -1334,6 +1648,14 @@ Future agents must not claim:
 - a Type must control model obedience or truth;
 - tags and Types are the same system;
 - World, Roleplay Character, or Campaign memories belong mixed into the General tab;
+- Companion memories should be available to every companion;
+- Companion behavior memories must be injected every turn;
+- a companion profile should silently decide all conversation extraction and retrieval routing;
+- deleting a companion should preserve orphaned companion memories;
+- companion memories should silently convert to General when a companion is deleted;
+- one conversation policy must apply to every conversation with the same companion;
+- a sensitive conversation requires a visible topic label;
+- Analysis Note is memory provenance or ordinary chat context;
 - a computer-imported memory needs different UI;
 - every transcript row needs permanent processing states;
 - permanent provenance is required for safe chunking;
@@ -1357,13 +1679,18 @@ A memory feature is complete only when:
 - Type is user-owned;
 - the Roleplay tab is derived from World, Roleplay Character, and Campaign scopes;
 - underlying fictional scope and target boundaries remain intact;
+- Companion memories are isolated to their target companion and can provide semantically retrieved continuity or behavior guidance;
+- conversations can independently allow General memories, companion memories, both, or neither;
+- conversations can independently create General memories, companion memories, and Model Rules, or be excluded from analysis;
+- deleting a companion clearly warns about and permanently deletes all companion-targeted memories;
+- retrieval can provide several relevant memories within a tested bounded context budget;
 - optional importance can be disabled without losing stored values;
 - generated changes remain proposals until approved;
-- the analysis purpose and approximate request size are visible before a run;
+- the analysis purpose, processing method, and approximate request size are visible before a run;
 - long conversations are split by conservative token budgets rather than a giant character ceiling;
 - a failed chunk cannot create a hidden partial analysis or advance the bookmark;
 - JSON and truncation failures are reported honestly;
-- prompt profiles and chunk defaults are supported by the evaluation harness;
+- prompt profiles, chunk defaults, and retrieval budgets are supported by the evaluation harness;
 - Model Rules remain a separate reviewable output stream;
 - focused tests pass;
 - Android Checks is green;
