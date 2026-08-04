@@ -1,6 +1,8 @@
 # Memory System: Phase 0 Current-Code Audit and Migration Map
 
-**Companion document to:** `Memory System/external_memory_analysis_counterplan.md` (Revision 24, 2026-08-04) — the canonical plan.
+**Companion document to:**
+- `Memory System/external_memory_analysis_counterplan.md` (Revision 24, 2026-08-04) — the canonical recovery plan.
+- `Memory System/memory_retrieval_and_analysis_ui_copy.md` (2026-08-04) — the canonical wording/behavior contract for live Memory Retrieval controls (Use Model-Aware Limits, Maximum Memories Per Response, Maximum Memory Context, Memory Priority, Memory Match Strictness, Current Retrieval Limits, Context Window Override) and the Conversation Amount Per Request chunk choices. Added to `main` after the initial Phase 0 pass; §21-§28 below extend the original audit to cover it. Nothing in §21-§28 implements any of that document's controls — this remains investigation and documentation only.
 
 **Scope:** This report is investigation and documentation only, per the canonical plan's Phase 0 restrictions. It changes no application behavior, database schema, prompt, UI, retrieval, companion-deletion behavior, archiving behavior, or memory logic. It traces the current implementation against the canonical plan's Phase 0 checklist (plan §17) and required work list (plan "Phase 0" section), and records the gap.
 
@@ -451,6 +453,9 @@ Per Phase 0's restriction against making product decisions, the following genuin
 4. **`CompanionDetailActivity`'s separate delete affordance** (§8): once companion deletion becomes unconditional (per plan §2.13/§4.6), does this second delete flow (for memory-store-only companion records never linked to an app persona) still need to exist as a distinct screen action, get merged into the same unconditional-deletion behavior as the persona-delete path, or get removed entirely? Someone must decide before Phase 1/2 touches `CompanionDetailActivity.confirmDelete()`.
 5. **Roleplay-companion-memories global toggle vs. per-conversation** (§7): the existing "Allow active companion memories in roleplay" toggle is global and roleplay-specific. Plan §4.4's "Memories Used in This Conversation" is per-conversation and scope-agnostic. Does the new per-conversation Companion-pool toggle (§9's recommended addition) subsume/replace the existing roleplay-specific global toggle, coexist with it, or does the roleplay door remain a separate, additional gate on top of the new per-conversation toggle?
 6. **Existing stored `importance = 3` defaults** (§3): once 0 becomes the neutral default, the ~large body of existing AI-authored memories that hold `importance = 3` (the current default, not necessarily a deliberate "notable" rating) will look identical to a memory someone deliberately rated 3/5. Should Phase 1 leave these values as-is (plan's explicit instruction: "Preserve every existing stored importance value"), or is a one-time note/flag warranted so the user understands why older memories may show a non-neutral default they never actually chose? The plan says preserve values; it does not address the ambiguity ration-ale.
+7. **Whether `Maximum Memory Context` gets a dedicated memory-only budget or continues to share space with lore notes and card entries** (§23): today's `charBudget` is one pool for all three; the new spec's wording describes memory content specifically. Splitting it is a larger change (a second budget dimension inside `Enforcer.assembleTurn`'s existing char-accounting) than keeping the shared pool and simply renaming/retyping it to tokens.
+8. **Whether `Memory Priority` and the original counterplan's "protected companion capacity" (Phase 5, plan §4.3/§5.12) are the same mechanism or two** (§25): both describe letting Companion memories avoid being crowded out by General ones under a shared budget. Building them as one mechanism avoids maintaining two overlapping budget-allocation systems, but no document yet says they are the same feature.
+9. **Which wiring path connects model/provider context-window information into retrieval** (§30): extending `Enforcer.TurnInput` (changes the Enforcer's contract, lets retrieval itself be model-aware) versus a post-assembly trim step between the Enforcer and the existing `RequestCapacity` check (no Enforcer contract change, but retrieval stays model-blind and a second pass re-does work the first already did). Both satisfy the new spec's plain requirements; neither is clearly mandated by it.
 
 ---
 
@@ -482,4 +487,225 @@ Cross-referenced against the canonical plan's own Phase 0 "Required work" list (
 
 **All eight Phase 0 "Required work" items and every §17 checklist category have a corresponding section above.** No destructive migration was found anywhere in the current codebase. No legacy `lore` auto-conversion to Roleplay scope was performed by this audit (none exists to perform — Type and scope are already independent today, `lore` is a Type value, not a scope value). No roleplay `Add to Card` behavior was altered. No chunk constant was replaced. Companion deletion was traced, not altered.
 
-**Phase 0 Completion Gate assessment:** the canonical plan's gate requires "the audit report exists, every affected code path is accounted for, the current archiver is diagrammed from transcript selection through Pending filing, the companion deletion path is documented, and no destructive migration remains unexplained." This report satisfies all four conditions as written above.
+**Phase 0 Completion Gate assessment (original pass):** the canonical plan's gate requires "the audit report exists, every affected code path is accounted for, the current archiver is diagrammed from transcript selection through Pending filing, the companion deletion path is documented, and no destructive migration remains unexplained." This report satisfies all four conditions as written above.
+
+---
+
+## 21. Addendum: `memory_retrieval_and_analysis_ui_copy.md` — Scope of This Extension
+
+The newly-added canonical document specifies exact wording and behavior for controls that do not exist in the app today: **Use Model-Aware Limits**, **Maximum Memories Per Response**, **Maximum Memory Context**, **Memory Priority**, **Memory Match Strictness**, the **Current Retrieval Limits** read-only status area, and a per-endpoint/model **Context Window Override** — plus a revision of the existing **Conversation Amount Per Request** archiver-chunking control's exact token targets (Small ≈4,000 / Standard ≈8,000 / Large ≈16,000 / Custom, superseding the placeholder framing in the original counterplan's Phase 0 audit, §16 above).
+
+Sections 22-28 below trace, for each item the follow-up instruction named, exactly where the current code already does something relevant, where it does nothing at all, and where two currently-separate subsystems will need to be connected. **No control described in the new document is implemented here.** Where this addendum recommends an implementation path, that recommendation is deferred to Phase 1+ exactly like every recommendation in §1-§19 above.
+
+---
+
+## 22. Every Current Cap on How Many Memories Can Be Retrieved for One Response
+
+**Where it exists:** `RetrievalPolicy.kt` — `DEFAULT_TOP_K = 8`, `MIN_TOP_K = 1`, `MAX_TOP_K = 64` (lines 36-45). `RetrievalPolicy.boundTopK(raw)` bounds a `top_k` value read from the stored `retrieval_policy.policy_json` row; `Enforcer.assembleTurn` reads `policy.topK` (parsed via this bound) and passes it to `Librarian.search`, which caps the ranked pool at `topK` (`Librarian.rank`/`rankLexical`, `.take(topK)`) after `RetrievalBackfill.select` walks the pool consuming survivors until `topK` are kept, the pool is exhausted, or the scan cap (`topK + RetrievalBackfill.SCAN_MARGIN(64)`) is reached.
+
+**What it currently does:** A single count cap, **8 by default**, shared by every enabled pool (General, Companion, Roleplay-eligible scopes) together — there is no separate per-pool count. The bound (1-64) exists only to reject corrupt/malformed stored policy data (doc comment, `RetrievalPolicy.kt` lines 31-34: "no UI writes these values and the defaults are unchanged... a user can only notice them if a stored policy row is malformed").
+
+**How it relates to the new spec:** This is exactly the mechanism `Maximum Memories Per Response` needs to become user-facing — the bound, the default, and the enforcement point already exist; only a settings UI that writes `retrieval_policy.policy_json.top_k` (or an equivalent new field) does not.
+
+**Can it be neutralized/extended without a DB migration?** No migration needed — `retrieval_policy` is a JSON blob column (`retrieval_policy.policy_json TEXT NOT NULL`) already capable of holding a new field with no schema change; `RetrievalPolicy.boundTopK` already has the exact bounding logic a new "Maximum Memories Per Response" field needs.
+
+**Recommended path (not Phase 0):** Expose `top_k` through the new UI, reusing `RetrievalPolicy.boundTopK`; decide whether the single shared cap is retained as the sum-across-pools limit or split into independent per-pool maxima (the new spec's wording — "the maximum number of relevant memories that can be included with one AI response" — reads as one combined cap, consistent with the current single-`topK` architecture; **Memory Priority**, §24 below, is the mechanism that governs how that one shared cap is divided between pools, not a second cap).
+
+**Tests needed:** see §28.
+
+---
+
+## 23. Every Current Token or Character Limit Applied to Retrieved Memory
+
+**Where it exists:** `PromptAssembler.DEFAULT_CHAR_BUDGET = 6000` (**characters**, not tokens). `RetrievalPolicy.MIN_CHAR_BUDGET = 500`, `MAX_CHAR_BUDGET = 60_000` bound a `memory_char_budget` value from the same `retrieval_policy.policy_json` row (`RetrievalPolicy.boundCharBudget`). In `Enforcer.assembleTurn`, `policy.charBudget` is **shared** across lore notes, directly-fired card entries, and retrieved memories together (lines 373-381, 407 in the earlier trace): lore notes and directly-fired cards charge first, memories absorb whatever remains (`memoryAvailable = (policy.charBudget - loreChars - directChars).coerceAtLeast(0)`).
+
+**What it currently does:** One shared, **character-counted** (not token-counted) budget across three different kinds of injected content, with retrieved memories getting whatever is left after lore/cards. `PromptAssembler.memoryCost(m)` (title + content + handling + never-assume line lengths) is the atomic unit charged per memory; a memory that doesn't fit is skipped whole (never truncated), and `RetrievalBackfill` backfills from the ranked pool so a skipped memory's slot goes to the next-best candidate rather than silently shrinking the result.
+
+**How it relates to the new spec:** `Maximum Memory Context` is described as token-based ("the maximum amount of retrieved memory... in tokens" is implied by parity with `Maximum Memories Per Response` and the archiver's own token-based `Conversation Amount Per Request`, §3 of the new spec). The current budget is **characters**. The new spec's rule 7 ("add memories until the count or token maximum is reached, whichever occurs first") already matches the current code's dual-limit shape (`topK` **and** `charBudget` both gate the backfill walk today) — only the **unit** (chars → tokens) and the **exclusivity** (today the memory budget is *shared* with lore/cards, not a dedicated memory-only maximum) differ.
+
+**Can it be neutralized/extended without a DB migration?** No migration needed — same `retrieval_policy.policy_json` blob; `IncludeTextPolicy.estimateTokens` (`preferences/includes/IncludeTextPolicy.kt` line 48) is an existing, already-used-elsewhere chars-to-tokens estimator (ASCII/non-ASCII aware) that could be reused for a token-based memory budget without inventing a second estimation heuristic.
+
+**Recommended path:** Convert `PromptAssembler`'s memory-specific budget accounting to tokens (via `IncludeTextPolicy.estimateTokens` or an equivalent), and decide whether the new `Maximum Memory Context` field governs memories exclusively (a dedicated sub-budget, separate from lore/card accounting) or continues to share the same pool — the new spec's wording ("the maximum amount of retrieved memory that can be included," "leave more room for the current conversation") describes memory content specifically and does not mention lore/cards, suggesting a dedicated memory-only budget is the closer reading, but this is a product decision, not something this audit resolves (see §27's unresolved-decision note).
+
+**Tests needed:** see §28.
+
+---
+
+## 24. Current Semantic-Match Threshold and Whether It Is Configurable
+
+**Where it exists:** `Librarian.kt` line 57 — `private const val MIN_SIMILARITY = 0.30f`, a hard-coded cosine-similarity floor applied in `Librarian.rank` (called from `searchCore`, line 231: `rank(queryVec, ..., weights, topK, MIN_SIMILARITY)`). This is the **only** relevance floor applied to ordinary chat retrieval. It is distinct from the two other cosine thresholds already documented in the original audit's §7/§11-adjacent code: `PossibleMatchFinder.SEMANTIC_COSINE_THRESHOLD = 0.80f` (duplicate/update detection, unrelated to chat retrieval) and `enforcer.NearDuplicate.COSINE_THRESHOLD = 0.85f` (memory-vs-lore-note suppression, also unrelated to the relevance gate itself).
+
+**What it currently does:** Every candidate below 0.30 cosine similarity to the query is excluded from ranking entirely (`if (sim < minSimilarity) return@mapNotNull null`, `Librarian.kt` line 154) before scope boosts, importance, or recency are applied — i.e., the floor is applied first, exactly as canonical plan §7.3 requires ("a relevance floor is applied before importance"). The lexical fallback path (`rankLexical`, used only when the vector index is incomplete or no model is installed) has a **different** relevance gate — `hits == 0` (zero whole-token overlap) rather than a cosine value — because it has no similarity score to threshold.
+
+**Is it configurable today?** **No.** `MIN_SIMILARITY` is a `private const val` inside `Librarian`, not read from `retrieval_policy.policy_json`, not bounded by `RetrievalPolicy.kt` (which bounds `top_k`, `memory_char_budget`, and the three ranking weights, but has no similarity-threshold field at all), and not exposed in any settings UI. There is exactly one fixed threshold used for every user, every conversation, every memory pool.
+
+**How it relates to the new spec:** `Memory Match Strictness` (Strict / Balanced / Broad) requires **three** distinct thresholds where **one** fixed threshold exists today. The new spec explicitly frames `0.30` conceptually as roughly the "Balanced" tier's "normal relevance threshold" (spec: "Balanced uses the normal relevance threshold") — i.e., the existing hard-coded 0.30 is a reasonable candidate default for the middle tier, with Strict needing a higher floor and Broad a lower one. The spec's rule "the ordinary UI does not expose an unexplained raw decimal threshold" means whatever values Strict/Balanced/Broad map to must be chosen behind the three labeled options, not surfaced as a raw number — consistent with how `MIN_SIMILARITY` is invisible today (just not adjustable).
+
+**Can it be neutralized/extended without a DB migration?** No migration needed — `MIN_SIMILARITY` is pure application code; adding a `match_strictness` (or equivalent numeric threshold) field to the existing `retrieval_policy.policy_json` blob, bounded by a new `RetrievalPolicy.boundMatchThreshold`-equivalent function, requires no schema change.
+
+**Recommended path:** Add a bounded threshold field to `RetrievalPolicy`/`retrieval_policy.policy_json` (three fixed values behind the Strict/Balanced/Broad labels, or a bounded custom range if the owner later wants finer control — the current spec only asks for three labeled tiers); thread it into `Librarian.rank`'s `minSimilarity` parameter (already present and already accepts a caller-supplied value — `searchCore` currently hard-codes `MIN_SIMILARITY` at its one call site, so this is a narrow, already-parameterized change) in place of the constant. Exact threshold values for Strict/Broad are evaluation work (consistent with the original counterplan's Phase 3 "do not finalize... until the harness produces evidence" instruction, applied here to a threshold rather than a chunk size) — not a Phase 0/1 decision.
+
+**Tests needed:** see §28.
+
+---
+
+## 25. How General and Companion Memories Currently Compete for Retrieval Space
+
+**Where it exists:** `Librarian.retrievalBoost` (lines 91-99, 116-131) — a fixed, non-configurable **scope-specificity ladder**, applied as an additive score boost after the similarity/importance/recency blend: `campaign` +0.12, `rp_character` +0.10, `world` +0.08, `project` +0.06, **`companion` +0.04**, `real_life` +0.02, **`global` +0.0**. A doc comment (lines 85-88) states the design intent explicitly: this is "a soft nudge among comparably relevant entries, never a hard sort tier... even the maximum stacked boost (~0.26) cannot let a weakly-relevant specific entry beat a strongly-relevant broader one... the `MIN_SIMILARITY` floor still gates everything."
+
+**What it currently does:** General memories (`real_life` +0.02, `global` +0.0) and Companion memories (`companion` +0.04) are ranked into **one shared pool**, competing for the **same** `topK` count cap and the **same** shared `charBudget` (§22, §23) — there is no reserved/protected capacity for either pool. The only asymmetry is the small, fixed +0.04-vs-+0.02/0.0 scope boost, which the code's own comment says is deliberately too small to let a merely-present Companion memory outrank a more relevant General one, or vice versa — it is a tie-breaker among near-equally-relevant candidates, not a competition-resolution mechanism.
+
+**How it relates to the new spec:** `Memory Priority` (Balanced / General Memories First / Companion Memories First) requires a **user-selectable** mechanism to let one pool win when both have relevant results competing for limited space, while still (per the spec's own rules) letting "unused capacity from one pool... be used by another enabled pool." **Nothing like this exists today** — the fixed scope-boost ladder is a single always-on ordering nudge, not a pool-priority selector, and it treats Companion as just one tier among seven scope values (behind campaign/rp_character/world), not as one side of a two-pool balance against General.
+
+**Can it be neutralized/extended without a DB migration?** No migration needed — `retrievalBoost` is pure application code inside `Librarian`; adding a `memory_priority` field to `retrieval_policy.policy_json` and consuming it inside (or alongside) `retrievalBoost`/the backfill walk requires no schema change.
+
+**Recommended path:** This likely needs new logic beyond a boost tweak, since "Balanced... without allowing one pool to consume all limited context before the other is considered" and "unused capacity... may spill over" describe **budget allocation**, not ranking order — closer in shape to the companion-protected-capacity mechanism the original counterplan's Phase 5 already calls for (original audit §7: "a tested protected capacity for relevant companion memories... unused protected capacity may spill over"). Recommend building **one** mechanism that serves both the counterplan's "protected companion capacity" requirement and this spec's "Memory Priority" control, rather than two overlapping systems — a genuine design question for whoever scopes Phase 5, flagged here rather than decided.
+
+**Tests needed:** see §28.
+
+---
+
+## 26. Whether Several Memories Can Be Retrieved at Once
+
+**Confirmed yes, already.** `RetrievalBackfill.select` (§7 of the original audit, `enforcer/RetrievalBackfill.kt`) walks a ranked candidate pool keeping up to `topK` (default 8, §22 above) survivors, backfilling past cooldown/near-duplicate/budget rejections so a filtered-out candidate frees its slot for the next-ranked one rather than shrinking the result. This is not new territory opened by the follow-up instruction — it restates and cross-references original-audit §7's finding that retrieval is **already** multi-memory, not hardcoded to one General and one Companion memory. No further action needed for this item beyond this cross-reference.
+
+---
+
+## 27. Where Retrieved Memories Are Inserted Into the Final Model Request
+
+**Where it exists:** `ChatActivity.buildFrozenRegularRequest` (traced in detail for this addendum; the original audit's §7 covered `PromptAssembler`'s internal section ordering but not this outer message-list assembly). The system-message list is built in this fixed order, one `ChatMessage(role = ChatRole.System, ...)` per stage:
+
+1. Companion persona + chat system instructions (`effectiveSystemMessage`, lines 7983-7997).
+2. Model Rules injection, when `apply_model_rules` is on (lines 7999-8024).
+3. Memory assembly — the Enforcer's full output (retrieved memories, Instruction-memory rules, user lore notes, fired card entries; §7/§27 above), when `memory_enabled` is on (lines 8074-8115).
+4. Lore-book matches (classic lorebook tier, separate from the Enforcer's own lore-note handling; lines 8117-8123).
+5. Conversation-summary injection, when the summarizer is active (lines 8125-8129).
+6. **Then**, and only then, the actual conversation history / transcript / current user input (`resolveImagePartsForSend(requestMessages, requestIncludes)`, line 8135) — everything above is system messages that precede every history/user/assistant turn in the final array sent to the model.
+
+**How it relates to the new spec:** Retrieval Behavior rule 9-10 ("keep fixed app safety, developer instructions, and fixed companion identity above retrieved memory context... insert retrieved memory before the conversation transcript") is **already satisfied** by this ordering — persona/system content is stage 1, memory is stage 3, and every stage precedes the transcript at stage 6. No gap found here; this section exists to give the follow-up instruction's question a direct, cited answer rather than to report a problem.
+
+---
+
+## 28. How the App Currently Determines Model Context Windows
+
+This is the largest cluster of new findings in this addendum, spanning several of the follow-up instruction's bullets together because they are all facets of the same two currently-disconnected subsystems.
+
+### 28a. The two subsystems, and why they don't talk to each other today
+
+- **Subsystem A — memory retrieval budgeting** (`RetrievalPolicy`, `PromptAssembler`, `Librarian`, all traced in §22-§25): entirely **character**-based, entirely **model-blind**. Nothing in this subsystem reads the selected model, the selected endpoint, or any context-window value. `Enforcer.TurnInput.modelTag` (`enforcer/Enforcer.kt` line 109) is passed in but is used only for the card-retrieval/companion-name lookup path — never for a context-window decision.
+- **Subsystem B — whole-request capacity checking** (`util/RequestCapacity.kt`, invoked from `ChatActivity` lines 6511-6600, §28c below): **token**-estimated (approximate, via `IncludeTextPolicy.estimateTokens`), **model-aware** (reads `apiEndpointObject.contextWindowTokens`), but runs **after** the entire request — including whatever Subsystem A already retrieved — has been fully assembled into a `FrozenChatPayload`. It can only **Send / Block / Warn**; it has no mechanism to feed a "please retrieve less" signal back into Subsystem A.
+
+**This is the central wiring gap the new spec's "Use Model-Aware Limits" control needs to close**: today, a verified or manual context-window value exists (Subsystem B) but cannot influence how much memory gets retrieved in the first place (Subsystem A); it can only block or warn about the fully-assembled result after the fact.
+
+### 28b. Verified/reported context-window metadata: none ingested from any provider
+
+Full-text search across `providers/` (`ProviderEndpointInfo.kt`, `ProviderEndpointsParser.kt` — the OpenRouter/Choose-Provider discovery code) and the endpoint preference layer found **no** ingestion of a provider-reported context-length/context-window field from any API (`context_length`, `contextLength`, `context_window`, `contextWindow`, `max_context`, `maxContextTokens` — zero matches in the provider-discovery files). `ProviderEndpointInfo.kt` captures **pricing** per token (for the Choose Provider discovery chart) but nothing about context size. **No provider integration in the app today reports verified context-window metadata into any stored value.** The new spec's "(Reported)" vs "(Manual)" distinction in `Current Retrieval Limits` therefore has, today, no "(Reported)" data source at all — only the manual path (§28c) exists.
+
+### 28c. The existing manual Context Window Override — already substantially built
+
+`ApiEndpointObject.kt` lines 68-74:
+```
+var contextWindowTokens: Int? = null   // null = unknown, never blocks Send
+var contextWindowModelId: String = ""  // exact model id this value belongs to
+```
+Editable in `ApiEndpointEditorActivity.kt` (field `field_context_window`, lines 246, 360-361, 576-580) and the endpoint quick-edit `EditApiEndpointDialogFragment.kt` (lines 53-54, 71-74, 145, 185-190, 280-284) — a plain user-typed token count, per endpoint profile, **tied to a specific model id** so a stale value from a previously-selected model does not silently apply after a model switch (`endpoint.contextWindowModelId == endpoint.model` / `== selectedModel` checks at both the editor and the consuming site).
+
+**This already is, functionally, most of the new spec's `Context Window Override` control** — "accepts a user-entered token count," "a manual value overrides... until cleared," "leaving the field blank... leaves the model context Unknown" (an absent/zero `contextWindowTokens` already resolves to `null`, which `ModelContextCapacity.decide` already treats as "never blocks Send," i.e. Unknown) are all already true today. What's new relative to the spec is exposing this value under the `Memory Retrieval` section too (the spec: "may also be linked from Memory Retrieval") and — see §28a — actually using it to influence retrieval, not only the post-hoc whole-request check.
+
+### 28d. Whether reported metadata can be absent, stale, or wrong
+
+- **Absent:** yes, the common case — `contextWindowTokens` defaults to `null`, and `ModelContextCapacity.decide` treats `null` (or `<= 0`) as `Send` unconditionally (line 357: `contextWindow?.takeIf { it > 0 } ?: return ModelContextDecision.Send`) — i.e., **unknown context never blocks or warns today**, consistent with the new spec's "missing or unknown context information does not authorize an invented fallback."
+- **Stale:** guarded against for the one stale case the current code models — a manual value entered for a previously-selected model is prevented from silently applying to a newly-selected model via the `contextWindowModelId` match check (§28c). There is no other staleness concern today because there is no "reported" data source (§28b) that could go stale independently of user action.
+- **Wrong:** no validation beyond a plain integer field — a user-mistyped value is accepted as-is and used exactly like a correct one; nothing in the current code cross-checks a manual value against anything.
+
+### 28e. Whether the app currently reduces request content automatically
+
+**No.** Traced in full at `ChatActivity.kt` lines 6511-6658: `buildFrozenRegularRequest` assembles the **complete** request (system prompts, Model Rules, full memory retrieval, lore, summary, full history) with no awareness of context window at any point in that assembly. Only afterward does `RequestCapacity.measure` + `ModelContextCapacity.decide` evaluate the finished payload against `contextWindowTokens`, producing exactly one of:
+- `Send` — nothing shown, request proceeds as assembled.
+- `Block` — a hard, non-dismissable-except-OK dialog (`showRequestHardBlock`, `request_context_exceeded_title/body`); **the request is not sent, and nothing is trimmed** — the user must manually change something (shorten the message, switch models, adjust settings) and retry.
+- `WarnRange` / `WarnApproximate` — a dialog with **"Send Anyway"** or **"Cancel"** (`showRequestWarning`, lines 6645-6658); choosing "Send Anyway" sends the **unmodified** over-budget payload; choosing "Cancel" sends nothing. **No automatic reduction occurs in either branch.**
+
+This confirms the new spec's rule that model-aware behavior may only ever *reduce the selected memory limits proactively before assembly* (when Use Model-Aware Limits is On) — there is no precedent in the current code for the app silently cutting content on the user's behalf; every existing context-capacity outcome is either fully automatic pass-through (`Send`), a full stop requiring the user to act (`Block`), or an explicit choice (`Send Anyway`/`Cancel`). A future "Use Model-Aware Limits: On" implementation that proactively shrinks the memory count/token maximum **before** assembly would be a new category of behavior — automatic, silent (from the request-sending perspective) reduction — that today's design has deliberately avoided everywhere else in the request pipeline; the new spec's requirement to "show the reported or manual context limit and any reduction it applies" (rather than reducing silently) is consistent with that existing design posture and should guide the Phase 1+ implementation.
+
+---
+
+## 29. Every Place a New Memory Retrieval Setting Would Need Storage, Backup, Restore, Export, or UI Support
+
+Three storage tiers already exist in the app, each with different backup coverage — a new Memory Retrieval setting's storage location determines which of these it inherits:
+
+| Tier | Example of existing use | Backed up today? |
+|---|---|---|
+| **`retrieval_policy` table** (inside the encrypted `companion_memory.db`, one JSON blob row) | `top_k`, `memory_char_budget`, `{similarity, importance, recency}` weights (all read via `RetrievalPolicy.kt`) | **Yes** — `MemoryStoreData.retrievalPolicyJson` (`MemoryData.kt` line 617) is part of the whole-store shape `MemorySeedCodec.parse`/`serialize` already round-trips (original audit §17); rides every memory-database backup/restore/seed-import automatically. |
+| **Per-chat settings file** (`settings.<chatId>`, plain `SharedPreferences`-backed, one file per chat) | `memory_enabled`, `memory_excluded`, `apply_model_rules` (original audit §9-§11) | Survives chat rename (via `PerChatSettingKeys.ALL`, original audit §9) and travels with the chat's own portable backup/export path (`preferences/backup/portable/*`, not traced in depth in this pass) — **not** part of the memory-database backup at all; a new per-chat retrieval setting would need its key added to `PerChatSettingKeys.ALL` (already an enforced, test-checked registry per that file's own doc comment) but needs no `MemoryStore` migration. |
+| **Global app `SharedPreferences`** (`Preferences.getGlobalBoolean`/`getGlobalString`, device-wide, not per-chat, not in the encrypted memory database) | `default_memory_enabled` (app-wide default for the per-chat toggle) | **No memory-backup coverage found** — `default_memory_enabled` appears only in `MemoryControlsActivity.kt` (UI) and `Preferences.kt` (storage); it is not referenced by `MemoryExporter.kt` or `MemorySeedCodec.kt`. This is a real gap for *any* global app setting, not new to this addendum, but directly relevant: **`Use Model-Aware Limits`, `Maximum Memories Per Response`, `Maximum Memory Context`, `Memory Priority`, and `Memory Match Strictness` read, in the new spec's wording, as global/device-level settings** (no per-chat framing anywhere in the new document, unlike `memory_enabled`), which would put them in this least-backed-up tier by default unless deliberately placed in `retrieval_policy` instead. |
+| **Per-endpoint profile fields** (`ApiEndpointObject`, via `ApiEndpointPreferences`) | `contextWindowTokens`, `contextWindowModelId` (§28c) — the existing Context Window Override | Endpoint profiles are not part of `MemoryStoreData` either; their backup path was not traced in this pass (outside the memory system's own scope) — flagged as a place to verify before Phase 1 ships a Memory-Retrieval-linked view of this field, since the spec explicitly says the control "may also be linked from Memory Retrieval." |
+
+**Recommendation (not a decision — a placement question for whoever scopes Phase 1's storage):** given every new control in the new spec's §1 is global/device-scoped and several already have a natural, already-backed-up home in `retrieval_policy.policy_json` (which already stores conceptually identical settings — `top_k`, a char/token budget, ranking weights), placing `Use Model-Aware Limits`, `Maximum Memories Per Response`, `Maximum Memory Context`, `Memory Priority`, and `Memory Match Strictness` there (extending `RetrievalPolicy.kt`'s bounding functions with matching new ones) would give them backup/restore/export coverage for free and keep one settings shape instead of three. This is flagged as a recommendation, not chosen — placement is an implementation detail Phase 1 should confirm, not something Phase 0 decides.
+
+**UI touchpoints identified (existing screens that would need new sections, none altered in this pass):** `MemoryControlsActivity.kt` (already hosts `default_memory_enabled` and other device-wide memory defaults — the closest existing precedent for a global "Memory Retrieval" section) and/or `AdvancedMemorySettingsActivity.kt` (already hosts Archivist/analysis-side settings including per-chat-adjacent `getArchivistMaxSuggestions`/`getArchivistMinImportance`/etc. — the closest existing precedent for the `Conversation Amount Per Request` chunk-size revision). Neither screen currently has any retrieval-limit or match-strictness control; both are named here only as the most structurally similar existing screens, not as a placement decision.
+
+---
+
+## 30. How the Existing Selected Model and Provider Information Reaches the Retrieval Layer
+
+**Today: it does not**, beyond one unused string. Traced explicitly for this addendum:
+
+- `ChatActivity` knows the selected model (`selectedModel: String`) and the selected endpoint (`apiEndpointObject: ApiEndpointObject?`, carrying `contextWindowTokens`/`contextWindowModelId`) at the point it calls `buildFrozenRegularRequest`.
+- `buildFrozenRegularRequest` passes `modelTag = selectedModel` into `Enforcer.TurnInput` (§28a) — but **not** the endpoint object, and not any context-window value.
+- `Enforcer.assembleTurn` never reads `input.modelTag` for anything context-window-related (confirmed by full-text trace of `Enforcer.kt` — `modelTag` is read only where the Archivist/retrieval-diagnostics code paths use a model tag as an embedding-index cache key, an unrelated concern).
+- The context-window value (`apiEndpointObject.contextWindowTokens`) is read for the **first and only time** back in `ChatActivity`, **after** `buildFrozenRegularRequest` already returned a fully-assembled payload (§28e) — i.e., by the time any context-window information is consulted, retrieval has already happened with none of it.
+
+**How this relates to the new spec:** implementing `Use Model-Aware Limits` requires threading model/endpoint context-window information **into** the retrieval call, not just consulting it afterward. Two structurally different paths would satisfy this, presented as options rather than a choice made here:
+1. **Extend `Enforcer.TurnInput`** with a context-window value (and the `Use Model-Aware Limits` on/off state) so `Enforcer.assembleTurn` can compute an effective `topK`/`charBudget` (or token budget, per §23) *before* calling `Librarian.search` — the more thorough approach, but changes the Enforcer's public contract and requires `ChatActivity` to resolve the effective context window (reported-or-manual-or-unknown) *before* calling it, reordering today's "assemble first, check capacity after" flow specifically for the memory stage.
+2. **Leave `Enforcer` unchanged and add a Model-Aware reduction step between memory assembly and the final `RequestCapacity` check** — re-run or post-trim the memory system message specifically when the whole-request check would otherwise warn/block, using the already-known context window at that later point. Simpler to wire (no `Enforcer` contract change) but means memory retrieval itself stays model-blind and a second pass has to un-pick what the first pass already assembled.
+
+Neither is chosen here; this is exactly the kind of architecture question the original audit's Unresolved Decisions section (§20) exists to surface rather than resolve.
+
+---
+
+## 31. Tests Required for the New Controls
+
+None of the following exist today (there is no existing test suite for any of these controls, since none of them exist in application code yet). Recommended coverage, organized by control:
+
+**Use Model-Aware Limits — On vs Off:**
+- On, verified/reported context available (once a reporting source exists, §28b) → memory limits reduce only when the assembled request would not fit; reduction is visible (selected vs effective values both shown, per spec §"Current Retrieval Limits").
+- On, no context available (Unknown) → **no** reduction applied, no invented fallback value used, status area shows `Unknown`, and the user's selected limits are used exactly as if the toggle were Off for that turn (spec: "missing or unknown context information does not authorize an invented fallback for live memory retrieval").
+- On, manual override present → status area shows `(Manual)` and the manual value is used as the effective limit source, taking precedence over any reported value (spec: "a manual value overrides reported metadata until cleared").
+- Off → selected limits are used unconditionally regardless of any known/reported/manual context value; no reduction, ever, even when the assembled request would clearly exceed a known context window (matches spec: "a request may fail... but this remains the user's choice").
+
+**Reported / manual / unknown context — resolution order:**
+- Manual set + reported available → manual wins (once a reporting source exists).
+- Manual blank + reported available → reported value used.
+- Manual blank + no reported source → Unknown (today's actual state for every provider, per §28b).
+- Model switched after a manual value was set for a different model → the existing `contextWindowModelId` mismatch guard continues to degrade to Unknown, not a stale carried-over number (regression test against `ApiEndpointEditorActivity`/`EditApiEndpointDialogFragment`'s existing behavior, §28c).
+
+**Maximum Memories Per Response (count limit):**
+- Retrieval never exceeds the selected count regardless of how many eligible/relevant memories exist.
+- A count lower than the number of eligible relevant memories does not pad with irrelevant ones to reach the count (spec: "This is a maximum, not a required count").
+- Interaction with the token/char maximum: whichever limit is hit first stops further additions (spec rule 7; extends the existing dual-limit shape already covered by `RetrievalBackfillTest`/`LibrarianRankingTest`'s current topK-only coverage).
+
+**Maximum Memory Context (token limit):**
+- Token estimation for the memory block matches whatever estimator is chosen (reuse-`IncludeTextPolicy.estimateTokens` regression test, §23) within its documented approximation.
+- A memory that doesn't fit remaining budget is skipped whole, never truncated (extends existing `PromptAssemblerTest`/`RetrievalBackfillTest` coverage of today's char-based equivalent).
+
+**Memory Priority (Balanced / General First / Companion First):**
+- Balanced: with both pools enabled and more relevant results than fit, neither pool is starved to zero when both have relevant candidates (spec: "without allowing one pool to consume all limited context before the other is considered").
+- General First / Companion First: the named pool's relevant results are seated before the other pool's when they compete for the last available slots/tokens.
+- Priority never seats an irrelevant memory (below Match Strictness) merely because its pool has priority (spec: "priority never makes an irrelevant memory eligible").
+- Unused capacity from a low-priority (or disabled) pool is still available to the other enabled pool (spec: "unused capacity from one pool may be used by another enabled pool") — regression-relevant since today's shared-budget behavior (§25) already does this by default and must not regress once priority is added.
+
+**Memory Match Strictness (Strict / Balanced / Broad):**
+- Each tier's threshold is applied as a hard floor before ranking/importance/scope-boost, exactly like today's single `MIN_SIMILARITY` floor (extends `LibrarianRankingTest`/`LibrarianSearchCoreTest`'s existing floor-ordering coverage, §24, to three values instead of one).
+- Strict excludes candidates Balanced would include; Broad includes candidates Balanced would exclude — basic monotonicity across the three tiers.
+- The lexical (no-embedding-model) fallback path's zero-hits gate is not accidentally bypassed or double-gated when a strictness tier is layered on top of it (today's `rankLexical` has its own independent relevance gate, §24 — a new strictness setting must not silently apply a cosine-shaped threshold to a path that has no cosine score).
+
+**Conversation Amount Per Request (revised token targets, §3 of the new spec — analysis chunking, not live retrieval):**
+- Small/Standard/Large resolve to approximately 4,000/8,000/16,000 transcript tokens respectively (once implemented on top of the original audit's §16 token-estimation gap — today's `ArchivistBatchPlanner` is character-based with no token awareness at all, so this is new work, not a variant of an existing test).
+- Auto resolves using verified/manual limits when available and degrades safely (not to the retired 200,000-character ceiling, which the new spec explicitly says "is not retained as a fallback") when they are not.
+- Whole messages remain preserved (regression test against the existing `ArchivistBatchPlannerTest` row-atom guarantee, original audit §16).
+
+---
+
+## Addendum Coverage Note
+
+Every bullet in the follow-up instruction that added `Memory System/memory_retrieval_and_analysis_ui_copy.md` to scope is addressed above: retrieval count cap (§22), token/char limit on retrieved memory (§23), semantic-match threshold and its configurability (§24), General/Companion competition for retrieval space (§25), multi-memory retrieval confirmation (§26), prompt-insertion point (§27), model-context-window determination including verified-provider-metadata coverage, manual-override support, and absent/stale/wrong metadata handling (§28), automatic content reduction (§28e), storage/backup/restore/export/UI touchpoints (§29), how model/provider information reaches the retrieval layer today (§30), and the required test matrix (§31). No control described in the new document was implemented, no schema was changed, and no product decision was made — three additional genuine open questions raised specifically by this addendum are recorded in §20 (items 7-9) alongside the original six. This extends, and does not replace, the original Phase 0 Completion Gate assessment above: the audit report continues to exist, every code path the new instruction named is accounted for, and no destructive migration was introduced by this pass either.
