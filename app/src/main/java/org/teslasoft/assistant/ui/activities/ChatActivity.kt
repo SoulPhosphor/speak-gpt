@@ -265,7 +265,6 @@ import io.ktor.http.ContentType
 import io.ktor.http.content.TextContent
 import io.ktor.http.isSuccess
 import io.ktor.util.AttributeKey
-import io.ktor.utils.io.readUTF8Line
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -5144,22 +5143,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 } else if (response.call.attributes.contains(responseLifecycleRecorderAttribute)) {
                                     val recorder = response.call.attributes[responseLifecycleRecorderAttribute]
                                     try {
-                                        // Receive the observer's split copy ONCE. A second
-                                        // bodyAsChannel() on the same call throws
-                                        // DoubleReceiveException, and Ktor's receive failure
-                                        // path cancels the ORIGIN response context — killing
-                                        // the live generation stream this copy was split from.
+                                        // Receive the observer's split copy ONCE (a second
+                                        // bodyAsChannel() throws and cancels the origin,
+                                        // killing the live stream) and drain it to end of
+                                        // stream — stopping early stalls Ktor's splitter
+                                        // and freezes the visible reply after ~4 KB; see
+                                        // consumeObservedStream.
                                         val observedChannel = response.bodyAsChannel()
-                                        while (true) {
-                                            val line = observedChannel.readUTF8Line() ?: break
-                                            val reported = ReportedProviderParser.fromResponseLine(line)
-                                            if (reported != null) {
-                                                // Response-derived only. Never
-                                                // substitute the configured or
-                                                // requested provider here.
-                                                recorder.noteActualModelProvider(reported)
-                                                break
-                                            }
+                                        ReportedProviderParser.consumeObservedStream(observedChannel) { reported ->
+                                            // Response-derived only. Never substitute the
+                                            // configured or requested provider here.
+                                            recorder.noteActualModelProvider(reported)
                                         }
                                     } finally {
                                         recorder.finishProviderObservation()

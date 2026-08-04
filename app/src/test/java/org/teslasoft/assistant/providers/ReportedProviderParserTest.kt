@@ -16,8 +16,14 @@
 
 package org.teslasoft.assistant.providers
 
+import io.ktor.utils.io.ByteChannel
+import io.ktor.utils.io.close
+import io.ktor.utils.io.writeStringUtf8
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReportedProviderParserTest {
@@ -58,5 +64,46 @@ class ReportedProviderParserTest {
         assertNull(ReportedProviderParser.fromResponseLine("data: [DONE]"))
         assertNull(ReportedProviderParser.fromResponseLine(": OPENROUTER PROCESSING"))
         assertNull(ReportedProviderParser.fromResponseLine("data: {broken"))
+    }
+
+    // The observed copy of a generation stream must be read through to its
+    // end even after the provider is found: stopping early stalls Ktor's
+    // channel splitter and freezes the live reply the copy was split from.
+    @Test fun consumesObservedStreamToEndAfterFindingProvider() = runBlocking {
+        val channel = ByteChannel(autoFlush = true)
+        launch {
+            channel.writeStringUtf8("data: {\"id\":\"gen-1\",\"provider\":\"Open Inference\",\"choices\":[]}\n")
+            repeat(200) {
+                channel.writeStringUtf8("data: {\"id\":\"gen-1\",\"choices\":[{\"delta\":{\"content\":\"${"x".repeat(400)}\"}}]}\n")
+            }
+            channel.writeStringUtf8("data: [DONE]\n")
+            channel.close()
+        }
+        val providers = mutableListOf<String>()
+        ReportedProviderParser.consumeObservedStream(channel) { providers.add(it) }
+        assertEquals(listOf("Open Inference"), providers)
+        assertTrue(channel.isClosedForRead)
+        assertEquals(0, channel.availableForRead)
+    }
+
+    @Test fun reportsOnlyFirstProviderSeenInObservedStream() = runBlocking {
+        val channel = ByteChannel(autoFlush = true)
+        channel.writeStringUtf8("data: {\"provider\":\"First\",\"choices\":[]}\n")
+        channel.writeStringUtf8("data: {\"provider\":\"Second\",\"choices\":[]}\n")
+        channel.close()
+        val providers = mutableListOf<String>()
+        ReportedProviderParser.consumeObservedStream(channel) { providers.add(it) }
+        assertEquals(listOf("First"), providers)
+    }
+
+    @Test fun consumesObservedStreamFullyWhenNoProviderIsReported() = runBlocking {
+        val channel = ByteChannel(autoFlush = true)
+        channel.writeStringUtf8("data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n")
+        channel.writeStringUtf8("data: [DONE]\n")
+        channel.close()
+        val providers = mutableListOf<String>()
+        ReportedProviderParser.consumeObservedStream(channel) { providers.add(it) }
+        assertTrue(providers.isEmpty())
+        assertTrue(channel.isClosedForRead)
     }
 }
