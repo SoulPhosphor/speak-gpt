@@ -1,8 +1,8 @@
 # Memory Systems Canonical Plan: Owner-Approved Rules Only
 
-**Revision 14, 2026-08-04**
+**Revision 15, 2026-08-04**
 
-This is the active memory-system plan. It deliberately records only direct owner decisions, verified implementation facts, and clearly labeled open questions. An agent may not turn an implementation accident, an older document, or its own recommendation into product approval.
+This is the active memory-system plan. It records direct owner decisions, verified implementation facts, and clearly labeled open questions. An agent may not turn an implementation accident, an older document, or its own recommendation into product approval.
 
 ## 1. Authority rules
 
@@ -11,7 +11,7 @@ This is the active memory-system plan. It deliberately records only direct owner
 3. Green CI proves that code compiled and tests passed. It does not prove that the UI or behavior was approved on-device.
 4. Models, embeddings, computer agents, and auditors may propose. They never directly mutate authoritative memories.
 5. No implementation agent may invent user-facing fields, labels, controls, layouts, destinations, retention rules, or action meanings.
-6. When the owner has not approved something, stop at that boundary. Do not choose for her and then report the choice afterward.
+6. When the owner has not approved something, stop at that boundary. Do not choose for her and report the choice afterward.
 
 ## 2. Memory shape: no titles, ever
 
@@ -47,7 +47,7 @@ Consequences:
 
 Any current title control or title-dependent path is an implementation defect to audit. It is not an approved feature.
 
-## 3. A saved memory does not remember its source chat
+## 3. A saved memory does not remember its source chat or import route
 
 A saved or Pending memory must not store or expose the conversation it came from as part of the memory.
 
@@ -64,19 +64,21 @@ Do not attach to a memory or proposal:
 - a link back to the originating conversation;
 - any equivalent durable conversation lineage.
 
-A memory may identify the creation route in a general way when needed, for example:
+A computer-imported suggestion must not retain or display a special computer origin after it enters Pending. It is the same kind of suggestion as one produced by API Memory Assistant.
 
-- entered by the user;
-- proposed by API Memory Assistant;
-- proposed through Computer Memory Review;
-- proposed by Memory Auditor;
-- imported.
+Do not add to the memory or its visible UI:
 
-That is not permission to retain the source conversation.
+- a computer-imported badge;
+- an API-created badge;
+- a route/source label;
+- a special Information row;
+- a separate filter or Pending category;
+- computer-specific fields;
+- different actions or styling.
 
-Temporary analysis bookkeeping may exist outside the memory record only as needed to prevent duplicate processing, recover an interrupted run, or complete an outstanding computer-review package. It must not become memory provenance, must not be displayed as the memory's origin chat, and must not be retained longer merely because the memory was approved.
+Temporary run/import bookkeeping may exist outside the memory record only as needed to prevent duplicate processing, recover interrupted work, and make import replay-safe. It must not become memory provenance, must not appear in the memory UI, and must not survive merely because the memory was approved.
 
-The exact contents of the Information control are not fully approved. It must not show or retain a source chat. No agent may fill the gap by inventing an evidence-lineage system.
+The exact contents of the Information control are not fully approved. It must not show a source chat or distinguish API suggestions from computer-imported suggestions. No agent may fill the gap by inventing an evidence-lineage or source-label system.
 
 ## 4. Existing placement behavior is preserved, not newly approved
 
@@ -166,6 +168,8 @@ Pending remains inside the existing Memory Browser and uses the normal memory-ca
 
 Every card shows the complete memory text. It does not show a title.
 
+The card is identical whether the suggestion arrived from API Memory Assistant or Computer Memory Review.
+
 ### No Possible Match
 
 - top-left caution position empty;
@@ -192,6 +196,8 @@ All icon-only controls have accessibility labels.
 ## 8. Binding Possible Match Review UI
 
 Review is a dedicated full-page screen.
+
+It is identical for API Memory Assistant suggestions and computer-imported suggestions.
 
 - proposed memory first, full width, no checkbox, Information at top-right;
 - proposed memory scrolls normally and is not pinned;
@@ -252,30 +258,45 @@ Therefore:
 - do not extend the ordinary UI into roleplay by guessing where those actions belong;
 - record what exists during device testing and return for one focused decision when necessary.
 
-## 10. One phone-side authority for every proposal route
+## 10. API and computer suggestions are the same Pending memory
 
-The creation route changes only the general route label. It does not grant different safety or mutation authority.
+A computer-imported Associative suggestion is not a separate memory type, source presentation, or review product.
 
-Associative proposals from:
+After strict import validation, it becomes the exact same Pending memory object and uses the exact same behavior as a suggestion produced by API Memory Assistant.
 
-- API Memory Assistant;
-- Computer Memory Review;
-- Memory Auditor using an API model;
-- Memory Auditor using computer export/import;
+It must have the same:
 
-all go to **Memories → Pending** and use the same phone-side validation, Possible Match, Review, and resolution behavior.
+- record shape;
+- memory text and approved non-title metadata;
+- Pending destination;
+- card layout;
+- Information control behavior;
+- Possible Match detection;
+- loading and retry behavior;
+- Review screen;
+- selected-match behavior;
+- editor;
+- actions;
+- confirmation behavior;
+- acceptance transaction;
+- final Active/Archived/Superseded/Deleted lifecycle.
 
-Lorebook Memory proposals go to **Lorebooks → Pending** and remain individually approved before entering a Lorebook.
+It must not have:
 
-No proposal route:
+- a different card;
+- a source/import badge;
+- a special label;
+- a different Information panel;
+- a separate Pending category;
+- a different editor;
+- extra or missing actions;
+- different styling;
+- different Possible Match rules;
+- different final memory behavior.
 
-- creates titles;
-- stores the source chat in the memory;
-- writes directly to Active;
-- creates a private second Pending queue;
-- bypasses current-phone duplicate checks;
-- mutates authored Lorebook/card content automatically;
-- treats a computer-generated similarity score as authority.
+The import mechanism may retain invisible replay/session state outside the memory long enough to complete or safely resume import. That state does not become part of the memory and does not alter the visible product.
+
+Lorebook Memory proposals use the existing Lorebooks → Pending system. The same principle applies there: after validation, a computer-imported Lorebook suggestion must look and behave exactly like an API-created Lorebook suggestion, not a computer-specific variant.
 
 ## 11. Embedding and memory-system distinction
 
@@ -290,7 +311,7 @@ The conversation archive is source material for analysis. It is not itself a pro
 
 The exact Archive This Chat and Memory Participation behavior remains governed by existing approved work. This document does not add new source-chat retention to memories.
 
-## 12. Computer Memory Review: approved direction, not invented internals
+## 12. Computer Memory Review
 
 The intended complete loop is:
 
@@ -298,7 +319,8 @@ The intended complete loop is:
 Phone exports a review package
   → a file-capable computer AI proposes memories
   → phone validates the returned file
-  → proposals enter the correct existing Pending area
+  → the valid proposal is filed exactly as API Memory Assistant would file it
+  → the ordinary existing Pending UI appears
   → user decides
 ```
 
@@ -306,11 +328,13 @@ The computer never edits the phone database directly.
 
 The package must not contain credentials, databases, recovery secrets, embedding vectors, model files, or unrelated private data.
 
-Associative proposal records contain the memory text and only approved non-title metadata. They contain no title and do not require durable source-chat lineage.
+Associative proposal records contain the same memory text and approved non-title metadata expected from API Memory Assistant. They do not contain a title or durable source-chat lineage.
 
-The exact package schema, temporary processing identifiers, privacy disclosure, and transfer workflow must be approved when that work unit begins. Older plans do not grant automatic approval to conversation UID, transcript lineage, quote hashes, source excerpts, or permanent evidence tables.
+The computer result may have temporary import identifiers required to validate and replay the file safely. Those identifiers remain import bookkeeping and are removed or ignored when the ordinary Pending memory is created.
 
-Import must be strict, replay-safe, and proposal-only. It must route through the same phone Pending and Possible Match rules.
+The exact package schema, privacy disclosure, and transfer workflow must be approved when that work unit begins. Older plans do not grant automatic approval to conversation UID, transcript lineage, quote hashes, source excerpts, permanent evidence tables, special origin labels, or computer-specific Pending UI.
+
+Import must be strict, replay-safe, and proposal-only. After validation it must call the same filing path used by API Memory Assistant, not a parallel computer filing path that merely tries to imitate it.
 
 ## 13. Memory Auditor: approved direction, not direct mutation
 
@@ -356,16 +380,16 @@ Classify each as:
 
 Do not remove schema columns blindly. Remove title from product behavior and define a safe migration only after the audit.
 
-### B. Audit source-chat retention
+### B. Audit source-chat and import-route leakage
 
-Find every place a memory or proposal stores or displays chat name, chat ID, conversation UID, transcript row, turn reference, excerpt, quote hash, or equivalent lineage.
+Find every place a memory or proposal stores or displays chat name, chat ID, conversation UID, transcript row, turn reference, excerpt, quote hash, API/computer route, import badge, or equivalent lineage/source distinction.
 
 Separate:
 
-- temporary run/package bookkeeping required to avoid data loss or duplicate processing;
-- durable memory/proposal provenance that violates the no-source-chat rule.
+- temporary run/import bookkeeping required to avoid data loss or duplicate processing;
+- durable memory/proposal data or visible UI that violates the no-source-chat and identical-UI rules.
 
-Do not expand lineage. Report the current behavior and the narrow removal/migration needed.
+Do not expand lineage or source presentation. Report the current behavior and the narrow removal/migration needed.
 
 ### C. Device-test the merged Step 1.5 UI
 
@@ -392,11 +416,11 @@ After the audits and device findings:
 3. build export;
 4. prove real computer-agent output;
 5. build strict import;
-6. route proposals through existing Pending;
+6. route each valid imported proposal through the exact API filing path and ordinary Pending UI;
 7. build Memory Auditor routes;
 8. prove complete end-to-end loops.
 
-No unit may invent titles, permanent source-chat lineage, new scope architecture, or a second memory authority.
+No unit may invent titles, permanent source-chat lineage, route-specific memory UI, new scope architecture, or a second memory authority.
 
 ## 16. Explicitly forbidden claims
 
@@ -413,7 +437,9 @@ Future agents must not claim:
 - token overlap is semantic matching;
 - Save & Replace preserves old memories;
 - Superseded memories may enter chats;
-- a computer route may bypass phone Pending and validation;
+- a computer-imported memory needs a special card, badge, source label, category, editor, or action set;
+- a computer route may use a parallel filing or Pending system as long as it looks similar;
+- import origin belongs in the memory's visible Information panel;
 - an agent may resolve an open design question because implementation is easier that way.
 
 ## 17. Completion standard
