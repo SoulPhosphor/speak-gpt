@@ -1,6 +1,6 @@
 # Speak-GPT Memory Systems: Canonical Recovery Plan
 
-**Revision 17, 2026-08-04**
+**Revision 18, 2026-08-04**
 
 This is the active memory-system plan. It records the owner's decisions and a small implementation baseline. Existing code is evidence of what was built, not proof that the behavior was approved.
 
@@ -32,7 +32,7 @@ Any field or mechanism that does not materially help those goals must not become
 An Associative Memory contains:
 
 - the memory text;
-- one user-defined Type;
+- zero or one user-defined Type;
 - separate optional tags;
 - an invisible stable memory ID;
 - ordinary internal timestamps;
@@ -101,11 +101,11 @@ These are starter choices, not a permanent ontology. A user may create categorie
 
 ### 4.2 Type behavior
 
-- every Associative Memory has one selected Type;
-- the Memory Assistant suggests a Type only from the user's current Type list;
+- an Associative Memory may have zero or one selected Type;
+- the Memory Assistant normally suggests one Type, and may choose only from the user's current Type list;
 - the proposed Type is shown directly on the Pending card;
-- the user can change the Type before saving;
-- ordinary memory editing can change the Type;
+- the user can change or remove the Type before saving;
+- ordinary memory editing can change or remove the Type;
 - Type is available for human browsing and filtering;
 - Type does not determine whether a memory is true, important, or authoritative;
 - Type does not automatically change a memory into a special command or alter how the receiving model must obey it;
@@ -151,10 +151,10 @@ Deleting an ordinary Type:
 
 - never deletes a memory;
 - removes that Type assignment from associated memories;
-- leaves those memories visibly needing a replacement Type rather than silently guessing one;
-- refreshes their embeddings after a replacement is chosen.
+- leaves those memories as **No Type** rather than silently guessing a replacement;
+- refreshes their embeddings using the remaining memory text and tags.
 
-The exact UI for resolving memories temporarily missing a Type must be designed narrowly when this feature is implemented. No agent may silently assign a replacement category.
+No Type is a valid state. The user may assign another Type later.
 
 ### 4.5 Roleplay is the routing Type
 
@@ -165,15 +165,16 @@ The **Roleplay** starter Type has one special product function: it routes memori
 - normal chat retrieval and Possible Match do not cross between Roleplay and non-roleplay spaces;
 - API and computer-created Roleplay suggestions use the same Roleplay Pending area;
 - the visible Roleplay Type name may be renamed while its stable internal routing identity remains Roleplay;
-- the routing Type cannot be deleted while it is the active Roleplay partition key.
+- deleting or replacing the Roleplay routing Type is not decided by this document;
+- no deletion flow may silently move Roleplay memories into the non-roleplay tab or strip their separation.
 
-This is the only approved hard behavior attached to a Type.
+This is the only approved hard behavior attached to a Type. The exact delete/replacement flow for the routing Type must return to the owner as one focused decision.
 
 ## 5. Tags remain separate
 
 Tags are not Types.
 
-- one memory has one Type but may have multiple tags;
+- one memory has zero or one Type but may have multiple tags;
 - Types provide broad user-owned organization;
 - tags provide smaller cross-cutting words or themes;
 - tags do not determine Roleplay routing;
@@ -187,7 +188,7 @@ The exact tag-management UI is not redesigned by this document.
 The Memory Browser has a dedicated **Roleplay** tab and a separate non-roleplay tab.
 
 - all Roleplay Pending, Active, Archived, and Superseded memories belong in Roleplay;
-- all other Types belong in the non-roleplay tab;
+- all other Types and No Type belong in the non-roleplay tab;
 - the final label for the non-roleplay tab remains a user-facing wording decision;
 - searching, filtering, bulk actions, and Possible Match remain inside the selected tab;
 - the embedding search does not compare or retrieve across the Roleplay boundary.
@@ -212,7 +213,7 @@ Do not require permanent per-row pending, processed, excluded, or claimed states
 The on-device embedding model uses:
 
 - memory text;
-- the user-visible Type name as an optional soft clue;
+- the user-visible Type name as an optional soft clue when a Type is assigned;
 - tags only where the existing approved embedding design uses them without overpowering the text.
 
 It does not use:
@@ -270,7 +271,7 @@ The Pending screen shows all user-relevant data that will be saved. It must not 
 Every ordinary card shows:
 
 - complete memory text;
-- selected Type;
+- selected Type or No Type;
 - tags, when present;
 - all other approved visible fields that will be saved;
 - no title;
@@ -400,6 +401,7 @@ Future agents must not claim:
 - the starter Type list is permanently fixed;
 - Lore remains an Associative Memory Type;
 - users cannot create arbitrary Types;
+- every memory must have a Type;
 - a Type must control model obedience or truth;
 - tags and Types are the same system;
 - Roleplay belongs mixed with non-roleplay memory;
