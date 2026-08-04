@@ -1,6 +1,6 @@
 # Speak-GPT Memory Systems: Canonical Recovery Plan
 
-**Revision 20, 2026-08-04**
+**Revision 21, 2026-08-04**
 
 This is the active memory-system plan. It records the owner's decisions and a small implementation baseline. Existing code is evidence of what was built, not proof that the behavior was approved.
 
@@ -83,16 +83,18 @@ The app already has the scopes that identify roleplay memory. A memory is groupe
 
 This is a derived browser and retrieval grouping rule, not a fourth roleplay scope stored on the memory.
 
-All other existing scopes remain in the non-roleplay side unless the owner later changes a specific scope's meaning.
+All other existing scopes remain in the **General** side unless the owner later changes a specific scope's meaning.
 
-The Memory Browser has a dedicated **Roleplay** tab and a separate non-roleplay tab.
+The Memory Browser has two tabs:
+
+- **General**;
+- **Roleplay**.
 
 - Pending, Active, Archived, and Superseded memories with World, Roleplay Character, or Campaign scope appear in the Roleplay tab;
-- memories with other scopes appear in the non-roleplay tab;
+- memories with other scopes appear in the General tab;
 - API and computer-created suggestions use the same rule;
 - Type names and tags never decide which tab a memory belongs in;
-- changing a Type never moves a memory between Roleplay and non-roleplay;
-- the final label for the non-roleplay tab remains a user-facing wording decision.
+- changing a Type never moves a memory between General and Roleplay.
 
 ### 4.1 The Roleplay tab is a grouping, not a collapsed scope
 
@@ -161,22 +163,39 @@ However:
 
 ### 5.4 Type management in Memory Controls
 
-Memory Controls contains a **Memory Types** area showing the complete current Type list as ordinary list rows.
+Memory Controls contains a **Memory Types** area.
 
-The user can:
+At the top is one compact entry row:
 
-- add a Type;
-- rename a Type;
-- delete a Type.
+- **Label:** `Type`;
+- an empty text field;
+- **Button:** `Add`.
+
+Adding a Type happens directly on Memory Controls. It does not open a separate Add dialog or navigate away.
+
+Directly beneath the entry row is a bordered, scrollable box containing the complete Type list.
+
+- each Type appears as an ordinary list row;
+- tapping a row offers `Rename` and `Delete`;
+- labels, buttons, and dialog titles use Title Case.
+
+Renaming opens:
+
+- **Title:** `Rename Type`;
+- **Field Label:** `Type`;
+- the current name prefilled;
+- **Buttons:** `Cancel` and `Save`.
 
 Rename uses a stable internal Type ID so every associated memory reflects the new name without rewriting each memory relationship individually.
 
-Before deleting a Type, show:
+Deleting opens:
 
-> **Delete this type?**  
-> This will remove it from the associated memories.
+> **Delete This Type?**  
+> Used by {count} memories. This will remove the type from those memories. The memories will not be deleted.
 
-The dialog includes the number of associated memories. A local indexed count is inexpensive even for hundreds or thousands of memories.
+Use correct singular wording for one memory and plural wording for multiple memories.
+
+**Buttons:** `Cancel` and destructive `Delete`.
 
 Deleting a Type:
 
@@ -206,11 +225,15 @@ Importance is an optional user-controlled ranking aid, not part of the embedding
 
 ### 7.1 Memory Controls toggle
 
-Memory Controls contains one master toggle:
+Memory Controls contains one master toggle.
 
-**Use importance ratings**
+**Toggle Label:** `Use Importance Ratings`
 
-Recommended default: **Off**.
+**Subtext:**
+
+> Memories can be rated from 0 to 5. Completely neutral is 0. Higher importance may take precedence when multiple memories apply.
+
+**Recommended Default:** Off.
 
 When Off:
 
@@ -224,9 +247,11 @@ When On:
 
 - importance is visible and editable wherever the user reviews or edits a memory;
 - allowed values are **0 through 5**;
-- **0 is neutral / not rated**;
+- **0 is neutral**;
 - new API suggestions, computer-imported suggestions, and manually created memories start at 0;
 - existing stored values reappear.
+
+The visible neutral value is `0 · Neutral`.
 
 There is no separate “start all ratings at zero” toggle. Zero is simply the default and a valid permanent value.
 
@@ -250,7 +275,7 @@ When importance ratings are On:
 - importance may act only as a bounded secondary ordering signal among already relevant memories;
 - importance cannot make an irrelevant memory eligible;
 - 0 adds no boost;
-- higher values may gently prefer one relevant memory over another.
+- higher values may gently prefer one relevant memory over another when multiple memories apply.
 
 When importance ratings are Off, the importance contribution is exactly zero even though stored values remain.
 
@@ -286,7 +311,7 @@ It does not use:
 
 Retrieval rules:
 
-- derive the Roleplay or non-roleplay browser group from the memory's existing scope;
+- derive the General or Roleplay browser group from the memory's existing scope;
 - preserve the actual World, Roleplay Character, Campaign, or other scope and target boundaries during eligibility filtering;
 - retrieve Active memories only;
 - semantic relevance is the primary signal;
@@ -339,8 +364,8 @@ Every ordinary card shows:
 - complete memory text;
 - selected Type or No Type;
 - tags, when present;
-- its Roleplay/non-roleplay destination through the tab it appears in;
-- importance only when **Use importance ratings** is On;
+- its General/Roleplay destination through the tab it appears in;
+- importance only when **Use Importance Ratings** is On;
 - all other approved visible fields that will be saved;
 - no title.
 
@@ -457,7 +482,7 @@ Audit current code for every use of:
 - title bonuses;
 - source-chat lineage attached to memories;
 - permanent transcript processing states where one bookmark would suffice;
-- World, Roleplay Character, or Campaign memories appearing in the non-roleplay tab;
+- World, Roleplay Character, or Campaign memories appearing in the General tab;
 - API/computer origin shown in memory UI.
 
 For each item, report:
@@ -487,7 +512,7 @@ Future agents must not claim:
 - every memory must have a Type;
 - a Type must control model obedience or truth;
 - tags and Types are the same system;
-- World, Roleplay Character, or Campaign memories belong mixed into the non-roleplay tab;
+- World, Roleplay Character, or Campaign memories belong mixed into the General tab;
 - a computer-imported memory needs different UI;
 - every transcript row needs permanent processing states;
 - existing code retroactively proves approval.
