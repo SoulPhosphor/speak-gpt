@@ -120,51 +120,57 @@
                     android:text="@string/mem_comp_approve" />
             </LinearLayout>
 
-            <!-- ============ Memory participation ============ -->
+            <!-- ============ Memory Scope ============ -->
+            <!-- Title, then the general description, then the three type
+                 descriptions as subtext, then the full-width dropdown holding
+                 only the words (owner ruling: title-and-subtext above the
+                 control, never a hint underneath it). -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="24dp"
-                android:text="@string/mem_comp_participation_section"
+                android:text="@string/mem_comp_scope_section"
                 android:textColor="?attr/colorPrimary"
                 android:textSize="18sp"
                 android:textStyle="bold" />
 
-            <LinearLayout
-                android:id="@+id/row_participation"
+            <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingTop="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/mem_comp_participation_section"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <TextView
-                    android:id="@+id/text_participation_value"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:textColor="@color/text_subtitle"
-                    android:textSize="14sp" />
-            </LinearLayout>
+                android:paddingTop="6dp"
+                android:text="@string/mem_comp_scope_intro"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingTop="8dp"
-                android:text="@string/mem_comp_participation_hint"
+                android:paddingTop="10dp"
+                android:text="@string/mem_comp_scope_desc_isolated"
                 android:textColor="@color/text_subtitle"
                 android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="6dp"
+                android:text="@string/mem_comp_scope_desc_general"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="6dp"
+                android:text="@string/mem_comp_scope_desc_full"
+                android:textColor="@color/text_subtitle"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/dropdown_memory_scope"
+                style="@style/Widget.App.Dropdown.CanonicalValue"
+                android:layout_width="match_parent"
+                android:layout_marginTop="12dp" />
 
             <!-- ============ Memories (into the central browser, this companion) ============ -->
             <com.google.android.material.button.MaterialButton

@@ -40,6 +40,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CompanionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 
 /**
  * Phase 5 companion detail/edit page (app_adaptation_notes §Characters area).
@@ -72,8 +73,7 @@ class CompanionDetailActivity : FragmentActivity() {
     private var textName: TextView? = null
     private var draftContainer: LinearLayout? = null
     private var btnApprove: MaterialButton? = null
-    private var rowParticipation: LinearLayout? = null
-    private var textParticipationValue: TextView? = null
+    private var dropdownMemoryScope: TextView? = null
     private var btnMemories: MaterialButton? = null
     private var btnSave: MaterialButton? = null
     private var btnDelete: MaterialButton? = null
@@ -81,8 +81,13 @@ class CompanionDetailActivity : FragmentActivity() {
     // The loaded record; status drives the draft/approve section.
     private var record: CompanionRecord? = null
 
-    // full | global_only | none — the participation currently selected in the UI.
+    // full | global_only | none — the stored Memory Scope value currently
+    // selected in the UI (shown as Full / General / Isolated respectively).
     private var participation: String = "full"
+
+    // Dropdown order: Isolated, General, Full. The stored value for each sits
+    // in [scopeValues] at the same index; the label in [scopeLabels].
+    private val scopeValues = listOf("none", "global_only", "full")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -97,7 +102,7 @@ class CompanionDetailActivity : FragmentActivity() {
         applyTheme()
 
         btnBack?.setOnClickListener { finish() }
-        rowParticipation?.setOnClickListener { showParticipationPicker() }
+        dropdownMemoryScope?.setOnClickListener { showScopePicker() }
         btnApprove?.setOnClickListener { approve() }
         btnMemories?.setOnClickListener { openMemories() }
         btnSave?.setOnClickListener { save() }
@@ -112,8 +117,7 @@ class CompanionDetailActivity : FragmentActivity() {
         textName = findViewById(R.id.text_companion_name)
         draftContainer = findViewById(R.id.draft_container)
         btnApprove = findViewById(R.id.btn_approve)
-        rowParticipation = findViewById(R.id.row_participation)
-        textParticipationValue = findViewById(R.id.text_participation_value)
+        dropdownMemoryScope = findViewById(R.id.dropdown_memory_scope)
         btnMemories = findViewById(R.id.btn_memories)
         btnSave = findViewById(R.id.btn_save)
         btnDelete = findViewById(R.id.btn_delete)
@@ -141,40 +145,37 @@ class CompanionDetailActivity : FragmentActivity() {
     private fun bindRecord(c: CompanionRecord) {
         textName?.text = c.currentName
         participation = c.memoryParticipation
-        refreshParticipationRow()
+        refreshScopeValue()
 
         draftContainer?.visibility = if (c.status == "draft") View.VISIBLE else View.GONE
     }
 
-    /* ------------------------------ participation ------------------------------ */
+    /* ------------------------------ Memory Scope ------------------------------ */
 
-    private fun participationLabel(value: String): String = when (value) {
-        "global_only" -> getString(R.string.mem_comp_participation_global_only)
-        "none" -> getString(R.string.mem_comp_participation_none)
-        else -> getString(R.string.mem_comp_participation_full)
+    // Dropdown labels, in the same order as [scopeValues]: Isolated / General / Full.
+    private fun scopeLabels(): List<String> = listOf(
+        getString(R.string.mem_comp_scope_option_isolated),
+        getString(R.string.mem_comp_scope_option_general),
+        getString(R.string.mem_comp_scope_option_full)
+    )
+
+    private fun scopeLabel(value: String): String {
+        val index = scopeValues.indexOf(value).let { if (it < 0) scopeValues.indexOf("full") else it }
+        return scopeLabels()[index]
     }
 
-    private fun refreshParticipationRow() {
-        textParticipationValue?.text = participationLabel(participation)
+    private fun refreshScopeValue() {
+        dropdownMemoryScope?.text = scopeLabel(participation)
     }
 
-    private fun showParticipationPicker() {
-        val values = arrayOf("full", "global_only", "none")
-        val labels = arrayOf(
-            getString(R.string.mem_comp_participation_full),
-            getString(R.string.mem_comp_participation_global_only),
-            getString(R.string.mem_comp_participation_none)
-        )
-        val current = values.indexOf(participation).coerceAtLeast(0)
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.mem_comp_participation_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                participation = values[which]
-                refreshParticipationRow()
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
+    private fun showScopePicker() {
+        val anchor = dropdownMemoryScope ?: return
+        val labels = scopeLabels()
+        val selected = scopeValues.indexOf(participation).coerceAtLeast(0)
+        AppDropdown.show(anchor, labels, selected) { position ->
+            participation = scopeValues[position]
+            refreshScopeValue()
+        }
     }
 
     /* ------------------------------ actions ------------------------------ */

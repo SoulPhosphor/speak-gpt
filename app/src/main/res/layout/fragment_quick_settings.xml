@@ -389,13 +389,32 @@
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toBottomOf="@+id/row_chat_memory">
 
-                        <TextView
+                        <LinearLayout
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="@string/label_chat_memory_excluded"
-                            android:textColor="@color/text"
-                            android:textSize="15sp" />
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/label_chat_memory_excluded"
+                                android:textColor="@color/text"
+                                android:textSize="15sp" />
+
+                            <!-- Shown only when the active companion's Memory
+                                 Scope is Isolated, which forces this toggle off
+                                 and disabled (title-with-subtext, owner ruling). -->
+                            <TextView
+                                android:id="@+id/text_chat_excluded_unavailable"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:paddingTop="2dp"
+                                android:text="@string/label_chat_memory_excluded_unavailable"
+                                android:textColor="@color/text_subtitle"
+                                android:textSize="13sp"
+                                android:visibility="gone" />
+                        </LinearLayout>
 
                         <com.google.android.material.materialswitch.MaterialSwitch
                             android:id="@+id/switch_chat_excluded"

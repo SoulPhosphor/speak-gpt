@@ -1409,6 +1409,7 @@
     <string name="label_chat_memory_enabled">Use memory in this chat</string>
     <string name="label_chat_lorebooks_enabled">Use Lorebooks in this chat</string>
     <string name="label_chat_memory_excluded">Archive This Chat</string>
+    <string name="label_chat_memory_excluded_unavailable">Unavailable as memory archiving is turned off in the companion\'s profile.</string>
     <string name="memory_marker_pending">Memory: waiting for review</string>
     <string name="memory_marker_partial">Memory: partially archived</string>
     <string name="memory_marker_processed">Memory: archived</string>
@@ -2245,6 +2246,17 @@
     <string name="mem_comp_participation_section">Memory participation</string>
     <string name="mem_comp_participation_picker_title">Memory participation</string>
     <string name="mem_comp_participation_hint">Full: keeps this companion\'s own relationship history and global memory. Global only: a throwaway companion that keeps no relationship history, only shared facts. None: bypass the memory system entirely for this companion.</string>
+
+    <!-- Memory Scope selector (companion detail). The three descriptions are
+         subtext above the dropdown; the dropdown itself holds only the words. -->
+    <string name="mem_comp_scope_section">Memory Scope</string>
+    <string name="mem_comp_scope_intro">Controls what memories will be created after chatting with your companion.</string>
+    <string name="mem_comp_scope_desc_isolated">Isolated: No memories will be saved from this conversation.</string>
+    <string name="mem_comp_scope_desc_general">General: Memories about you and general preferences will be remembered, but the companion will not retain any memories about its experience with you.</string>
+    <string name="mem_comp_scope_desc_full">Full: When archiving, conversations will have both general memories about you saved as well as one specific to the companion. This ensures that the companion has a specific memory of your experience together.</string>
+    <string name="mem_comp_scope_option_isolated">Isolated</string>
+    <string name="mem_comp_scope_option_general">General</string>
+    <string name="mem_comp_scope_option_full">Full</string>
 
     <!-- Save -->
     <string name="mem_comp_save">Save</string>

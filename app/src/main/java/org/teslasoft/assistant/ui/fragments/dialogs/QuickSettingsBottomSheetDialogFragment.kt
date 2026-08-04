@@ -138,6 +138,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var btnSaveToProfile: MaterialButton? = null
     private var switchChatMemory: com.google.android.material.materialswitch.MaterialSwitch? = null
     private var switchChatExcluded: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var textChatExcludedUnavailable: TextView? = null
     // Per-chat lore books on/off, independent of the memory switch. QUICK
     // SETTINGS IS AUTHORITATIVE (owner ruling, July 10 2026): these two
     // switches decide what this chat injects; the global Memory engine picker
@@ -830,6 +831,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // transcripts so the Archivist's view matches immediately.
         switchChatMemory = view.findViewById(R.id.switch_chat_memory)
         switchChatExcluded = view.findViewById(R.id.switch_chat_excluded)
+        textChatExcludedUnavailable = view.findViewById(R.id.text_chat_excluded_unavailable)
         containerMemoryScene = view.findViewById(R.id.container_memory_scene)
         textChatWorld = view.findViewById(R.id.text_chat_world)
         textChatCampaign = view.findViewById(R.id.text_chat_campaign)
@@ -858,7 +860,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         switchChatLoreBooks?.setOnCheckedChangeListener { _, checked ->
             preferences?.setChatLoreBooksEnabled(checked)
         }
-        switchChatExcluded?.setOnCheckedChangeListener { _, archive ->
+        switchChatExcluded?.setOnCheckedChangeListener { btn, archive ->
+            // Isolated companions force this control off and disabled (below);
+            // a programmatic change on the disabled control must not persist.
+            if (!btn.isEnabled) return@setOnCheckedChangeListener
             val excluded = !archive
             preferences?.setChatExcludedFromMemory(excluded)
             val appContext = context?.applicationContext ?: return@setOnCheckedChangeListener
@@ -870,6 +875,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 } catch (_: Exception) { /* queue flip is best-effort; the pref alone already stops capture */ }
             }.start()
         }
+        applyCompanionMemoryScopeToArchiveToggle()
         setupMemorySceneRows()
         btnSaveToProfile = view.findViewById(R.id.btn_save_to_profile)
         textModel = view.findViewById(R.id.text_model)
@@ -1255,6 +1261,39 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
      * their own prompt layer at any tier. Follows the global "Automatically
      * Apply Model Rules" default (on); flipping it overrides for this chat.
      */
+    /**
+     * Isolated companions (Memory Scope = Isolated, stored 'none') never
+     * archive, so this chat's "Archive This Chat" toggle is forced off and
+     * disabled with a subtitle saying why. The companion's profile is the
+     * authority; the toggle only reflects it. The lookup is off the main
+     * thread; the default (enabled, no subtitle) holds until it returns and
+     * is re-applied every binding so a previous chat can't leave the
+     * disabled treatment behind.
+     */
+    private fun applyCompanionMemoryScopeToArchiveToggle() {
+        switchChatExcluded?.isEnabled = true
+        textChatExcludedUnavailable?.visibility = View.GONE
+        val personaId = preferences?.getPersonaId().orEmpty()
+        if (personaId.isBlank()) return
+        val appContext = context?.applicationContext ?: return
+        Thread {
+            val isolated = try {
+                MemoryStore.isProvisioned(appContext) &&
+                    MemoryStore.getInstance(appContext)
+                        .findCompanionByAppCharacterId(personaId)?.memoryParticipation == "none"
+            } catch (_: Exception) { false }
+            if (!isolated) return@Thread
+            switchChatExcluded?.post {
+                if (!isAdded) return@post
+                // Disable first so forcing it off can't persist through the
+                // listener (which returns early on a disabled control).
+                switchChatExcluded?.isEnabled = false
+                switchChatExcluded?.isChecked = false
+                textChatExcludedUnavailable?.visibility = View.VISIBLE
+            }
+        }.start()
+    }
+
     private fun setupModelRulesRow() {
         switchChatModelRules?.isChecked = preferences?.getChatApplyModelRules() ?: true
         switchChatModelRules?.setOnCheckedChangeListener { _, checked ->
