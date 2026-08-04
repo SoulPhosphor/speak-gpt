@@ -1,8 +1,8 @@
 # Speak-GPT Memory Systems: Canonical Recovery Plan
 
-**Revision 22, 2026-08-04**
+**Revision 23, 2026-08-04**
 
-This is the active memory-system plan. It records the owner's decisions, the required implementation order, and the completion gates for each phase. Existing code is evidence of what was built, not proof that the behavior was approved.
+This is the active memory-system plan. It records the owner's decisions, the required implementation order, the archiver contract, and the completion gates for each phase. Existing code is evidence of what was built, not proof that the behavior was approved.
 
 ## 1. Product Goal
 
@@ -11,15 +11,17 @@ The memory system should reduce work, not create a second job.
 It must:
 
 1. review new conversation material after the last successful bookmark;
-2. propose useful memories;
+2. propose useful memories and, when selected, Model Rules;
 3. check the existing database before filing duplicates or updates;
 4. show everything the user is approving directly in Pending for fast scanning;
 5. retrieve relevant approved memories during chats with the on-device embedding model;
-6. keep roleplay memory separate from non-roleplay memory.
+6. keep roleplay memory separate from non-roleplay memory;
+7. work reliably with ordinary, less-expensive models and provider limits rather than assuming the largest advertised context window;
+8. make analysis size, expected request count, and selected analysis purpose visible before a run.
 
 Any field or mechanism that does not materially help those goals must not become required product behavior.
 
-## 2. Authority Rules
+## 2. Authority and Reference Rules
 
 1. The owner's direct decisions control the product.
 2. Anything not approved remains open. An implementation agent may not choose it and report the choice afterward.
@@ -27,6 +29,11 @@ Any field or mechanism that does not materially help those goals must not become
 4. Models and embeddings may propose and search. They never directly approve, replace, supersede, archive, or delete memories.
 5. API analysis and computer-file analysis must create the same Pending memory experience.
 6. This roadmap is binding. Do not skip ahead, combine phases into an uncontrolled rewrite, or redesign unrelated memory systems.
+7. The archiver is **LangMem-inspired**, not a direct Python dependency. Adapt the useful architecture, prompts, schemas, evaluation methods, and separation of memory kinds to Speak-GPT's Kotlin, Android, SQLite, and local-embedding design.
+8. Mem0 is a secondary reference for additive-only extraction, exact deduplication before semantic comparison, and evaluation discipline.
+9. Speak-GPT remains the authority for storage, scope, Pending review, Possible Match, lifecycle, and human approval.
+10. Do not claim parity with another project's hosted product, benchmark, or proprietary implementation.
+11. If code or prompt text is copied rather than independently reproduced, preserve the source project's license and attribution requirements and record the exact source path and revision.
 
 ## Ordered Implementation Roadmap
 
@@ -41,6 +48,7 @@ This section is the required execution order. The detailed product rules later i
 - If a phase encounters a genuine product decision not answered here, stop only that decision path and return one focused question. Continue unrelated work within the approved phase.
 - At the end of every phase, record changed files, migrations, tests, unresolved items, and the exact commit.
 - Do not redesign Lorebooks, roleplay cards, VAD, Whisper, logging, provider routing, or unrelated app systems while implementing this plan.
+- Do not use a live user's paid API budget for broad prompt or chunk experiments without an explicit test run initiated by that user.
 
 ### Phase 0: Current-Code Audit and Migration Map
 
@@ -60,15 +68,36 @@ Required work:
    - API/computer origin distinctions;
    - roleplay-specific Pending actions;
    - scope and target eligibility.
-2. Identify the current database version and every upgrade path that touches the memory tables.
-3. Identify all backup, restore, seed, export, and import formats that contain affected fields.
-4. Identify tests that already protect memory behavior and gaps requiring new tests.
-5. Commit a concise audit report at `Memory System/memory_implementation_audit.md` containing:
+2. Trace the full current archiver path:
+   - conversation selection;
+   - bookmark and frozen range behavior;
+   - transcript formatting;
+   - character, message, and token limits;
+   - chunk boundaries and overlap;
+   - selected endpoint and model;
+   - system and user prompts;
+   - output-token allowance;
+   - structured-output support;
+   - JSON parsing and repair;
+   - finish-reason and truncation handling;
+   - retry behavior;
+   - partial filing behavior;
+   - duplicate handling;
+   - Model Rule extraction and destination;
+   - cancellation and process-death recovery.
+3. Identify every hard-coded archiver assumption, including the current 200,000-character request ceiling and any fixed output count.
+4. Identify the current database version and every upgrade path that touches the memory tables.
+5. Identify all backup, restore, seed, export, and import formats that contain affected fields.
+6. Identify tests that already protect memory and archiver behavior and gaps requiring new tests.
+7. Commit a concise audit report at `Memory System/memory_implementation_audit.md` containing:
    - current behavior;
    - approved target behavior;
    - safe migration approach;
    - files involved;
-   - risks and rollback notes.
+   - risks and rollback notes;
+   - current archiver request/response flow;
+   - current maximum raw input, estimated token use, and output reserve;
+   - every point where a failed chunk can create partial visible results.
 
 Restrictions:
 
@@ -76,8 +105,9 @@ Restrictions:
 - No destructive schema migration.
 - No automatic conversion of legacy `lore` into Roleplay scope.
 - Do not remove existing roleplay `Add to Card` behavior during the audit.
+- Do not replace the current chunk constant with another arbitrary “large enough” constant during the audit.
 
-**Completion Gate:** The audit report exists, every affected code path is accounted for, and no destructive migration remains unexplained.
+**Completion Gate:** The audit report exists, every affected code path is accounted for, the current archiver is diagrammed from transcript selection through Pending filing, and no destructive migration remains unexplained.
 
 ### Phase 1: Storage Compatibility and Database Migration
 
@@ -109,15 +139,17 @@ Required work:
    - if a legacy NOT NULL column temporarily requires a placeholder, it must remain internal and inert.
 9. Stop attaching source-chat identity to new Pending or saved memories. Existing legacy source fields remain inert until cleanup.
 10. Preserve current scope and target relationships, including multi-target joins.
-11. Add migration tests for:
+11. Add only the minimal short-lived run storage required by Section 8.10. Do not create a permanent provenance subsystem.
+12. Add migration tests for:
    - a fresh install;
    - an existing database with every legacy Type;
    - existing importance values;
    - No Type;
    - General and Roleplay scopes;
+   - interrupted temporary analysis state;
    - backup/restore compatibility.
 
-**Completion Gate:** Fresh and upgraded databases open successfully, no memory is lost, Types are user-owned in storage, importance supports 0, and titles/source lineage are behaviorally inert.
+**Completion Gate:** Fresh and upgraded databases open successfully, no memory is lost, Types are user-owned in storage, importance supports 0, titles/source lineage are behaviorally inert, and temporary run state cannot become permanent memory metadata.
 
 ### Phase 2: Memory Domain Services and Shared Filing Path
 
@@ -146,10 +178,128 @@ Required work:
    - manual creation where applicable.
 7. The canonical Pending object must contain the same approved fields regardless of origin.
 8. Do not expose API/computer origin in the memory object or visible card.
+9. Define separate validated candidate objects for:
+   - Associative Memory proposals;
+   - Model Rule proposals.
+10. Model Rules must not be disguised as Associative Memories, Types, or importance-rated facts.
+11. Audit the existing Model Rule storage, review, and application path before changing it. Preserve approved behavior and return a focused question if the visible review contract is not already defined.
 
-**Completion Gate:** Unit tests prove that all origins create the same Pending object, Type CRUD preserves memories, and scope grouping does not collapse target boundaries.
+**Completion Gate:** Unit tests prove that all origins create the same Pending memory object, Type CRUD preserves memories, scope grouping does not collapse target boundaries, and Model Rule proposals remain a separate validated output stream.
 
-### Phase 3: Embeddings, Retrieval, and Ranking
+### Phase 3: Archiver Evaluation Harness and Provisional Defaults
+
+**Status:** [ ] Not Started
+
+**Goal:** Test extraction quality, chunk sizes, schemas, and prompt profiles before choosing production defaults.
+
+Required work:
+
+1. Build a repeatable local test harness that can run sanitized or synthetic conversation fixtures without filing into the live memory database.
+2. Include fixtures for:
+   - dense product decisions;
+   - long casual conversation;
+   - changing facts and statuses;
+   - preferences;
+   - contradictions;
+   - projects and plans;
+   - roleplay worlds, characters, and campaigns;
+   - Model Rules;
+   - mixed Memories + Model Rules;
+   - conversations with almost nothing worth saving;
+   - malformed, fenced, truncated, and prose-wrapped JSON responses.
+3. Define expected facts and rules for each fixture without requiring identical model wording.
+4. Test at least:
+   - Broad, Balanced, and Conservative prompt profiles;
+   - Memories, Memories + Model Rules, and Model Rules Only;
+   - multiple token-based chunk targets;
+   - a lower-cost model and a stronger model where available;
+   - structured output and plain-JSON fallback where supported.
+5. Record:
+   - useful memories found;
+   - missed memories;
+   - invented or overinterpreted memories;
+   - duplicates;
+   - wrong scope or target;
+   - invalid or unknown Type suggestions;
+   - useful and noisy Model Rules;
+   - malformed and truncated responses;
+   - request count;
+   - input and output token estimates;
+   - latency;
+   - estimated cost where the provider exposes pricing.
+6. Preserve the current extraction prompt as a testable **Broad** candidate rather than deleting it before comparison.
+7. Do not finalize the token values behind Small, Standard, or Large until the harness produces evidence.
+8. Commit the fixture definitions, scoring method, and results summary under `Memory System/archiver_evaluation/`.
+
+Restrictions:
+
+- The harness does not write Active or Pending memories.
+- A model accepting a large context window is not evidence that large chunks extract reliably.
+- Do not choose defaults from one conversation or one model.
+- Do not treat exact wording mismatch as automatic failure when the same supported memory was captured accurately.
+
+**Completion Gate:** The harness can compare prompt profiles, modes, chunk sizes, and models; the provisional production defaults are documented with evidence; and failures are visible rather than collapsed into “no memories.”
+
+### Phase 4: Archiver Request, Chunking, Consolidation, and Run UI
+
+**Status:** [ ] Not Started
+
+**Goal:** Implement a resilient, user-visible analysis engine based on Section 8 and the evidence from Phase 3.
+
+Required work:
+
+1. Add the per-run **Analyze For** choices:
+   - Memories;
+   - Memories + Model Rules;
+   - Model Rules Only.
+2. Remember the previous choice for convenience without removing the per-run control.
+3. Add **Prompt Profile** choices:
+   - Balanced;
+   - Broad;
+   - Conservative;
+   - Custom.
+4. Preserve separate editable custom instructions for memory extraction and Model Rule extraction where both are used.
+5. Keep the response schema app-owned. Custom instructions may change what the model notices, but cannot replace the required output envelope or validation rules.
+6. Add **Conversation Amount Per Request** choices:
+   - Auto;
+   - Small;
+   - Standard;
+   - Large;
+   - Custom.
+7. Show before the run:
+   - selected message count;
+   - approximate transcript tokens;
+   - approximate request count;
+   - selected model's known context limit, when available;
+   - known provider request limit, when available;
+   - a clear notice when a conservative fallback is being used.
+8. Replace character-based chunking with the token-budget rules in Section 8.5.
+9. Preserve whole messages whenever possible. Handle one oversized message according to Section 8.6.
+10. Collect every chunk's validated candidates in temporary run storage before filing anything into visible Pending.
+11. Apply deterministic validation and exact deduplication first.
+12. Consolidate overlapping candidates across chunks using the bounded process in Section 8.8.
+13. Compare consolidated memory proposals with relevant existing memories and route candidates through Possible Match. The model may not directly mutate existing memories.
+14. Use provider-supported structured output where available and the resilient JSON fallback in Section 8.7 everywhere else.
+15. Distinguish truncation, malformed JSON, provider rejection, cancellation, and semantic no-result outcomes.
+16. Retry only under the bounded rules in Section 8.9.
+17. File the complete valid set through the Phase 2 canonical Pending path only after all required chunks and consolidation succeed.
+18. Leave the bookmark unchanged after failure, cancellation, or process death.
+19. Delete temporary run data after successful filing or explicit cancellation, subject to narrow interrupted-run recovery.
+20. Add tests for:
+   - each analysis mode;
+   - each prompt profile;
+   - each chunk choice;
+   - known and unknown model/provider limits;
+   - oversized single messages;
+   - structured output and JSON fallback;
+   - truncation and repair;
+   - process death;
+   - no partial visible filing;
+   - duplicate candidates across chunk boundaries.
+
+**Completion Gate:** The user can see and select the purpose and approximate size of an analysis run, lower-cost models can operate within conservative limits, malformed or truncated output cannot masquerade as no result, and a failed final chunk cannot leave a half-analysis in Pending.
+
+### Phase 5: Embeddings, Retrieval, and Ranking
 
 **Status:** [ ] Not Started
 
@@ -189,7 +339,7 @@ Required work:
 
 **Completion Gate:** Retrieval tests demonstrate relevant memory application, target isolation, and optional importance behavior without title/source influence.
 
-### Phase 4: Memory Controls UI
+### Phase 6: Memory Controls UI
 
 **Status:** [ ] Not Started
 
@@ -214,7 +364,7 @@ Required work:
 
 **Completion Gate:** The user can manage Types and toggle importance without data loss, and the screen matches the approved wording.
 
-### Phase 5: Pending Browser, General/Roleplay Tabs, and Fast Review
+### Phase 7: Pending Browser, General/Roleplay Tabs, and Fast Review
 
 **Status:** [ ] Not Started
 
@@ -252,11 +402,12 @@ Required work:
 11. Audit existing roleplay-specific `Add to Card` behavior before changing it:
    - do not remove it by implication;
    - if the new card layout conflicts with it, return one focused decision before altering that action.
-12. Add UI tests for both tabs, card variants, direct field visibility, and Accept All exclusions.
+12. Keep Model Rule review separate from ordinary memory cards unless an existing approved UI explicitly combines them.
+13. Add UI tests for both tabs, card variants, direct field visibility, and Accept All exclusions.
 
-**Completion Gate:** The user can scan and safely approve ordinary Pending memories, while conflict cards and roleplay-specific actions remain protected.
+**Completion Gate:** The user can scan and safely approve ordinary Pending memories, while conflict cards, Model Rules, and roleplay-specific actions remain protected.
 
-### Phase 6: Possible Match Review and Lifecycle Actions
+### Phase 8: Possible Match Review and Lifecycle Actions
 
 **Status:** [ ] Not Started
 
@@ -287,7 +438,7 @@ Required work:
 
 **Completion Gate:** Possible Match reliably surfaces database conflicts and every resolution is atomic, user-controlled, and correctly reflected in lifecycle state.
 
-### Phase 7: Conversation Bookmark, API Analysis, and Computer Import
+### Phase 9: Conversation Bookmark, API Analysis, and Computer Import
 
 **Status:** [ ] Not Started
 
@@ -300,17 +451,18 @@ Required work:
 3. Leave later messages for the next run.
 4. Advance the bookmark only after all valid suggestions from the frozen range are safely filed into Pending.
 5. Do not advance after failure, cancellation, or process death.
-6. Use short-lived run bookkeeping only for locking, retry safety, duplicate prevention, and interrupted-run recovery.
-7. Never copy the bookmark, chat ID, transcript row IDs, excerpts, or source timestamps into a memory.
+6. Use short-lived run bookkeeping only for locking, chunk status, retry safety, duplicate prevention, and interrupted-run recovery.
+7. Never copy the bookmark, chat ID, transcript row IDs, excerpts, source timestamps, run ID, chunk number, or candidate hash into a memory.
 8. API analysis and computer import both call the canonical Pending filing path from Phase 2.
 9. Strictly validate computer packages before filing.
 10. A valid imported suggestion receives no import badge, source label, special card, or separate review path.
 11. Keep Lorebook import and retrieval separate from Associative Memory. Do not merge the two systems while repairing this route.
-12. Add tests for retry, cancellation, process death, duplicate import, messages arriving during analysis, and identical API/computer results.
+12. Apply the same fixed candidate schemas and validation rules to imported packages where applicable.
+13. Add tests for retry, cancellation, process death, duplicate import, messages arriving during analysis, and identical API/computer results.
 
 **Completion Gate:** Analysis resumes from the correct bookmark, failures do not skip material, and API/computer suggestions become identical Pending memories.
 
-### Phase 8: Legacy Cleanup, Backup Compatibility, and Release Verification
+### Phase 10: Legacy Cleanup, Backup Compatibility, and Release Verification
 
 **Status:** [ ] Not Started
 
@@ -318,13 +470,16 @@ Required work:
 
 Required work:
 
-1. Re-audit legacy fields after Phases 1 through 7.
+1. Re-audit legacy fields after Phases 1 through 9.
 2. Remove obsolete reads and writes for:
    - titles;
    - fixed Type constants;
    - source-chat lineage;
    - API/computer presentation differences;
-   - transcript row processing states made unnecessary by the bookmark.
+   - transcript row processing states made unnecessary by the bookmark;
+   - the 200,000-character archiver ceiling;
+   - obsolete archiver schemas and prompt fields;
+   - partial filing from incomplete analysis runs.
 3. Remove or migrate physical database columns only when:
    - no approved behavior depends on them;
    - upgrade and rollback behavior is documented;
@@ -336,11 +491,18 @@ Required work:
    - tags;
    - importance values even while disabled;
    - scope and target relationships;
-   - lifecycle and supersession history.
-6. Run focused unit, migration, instrumentation, and UI tests.
+   - lifecycle and supersession history;
+   - user prompt profiles and custom instructions;
+   - archiver chunk preference and last Analyze For choice where intended;
+   - no abandoned temporary run state as permanent memory data.
+6. Run focused unit, migration, instrumentation, parser, archiver, and UI tests.
 7. Run Android Checks and require green CI.
 8. Exercise the full device path:
-   - analyze a chat;
+   - analyze a short chat;
+   - analyze a long dense chat with a lower-cost model;
+   - inspect estimated tokens and request count;
+   - run Memories, Memories + Model Rules, and Model Rules Only;
+   - interrupt and resume an analysis;
    - review ordinary Pending memories;
    - use Accept All;
    - resolve a Possible Match;
@@ -350,7 +512,7 @@ Required work:
    - export and restore.
 9. Update the phase statuses and commit the final implementation report.
 
-**Completion Gate:** CI is green, the owner has exercised the relevant device paths, backups are safe, and no legacy field influences the revised product.
+**Completion Gate:** CI is green, the owner has exercised the relevant device paths, long-conversation analysis is bounded and visible, backups are safe, and no legacy field or archiver assumption influences the revised product.
 
 ### Decisions That Do Not Block the Early Phases
 
@@ -359,7 +521,11 @@ These may remain open until the phase that touches them:
 - the exact standalone tag-management screen;
 - whether AI-assigned importance is ever offered as a future optional feature;
 - additional editable placement fields in Save & Edit Old Memory;
-- any change to roleplay-specific Add to Card behavior.
+- any change to roleplay-specific Add to Card behavior;
+- the exact Small, Standard, and Large token targets until Phase 3 evaluation;
+- the exact UI component used for the three Analyze For choices;
+- the final wording of Balanced, Broad, and Conservative prompts until Phase 3 evaluation;
+- additional visible Model Rule review fields if the existing implementation does not already settle them.
 
 An implementation agent must not silently decide these.
 
@@ -376,7 +542,7 @@ An Associative Memory contains:
 - its lifecycle state;
 - only the minimum existing placement information needed to prevent unrelated contexts from bleeding together.
 
-It does not contain a title or durable source-chat history.
+It does not contain a title, a durable source-chat history, a run ID, a chunk ID, or evidence excerpts.
 
 ### 3.1 No Titles
 
@@ -390,9 +556,9 @@ No Associative Memory has a separate title.
 - retrieval has no title bonus;
 - any legacy title column is compatibility baggage only and must not affect product behavior.
 
-### 3.2 No Source-Chat Memory
+### 3.2 No Source-Chat Memory or Provenance Feature
 
-A saved or Pending memory does not remember which chat produced it.
+A saved or Pending memory does not remember which chat, request, or chunk produced it.
 
 Do not attach or expose:
 
@@ -403,9 +569,13 @@ Do not attach or expose:
 - source timestamps or excerpts;
 - quote hashes;
 - links back to the source conversation;
-- durable source-evidence tables derived from the chat.
+- durable source-evidence tables derived from the chat;
+- analysis run IDs;
+- chunk numbers;
+- candidate hashes;
+- API/computer origin.
 
-Temporary run bookkeeping may exist outside the memory only long enough to finish or safely recover analysis/import. It does not become part of the memory.
+Do not build a “provenance” subsystem merely because temporary retry bookkeeping is useful. Minimal run bookkeeping may exist outside the memory only long enough to finish or safely recover analysis/import. It does not become part of the candidate shown to the user or the saved memory.
 
 ## 4. Existing Scopes Determine Roleplay Grouping
 
@@ -472,6 +642,7 @@ These are starter choices, not a permanent ontology. A user may create categorie
 
 - an Associative Memory may have zero or one selected Type;
 - the Memory Assistant normally suggests one Type and may choose only from the user's current Type list;
+- an absent or invalid AI Type suggestion becomes No Type rather than causing the supported memory text to be discarded;
 - the proposed Type is shown directly on the Pending card;
 - the user can change or remove the Type before saving;
 - ordinary memory editing can change or remove the Type;
@@ -617,20 +788,259 @@ When importance ratings are Off, the importance contribution is exactly zero eve
 
 Importance does not affect exact duplicate detection or Possible Match candidate generation.
 
-## 8. Conversation Review Uses a Bookmark
+## 8. Archiver Request, Chunking, and Consolidation Contract
+
+The archiver is a bounded extraction pipeline, not one giant summarization request.
+
+It is primarily inspired by LangMem's storage-independent memory manager concepts: customizable instructions, structured schemas, insertion-only operation, existing-memory awareness, and separate extraction/consolidation stages. Mem0 is a secondary reference for additive-only extraction and exact deduplication before more expensive semantic work.
+
+Speak-GPT does not import the Python packages into Android. It reproduces the relevant logic in the existing app architecture.
+
+### 8.1 Analysis Is Additive and Human-Reviewed
+
+The model may propose new memory candidates and Model Rules.
+
+It may not automatically:
+
+- update an existing memory;
+- delete an existing memory;
+- archive an existing memory;
+- supersede an existing memory;
+- replace an existing memory;
+- approve its own proposal.
+
+A proposal that may conflict with an existing memory is routed through Possible Match. The human chooses what happens.
+
+### 8.2 Analyze For
+
+Each analysis pass offers:
+
+- **Memories**;
+- **Memories + Model Rules**;
+- **Model Rules Only**.
+
+The app remembers the previous choice but keeps it visible and changeable for every pass.
+
+Model Rules are procedural behavior instructions. They remain separate from Associative Memories and do not receive a Memory Type or importance rating merely because they came from the same conversation.
+
+### 8.3 Prompt Profiles
+
+Each analysis pass offers:
+
+- **Balanced**;
+- **Broad**;
+- **Conservative**;
+- **Custom**.
+
+The exact built-in prompt wording is selected only after Phase 3 evaluation.
+
+Intent:
+
+- **Balanced:** capture useful durable information without aggressively interpreting every pattern.
+- **Broad:** capture more implicit observations and possible long-term context. The current “wise friend” style prompt remains available as a Broad test candidate.
+- **Conservative:** favor information directly supported by the conversation and avoid personality, motive, diagnosis, or recurring-pattern inference unless explicitly stated.
+- **Custom:** allow the user to edit the extraction instructions.
+
+Custom instructions control what the model looks for. They do not control the JSON envelope, required field names, validation, retry policy, bookmark behavior, lifecycle, or permission to mutate the database.
+
+Where both Memories and Model Rules are selected, the app may use separate instructions for each output stream while keeping one user-visible Prompt Profile selection.
+
+### 8.4 Conversation Amount Per Request
+
+Each analysis pass offers:
+
+- **Auto**;
+- **Small**;
+- **Standard**;
+- **Large**;
+- **Custom**.
+
+Suggested user-facing explanation:
+
+> Controls how much conversation text is sent in each AI request. Smaller amounts work with more models and providers but require more requests.
+
+The exact token values for Small, Standard, and Large are chosen from Phase 3 evidence. They are not hard-coded from intuition.
+
+Before starting, show:
+
+- selected message count;
+- approximate transcript tokens;
+- approximate request count;
+- known model context limit, when available;
+- known provider request limit, when available;
+- whether a conservative fallback is being used.
+
+Message count may be displayed for human understanding, but token budget governs chunking.
+
+### 8.5 Token Budget
+
+For each request, the maximum transcript budget is the minimum of:
+
+- the user's selected chunk target;
+- the selected model's known context limit;
+- the provider's known request or context limit;
+- any documented endpoint-profile limit.
+
+Then subtract:
+
+- system and developer prompt estimate;
+- output-token reservation;
+- tool or structured-output overhead;
+- a conservative safety margin.
+
+Do not use the model's advertised context limit as the target chunk size.
+
+When a model or provider limit is unknown:
+
+- use a conservative fallback derived from Phase 3 testing;
+- say that the limit is unknown;
+- do not assume a million-token model or headline specification is fully available through the selected provider.
+
+Do not retain the current 200,000-character ceiling as a fallback.
+
+### 8.6 Chunk Boundaries
+
+- Preserve complete messages whenever possible.
+- Do not split merely because a fixed number of messages was reached.
+- If one message exceeds the safe transcript budget, split that message at paragraph boundaries, then sentence boundaries if necessary.
+- Preserve speaker identity and original ordering.
+- Use only a small bounded overlap if Phase 3 demonstrates that it improves boundary recall enough to justify duplicate risk and cost.
+- Mark overlap internally for deduplication, not as permanent memory metadata.
+- Do not summarize an earlier raw chunk and silently replace the source material unless that separate strategy has been evaluated and approved.
+
+### 8.7 App-Owned Response Contract
+
+Use provider-supported structured output or tool calling when available. Generic OpenAI-compatible and custom endpoints must still work through a plain-JSON fallback.
+
+The logical combined response envelope is:
+
+```json
+{
+  "memories": [
+    {
+      "content": "The user prefers...",
+      "scope": "real_life",
+      "target": null,
+      "suggested_type": "Preference",
+      "tags": []
+    }
+  ],
+  "model_rules": [
+    {
+      "content": "Avoid rewriting text unless explicitly requested."
+    }
+  ]
+}
+```
+
+Rules:
+
+- omit or return an empty array for an output stream not selected by Analyze For;
+- no title;
+- no AI importance;
+- no provenance or source field;
+- no chat ID, row ID, quote, evidence excerpt, run ID, or chunk ID;
+- no automatic lifecycle action;
+- no card placement field in the initial Associative Memory contract;
+- `suggested_type` may be null and may only name a current user Type;
+- an invalid or unknown Type becomes No Type rather than deleting an otherwise valid candidate;
+- scope and target must pass existing placement validation;
+- invalid placement cannot be accepted by Accept All;
+- tags are normalized and validated independently from Type;
+- a schema or safety cap must never silently discard excess valid output. If output is incomplete, report it and retry with smaller work units.
+
+The exact Model Rule schema beyond `content` must follow the audited existing Model Rule workflow. Do not invent new visible fields without approval.
+
+### 8.8 Candidate Collection and Consolidation
+
+Do not file each successful chunk directly into visible Pending.
+
+For one frozen conversation range:
+
+1. validate every chunk response;
+2. hold candidates in temporary run storage;
+3. normalize whitespace and exact-match keys;
+4. remove exact duplicates, including duplicates caused by overlap;
+5. group strongly related candidates with scope and target boundaries preserved;
+6. consolidate only the grouped candidate text, not the entire raw conversation again;
+7. keep genuinely separate facts separate;
+8. compare final memory candidates with relevant existing memories;
+9. mark Possible Match candidates without allowing the model to decide the resolution;
+10. file the complete valid set through the canonical Pending path;
+11. advance the bookmark only after filing succeeds.
+
+Deterministic exact deduplication happens before model-assisted or semantic consolidation.
+
+Model-assisted consolidation should be bounded to small candidate groups. It must not become another giant transcript pass.
+
+### 8.9 Failure, Truncation, and Retry
+
+The app must distinguish:
+
+- a valid empty result;
+- malformed JSON;
+- a response truncated by output limit;
+- a request rejected for context or payload size;
+- provider/model failure;
+- cancellation;
+- process death.
+
+Required behavior:
+
+- accept fenced JSON and harmless surrounding prose when the outer object can be isolated safely;
+- validate each entry independently after the outer response parses;
+- for a complete but malformed response, allow one bounded repair attempt using the fixed schema;
+- for truncation or context rejection, retry with a smaller transcript chunk and appropriate output reserve;
+- prevent infinite repair or shrink loops;
+- after bounded retries fail, mark the run incomplete, show the real failure, file nothing from that conversation range, and leave the bookmark unchanged;
+- never display semantic failure as “no memories found.”
+
+### 8.10 Minimal Temporary Run Bookkeeping
+
+Temporary analysis state may contain only what is needed to finish or recover the run, such as:
+
+- run ID;
+- chat ID and frozen end marker outside the memory object;
+- selected mode and prompt profile;
+- selected chunk setting and calculated budgets;
+- chunk ordinal and success state;
+- temporary validated candidates;
+- candidate hashes for deduplication;
+- retry counters.
+
+This is not a provenance feature.
+
+Temporary run data:
+
+- is not shown as memory metadata;
+- is not embedded;
+- is not exported as part of a memory;
+- is not copied into Pending or Active memories;
+- is removed after successful filing or explicit cancellation;
+- may persist narrowly across process death only to prevent skipped or duplicated work.
+
+### 8.11 Evaluation Determines Defaults
+
+Production defaults must be supported by Phase 3 evidence across multiple conversation styles and at least one lower-cost model.
+
+Evaluate extraction quality and operational cost together. A profile that finds slightly more memories but doubles hallucinations, malformed output, or request cost is not automatically better.
+
+Keep the evaluation harness available for future prompt, provider, and model changes.
+
+## 9. Conversation Review Uses a Bookmark
 
 For each chat:
 
 1. store one bookmark representing the last message successfully reviewed and safely filed;
 2. read from immediately after that bookmark through a frozen end point captured when the run begins;
 3. leave messages added after the frozen end point for the next run;
-4. advance the bookmark only after valid suggestions are safely filed into Pending;
+4. advance the bookmark only after every required chunk succeeds, candidates are consolidated, and valid suggestions are safely filed into Pending;
 5. do not advance it after failure, cancellation, or process death;
 6. never copy the bookmark or source-chat identity into a memory.
 
-Do not require permanent per-row pending, processed, excluded, or claimed states merely to know where analysis stopped. A short-lived run lock or frozen end marker may exist invisibly while a run is active.
+Do not require permanent per-row pending, processed, excluded, or claimed states merely to know where analysis stopped. A short-lived run lock, frozen end marker, and chunk-state record may exist invisibly while a run is active or recoverable.
 
-## 9. Embeddings and Retrieval
+## 10. Embeddings and Retrieval
 
 The on-device embedding model may use:
 
@@ -643,7 +1053,8 @@ It does not use:
 - a title;
 - importance;
 - source-chat identity;
-- API/computer origin.
+- API/computer origin;
+- analysis mode, prompt profile, run ID, or chunk information.
 
 Retrieval rules:
 
@@ -656,11 +1067,12 @@ Retrieval rules:
 - Pending, Archived, and Superseded memories never enter normal chats;
 - model failure is reported honestly.
 
-## 10. Possible Match
+## 11. Possible Match
 
 Possible Match finds candidates. It does not decide whether something is a duplicate, update, contradiction, replacement, or supersession.
 
 - exact normalized text matching works without an embedding model;
+- exact candidate deduplication occurs before semantic comparison;
 - differently worded related memories use the local embedding model;
 - a proposal is shown in the Roleplay tab when its scope is World, Roleplay Character, or Campaign;
 - candidates must still respect the proposal's actual scope and target context rather than comparing every Roleplay-tab memory together;
@@ -671,9 +1083,10 @@ Possible Match finds candidates. It does not decide whether something is a dupli
 - semantic failure cannot be shown as no match;
 - Type may contribute only through the same soft embedding clue;
 - importance does not affect candidate generation;
+- the archiver may flag possible related memories but may not choose a destructive resolution;
 - every resolution revalidates before committing.
 
-## 11. Lifecycle
+## 12. Lifecycle
 
 | State | Meaning | Enters Normal Chats? |
 |---|---|---:|
@@ -691,7 +1104,7 @@ The Superseded Memories filter remains:
 - **Include**;
 - **Only**.
 
-## 12. Pending Is Designed for Fast Scanning
+## 13. Pending Is Designed for Fast Scanning
 
 The Pending screen shows all user-relevant data that will be saved. It must not hide fields behind endless per-memory editing screens.
 
@@ -700,10 +1113,12 @@ Every ordinary card shows:
 - complete memory text;
 - selected Type or No Type;
 - tags, when present;
+- its actual scope and target;
 - its General/Roleplay destination through the tab it appears in;
 - importance only when **Use Importance Ratings** is On;
 - all other approved visible fields that will be saved;
-- no title.
+- no title;
+- no source-chat or analysis-run metadata.
 
 The Type, tags, and visible importance value can be corrected directly without leaving the review flow.
 
@@ -731,7 +1146,9 @@ Because generated memories start at importance 0, enabling importance does not m
 
 API and computer-imported suggestions use the exact same cards.
 
-## 13. Possible Match Review UI
+Model Rule proposals use their existing separate review destination. They do not silently appear as ordinary Associative Memory cards.
+
+## 14. Possible Match Review UI
 
 - dedicated full-page screen;
 - proposal first, full width, no checkbox, Information at top-right;
@@ -781,7 +1198,7 @@ No resolution is allowed with zero selected memories.
 
 All resolutions are atomic and revalidated. Backing out leaves the proposal Pending.
 
-## 14. API and Computer Workflows
+## 15. API and Computer Workflows
 
 After strict import validation, a computer-created suggestion becomes the same Pending object as an API Memory Assistant suggestion.
 
@@ -801,7 +1218,63 @@ It receives no visible import badge, source label, special category, different I
 
 Temporary import IDs may exist outside the memory solely to prevent duplicate import and recover interrupted import.
 
-## 15. Phase 0 Audit Checklist
+Computer packages must not bypass the app-owned candidate schema by supplying titles, AI importance, lifecycle actions, provenance, or automatic replacement instructions.
+
+## 16. Open-Source Reference Boundary
+
+### Primary Reference: LangMem
+
+Use LangMem as the main architectural reference for:
+
+- storage-independent extraction primitives;
+- customizable instructions;
+- custom structured schemas;
+- separate insertion, update, and delete permissions;
+- insertion-only operation for Speak-GPT;
+- extraction and consolidation stages;
+- separate semantic memory and procedural prompt/rule concepts;
+- evaluation of extraction quality.
+
+Official references:
+
+- https://github.com/langchain-ai/langmem
+- https://langchain-ai.github.io/langmem/reference/memory/
+- https://langchain-ai.github.io/langmem/concepts/conceptual_guide/
+
+LangMem is MIT-licensed at the time of this revision. Verify the current license and source revision before copying code or prompt text.
+
+### Secondary Reference: Mem0
+
+Use Mem0 selectively for:
+
+- additive-only extraction;
+- no model-controlled UPDATE or DELETE in the extraction pass;
+- exact deduplication before semantic work;
+- retrieval and memory-quality evaluation ideas.
+
+Official reference:
+
+- https://github.com/mem0ai/mem0
+
+Mem0 is Apache-2.0-licensed at the time of this revision. Verify the current license, NOTICE requirements, and source revision before copying code or prompt text.
+
+### Do Not Import Unneeded Architecture
+
+Do not copy merely because another framework contains it:
+
+- hosted services;
+- Python or LangGraph runtime dependencies;
+- external vector databases;
+- graph memory;
+- automatic destructive updates;
+- permanent source-conversation history;
+- entity pipelines not justified by Speak-GPT tests;
+- temporal-reasoning model passes not justified by Speak-GPT tests;
+- benchmark claims from proprietary or hosted implementations.
+
+Adapt the smallest useful method to the existing Android app.
+
+## 17. Phase 0 Audit Checklist
 
 The Phase 0 report must account for every use of:
 
@@ -817,20 +1290,32 @@ The Phase 0 report must account for every use of:
 - tags or Types used as excessive ranking bonuses;
 - title bonuses;
 - source-chat lineage attached to memories;
-- permanent transcript processing states where one bookmark would suffice;
+- permanent transcript processing states where one bookmark plus temporary run state would suffice;
 - World, Roleplay Character, or Campaign memories appearing in the General tab;
-- API/computer origin shown in memory UI.
+- API/computer origin shown in memory UI;
+- 200,000-character or other character-based chunk ceilings;
+- request sizing that ignores model or provider limits;
+- missing output-token reservation;
+- raw-message splitting behavior;
+- prompts that request title, AI importance, provenance, card placement, or automatic lifecycle changes;
+- JSON parsing that treats truncation as malformed output or no result;
+- fixed candidate limits that silently discard output;
+- successful early chunks filed before the complete conversation range succeeds;
+- Model Rules mixed into ordinary memories;
+- analysis controls that hide approximate tokens or expected request count;
+- any provenance subsystem beyond minimal temporary run bookkeeping.
 
 For each item, report:
 
 1. where it exists;
-2. what visible or retrieval behavior it changes;
+2. what visible, extraction, or retrieval behavior it changes;
 3. whether it can be neutralized without a database migration;
-4. the narrow safe implementation or migration path.
+4. the narrow safe implementation or migration path;
+5. the test that will prove the old behavior is gone.
 
-Do not delete database columns blindly. First stop unapproved fields from affecting prompts, UI, matching, embedding, and ranking.
+Do not delete database columns blindly. First stop unapproved fields from affecting prompts, UI, matching, embedding, ranking, chunking, and filing.
 
-## 16. Explicitly Forbidden Claims
+## 18. Explicitly Forbidden Claims
 
 Future agents must not claim:
 
@@ -851,9 +1336,19 @@ Future agents must not claim:
 - World, Roleplay Character, or Campaign memories belong mixed into the General tab;
 - a computer-imported memory needs different UI;
 - every transcript row needs permanent processing states;
+- permanent provenance is required for safe chunking;
+- a model's advertised context window is the correct chunk size;
+- character count is sufficiently accurate for model/provider budgeting;
+- a one-million-token context window means the provider allows one million tokens;
+- all chunks may be filed independently without affecting review safety;
+- malformed or truncated JSON means the conversation contained no memories;
+- custom prompts may redefine the app's response schema or lifecycle powers;
+- Model Rules should be ordinary Associative Memories;
+- LangMem or Mem0 must be imported wholesale;
+- another project's benchmark automatically applies to Speak-GPT;
 - existing code retroactively proves approval.
 
-## 17. Completion Standard
+## 19. Completion Standard
 
 A memory feature is complete only when:
 
@@ -864,8 +1359,14 @@ A memory feature is complete only when:
 - underlying fictional scope and target boundaries remain intact;
 - optional importance can be disabled without losing stored values;
 - generated changes remain proposals until approved;
+- the analysis purpose and approximate request size are visible before a run;
+- long conversations are split by conservative token budgets rather than a giant character ceiling;
+- a failed chunk cannot create a hidden partial analysis or advance the bookmark;
+- JSON and truncation failures are reported honestly;
+- prompt profiles and chunk defaults are supported by the evaluation harness;
+- Model Rules remain a separate reviewable output stream;
 - focused tests pass;
 - Android Checks is green;
 - the owner exercises the relevant device path.
 
-The goal is a memory system the user can scan and trust, not a taxonomy maintenance hobby.
+The goal is a memory system the user can scan and trust, not a taxonomy maintenance hobby or a transcript-eating context-window contest.
