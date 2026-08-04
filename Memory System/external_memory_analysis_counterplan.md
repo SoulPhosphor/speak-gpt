@@ -1,845 +1,432 @@
-# External Memory Analysis + RAG Compatibility: Truth-Repaired Plan
+# Memory Systems Canonical Plan: Owner-Approved Rules Only
 
-**Revision 12, 2026-08-04**
+**Revision 14, 2026-08-04**
 
-This document is the active plan for the phone memory systems, Computer Memory Review, Memory Auditor, and the RAG behavior those workflows depend on.
+This is the active memory-system plan. It deliberately records only direct owner decisions, verified implementation facts, and clearly labeled open questions. An agent may not turn an implementation accident, an older document, or its own recommendation into product approval.
 
-## Authority and truth rules
+## 1. Authority rules
 
-1. Direct owner decisions recorded in the August 3-4, 2026 design conversation are authenticated decisions. They are not speculative notes and must not be demoted because an older file used different language.
-2. Where an older passage conflicts with the binding lifecycle, Possible Match, Pending, Review, or embedding rules below, this revision wins.
-3. Current code on `main` is evidence of what is built. A green compile is not device verification, but built code must not be scheduled for reversal merely because an older plan described a different design.
-4. The phone remains authoritative. API models, computer agents, and auditor models may propose. They never directly activate, edit, supersede, archive, replace, or delete authoritative records.
-5. User-facing behavior is not invented by an implementation agent. Open design choices stop for the owner. Current implementation facts that were never approved as permanent rules are labeled as such below.
-6. This plan preserves one phone-side filing, matching, Pending, and resolution contract across proposal sources. A new transport does not receive a second, weaker memory system.
+1. The owner's direct decisions control the product.
+2. Anything not directly approved remains open. It may exist in code, but it is not approved design.
+3. Green CI proves that code compiled and tests passed. It does not prove that the UI or behavior was approved on-device.
+4. Models, embeddings, computer agents, and auditors may propose. They never directly mutate authoritative memories.
+5. No implementation agent may invent user-facing fields, labels, controls, layouts, destinations, retention rules, or action meanings.
+6. When the owner has not approved something, stop at that boundary. Do not choose for her and then report the choice afterward.
 
-## Verified implementation baseline
+## 2. Memory shape: no titles, ever
 
-The following work exists in repository history and was merged to `main`:
+No memory has a separate title.
 
-- Superseded Memories filter: `ddfcf07aab7af78f8dda2f299b43918b629e108f`
-- Deterministic and embedding-based Possible Match foundation: `7894ffce34b7dd8bbc251c8988f6f3af8359afd2`
-- Semantic comparison with archived and superseded memories: `64c38a4940377829c922e70d810300b2fc05976c`
-- Approved Pending and Review rules recorded: `f626e41d789496422a8be9190dc69e9bf6a6489a`
-- Pending cards and Possible Match Review UI: `b0f253bde9146ffdd8b98052e53574945cf384a8`
-- Step 1.5 merged to `main`: `a17bd427edcdfaeb30cf3e24a819c8faecca68b7`
+This applies to every memory route and state:
 
-The built Step 1.5 flow is not a future proposal to be replaced by the older Keep Both / Keep Existing / Replace Existing / Delete Suggestion design. The binding design is stated below.
+- manually entered memories;
+- API Memory Assistant suggestions;
+- computer-review suggestions;
+- Memory Auditor suggestions;
+- Pending memories;
+- Active memories;
+- Archived memories;
+- Superseded memories;
+- imported memories;
+- roleplay-related memories;
+- Lorebook Memory suggestions where the approved Lorebook entry design also has no separate title.
 
-Device testing may still expose bugs, visual problems, or missing wiring. Those are fixed narrowly when observed. They do not reopen the approved lifecycle or action meanings.
+A memory consists of its memory text plus whatever existing non-title metadata the app already requires. An agent may not invent a title because it thinks titles improve search, display, export, or editing.
 
-### Current implementation facts that are not permanent owner rulings
+Consequences:
 
-- Roleplay-scoped Pending rows currently retain their earlier Accept / Delete / Edit / Add to Card behavior. The new ordinary Associative Memory card and Possible Match flow currently applies to non-roleplay associative drafts. This may be reviewed after device testing. No agent may treat the split as a permanent design decision or extend it without direction.
-- Save & Edit Old Memory currently edits title and content inline. This is the current implementation, not a permanent ruling that other fields must remain unavailable. Do not expand or restrict it further without owner direction.
+- models do not generate titles;
+- prompts and result schemas do not request titles;
+- Pending and Review cards do not display titles;
+- editors do not expose title fields;
+- exact matching does not compare titles;
+- semantic embedding documents do not depend on titles;
+- computer packages and imports do not require titles;
+- Memory Auditor proposals do not create titles;
+- any legacy/internal title column is compatibility baggage only and must not become visible or required.
 
----
+Any current title control or title-dependent path is an implementation defect to audit. It is not an approved feature.
 
-## 1. Binding memory lifecycle
+## 3. A saved memory does not remember its source chat
 
-| State | Meaning | May enter normal chats? | User control |
-|---|---|---:|---|
-| **Active** | Current approved memory. | Yes, when Associative Search is enabled and the embedding system is usable. | Edit, archive, supersede through an approved resolution, or permanently delete. |
-| **Archived** | Intentionally shelved. | No. | Browse, restore, or permanently delete. |
-| **Superseded** | Retained historical version replaced by a newer memory. | No. | Browse, restore, or permanently delete. |
-| **Deleted** | Permanently removed. | No. | No restoration promise. |
-| **Pending / Draft** | Proposal awaiting the user. | No. | Review, edit where supported, approve through the shared gate, or reject/discard through the approved surface. |
+A saved or Pending memory must not store or expose the conversation it came from as part of the memory.
+
+Do not attach to a memory or proposal:
+
+- source chat name;
+- source chat ID;
+- conversation UID;
+- transcript row IDs;
+- turn numbers;
+- chat timestamps;
+- chat excerpts;
+- quote hashes;
+- a link back to the originating conversation;
+- any equivalent durable conversation lineage.
+
+A memory may identify the creation route in a general way when needed, for example:
+
+- entered by the user;
+- proposed by API Memory Assistant;
+- proposed through Computer Memory Review;
+- proposed by Memory Auditor;
+- imported.
+
+That is not permission to retain the source conversation.
+
+Temporary analysis bookkeeping may exist outside the memory record only as needed to prevent duplicate processing, recover an interrupted run, or complete an outstanding computer-review package. It must not become memory provenance, must not be displayed as the memory's origin chat, and must not be retained longer merely because the memory was approved.
+
+The exact contents of the Information control are not fully approved. It must not show or retain a source chat. No agent may fill the gap by inventing an evidence-lineage system.
+
+## 4. Existing placement behavior is preserved, not newly approved
+
+The app already has placement/context behavior for different memories and fictional settings. The owner has not approved a new scope taxonomy or a redesign through this document.
+
+Therefore:
+
+- preserve the app's existing placement boundaries unless the owner starts a focused placement discussion;
+- do not add new scope categories, target types, placement screens, or placement requirements;
+- do not rename existing concepts as an architecture decision;
+- do not claim the owner approved technical words such as scope, target catalog, placement identity, or conversation lineage merely because code uses them;
+- Possible Match must not compare unrelated fictional contexts as though they are the same memory;
+- duplicate display names must not silently select the first record.
+
+The final set of editable non-title fields on the Review screen remains open. An agent may not decide it.
+
+## 5. Binding memory lifecycle
+
+| State | Meaning | Used in normal chats? |
+|---|---|---:|
+| **Pending** | Proposal awaiting the user's decision. | No. |
+| **Active** | Approved current memory. | Yes, when Associative Search is enabled and usable. |
+| **Archived** | Shelved memory. | No. |
+| **Superseded** | Retained historical memory replaced by a newer memory. | No. |
+| **Deleted** | Permanently removed. | No. |
 
 ### Superseded behavior
 
 - Superseded means history only.
-- A superseded memory is never supplied to the normal chat model.
-- It remains browsable, restorable, and permanently deletable.
+- Superseded memories never enter normal chats.
+- They remain browsable, restorable, and permanently deletable.
 - One new memory may supersede several selected old memories.
-- The many-to-many history is stored in `memory_supersessions`; an old singular `supersedes` field must not limit the user-facing behavior.
-- Deleting either side cleans relationship rows safely and must not make a superseded record undeletable.
+- The history relationship is many-to-many.
 
-### Browser filter
+### Superseded Memories filter
 
-The Memory Browser's **Superseded Memories** filter has exactly these values:
+The Memory Browser filter has exactly:
 
-- **Hide**: default. Do not show superseded rows.
-- **Include**: show superseded rows with the ordinary set.
-- **Only**: show only superseded rows.
+- **Hide**, default;
+- **Include**;
+- **Only**.
 
-Archived and Superseded remain distinct states.
+Archived and Superseded remain different states.
 
----
+## 6. Binding Possible Match behavior
 
-## 2. Binding Possible Match detection
+Possible Match finds candidates. It never decides what the relationship means.
 
-Possible Match has two layers. Neither layer is an authority to alter records.
+### Exact matching
 
-### 2.1 Deterministic layer
+Exact matching remains deterministic and works without an embedding model.
 
-This layer works with or without an embedding model.
-
-Normalize identity using:
-
-- Unicode NFKC;
-- locale-independent case folding;
-- collapsed whitespace;
-- content, not title, as the textual identity;
-- placement consisting of scope plus sorted stable target IDs;
-- memory kind/type;
-- current status.
-
-Do not strip punctuation or negation in a way that turns opposite statements into the same identity.
+It uses normalized memory text and the app's existing placement/type/status behavior. It does not use a title.
 
 Required outcomes:
 
-- Exact normalized content + same placement + same type on an Active or Pending memory suppresses a second draft as already present.
-- Exact content and placement with a different type is a Possible Match because type can change rendering semantics.
-- An exact match against Archived or Superseded is a Possible Match, not a silent skip, resurrection, or overwrite.
-- The same wording in different fictional placements remains separate. The fiction wall is part of identity.
-- Duplicate target names never resolve by first match. Stable IDs are required or the proposal remains unresolved.
+- an already-existing equivalent Active or Pending memory does not create a second identical draft;
+- a type difference may become a Possible Match rather than a silent overwrite;
+- an equivalent Archived or Superseded memory becomes a Possible Match rather than being silently restored, skipped, or overwritten;
+- unrelated fictional contexts are not collapsed together;
+- duplicate names never resolve by choosing the first result.
 
-### 2.2 Semantic layer
+### Semantic matching
 
-Differently worded but related memories are found with the installed on-device embedding model.
+Differently worded but related Associative Memories use the installed on-device embedding model.
 
-- No external or API AI call is used for semantic matching.
-- Token overlap, Jaccard similarity, or string distance must not be presented as semantic matching.
-- The embedding result is a candidate list only. It does not classify a pair as duplicate, update, contradiction, negation, replacement, or supersession.
-- A high cosine score is not shown as a probability or percentage.
-- Similarity never triggers an automatic merge, delete, replacement, archive, or supersession.
+- no external/API AI performs phone-side semantic matching;
+- token overlap or Jaccard is not semantic matching;
+- cosine similarity is not shown as a probability or percentage;
+- embedding results are candidates only;
+- similarity never automatically merges, deletes, replaces, archives, or supersedes;
+- Active memories may use stored vectors;
+- Archived and Superseded memories may be embedded temporarily for comparison and then discarded;
+- inactive comparison vectors are not persisted;
+- chat retrieval remains Active-only;
+- comparison runs lazily per proposal rather than embedding the whole archive when Pending opens;
+- a short-lived comparison cache may exist only for the current UI session;
+- stale asynchronous work must not update the wrong card;
+- without a model, exact matching still works and semantic matching reports unavailable honestly;
+- semantic failure must not silently become no match.
 
-Comparison sources:
+Every resolution rechecks the proposal and selected memories at commit time. A stale result changes nothing and leaves the proposal recoverable.
 
-- Active memories may use their stored vectors.
-- Archived and Superseded memories may be embedded on demand for comparison and immediately discarded.
-- Temporary inactive-memory vectors are never persisted merely for Possible Match.
-- Chat retrieval remains Active-only even while historical records are compared.
-- Exact Pending collisions remain available through the deterministic layer.
+## 7. Binding Associative Pending card UI
 
-Performance and loading:
+Pending remains inside the existing Memory Browser and uses the normal memory-card visual language.
 
-- Do not eagerly embed the entire archive for every Pending card when the browser opens.
-- Invoke comparison lazily per proposal.
-- A short-lived in-memory comparison cache may reuse transient vectors during the current browser/review session.
-- Cache contents never become retrieval eligibility and never persist inactive vectors.
-- Obsolete async work must not update a recycled row or the wrong draft.
+Every card shows the complete memory text. It does not show a title.
 
-No-model behavior:
+### No Possible Match
 
-- Exact deterministic matching still works.
-- Semantic matching reports unavailable honestly.
-- A semantic failure must not silently become “no match.” Keep the proposal Pending and expose a retryable, non-destructive state.
-- Associative semantic Possible Match therefore requires the embedding model. Lorebook trigger matching is a separate system and does not.
+- top-left caution position empty;
+- top-right Information control;
+- full memory text in the card body;
+- bottom-right discard **X** immediately left of the save/disk icon;
+- save/disk at the far right;
+- no caution icon;
+- no Review button.
 
-### 2.3 Revalidation
+### One or more Possible Matches
 
-Matching is repeated at the decision boundary because the library may change while a card or Review screen is open.
-
-Before any resolution commits, re-read:
-
-- proposal status and content;
-- selected records and statuses;
-- placement and stable targets;
-- kind/type;
-- current exact identity;
-- required evidence/provenance;
-- participation restrictions where applicable.
-
-If anything material changed, apply nothing. Keep the proposal in a recoverable Pending or conflict state.
-
----
-
-## 3. Binding Associative Memory Pending UI
-
-Pending remains a mode inside the existing Memory Browser and uses the normal memory-card visual language where practical.
-
-Every Associative Memory proposal shows the full proposed memory, not a shortened preview.
-
-### 3.1 Ordinary proposal with no Possible Match
-
-Exact placement:
-
-- Top-left caution position is empty.
-- Top-right: Information control.
-- Card body: full proposed memory in the normal field order and spacing.
-- Bottom-right action row: discard **X** immediately left of the save/disk icon; save/disk at the far right.
-
-Behavior:
-
-- Information shows source, provenance, and available evidence.
-- Save uses the shared acceptance gate and activates only after transaction-time revalidation.
-- X uses the existing approved discard behavior.
-- No caution icon.
-- No Review button.
-- The user does not need another screen for an ordinary suggestion.
-
-### 3.2 Proposal with one or more Possible Matches
-
-Exact placement:
-
-- Top-left: caution icon.
-- Top-right: Information control.
-- Card body: full proposed memory.
-- Bottom-right: one labeled **Review** action.
-
-Behavior:
-
-- The caution icon is never labeled and has no explanatory words beside it.
-- Direct save and discard controls are replaced by Review on that card.
-- There is no save/disk icon and no X on the conflicted Pending card.
-- The entire card is not secretly turned into the Review control.
-- Do not place Review in the top row.
+- top-left caution icon, unlabeled and without words beside it;
+- top-right Information control;
+- full memory text in the card body;
+- one labeled **Review** action at bottom-right;
+- no save/disk icon;
+- no discard X;
+- the entire card is not the Review control;
+- Review is not placed in the top row.
 
 All icon-only controls have accessibility labels.
 
----
+## 8. Binding Possible Match Review UI
 
-## 4. Binding Possible Match Review UI and actions
+Review is a dedicated full-page screen.
 
-Review is a dedicated full-page screen using existing header and field styles.
-
-### 4.1 Layout
-
-- The proposed memory is the first full-width card beneath the screen header.
-- It has no checkbox.
-- Its Information control is at the top-right.
-- It is not pinned and scrolls normally.
-- Existing possible matches appear vertically beneath it in normal full-width memory-card format.
-- Each existing memory has a checkbox near the top-left and Information at the top-right.
-- Recommended candidates may start checked, but the user may change every selection.
-- Checkboxes do not move to a toolbar, separate list, or second selection screen.
-- Resolution actions appear in one section after the final match card and scroll with the screen.
-- Do not use floating buttons, hidden swipe actions, unlabeled resolution icons, sticky overlays, or controls layered over memory text.
+- proposed memory first, full width, no checkbox, Information at top-right;
+- proposed memory scrolls normally and is not pinned;
+- existing possible matches appear below in full-width normal memory cards;
+- checkbox top-left and Information top-right on each existing match;
+- suggested matches may begin checked, but the user can change every selection;
+- no separate selection screen;
+- resolution actions appear after the final match and scroll with the page;
+- no floating buttons, hidden swipe actions, unlabeled resolution icons, sticky overlays, or controls over memory text;
+- no memory title appears anywhere.
 
 Action order:
 
-1. **Save & Edit Old Memory**, only when exactly one existing memory is selected.
+1. **Save & Edit Old Memory**, available only when exactly one old memory is selected.
 2. **Save & Supersede**.
 3. **Save & Replace**, using destructive styling.
 
-No resolution is allowed when no existing memory is selected.
+No resolution is allowed when no old memory is selected.
 
-### 4.2 Save & Edit Old Memory
+### Save & Edit Old Memory
 
-- Save the proposal as Active.
-- Keep the selected old memory Active.
-- Let the selected old memory be edited on the Review screen using existing field style and validation.
-- This action is available only with one selected memory, never as a bulk edit.
-- The current title/content-only editor is an implementation fact awaiting device evaluation, not a permanent field restriction.
+- save the proposal as Active;
+- keep the selected old memory Active;
+- edit the old memory on the Review screen;
+- single-selection only;
+- no title field;
+- the final set of editable non-title fields is still an owner decision.
 
-### 4.3 Save & Supersede
+### Save & Supersede
 
-- Save the proposal as Active.
-- Mark every checked old memory Superseded.
-- Record every old-to-new history relationship.
-- Preserve the old memories for browsing, restoration, evidence, and permanent deletion.
-- Superseded records remain excluded from normal chat retrieval.
+- save the proposal as Active;
+- mark every checked old memory Superseded;
+- record every old-to-new relationship;
+- preserve the old memories for history, restoration, and permanent deletion;
+- keep Superseded memories out of chats.
 
-### 4.4 Save & Replace
+### Save & Replace
 
-- Save the proposal as Active.
-- Permanently delete every checked old memory.
-- This destructive meaning is intentional and owner-approved.
-- Replace is not an alias for archive or supersede.
-- The existence of Save & Supersede is the history-preserving alternative.
+- save the proposal as Active;
+- permanently delete every checked old memory;
+- Replace is intentionally destructive;
+- Save & Supersede is the history-preserving alternative.
 
-### 4.5 Transaction and escape behavior
+Each resolution is atomic. Backing out leaves the proposal Pending. A stale or missing record applies nothing.
 
-- Every operation is atomic. Either the proposal and every selected-record effect commit, or none do.
-- Revalidate within the transaction.
-- A stale or vanished record leaves the user on Review with a plain, recoverable message.
-- Backing out leaves the proposal Pending. Do not invent old action sets to “repair” the screen.
+The older required action set of Keep Both / Keep Existing / archive-style Replace / Delete Suggestion is superseded and must not be restored as the canonical design.
 
-The following older action contract is superseded and must not be restored as the required design:
+## 9. Roleplay Pending remains unresolved, not approved as an exception
 
-- Keep Both
-- Keep Existing
-- Replace Existing where Replace merely archives or supersedes
-- Delete Suggestion as a required comparison action
+The current code reportedly leaves roleplay-scoped Pending rows on an older Accept / Delete / Edit / Add to Card flow while ordinary Associative Pending uses the new cards.
 
-Those labels came from an older design. They do not override Save & Edit Old Memory, Save & Supersede, and destructive Save & Replace.
+The owner agreed only to inspect the ordinary cards first. She did not approve a permanent roleplay exception.
 
----
+Therefore:
 
-## 5. One phone-side contract for every proposal source
+- do not treat the split as settled design;
+- do not remove sanctioned roleplay actions such as Add to Card without approval;
+- do not extend the ordinary UI into roleplay by guessing where those actions belong;
+- record what exists during device testing and return for one focused decision when necessary.
 
-The source of a proposal changes provenance and evidence. It does not change the phone's safety rules.
+## 10. One phone-side authority for every proposal route
 
-| Proposal source | Proposal type | Phone destination | Matching and review |
-|---|---|---|---|
-| **API Memory Assistant** | Associative Memory | **Memories → Pending** | Shared filing, deterministic checks, local-embedding Possible Match, approved Pending/Review actions. |
-| **Computer Memory Review import** | Associative Memory | **Memories → Pending** | Same phone-side filing, validation, matching, and actions. The computer cannot bypass them. |
-| **Memory Auditor, API route** | Associative maintenance finding | **Memories → Pending** | Same lifecycle and candidate rules. Auditor output remains a proposal. |
-| **Memory Auditor, computer route** | Associative maintenance finding | **Memories → Pending** | Same strict import boundary and user authority. |
-| **API Memory Assistant** | Lorebook Memory | **Lorebooks → Pending** | Trigger-keyword Lorebook flow. No embedding model required. |
-| **Computer Memory Review import** | Lorebook Memory | **Lorebooks → Pending** | Same approved Lorebook Pending destination and validation. |
+The creation route changes only the general route label. It does not grant different safety or mutation authority.
 
-### Cross-route invariants
+Associative proposals from:
 
-- Every route uses stable IDs, current target validation, exact duplicate checks, evidence/provenance, and a durable replay-safe filing boundary.
-- No route writes directly to an active memory or Lorebook entry.
-- No route gets a private second Pending queue.
-- Repeating or resuming an import does not create duplicate Pending items.
-- Imported proposals are rechecked against the current phone, not trusted because they passed a computer-side validator.
-- Computer-generated semantic scores are advisory context only. The phone's own deterministic and on-device semantic matching controls the phone Possible Match candidates.
-- API and computer suggestions display where they came from and the evidence available for review.
+- API Memory Assistant;
+- Computer Memory Review;
+- Memory Auditor using an API model;
+- Memory Auditor using computer export/import;
 
-### Associative versus Lorebook behavior
+all go to **Memories → Pending** and use the same phone-side validation, Possible Match, Review, and resolution behavior.
 
-The phrase “both systems use the same rules” means both proposal-producing routes use the same phone authority and destination rules. It does not mean Associative Memories and Lorebooks use the same retrieval mechanism.
+Lorebook Memory proposals go to **Lorebooks → Pending** and remain individually approved before entering a Lorebook.
 
-- **Associative Memories** use the on-device embedding model for semantic retrieval and differently worded Possible Match candidates.
-- **Lorebooks** use explicit trigger keywords and do not require an embedding model.
-- One analysis run or computer package chooses **Associative Memories** or **Lorebook Memories**. There is no Both output mode for a single run.
+No proposal route:
 
----
+- creates titles;
+- stores the source chat in the memory;
+- writes directly to Active;
+- creates a private second Pending queue;
+- bypasses current-phone duplicate checks;
+- mutates authored Lorebook/card content automatically;
+- treats a computer-generated similarity score as authority.
 
-## 6. Source injection, participation, and archive consent remain separate
+## 11. Embedding and memory-system distinction
 
-Three different questions must not be collapsed into one toggle:
+The phone has two different memory retrieval systems:
 
-1. What memory sources enter the current chat prompt?
-2. What a companion may contribute to long-term memory?
-3. Whether this chat is currently eligible for later review?
+- **Associative Search** uses the on-device embedding model for semantic retrieval and differently worded Possible Match discovery.
+- **Lorebooks** use explicit keyword triggers and do not require an embedding model.
 
-Binding behavior:
+Pending, Archived, and Superseded Associative Memories never enter normal chats.
 
-- **Associative Search** controls saved-memory retrieval and injection.
-- **Lorebooks** controls trigger-based Lorebook injection.
-- **Memory Participation** captures the companion ceiling with transcript material:
-  - Full permits normal memory outputs.
-  - General permits general/model-rule/eligible Lorebook handling while excluding companion-relationship memory.
-  - None excludes that captured material from Associative and Lorebook analysis.
-- **Archive This Chat** pauses or resumes review eligibility. It does not raise a row above its captured participation ceiling.
-- Participation changes are not retroactive.
-- Source-injection switches do not mark transcript material processed, excluded, or requeued.
-- Turning Archive back on clears only the archive-pause condition from otherwise eligible unprocessed material.
-- Never show an **Include Earlier Messages?** prompt or an equivalent choice.
-- Do not add a withheld-items queue, second Pending area, or recovery ceremony for ordinary excluded material.
+The conversation archive is source material for analysis. It is not itself a prompt-memory source merely because it was retained for analysis.
 
-Model availability:
+The exact Archive This Chat and Memory Participation behavior remains governed by existing approved work. This document does not add new source-chat retention to memories.
 
-- API/computer analysis may still create proposals without an embedding model.
-- Approved Associative Memories cannot enter chats until the embedding model is installed and usable.
-- Exact Possible Match detection still works without the model; differently worded semantic comparison does not.
-- Lorebook Memories remain usable by keyword without the embedding model.
+## 12. Computer Memory Review: approved direction, not invented internals
 
----
-
-## 7. Computer Memory Review: intended complete workflow
-
-Computer Memory Review lets the user use a file-capable computer AI covered by an existing subscription instead of spending API tokens for every review.
-
-The feature is complete only when the full loop works:
+The intended complete loop is:
 
 ```text
-Phone export
-  → computer AI reads package and writes proposals
-  → phone validates and imports
-  → proposals enter the correct Pending area
-  → user reviews and decides
+Phone exports a review package
+  → a file-capable computer AI proposes memories
+  → phone validates the returned file
+  → proposals enter the correct existing Pending area
+  → user decides
 ```
 
-Export alone is not a completed feature. Import alone is not a completed feature.
-
-### 7.1 Entry and analysis type
-
-Memory Manager contains separate rows:
-
-1. **API Memory Assistant**
-2. **Computer Memory Review**
-3. **Memory Auditor**
-
-The Computer Memory Review export area uses **Memory Analysis Type** with exactly:
-
-- **Associative Memories**
-- **Lorebook Memories**
-
-Associative Memories is the default. One package asks for one proposal type.
-
-### 7.2 Phone authority
-
-- The Android stores are authoritative.
-- The package is a read-only review snapshot plus instructions and output schema.
-- The computer never receives database, backup, API, account, or direct mutation authority.
-- The computer returns proposals only.
-- Every imported item is checked against current phone state.
-
-### 7.3 Package contract
-
-Use a versioned `.sgmemory` ZIP. An optional encrypted wrapper may be added later only through an explicit decision.
-
-Minimum package tree:
-
-```text
-manifest.json
-checksums.sha256
-README.md
-spec/
-  manifest.schema.json
-  record.schema.json
-  proposals.schema.json
-  retrieval_spec.json
-  normalization_spec.json
-  capabilities.json
-instructions/
-  agent_workflow.md
-  safety_and_scope.md
-data/
-  targets.jsonl
-  memories.jsonl
-  lorebooks.jsonl
-  lore_entries.jsonl
-  roleplay_cards.jsonl
-  card_entries.jsonl
-  source_conversations.jsonl
-  tombstones.jsonl
-  rejected_fingerprints.jsonl
-  changes.jsonl
-evidence/
-  transcripts/<transcript_id>.jsonl
-jobs/
-  review_items.jsonl
-output/
-  proposals.template.json
-```
-
-The package contains no:
-
-- SQLCipher database;
-- SharedPreferences file;
-- API key, auth token, database key, or recovery secret;
-- embedding vector or model file;
-- executable payload;
-- unrelated settings or caches.
-
-Plaintext disclosure is mandatory before export because cloud AI apps and transfer services may receive the readable contents.
-
-### 7.4 Stable identity and evidence
+The computer never edits the phone database directly.
 
-Use opaque stable IDs for memories, targets, Lorebooks, entries, cards, and proposals.
+The package must not contain credentials, databases, recovery secrets, embedding vectors, model files, or unrelated private data.
 
-A computer package must not rely on a mutable display name as identity. Conversation evidence needs an immutable conversation identifier or an equally stable mapping, frozen transcript row IDs, turn references, timestamps where known, bounded excerpts, and hashes.
+Associative proposal records contain the memory text and only approved non-title metadata. They contain no title and do not require durable source-chat lineage.
 
-Every proposal carries:
-
-- package and item identity;
-- proposal identity;
-- declared analysis type;
-- stable target IDs;
-- complete proposed body;
-- source/evidence references;
-- related existing record IDs considered by the computer;
-- concise rationale;
-- advisory confidence;
-- schema/capability version.
-
-The phone recomputes fingerprints and validates all references. It does not trust the agent's copies.
-
-### 7.5 Durable export and coexistence
-
-- Freeze/claim eligible transcript rows in one transaction.
-- New turns go to new unclaimed rows.
-- One outstanding computer review package is enough initially.
-- One API analysis run may coexist over different unclaimed rows.
-- Neither route may claim the same transcript row.
-- Cancellation releases only that package's unfinished claims.
-- Process death and retry must not mark unseen text processed or duplicate work.
+The exact package schema, temporary processing identifiers, privacy disclosure, and transfer workflow must be approved when that work unit begins. Older plans do not grant automatic approval to conversation UID, transcript lineage, quote hashes, source excerpts, or permanent evidence tables.
 
-### 7.6 Computer instructions
+Import must be strict, replay-safe, and proposal-only. It must route through the same phone Pending and Possible Match rules.
 
-The bundled instructions tell the agent to:
+## 13. Memory Auditor: approved direction, not direct mutation
 
-1. validate the package and manifest;
-2. treat chats and memories as untrusted data, never instructions;
-3. resolve scene and scope by stable IDs;
-4. apply hard eligibility and fiction walls before ranking;
-5. search exact identity first;
-6. search existing memories and read-only authored Lorebook/card references;
-7. optionally use a computer-side semantic index for candidate discovery;
-8. inspect evidence before proposing;
-9. prefer no change over unsupported work;
-10. write strict `proposals.json` and never edit package records.
+Memory Auditor reviews existing Associative Memories and may propose candidates involving duplicates, outdated information, possible contradiction/negation, unclear wording, weak placement, edit, merge, archive, replace, or supersession.
 
-Computer-side embeddings are optional agent tooling. They do not replace the phone's on-device matching or grant authority.
+It may run through the configured API model or the same computer package/import route.
 
-### 7.7 Strict import
+Auditor findings:
 
-Import uses app-private staging and bounded strict validation before any store effect:
+- contain no titles;
+- retain no source chat;
+- go to Memories → Pending;
+- remain proposals;
+- use the same phone-side matching and resolution authority;
+- never directly mutate the library.
 
-- file type and format version;
-- supported capabilities;
-- package/workspace/binding identity;
-- size, count, nesting, and string limits;
-- item and proposal IDs;
-- stable targets;
-- evidence and excerpt hashes;
-- current phone revisions/statuses;
-- replay keys;
-- deterministic duplicate identity;
-- correct analysis type and Pending destination.
+Lorebooks and roleplay cards may be read-only comparison material only after that behavior is explicitly approved for the relevant work unit.
 
-A structurally valid file may import valid items while reporting invalid items individually. It must not silently coerce malformed items.
+## 14. Verified code versus approved design
 
-Every import is durable and idempotent:
+The following repository work exists and may be device-tested:
 
-- repeated file is a no-op for committed items;
-- interrupted import resumes from its item ledger;
-- partial success remains visibly partial;
-- failed/conflicted items remain retryable;
-- no completed item is duplicated.
+- Superseded Memories filter: `ddfcf07aab7af78f8dda2f299b43918b629e108f`
+- deterministic and embedding Possible Match foundation: `7894ffce34b7dd8bbc251c8988f6f3af8359afd2`
+- Archived/Superseded semantic comparison: `64c38a4940377829c922e70d810300b2fc05976c`
+- recorded Pending/Review rulings: `f626e41d789496422a8be9190dc69e9bf6a6489a`
+- Pending/Review UI implementation: `b0f253bde9146ffdd8b98052e53574945cf384a8`
+- Step 1.5 merge to `main`: `a17bd427edcdfaeb30cf3e24a819c8faecca68b7`
 
-### 7.8 Imported result routing
+Code that differs from this plan is a defect or an unresolved implementation fact. It is not retroactive approval.
 
-Associative result:
+## 15. Immediate repair and verification queue
 
-- File through the same phone filing boundary as API suggestions.
-- Run exact and local-embedding Possible Match detection.
-- Open **Memories → Pending**.
-- Use the binding Pending/Review lifecycle and action meanings in this plan.
+### A. Audit title leakage
 
-Lorebook result:
+Find every memory title field, prompt key, parser key, database use, editor field, card rendering, matching input, embedding input, export field, import field, and Auditor field.
 
-- Validate trigger-bearing entries and selected destination behavior.
-- Open **Lorebooks → Pending**.
-- Nothing enters a Lorebook until individually approved.
-- Never edit/delete existing Lorebook entries through this route.
+Classify each as:
 
----
+- invisible legacy compatibility that can safely remain temporarily;
+- visible/required behavior that violates the no-title rule;
+- dead code.
 
-## 8. Memory Auditor
+Do not remove schema columns blindly. Remove title from product behavior and define a safe migration only after the audit.
 
-Memory Auditor reviews the existing Associative Memory catalog. It is not another conversation-discovery job.
+### B. Audit source-chat retention
 
-It has two routes:
+Find every place a memory or proposal stores or displays chat name, chat ID, conversation UID, transcript row, turn reference, excerpt, quote hash, or equivalent lineage.
 
-1. Analyze using the selected Memory Assistant model.
-2. Export to a computer AI and import its proposal file.
+Separate:
 
-Both routes may flag:
+- temporary run/package bookkeeping required to avoid data loss or duplicate processing;
+- durable memory/proposal provenance that violates the no-source-chat rule.
 
-- possible duplicates;
-- outdated or apparently superseded information;
-- contradictions or negations requiring comparison;
-- unclear wording;
-- weak placement;
-- missing evidence;
-- candidates for edit, merge, archive, split, replace, or supersession.
+Do not expand lineage. Report the current behavior and the narrow removal/migration needed.
 
-These are proposals, not conclusions.
+### C. Device-test the merged Step 1.5 UI
 
-### Auditor boundaries
+Inspect:
 
-- Auditor works on Associative Memories only.
-- It has no Memory Analysis Type picker.
-- Lorebooks and roleplay cards may be read-only comparison context.
-- Auditor never edits authored Lorebook/card content.
-- Findings go to **Memories → Pending**.
-- The existing lifecycle and Possible Match actions remain binding.
-- Auditor-specific future edit/merge/archive proposal cards may extend the same Pending area only after their visible behavior is approved. They may not replace or reinterpret Save & Replace and Save & Supersede.
-- No auditor model may directly mutate the library.
+- ordinary Pending card layout;
+- title leakage;
+- Information contents;
+- semantic loading/retry;
+- one and multiple matches;
+- Save & Edit Old;
+- Save & Supersede and history filter;
+- destructive Save & Replace;
+- roleplay Pending behavior.
 
-The computer route reuses Computer Memory Review's package, strict validation, item ledger, stable IDs, evidence, and import boundary. It must not build a parallel package format.
+Fix concrete bugs incrementally. Do not use device testing to approve unasked design choices.
 
----
+### D. Continue the remaining roadmap one bounded unit at a time
 
-## 9. RAG and Lorebook compatibility requirements
+After the audits and device findings:
 
-The app has two distinct prompt-memory systems and one review source:
+1. finish Archive This Chat / Memory Participation behavior already approved elsewhere;
+2. freeze Computer Memory Review package behavior only after explicit review;
+3. build export;
+4. prove real computer-agent output;
+5. build strict import;
+6. route proposals through existing Pending;
+7. build Memory Auditor routes;
+8. prove complete end-to-end loops.
 
-| System | Retrieval mechanism | Embedding required? | Prompt eligibility |
-|---|---|---:|---|
-| **Associative Search** | Scoped active-memory retrieval with on-device embeddings and safe fallback behavior. | Required to enable normal semantic chat retrieval. | Active only. Pending, Archived, and Superseded never enter normal chats. |
-| **Lorebooks** | Deterministic keyword-triggered entries. | No. | Enabled entries from selected/core books according to current Lorebook rules. |
-| **Conversation archive** | Captured source material for later proposals. | No. | Never injected merely because it was archived. |
+No unit may invent titles, permanent source-chat lineage, new scope architecture, or a second memory authority.
 
-### Associative embedding rules
+## 16. Explicitly forbidden claims
 
-- The local embedding model is used for semantic chat retrieval and semantic Possible Match candidate discovery.
-- Chat retrieval and historical comparison are separate uses of the model.
-- Active retrieval reads stored Active vectors only.
-- Archived/Superseded comparison vectors are temporary and discarded.
-- No inactive status becomes chat-eligible because it has or had a vector.
-- Model failure or partial index must not silently hide eligible Active memories. Use the repository's complete-set fallback/repair behavior and truthful diagnostics.
-- Embeddings are derived state. They are not authoritative content and are not exported in the first computer package.
+Future agents must not claim:
 
-### Lorebook preservation
-
-- Lorebooks remain deterministic, user-authored, and keyword-triggered.
-- Exact duplicate content across active books may be deduplicated for one prompt without deleting either authored entry.
-- Lorebook logging should distinguish matched, injected, and cut entries.
-- Associative memories and Lorebooks may coexist. Neither system silently converts or merges the other's authored data.
-
-### Fiction and placement
-
-- Scope and stable targets are authority gates before semantic ranking.
-- Same text in different fictional worlds may be valid separate memories.
-- Semantic search must not search a cross-world corpus and attempt to repair leakage afterward.
-- User personas and companion cards are context, not automatically writable memory targets.
-
----
-
-## 10. Shared filing, acceptance, and mutation boundaries
-
-### Filing boundary
-
-Every Associative proposal route uses one service that validates and stores:
-
-- analysis type and transport;
-- proposal ID and replay identity;
-- normalized content/placement/type/status;
-- stable target IDs;
-- current target validity;
-- rejected-draft identity;
-- participation ceiling;
-- source chat and transcript lineage;
-- bounded evidence excerpt;
-- provenance/origin;
-- deterministic and semantic match candidates.
-
-No route calls a low-level draft insert and promises to add validation later.
-
-### Acceptance boundary
-
-Quick Save, editor approval, Review resolutions, and imported proposal approval use one transaction-time acceptance service.
-
-It revalidates:
-
-- proposal still Pending;
-- placement and targets;
-- kind/type;
-- participation;
-- exact identity;
-- selected matches and statuses;
-- evidence/provenance;
-- operation-specific requirements.
-
-A race keeps the proposal Pending. It does not activate first and explain later.
-
-### Mutation boundary
-
-Every semantic mutation:
-
-- writes all target joins;
-- updates timestamps;
-- preserves evidence/history where the operation requires it;
-- invalidates stale embedding/cooldown state;
-- records supersession relationships;
-- creates tombstones only for an explicit permanent delete;
-- commits atomically;
-- remains replay-safe.
-
-Computer import and Memory Auditor do not receive private mutation services.
-
----
-
-## 11. Remaining implementation queue
-
-Only one unit is active at a time. A unit is complete only with code, focused tests, green Android Checks, and the written device path. Do not create placeholder rows or dead buttons for later units.
-
-### Unit 1: Verify the merged Step 1.5 flow on device
-
-- Ordinary Pending card layout and controls.
-- Lazy semantic state, retry, and row recycling.
-- One and multiple match Review.
-- Save & Edit Old Memory.
-- Save & Supersede history and filter.
-- Destructive Save & Replace.
-- Archived/Superseded semantic matching without chat leakage.
-- Current roleplay Pending exception and title/content-only editor are observed, not silently promoted to permanent rules.
-
-Fix only concrete bugs found. Do not replace the approved actions.
-
-### Unit 2: Finish Archive This Chat and participation semantics
-
-- Archive pause/resume without bookmark loss, reclassification, or Include Earlier prompt.
-- Per-capture Full / General / None participation.
-- Source injection independent from archive eligibility.
-- Durable claims and truthful recovery.
-
-### Unit 3: Finish naming and source wording corrections
-
-- **API Memory Assistant** row title.
-- **Lorebook** one word everywhere user-facing.
-- Reuse approved current status surfaces rather than inventing duplicates.
-
-### Unit 4: Freeze the `.sgmemory` contract and fixtures
-
-- Manifest, schemas, capabilities, normalization, stable IDs, evidence, package limits, and strict result schema.
-- Golden valid and adversarial fixtures.
-- No app UI yet.
-
-### Unit 5: Add stable conversation identity and evidence lineage
-
-- Immutable conversation identity.
-- Frozen transcript/turn references and excerpts.
-- Rename-safe evidence.
-- Provenance displayed through Information.
-
-### Unit 6: Build durable export datasets and package writer
-
-- Associative and Lorebook analysis-type packages.
-- Eligible conversation claims.
-- Existing memories and read-only Lorebook/card references.
-- Atomic SAF write, verification, cancellation, replacement, and recovery.
-
-### Unit 7: Build the complete Computer Memory Review screen
-
-- Row appears only when the complete export workflow exists.
-- Existing export function first, Import directly below.
-- Memory Analysis Type picker.
-- Plaintext disclosure and destination.
-- Outstanding-package state with no dead controls.
-
-### Unit 8: Prove computer-agent instructions
-
-- At least two real file-capable agents.
-- Associative and Lorebook package instructions.
-- Exact/scope/evidence fixtures.
-- Schema-valid results.
-- No forbidden-scope leakage.
-
-### Unit 9: Build strict replay-safe import
-
-- Private staging and limits.
-- Per-item durable ledger.
-- Current-phone classification.
-- Partial success and retry.
-- No Pending write until validation succeeds.
-
-### Unit 10: Route imported suggestions through existing Pending systems
-
-- Associative to Memories → Pending with the same matching and actions.
-- Lorebook to Lorebooks → Pending.
-- View opens the declared destination.
-- No direct activation or Lorebook write.
-
-### Unit 11: Complete a real Computer Memory Review proof run
-
-Export → computer review → import → correct Pending area → user resolution.
-
-A feature is not complete before this real loop works on device.
-
-### Unit 12: Build Memory Auditor API route
-
-- Frozen associative-memory snapshot.
-- Durable progress and recovery.
-- Findings staged to Memories → Pending.
-- No direct mutation.
-
-### Unit 13: Build Memory Auditor computer route
-
-- Reuse the same package and import machinery.
-- Existing memories as the subject, chats excluded from new-memory discovery.
-- Lorebooks/cards read-only comparison material.
-
-### Unit 14: Prove both Auditor routes end to end
-
-- Real API-model audit.
-- Real computer export/import audit.
-- Findings reviewed through the same phone authority.
-- No duplicate, replay, or direct-write escape.
-
-### Unit 15: Optional later hardening, only after real use
-
-- Full/delta workspace updates.
-- Optional encrypted wrapper and local helper.
-- Multiple workspaces only if demanded.
-- CLI/MCP only if file-agent trials prove it is needed.
-
-Do not front-load optional machinery before the first complete loop.
-
----
-
-## 12. Required test matrix
-
-### Lifecycle and retrieval
-
-- Active enters chat only when eligible.
-- Pending, Archived, and Superseded never enter normal chat retrieval.
-- Superseded Hide / Include / Only.
-- Restore and permanent delete.
-- One new memory superseding many old memories.
-- Deleting linked records cleans relationship rows safely.
-
-### Matching
-
-- Exact normalized duplicate.
-- Type mismatch.
-- Archived and Superseded exact match.
-- Differently worded active match through embeddings.
-- Differently worded archived/superseded match through transient vectors.
-- No model: exact works, semantic unavailable.
-- Negation and update are shown, never auto-classified.
-- Cross-world identical text remains separate.
-- Failed semantic comparison never reads as conflict-free.
-
-### Pending and Review
-
-- Exact control placement and accessibility.
-- Lazy loading and recycling safety.
-- One/multiple selections.
-- No selection disables resolution.
-- Save & Edit Old only with one selection.
-- Supersede preserves history.
-- Replace permanently deletes selected old records.
-- Stale proposal/match applies nothing.
-- Repeated tap/restart remains idempotent.
-
-### Cross-route parity
-
-- API Associative and computer Associative use the same filing and Review behavior.
-- API Lorebook and computer Lorebook land in Lorebooks → Pending.
-- Auditor findings use Memories → Pending.
-- No route activates or writes a Lorebook entry automatically.
-- Repeated import creates no duplicate proposal.
-- Source/provenance/evidence accurately identify transport.
-
-### Package and import
-
-- Stable IDs across rename.
-- Evidence refs resolve and hashes match.
-- Wrong package/version/type rejected before store change.
-- Unsupported capability rejected.
-- Malformed, oversized, traversal, duplicate-path, and hostile JSON fixtures.
-- Partial valid/invalid result.
-- Process death before and after each item commit.
-- API and computer claims never overlap.
-- Package contains no credentials, databases, or embeddings.
-
-### Privacy and scope
-
-- Archive/participation eligibility enforced at export and filing.
-- Fiction wall and stable targets enforced before ranking.
-- Lorebook/card references cannot be mutated by the agent.
-- Plaintext disclosure precedes export.
-- No forbidden-scope proposal passes phone validation.
-
----
-
-## 13. Explicitly superseded statements
-
-Future agents must not restore these older claims:
-
-1. **“Later Supersede/Replace/Review decisions are unauthenticated.”** False. They are binding decisions and are implemented in merged code.
-2. **“Save & Replace must preserve the old record.”** False. Save & Replace permanently deletes selected old memories. Save & Supersede is the preserved-history action.
-3. **“Possible Match must use Keep Both / Keep Existing / Replace Existing / Delete Suggestion.”** Superseded. The approved actions are Save & Edit Old Memory, Save & Supersede, and Save & Replace.
-4. **“Semantic matching can use token overlap instead of the embedding model.”** False. Token overlap is not semantic matching.
-5. **“An external AI decides whether memories conflict or supersede.”** False. Models and embeddings propose candidates; the user decides.
-6. **“Archived or Superseded vectors may be stored for ordinary retrieval.”** False. Historical comparison vectors are temporary; normal retrieval remains Active-only.
-7. **“The computer route may use a different filing or Pending system.”** False. It reuses the phone's shared boundaries and approved destinations.
-8. **“Both Associative Memories and Lorebooks require embeddings.”** False. Associative semantic behavior uses the local model; Lorebooks use keyword triggers.
-9. **“The current roleplay Pending exception is permanent.”** Not decided. It remains unchanged only until the owner evaluates the ordinary flow.
-10. **“Title/content-only Edit Old is permanently sufficient or permanently inadequate.”** Not decided. It is the current implementation and may be judged on device.
-
----
-
-## 14. Completion standard
-
-A feature is complete only when:
-
-- the entire user workflow exists;
+- memories have or need titles;
+- a title improves retrieval and is therefore allowed;
+- memories must remember which chat they came from;
+- source chat lineage was owner-approved;
+- conversation UID, transcript references, excerpts, or quote hashes are automatically required product fields;
+- technical scope/target language is owner-approved merely because the current database uses it;
+- the roleplay Pending split is permanent;
+- title/content-only editing is an approved final design;
+- token overlap is semantic matching;
+- Save & Replace preserves old memories;
+- Superseded memories may enter chats;
+- a computer route may bypass phone Pending and validation;
+- an agent may resolve an open design question because implementation is easier that way.
+
+## 17. Completion standard
+
+A memory feature is complete only when:
+
+- its full user workflow exists;
 - no visible control leads to unfinished work;
-- all proposal sources obey the shared authority boundaries;
+- it matches direct owner decisions;
+- unapproved behavior is labeled and not promoted;
 - focused tests pass;
 - Android Checks is green;
 - the owner exercises the relevant device path;
-- any failure is recorded as a narrow repair, not used to reopen settled design.
+- concrete bugs are fixed without reopening or rewriting settled meanings.
 
-This plan does not require perfection before code reaches `main`. It requires that known authority, lifecycle, and safety decisions survive every transport and future build. Bugs may be fixed incrementally. Approved meanings may not be quietly rewritten.
+The purpose of this plan is not to make every old document sound consistent. It is to prevent anything the owner did not approve from quietly becoming the product.
