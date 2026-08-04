@@ -349,7 +349,7 @@ class MemoryStoreInstrumentedTest {
     private fun buildV20Database(name: String, fill: (SQLiteDatabase) -> Unit) {
         val file = ctx.getDatabasePath(name)
         file.parentFile?.mkdirs()
-        val db = SQLiteDatabase.openOrCreateDatabase(file.path, key, null)
+        val db = SQLiteDatabase.openOrCreateDatabase(file.path, key, null, null)
         db.execSQL("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         db.execSQL("INSERT INTO meta (key, value) VALUES ('db_migration', '20')")
         db.execSQL(
