@@ -5144,8 +5144,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 } else if (response.call.attributes.contains(responseLifecycleRecorderAttribute)) {
                                     val recorder = response.call.attributes[responseLifecycleRecorderAttribute]
                                     try {
+                                        // Receive the observer's split copy ONCE. A second
+                                        // bodyAsChannel() on the same call throws
+                                        // DoubleReceiveException, and Ktor's receive failure
+                                        // path cancels the ORIGIN response context — killing
+                                        // the live generation stream this copy was split from.
+                                        val observedChannel = response.bodyAsChannel()
                                         while (true) {
-                                            val line = response.bodyAsChannel().readUTF8Line() ?: break
+                                            val line = observedChannel.readUTF8Line() ?: break
                                             val reported = ReportedProviderParser.fromResponseLine(line)
                                             if (reported != null) {
                                                 // Response-derived only. Never
