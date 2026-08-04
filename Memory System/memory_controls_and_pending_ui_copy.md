@@ -2,7 +2,7 @@
 
 **2026-08-04**
 
-This focused specification accompanies `external_memory_analysis_counterplan.md` on branch `codex/memory-plan-truth-repair`. It pins down the user-facing wording and confirms how the revised memory data fits the already-approved Pending and Possible Match controls.
+This focused specification accompanies `external_memory_analysis_counterplan.md`. Both documents are intended to live on `main` as the authoritative memory implementation plan. This file supplies the exact user-facing wording and layout contract for Roadmap Phases 4 through 6. If implementation order or product behavior is in question, follow the canonical plan; for the controls described here, follow this wording and layout.
 
 ## 1. Memory Controls
 
