@@ -8,60 +8,78 @@ This focused specification accompanies `external_memory_analysis_counterplan.md`
 
 ### Memory Types
 
-**Section title:** `Memory Types`
+**Section Title:** `Memory Types`
 
 **Description:**
 
-> Create the categories used to organize memories. The Memory Assistant can suggest any type in this list.
+> Create the types used to organize memories. The Memory Assistant can suggest any type in this list.
 
-The section shows the complete current list as ordinary rows.
+Use Title Case for labels, buttons, and dialog titles in this section.
 
-**Primary action:** `Add type`
+#### Add Type Row
 
-Each row allows:
+The top of the section contains one compact horizontal entry row rather than a separate Add dialog:
 
-- `Rename`
-- `Delete`
+- **Field Label:** `Type`
+- an empty text field;
+- **Button:** `Add`
 
-#### Add dialog
+The user enters a type name and taps **Add**. The new type then appears in the list below.
 
-**Title:** `Add type`
+The Add button should not submit blank or whitespace-only text.
 
-**Field label:** `Type name`
+#### Type List
 
-**Buttons:** `Cancel` and `Add`
+Directly beneath the Add Type row is a bordered, scrollable box containing the complete current Type list.
 
-#### Rename dialog
+- each Type appears as an ordinary list row;
+- the list scrolls when it exceeds the available height;
+- tapping a Type row opens its available actions;
+- row actions are `Rename` and `Delete`.
 
-**Title:** `Rename type`
+The list remains visible while the Add Type row stays above it. Adding a Type does not navigate away from Memory Controls.
 
-**Field label:** `Type name`
+#### Rename Type
 
-**Buttons:** `Cancel` and `Save`
+Tapping **Rename** opens a small dialog:
 
-#### Delete dialog
+- **Title:** `Rename Type`
+- **Field Label:** `Type`
+- the current name is prefilled;
+- **Buttons:** `Cancel` and `Save`.
 
-**Title:** `Delete this type?`
+Rename uses a stable internal Type ID so every associated memory reflects the new name without rewriting each memory relationship individually.
+
+#### Delete Type
+
+Tapping **Delete** opens:
+
+**Title:** `Delete This Type?`
 
 **Body:**
 
-> This will remove “{type name}” from {count} associated memories. The memories will not be deleted.
+> Used by {count} memories. This will remove the type from those memories. The memories will not be deleted.
 
-Use correct singular/plural wording for `1 memory` and multiple `memories`.
+Use correct singular wording for `1 memory` and plural wording for multiple memories.
 
-**Buttons:** `Cancel` and destructive `Delete`
+**Buttons:** `Cancel` and destructive `Delete`.
 
-Deleting a Type removes only the assignment. Affected memories become `No Type`.
+Deleting a Type:
+
+- removes only the Type assignment;
+- never deletes a memory;
+- leaves affected memories as `No Type`;
+- refreshes their embeddings using their remaining memory text and tags.
 
 ### Importance Ratings
 
-**Toggle label:** `Use importance ratings`
+**Toggle Label:** `Use Importance Ratings`
 
-**Summary:**
+**Subtext:**
 
-> Rate memories from 0 to 5. Ratings only reorder memories that are already relevant and are preserved when turned off.
+> Memories can be rated from 0 to 5. Completely neutral is 0. Higher importance may take precedence when multiple memories apply.
 
-**Recommended default:** Off.
+**Recommended Default:** Off.
 
 There is no second toggle for default ratings and no initial AI-rating toggle.
 
@@ -79,15 +97,20 @@ When On:
 - new memories begin at 0;
 - stored ratings reappear.
 
-**Neutral value copy:** `0 · Not rated`
+**Neutral Value:** `0 · Neutral`
 
-Values 1 through 5 are displayed as numbers. Do not invent semantic labels such as `critical`, `minor`, or `essential` unless the owner later approves them.
+Values 1 through 5 are displayed as numbers. Do not invent semantic labels such as `Critical`, `Minor`, or `Essential` unless the owner later approves them.
 
-## 2. Memory Browser tabs
+Importance is considered only after scope and semantic relevance have already made a memory eligible. It may help choose among multiple applicable memories, but it cannot make an irrelevant memory apply.
 
-**Approved tab:** `Roleplay`
+## 2. Memory Browser Tabs
 
-The Roleplay tab is a grouped browser view of memories whose existing scope is:
+The approved tab labels are:
+
+- `General`
+- `Roleplay`
+
+The **Roleplay** tab is a grouped browser view of memories whose existing scope is:
 
 - World;
 - Roleplay Character;
@@ -97,17 +120,9 @@ It is not a new generic Roleplay scope.
 
 The underlying scope and target remain intact and visible. A Campaign memory does not become a generic Roleplay memory, and unrelated worlds, characters, or campaigns do not share retrieval context merely because they appear in the same tab.
 
-**Non-roleplay tab label remains unresolved.**
+The **General** tab contains all remaining existing scopes.
 
-Recommended wording options, in order:
-
-1. `General`, clearest and least likely to exclude a valid existing scope;
-2. `Everyday`, warmer but potentially less accurate for projects and companion memories;
-3. `Main`, neutral but less descriptive.
-
-Do not lock one into code until the owner selects it.
-
-## 3. Pending screen structure
+## 3. Pending Screen Structure
 
 The previously approved controls still fit. Do not redesign their meanings or positions.
 
@@ -116,14 +131,14 @@ Each Pending card shows all user-relevant data that would be approved:
 1. complete memory text;
 2. actual scope and target;
 3. selected Type or `No Type`;
-4. tags or `No tags`;
-5. importance only when `Use importance ratings` is On;
+4. tags or `No Tags`;
+5. importance only when `Use Importance Ratings` is On;
 6. the existing Information control;
 7. the existing save/discard or Review controls.
 
 No title appears.
 
-### Scope display
+### Scope Display
 
 The tab communicates only the broad grouping. The card must still show the actual scope and target in human-readable form.
 
@@ -141,37 +156,37 @@ Do not show raw keys such as `rp_character` to the user.
 
 Scope and target are visible directly on the card. If they need correction, the row may open the existing selector, but the current value must never be hidden behind Information or a separate edit screen.
 
-### Type display
+### Type Display
 
-**Field label:** `Type`
+**Field Label:** `Type`
 
 The current value is visible directly on the card and can be changed in place from the user's current Type list.
 
-Empty value: `No Type`
+Empty value: `No Type`.
 
 Type never determines the Roleplay tab.
 
-### Tags display
+### Tags Display
 
-**Field label:** `Tags`
+**Field Label:** `Tags`
 
 Show every assigned tag directly on the card using the app's existing tag presentation.
 
-Empty value: `No tags`
+Empty value: `No Tags`.
 
 Editing may expand inline or open the existing compact tag editor, but assigned tags must remain visible without opening Information.
 
-### Importance display
+### Importance Display
 
 Shown only while the master toggle is On.
 
-**Field label:** `Importance`
+**Field Label:** `Importance`
 
-Default and neutral display: `0 · Not rated`
+Default and neutral display: `0 · Neutral`.
 
 The selected value must be visible without opening another screen. A compact dropdown is preferred over six permanently visible buttons because the Pending list is intended for scanning.
 
-## 4. Existing Pending actions
+## 4. Existing Pending Actions
 
 ### No Possible Match
 
@@ -186,11 +201,11 @@ Keep the approved layout:
 
 Accessibility labels:
 
-- Information: `Memory details`
-- discard X: `Discard memory`
-- save/disk: `Save memory`
+- Information: `Memory Details`
+- discard X: `Discard Memory`
+- save/disk: `Save Memory`
 
-### One or more Possible Matches
+### One or More Possible Matches
 
 Keep the approved layout:
 
@@ -202,11 +217,11 @@ Keep the approved layout:
 - no discard X;
 - the whole card is not secretly the Review control.
 
-The caution icon's accessibility description is `Possible match found`.
+The caution icon's accessibility description is `Possible Match Found`.
 
 ## 5. Accept All
 
-**Screen action:** `Accept All`
+**Screen Action:** `Accept All`
 
 Accept All applies only to ordinary, conflict-free proposals currently visible in the selected tab.
 
@@ -245,7 +260,7 @@ Keep the approved resolution order:
 
 No new resolution button is required by user-owned Types, tags, scope-derived Roleplay grouping, or optional importance.
 
-## 7. Design rule
+## 7. Design Rule
 
 The Pending interface is a review sheet, not a series of mystery envelopes.
 
