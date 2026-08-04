@@ -23,11 +23,9 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
-import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -39,6 +37,7 @@ import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 
 /**
  * "Memory Filters" — slide-out panel that replaces the old chip-row (owner
@@ -164,7 +163,7 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         val root = sectionsContainer ?: return
         root.removeAllViews()
 
-        // Sort and Source use the shared dropdown style (anchored ListPopupWindow),
+        // Sort and Source use the canonical shared dropdown style,
         // with Source directly under Sort (owner ruling, Aug 3 2026).
         addDropdownSection(
             root, getString(R.string.mem_filter_sort),
@@ -234,10 +233,8 @@ class MemoryFilterPanelActivity : FragmentActivity() {
     }
 
     /**
-     * A single-value dropdown row in the shared Widget.App.Dropdown style: bold
-     * label on the left, current value on the right. Tapping the value opens an
-     * anchored ListPopupWindow (the shared dropdown, not a dialog). No filled
-     * row background.
+     * A single-value canonical dropdown row: label on the left, control filling
+     * the rest of the same line. Tapping the value opens AppDropdown.
      */
     private fun addDropdownSection(
         root: LinearLayout,
@@ -253,8 +250,10 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         labelView.text = label
         valueView.text = options.firstOrNull { it.first == currentKey() }?.second ?: currentKey()
 
-        valueView.setOnClickListener { anchor ->
-            showDropdown(anchor, options.map { it.second }) { index ->
+        valueView.setOnClickListener {
+            val labels = options.map { it.second }
+            val selectedIndex = options.indexOfFirst { it.first == currentKey() }
+            AppDropdown.show(valueView, labels, selectedIndex) { index ->
                 apply(options[index].first)
                 valueView.text = options[index].second
             }
@@ -263,28 +262,12 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         root.addView(row)
     }
 
-    /** The shared dropdown: an anchored ListPopupWindow the width of its value,
-     *  matching the Provider Filters panel. */
-    private fun showDropdown(anchor: View, labels: List<String>, onPick: (Int) -> Unit) {
-        if (isFinishing) return
-        val popup = ListPopupWindow(this)
-        popup.anchorView = anchor
-        popup.isModal = true
-        popup.width = anchor.width
-        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
-        popup.setOnItemClickListener { _, _, position, _ ->
-            popup.dismiss()
-            onPick(position)
-        }
-        popup.show()
-    }
-
     /**
-     * A multi-select dropdown section in the shared Widget.App.Dropdown style.
+     * A multi-select dropdown section in the canonical dropdown style.
      * The value stays "Select" (it is the add-another control); each pick drops
      * into a chip below and leaves the dropdown list until its chip's × returns
-     * it. Options absent from [available] render greyed + italic and cannot be
-     * picked (owner ruling, Aug 3 2026).
+     * it. Options absent from [available] use the shared disabled treatment and
+     * cannot be picked (owner ruling, Aug 3 2026).
      */
     private fun addMultiDropdownSection(
         root: LinearLayout,
@@ -336,13 +319,18 @@ class MemoryFilterPanelActivity : FragmentActivity() {
             pills.visibility = if (selection.isEmpty()) View.GONE else View.VISIBLE
         }
 
-        valueView.setOnClickListener { anchor ->
+        valueView.setOnClickListener {
             // Only offer what is not already chosen; picking removes it from the
             // list until the chip is closed.
             val remaining = options.filter { it.first !in selection }
             if (remaining.isEmpty()) return@setOnClickListener
-            showMultiDropdown(anchor, remaining, available) { key ->
-                selection.add(key)
+            AppDropdown.show(
+                anchor = valueView,
+                labels = remaining.map { it.second },
+                selectedIndex = -1,
+                isOptionEnabled = { index -> remaining[index].first in available }
+            ) { index ->
+                selection.add(remaining[index].first)
                 rebuildPills()
             }
         }
@@ -351,50 +339,6 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         section.addView(row)
         section.addView(pills)
         root.addView(section)
-    }
-
-    /** The multi-select dropdown list: an anchored ListPopupWindow of the
-     *  not-yet-chosen options. Options absent from [available] show italic +
-     *  lighter and are disabled, so a tap adds nothing. */
-    private fun showMultiDropdown(
-        anchor: View,
-        remaining: List<Pair<String, String>>,
-        available: Set<String>,
-        onPick: (String) -> Unit
-    ) {
-        if (isFinishing) return
-        val popup = ListPopupWindow(this)
-        popup.anchorView = anchor
-        popup.isModal = true
-        popup.width = anchor.width
-        val adapter = object : ArrayAdapter<String>(
-            this, android.R.layout.simple_list_item_1, remaining.map { it.second }
-        ) {
-            override fun areAllItemsEnabled(): Boolean = false
-            override fun isEnabled(position: Int): Boolean = remaining[position].first in available
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val view = super.getView(position, convertView, parent) as TextView
-                if (remaining[position].first in available) {
-                    view.setTypeface(null, android.graphics.Typeface.NORMAL)
-                    view.setTextColor(resources.getColor(R.color.text, theme))
-                    view.alpha = 1f
-                } else {
-                    view.setTypeface(null, android.graphics.Typeface.ITALIC)
-                    view.setTextColor(resources.getColor(R.color.text_subtitle, theme))
-                    view.alpha = 0.6f
-                }
-                return view
-            }
-        }
-        popup.setAdapter(adapter)
-        popup.setOnItemClickListener { _, _, position, _ ->
-            // Disabled (unavailable) rows do not fire this; guard anyway.
-            if (remaining[position].first in available) {
-                popup.dismiss()
-                onPick(remaining[position].first)
-            }
-        }
-        popup.show()
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

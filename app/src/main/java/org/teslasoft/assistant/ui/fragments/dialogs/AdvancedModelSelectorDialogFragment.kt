@@ -21,12 +21,14 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.DialogInterface
+import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
@@ -64,13 +66,17 @@ import kotlin.time.Duration.Companion.seconds
  * Full-screen model picker (owner redesign, July 31 2026). Replaces the old
  * pop-up: it fills the screen, has a header with a back button, and opens on a
  * favorites-first landing — the current endpoint's favorites, a search box that
- * searches the endpoint's whole catalog, and a "View all" button that swaps the
- * screen to the full model list. Favorites are per-endpoint (see
- * [FavoriteModelsPreferences]); the image-generator variant keeps its previous
- * behavior of showing the full (capability-narrowed) catalog directly.
+ * searches the endpoint's whole catalog, and a "View All" button that swaps the
+ * screen to the full model list. A separate provider-wide entry purpose opens
+ * the same screen directly on every model advertised by that endpoint.
+ * Favorites are per-endpoint (see [FavoriteModelsPreferences]); the
+ * image-generator variant keeps its previous behavior of showing the full
+ * (capability-narrowed) catalog directly.
  */
 class AdvancedModelSelectorDialogFragment : DialogFragment() {
     companion object {
+        private const val ARG_START_WITH_ALL_MODELS = "startWithAllModels"
+
         /** [endpointId], when non-blank, fetches models for that specific saved
          *  endpoint instead of the chat's own active endpoint (Preferences'
          *  apiEndpointId) — used by callers assigning a model to a feature that
@@ -96,6 +102,21 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
             return advancedModelSelectorDialogFragment
         }
+
+        /**
+         * Provider-wide entry point. It uses the same selector screen, fetch,
+         * search, rows, and selection result as [newInstance], but opens on the
+         * endpoint's complete model catalog instead of its favorites landing.
+         * Back closes the screen rather than stepping into favorites.
+         */
+        fun newAllModelsInstance(
+            name: String,
+            chatId: String,
+            endpointId: String
+        ): AdvancedModelSelectorDialogFragment =
+            newInstance(name, chatId, endpointId).apply {
+                requireArguments().putBoolean(ARG_START_WITH_ALL_MODELS, true)
+            }
     }
 
     private var modelList: ListView? = null
@@ -125,6 +146,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
     /** false = favorites landing; true = the full "View all" list. */
     private var showingAll = false
+    /** True when the caller's purpose is the provider-wide catalog itself. */
+    private var startsWithAllModels = false
     private var query = ""
 
     private var requestNetwork: RequestNetwork? = null
@@ -144,6 +167,14 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         super.onDetach()
 
         mContext = null
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // A match-parent view inside the default DialogFragment theme is still
+        // a floating window with dialog insets. Use the app's normal screen
+        // theme so the shared action bar and content genuinely fill the screen.
+        setStyle(STYLE_NORMAL, R.style.UI_Material)
     }
 
     private var modelSelectedListener: ModelListAdapter.OnItemClickListener = object : ModelListAdapter.OnItemClickListener {
@@ -336,6 +367,29 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         super.onStart()
         // Fill the screen: this is a full-screen selector, not a floating pop-up.
         dialog?.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        applySystemBarInsets()
+    }
+
+    /** Match the app's full-screen activity treatment on Android 15+. */
+    private fun applySystemBarInsets() {
+        if (Build.VERSION.SDK_INT < 35) return
+        val window = dialog?.window ?: return
+        val root = view ?: return
+        window.decorView.post {
+            val insets = window.decorView.rootWindowInsets ?: return@post
+            root.findViewById<View>(R.id.action_bar)?.setPadding(
+                0,
+                insets.getInsets(WindowInsets.Type.statusBars()).top,
+                0,
+                0
+            )
+            root.setPadding(
+                root.paddingLeft,
+                root.paddingTop,
+                root.paddingRight,
+                insets.getInsets(WindowInsets.Type.navigationBars()).bottom
+            )
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -352,6 +406,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         val ctx = mContext ?: requireContext()
 
         imageMode = requireArguments().getBoolean("imageModels", false)
+        startsWithAllModels = requireArguments().getBoolean(ARG_START_WITH_ALL_MODELS, false)
         selectorTitle?.text = getString(
             if (imageMode) R.string.label_select_image_model else R.string.label_select_ai_model
         )
@@ -383,9 +438,9 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             override fun afterTextChanged(s: Editable?) { /* unused */ }
         })
 
-        // Image mode has no favorites landing — it goes straight to the full
-        // (capability-narrowed) catalog, as it did before this redesign.
-        if (imageMode) showingAll = true
+        // Image mode and provider-wide callers have no favorites landing.
+        // The ordinary Select AI Model purpose remains favorites-first.
+        if (imageMode || startsWithAllModels) showingAll = true
 
         render()
         startCatalogFetch()
@@ -394,7 +449,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     /** System/hardware back: from the full list return to the favorites
      *  landing; from the landing, close the picker. */
     private fun handleBack() {
-        if (showingAll && !imageMode) {
+        if (showingAll && !imageMode && !startsWithAllModels) {
             showingAll = false
             fieldSearch?.setText("")
             query = ""
@@ -434,11 +489,17 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         }
     }
 
-    /** Fetch the endpoint's catalog: the OpenAI SDK path first (with the chat
-     *  variant's name exclusions), falling back to a plain GET; image mode uses
-     *  the raw request directly so capability metadata survives. */
+    /** Fetch the endpoint's catalog. The provider-wide purpose uses the raw
+     *  endpoint response so "all models" really means every model id the
+     *  endpoint advertises. The ordinary chat picker keeps its established SDK
+     *  filtering, and image mode keeps the raw capability-aware path. */
     private fun startCatalogFetch() {
         val endpoint = apiEndpointObject ?: return
+        if (imageMode || startsWithAllModels) {
+            startRawModelsRequest()
+            return
+        }
+
         val extraHeaders: Map<String, String> = when (endpoint.authType) {
             ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to endpoint.apiKey)
             ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to endpoint.apiKey)
@@ -458,10 +519,6 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         val ai = OpenAI(config)
 
         CoroutineScope(Dispatchers.Main).launch {
-            if (imageMode) {
-                startRawModelsRequest()
-                return@launch
-            }
             try {
                 val models: List<Model> = ai.models()
                 for (model in models) {
@@ -480,8 +537,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     }
 
     /** Plain GET {base}models with the endpoint's auth mode; the parsed
-     *  response lands in [requestListener]. Used as the fallback when the
-     *  SDK path fails, and as the primary path in image mode. */
+     *  response lands in [requestListener]. Used as the fallback when the SDK
+     *  path fails, and as the primary path in image/provider-wide modes. */
     private fun startRawModelsRequest() {
         requestNetwork = RequestNetwork((mContext as Activity?) ?: return)
         val authHeaders = HashMap<String, Any>()

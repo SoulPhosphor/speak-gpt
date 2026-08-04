@@ -255,7 +255,11 @@ class ChooseProviderActivity : FragmentActivity() {
         loadValues()
         initLogic()
 
-        seedProviderStateFromFavorite()
+        // The caller may be opening this screen specifically to set up a mode
+        // just picked in Quick Settings or Memory Assistant. Load the saved
+        // provider details, but preserve that explicit initial mode. A later
+        // model change still adopts the newly chosen favorite's saved mode.
+        seedProviderStateFromFavorite(adoptFavoriteRoutingType = false)
         if (selectedModel.isNotBlank()) startProviderFetch()
     }
 
@@ -378,7 +382,11 @@ class ChooseProviderActivity : FragmentActivity() {
             ?: emptyList()
 
     private fun openFullModelPicker() {
-        val modelDialog = AdvancedModelSelectorDialogFragment.newInstance(selectedModel, "", endpointId)
+        val modelDialog = AdvancedModelSelectorDialogFragment.newAllModelsInstance(
+            selectedModel,
+            "",
+            endpointId
+        )
         modelDialog.setModelSelectedListener { model -> onModelChanged(model) }
         modelDialog.show(supportFragmentManager, "ChooseProviderModelSelector")
     }
@@ -392,7 +400,7 @@ class ChooseProviderActivity : FragmentActivity() {
         providerEndpoints = null
         availableSlugs = null
         zdrMatches = null
-        seedProviderStateFromFavorite()
+        seedProviderStateFromFavorite(adoptFavoriteRoutingType = true)
         updateModeViews()
         if (selectedModel.isBlank()) {
             btnProviderFilters?.visibility = View.GONE
@@ -410,7 +418,7 @@ class ChooseProviderActivity : FragmentActivity() {
 
     /** Load the model's saved provider memory (rides on its favorite). A model
      *  with no favorite starts from the defaults. */
-    private fun seedProviderStateFromFavorite() {
+    private fun seedProviderStateFromFavorite(adoptFavoriteRoutingType: Boolean) {
         val favorite = if (selectedModel.isBlank()) null
         else favoriteModelsPreferences?.getFavorite(selectedModel, endpointId)
 
@@ -420,8 +428,10 @@ class ChooseProviderActivity : FragmentActivity() {
         ignored.clear()
         ignored.addAll(favorite?.ignoredProviders ?: emptyList())
         switchAllowFallbacks?.isChecked = favorite?.allowFallbacks ?: true
-        if (favorite != null && favorite.routingType in routingTypes) {
-            selectedRoutingType = favorite.routingType
+        if (adoptFavoriteRoutingType) {
+            selectedRoutingType = favorite?.routingType
+                ?.takeIf { it in routingTypes }
+                ?: FavoriteModelObject.ROUTING_AUTOMATIC
             fieldRoutingType?.text = routingLabel(selectedRoutingType)
         }
         updateOrderBox()

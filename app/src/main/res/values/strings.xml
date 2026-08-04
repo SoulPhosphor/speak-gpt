@@ -332,7 +332,7 @@
     <string name="chat_generate_name_automatically">Generate name automatically</string>
     <string name="btn_favorite_models">Favorite models</string>
     <string name="btn_all_models">See all models</string>
-    <string name="label_view_all">View all</string>
+    <string name="label_view_all">View All</string>
     <string name="label_favorite_models_section">Favorites</string>
     <string name="label_creative">Creative</string>
     <string name="label_deterministic">Deterministic</string>
@@ -1770,7 +1770,8 @@
     <string name="memory_controls_row_assistant_model">Memory Assistant Model</string>
     <string name="memory_controls_row_assistant_model_hint">Model name used by Memory Assistant.</string>
     <string name="memory_assistant_edit_endpoint_desc">Edit selected endpoint</string>
-    <string name="memory_assistant_choose_model_desc">Choose from all models</string>
+    <string name="memory_assistant_routing_title">Select Preferred Routing Type</string>
+    <string name="memory_assistant_routing_hint">Provider routing remains Automatic unless the selected model is a favorite with routing already set up. Preferred and Only use the provider settings saved with that favorite.</string>
     <string name="memory_controls_section_backups">Backups</string>
     <string name="memory_controls_auto_backup">Automatic Daily Backup</string>
     <string name="memory_controls_auto_backup_hint">Save a rotating local backup once a day.</string>
@@ -2943,8 +2944,11 @@
     <string name="summarizer_section_model">Summary Model</string>
     <string name="summarizer_row_endpoint">Summarizer Endpoint</string>
     <string name="summarizer_row_endpoint_hint">Choose the AI endpoint that will write the conversation summaries.</string>
+    <string name="summarizer_edit_endpoint_desc">Edit selected endpoint</string>
     <string name="summarizer_row_model">Summarizer Model</string>
     <string name="summarizer_row_model_hint">The model that writes the summary. A cheaper model than the chat\'s own is fine here.</string>
+    <string name="summarizer_routing_title">Select Preferred Routing Type</string>
+    <string name="summarizer_routing_hint">Provider routing remains Automatic unless the selected model is a favorite with routing already set up. Preferred and Only use the provider settings saved with that favorite.</string>
 
     <string name="summarizer_complete_messages">Complete Messages</string>
     <string name="summarizer_complete_messages_hint">Last number of complete messages sent to the model before summarizing.</string>
@@ -2988,6 +2992,7 @@
     <!-- Failure categories — exact normative wording (errors addendum §2). -->
     <string name="summarizer_err_model_missing_title">Summary Model Missing</string>
     <string name="summarizer_err_model_missing">The selected Summary Model is no longer available. Choose another model in Summarizer Settings.</string>
+    <string name="summarizer_routing_not_configured_detail">Provider routing for this Summary Model is incomplete. Choose Automatic or finish Preferred or Only setup in Summarizer Settings.</string>
     <string name="summarizer_err_unreachable_title">AI Service Unreachable</string>
     <string name="summarizer_err_unreachable">The summarizer couldn\'t reach the selected AI service. Check your connection and the selected endpoint, then try again.</string>
     <string name="summarizer_err_connect_timeout_title">Connection Timed Out</string>

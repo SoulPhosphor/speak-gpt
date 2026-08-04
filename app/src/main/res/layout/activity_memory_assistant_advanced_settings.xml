@@ -188,29 +188,46 @@
                         android:text="@string/memory_controls_row_assistant_model_hint" />
                 </LinearLayout>
 
-                <LinearLayout
+                <TextView
+                    android:id="@+id/text_archivist_model_value"
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/dropdown_select" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_view_all_archivist_models"
+                    style="@style/AppButton.Primary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:layout_marginTop="12dp"
+                    android:text="@string/choose_provider_view_all_models" />
+            </LinearLayout>
 
-                    <TextView
-                        android:id="@+id/text_archivist_model_value"
-                        style="@style/Widget.App.Dropdown.CanonicalValue"
-                        android:layout_width="0dp"
-                        android:layout_weight="1"
-                        android:text="@string/dropdown_select" />
+            <!-- OpenRouter-style provider routing is an override for Memory
+                 Assistant only. It uses provider details already stored on the
+                 selected favorite and is hidden for endpoints without routing. -->
+            <LinearLayout
+                android:id="@+id/section_archivist_routing"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
 
-                    <ImageButton
-                        android:id="@+id/btn_choose_archivist_model"
-                        style="@style/Widget.App.QuickTile.EditButton"
-                        android:layout_marginStart="8dp"
-                        android:layout_marginEnd="0dp"
-                        android:contentDescription="@string/memory_assistant_choose_model_desc"
-                        android:src="@drawable/ic_settings"
-                        android:tooltipText="@string/memory_assistant_choose_model_desc" />
-                </LinearLayout>
+                <TextView
+                    style="@style/Widget.App.Section.Title"
+                    android:text="@string/memory_assistant_routing_title" />
+
+                <TextView
+                    style="@style/Widget.App.Section.Hint"
+                    android:text="@string/memory_assistant_routing_hint" />
+
+                <TextView
+                    android:id="@+id/text_archivist_routing_value"
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/choose_provider_routing_automatic" />
             </LinearLayout>
 
             <!-- ============ Temperature ============ -->

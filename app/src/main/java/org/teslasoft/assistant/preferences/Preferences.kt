@@ -1832,6 +1832,27 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("archivist_model", model)
     }
 
+    /** Memory Assistant-only provider-routing override. Provider details still
+     * live on the selected model favorite; this value chooses which of those
+     * saved details the Memory Assistant uses without changing normal chat. */
+    fun getArchivistRoutingType(): String {
+        val stored = getGlobalString("archivist_routing_type", "automatic")
+        return when (stored) {
+            "preferred", "only" -> stored
+            else -> "automatic"
+        }
+    }
+
+    fun setArchivistRoutingType(type: String) {
+        putGlobalString(
+            "archivist_routing_type",
+            when (type) {
+                "preferred", "only" -> type
+                else -> "automatic"
+            }
+        )
+    }
+
     /* Memory Assistant tuning (owner spec, July 9 2026 —
      * `Memory System/memory_settings_reorg_spec.md`). All global. The cap and
      * minimum importance are ENFORCED IN CODE in the Archivist runner, never
@@ -2182,12 +2203,32 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("summarizer_endpoint_id", id)
     }
 
-    /** Summary Model name on that endpoint. "" = use the endpoint's model. */
+    /** Explicit Summary Model name on that endpoint. "" = not configured. */
     fun getSummarizerModel(): String =
         getGlobalString("summarizer_model", "")
 
     fun setSummarizerModel(model: String) {
         putGlobalString("summarizer_model", model)
+    }
+
+    /** Summarizer-only provider-routing override. Provider details remain on
+     * the selected model favorite and ordinary chat routing is untouched. */
+    fun getSummarizerRoutingType(): String {
+        val stored = getGlobalString("summarizer_routing_type", "automatic")
+        return when (stored) {
+            "preferred", "only" -> stored
+            else -> "automatic"
+        }
+    }
+
+    fun setSummarizerRoutingType(type: String) {
+        putGlobalString(
+            "summarizer_routing_type",
+            when (type) {
+                "preferred", "only" -> type
+                else -> "automatic"
+            }
+        )
     }
 
     /** Complete Messages default (owner-approved default: 20) — the

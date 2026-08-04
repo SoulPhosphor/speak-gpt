@@ -55,8 +55,8 @@ data class RoutingDecision(
  * route every outgoing chat request's provider preferences through [decide],
  * with the freshest authoritative discovery information available.
  *
- * NOTE: request wiring does not exist yet. This module is the single,
- * pre-tested rule set it must call; nothing sends provider preferences today.
+ * Chat, Memory Assistant, and Summarizer request wiring resolve through this
+ * rule set immediately before building their provider payloads.
  *
  * [availableSlugs] carries the lowercase slugs of a COMPLETE, authoritative
  * discovery result, or null when availability is unknown (failed, partial,

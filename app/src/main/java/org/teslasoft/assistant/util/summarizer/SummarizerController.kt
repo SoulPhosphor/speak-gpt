@@ -37,9 +37,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
+import org.teslasoft.assistant.providers.ProviderRoutingResolver
+import org.teslasoft.assistant.providers.ProviderRoutingSerializer
+import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.util.GenerationErrorClassifier
+import io.ktor.client.plugins.api.Send
+import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.content.TextContent
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -108,8 +118,17 @@ class SummarizerController(
             } else {
                 val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(context)
                     .getApiEndpoint(context, endpointId)
-                endpoint.host.isNotBlank() &&
-                    (prefs.getSummarizerModel().isNotBlank() || endpoint.model.isNotBlank())
+                val model = prefs.getSummarizerModel()
+                val routingReady = if (endpoint.isOpenRouterRouting() && model.isNotBlank()) {
+                    val favorite = FavoriteModelsPreferences.getPreferences(context)
+                        .getFavorite(model, endpointId)
+                    !DedicatedModelRoutingPolicy.needsSetup(
+                        prefs.getSummarizerRoutingType(), favorite
+                    )
+                } else {
+                    true
+                }
+                endpoint.host.isNotBlank() && model.isNotBlank() && routingReady
             }
         } catch (_: Exception) {
             false
@@ -198,13 +217,48 @@ class SummarizerController(
         } catch (_: Exception) {
             null
         }
-        val model = prefs.getSummarizerModel().ifBlank { endpoint?.model.orEmpty() }
+        // The Summary Model is an explicit selection. Endpoint changes clear
+        // it to "Select"; never fall back to the profile's chat model behind
+        // that UI.
+        val model = prefs.getSummarizerModel()
         if (endpoint == null || endpoint.host.isBlank() || model.isBlank()) {
             recordFailure(
                 prefs, SummarizerErrorCategory.MODEL_MISSING,
                 endpoint?.label ?: appContext.getString(R.string.summarizer_unknown_profile),
                 model.ifBlank { appContext.getString(R.string.summarizer_unknown_model) },
                 httpStatus = null, detail = null
+            )
+            return false
+        }
+
+        val routingMode = prefs.getSummarizerRoutingType()
+        val savedFavorite = FavoriteModelsPreferences.getPreferences(appContext)
+            .getFavorite(model, endpointId)
+        if (endpoint.isOpenRouterRouting() &&
+            DedicatedModelRoutingPolicy.needsSetup(routingMode, savedFavorite)
+        ) {
+            recordFailure(
+                prefs, SummarizerErrorCategory.MODEL_MISSING, endpoint.label, model,
+                httpStatus = null,
+                detail = appContext.getString(R.string.summarizer_routing_not_configured_detail)
+            )
+            return false
+        }
+        val requestFavorite = if (endpoint.isOpenRouterRouting()) {
+            DedicatedModelRoutingPolicy.favoriteForRequest(
+                model, endpointId, routingMode, savedFavorite
+            )
+        } else {
+            null
+        }
+        val routingResolution = ProviderRoutingResolver.resolve(
+            endpoint.isOpenRouterRouting(), requestFavorite
+        )
+        if (routingResolution.block != RoutingBlock.NONE) {
+            recordFailure(
+                prefs, SummarizerErrorCategory.MODEL_MISSING, endpoint.label, model,
+                httpStatus = null,
+                detail = appContext.getString(R.string.summarizer_routing_not_configured_detail)
             )
             return false
         }
@@ -234,7 +288,7 @@ class SummarizerController(
             val text: String
             try {
                 text = withContext(Dispatchers.IO) {
-                    val client = buildClient(endpoint)
+                    val client = buildClient(endpoint, routingResolution.providerJson)
                     val request = ChatCompletionRequest(
                         model = ModelId(model),
                         maxTokens = responseTokenBudget(lengthWords),
@@ -325,7 +379,10 @@ class SummarizerController(
      * No client-level auto-retry: retry happens on the next eligible cycle,
      * never as a rapid background loop (§3).
      */
-    private fun buildClient(endpoint: ApiEndpointObject): OpenAI {
+    private fun buildClient(
+        endpoint: ApiEndpointObject,
+        providerRouting: com.google.gson.JsonObject?
+    ): OpenAI {
         val isBearerAuth = endpoint.authType == ApiEndpointObject.AUTH_BEARER
         val extraHeaders: Map<String, String> = when (endpoint.authType) {
             ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to endpoint.apiKey)
@@ -348,7 +405,31 @@ class SummarizerController(
                 headers = extraHeaders,
                 host = OpenAIHost(composeChatHost(endpoint.host, endpoint.chatEndpoint)),
                 proxy = null,
-                retry = RetryStrategy(maxRetries = 0)
+                retry = RetryStrategy(maxRetries = 0),
+                httpClientConfig = {
+                    if (endpoint.isOpenRouterRouting() && providerRouting != null) {
+                        // Each fold-in call and size-split retry is built through
+                        // this client, so the selected Summarizer routing object
+                        // is attached to every outgoing request.
+                        install(createClientPlugin("SummarizerProviderRouting") {
+                            on(Send) { request ->
+                                val content = request.body as? TextContent
+                                if (content?.contentType?.match(ContentType.Application.Json) == true) {
+                                    val augmented = ProviderRoutingSerializer.augmentBody(
+                                        content.text, providerRouting
+                                    )
+                                    request.setBody(
+                                        TextContent(
+                                            augmented,
+                                            content.contentType ?: ContentType.Application.Json
+                                        )
+                                    )
+                                }
+                                proceed(request)
+                            }
+                        })
+                    }
+                }
             )
         )
     }

@@ -16,12 +16,9 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<!-- One Memory Filters dropdown row: a bold label on the left and the current
-     value on the right, using the shared Widget.App.Dropdown family (the same
-     pattern the Provider Filters panel uses). The value is the tap target and
-     opens an anchored ListPopupWindow. The row carries NO filled background —
-     only the value's own tap ripple. The value overrides the style's 0dp width
-     with an explicit weight so it fills the row inside this LinearLayout. -->
+<!-- One Memory Filters dropdown row: the canonical label and control share a
+     line, and the control fills the remaining width. The value is the tap
+     target and opens the shared border-continuous AppDropdown menu. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -32,11 +29,12 @@
 
     <TextView
         android:id="@+id/label"
-        style="@style/Widget.App.Dropdown.Label" />
+        style="@style/Widget.App.Dropdown.CanonicalLabel" />
 
     <TextView
         android:id="@+id/value"
-        style="@style/Widget.App.Dropdown.Value"
+        style="@style/Widget.App.Dropdown.CanonicalValue"
         android:layout_width="0dp"
+        android:layout_marginStart="12dp"
         android:layout_weight="1" />
 </LinearLayout>

@@ -32,6 +32,7 @@ import com.aallam.openai.client.RetryStrategy
 import org.json.JSONArray
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
@@ -45,12 +46,21 @@ import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
+import org.teslasoft.assistant.providers.ProviderRoutingSerializer
+import org.teslasoft.assistant.providers.ProviderRoutingResolver
+import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.util.GenErrorResult
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.util.ProviderErrorInfo
 import org.teslasoft.assistant.util.reachedServer
 import io.ktor.client.plugins.observer.ResponseObserver
+import io.ktor.client.plugins.api.Send
+import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.content.TextContent
 import io.ktor.http.isSuccess
 import org.teslasoft.assistant.util.Hash
 import java.time.Instant
@@ -277,10 +287,39 @@ object Archivist {
                     "Missing: ${if (endpointId.isBlank()) "endpoint profile not selected" else "endpoint host empty"}")
             return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
         }
-        val model = prefs.getArchivistModel().ifBlank { endpoint.model }
+        // The Memory Assistant model is an explicit selection. Changing its
+        // endpoint clears this value and shows "Select"; never silently fall
+        // back to the endpoint profile's ordinary-chat model behind that UI.
+        val model = prefs.getArchivistModel()
         if (model.isBlank()) {
             MemoryLog.logAlways(context, "Archivist", "warn",
                 "Archivist Not Ready — Memory Archivist needs a model before it can run. Missing: model name")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
+        }
+
+        val routingMode = prefs.getArchivistRoutingType()
+        val savedFavorite = FavoriteModelsPreferences.getPreferences(context)
+            .getFavorite(model, endpointId)
+        if (endpoint.isOpenRouterRouting() &&
+            DedicatedModelRoutingPolicy.needsSetup(routingMode, savedFavorite)
+        ) {
+            MemoryLog.logAlways(context, "Archivist", "warn",
+                "Archivist Not Ready — selected provider routing is not configured for the Memory Assistant model")
+            return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
+        }
+        val requestFavorite = if (endpoint.isOpenRouterRouting()) {
+            DedicatedModelRoutingPolicy.favoriteForRequest(
+                model, endpointId, routingMode, savedFavorite
+            )
+        } else {
+            null
+        }
+        val routingResolution = ProviderRoutingResolver.resolve(
+            endpoint.isOpenRouterRouting(), requestFavorite
+        )
+        if (routingResolution.block != RoutingBlock.NONE) {
+            MemoryLog.logAlways(context, "Archivist", "warn",
+                "Archivist Not Ready — selected provider routing cannot be satisfied")
             return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "not_configured", analysisType = analysisType)
         }
 
@@ -293,7 +332,10 @@ object Archivist {
             return RunOutcome(null, 0, 0, 0, 0, emptyList(), outcome = "already_running", analysisType = analysisType)
         }
         try {
-            return runLocked(context, selectConversations, markProcessed, analysisType, onProgress, prefs, endpoint, model)
+            return runLocked(
+                context, selectConversations, markProcessed, analysisType,
+                onProgress, prefs, endpoint, model, routingResolution.providerJson
+            )
         } finally {
             liveRun.set(false)
         }
@@ -307,7 +349,8 @@ object Archivist {
         onProgress: (Progress) -> Unit,
         prefs: Preferences,
         endpoint: ApiEndpointObject,
-        model: String
+        model: String,
+        providerRouting: com.google.gson.JsonObject?
     ): RunOutcome {
         val lorebookMode = analysisType == "lorebook"
         val store = MemoryStore.getInstance(context)
@@ -360,7 +403,7 @@ object Archivist {
             store.insertArchivistRun(runningRow)
         }
 
-        val ai = buildClient(endpoint)
+        val ai = buildClient(endpoint, providerRouting)
 
         // Memory Assistant tuning (owner spec, July 9 2026): the cap and the
         // importance floor are enforced HERE in code — the prompt is never
@@ -963,7 +1006,10 @@ object Archivist {
         }
     }
 
-    private fun buildClient(endpoint: ApiEndpointObject): OpenAI {
+    private fun buildClient(
+        endpoint: ApiEndpointObject,
+        providerRouting: com.google.gson.JsonObject?
+    ): OpenAI {
         // Same auth handling as the chat funnel: token only for bearer auth,
         // alternate header modes carry the key themselves (double auth 4xx's
         // at some providers).
@@ -997,6 +1043,28 @@ object Archivist {
                                 capturedErrorBody = response.bodyAsText()
                             } catch (_: Exception) { /* best effort; never disturb the failure path */ }
                         }
+                    }
+                    if (endpoint.isOpenRouterRouting() && providerRouting != null) {
+                        // Memory Assistant sends one or many chat-completion
+                        // chunks through this client. Attach the same resolved
+                        // feature-specific provider object to every chunk.
+                        install(createClientPlugin("MemoryAssistantProviderRouting") {
+                            on(Send) { request ->
+                                val content = request.body as? TextContent
+                                if (content?.contentType?.match(ContentType.Application.Json) == true) {
+                                    val augmented = ProviderRoutingSerializer.augmentBody(
+                                        content.text, providerRouting
+                                    )
+                                    request.setBody(
+                                        TextContent(
+                                            augmented,
+                                            content.contentType ?: ContentType.Application.Json
+                                        )
+                                    )
+                                }
+                                proceed(request)
+                            }
+                        })
                     }
                 }
             )

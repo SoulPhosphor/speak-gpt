@@ -185,7 +185,12 @@ reduction, more the longer the chat runs.
    holds:
    - **Summary Model** — the API endpoint and model picker for summary
      calls, modeled on the Memory Assistant's endpoint picker (same
-     interaction shape);
+     interaction shape). Changing endpoint clears the model to Select;
+     the model dropdown contains endpoint-scoped favorites and View All
+     opens the endpoint's complete catalog directly. A configured
+     favorite adopts its saved routing default, while a non-favorite
+     uses Automatic. Preferred/Only reuse that favorite's provider
+     configuration without changing ordinary chat routing;
    - **Complete Messages** — the default recent-window message count
      (the value new chats start with, so the user doesn't retype it).
      Hint: "Last number of complete messages sent to the model before
@@ -289,8 +294,9 @@ reduction, more the longer the chat runs.
    uses the standard dialog theme and two-action pattern.
 
 8. **No-model state.** The Quick Settings "Use Summarizer" toggle is
-   not shown until a summarizer endpoint/model is set up — without a
-   model the toggle is pointless, and hiding it means the feature can
+   not shown until a summarizer endpoint/model is explicitly set up and
+   any selected provider routing is complete — without a model the
+   toggle is pointless, and hiding it means the feature can
    never be switched on in a broken state, so no exit-blocking popup is
    needed on the Summarizer Settings screen. Instead the screen opens
    with an explanatory paragraph at the top. Approved wording (owner-authored,

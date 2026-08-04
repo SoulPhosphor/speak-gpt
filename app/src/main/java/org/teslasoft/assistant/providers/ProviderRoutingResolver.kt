@@ -20,9 +20,10 @@ import com.google.gson.JsonObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 
 /**
- * The pure, request-boundary decision the chat send path applies: given the
- * endpoint's routing identity and the model's saved favorite, decide what (if
- * anything) to attach to the outgoing request, or whether to block it.
+ * The pure, request-boundary decision used by chat and dedicated background
+ * model requests: given the endpoint's routing identity and the model's saved
+ * favorite, decide what (if anything) to attach to the outgoing request, or
+ * whether to block it.
  *
  * Availability is treated as unknown at request time (the saved lists are sent
  * as-is; OpenRouter's own rejection is surfaced by the normal error path), so

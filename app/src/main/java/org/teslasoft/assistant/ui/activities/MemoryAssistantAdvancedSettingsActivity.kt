@@ -46,8 +46,11 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistPrompt
+import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.fragments.dialogs.FavoriteRoutingActions
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import java.util.Locale
@@ -80,7 +83,9 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     private var textArchivistEndpointValue: TextView? = null
     private var btnEditArchivistEndpoint: ImageButton? = null
     private var textArchivistModelValue: TextView? = null
-    private var btnChooseArchivistModel: ImageButton? = null
+    private var btnViewAllArchivistModels: MaterialButton? = null
+    private var sectionArchivistRouting: View? = null
+    private var textArchivistRoutingValue: TextView? = null
 
     private var sliderTemperature: Slider? = null
     private var textTemperatureValue: TextView? = null
@@ -105,6 +110,25 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         if (result.resultCode == RESULT_OK && result.data?.getBooleanExtra("deleted", false) == true) {
             preferences?.setArchivistEndpointId("")
             preferences?.setArchivistModel("")
+            preferences?.setArchivistRoutingType(FavoriteModelObject.ROUTING_AUTOMATIC)
+        }
+        refreshArchivistRows()
+    }
+
+    /** Provider setup writes to the favorite only after Choose Provider saves.
+     * On return, adopt the saved mode when the currently selected Memory
+     * Assistant model now has complete setup; cancelling changes nothing. */
+    private val archivistRoutingSetupLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val endpointId = preferences?.getArchivistEndpointId().orEmpty()
+            val model = preferences?.getArchivistModel().orEmpty()
+            val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
+            val mode = favorite?.routingType ?: FavoriteModelObject.ROUTING_AUTOMATIC
+            if (!DedicatedModelRoutingPolicy.needsSetup(mode, favorite)) {
+                preferences?.setArchivistRoutingType(mode)
+            }
         }
         refreshArchivistRows()
     }
@@ -137,7 +161,9 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         textArchivistEndpointValue = findViewById(R.id.text_archivist_endpoint_value)
         btnEditArchivistEndpoint = findViewById(R.id.btn_edit_archivist_endpoint)
         textArchivistModelValue = findViewById(R.id.text_archivist_model_value)
-        btnChooseArchivistModel = findViewById(R.id.btn_choose_archivist_model)
+        btnViewAllArchivistModels = findViewById(R.id.btn_view_all_archivist_models)
+        sectionArchivistRouting = findViewById(R.id.section_archivist_routing)
+        textArchivistRoutingValue = findViewById(R.id.text_archivist_routing_value)
         sliderTemperature = findViewById(R.id.slider_temperature)
         textTemperatureValue = findViewById(R.id.text_temperature_value)
         btnResetTemperature = findViewById(R.id.btn_reset_temperature)
@@ -183,7 +209,8 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         textArchivistEndpointValue?.setOnClickListener { showArchivistEndpointDropdown() }
         btnEditArchivistEndpoint?.setOnClickListener { openSelectedArchivistEndpointEditor() }
         textArchivistModelValue?.setOnClickListener { showArchivistModelDropdown() }
-        btnChooseArchivistModel?.setOnClickListener { openArchivistModelChooser() }
+        btnViewAllArchivistModels?.setOnClickListener { openAllArchivistModels() }
+        textArchivistRoutingValue?.setOnClickListener { showArchivistRoutingDropdown() }
 
         /* ---- Temperature ---- */
         val temperature = (preferences?.getArchivistTemperature() ?: RECOMMENDED_TEMPERATURE)
@@ -281,8 +308,23 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
         val model = preferences?.getArchivistModel().orEmpty()
         textArchivistModelValue?.text = model.ifEmpty { getString(R.string.dropdown_select) }
-        btnChooseArchivistModel?.isEnabled = endpoint != null
-        btnChooseArchivistModel?.alpha = if (endpoint != null) 1f else 0.38f
+        btnViewAllArchivistModels?.isEnabled = endpoint != null
+        btnViewAllArchivistModels?.alpha = if (endpoint != null) 1f else 0.38f
+
+        val supportsRouting = endpoint?.isOpenRouterRouting() == true
+        sectionArchivistRouting?.visibility = if (supportsRouting) View.VISIBLE else View.GONE
+        val routingEnabled = supportsRouting && model.isNotBlank()
+        textArchivistRoutingValue?.isEnabled = routingEnabled
+        textArchivistRoutingValue?.alpha = if (routingEnabled) 1f else 0.38f
+        val selectedRouting = if (routingEnabled) {
+            DedicatedModelRoutingPolicy.normalize(preferences?.getArchivistRoutingType().orEmpty())
+        } else {
+            FavoriteModelObject.ROUTING_AUTOMATIC
+        }
+        if (!routingEnabled && preferences?.getArchivistRoutingType() != FavoriteModelObject.ROUTING_AUTOMATIC) {
+            preferences?.setArchivistRoutingType(FavoriteModelObject.ROUTING_AUTOMATIC)
+        }
+        textArchivistRoutingValue?.text = routingLabel(selectedRouting)
     }
 
     /** Select a saved user-defined endpoint in place; no navigation. */
@@ -298,6 +340,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
                 // A model override belongs to its endpoint. Do not silently
                 // carry a prior endpoint's model into the newly selected one.
                 preferences?.setArchivistModel("")
+                preferences?.setArchivistRoutingType(FavoriteModelObject.ROUTING_AUTOMATIC)
             }
             refreshArchivistRows()
         }
@@ -324,29 +367,83 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         val models = endpointFavoriteModels(endpointId)
         val current = preferences?.getArchivistModel().orEmpty()
         AppDropdown.show(dropdown, models, models.indexOf(current)) { position ->
-            preferences?.setArchivistModel(models[position])
-            refreshArchivistRows()
+            selectArchivistModel(models[position])
         }
     }
 
-    /** Opens the same model picker the main chat's Quick Settings uses: your
-     *  favorited models first (with a "All models" fallback to search), or
-     *  straight to the live searchable list if you have no favorites yet.
-     *  Either way it fetches from the Memory Assistant's own endpoint. If no
-     *  endpoint has been chosen yet, the disabled gear cannot open it. */
-    private fun openArchivistModelChooser() {
+    /** The visible dropdown is the endpoint's favorites quick-pick. This
+     * explicit View All path opens directly on the endpoint's live catalog,
+     * matching Choose Provider rather than repeating a favorites landing. */
+    private fun openAllArchivistModels() {
         val endpointId = preferences?.getArchivistEndpointId().orEmpty()
         if (endpointId.isEmpty()) return
 
         val current = preferences?.getArchivistModel().orEmpty()
-        // One full-screen selector, scoped to the Archivist's own endpoint: it
-        // opens on that endpoint's favorites and offers "View all".
-        val dialog = AdvancedModelSelectorDialogFragment.newInstance(current, chatId, endpointId)
-        dialog.setModelSelectedListener { model ->
-            preferences?.setArchivistModel(model)
-            refreshArchivistRows()
-        }
+        val dialog = AdvancedModelSelectorDialogFragment.newAllModelsInstance(current, chatId, endpointId)
+        dialog.setModelSelectedListener { model -> selectArchivistModel(model) }
         dialog.show(supportFragmentManager, "ArchivistModelSelector")
+    }
+
+    /** A favorite contributes its saved routing default; a catalog-only model
+     * has no provider memory and therefore resets this feature to Automatic. */
+    private fun selectArchivistModel(model: String) {
+        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
+        val endpoint = endpointProfiles().firstOrNull { it.id == endpointId }
+        val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
+        val routing = DedicatedModelRoutingPolicy.modeForSelectedModel(
+            endpoint?.isOpenRouterRouting() == true,
+            favorite
+        )
+        preferences?.setArchivistModel(model)
+        preferences?.setArchivistRoutingType(routing)
+        refreshArchivistRows()
+    }
+
+    private fun routingLabel(type: String): String = when (type) {
+        FavoriteModelObject.ROUTING_PREFERRED -> getString(R.string.choose_provider_routing_preferred)
+        FavoriteModelObject.ROUTING_ONLY -> getString(R.string.choose_provider_routing_only)
+        else -> getString(R.string.choose_provider_routing_automatic)
+    }
+
+    private fun showArchivistRoutingDropdown() {
+        val dropdown = textArchivistRoutingValue ?: return
+        val endpointId = preferences?.getArchivistEndpointId().orEmpty()
+        val model = preferences?.getArchivistModel().orEmpty()
+        if (endpointId.isBlank() || model.isBlank()) return
+        val labels = DedicatedModelRoutingPolicy.routingTypes.map { routingLabel(it) }
+        val current = DedicatedModelRoutingPolicy.routingTypes
+            .indexOf(preferences?.getArchivistRoutingType().orEmpty())
+            .coerceAtLeast(0)
+        AppDropdown.show(dropdown, labels, current) { position ->
+            val picked = DedicatedModelRoutingPolicy.routingTypes[position]
+            val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
+            if (DedicatedModelRoutingPolicy.needsSetup(picked, favorite)) {
+                showArchivistRoutingSetupDialog(picked)
+            } else {
+                preferences?.setArchivistRoutingType(picked)
+                refreshArchivistRows()
+            }
+        }
+    }
+
+    /** Preferred/Only without provider details uses the same explicit setup
+     * flow as Quick Settings. The prior Memory Assistant choice remains in
+     * place unless Choose Provider completes a valid save. */
+    private fun showArchivistRoutingSetupDialog(mode: String) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.provider_mode_setup_title)
+            .setMessage(R.string.provider_mode_setup_message)
+            .setPositiveButton(R.string.provider_mode_setup_confirm) { _, _ ->
+                val endpointId = preferences?.getArchivistEndpointId().orEmpty()
+                val model = preferences?.getArchivistModel().orEmpty()
+                val endpointPrefs = apiEndpointPreferences ?: return@setPositiveButton
+                val favoritePrefs = favoriteModelsPreferences ?: return@setPositiveButton
+                FavoriteRoutingActions.buildRoutingIntent(
+                    this, endpointPrefs, favoritePrefs, model, endpointId, mode
+                )?.let { archivistRoutingSetupLauncher.launch(it) }
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
     }
 
     /* ------------------------------ Temperature ------------------------------ */
