@@ -307,15 +307,8 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
                     ChatPreferences.getChatPreferences().switchPinState(mContext ?: return@post, Hash.hash(chats[position]["name"].toString()))
                     initSettings()
                 } else {
-                    MaterialAlertDialogBuilder(requireActivity(), R.style.App_MaterialAlertDialog)
-                        .setTitle(R.string.label_confirm_deletion)
-                        .setMessage(R.string.msg_confirm_deletion_chat)
-                        .setPositiveButton(R.string.btn_delete) { _, _ -> run {
-                            ChatPreferences.getChatPreferences().deleteChat(mContext ?: return@run, chats[position]["name"].toString())
-                            initSettings("delete", position)
-                        } }
-                        .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-                        .show()
+                    ChatPreferences.getChatPreferences().deleteChat(mContext ?: return@post, chats[position]["name"].toString())
+                    initSettings()
                 }
 
             }
