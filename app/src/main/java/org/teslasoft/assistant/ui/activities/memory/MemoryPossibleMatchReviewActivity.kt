@@ -199,7 +199,8 @@ class MemoryPossibleMatchReviewActivity : FragmentActivity() {
     private fun addMemoryCard(parent: LinearLayout, record: MemoryRecord, withCheckbox: Boolean): MatchHolder {
         val card = layoutInflater.inflate(R.layout.view_review_memory_card, parent, false)
         card.findViewById<ImageView>(R.id.review_icon).setImageResource(iconForScope(record.scope))
-        card.findViewById<TextView>(R.id.review_title).text = record.title
+        // Titles are retired (§3.1): the review card shows content, not a title.
+        card.findViewById<TextView>(R.id.review_title).visibility = View.GONE
         val tags = parseTags(record.tagsJson)
         card.findViewById<TextView>(R.id.review_tags).apply {
             if (tags.isEmpty()) visibility = View.GONE
@@ -284,13 +285,14 @@ class MemoryPossibleMatchReviewActivity : FragmentActivity() {
         var editedOld: MemoryRecord? = null
         if (kind == ResolutionKind.EDIT_OLD) {
             val holder = checked.singleOrNull() ?: return
-            val title = holder.editTitle.text?.toString()?.trim().orEmpty()
+            // Titles are retired (§3.1): only content is edited; the title stays
+            // the inert empty placeholder.
             val content = holder.editContent.text?.toString()?.trim().orEmpty()
-            if (title.isEmpty() || content.isEmpty()) {
+            if (content.isEmpty()) {
                 Toast.makeText(this, R.string.mem_edit_required, Toast.LENGTH_SHORT).show()
                 return
             }
-            editedOld = holder.record.copy(title = title, content = content)
+            editedOld = holder.record.copy(title = "", content = content)
         }
         val checkedIds = checked.map { it.record.memoryId }
 

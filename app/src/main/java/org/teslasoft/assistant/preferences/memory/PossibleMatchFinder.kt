@@ -89,7 +89,7 @@ object PossibleMatchFinder {
         }
 
         val doc = RetrievalDocument.semanticDocument(
-            draft.title, draft.content, draft.embeddingText, parseTags(draft.tagsJson)
+            draft.content, draft.embeddingText, parseTags(draft.tagsJson)
         )
         val queryVec = librarian.embedComparisonCached(doc)
             ?: return Result(deterministic, semanticAvailable = false)
@@ -114,7 +114,7 @@ object PossibleMatchFinder {
         // Nothing is persisted; these memories remain barred from chat retrieval.
         for (cmp in store.comparableInactiveDocsForDraft(draftId)) {
             if (cmp.memoryId in alreadyMatched) continue
-            val text = RetrievalDocument.semanticDocument(cmp.title, cmp.content, cmp.embeddingText, parseTags(cmp.tagsJson))
+            val text = RetrievalDocument.semanticDocument(cmp.content, cmp.embeddingText, parseTags(cmp.tagsJson))
             val vec = librarian.embedComparisonCached(text) ?: continue
             if (VectorMath.cosine(queryVec, vec) >= SEMANTIC_COSINE_THRESHOLD) {
                 semantic.add(MemoryMatch.Match(cmp.memoryId, MemoryMatch.Relation.SEMANTIC_NEAR))

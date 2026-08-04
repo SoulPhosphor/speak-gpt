@@ -406,13 +406,14 @@ object Archivist {
 
         val ai = buildClient(endpoint, providerRouting)
 
-        // Memory Assistant tuning (owner spec, July 9 2026): the cap and the
-        // importance floor are enforced HERE in code — the prompt is never
-        // trusted to do it. Temperature rides every analysis request
-        // (recommended default 0.3); a user-edited extraction prompt replaces
-        // the built-in one (Reset clears back to built-in).
+        // Memory Assistant tuning (owner spec, July 9 2026): the per-conversation
+        // cap is enforced HERE in code — the prompt is never trusted to do it.
+        // The old minimum-importance floor is retired (canonical recovery plan
+        // §7.2): the Memory Assistant does not assign importance, so an invisible
+        // AI rating must not be able to discard proposals. Temperature rides
+        // every analysis request (recommended default 0.3); a user-edited
+        // extraction prompt replaces the built-in one (Reset clears to built-in).
         val maxSuggestions = prefs.getArchivistMaxSuggestions()
-        val minImportance = prefs.getArchivistMinImportance()
         val temperature = prefs.getArchivistTemperature().toDouble()
         // Each analysis type sends its OWN editable prompt (Step 1.7): the
         // saved prompt for that type, or its built-in default when the saved
@@ -540,11 +541,12 @@ object Archivist {
                                 MemoryLog.log(context, "Archivist", "warn",
                                     "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped")
                             }
-                            // Code-enforced tuning (owner spec): the importance
-                            // floor first, then the per-conversation cap across
-                            // all of the conversation's chunks.
-                            var candidates = parsed.memories.filter { it.importance >= minImportance }
-                            val belowFloor = parsed.memories.size - candidates.size
+                            // Code-enforced tuning (owner spec): the per-
+                            // conversation cap across all of the conversation's
+                            // chunks. No importance floor (§7.2) — the analyzer no
+                            // longer rates memories, so nothing is dropped for a
+                            // low AI importance it never assigned.
+                            var candidates = parsed.memories
                             if (maxSuggestions > 0) {
                                 val room = (maxSuggestions - filedThisConversation).coerceAtLeast(0)
                                 if (candidates.size > room) {
@@ -552,10 +554,6 @@ object Archivist {
                                         "chat=${conversation.chatId}: cap $maxSuggestions reached, ${candidates.size - room} draft(s) not filed")
                                     candidates = candidates.take(room)
                                 }
-                            }
-                            if (belowFloor > 0) {
-                                MemoryLog.log(context, "Archivist", "info",
-                                    "chat=${conversation.chatId}: $belowFloor draft(s) below minimum importance $minImportance skipped")
                             }
                             val before = memoryIds.size
                             duplicatesSkipped += fileMemoryDrafts(
@@ -867,31 +865,36 @@ object Archivist {
             val projectIds = resolveTarget(d, "project") { store.getProjects().map { it.projectId to it.name } }
             val companionIds =
                 if (d.scope == "companion" && companionId != null) listOf(companionId) else emptyList()
+            // The user-owned Type is the source of truth (§5): map the model's
+            // raw suggestion to a Type id (recognized starter Type, or No Type
+            // for lore/blank/unknown), and derive the inert legacy kind from it
+            // so the stored kind can never disagree with the Type (item 4).
+            val resolvedTypeId = MemoryTypeMigration.typeIdForLegacyKind(d.kind)
+            val inertKind = MemoryTypeMigration.legacyKindForTypeId(resolvedTypeId)
             // Step 1.5 staging gate (counterplan §5.2(b)): only an exact
-            // normalized match with the same placement AND the same kind, on an
+            // normalized match with the same placement AND the same Type, on an
             // active or pending memory, is a true duplicate that must not create
-            // a second draft. Everything else — a different kind, an archived or
+            // a second draft. Everything else — a different Type, an archived or
             // superseded exact match, or a semantic near-match — is filed and
             // surfaces as a Possible Match at review time. Placement-aware and
-            // title-independent, replacing the old exact title+content check.
+            // title-independent.
             val candidate = MemoryMatch.Candidate(
                 content = d.content,
                 scope = d.scope,
-                kind = d.kind,
+                kind = inertKind,
                 targetIds = worldIds + rpCharIds + campaignIds + projectIds + companionIds
             )
             if (store.classifyCandidate(candidate) is MemoryMatch.Outcome.AlreadyPresent) {
                 duplicates++; continue
             }
             // A draft the user deleted is a rejection (owner preference,
-            // July 9 2026): the exact same draft from the same conversation
-            // is not refiled on rerun. Deliberately narrow — different
-            // wording or a different conversation files normally. Keyed by
-            // chat ID since DB v17 (counterplan §4(c)) so a rename cannot
-            // defeat it.
-            if (store.isDraftRejected(d.title, d.content, conversation.chatId)) {
+            // July 9 2026): the exact same draft is not refiled on rerun. The
+            // rejection is keyed on the memory CONTENT only (canonical recovery
+            // plan §3.2 / item 1): a memory never remembers which chat produced
+            // it, so the dedup no longer carries source-chat identity.
+            if (store.isDraftRejected(d.content)) {
                 MemoryLog.log(context, "Archivist", "info",
-                    "chat=${conversation.chatId}: previously rejected draft not refiled (\"${d.title}\")")
+                    "chat=${conversation.chatId}: previously rejected draft not refiled")
                 continue
             }
             // Resolve a proposed placement (roleplay scopes only): the section
@@ -912,13 +915,13 @@ object Archivist {
             val record = MemoryRecord(
                 memoryId = MemoryStore.newId("m-"),
                 scope = d.scope,
-                // Legacy kind stays for compatibility; the user-owned Type is
-                // resolved from it (recognized starter kind → seeded Type,
-                // lore/unknown → No Type) so the Pending card shows a real Type
-                // (§5). No importance is assigned here (§7.2) — that stays 0.
-                kind = d.kind,
-                typeId = MemoryTypeMigration.typeIdForLegacyKind(d.kind),
-                title = d.title,
+                // The user-owned Type id is the source of truth (§5); the legacy
+                // kind is a derived, inert shadow that can never disagree (item
+                // 4). Title is retired (§3.1): new memories carry only the inert
+                // empty placeholder the legacy NOT NULL column requires.
+                kind = inertKind,
+                typeId = resolvedTypeId,
+                title = "",
                 content = d.content,
                 embeddingText = null,
                 tagsJson = listToJson(d.tags),
@@ -935,13 +938,12 @@ object Archivist {
                 provenanceSource = if (d.stated) "user_stated" else "inferred",
                 provenanceConfidence = if (d.stated) "certain" else "tentative",
                 provenanceNotedOn = now,
-                // Source-chat identity is not attached to new memories (canonical
-                // recovery plan §3.2, Phase 1 item 9): the chat NAME is never
-                // stored on a Pending or saved memory. The rename-safe chat id
-                // below stays only as device-local rejected-draft dedup
-                // bookkeeping (§8.10) — never exported, embedded, or shown.
+                // Source-chat identity is never attached to a new memory
+                // (canonical recovery plan §3.2 / item 1): no chat name and no
+                // chat id. Rejected-draft dedup is keyed on content alone, in the
+                // separate rejected_drafts ledger — not on the memory.
                 provenanceContext = null,
-                sourceChatId = conversation.chatId,
+                sourceChatId = null,
                 createdAt = now,
                 updatedAt = null,
                 status = "draft",

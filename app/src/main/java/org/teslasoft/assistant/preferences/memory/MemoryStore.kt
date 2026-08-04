@@ -49,9 +49,9 @@ import java.util.UUID
  * mirrors the applied number for exports/diagnostics. Always bump both, always
  * additive steps, never edit old blocks (same rule as LoreBookStore).
  */
-class MemoryStore private constructor(context: Context, password: ByteArray) :
+class MemoryStore private constructor(context: Context, password: ByteArray, databaseName: String = DATABASE_NAME) :
     SQLiteOpenHelper(
-        context.applicationContext, DATABASE_NAME, password, null, DATABASE_VERSION, 0,
+        context.applicationContext, databaseName, password, null, DATABASE_VERSION, 0,
         // Explicit corruption handler (Build Phase 3): the library DEFAULT
         // deletes a corrupt database file; ours flags the store degraded and
         // preserves the file for quarantine + repair. Never pass null here.
@@ -151,6 +151,22 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         fun nowIso(): String = Instant.now().toString()
 
         fun newId(prefix: String): String = prefix + UUID.randomUUID().toString()
+
+        /**
+         * Open an ISOLATED store on a caller-named database file with a
+         * caller-supplied key — for instrumentation tests only, so a test can
+         * exercise onCreate/onUpgrade/import/deletion against a throwaway file
+         * without touching the real singleton or the real companion_memory.db.
+         * Production code must always use [getInstance].
+         */
+        @androidx.annotation.VisibleForTesting
+        fun openForTest(context: Context, databaseName: String, password: ByteArray): MemoryStore {
+            if (!libraryLoaded) {
+                System.loadLibrary("sqlcipher")
+                libraryLoaded = true
+            }
+            return MemoryStore(context.applicationContext, password, databaseName)
+        }
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -1542,10 +1558,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
         }
         if (oldVersion < 21) {
             // v21 (Phase 1: Storage Compatibility, canonical recovery plan §5,
-            // §7, §8.10). Additive, non-destructive: no memory row is deleted or
-            // rewritten, every existing importance value and target relationship
-            // is preserved, and the legacy `kind`/`title` columns stay intact as
-            // inert compatibility baggage.
+            // §7, §8.10). Non-destructive: no memory is deleted and every row's
+            // values (importance, targets, lifecycle, timestamps, the legacy
+            // kind/title baggage) are preserved. The memories table is rebuilt
+            // only to change column DEFAULTS and add type_id, so an upgraded
+            // store ends up schema-identical to a fresh v21 install.
             val now = nowIso()
 
             // 1) User-owned Memory Types, seeded with the five starters (§5.1).
@@ -1557,24 +1574,83 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
             )
             seedStarterMemoryTypes(db, now)
 
-            // 2) memories.type_id (nullable = No Type). ADD COLUMN keeps the
-            //    table and all its child-table foreign keys in place — no rebuild.
-            db.execSQL("ALTER TABLE memories ADD COLUMN type_id TEXT REFERENCES memory_types(type_id)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type_id)")
-
-            // 3) Migrate legacy `kind` → type_id. Recognized starter kinds map
-            //    to their seeded Type id; legacy `lore` and any unrecognized or
-            //    blank kind stay type_id = NULL (No Type) — memory text, scope,
-            //    targets, tags, lifecycle, and timestamps untouched (§5, item 4).
-            //    The `kind` column itself is left as-is (inert baggage). This
-            //    mapping mirrors MemoryTypeMigration.typeIdForLegacyKind exactly.
-            for (t in MemoryTypeMigration.STARTER_TYPES) {
-                val legacyKind = t.name.lowercase()
-                db.execSQL(
-                    "UPDATE memories SET type_id = ? WHERE lower(trim(kind)) = ?",
-                    arrayOf(t.typeId, legacyKind)
-                )
-            }
+            // 2) Rebuild `memories` so an upgraded database has the SAME schema
+            //    as a fresh v21 install: add type_id, set importance DEFAULT 0
+            //    (so new memories default to neutral 0 on both fresh and upgraded
+            //    stores, never the legacy 3), and give the retired title/kind
+            //    columns an inert '' default. Foreign keys are OFF during this
+            //    migration (see onConfigure), so dropping `memories` does not
+            //    cascade-delete its child rows; the same memory_ids are
+            //    re-inserted, leaving embeddings, target joins, supersessions,
+            //    and change-log rows valid — the v4/v7 precedent. Every existing
+            //    row is copied verbatim: importance, title, kind, scope, targets,
+            //    lifecycle, and timestamps are preserved unchanged.
+            db.execSQL(
+                "CREATE TABLE memories_new (" +
+                    "memory_id TEXT PRIMARY KEY, " +
+                    "scope TEXT NOT NULL CHECK (scope IN ('global','real_life','companion','project','world','campaign','rp_character')), " +
+                    "kind TEXT NOT NULL DEFAULT '', " +
+                    "type_id TEXT REFERENCES memory_types(type_id), " +
+                    "title TEXT NOT NULL DEFAULT '', " +
+                    "content TEXT NOT NULL, " +
+                    "embedding_text TEXT, " +
+                    "tags_json TEXT DEFAULT '[]', " +
+                    "importance INTEGER NOT NULL DEFAULT 0, " +
+                    "always_load INTEGER NOT NULL DEFAULT 0, " +
+                    "world_id TEXT REFERENCES worlds(world_id), " +
+                    "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
+                    "campaign_id TEXT REFERENCES campaigns(campaign_id), " +
+                    "project_id TEXT REFERENCES projects(project_id), " +
+                    "protection_json TEXT, " +
+                    "mode_hints_json TEXT DEFAULT '[]', " +
+                    "provenance_source TEXT, " +
+                    "provenance_confidence TEXT, " +
+                    "provenance_noted_on TEXT, " +
+                    "provenance_context TEXT, " +
+                    "created_at TEXT NOT NULL, " +
+                    "updated_at TEXT, " +
+                    "status TEXT NOT NULL CHECK (status IN ('draft','active','archived','superseded')), " +
+                    "supersedes TEXT REFERENCES memories(memory_id), " +
+                    "origin TEXT NOT NULL DEFAULT 'user', " +
+                    "suggested_card_type TEXT, " +
+                    "suggested_card_id TEXT, " +
+                    "suggested_section TEXT, " +
+                    "source_chat_id TEXT)"
+            )
+            // Copy every row, computing type_id from the legacy kind: recognized
+            // starter kinds map to their seeded Type id; legacy `lore` and any
+            // unrecognized or blank kind become type_id = NULL (No Type). This
+            // CASE mirrors MemoryTypeMigration.typeIdForLegacyKind exactly.
+            db.execSQL(
+                "INSERT INTO memories_new (memory_id, scope, kind, title, content, embedding_text, " +
+                    "tags_json, importance, always_load, world_id, roleplay_character_id, campaign_id, " +
+                    "project_id, protection_json, mode_hints_json, provenance_source, provenance_confidence, " +
+                    "provenance_noted_on, provenance_context, created_at, updated_at, status, supersedes, " +
+                    "origin, suggested_card_type, suggested_card_id, suggested_section, source_chat_id, type_id) " +
+                    "SELECT memory_id, scope, kind, title, content, embedding_text, " +
+                    "tags_json, importance, always_load, world_id, roleplay_character_id, campaign_id, " +
+                    "project_id, protection_json, mode_hints_json, provenance_source, provenance_confidence, " +
+                    "provenance_noted_on, provenance_context, created_at, updated_at, status, supersedes, " +
+                    "origin, suggested_card_type, suggested_card_id, suggested_section, source_chat_id, " +
+                    "CASE lower(trim(kind)) " +
+                    "WHEN 'fact' THEN 'mtype-fact' " +
+                    "WHEN 'preference' THEN 'mtype-preference' " +
+                    "WHEN 'event' THEN 'mtype-event' " +
+                    "WHEN 'status' THEN 'mtype-status' " +
+                    "WHEN 'instruction' THEN 'mtype-instruction' " +
+                    "ELSE NULL END " +
+                    "FROM memories"
+            )
+            db.execSQL("DROP TABLE memories")
+            db.execSQL("ALTER TABLE memories_new RENAME TO memories")
+            // Recreate the indexes that lived on memories, plus the new type index.
+            db.execSQL("CREATE INDEX idx_memories_status ON memories(status)")
+            db.execSQL("CREATE INDEX idx_memories_type ON memories(type_id)")
+            db.execSQL("CREATE INDEX idx_memories_always_load ON memories(always_load) WHERE always_load = 1")
+            db.execSQL("CREATE INDEX idx_memories_world ON memories(world_id)")
+            db.execSQL("CREATE INDEX idx_memories_rp_character ON memories(roleplay_character_id)")
+            db.execSQL("CREATE INDEX idx_memories_campaign ON memories(campaign_id)")
+            db.execSQL("CREATE INDEX idx_memories_project ON memories(project_id)")
 
             // 4) Minimal temporary analysis-run storage (§8.10). Empty until the
             //    archiver rework populates it; present now so companion deletion
@@ -1921,6 +1997,31 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                         "ON CONFLICT(type_id) DO UPDATE SET name = excluded.name",
                     arrayOf(t.typeId, t.name, t.createdAt.ifBlank { nowIso() })
                 )
+            }
+            // Authoritative restore (item 7): when a Type-aware backup is restored
+            // into a fresh store (overwriteSingletons — the first-seed path), the
+            // store's Type set must MATCH the backup exactly, or a starter Type
+            // the user deleted would be silently resurrected by the fresh-install
+            // seeding. Remove any Type not present in the backup; a memory that
+            // referenced a removed Type degrades to No Type (§5.4). A merge import
+            // (overwriteSingletons = false) keeps the current user's Type set and
+            // only upserts, so it never deletes a Type the user still has. A
+            // pre-Phase-1 backup carries no Types and never triggers this.
+            if (overwriteSingletons && data.memoryTypes.isNotEmpty()) {
+                val keepIds = data.memoryTypes.map { it.typeId }.toHashSet()
+                val toRemove = ArrayList<String>()
+                db.query("memory_types", arrayOf("type_id"), null, null, null, null, null).use {
+                    while (it.moveToNext()) {
+                        val id = it.getString(0)
+                        if (id !in keepIds) toRemove.add(id)
+                    }
+                }
+                for (id in toRemove) {
+                    // Detach memories first (no ON DELETE rule on type_id) so the
+                    // Type removal can never fail or orphan a reference.
+                    db.execSQL("UPDATE memories SET type_id = NULL WHERE type_id = ?", arrayOf(id))
+                    db.delete("memory_types", "type_id = ?", arrayOf(id))
+                }
             }
             // The set of Type ids that actually exist after the import: a memory
             // whose resolved Type is not among these degrades to No Type rather
@@ -2999,7 +3100,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
                     cardType = cardType,
                     cardId = cardId,
                     section = section,
-                    name = m.title,
+                    // Titles are retired (§3.1): a card entry still needs a name
+                    // (its trigger word), so derive one from the memory content
+                    // for a title-less memory. A legacy memory that still carries
+                    // a title keeps using it.
+                    name = m.title.ifBlank { m.content.trim().take(80) },
                     description = m.content,
                     createdAt = nowIso()
                 )
@@ -4132,14 +4237,29 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
 
     /**
      * How many memories are targeted to this companion, across every lifecycle
-     * state (Pending/draft, Active, Archived, Superseded). Backs the destructive
-     * deletion confirmation's count (§4.6) and is the count a companion deletion
-     * would cascade. Reads the memory_companions join — the source of truth for
-     * companion ownership.
+     * state (Pending/draft, Active, Archived, Superseded). Reads the
+     * memory_companions join — the source of truth for companion ownership.
      */
     fun companionMemoryCount(companionId: String): Int {
         readableDatabase.rawQuery(
             "SELECT COUNT(*) FROM memory_companions WHERE companion_id = ?", arrayOf(companionId)
+        ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    /**
+     * How many memories a companion deletion will ACTUALLY delete: the memories
+     * this companion SOLELY owns (canonical recovery plan §4.6 / item 6). A
+     * memory also targeted to another companion survives (its link is removed,
+     * the memory is not) and must NOT be counted as permanently deleted. This is
+     * the number to disclose in the destructive confirmation — the same
+     * sole-owner rule the deletion cascade applies.
+     */
+    fun companionSoleOwnedMemoryCount(companionId: String): Int {
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM memory_companions mc WHERE mc.companion_id = ? " +
+                "AND NOT EXISTS (SELECT 1 FROM memory_companions o " +
+                "WHERE o.memory_id = mc.memory_id AND o.companion_id != ?)",
+            arrayOf(companionId, companionId)
         ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
     }
 
@@ -5580,21 +5700,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
      *  as well as the standalone [deleteMemory]. */
     private fun deleteMemoryTx(db: SQLiteDatabase, memoryId: String) {
         // Deleting a Memory Assistant DRAFT is a rejection (owner preference,
-        // July 9 2026): remember it so a rerun of the same conversation doesn't
-        // refile the exact same draft. Scoped to the draft's source
-        // conversation and exact text — never broad suppression. Keyed by the
-        // rename-safe source chat id (DB v17, counterplan §4(c)); a legacy draft
-        // without one falls back to hashing its filing-time chat name, which
-        // equals the chat id unless the chat was renamed since filing (the old
-        // behavior's exact limit — no worse). User-authored memories and
-        // non-draft deletions register nothing.
+        // July 9 2026): remember it so a rerun does not refile the exact same
+        // draft. Keyed on the memory CONTENT only (canonical recovery plan §3.2 /
+        // item 1): a memory never remembers which chat produced it, so the
+        // rejection carries no source-chat identity and no title (§3.1). The
+        // chat_key column stays for schema compatibility but is written empty.
+        // User-authored memories and non-draft deletions register nothing.
         val prior = getMemory(memoryId)
         if (prior != null && prior.status == "draft" && prior.origin == "archivist") {
-            val chatKey = prior.sourceChatId
-                ?: prior.provenanceContext?.let { Hash.hash(it) } ?: ""
             db.execSQL(
                 "INSERT OR REPLACE INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
-                arrayOf(draftContentHash(prior.title, prior.content), chatKey, nowIso())
+                arrayOf(draftContentHash(prior.content), "", nowIso())
             )
         }
         // Supersession safety (Step 1.5): the legacy memories.supersedes column
@@ -5910,17 +6026,17 @@ class MemoryStore private constructor(context: Context, password: ByteArray) :
      *  conversation was deleted before — the runner skips refiling it.
      *  [chatKey] is the source CHAT ID (rename-safe since DB v17: renames
      *  re-point the stored rows, so the current id always matches). */
-    fun isDraftRejected(title: String, content: String, chatKey: String): Boolean {
+    fun isDraftRejected(content: String): Boolean {
         readableDatabase.query(
             "rejected_drafts", arrayOf("content_hash"),
-            "content_hash = ? AND chat_key = ?",
-            arrayOf(draftContentHash(title, content), chatKey), null, null, null
+            "content_hash = ?",
+            arrayOf(draftContentHash(content)), null, null, null
         ).use { return it.moveToNext() }
     }
 
-    private fun draftContentHash(title: String, content: String): String {
+    private fun draftContentHash(content: String): String {
         val digest = java.security.MessageDigest.getInstance("SHA-256")
-            .digest((title + " " + content).toByteArray(Charsets.UTF_8))
+            .digest(content.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
     }
 

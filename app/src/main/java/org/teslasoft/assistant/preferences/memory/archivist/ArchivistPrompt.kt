@@ -49,11 +49,9 @@ Your core question: what would a wise friend remember from this conversation —
 {
   "memories": [
     {
-      "title": "short human title",
       "content": "the memory itself, written as prose",
       "scope": "global | real_life | companion | project | world | campaign | rp_character",
       "type": "fact | preference | event | status | instruction | lore",
-      "importance": 1-5,
       "tags": ["optional", "short", "labels"],
       "provenance": "stated | inferred",
       "target": "optional: the NAME of the world/campaign/character/project this belongs to, exactly as it appears in the conversation",
@@ -84,9 +82,6 @@ Both arrays may be empty. A conversation that yields nothing is a successful run
 - status: currently true but expected to change.
 - instruction: a handling rule for the assistant that should activate only when its topic comes up (a context rule). A rule that must apply in EVERY message is not a memory — do not propose it at all.
 - lore: fictional/world/roleplay information.
-
-## Importance
-1 low, 2 minor, 3 notable, 4 high, 5 critical.
 
 ## Iron rules
 - Prose, always. Write memories the way a person who knows the user well would describe things. Never trait lists, never labels, never diagnoses.

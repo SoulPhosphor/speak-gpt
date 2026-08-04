@@ -78,11 +78,16 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
+            <!-- Titles are retired (canonical recovery plan §3.1): the field is
+                 hidden and never edited. The inert legacy column is preserved in
+                 the database but never shown or written with meaningful text. -->
             <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/layout_mem_title"
                 style="?attr/textInputOutlinedDenseStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
+                android:visibility="gone"
                 android:hint="@string/mem_edit_hint_title">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -135,6 +140,7 @@
                 android:textSize="13sp" />
 
             <TextView
+                android:id="@+id/text_importance_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="20dp"

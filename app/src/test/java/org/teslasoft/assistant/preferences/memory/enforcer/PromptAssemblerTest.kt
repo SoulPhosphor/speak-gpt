@@ -37,7 +37,7 @@ class PromptAssemblerTest {
         content: String = "content of $id",
         kind: String = "fact"
     ) = AssembledMemory(
-        memoryId = id, title = id, content = content,
+        memoryId = id, content = content,
         provenanceMarker = "told", handling = handling, neverAssume = neverAssume,
         score = score, kind = kind
     )
@@ -57,7 +57,9 @@ class PromptAssemblerTest {
     fun unprotectedMemoryHasNoHandlingLine() {
         val line = PromptAssembler.renderMemoryLine(mem("m1"))
         assertFalse(line.contains("HANDLE WITH CARE"))
-        assertTrue(line.startsWith("- (told) m1: content of m1"))
+        // Titles are retired (§3.1): the line is the marker plus content only.
+        assertTrue(line.startsWith("- (told) content of m1"))
+        assertFalse("no title prefix before content", line.contains("m1: content"))
     }
 
     @Test
@@ -198,8 +200,9 @@ class PromptAssemblerTest {
         val protected1 = mem("p", score = 0.9f, handling = listOf("h".repeat(300)))
         assertTrue(PromptAssembler.memoryCost(protected1) >= 300)
         val plain = mem("q", score = 0.9f)
+        // Cost is content only now — titles are retired (§3.1).
         assertEquals(
-            plain.title.length + plain.content.length,
+            plain.content.length,
             PromptAssembler.memoryCost(plain)
         )
     }

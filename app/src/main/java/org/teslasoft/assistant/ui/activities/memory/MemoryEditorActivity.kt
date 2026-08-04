@@ -43,6 +43,7 @@ import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.memory.MemoryTypeMigration
 import org.teslasoft.assistant.preferences.memory.ProjectRecord
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.theme.ThemeManager
@@ -90,9 +91,13 @@ class MemoryEditorActivity : FragmentActivity() {
     private var dropdownLinkCard: TextView? = null
     private var dropdownLinkSection: TextView? = null
 
-    // Current selections.
+    // Current selections. currentType is a dropdown key: one of the starter
+    // Type names or "none" (No Type). It is mapped to the user-owned type_id
+    // (the source of truth) at save time; the legacy kind is derived from that
+    // so the two can never disagree (§5 / item 4). New memories start at
+    // importance 0 (§7.2).
     private var currentType: String = "fact"
-    private var currentImportance: Int = 3
+    private var currentImportance: Int = 0
     private var currentScope: String = "global"
 
     /** "Link to Lore Card:" pick (roleplay drafts only, owner design July 8
@@ -123,7 +128,9 @@ class MemoryEditorActivity : FragmentActivity() {
     private val loreCards = ArrayList<Triple<String, String, String>>()
 
     companion object {
-        private val TYPE_KEYS = listOf("fact", "preference", "event", "status", "instruction", "lore")
+        // No Type plus the five starter Types. Lore is not a Type (§5.1) and is
+        // deliberately absent. The keys map to type_ids at save time.
+        private val TYPE_KEYS = listOf("none", "fact", "preference", "event", "status", "instruction")
         private val SCOPE_KEYS = listOf("global", "real_life", "companion", "project", "world", "campaign", "rp_character")
         private val TARGET_SCOPES = setOf("companion", "project", "world", "campaign", "rp_character")
     }
@@ -163,6 +170,13 @@ class MemoryEditorActivity : FragmentActivity() {
         btnBack?.setOnClickListener { finish() }
         btnType?.setOnClickListener { showTypePicker() }
         btnImportance?.setOnClickListener { showImportancePicker() }
+        // Importance controls are hidden unless Use Importance Ratings is On
+        // (§7.1). When Off (the default), a new memory keeps the neutral 0 and
+        // an edit preserves its stored value without exposing the control.
+        val importanceOn = preferences?.getUseImportanceRatings() == true
+        val importanceVisibility = if (importanceOn) View.VISIBLE else View.GONE
+        findViewById<TextView>(R.id.text_importance_label)?.visibility = importanceVisibility
+        btnImportance?.visibility = importanceVisibility
         btnScope?.setOnClickListener { showScopePicker() }
         dropdownTargets?.setOnClickListener { showTargetDropdown(it) }
         btnSave?.setOnClickListener { save(activate = false) }
@@ -214,11 +228,17 @@ class MemoryEditorActivity : FragmentActivity() {
             runOnUiThread {
                 existing = record
                 if (record != null) {
-                    fieldTitle?.setText(record.title)
+                    // Titles are retired (§3.1): never populate or edit them.
                     fieldContent?.setText(record.content)
                     findViewById<TextInputEditText>(R.id.field_mem_tags)?.setText(tagsToText(record.tagsJson))
-                    currentType = record.kind.takeIf { it in TYPE_KEYS } ?: "fact"
-                    currentImportance = record.importance.coerceIn(1, 5)
+                    // Type comes from the user-owned type_id (source of truth),
+                    // mapped to a dropdown key. No Type / a custom Type without a
+                    // legacy equivalent shows as "none" (item 4).
+                    currentType = record.typeId
+                        ?.let { MemoryTypeMigration.legacyKindForTypeId(it).ifBlank { "none" } }
+                        ?: "none"
+                    // Preserve the stored importance unchanged; range is 0..5 (§7).
+                    currentImportance = record.importance.coerceIn(0, 5)
                     currentScope = record.scope.takeIf { it in SCOPE_KEYS } ?: "global"
                     selectedTargets.clear()
                     targetsForScope(currentScope, record).forEach { id ->
@@ -306,7 +326,7 @@ class MemoryEditorActivity : FragmentActivity() {
             "event" -> R.string.mem_type_event
             "status" -> R.string.mem_type_status
             "instruction" -> R.string.mem_type_instruction
-            else -> R.string.mem_type_lore
+            else -> R.string.mem_type_none
         }
     )
 
@@ -317,7 +337,7 @@ class MemoryEditorActivity : FragmentActivity() {
             "event" -> R.string.mem_type_event_hint
             "status" -> R.string.mem_type_status_hint
             "instruction" -> R.string.mem_type_instruction_hint
-            else -> R.string.mem_type_lore_hint
+            else -> R.string.mem_type_none_hint
         }
     )
 
@@ -344,6 +364,7 @@ class MemoryEditorActivity : FragmentActivity() {
 
     private fun importanceLabel(i: Int): String = getString(
         when (i) {
+            0 -> R.string.mem_importance_0
             1 -> R.string.mem_importance_1
             2 -> R.string.mem_importance_2
             3 -> R.string.mem_importance_3
@@ -357,11 +378,12 @@ class MemoryEditorActivity : FragmentActivity() {
     }
 
     private fun showImportancePicker() {
-        val labels = (1..5).map { importanceLabel(it) }.toTypedArray()
+        // 0..5, with 0 · Neutral (§7): 0 is a valid permanent value.
+        val labels = (0..5).map { importanceLabel(it) }.toTypedArray()
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.mem_edit_label_importance)
-            .setSingleChoiceItems(labels, currentImportance - 1) { d, which ->
-                currentImportance = which + 1
+            .setSingleChoiceItems(labels, currentImportance.coerceIn(0, 5)) { d, which ->
+                currentImportance = which
                 refreshImportance()
                 d.dismiss()
             }
@@ -562,12 +584,18 @@ class MemoryEditorActivity : FragmentActivity() {
             Toast.makeText(this, R.string.mem_edit_still_loading, Toast.LENGTH_SHORT).show()
             return
         }
-        val title = fieldTitle?.text?.toString()?.trim().orEmpty()
+        // Titles are retired (§3.1): only content is required, and the stored
+        // title is the inert empty placeholder.
         val content = fieldContent?.text?.toString()?.trim().orEmpty()
-        if (title.isEmpty() || content.isEmpty()) {
+        if (content.isEmpty()) {
             Toast.makeText(this, R.string.mem_edit_required, Toast.LENGTH_SHORT).show()
             return
         }
+        // The user-owned Type id is the source of truth; the legacy kind is
+        // derived from it so they can never disagree (item 4). "none" = No Type.
+        val typeId = if (currentType == "none") null
+            else MemoryTypeMigration.typeIdForLegacyKind(currentType)
+        val inertKind = MemoryTypeMigration.legacyKindForTypeId(typeId)
         val tagsJson = textToTagsJson(findViewById<TextInputEditText>(R.id.field_mem_tags)?.text?.toString().orEmpty())
         val targets = selectedTargets.keys.toList()
 
@@ -588,7 +616,7 @@ class MemoryEditorActivity : FragmentActivity() {
             val section = linkSection
             if (activate && prior != null && cardType != null && cardId != null && section != null) {
                 store.updateMemory(
-                    prior.copy(title = title, content = content),
+                    prior.copy(title = "", content = content, kind = inertKind, typeId = typeId),
                     getString(R.string.memory_change_edited)
                 )
                 store.convertMemoryToCardEntry(prior.memoryId, cardType, cardId, section)
@@ -601,7 +629,7 @@ class MemoryEditorActivity : FragmentActivity() {
             if (prior == null) {
                 val record = MemoryRecord(
                     memoryId = MemoryStore.newId("m-"),
-                    scope = currentScope, kind = currentType, title = title, content = content,
+                    scope = currentScope, kind = inertKind, typeId = typeId, title = "", content = content,
                     embeddingText = null, tagsJson = tagsJson, importance = currentImportance,
                     worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
                     projectIds = projectIds,
@@ -616,7 +644,7 @@ class MemoryEditorActivity : FragmentActivity() {
                 Librarian.getInstance(this).reindexMemory(record.memoryId)
             } else {
                 val updated = prior.copy(
-                    scope = currentScope, kind = currentType, title = title, content = content,
+                    scope = currentScope, kind = inertKind, typeId = typeId, title = "", content = content,
                     importance = currentImportance, tagsJson = tagsJson,
                     worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
                     projectIds = projectIds, companionIds = companionIds,

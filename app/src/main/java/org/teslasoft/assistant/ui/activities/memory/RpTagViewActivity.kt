@@ -133,15 +133,20 @@ class RpTagViewActivity : MemoryScreenActivity() {
         // The tag bridge (§3): roleplay-scoped memories sharing the tag —
         // linked rows plus the name-matched read-side bridge, deduped. The
         // realm wall holds: real-life memories never appear here.
+        // Titles are retired (§3.1): identify a memory row by a content preview.
         val memoryRows = LinkedHashMap<String, MemoryRow>()
         for ((_, id) in targets.filter { it.first == RpTagTargetType.MEMORY }) {
             store.getMemory(id)?.let { m ->
-                memoryRows[m.memoryId] = MemoryRow(id = "mem:${m.memoryId}", title = m.title)
+                memoryRows[m.memoryId] = MemoryRow(
+                    id = "mem:${m.memoryId}", title = m.content.substringBefore('\n').trim().take(80)
+                )
             }
         }
         if (tagName.isNotEmpty()) {
             for (m in store.roleplayMemoriesWithTag(tagName)) {
-                memoryRows.getOrPut(m.memoryId) { MemoryRow(id = "mem:${m.memoryId}", title = m.title) }
+                memoryRows.getOrPut(m.memoryId) {
+                    MemoryRow(id = "mem:${m.memoryId}", title = m.content.substringBefore('\n').trim().take(80))
+                }
             }
         }
         if (memoryRows.isNotEmpty()) {

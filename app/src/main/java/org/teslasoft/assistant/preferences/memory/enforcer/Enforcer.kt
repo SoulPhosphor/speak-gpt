@@ -714,7 +714,6 @@ class Enforcer private constructor(private val appContext: Context) {
         }
         return AssembledMemory(
             memoryId = m.memoryId,
-            title = m.title,
             content = m.content,
             provenanceMarker = provenanceMarker(m.provenanceSource, m.provenanceConfidence),
             handling = handling,

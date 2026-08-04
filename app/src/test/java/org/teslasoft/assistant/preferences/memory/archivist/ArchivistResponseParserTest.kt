@@ -26,6 +26,8 @@ class ArchivistResponseParserTest {
 
     @Test
     fun parsesWellFormedResponse() {
+        // Any title/importance in the response is ignored (§3.1/§7.2): the
+        // parser never reads them and DraftMemory has no such fields.
         val parsed = ArchivistResponseParser.parse(
             """
             {"memories":[{"title":"Coffee order","content":"Prefers oat-milk lattes.","scope":"real_life","type":"preference","importance":2,"tags":["Food"],"provenance":"stated"}],
@@ -34,10 +36,9 @@ class ArchivistResponseParserTest {
         )
         assertEquals(1, parsed.memories.size)
         val m = parsed.memories[0]
-        assertEquals("Coffee order", m.title)
+        assertEquals("Prefers oat-milk lattes.", m.content)
         assertEquals("real_life", m.scope)
         assertEquals("preference", m.kind)
-        assertEquals(2, m.importance)
         assertEquals(listOf("Food"), m.tags)
         assertTrue(m.stated)
         assertNull(m.targetName)
@@ -55,20 +56,30 @@ class ArchivistResponseParserTest {
     }
 
     @Test
-    fun dropsUnknownScopeAndType_neverCoerces() {
+    fun dropsUnknownScope_butKeepsUnknownOrBlankTypeAndTitlelessRows() {
+        // Only an unknown SCOPE drops a proposal. An unknown/blank Type is never
+        // a drop (§5.2 — it becomes No Type at filing), and a missing title is
+        // irrelevant (§3.1). Content is the only text requirement.
         val parsed = ArchivistResponseParser.parse(
             """
             {"memories":[
-              {"title":"a","content":"b","scope":"secret","type":"fact"},
-              {"title":"a","content":"b","scope":"real_life","type":"vibe"},
-              {"title":"","content":"b","scope":"real_life","type":"fact"},
-              {"title":"ok","content":"kept","scope":"global","type":"instruction"}
+              {"content":"b","scope":"secret","type":"fact"},
+              {"content":"kept-unknown-type","scope":"real_life","type":"vibe"},
+              {"content":"kept-no-title","scope":"real_life","type":"fact"},
+              {"content":"","scope":"real_life","type":"fact"},
+              {"content":"kept-instruction","scope":"global","type":"instruction"}
             ]}
             """.trimIndent()
         )
-        assertEquals(1, parsed.memories.size)
-        assertEquals("ok", parsed.memories[0].title)
-        assertEquals(3, parsed.dropped)
+        // Kept: unknown-type, no-title, instruction. Dropped: unknown scope,
+        // empty content.
+        assertEquals(3, parsed.memories.size)
+        assertEquals(setOf("kept-unknown-type", "kept-no-title", "kept-instruction"),
+            parsed.memories.map { it.content }.toSet())
+        // The unknown Type suggestion is carried through unchanged (mapped to No
+        // Type only at the filing layer), never coerced or dropped here.
+        assertEquals("vibe", parsed.memories.first { it.content == "kept-unknown-type" }.kind)
+        assertEquals(2, parsed.dropped)
     }
 
     @Test
@@ -86,19 +97,21 @@ class ArchivistResponseParserTest {
     }
 
     @Test
-    fun importanceClampedAndDefaulted() {
+    fun importanceIsNeverParsed() {
+        // The Memory Assistant does not assign importance (§7.2). Whatever the
+        // model emits for importance is ignored; DraftMemory has no importance
+        // field, and every proposal starts neutral at the filing layer.
         val parsed = ArchivistResponseParser.parse(
             """
             {"memories":[
-              {"title":"a","content":"c","scope":"real_life","type":"fact","importance":9},
-              {"title":"b","content":"c","scope":"real_life","type":"fact","importance":0},
-              {"title":"d","content":"c","scope":"real_life","type":"fact"}
+              {"content":"c","scope":"real_life","type":"fact","importance":9},
+              {"content":"d","scope":"real_life","type":"fact"}
             ]}
             """.trimIndent()
         )
-        assertEquals(5, parsed.memories[0].importance)
-        assertEquals(1, parsed.memories[1].importance)
-        assertEquals(3, parsed.memories[2].importance)
+        // Both survive regardless of any importance value — none was consulted.
+        assertEquals(2, parsed.memories.size)
+        assertEquals(0, parsed.dropped)
     }
 
     @Test

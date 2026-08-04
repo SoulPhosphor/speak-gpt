@@ -23,24 +23,25 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * memory-doc-v2 (counterplan §10 A.2): the semantic document is built from
- * the current title, content, and tags; condensed text is an additional
- * hint that can never replace the content; and the document version is part
- * of the embedding key so old-format vectors are never treated as current.
+ * memory-doc-v3 (canonical recovery plan §3.1/§10): the semantic document is
+ * built from the current content and tags — titles are retired and NOT part of
+ * the document. Condensed text is an additional hint that can never replace the
+ * content, and the document version is part of the embedding key so old-format
+ * (title-bearing v2) vectors are never treated as current.
  */
 class RetrievalDocumentTest {
 
     @Test
     fun effectiveKeyCarriesModelTagAndDocumentVersion() {
-        assertEquals("gemma-256|memory-doc-v2", RetrievalDocument.effectiveKey("gemma-256"))
-        // Distinct from the plain model tag, so pre-v2 vectors never match.
+        assertEquals("gemma-256|memory-doc-v3", RetrievalDocument.effectiveKey("gemma-256"))
+        // Distinct from the plain model tag, so pre-v3 vectors never match.
         assertNotEquals("gemma-256", RetrievalDocument.effectiveKey("gemma-256"))
     }
 
     @Test
     fun currentContentIsAlwaysInTheDocument() {
         val doc = RetrievalDocument.semanticDocument(
-            "Sister's dog", "The dog is named Biscuit now", "old note about an unnamed puppy",
+            "The dog is named Biscuit now", "old note about an unnamed puppy",
             emptyList()
         )
         assertTrue(doc.contains("The dog is named Biscuit now"))
@@ -49,26 +50,28 @@ class RetrievalDocumentTest {
     }
 
     @Test
-    fun editingContentChangesTheDocumentEvenWithStaleCondensedText() {
-        val before = RetrievalDocument.semanticDocument("t", "original fact", "condensed", emptyList())
-        val after = RetrievalDocument.semanticDocument("t", "corrected fact", "condensed", emptyList())
-        assertNotEquals(before, after)
-    }
-
-    @Test
-    fun tagsAndTitleAreInTheDocument() {
+    fun titleIsNeverInTheDocument() {
+        // A retired title must have no effect on the embedding document (§3.1).
         val doc = RetrievalDocument.semanticDocument(
-            "Garden plans", "planting schedule", null, listOf("garden", "spring")
+            "planting schedule", null, listOf("garden", "spring")
         )
-        assertTrue(doc.contains("Garden plans"))
+        assertFalse(doc.contains("Garden plans"))
+        assertTrue(doc.contains("planting schedule"))
         assertTrue(doc.contains("garden, spring"))
     }
 
     @Test
+    fun editingContentChangesTheDocumentEvenWithStaleCondensedText() {
+        val before = RetrievalDocument.semanticDocument("original fact", "condensed", emptyList())
+        val after = RetrievalDocument.semanticDocument("corrected fact", "condensed", emptyList())
+        assertNotEquals(before, after)
+    }
+
+    @Test
     fun condensedTextIdenticalToContentIsNotDuplicated() {
-        val doc = RetrievalDocument.semanticDocument("t", "same text", "same text", emptyList())
+        val doc = RetrievalDocument.semanticDocument("same text", "same text", emptyList())
         assertEquals(1, Regex("same text").findAll(doc).count())
-        val noHint = RetrievalDocument.semanticDocument("t", "same text", null, emptyList())
+        val noHint = RetrievalDocument.semanticDocument("same text", null, emptyList())
         assertEquals(noHint, doc)
         assertFalse(doc.endsWith("\n"))
     }

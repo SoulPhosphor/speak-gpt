@@ -28,17 +28,19 @@ import org.json.JSONObject
  *   the response — protection/handling fields (retired), companion or persona
  *   content, modes, directives, card placements (not yet designed) — is
  *   ignored, never stored.
- * - A row missing required fields or carrying an unknown scope/type is
- *   DROPPED and counted, never coerced into a guess (the integration plan's
- *   "anything failing validation is dropped", not silently mutated).
- * - Importance is clamped to 1..5; provenance defaults to "inferred" — a
- *   memory is never marked as the user's own words unless the model
- *   explicitly claimed so ("they told me" vs "I noticed" is sacred).
+ * - A row missing required content or carrying an unknown scope is DROPPED and
+ *   counted. But an absent or unrecognized Type suggestion is NOT a drop
+ *   (canonical recovery plan §5.2): it simply becomes No Type — the supported
+ *   memory text is never discarded because the Type was blank or unknown.
+ * - Titles are retired (§3.1) and never requested or parsed. Importance is not
+ *   an AI decision (§7.2) and is never requested, parsed, or clamped — every
+ *   proposal starts neutral at the filing layer. Provenance defaults to
+ *   "inferred" — a memory is never marked as the user's own words unless the
+ *   model explicitly claimed so ("they told me" vs "I noticed" is sacred).
  */
 object ArchivistResponseParser {
 
     val SCOPES = setOf("global", "real_life", "companion", "project", "world", "campaign", "rp_character")
-    val KINDS = setOf("fact", "preference", "event", "status", "instruction", "lore")
 
     /** Defensive bound per conversation so a runaway model can't flood the
      *  Pending queue; overflow is counted in [Parsed.dropped] and logged by
@@ -48,11 +50,13 @@ object ArchivistResponseParser {
     private const val MAX_TAGS_PER_MEMORY = 8
 
     data class DraftMemory(
-        val title: String,
         val content: String,
         val scope: String,
+        /** The model's raw Type suggestion (may be blank or unrecognized). The
+         *  filing layer maps it to a user-owned Type id — a recognized starter
+         *  Type, or No Type for `lore`/blank/unknown (§5.2). Never gates the
+         *  proposal. */
         val kind: String,
-        val importance: Int,
         val tags: List<String>,
         /** true only when the model explicitly marked provenance "stated". */
         val stated: Boolean,
@@ -105,12 +109,14 @@ object ArchivistResponseParser {
             for (i in 0 until memArray.length()) {
                 val o = memArray.optJSONObject(i)
                 if (o == null) { dropped++; continue }
-                val title = o.optString("title").trim()
                 val content = o.optString("content").trim()
                 val scope = o.optString("scope").trim().lowercase()
+                // The Type suggestion is optional and never a gate (§5.2). An
+                // unknown or blank value is carried as-is and becomes No Type at
+                // filing — it does not drop the proposal.
                 val kind = o.optString("type").trim().lowercase()
                     .ifEmpty { o.optString("kind").trim().lowercase() }
-                if (title.isEmpty() || content.isEmpty() || scope !in SCOPES || kind !in KINDS) {
+                if (content.isEmpty() || scope !in SCOPES) {
                     dropped++; continue
                 }
                 if (memories.size >= MAX_MEMORIES_PER_CONVERSATION) { dropped++; continue }
@@ -126,11 +132,9 @@ object ArchivistResponseParser {
                 }
                 memories.add(
                     DraftMemory(
-                        title = title,
                         content = content,
                         scope = scope,
                         kind = kind,
-                        importance = o.optInt("importance", 3).coerceIn(1, 5),
                         tags = tags,
                         stated = o.optString("provenance").trim().equals("stated", ignoreCase = true),
                         targetName = o.optString("target").trim().ifEmpty { null },

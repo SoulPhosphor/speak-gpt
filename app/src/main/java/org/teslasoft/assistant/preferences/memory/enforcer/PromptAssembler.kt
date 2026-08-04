@@ -42,13 +42,14 @@ object PromptAssembler {
         "(told = they said it; observed = seen over time; guessed = tentative — hold guesses lightly, let them go gracefully if wrong)"
 
     /**
-     * The atomic budget cost of one memory: title + content + protection
-     * handling + never-assume lines. A memory that does not fit the budget
+     * The atomic budget cost of one memory: content + protection handling +
+     * never-assume lines (titles are retired, §3.1). A memory that does not fit
+     * the budget
      * is skipped WHOLE by the enforcer's backfill walk — handling is never
      * sheared off a protected memory, and no memory is ever truncated.
      */
     fun memoryCost(m: AssembledMemory): Int =
-        m.title.length + m.content.length +
+        m.content.length +
             m.handling.sumOf { it.length } + m.neverAssume.sumOf { it.length }
 
     /** The single memory-line renderer. There is deliberately no other place
@@ -57,7 +58,7 @@ object PromptAssembler {
     fun renderMemoryLine(m: AssembledMemory): String {
         val sb = StringBuilder()
         sb.append("- (").append(m.provenanceMarker).append(") ")
-            .append(m.title.trim()).append(": ").append(m.content.trim())
+            .append(m.content.trim())
         if (m.isProtected) {
             sb.append("\n  HANDLE WITH CARE")
             if (m.handling.isNotEmpty()) {

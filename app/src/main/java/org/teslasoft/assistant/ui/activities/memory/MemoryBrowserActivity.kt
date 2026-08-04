@@ -205,13 +205,16 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
         availableTags = base.flatMap { parseTags(it.tagsJson) }.distinct().sortedBy { it.lowercase() }
         availableScopes = base.map { it.scope }.toSet()
-        availableTypes = base.map { it.kind }.toSet()
+        // The legacy kind is a derived, inert shadow of the Type (item 4); a No
+        // Type memory carries a blank kind, which is not a filter option.
+        availableTypes = base.map { it.kind }.filter { it.isNotBlank() }.toSet()
         pendingCount = base.count { it.status == "draft" }
 
         val f = MemoryBrowserFilterState
         val q = query.trim().lowercase()
         var list = base
-        if (q.isNotEmpty()) list = list.filter { it.title.lowercase().contains(q) || it.content.lowercase().contains(q) }
+        // Titles are retired (§3.1): search the memory content only.
+        if (q.isNotEmpty()) list = list.filter { it.content.lowercase().contains(q) }
         if (!isScoped() && f.scope.isNotEmpty()) list = list.filter { it.scope in f.scope }
         if (f.type.isNotEmpty()) list = list.filter { it.kind in f.type }
         // The mode toggle IS the draft split (owner design, July 8 2026
@@ -268,7 +271,10 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         val usePendingCard = pending && !roleplay
         return MemoryRow(
             id = m.memoryId,
-            title = m.title,
+            // Titles are retired (§3.1): the row's primary line is a content
+            // preview, never a title. The pending card additionally shows the
+            // full memory text below.
+            title = firstLine.ifEmpty { m.content.trim() },
             // The pending card shows the FULL proposed memory; the ordinary
             // rows keep the one-line content preview.
             subtitle = if (usePendingCard) m.content.trim().ifEmpty { null } else firstLine.ifEmpty { null },
@@ -455,9 +461,11 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     }
 
     private fun confirmDelete(m: MemoryRecord) {
+        // Titles are retired (§3.1): identify the memory by a content preview.
+        val preview = m.content.substringBefore('\n').trim().take(80)
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.memory_delete_confirm_title)
-            .setMessage(getString(R.string.memory_delete_confirm_msg, m.title))
+            .setMessage(getString(R.string.memory_delete_confirm_msg, preview))
             .setPositiveButton(R.string.btn_delete) { _, _ ->
                 matchState.clear()
                 runOffThread {

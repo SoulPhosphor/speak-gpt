@@ -39,7 +39,6 @@ package org.teslasoft.assistant.preferences.memory.enforcer
  */
 data class AssembledMemory(
     val memoryId: String,
-    val title: String,
     val content: String,
     /** told | observed | guessed — the one-word provenance marker. */
     val provenanceMarker: String,

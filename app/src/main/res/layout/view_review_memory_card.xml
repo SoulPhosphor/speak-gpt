@@ -123,10 +123,13 @@
         android:orientation="vertical"
         android:visibility="gone">
 
+        <!-- Titles are retired (§3.1): the inline title editor is hidden and
+             never edited. Only the content is editable. -->
         <com.google.android.material.textfield.TextInputLayout
             style="?attr/textInputOutlinedDenseStyle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:visibility="gone"
             android:hint="@string/mem_edit_hint_title">
 
             <com.google.android.material.textfield.TextInputEditText

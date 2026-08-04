@@ -41,6 +41,13 @@ android {
         buildConfigField "String", "GIT_SHA", "\"${gitSha}\""
         buildConfigField "String", "BUILD_DATE", "\"${buildDate}\""
 
+        // Instrumentation tests (app/src/androidTest) exercise the real
+        // SQLCipher-backed MemoryStore — onCreate/onUpgrade/import/deletion.
+        // They require an arm64 device or emulator because the app ships
+        // arm64-only native code (abiFilters below); a standard x86_64 CI
+        // emulator cannot install this APK.
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
         ndk {
             // Only ship arm64 binaries. The target user runs a Pixel 8 and
             // we don't need to bloat the APK with x86_64 / armeabi-v7a.
@@ -209,4 +216,12 @@ dependencies {
     // Real org.json for unit tests (the android.jar stub throws); lets the
     // memory seed codec be tested without Robolectric.
     testImplementation 'org.json:json:20240303'
+
+    // Instrumentation tests (app/src/androidTest): real SQLCipher MemoryStore
+    // migration/deletion coverage. Run with "gradlew connectedAndroidTest" on
+    // an arm64 device or emulator (the app is arm64-only, so a standard x86_64
+    // CI emulator cannot host them).
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'androidx.test:core:1.5.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
 }

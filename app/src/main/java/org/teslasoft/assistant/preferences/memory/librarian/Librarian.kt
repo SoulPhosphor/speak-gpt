@@ -62,11 +62,6 @@ class Librarian private constructor(private val appContext: Context) {
         private val TOKEN_BOUNDARY = Regex("[^\\p{L}\\p{Nd}]+")
         private const val MIN_TERM_LENGTH = 3
 
-        /** Bounded bonus when a query term hits the title — the user's own
-         *  name for the fact — applied after dampening like the context
-         *  boost, so it breaks ties without overwhelming relevance. */
-        private const val TITLE_HIT_BONUS = 0.05
-
         /** How many lore-overlap vectors to keep cached across turns. */
         private const val LORE_VECTOR_CACHE_MAX = 256
 
@@ -183,9 +178,9 @@ class Librarian private constructor(private val appContext: Context) {
             if (terms.isEmpty()) return emptyList()
             val scored = candidates.mapNotNull { c ->
                 val mem = c.memory
-                val titleTokens = lexicalTokens(mem.title)
-                val docTokens = HashSet(titleTokens)
-                docTokens.addAll(lexicalTokens(mem.content))
+                // Titles are retired (§3.1): the lexical document is content,
+                // the condensed hint, tags, and target aliases — never a title.
+                val docTokens = HashSet(lexicalTokens(mem.content))
                 mem.embeddingText?.takeIf { it.isNotBlank() }?.let { docTokens.addAll(lexicalTokens(it)) }
                 for (tag in c.tags) docTokens.addAll(lexicalTokens(tag))
                 for (alias in c.aliases) docTokens.addAll(lexicalTokens(alias))
@@ -197,7 +192,7 @@ class Librarian private constructor(private val appContext: Context) {
                     weights.recency * c.recency
                 if (mem.provenanceConfidence.equals("tentative", ignoreCase = true)) s *= TENTATIVE_DAMPEN
                 s += c.boost
-                if (terms.any { it in titleTokens }) s += TITLE_HIT_BONUS
+                // No title bonus (§3.1): retrieval never rewards a title.
                 ScoredMemory(mem, relevance, s.toFloat())
             }
             return scored.sortedByDescending { it.score }.take(topK)
@@ -462,7 +457,7 @@ class Librarian private constructor(private val appContext: Context) {
         val mem = store.getMemory(memoryId)?.takeIf { it.status == "active" } ?: return
         try {
             val doc = RetrievalDocument.semanticDocument(
-                mem.title, mem.content, mem.embeddingText, parseTags(mem.tagsJson)
+                mem.content, mem.embeddingText, parseTags(mem.tagsJson)
             )
             val vec = embedLocked(m, doc, false)
             store.upsertEmbedding(memoryId, RetrievalDocument.effectiveKey(m.tag), VectorMath.toBlob(vec))
@@ -617,7 +612,7 @@ class Librarian private constructor(private val appContext: Context) {
         for (mem in memories) {
             try {
                 val doc = RetrievalDocument.semanticDocument(
-                    mem.title, mem.content, mem.embeddingText, parseTags(mem.tagsJson)
+                    mem.content, mem.embeddingText, parseTags(mem.tagsJson)
                 )
                 val vec = embedLocked(m, doc, false)
                 store.upsertEmbedding(mem.memoryId, key, VectorMath.toBlob(vec))
@@ -677,7 +672,7 @@ class Librarian private constructor(private val appContext: Context) {
         for (mem in pending) {
             try {
                 val doc = RetrievalDocument.semanticDocument(
-                    mem.title, mem.content, mem.embeddingText, parseTags(mem.tagsJson)
+                    mem.content, mem.embeddingText, parseTags(mem.tagsJson)
                 )
                 val vec = embedLocked(m, doc, false)
                 store.upsertEmbedding(mem.memoryId, key, VectorMath.toBlob(vec))

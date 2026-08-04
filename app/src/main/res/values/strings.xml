@@ -1598,10 +1598,12 @@
     <string name="mem_edit_new_project">New project</string>
     <string name="mem_edit_new_project_hint">Project name</string>
     <string name="mem_edit_btn_save">Save</string>
-    <string name="mem_edit_required">A title and content are required.</string>
+    <string name="mem_edit_required">Content is required.</string>
     <string name="mem_edit_still_loading">Still loading — try again in a moment.</string>
     <string name="mem_edit_op_failed">Couldn\'t save: %1$s</string>
     <!-- Types (owner_approved_rules §5) -->
+    <string name="mem_type_none">No Type</string>
+    <string name="mem_type_none_hint">No category. A memory does not need a Type.</string>
     <string name="mem_type_fact">Fact</string>
     <string name="mem_type_preference">Preference</string>
     <string name="mem_type_event">Event</string>
@@ -1622,7 +1624,8 @@
     <string name="mem_scope_world">World</string>
     <string name="mem_scope_campaign">Campaign</string>
     <string name="mem_scope_rp_character">RP character</string>
-    <!-- Importance (owner_approved_rules §8) -->
+    <!-- Importance (owner_approved_rules §8; canonical recovery plan §7) -->
+    <string name="mem_importance_0">0 · Neutral</string>
     <string name="mem_importance_1">1 Low importance</string>
     <string name="mem_importance_2">2 Minor</string>
     <string name="mem_importance_3">3 Notable</string>
@@ -2255,7 +2258,7 @@
     <!-- Delete companion (wording from the Phase 5 rework work order 1.2) -->
     <string name="mem_comp_delete">Delete</string>
     <string name="mem_comp_delete_title">Delete companion?</string>
-    <string name="mem_comp_delete_body">This removes %1$s from the memory system. Its persona/character card is not affected.</string>
+    <string name="mem_comp_delete_body">This will permanently delete %1$s and its companion memories from the memory system. Its persona or character card is not affected. This cannot be undone.</string>
     <string name="mem_comp_delete_also_memories">Also delete this companion\'s memories</string>
     <!-- Destructive confirmation with the current companion-memory count
          (canonical recovery plan §4.6). Deleting a companion permanently

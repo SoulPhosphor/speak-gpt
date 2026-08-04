@@ -242,14 +242,16 @@ class LibrarianRankingTest {
     }
 
     @Test
-    fun lexicalTitleHitOutranksEqualBodyHit() {
-        val titled = mem("titled", title = "garden", content = "many plants grow here")
+    fun lexicalIgnoresTitle() {
+        // Titles are retired (§3.1): a query term that appears ONLY in a
+        // memory's title contributes nothing — the memory is not matched, and
+        // there is no title bonus.
+        val titleOnly = mem("title-only", title = "garden", content = "many plants grow here")
         val body = mem("body", title = "plot notes", content = "the garden layout")
         val ranked = Librarian.rankLexical(
-            "garden plans", listOf(lex(body), lex(titled)), weights, topK = 5
+            "garden", listOf(lex(titleOnly), lex(body)), weights, topK = 5
         )
-        assertEquals("titled", ranked.first().memory.memoryId)
-        assertTrue(ranked[0].score > ranked[1].score)
+        assertEquals(listOf("body"), ranked.map { it.memory.memoryId })
     }
 
     @Test

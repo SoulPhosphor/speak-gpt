@@ -228,8 +228,11 @@ class CompanionDetailActivity : FragmentActivity() {
         // show the dialog on the UI thread. A read failure degrades to a
         // no-count body rather than blocking deletion (the memory-UI contract).
         runOffThread {
+            // The count must be the number of memories the deletion ACTUALLY
+            // deletes — those this companion solely owns (§4.6 / item 6). Shared
+            // memories survive and are not counted.
             val count = try {
-                MemoryStore.getInstance(this).companionMemoryCount(id)
+                MemoryStore.getInstance(this).companionSoleOwnedMemoryCount(id)
             } catch (_: Exception) {
                 -1
             }

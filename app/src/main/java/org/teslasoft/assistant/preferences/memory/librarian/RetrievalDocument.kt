@@ -20,33 +20,36 @@ package org.teslasoft.assistant.preferences.memory.librarian
  * memory-doc-v2 (counterplan §10 A.2): the versioned semantic retrieval
  * document and its embedding key.
  *
- * The document is title + current content + tags; the condensed
- * `embedding_text` rides along as an ADDITIONAL hint only and can never
- * replace the current content — so an edited memory cannot remain
- * discoverable solely by stale condensed wording. The document version is
- * part of the effective embedding key (existing model-keyed embeddings
- * table, no schema change), so vectors built from the old document format
- * are never treated as current; until a rebuild produces current vectors,
- * the complete-set rule keeps retrieval on the lexical path. Pure Kotlin,
- * unit tested (RetrievalDocumentTest).
+ * The document is current content + tags; the condensed `embedding_text`
+ * rides along as an ADDITIONAL hint only and can never replace the current
+ * content — so an edited memory cannot remain discoverable solely by stale
+ * condensed wording. Titles are retired (canonical recovery plan §3.1) and are
+ * NOT part of the embedding document. The document version is part of the
+ * effective embedding key (existing model-keyed embeddings table, no schema
+ * change), so vectors built from the old, title-bearing document format are
+ * never treated as current; until a rebuild produces current vectors, the
+ * complete-set rule keeps retrieval on the lexical path. Pure Kotlin, unit
+ * tested (RetrievalDocumentTest).
  */
 object RetrievalDocument {
 
-    const val DOC_VERSION = "memory-doc-v2"
+    // v3 drops the title from the document (§3.1). Bumping the version retires
+    // every v2 vector so a title-bearing embedding is never treated as current.
+    const val DOC_VERSION = "memory-doc-v3"
 
     /** The embeddings-table key for [modelTag] under the current document
      *  version. Old plain-tag vectors simply never match this key. */
     fun effectiveKey(modelTag: String): String = "$modelTag|$DOC_VERSION"
 
-    /** The text embedded for one memory. */
+    /** The text embedded for one memory. Title is retired and never included
+     *  (§3.1); the document is current content, the optional condensed hint,
+     *  and tags. */
     fun semanticDocument(
-        title: String,
         content: String,
         embeddingText: String?,
         tags: List<String>
     ): String {
-        val sb = StringBuilder(title.trim())
-        sb.append('\n').append(content.trim())
+        val sb = StringBuilder(content.trim())
         embeddingText?.trim()?.takeIf { it.isNotEmpty() && it != content.trim() }
             ?.let { sb.append('\n').append(it) }
         if (tags.isNotEmpty()) sb.append('\n').append(tags.joinToString(", "))
