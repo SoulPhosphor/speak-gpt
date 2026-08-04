@@ -17,9 +17,36 @@
 package org.teslasoft.assistant.providers
 
 import com.google.gson.JsonParser
+import io.ktor.utils.io.ByteReadChannel
+import io.ktor.utils.io.readUTF8Line
 
 /** Reads an API-reported serving provider without consulting app configuration. */
 object ReportedProviderParser {
+
+    /**
+     * Read the observer's split copy of a generation stream, reporting the
+     * first API-reported provider found.
+     *
+     * The copy MUST be read through to end of stream, found or not. Ktor's
+     * channel splitter feeds the live reply and this copy in lockstep;
+     * abandoning the copy mid-stream stalls the splitter once the copy's
+     * ~4 KB buffer fills, freezing the visible reply. Cancelling the copy
+     * instead makes Ktor's body copier cancel the origin response, killing
+     * the reply outright. Draining to the end is the only safe exit.
+     */
+    suspend fun consumeObservedStream(channel: ByteReadChannel, onProvider: (String) -> Unit) {
+        var noted = false
+        while (true) {
+            val line = channel.readUTF8Line() ?: break
+            if (!noted) {
+                val reported = fromResponseLine(line)
+                if (reported != null) {
+                    onProvider(reported)
+                    noted = true
+                }
+            }
+        }
+    }
 
     /**
      * OpenRouter's opted-in router metadata is authoritative: use the endpoint
