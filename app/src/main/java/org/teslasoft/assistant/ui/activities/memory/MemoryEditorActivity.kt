@@ -91,12 +91,16 @@ class MemoryEditorActivity : FragmentActivity() {
     private var dropdownLinkCard: TextView? = null
     private var dropdownLinkSection: TextView? = null
 
-    // Current selections. currentType is a dropdown key: one of the starter
-    // Type names or "none" (No Type). It is mapped to the user-owned type_id
-    // (the source of truth) at save time; the legacy kind is derived from that
-    // so the two can never disagree (§5 / item 4). New memories start at
-    // importance 0 (§7.2).
-    private var currentType: String = "fact"
+    // The actual selected user-owned Type id — the source of truth (§5). It is
+    // preserved verbatim across an edit and only changes when the user picks a
+    // Type in the picker, so editing a memory with a CUSTOM Type never silently
+    // drops it (item 2). null = No Type. New memories default to Fact. The
+    // legacy kind is derived from this at save so the two can never disagree.
+    private var currentTypeId: String? = "mtype-fact"
+    // The current Type list (loaded once, off-thread) — for showing a Type's
+    // name on the button, including a user-created custom Type the starter-only
+    // picker cannot represent. Full Type CRUD / dynamic picker are Phase 2.
+    private var memTypes: List<org.teslasoft.assistant.preferences.memory.MemoryTypeRecord> = emptyList()
     private var currentImportance: Int = 0
     private var currentScope: String = "global"
 
@@ -201,6 +205,9 @@ class MemoryEditorActivity : FragmentActivity() {
                 return@runOffThread
             }
             val store = MemoryStore.getInstance(this)
+            // The current Type list — for showing a Type's name on the button
+            // (including a custom Type the starter-only picker cannot represent).
+            memTypes = store.getMemoryTypes()
             // The PICKER offers approved companions only, but name display
             // must resolve every id — the owner's rule (July 8 2026): the
             // internal identifier is never shown; always the current name.
@@ -231,12 +238,11 @@ class MemoryEditorActivity : FragmentActivity() {
                     // Titles are retired (§3.1): never populate or edit them.
                     fieldContent?.setText(record.content)
                     findViewById<TextInputEditText>(R.id.field_mem_tags)?.setText(tagsToText(record.tagsJson))
-                    // Type comes from the user-owned type_id (source of truth),
-                    // mapped to a dropdown key. No Type / a custom Type without a
-                    // legacy equivalent shows as "none" (item 4).
-                    currentType = record.typeId
-                        ?.let { MemoryTypeMigration.legacyKindForTypeId(it).ifBlank { "none" } }
-                        ?: "none"
+                    // Type is the user-owned type_id itself (source of truth),
+                    // preserved verbatim — a custom Type survives an edit
+                    // untouched (item 2). It changes only if the user picks a
+                    // different Type in the picker.
+                    currentTypeId = record.typeId
                     // Preserve the stored importance unchanged; range is 0..5 (§7).
                     currentImportance = record.importance.coerceIn(0, 5)
                     currentScope = record.scope.takeIf { it in SCOPE_KEYS } ?: "global"
@@ -341,18 +347,38 @@ class MemoryEditorActivity : FragmentActivity() {
         }
     )
 
+    /** The starter dropdown key for a type_id, or "none" for No Type / a custom
+     *  Type (which the starter-only picker cannot represent as a selection). */
+    private fun starterKeyFor(typeId: String?): String {
+        if (typeId == null) return "none"
+        val kind = MemoryTypeMigration.legacyKindForTypeId(typeId)
+        return if (kind.isNotEmpty()) kind else "none"
+    }
+
     private fun refreshType() {
-        btnType?.text = typeLabel(currentType)
-        typeHint?.text = typeHintText(currentType)
+        // The button shows the Type's actual name (a custom Type included);
+        // No Type when there is none.
+        btnType?.text = when {
+            currentTypeId == null -> getString(R.string.mem_type_none)
+            else -> memTypes.firstOrNull { it.typeId == currentTypeId }?.name
+                ?: typeLabel(starterKeyFor(currentTypeId))
+        }
+        typeHint?.text = typeHintText(starterKeyFor(currentTypeId))
     }
 
     private fun showTypePicker() {
+        // The picker offers No Type plus the starter Types only (the dynamic
+        // Type picker is Phase 2). A custom Type stays selected until the user
+        // explicitly chooses one of these, so opening the picker without picking
+        // never drops a custom Type.
         val labels = TYPE_KEYS.map { typeLabel(it) }.toTypedArray()
-        val current = TYPE_KEYS.indexOf(currentType).coerceAtLeast(0)
+        val current = TYPE_KEYS.indexOf(starterKeyFor(currentTypeId))
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.mem_edit_label_type)
             .setSingleChoiceItems(labels, current) { d, which ->
-                currentType = TYPE_KEYS[which]
+                // index 0 = No Type; 1..5 = the matching starter Type id.
+                currentTypeId = if (which == 0) null
+                    else MemoryTypeMigration.STARTER_TYPES[which - 1].typeId
                 refreshType()
                 d.dismiss()
             }
@@ -591,10 +617,10 @@ class MemoryEditorActivity : FragmentActivity() {
             Toast.makeText(this, R.string.mem_edit_required, Toast.LENGTH_SHORT).show()
             return
         }
-        // The user-owned Type id is the source of truth; the legacy kind is
-        // derived from it so they can never disagree (item 4). "none" = No Type.
-        val typeId = if (currentType == "none") null
-            else MemoryTypeMigration.typeIdForLegacyKind(currentType)
+        // The user-owned Type id is the source of truth and is saved verbatim
+        // (a custom Type survives an edit — item 2); the legacy kind is derived
+        // from it so they can never disagree (item 4).
+        val typeId = currentTypeId
         val inertKind = MemoryTypeMigration.legacyKindForTypeId(typeId)
         val tagsJson = textToTagsJson(findViewById<TextInputEditText>(R.id.field_mem_tags)?.text?.toString().orEmpty())
         val targets = selectedTargets.keys.toList()

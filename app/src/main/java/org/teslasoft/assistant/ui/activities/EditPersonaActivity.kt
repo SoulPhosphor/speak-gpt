@@ -45,6 +45,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
+import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
@@ -566,11 +567,37 @@ class EditPersonaActivity : FragmentActivity() {
      *  with another companion survive) via MemoryCompanionSync.onPersonaDeleted
      *  — hence the "all associated memories that aren't shared" wording. */
     private fun confirmDelete() {
+        val name = originalLabel
+        // Resolve the count of memories this deletion will ACTUALLY delete — the
+        // ones this companion solely owns (§4.6); shared memories survive and are
+        // not counted. It is a store read, so run off the main thread, then show
+        // the dialog. A read failure or an unlinked persona degrades to the
+        // no-count body, which still states the permanent memory deletion.
+        Thread {
+            val count = try {
+                if (MemoryStore.isProvisioned(this)) {
+                    val store = MemoryStore.getInstance(this)
+                    store.findCompanionByAppCharacterId(personaId)
+                        ?.let { store.companionSoleOwnedMemoryCount(it.companionId) } ?: 0
+                } else 0
+            } catch (_: Exception) {
+                -1
+            }
+            runOnUiThread { showDeleteDialog(name, count) }
+        }.start()
+    }
+
+    private fun showDeleteDialog(name: String, count: Int) {
         val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
+        val body: CharSequence = if (count >= 0 && name.isNotBlank()) {
+            resources.getQuantityString(R.plurals.persona_delete_body_count, count, name, count)
+        } else {
+            getString(R.string.persona_delete_body)
+        }
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.persona_delete_title)
-            .setMessage(R.string.persona_delete_body)
+            .setMessage(body)
             .setView(actionsView)
             .create()
 

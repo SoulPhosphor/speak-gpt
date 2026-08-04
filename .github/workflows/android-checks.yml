@@ -41,6 +41,15 @@ jobs:
       - name: Build debug APK
         run: ./gradlew --no-daemon assembleDebug
 
+      - name: Compile instrumentation tests
+        # Compiles app/src/androidTest (the SQLCipher MemoryStore migration and
+        # deletion suite) so build breakage in the tests is caught in CI. The
+        # tests themselves require an arm64 device/emulator to RUN
+        # (connectedAndroidTest), which the app's arm64-only native code makes
+        # impractical on a standard x86_64 CI emulator; compiling them here still
+        # guards the suite against bit-rot.
+        run: ./gradlew --no-daemon assembleDebugAndroidTest
+
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:

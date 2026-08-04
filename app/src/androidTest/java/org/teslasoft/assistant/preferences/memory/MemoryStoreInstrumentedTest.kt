@@ -270,6 +270,25 @@ class MemoryStoreInstrumentedTest {
         assertTrue(ids.contains("mtype-fact"))
     }
 
+    @Test
+    fun editingContentPreservesACustomType() {
+        // Regression (item 2): a memory with a user-created custom Type must keep
+        // that Type through a content-only edit — the editor now saves the actual
+        // type_id verbatim rather than deriving it from a starter display key,
+        // which previously turned any custom Type into No Type on save.
+        val store = open(freshDbName())
+        store.upsertMemoryType(MemoryTypeRecord("mtype-pets", "Pets", "2026-08-04T00:00:00Z"))
+        store.insertMemory(mem("m-1", scope = "global", typeId = "mtype-pets"))
+
+        val prior = store.getMemory("m-1")!!
+        // The save path the fixed editor uses: only content changes; type_id is
+        // carried through unchanged.
+        store.updateMemory(prior.copy(content = "an edited fact", title = ""), null)
+
+        assertEquals("mtype-pets", store.getMemory("m-1")!!.typeId)
+        assertEquals("an edited fact", store.getMemory("m-1")!!.content)
+    }
+
     /* ------------------------------ helpers ------------------------------- */
 
     private fun importanceOf(store: MemoryStore, id: String): Int =

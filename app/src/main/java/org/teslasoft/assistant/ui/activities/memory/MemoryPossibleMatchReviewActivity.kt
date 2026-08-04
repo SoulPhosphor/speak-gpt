@@ -259,9 +259,9 @@ class MemoryPossibleMatchReviewActivity : FragmentActivity() {
         if (applying) return
         val editing = editingCardId
         if (editing == null) {
-            // First tap: reveal the single selected card's inline editor.
+            // First tap: reveal the single selected card's inline editor. Titles
+            // are retired (§3.1): only the content is editable.
             val holder = checkedHolders().singleOrNull() ?: return
-            holder.editTitle.setText(holder.record.title)
             holder.editContent.setText(holder.record.content)
             holder.editSection.visibility = View.VISIBLE
             editingCardId = holder.record.memoryId

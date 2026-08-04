@@ -279,7 +279,8 @@ class Enforcer private constructor(private val appContext: Context) {
             } ?: emptyMap()
         fun loreDupOf(mem: AssembledMemory): LoreNote? {
             if (loreVectors.isEmpty()) return null
-            val memText = "${mem.title}: ${mem.content}"
+            // Titles are retired (§3.1): compare on memory content only.
+            val memText = mem.content
             val memVec = poolVectors[mem.memoryId]?.let { VectorMath.fromBlob(it) }
             return loreVectors.firstOrNull { (note, loreVec) ->
                 if (memVec != null && loreVec != null) {
@@ -539,7 +540,7 @@ class Enforcer private constructor(private val appContext: Context) {
                 eligibility = eligibility,
                 injected = kept.map {
                     AssemblyLog.Line(
-                        it.title,
+                        memLogLabel(it),
                         "(${it.provenanceMarker}) score %.3f sim %.3f%s%s · %s".format(
                             it.score, it.similarity,
                             if (it.isProtected) " [protected]" else "",
@@ -550,10 +551,10 @@ class Enforcer private constructor(private val appContext: Context) {
                 } + cardsFinal.map { (a, reason) ->
                     AssemblyLog.Line("card: ${a.name}", "§${a.sectionLabel} — fired by $reason")
                 },
-                cut = budgetCut.map { AssemblyLog.Line(it.title, "over budget (score %.3f) · %s".format(it.score, it.memoryId)) } +
-                    suppressed.map { (m, l) -> AssemblyLog.Line(m.title, "near-duplicate of lore \"${l.label}\" — flagged · ${m.memoryId}") } +
+                cut = budgetCut.map { AssemblyLog.Line(memLogLabel(it), "over budget (score %.3f) · %s".format(it.score, it.memoryId)) } +
+                    suppressed.map { (m, l) -> AssemblyLog.Line(memLogLabel(m), "near-duplicate of lore \"${l.label}\" — flagged · ${m.memoryId}") } +
                     cooled.map { (m, ago) ->
-                        AssemblyLog.Line(m.title, "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS · ${m.memoryId}")
+                        AssemblyLog.Line(memLogLabel(m), "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS · ${m.memoryId}")
                     } +
                     cardCooled.map { (name, ago) ->
                         AssemblyLog.Line("card: $name", "cooldown — injected $ago turn(s) ago, refreshes after $COOLDOWN_TURNS")
@@ -732,6 +733,12 @@ class Enforcer private constructor(private val appContext: Context) {
         else -> "observed"
     }
 
+    /** A short label for a memory in the diagnostic assembly log. Titles are
+     *  retired (§3.1), so the label is a first-line content preview — never a
+     *  title; the full memory id is already appended to each line's detail. */
+    private fun memLogLabel(m: AssembledMemory): String =
+        m.content.substringBefore('\n').trim().take(48).ifEmpty { m.memoryId }
+
     private fun jsonToList(arr: JSONArray?): List<String> {
         if (arr == null) return emptyList()
         val out = ArrayList<String>(arr.length())
@@ -761,7 +768,6 @@ class Enforcer private constructor(private val appContext: Context) {
                     JSONObject()
                         .put("at", MemoryStore.nowIso())
                         .put("memory_id", mem.memoryId)
-                        .put("memory_title", mem.title)
                         .put("lore_label", lore.label)
                 )
             }

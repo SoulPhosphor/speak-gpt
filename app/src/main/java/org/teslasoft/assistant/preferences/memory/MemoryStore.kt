@@ -422,9 +422,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 // never block a card delete); never exported.
                 "suggested_card_type TEXT, " +
                 "suggested_card_id TEXT, " +
-                // Source chat id for learned-from-chat records (DB v17,
-                // counterplan §4(c)): the rename-safe rejected-draft anchor,
-                // carried across renames by repointChat. Device-local.
+                // Legacy source chat id (DB v17), RETIRED in Phase 1 (§3.2): new
+                // memories store null and no code reads or maintains it; rejected-
+                // draft dedup is content-only in the separate ledger. Kept as an
+                // inert column so old rows preserve their value. Device-local.
                 "suggested_section TEXT, " +
                 "source_chat_id TEXT)"
         )
@@ -4053,17 +4054,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "UPDATE OR REPLACE chat_turn_counters SET chat_id = ? WHERE chat_id = ?",
                 arrayOf(newChatId, oldChatId)
             )
-            // Rejected-draft identity is keyed by chat id too (DB v17,
-            // counterplan §4(c)) — chat ids are name-derived hashes that
-            // change on rename, so both the registered rejections and the
-            // source-chat anchor on learned-from-chat memories must ride
-            // along or a rename would defeat the owner's narrow suppression.
+            // Rejected-draft dedup now lives ONLY in the separate rejected_drafts
+            // ledger and is keyed on memory content alone (canonical recovery plan
+            // §3.2 / item 1) — no memory remembers which chat produced it, so the
+            // memories.source_chat_id column is no longer maintained here (its old
+            // values remain physically, but inert). Any legacy chat_key rows in
+            // the ledger are carried across a rename for continuity; new
+            // rejections are content-keyed and unaffected.
             db.execSQL(
                 "UPDATE OR REPLACE rejected_drafts SET chat_key = ? WHERE chat_key = ?",
-                arrayOf(newChatId, oldChatId)
-            )
-            db.execSQL(
-                "UPDATE memories SET source_chat_id = ? WHERE source_chat_id = ?",
                 arrayOf(newChatId, oldChatId)
             )
             // Step 1.7: pending lore book suggestions and their rejection
@@ -5609,9 +5608,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             // source text field changes it is stale by definition and is
             // cleared, so a corrected memory can never stay discoverable by
             // its old condensed wording.
+            // Titles are retired (§3.1) and never part of the embedding, so a
+            // title change is not a source-text change — only content and tags
+            // affect the semantic document.
             val sourceTextChanged = prior == null ||
-                prior.title != m.title || prior.content != m.content ||
-                prior.tagsJson != m.tagsJson
+                prior.content != m.content || prior.tagsJson != m.tagsJson
             val updated = m.copy(
                 updatedAt = nowIso(),
                 embeddingText = if (sourceTextChanged) null else m.embeddingText
@@ -5941,7 +5942,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     // the derived embedding_text and drops the vector so the
                     // corrected memory can never stay discoverable by stale
                     // wording. The old memory stays active.
-                    val sourceTextChanged = prior.title != editedOld.title ||
+                    // Titles are retired (§3.1) and are not part of the embedding,
+                    // so only content and tags count as a source-text change.
+                    val sourceTextChanged =
                         prior.content != editedOld.content || prior.tagsJson != editedOld.tagsJson
                     val updated = editedOld.copy(
                         status = "active",

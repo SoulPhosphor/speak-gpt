@@ -272,7 +272,17 @@
          wording, July 20 2026). Deleting also removes the companion's memories
          that aren't shared with another companion. -->
     <string name="persona_delete_title">Delete this companion?</string>
-    <string name="persona_delete_body">The profile and all associated memories that aren\'t shared with another companion will be permanently deleted.</string>
+    <!-- Fallback shown when the memory count is unavailable (canonical recovery
+         plan §4.6): still states the permanent memory deletion and that it
+         cannot be undone. -->
+    <string name="persona_delete_body">The profile and all associated memories that aren\'t shared with another companion will be permanently deleted. This cannot be undone.</string>
+    <!-- Destructive confirmation with the companion name and the count of
+         memories actually deleted — those this companion solely owns; memories
+         shared with another companion survive and are not counted (§4.6). -->
+    <plurals name="persona_delete_body_count">
+        <item quantity="one">This permanently deletes %1$s, its profile, and %2$d companion memory (memories shared with another companion are kept). This cannot be undone.</item>
+        <item quantity="other">This permanently deletes %1$s, its profile, and %2$d companion memories (memories shared with another companion are kept). This cannot be undone.</item>
+    </plurals>
     <string name="persona_friendly_name">Companion Name</string>
     <string name="persona_prompt_hint">Companion Prompt</string>
     <string name="persona_prompt_help">Sent before your system message at the start of every request.</string>

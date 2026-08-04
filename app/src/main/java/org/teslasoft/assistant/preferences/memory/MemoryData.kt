@@ -468,11 +468,12 @@ data class MemoryRecord(
     val suggestedCardType: String? = null,
     val suggestedCardId: String? = null,
     val suggestedSection: String? = null,
-    /** Source chat id for learned-from-chat drafts (DB v17, counterplan
-     *  §4(c)): the rename-safe anchor for rejected-draft identity —
-     *  provenance_context keeps the display name captured at filing, this
-     *  keeps the id, and `repointChat` carries it across renames. Null for
-     *  user-authored memories and legacy drafts. Device-local, not exported. */
+    /** Legacy source chat id (DB v17). RETIRED as of Phase 1 (canonical recovery
+     *  plan §3.2 / item 1): a memory never remembers which chat produced it, so
+     *  new memories always store null here and rejected-draft dedup is keyed on
+     *  memory content alone in the separate rejected_drafts ledger. Old values
+     *  remain physically for compatibility but are never maintained or read.
+     *  Device-local, not exported. */
     val sourceChatId: String? = null,
     /** The memory's user-owned Type id (canonical recovery plan §5), or null
      *  for No Type. References memory_types(type_id). This is the source of
