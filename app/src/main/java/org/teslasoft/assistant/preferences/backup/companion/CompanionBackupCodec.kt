@@ -176,17 +176,28 @@ object CompanionBackupCodec {
             val namesJson = o.optJSONObject("additional_lorebook_names") ?: JSONObject()
             val names = HashMap<String, String>()
             for (key in namesJson.keys()) names[key] = namesJson.getString(key)
+            // Every carried lorebook link must carry its name: the restore
+            // report names removed connections and never shows an internal id
+            // (owner ruling, August 5 2026). A link without a name cannot be
+            // reported truthfully, so the file is not sound.
+            val coreId = o.optString("core_lorebook_id", "")
+            val coreName =
+                if (o.isNull("core_lorebook_name")) null
+                else o.optString("core_lorebook_name", "")
+            require(coreId.isBlank() || coreName != null) { "core lorebook link without a name" }
+            val additionalIds = stringList(o.getJSONArray("additional_lorebook_ids"))
+            for (linkId in additionalIds) {
+                require(names.containsKey(linkId)) { "additional lorebook link without a name" }
+            }
             profiles.add(
                 CompanionProfileEntry(
                     id = id,
                     label = o.getString("label"),
                     prompt = o.optString("prompt", ""),
                     activationPromptId = o.optString("activation_prompt_id", ""),
-                    coreLoreBookId = o.optString("core_lorebook_id", ""),
-                    coreLoreBookName =
-                        if (o.isNull("core_lorebook_name")) null
-                        else o.optString("core_lorebook_name", ""),
-                    additionalLoreBookIds = stringList(o.getJSONArray("additional_lorebook_ids")),
+                    coreLoreBookId = coreId,
+                    coreLoreBookName = coreName,
+                    additionalLoreBookIds = additionalIds,
                     additionalLoreBookNames = names,
                     autoLoadLastLoreBooks = o.optBoolean("autoload_last_lorebooks", false),
                     lastUsedLoreBookIds = stringList(o.getJSONArray("last_used_lorebook_ids")),

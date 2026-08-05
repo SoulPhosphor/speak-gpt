@@ -52,6 +52,14 @@ object CompanionBackupExporter {
          *  damage, pending repair) — exporting would silently drop the user's
          *  roleplay structure, so the export refuses instead. */
         object MemoryUnavailable : BuildResult()
+
+        /** Lorebook links exist but the lorebook database cannot be read, so
+         *  their names cannot be captured. Names are load-bearing: the restore
+         *  report names removed connections and NEVER shows an internal id
+         *  (owner ruling, August 5 2026), so exporting nameless links — or
+         *  silently dropping links whose books actually exist — is not
+         *  allowed. The export refuses instead. */
+        object LorebookUnavailable : BuildResult()
     }
 
     /**
@@ -84,18 +92,26 @@ object CompanionBackupExporter {
             }
 
         val lorebookNames = captureLorebookNames(appContext, personas)
+            ?: return BuildResult.LorebookUnavailable
 
+        // Every lorebook link carried by the backup carries its name (the
+        // restore report names removed connections — never an internal id).
+        // A link whose book no longer exists on THIS device has no name and
+        // nothing to reconnect, so it is not carried.
         val profiles = personas.map { p ->
+            val coreKept = p.coreLoreBookId.isNotBlank() &&
+                lorebookNames.containsKey(p.coreLoreBookId)
+            val additionalKept = p.additionalLoreBookIdList()
+                .filter { lorebookNames.containsKey(it) }
             CompanionProfileEntry(
                 id = p.id,
                 label = p.label,
                 prompt = p.prompt,
                 activationPromptId = p.activationPromptId,
-                coreLoreBookId = p.coreLoreBookId,
-                coreLoreBookName = lorebookNames[p.coreLoreBookId],
-                additionalLoreBookIds = p.additionalLoreBookIdList(),
-                additionalLoreBookNames = p.additionalLoreBookIdList()
-                    .mapNotNull { id -> lorebookNames[id]?.let { id to it } }.toMap(),
+                coreLoreBookId = if (coreKept) p.coreLoreBookId else "",
+                coreLoreBookName = if (coreKept) lorebookNames[p.coreLoreBookId] else null,
+                additionalLoreBookIds = additionalKept,
+                additionalLoreBookNames = additionalKept.associateWith { lorebookNames.getValue(it) },
                 autoLoadLastLoreBooks = p.autoLoadLastLoreBooks,
                 lastUsedLoreBookIds = p.lastUsedLoreBookIdList(),
                 avatarRef = p.avatarRef
@@ -131,15 +147,17 @@ object CompanionBackupExporter {
     }
 
     /**
-     * Reads the linked lorebooks' names for the manifest. Names are
-     * report-only: when the lorebook store does not exist or cannot be read,
-     * the links themselves are still carried and the export proceeds without
-     * names — never a reason to fail the backup.
+     * Reads the linked lorebooks' names for the manifest. Returns null when
+     * the lorebook database exists but cannot be read — the export must
+     * refuse rather than carry nameless links or drop links whose books are
+     * actually present. When no lorebook database exists at all, no books
+     * exist: every link is already dead on this device and an empty map is
+     * the truthful answer.
      */
     private fun captureLorebookNames(
         context: Context,
         personas: List<PersonaObject>
-    ): Map<String, String> {
+    ): Map<String, String>? {
         val referenced = LinkedHashSet<String>()
         for (p in personas) {
             if (p.coreLoreBookId.isNotBlank()) referenced.add(p.coreLoreBookId)
@@ -147,7 +165,7 @@ object CompanionBackupExporter {
         }
         if (referenced.isEmpty()) return emptyMap()
         if (!LoreBookStore.isProvisioned(context)) return emptyMap()
-        if (DatabaseHealthState.isDegraded(context, BackupType.LOREBOOK)) return emptyMap()
+        if (DatabaseHealthState.isDegraded(context, BackupType.LOREBOOK)) return null
         return try {
             val store = LoreBookStore.getInstance(context)
             val names = HashMap<String, String>()
@@ -156,7 +174,7 @@ object CompanionBackupExporter {
             }
             names
         } catch (_: Exception) {
-            emptyMap()
+            null
         }
     }
 

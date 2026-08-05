@@ -51,12 +51,14 @@ object CompanionRestorePlanner {
         val personas = LinkedHashMap<String, Any?>()
 
         for (p in manifest.companionProfiles) {
+            // Removed connections are reported by NAME, never by internal id
+            // (owner ruling, August 5 2026). The export and the codec both
+            // guarantee every carried link has its name; the orEmpty() below
+            // is unreachable for a validated file.
             val coreResolves = p.coreLoreBookId.isBlank() ||
                 p.coreLoreBookId in existingLorebookIds
             if (!coreResolves) {
-                removed.add(
-                    RemovedLorebookLink(p.label, p.coreLoreBookName ?: p.coreLoreBookId)
-                )
+                removed.add(RemovedLorebookLink(p.label, p.coreLoreBookName.orEmpty()))
             }
             val keptAdditional = ArrayList<String>()
             for (id in p.additionalLoreBookIds) {
@@ -64,7 +66,7 @@ object CompanionRestorePlanner {
                     keptAdditional.add(id)
                 } else {
                     removed.add(
-                        RemovedLorebookLink(p.label, p.additionalLoreBookNames[id] ?: id)
+                        RemovedLorebookLink(p.label, p.additionalLoreBookNames[id].orEmpty())
                     )
                 }
             }

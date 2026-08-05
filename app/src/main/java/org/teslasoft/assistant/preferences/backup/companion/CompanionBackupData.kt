@@ -42,9 +42,11 @@ data class CompanionBackupManifest(
 
 /**
  * One companion profile with every stored field (§2.1). Lorebook links are
- * carried as ids (reference only); the names captured at export time exist
- * purely so a restore report can name a lorebook that is missing on the
- * destination device.
+ * carried as ids (reference only) TOGETHER WITH their names captured at
+ * export time, so a restore report can always name a missing lorebook —
+ * the report never shows an internal id (owner ruling, August 5 2026). A
+ * link whose book was already gone on the source device has no name and is
+ * not carried; the export refuses entirely when names cannot be read.
  */
 data class CompanionProfileEntry(
     val id: String,
@@ -86,7 +88,7 @@ data class CompanionBackupImage(
 /** One removed companion -> lorebook connection for the §9 restore report. */
 data class RemovedLorebookLink(
     val companionLabel: String,
-    /** The lorebook's name captured at export time, or its id when no name
-     *  was available (a link that was already dangling on the source device). */
+    /** The lorebook's name captured at export time. Always a name — the
+     *  format guarantees one per carried link; ids never appear here. */
     val lorebookName: String
 )

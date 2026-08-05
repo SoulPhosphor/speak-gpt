@@ -1913,11 +1913,18 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             // problem is never reported as a destination-write problem.
             try {
                 val build = CompanionBackupExporter.buildBackupZip(this, staged)
-                if (build is CompanionBackupExporter.BuildResult.MemoryUnavailable) {
+                val refusalReason = when (build) {
+                    is CompanionBackupExporter.BuildResult.Ok -> null
+                    CompanionBackupExporter.BuildResult.MemoryUnavailable ->
+                        R.string.companion_backup_reason_memory_unavailable
+                    CompanionBackupExporter.BuildResult.LorebookUnavailable ->
+                        R.string.companion_backup_reason_lorebook_unavailable
+                }
+                if (refusalReason != null) {
                     runCatching { if (staged.exists()) staged.delete() }
                     runOnUiThread {
                         setCompanionIdle()
-                        showCompanionSaveFailed(getString(R.string.companion_backup_reason_memory_unavailable))
+                        showCompanionSaveFailed(getString(refusalReason))
                     }
                     return@runOffThread
                 }

@@ -41,7 +41,7 @@ class CompanionBackupCodecTest {
                 coreLoreBookId = "lb-core",
                 coreLoreBookName = "Core Book",
                 additionalLoreBookIds = listOf("lb-a", "lb-b"),
-                additionalLoreBookNames = mapOf("lb-a" to "Book A"),
+                additionalLoreBookNames = mapOf("lb-a" to "Book A", "lb-b" to "Book B"),
                 autoLoadLastLoreBooks = true,
                 lastUsedLoreBookIds = listOf("lb-a"),
                 avatarRef = "a".repeat(64)
@@ -221,6 +221,30 @@ class CompanionBackupCodecTest {
     fun blankProfileIdIsDamaged() {
         val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
         root.getJSONArray("companion_profiles").getJSONObject(0).put("id", "")
+        assertEquals(
+            CompanionBackupCodec.ParseResult.Damaged,
+            CompanionBackupCodec.parse(root.toString())
+        )
+    }
+
+    @Test
+    fun coreLorebookLinkWithoutANameIsDamaged() {
+        // Every carried link carries its name — the restore report names
+        // removed connections and never shows an internal id.
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        root.getJSONArray("companion_profiles").getJSONObject(0)
+            .put("core_lorebook_name", JSONObject.NULL)
+        assertEquals(
+            CompanionBackupCodec.ParseResult.Damaged,
+            CompanionBackupCodec.parse(root.toString())
+        )
+    }
+
+    @Test
+    fun additionalLorebookLinkWithoutANameIsDamaged() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        root.getJSONArray("companion_profiles").getJSONObject(0)
+            .getJSONObject("additional_lorebook_names").remove("lb-b")
         assertEquals(
             CompanionBackupCodec.ParseResult.Damaged,
             CompanionBackupCodec.parse(root.toString())

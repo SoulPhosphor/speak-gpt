@@ -83,12 +83,16 @@ class CompanionRestorePlannerTest {
     }
 
     @Test
-    fun missingCoreLinkWithoutCapturedNameFallsBackToId() {
+    fun removedLinksNeverShowAnInternalId() {
+        // The id must not leak into the report even for a degenerate entry;
+        // the codec rejects nameless links, so this is a belt-and-braces
+        // check on the planner itself.
         val plan = CompanionRestorePlanner.plan(
             manifest(listOf(profile(core = "lb-gone", coreName = null))),
             existingLorebookIds = emptySet()
         )
-        assertEquals(listOf(RemovedLorebookLink("Aria", "lb-gone")), plan.removedLinks)
+        assertEquals(1, plan.removedLinks.size)
+        assertFalse(plan.removedLinks[0].lorebookName.contains("lb-gone"))
     }
 
     @Test
