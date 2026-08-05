@@ -1746,8 +1746,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "CREATE TABLE memories_v24 (" +
                     "memory_id TEXT PRIMARY KEY, " +
                     "scope TEXT NOT NULL CHECK (scope IN ('global','real_life','companion','project','world','campaign','rp_character')), " +
-                    "kind TEXT NOT NULL, " +
-                    "type_id TEXT, " +
+                    "kind TEXT NOT NULL DEFAULT '', " +
+                    "type_id TEXT REFERENCES memory_types(type_id), " +
                     "title TEXT NOT NULL DEFAULT '', " +
                     "content TEXT NOT NULL, " +
                     "embedding_text TEXT, " +
@@ -1782,6 +1782,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.execSQL("DROP TABLE memories")
             db.execSQL("ALTER TABLE memories_v24 RENAME TO memories")
             db.execSQL("CREATE INDEX idx_memories_status ON memories(status)")
+            db.execSQL("CREATE INDEX idx_memories_type ON memories(type_id)")
             db.execSQL("CREATE INDEX idx_memories_always_load ON memories(always_load) WHERE always_load = 1")
             db.execSQL("CREATE INDEX idx_memories_world ON memories(world_id)")
             db.execSQL("CREATE INDEX idx_memories_rp_character ON memories(roleplay_character_id)")
@@ -6114,6 +6115,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             putNull("suggested_section")
         }, "memory_id = ?", arrayOf(proposalId))
         db.delete("embeddings", "memory_id = ?", arrayOf(proposalId))
+        // Acceptance clears the generated-draft route marker here too, exactly
+        // as in setMemoryStatus: no route/source bookkeeping may stay attached
+        // to an Active memory, whichever way the proposal was accepted.
+        db.delete("generated_pending_drafts", "memory_id = ?", arrayOf(proposalId))
         logChange(db, proposalId, "user", "activated", null, snapshotMemoryJson(p))
         clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, proposalId)
         return true

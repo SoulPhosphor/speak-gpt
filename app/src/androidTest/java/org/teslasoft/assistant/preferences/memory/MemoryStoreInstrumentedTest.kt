@@ -628,6 +628,29 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
+    fun acceptingAGeneratedDraftThroughResolutionClearsItsMarker() {
+        // A Possible Match resolution is the second acceptance path (Save &
+        // Edit Old / Replace / Supersede all activate via the same transaction)
+        // and must clear the route marker exactly like setMemoryStatus.
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "resolution-accepted fact", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-res", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record, generated = true)
+
+        assertTrue("marker present before resolution",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-res"))
+
+        val result = store.resolveSaveAndEditOld("m-res", null)
+        assertTrue(result is MemoryStore.ResolutionResult.Applied)
+
+        assertEquals("active", store.getMemory("m-res")!!.status)
+        assertFalse("marker removed after resolution acceptance",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-res"))
+    }
+
+    @Test
     fun manualPendingMemoryIsNeverMarkedGenerated() {
         val store = open(freshDbName())
         val candidate = (MemoryCandidateValidator.validateGeneral(
@@ -705,6 +728,13 @@ class MemoryStoreInstrumentedTest {
         assertEquals("kind preserved", "fact", m.kind)
         assertEquals("created_at preserved", "2026-07-01T00:00:00Z", m.createdAt)
         assertNotNull("type_id migrated", m.typeId)
+
+        // The rebuild must leave the same indexes a fresh install has — the
+        // Type index in particular is easy to lose in a table rebuild.
+        assertTrue("type index survives the rebuild",
+            indexExists(store, "idx_memories_type"))
+        assertTrue("status index survives the rebuild",
+            indexExists(store, "idx_memories_status"))
     }
 
     /* ------------------------------ helpers ------------------------------- */
@@ -733,6 +763,11 @@ class MemoryStoreInstrumentedTest {
         store.readableDatabase.rawQuery("PRAGMA table_info($table)", null).use { c ->
             while (c.moveToNext()) { if (c.getString(1) == column) return true }; false
         }
+
+    private fun indexExists(store: MemoryStore, name: String): Boolean =
+        store.readableDatabase.rawQuery(
+            "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?", arrayOf(name)
+        ).use { it.moveToFirst() }
 
     private fun companion(id: String, name: String) = CompanionRecord(
         companionId = id, currentName = name, essence = "e", relationshipNotes = null,
