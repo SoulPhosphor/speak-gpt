@@ -1876,21 +1876,21 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         textCompanionStatus?.visibility = View.VISIBLE
     }
 
-    private fun companionFailReasonText(reason: CompanionRoleplayRestoreManager.FailReason): String =
+    /** The owner-provided full message for a restore failure (August 5,
+     *  2026): each internal cause maps to one complete, standalone sentence
+     *  — never assembled from a template + fragment. */
+    private fun companionFailMessage(reason: CompanionRoleplayRestoreManager.FailReason): String =
         getString(
             when (reason) {
                 CompanionRoleplayRestoreManager.FailReason.MEMORY_UNAVAILABLE ->
-                    R.string.companion_backup_reason_memory_unavailable
+                    R.string.companion_backup_err_needs_memory_repair
                 CompanionRoleplayRestoreManager.FailReason.LOREBOOK_UNAVAILABLE ->
-                    R.string.companion_backup_reason_lorebook_unavailable
-                CompanionRoleplayRestoreManager.FailReason.IMAGES_WRITE_FAILED ->
-                    R.string.companion_backup_reason_images
-                CompanionRoleplayRestoreManager.FailReason.JOURNAL_WRITE_FAILED ->
-                    R.string.companion_backup_reason_journal
-                CompanionRoleplayRestoreManager.FailReason.DATABASE_WRITE_FAILED ->
-                    R.string.companion_backup_reason_database
+                    R.string.companion_backup_err_needs_lorebook_repair
+                CompanionRoleplayRestoreManager.FailReason.IMAGES_WRITE_FAILED,
+                CompanionRoleplayRestoreManager.FailReason.JOURNAL_WRITE_FAILED,
+                CompanionRoleplayRestoreManager.FailReason.DATABASE_WRITE_FAILED,
                 CompanionRoleplayRestoreManager.FailReason.SETTINGS_WRITE_FAILED ->
-                    R.string.companion_backup_reason_settings
+                    R.string.companion_backup_err_restore_write_failed
             }
         )
 
@@ -1913,18 +1913,18 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             // problem is never reported as a destination-write problem.
             try {
                 val build = CompanionBackupExporter.buildBackupZip(this, staged)
-                val refusalReason = when (build) {
+                val refusalMessage = when (build) {
                     is CompanionBackupExporter.BuildResult.Ok -> null
                     CompanionBackupExporter.BuildResult.MemoryUnavailable ->
-                        R.string.companion_backup_reason_memory_unavailable
+                        R.string.companion_backup_err_needs_memory_repair
                     CompanionBackupExporter.BuildResult.LorebookUnavailable ->
-                        R.string.companion_backup_reason_lorebook_unavailable
+                        R.string.companion_backup_err_needs_lorebook_repair
                 }
-                if (refusalReason != null) {
+                if (refusalMessage != null) {
                     runCatching { if (staged.exists()) staged.delete() }
                     runOnUiThread {
                         setCompanionIdle()
-                        showCompanionSaveFailed(getString(refusalReason))
+                        showCompanionSaveFailed(refusalMessage)
                     }
                     return@runOffThread
                 }
@@ -1936,7 +1936,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 } catch (_: Exception) { }
                 runOnUiThread {
                     setCompanionIdle()
-                    showCompanionSaveFailed(getString(R.string.companion_backup_reason_collect))
+                    showCompanionSaveFailed(R.string.companion_backup_err_data_unreadable)
                 }
                 return@runOffThread
             }
@@ -1953,7 +1953,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     discardReadableDestination(uri) // shared discard-unverified-destination helper
                     runOnUiThread {
                         setCompanionIdle()
-                        showCompanionSaveFailed(getString(R.string.companion_backup_reason_verify))
+                        showCompanionSaveFailed(R.string.companion_backup_err_save_location_failed)
                     }
                     return@runOffThread
                 }
@@ -1973,7 +1973,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 } catch (_: Exception) { }
                 runOnUiThread {
                     setCompanionIdle()
-                    showCompanionSaveFailed(getString(R.string.companion_backup_reason_write))
+                    showCompanionSaveFailed(R.string.companion_backup_err_save_location_failed)
                 }
             } finally {
                 runCatching { if (staged.exists()) staged.delete() }
@@ -1981,8 +1981,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         }
     }
 
-    private fun showCompanionSaveFailed(reason: String) {
-        showNoticeDialog(getString(R.string.companion_backup_err_save_failed, reason))
+    private fun showCompanionSaveFailed(messageRes: Int) {
+        showNoticeDialog(getString(messageRes))
     }
 
     /* ---------- restore (Upload Backup, §6) ---------- */
@@ -2020,9 +2020,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                         runCatching { staged.delete() }
                         runOnUiThread {
                             setCompanionIdle()
-                            showNoticeDialog(
-                                getString(R.string.companion_backup_err_failed, companionFailReasonText(preflight))
-                            )
+                            showNoticeDialog(companionFailMessage(preflight))
                         }
                         return@runOffThread
                     }
@@ -2101,12 +2099,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     }
                     is CompanionRoleplayRestoreManager.RestoreResult.Failed -> {
                         refreshBackupStatus()
-                        showNoticeDialog(
-                            getString(
-                                R.string.companion_backup_err_failed,
-                                companionFailReasonText(result.reason)
-                            )
-                        )
+                        showNoticeDialog(companionFailMessage(result.reason))
                     }
                 }
             }

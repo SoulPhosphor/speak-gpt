@@ -1968,18 +1968,16 @@
     <string name="companion_backup_err_wrong_file">This file is not a companion backup. Choose a file that was created with Download Backup. No changes were made.</string>
     <string name="companion_backup_err_newer">This backup was created by a newer version of the app and can\'t be read by this one. Update the app, then try again. No changes were made.</string>
     <string name="companion_backup_err_damaged">This backup file is damaged or incomplete and can\'t be read safely. No changes were made.</string>
-    <string name="companion_backup_err_failed">The restore could not be completed: %1$s. Your existing data was restored to its previous state.</string>
-    <string name="companion_backup_err_save_failed">The backup could not be saved: %1$s.</string>
-    <!-- The specific reasons that fill the two templates above. -->
-    <string name="companion_backup_reason_memory_unavailable">the companion memory database is unavailable until it is repaired</string>
-    <string name="companion_backup_reason_lorebook_unavailable">the lorebook database is unavailable, so lorebook connections could not be checked</string>
-    <string name="companion_backup_reason_images">the profile images could not be copied</string>
-    <string name="companion_backup_reason_journal">the restore\'s safety record could not be written</string>
-    <string name="companion_backup_reason_database">the companion memory database could not be updated</string>
-    <string name="companion_backup_reason_settings">app settings could not be written</string>
-    <string name="companion_backup_reason_collect">the backup could not be assembled from the app\'s data</string>
-    <string name="companion_backup_reason_write">the file could not be written to the chosen location</string>
-    <string name="companion_backup_reason_verify">the saved copy could not be verified</string>
+    <!-- Owner-provided exact wording (August 5, 2026), superseding the plan's
+         §8 blank-template pair below this comment. Five complete messages,
+         each covering one or more internal failure causes that call for the
+         same user action. Do not edit this wording; if a new failure cause
+         needs a message, ask — do not draft one. -->
+    <string name="companion_backup_err_needs_memory_repair">The operation could not be completed because the companion memory database needs to be repaired first. Please run the repair tool and try again.</string>
+    <string name="companion_backup_err_needs_lorebook_repair">The operation could not be completed because the lorebook database needs to be repaired first. Please run the repair tool and try again.</string>
+    <string name="companion_backup_err_restore_write_failed">The restore failed because this device storage could not be written to. Please free up space and try again.</string>
+    <string name="companion_backup_err_data_unreadable">The operation failed because the application data could not be read. Please retry or check the database health.</string>
+    <string name="companion_backup_err_save_location_failed">The backup could not be saved to the chosen location. Please select a different folder and try again.</string>
     <!-- §9 replace confirmation. -->
     <string name="companion_backup_confirm_title">Replace companion and roleplay data?</string>
     <string name="companion_backup_confirm_body">This backup will replace your existing companions, personas, system prompts, activation prompts, and roleplay cards with the contents of the backup file. Memories, lorebooks, conversations, API settings, and other app settings will not be changed.</string>
