@@ -36,15 +36,20 @@ import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
+import org.teslasoft.assistant.preferences.memory.CandidateResult
 import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.LorebookSuggestionRecord
+import org.teslasoft.assistant.preferences.memory.MemoryCandidate
+import org.teslasoft.assistant.preferences.memory.MemoryCandidateValidator
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryMatch
-import org.teslasoft.assistant.preferences.memory.MemoryRecord
+import org.teslasoft.assistant.preferences.memory.MemoryScopeGrouping
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.MemoryTypeMigration
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
+import org.teslasoft.assistant.preferences.memory.PendingMemoryFiler
+import org.teslasoft.assistant.preferences.memory.SCOPE_COMPANION
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
@@ -836,7 +841,6 @@ object Archivist {
     ): Int {
         if (drafts.isEmpty()) return 0
         var duplicates = 0
-        val now = Instant.now().toString()
         val companionId = conversation.transcripts.firstNotNullOfOrNull { it.companionId }
         // Live cards for placement-suggestion resolution: name → (type, id).
         // Loaded once per conversation; exact case-insensitive name match
@@ -903,7 +907,7 @@ object Archivist {
             var sugId: String? = null
             var sugSection: String? = null
             if (cardSuggestionsOn && d.cardName != null && d.cardSection != null &&
-                d.scope in setOf("world", "campaign", "rp_character")
+                MemoryScopeGrouping.isRoleplayGroup(d.scope)
             ) {
                 val match = liveCards.firstOrNull { it.third.equals(d.cardName, ignoreCase = true) }
                 if (match != null && d.cardSection in CardSections.sectionsFor(match.first)) {
@@ -912,56 +916,66 @@ object Archivist {
                     sugSection = d.cardSection
                 }
             }
-            val record = MemoryRecord(
-                memoryId = MemoryStore.newId("m-"),
-                scope = d.scope,
-                // The user-owned Type id is the source of truth (§5); the legacy
-                // kind is a derived, inert shadow that can never disagree (item
-                // 4). Title is retired (§3.1): new memories carry only the inert
-                // empty placeholder the legacy NOT NULL column requires.
-                kind = inertKind,
-                typeId = resolvedTypeId,
-                title = "",
-                content = d.content,
-                embeddingText = null,
-                tagsJson = listToJson(d.tags),
-                // Every generated proposal starts at the neutral 0 (§7.2): the
-                // Memory Assistant does not assign importance. The user sets it
-                // while reviewing Pending, only when importance ratings are On.
-                importance = 0,
-                worldIds = worldIds,
-                roleplayCharacterIds = rpCharIds,
-                campaignIds = campaignIds,
-                projectIds = projectIds,
-                protectionJson = null,
-                modeHintsJson = "[]",
-                provenanceSource = if (d.stated) "user_stated" else "inferred",
-                provenanceConfidence = if (d.stated) "certain" else "tentative",
-                provenanceNotedOn = now,
-                // Source-chat identity is never attached to a new memory
-                // (canonical recovery plan §3.2 / item 1): no chat name and no
-                // chat id. Rejected-draft dedup is keyed on content alone, in the
-                // separate rejected_drafts ledger — not on the memory.
-                provenanceContext = null,
-                sourceChatId = null,
-                createdAt = now,
-                updatedAt = null,
-                status = "draft",
-                supersedes = null,
-                companionIds = companionIds,
-                entityRefs = emptyList(),
-                changeLog = emptyList(),
-                origin = "archivist",
-                suggestedCardType = sugType,
-                suggestedCardId = sugId,
-                suggestedSection = sugSection
-            )
-            try {
-                store.insertArchivistDraftMemory(record)
-                collectedIds.add(record.memoryId)
-            } catch (e: Exception) {
-                MemoryLog.logAlways(context, "Archivist", "error", "draft insert failed: ${e.message}")
-                throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, e)
+            // Build a VALIDATED candidate and file it through the one canonical
+            // Pending filing service (Phase 2, items 5/6/8). The Memory Assistant
+            // is just one transport wrapper: it resolves scope/targets/Type above,
+            // then converges on the same validated candidate and the same filer
+            // the computer-import and manual paths use. Every generated proposal
+            // starts at the neutral importance 0 (§7.2) — the Memory Assistant
+            // never assigns importance; the user sets it while reviewing Pending.
+            val provSource = if (d.stated) "user_stated" else "inferred"
+            val provConfidence = if (d.stated) "certain" else "tentative"
+            val filingResult: CandidateResult<out MemoryCandidate> = if (d.scope == SCOPE_COMPANION) {
+                MemoryCandidateValidator.validateCompanion(
+                    content = d.content,
+                    companionTargetIds = companionIds,
+                    intendedCompanionId = companionId,
+                    availableCompanionIds = if (companionId != null) setOf(companionId) else emptySet(),
+                    typeId = resolvedTypeId,
+                    tags = d.tags,
+                    importance = 0,
+                    provenanceSource = provSource,
+                    provenanceConfidence = provConfidence,
+                    origin = "archivist"
+                )
+            } else {
+                MemoryCandidateValidator.validateGeneral(
+                    scope = d.scope,
+                    content = d.content,
+                    typeId = resolvedTypeId,
+                    tags = d.tags,
+                    importance = 0,
+                    provenanceSource = provSource,
+                    provenanceConfidence = provConfidence,
+                    origin = "archivist",
+                    worldIds = worldIds,
+                    campaignIds = campaignIds,
+                    roleplayCharacterIds = rpCharIds,
+                    projectIds = projectIds,
+                    suggestedCardType = sugType,
+                    suggestedCardId = sugId,
+                    suggestedSection = sugSection
+                )
+            }
+            when (filingResult) {
+                is CandidateResult.Invalid -> {
+                    // A malformed candidate (e.g. a companion-scoped draft with no
+                    // resolvable companion target) is quarantined, never filed as
+                    // the wrong kind of memory (item 5).
+                    MemoryLog.log(
+                        context, "Archivist", "info",
+                        "chat=${conversation.chatId}: candidate quarantined (${filingResult.error}) — not filed"
+                    )
+                }
+                is CandidateResult.Valid -> {
+                    try {
+                        val id = PendingMemoryFiler.getInstance(context).file(filingResult.candidate)
+                        collectedIds.add(id)
+                    } catch (e: Exception) {
+                        MemoryLog.logAlways(context, "Archivist", "error", "draft insert failed: ${e.message}")
+                        throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, e)
+                    }
+                }
             }
         }
         return duplicates

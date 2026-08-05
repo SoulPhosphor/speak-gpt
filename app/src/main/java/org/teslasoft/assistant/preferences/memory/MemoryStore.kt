@@ -3057,29 +3057,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     }
 
     /**
-     * File one Archivist-proposed memory draft. The record must arrive with
-     * status='draft' and origin='archivist' (enforced here — a bug upstream
-     * must not be able to file an ACTIVE memory: nothing the Archivist writes
-     * may take effect without the user's approval). Never writes protection
-     * (retired July 8 2026 — the Archivist must not emit handling fields).
-     */
-    fun insertArchivistDraftMemory(m: MemoryRecord) {
-        require(m.status == "draft") { "Archivist memories must be drafts" }
-        require(m.origin == "archivist") { "Archivist memories must carry origin='archivist'" }
-        val safe = m.copy(protectionJson = null)
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            db.insertOrThrow("memories", null, memoryValues(safe))
-            writeMemoryLinks(db, safe)
-            logChange(db, safe.memoryId, "archivist", "proposed", safe.provenanceContext, null)
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /**
      * "Add to Card" (owner ruling, July 8 2026 evening): linking MOVES the
      * memory onto the lore card — its title becomes the entry name, its
      * content the description, and the memory row is deleted (tombstoned).
@@ -4292,6 +4269,116 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "ON CONFLICT(type_id) DO UPDATE SET name = excluded.name",
             arrayOf(type.typeId, type.name, type.createdAt.ifBlank { nowIso() })
         )
+    }
+
+    /**
+     * Add a new user-owned Memory Type with a fresh stable id (canonical
+     * recovery plan Phase 2, item 1). The id is generated here and never
+     * changes; a later rename edits only the name. Returns the created record so
+     * the caller can reference it by id.
+     */
+    fun addMemoryType(name: String): MemoryTypeRecord {
+        val record = MemoryTypeRecord(newId("mtype-"), name.trim(), nowIso())
+        writableDatabase.execSQL(
+            "INSERT INTO memory_types (type_id, name, created_at) VALUES (?, ?, ?)",
+            arrayOf(record.typeId, record.name, record.createdAt)
+        )
+        return record
+    }
+
+    /**
+     * Rename a Memory Type by its stable id (Phase 2, item 1). Only the display
+     * name changes; the id is untouched, so every memory's `type_id` keeps
+     * resolving and no memory row is rewritten. Returns the ids of the memories
+     * assigned to this Type whose embeddings were queued for refresh (Phase 2,
+     * item 2): the stale vectors are dropped inside the same transaction so the
+     * librarian's background self-repair re-embeds them off the UI thread — old
+     * Type wording can never remain indefinitely in an active embedding
+     * document. Provenance/source metadata is deliberately NOT written.
+     */
+    fun renameMemoryType(typeId: String, newName: String): List<String> {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL("UPDATE memory_types SET name = ? WHERE type_id = ?", arrayOf(newName.trim(), typeId))
+            val affected = queueEmbeddingRefreshForTypeTx(db, typeId)
+            db.setTransactionSuccessful()
+            return affected
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Delete a Memory Type without deleting any of its memories (Phase 2, item
+     * 1). Atomic: affected memories are set to No Type (`type_id = NULL`) and the
+     * Type row is removed in one transaction, so the two can never diverge. A
+     * deleted Type's memories keep their content, scope, targets, tags,
+     * importance, lifecycle, and timestamps — nothing is archived, superseded,
+     * or altered. Returns the affected memory ids, whose embeddings are queued
+     * for refresh (item 2) exactly as in [renameMemoryType]. Deleting a starter
+     * Type does not re-seed it (item 1 / §5 item 7): the row simply goes.
+     */
+    fun deleteMemoryType(typeId: String): List<String> {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            // Capture the affected ids and drop their stale vectors BEFORE the
+            // reassignment, then detach (no ON DELETE rule on type_id) and delete.
+            val affected = queueEmbeddingRefreshForTypeTx(db, typeId)
+            db.execSQL("UPDATE memories SET type_id = NULL WHERE type_id = ?", arrayOf(typeId))
+            db.delete("memory_types", "type_id = ?", arrayOf(typeId))
+            db.setTransactionSuccessful()
+            return affected
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** How many memories are currently assigned to a Memory Type (Phase 2, item
+     *  1) — every lifecycle state, the source of truth being memories.type_id. */
+    fun countMemoriesForType(typeId: String): Int {
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM memories WHERE type_id = ?", arrayOf(typeId)
+        ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    /** Drop the embeddings of every memory assigned to [typeId] and return their
+     *  ids (Phase 2, item 2). Dropping a vector queues that memory for the
+     *  librarian's existing background missing-vector repair — controlled,
+     *  off-UI-thread re-embedding — rather than a synchronous re-embed here. */
+    private fun queueEmbeddingRefreshForTypeTx(db: SQLiteDatabase, typeId: String): List<String> {
+        val affected = ArrayList<String>()
+        db.query("memories", arrayOf("memory_id"), "type_id = ?", arrayOf(typeId), null, null, "memory_id ASC")
+            .use { while (it.moveToNext()) affected.add(it.getString(0)) }
+        for (id in affected) db.delete("embeddings", "memory_id = ?", arrayOf(id))
+        return affected
+    }
+
+    /**
+     * File one validated candidate as a canonical Pending (draft) Associative
+     * Memory (canonical recovery plan Phase 2, item 8). This is the ONE storage
+     * path every filing origin converges on after validation — the API Memory
+     * Assistant, a validated computer-file import, and manual pending creation
+     * all reach Pending storage here, so none maintains its own filing behavior.
+     * The record must arrive with status='draft' (a bug upstream must not file an
+     * active memory without review). Never writes protection (the filing path
+     * does not emit handling fields).
+     */
+    fun insertPendingMemory(m: MemoryRecord) {
+        require(m.status == "draft") { "Pending memories must be drafts" }
+        val safe = m.copy(protectionJson = null)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.insertOrThrow("memories", null, memoryValues(safe))
+            writeMemoryLinks(db, safe)
+            val actor = if (safe.origin == "archivist") "archivist" else "user"
+            logChange(db, safe.memoryId, actor, "proposed", null, null)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     /* -------- entities -------- */

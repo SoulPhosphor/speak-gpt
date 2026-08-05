@@ -290,6 +290,130 @@ class MemoryStoreInstrumentedTest {
         assertEquals("an edited fact", store.getMemory("m-1")!!.content)
     }
 
+    /* -------------------- Phase 2: canonical Type service ------------------- */
+
+    @Test
+    fun typeListAddAndRenameWorkByStableId() {
+        // Test 1. Add a Type; it gets a stable id. Rename by that id; the id is
+        // unchanged and only the name moves.
+        val store = open(freshDbName())
+        val created = store.addMemoryType("Recipes")
+        assertTrue(store.getMemoryTypes().any { it.typeId == created.typeId && it.name == "Recipes" })
+
+        store.renameMemoryType(created.typeId, "Cooking")
+        val after = store.getMemoryTypes().first { it.typeId == created.typeId }
+        assertEquals(created.typeId, after.typeId)   // stable id
+        assertEquals("Cooking", after.name)          // editable display name
+    }
+
+    @Test
+    fun renamingATypePreservesEveryAssignedMemory() {
+        // Test 2. A rename edits only the name; every assigned memory keeps its
+        // type_id and all its content.
+        val store = open(freshDbName())
+        val type = store.addMemoryType("Pets")
+        store.insertMemory(mem("m-1", scope = "global", typeId = type.typeId, importance = 3))
+        store.insertMemory(mem("m-2", scope = "global", typeId = type.typeId, importance = 4))
+
+        val affected = store.renameMemoryType(type.typeId, "Animals")
+
+        assertEquals(setOf("m-1", "m-2"), affected.toSet())
+        assertEquals(type.typeId, store.getMemory("m-1")!!.typeId)
+        assertEquals(type.typeId, store.getMemory("m-2")!!.typeId)
+        assertEquals("content of m-1", store.getMemory("m-1")!!.content)
+        assertEquals(3, store.getMemory("m-1")!!.importance)
+    }
+
+    @Test
+    fun deletingATypeLeavesItsMemoriesIntactAsNoType() {
+        // Test 3. Deletion reassigns memories to No Type atomically; nothing about
+        // the memories' content/scope/importance/lifecycle changes, and the Type
+        // is gone (a deleted starter is not re-seeded).
+        val store = open(freshDbName())
+        store.insertMemory(mem("m-fact", scope = "global", typeId = "mtype-fact", importance = 5, status = "active"))
+
+        val affected = store.deleteMemoryType("mtype-fact")
+
+        assertEquals(listOf("m-fact"), affected)
+        val m = store.getMemory("m-fact")!!
+        assertNull("memory kept, now No Type", m.typeId)
+        assertEquals("content of m-fact", m.content)
+        assertEquals("global", m.scope)
+        assertEquals(5, m.importance)
+        assertEquals("active", m.status)
+        assertFalse("deleted starter Type must not be re-seeded",
+            store.getMemoryTypes().any { it.typeId == "mtype-fact" })
+    }
+
+    @Test
+    fun typeRenameAndDeleteQueueEmbeddingRefreshForAffectedMemories() {
+        // Test 4. A rename or delete drops the affected memories' vectors so the
+        // librarian's background self-repair re-embeds them — old Type wording
+        // cannot linger in an active embedding document. Unaffected memories keep
+        // their vectors.
+        val store = open(freshDbName())
+        val a = store.addMemoryType("A")
+        val b = store.addMemoryType("B")
+        store.insertMemory(mem("m-a", scope = "global", typeId = a.typeId))
+        store.insertMemory(mem("m-b", scope = "global", typeId = b.typeId))
+        store.upsertEmbedding("m-a", "test-model", byteArrayOf(1, 2, 3))
+        store.upsertEmbedding("m-b", "test-model", byteArrayOf(4, 5, 6))
+
+        val renamed = store.renameMemoryType(a.typeId, "A2")
+        assertEquals(listOf("m-a"), renamed)
+        assertEquals("affected memory queued for refresh", 0, embeddingCount(store, "m-a"))
+        assertEquals("unrelated memory's vector is untouched", 1, embeddingCount(store, "m-b"))
+
+        // Re-embed m-a, then delete its Type: the vector is dropped (queued) again.
+        store.upsertEmbedding("m-a", "test-model", byteArrayOf(7, 8, 9))
+        val deleted = store.deleteMemoryType(a.typeId)
+        assertEquals(listOf("m-a"), deleted)
+        assertEquals(0, embeddingCount(store, "m-a"))
+        assertEquals(1, embeddingCount(store, "m-b"))
+    }
+
+    /* --------------- Phase 2: companion memory isolation (item 5) ----------- */
+
+    @Test
+    fun aCompanionMemoryIsRetrievableOnlyByItsOwnCompanion() {
+        // Test 10 (retrieval side). A memory filed for companion A is eligible in
+        // A's chat and NOT in B's chat — the scope gate lives in the query.
+        val store = open(freshDbName())
+        store.insertCompanion(companion("c-a", "Ash"))
+        store.insertCompanion(companion("c-b", "Blue"))
+        store.insertMemory(mem("for-a", scope = "companion", companionIds = listOf("c-a"), status = "active"))
+
+        val forA = store.activeMemoriesForScope(RetrievalScope("c-a", null, null, null)).map { it.memoryId }
+        val forB = store.activeMemoriesForScope(RetrievalScope("c-b", null, null, null)).map { it.memoryId }
+
+        assertTrue("companion A sees its own memory", forA.contains("for-a"))
+        assertFalse("companion B must NOT see companion A's memory", forB.contains("for-a"))
+    }
+
+    /* ------------- Phase 2: canonical Pending filing (items 8, 13) ---------- */
+
+    @Test
+    fun insertPendingMemoryStoresACanonicalDraftWithoutTransportOrChatIdentity() {
+        // Tests 12/13 (storage side). A validated candidate built by the canonical
+        // factory and stored via the canonical insert lands as a draft with no
+        // chat identity and no transport marker in the stored row.
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "a canonical fact", typeId = "mtype-fact", origin = "archivist"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-p", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record)
+
+        val stored = store.getMemory("m-p")!!
+        assertEquals("draft", stored.status)
+        assertEquals("mtype-fact", stored.typeId)
+        assertNull("no chat identity stored", stored.sourceChatId)
+        assertNull("no chat-name provenance stored", stored.provenanceContext)
+        assertTrue("origin is authorship, not transport", stored.origin in setOf("user", "archivist", "seed"))
+        // The stored draft is counted as Pending.
+        assertTrue(store.countDrafts() >= 1)
+    }
+
     /* ------------------------------ helpers ------------------------------- */
 
     private fun importanceOf(store: MemoryStore, id: String): Int =

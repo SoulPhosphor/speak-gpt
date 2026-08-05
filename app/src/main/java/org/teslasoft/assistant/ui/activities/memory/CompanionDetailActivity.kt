@@ -36,6 +36,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.memory.CompanionDeletionService
 import org.teslasoft.assistant.preferences.memory.CompanionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
@@ -232,7 +233,7 @@ class CompanionDetailActivity : FragmentActivity() {
             // deletes — those this companion solely owns (§4.6 / item 6). Shared
             // memories survive and are not counted.
             val count = try {
-                MemoryStore.getInstance(this).companionSoleOwnedMemoryCount(id)
+                CompanionDeletionService.getInstance(this).plannedMemoryDeletionCount(id)
             } catch (_: Exception) {
                 -1
             }
@@ -256,8 +257,9 @@ class CompanionDetailActivity : FragmentActivity() {
         val id = companionId
         runOffThread {
             // Always cascade companion-targeted memories (§4.6): a companion
-            // deletion never leaves its memories orphaned.
-            MemoryStore.getInstance(this).deleteCompanion(id, deleteMemories = true)
+            // deletion never leaves its memories orphaned. The one shared
+            // deletion service runs the confirmed cascade (Phase 2, item 9).
+            CompanionDeletionService.getInstance(this).deleteCompanion(id)
             runOnUiThread {
                 Toast.makeText(this, R.string.mem_comp_deleted_toast, Toast.LENGTH_SHORT).show()
                 finish()

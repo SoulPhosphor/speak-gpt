@@ -26,6 +26,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
+import org.teslasoft.assistant.preferences.memory.MemoryScopeGrouping
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.PossibleMatchFinder
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
@@ -260,7 +261,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         // roleplay target." note and CANNOT be added to a card until the
         // user assigns a target in the editor. Nothing proposes or creates
         // worlds/campaigns automatically.
-        val roleplay = m.scope in ROLEPLAY_SCOPES
+        val roleplay = MemoryScopeGrouping.isRoleplayGroup(m.scope)
         val needsTarget = roleplay &&
             m.worldIds.isEmpty() && m.campaignIds.isEmpty() && m.roleplayCharacterIds.isEmpty()
         // Step 1.5: the new Associative Memory Pending card (full memory, caution/
@@ -684,9 +685,4 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
     }
 
-    companion object {
-        /** Scopes whose pending rows carry Add to Card (owner: "Roleplay
-         *  Memories: Accept Delete Edit Add to Card"). */
-        private val ROLEPLAY_SCOPES = setOf("world", "campaign", "rp_character")
-    }
 }

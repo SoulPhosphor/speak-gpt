@@ -42,6 +42,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
+import org.teslasoft.assistant.preferences.memory.MemoryScopeGrouping
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.MemoryTypeMigration
 import org.teslasoft.assistant.preferences.memory.ProjectRecord
@@ -265,7 +266,7 @@ class MemoryEditorActivity : FragmentActivity() {
                         // picking a card + section makes approval MOVE the
                         // memory onto the card (owner ruling — it leaves the
                         // browser and lives with the card).
-                        if (record.scope in setOf("world", "campaign", "rp_character")) {
+                        if (MemoryScopeGrouping.isRoleplayGroup(record.scope)) {
                             isRoleplayDraft = true
                             wireLinkCardDropdowns()
                             // A Memory Assistant placement suggestion

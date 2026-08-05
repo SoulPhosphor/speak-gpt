@@ -18,6 +18,8 @@ package org.teslasoft.assistant.preferences.memory.librarian
 
 import android.content.Context
 import org.json.JSONObject
+import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.memory.ImportanceRanking
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
@@ -483,7 +485,18 @@ class Librarian private constructor(private val appContext: Context) {
         val raw = try { store.getRetrievalWeights() } catch (_: Exception) { null }
         val bounded = RetrievalPolicy.boundWeights(raw)
         bounded.substitutionNote?.let { MemoryLog.log(appContext, "Librarian", "info", it) }
-        return Weights(bounded.value[0], bounded.value[1], bounded.value[2])
+        // The one shared importance-access path (Phase 2, item 3): the
+        // "Use Importance Ratings" master toggle decides whether stored
+        // importance influences the score. Off => exactly zero contribution;
+        // the stored ratings on each memory are never read into the score and
+        // never modified — turning it back On restores their effect. This gates
+        // only the weight; eligibility is decided before scoring, so importance
+        // can never make an ineligible memory eligible.
+        val useImportance = try {
+            Preferences.getPreferences(appContext, "").getUseImportanceRatings()
+        } catch (_: Exception) { false }
+        val importanceWeight = ImportanceRanking.effectiveImportanceWeight(bounded.value[1], useImportance)
+        return Weights(bounded.value[0], importanceWeight, bounded.value[2])
     }
 
     /**

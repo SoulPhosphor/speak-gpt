@@ -138,7 +138,9 @@ object MemoryCompanionSync {
             if (personaId.isBlank() || !MemoryStore.isProvisioned(context)) return
             val store = MemoryStore.getInstance(context)
             val existing = store.findCompanionByAppCharacterId(personaId) ?: return
-            store.deleteCompanion(existing.companionId, deleteMemories = true)
+            // Both companion-deletion doorways run the SAME cascade through the
+            // one shared deletion service (Phase 2, item 9).
+            CompanionDeletionService.getInstance(context).deleteCompanion(existing.companionId)
         } catch (e: Exception) {
             // Persona deletes must always succeed; an orphaned companion record
             // can be cleaned up later and never blocks the app-side delete.
