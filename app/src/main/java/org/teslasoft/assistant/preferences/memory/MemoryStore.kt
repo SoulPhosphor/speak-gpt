@@ -61,7 +61,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 23
+        private const val DATABASE_VERSION = 24
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -408,26 +408,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "project_id TEXT REFERENCES projects(project_id), " +
                 "protection_json TEXT, " +
                 "mode_hints_json TEXT DEFAULT '[]', " +
-                "provenance_source TEXT, " +
-                "provenance_confidence TEXT, " +
-                "provenance_noted_on TEXT, " +
-                "provenance_context TEXT, " +
                 "created_at TEXT NOT NULL, " +
                 "updated_at TEXT, " +
                 "status TEXT NOT NULL CHECK (status IN ('draft','active','archived','superseded')), " +
                 "supersedes TEXT REFERENCES memories(memory_id), " +
                 "origin TEXT NOT NULL DEFAULT 'user', " +
-                // Archivist card-placement suggestion (DB v13): draft-only
-                // metadata, deliberately FK-less (a stale suggestion must
-                // never block a card delete); never exported.
                 "suggested_card_type TEXT, " +
                 "suggested_card_id TEXT, " +
-                // Legacy source chat id (DB v17), RETIRED in Phase 1 (§3.2): new
-                // memories store null and no code reads or maintains it; rejected-
-                // draft dedup is content-only in the separate ledger. Kept as an
-                // inert column so old rows preserve their value. Device-local.
-                "suggested_section TEXT, " +
-                "source_chat_id TEXT)"
+                "suggested_section TEXT)"
         )
 
         db.execSQL(
@@ -1749,6 +1737,61 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "23")
             )
         }
+        if (oldVersion < 24) {
+            // v24 (Phase 2): drop the five retired provenance/chat-identity
+            // columns from the memories table. SQLite does not support DROP
+            // COLUMN on older versions — rebuild the table without them.
+            // Data in those columns is discarded (no code reads them anymore).
+            db.execSQL(
+                "CREATE TABLE memories_v24 (" +
+                    "memory_id TEXT PRIMARY KEY, " +
+                    "scope TEXT NOT NULL CHECK (scope IN ('global','real_life','companion','project','world','campaign','rp_character')), " +
+                    "kind TEXT NOT NULL, " +
+                    "type_id TEXT, " +
+                    "title TEXT NOT NULL DEFAULT '', " +
+                    "content TEXT NOT NULL, " +
+                    "embedding_text TEXT, " +
+                    "tags_json TEXT DEFAULT '[]', " +
+                    "importance INTEGER NOT NULL DEFAULT 0, " +
+                    "always_load INTEGER NOT NULL DEFAULT 0, " +
+                    "world_id TEXT REFERENCES worlds(world_id), " +
+                    "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
+                    "campaign_id TEXT REFERENCES campaigns(campaign_id), " +
+                    "project_id TEXT REFERENCES projects(project_id), " +
+                    "protection_json TEXT, " +
+                    "mode_hints_json TEXT DEFAULT '[]', " +
+                    "created_at TEXT NOT NULL, " +
+                    "updated_at TEXT, " +
+                    "status TEXT NOT NULL CHECK (status IN ('draft','active','archived','superseded')), " +
+                    "supersedes TEXT REFERENCES memories(memory_id), " +
+                    "origin TEXT NOT NULL DEFAULT 'user', " +
+                    "suggested_card_type TEXT, " +
+                    "suggested_card_id TEXT, " +
+                    "suggested_section TEXT)"
+            )
+            db.execSQL(
+                "INSERT INTO memories_v24 (memory_id, scope, kind, type_id, title, content, embedding_text, " +
+                    "tags_json, importance, always_load, world_id, roleplay_character_id, campaign_id, " +
+                    "project_id, protection_json, mode_hints_json, created_at, updated_at, status, supersedes, " +
+                    "origin, suggested_card_type, suggested_card_id, suggested_section) " +
+                    "SELECT memory_id, scope, kind, type_id, title, content, embedding_text, " +
+                    "tags_json, importance, always_load, world_id, roleplay_character_id, campaign_id, " +
+                    "project_id, protection_json, mode_hints_json, created_at, updated_at, status, supersedes, " +
+                    "origin, suggested_card_type, suggested_card_id, suggested_section FROM memories"
+            )
+            db.execSQL("DROP TABLE memories")
+            db.execSQL("ALTER TABLE memories_v24 RENAME TO memories")
+            db.execSQL("CREATE INDEX idx_memories_status ON memories(status)")
+            db.execSQL("CREATE INDEX idx_memories_always_load ON memories(always_load) WHERE always_load = 1")
+            db.execSQL("CREATE INDEX idx_memories_world ON memories(world_id)")
+            db.execSQL("CREATE INDEX idx_memories_rp_character ON memories(roleplay_character_id)")
+            db.execSQL("CREATE INDEX idx_memories_campaign ON memories(campaign_id)")
+            db.execSQL("CREATE INDEX idx_memories_project ON memories(project_id)")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "24")
+            )
+        }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -2244,17 +2287,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     put("embedding_text", m.embeddingText)
                     put("tags_json", m.tagsJson)
                     put("importance", m.importance)
-                    // Primary-target mirror; full sets go to the join tables below.
                     put("world_id", m.worldIds.firstOrNull())
                     put("roleplay_character_id", m.roleplayCharacterIds.firstOrNull())
                     put("campaign_id", m.campaignIds.firstOrNull())
                     put("project_id", m.projectIds.firstOrNull())
                     put("protection_json", m.protectionJson)
                     put("mode_hints_json", m.modeHintsJson)
-                    put("provenance_source", m.provenanceSource)
-                    put("provenance_confidence", m.provenanceConfidence)
-                    put("provenance_noted_on", m.provenanceNotedOn)
-                    put("provenance_context", m.provenanceContext)
                     put("created_at", m.createdAt)
                     put("updated_at", m.updatedAt)
                     put("status", m.status)
@@ -2566,10 +2604,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         projectIds = readJoin(db, "memory_projects", "project_id", id),
                         protectionJson = it.getStringOrNull("protection_json"),
                         modeHintsJson = it.getStringOrNull("mode_hints_json") ?: "[]",
-                        provenanceSource = it.getStringOrNull("provenance_source"),
-                        provenanceConfidence = it.getStringOrNull("provenance_confidence"),
-                        provenanceNotedOn = it.getStringOrNull("provenance_noted_on"),
-                        provenanceContext = it.getStringOrNull("provenance_context"),
                         createdAt = it.getString(it.getColumnIndexOrThrow("created_at")),
                         updatedAt = it.getStringOrNull("updated_at"),
                         status = it.getString(it.getColumnIndexOrThrow("status")),
@@ -3808,22 +3842,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             }
         }
 
-        // Labels carry status + origin + provenance so the owner can tell a
-        // real user memory from a seed example or an archived draft at a
-        // glance (seed-safety audit requirement). Non-active memories are
-        // shown too — with their status — so "archived but still present"
-        // is verifiable from the debug box.
         scan(
-            "SELECT title, content, scope, status, origin, provenance_source FROM memories " +
+            "SELECT title, content, scope, status, origin FROM memories " +
                 "WHERE title LIKE ? OR content LIKE ? LIMIT $limit",
             {
                 val status = it.getString(3)
                 val origin = it.getString(4)
-                val prov = it.getString(5)
                 val marks = StringBuilder()
                 if (status != "active") marks.append(" [").append(status).append("]")
                 if (origin != "user") marks.append(" [").append(origin).append("]")
-                if (!prov.isNullOrBlank()) marks.append(" (").append(prov).append(")")
                 "Memory · ${it.getString(2)}$marks: ${it.getString(0)}"
             },
             { it.getString(1) }
@@ -3863,9 +3890,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         val out = ArrayList<RetrievableMemory>()
         readableDatabase.query(
             "memories",
-            arrayOf("memory_id", "scope", "title", "content", "embedding_text",
-                "importance", "created_at", "updated_at", "world_id", "provenance_confidence",
-                "protection_json", "provenance_source", "kind", "tags_json"),
+            arrayOf("memory_id", "scope", "content", "embedding_text",
+                "importance", "created_at", "updated_at", "world_id",
+                "protection_json", "type_id", "tags_json"),
             "status = 'active'", null, null, null, "created_at ASC"
         ).use {
             while (it.moveToNext()) out.add(readRetrievable(it))
@@ -4087,13 +4114,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "UPDATE OR REPLACE chat_turn_counters SET chat_id = ? WHERE chat_id = ?",
                 arrayOf(newChatId, oldChatId)
             )
-            // Rejected-draft dedup now lives ONLY in the separate rejected_drafts
-            // ledger and is keyed on memory content alone (canonical recovery plan
-            // §3.2 / item 1) — no memory remembers which chat produced it, so the
-            // memories.source_chat_id column is no longer maintained here (its old
-            // values remain physically, but inert). Any legacy chat_key rows in
-            // the ledger are carried across a rename for continuity; new
-            // rejections are content-keyed and unaffected.
+            // Rejected-draft dedup is keyed on memory content alone (§3.2 /
+            // item 1). Legacy chat_key rows in the ledger are carried across a
+            // rename for continuity; new rejections are content-keyed.
             db.execSQL(
                 "UPDATE OR REPLACE rejected_drafts SET chat_key = ? WHERE chat_key = ?",
                 arrayOf(newChatId, oldChatId)
@@ -5688,10 +5711,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             projectIds = readJoin(db, "memory_projects", "project_id", id),
             protectionJson = it.getStringOrNull("protection_json"),
             modeHintsJson = it.getStringOrNull("mode_hints_json") ?: "[]",
-            provenanceSource = it.getStringOrNull("provenance_source"),
-            provenanceConfidence = it.getStringOrNull("provenance_confidence"),
-            provenanceNotedOn = it.getStringOrNull("provenance_noted_on"),
-            provenanceContext = it.getStringOrNull("provenance_context"),
             createdAt = it.getString(it.getColumnIndexOrThrow("created_at")) ?: "",
             updatedAt = it.getStringOrNull("updated_at"),
             status = it.getString(it.getColumnIndexOrThrow("status")),
@@ -5703,7 +5722,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             suggestedCardType = it.getStringOrNull("suggested_card_type"),
             suggestedCardId = it.getStringOrNull("suggested_card_id"),
             suggestedSection = it.getStringOrNull("suggested_section"),
-            sourceChatId = it.getStringOrNull("source_chat_id"),
             typeId = it.getStringOrNull("type_id")
         )
     }
@@ -5730,10 +5748,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         put("project_id", m.projectIds.firstOrNull())
         put("protection_json", m.protectionJson)
         put("mode_hints_json", m.modeHintsJson)
-        put("provenance_source", m.provenanceSource)
-        put("provenance_confidence", m.provenanceConfidence)
-        put("provenance_noted_on", m.provenanceNotedOn)
-        put("provenance_context", m.provenanceContext)
         put("created_at", m.createdAt)
         put("updated_at", m.updatedAt)
         put("status", m.status)
@@ -5742,7 +5756,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         put("suggested_card_type", m.suggestedCardType)
         put("suggested_card_id", m.suggestedCardId)
         put("suggested_section", m.suggestedSection)
-        put("source_chat_id", m.sourceChatId)
     }
 
     private fun writeMemoryLinks(db: SQLiteDatabase, m: MemoryRecord) {
@@ -5844,6 +5857,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 putNull("suggested_section")
             }, "memory_id = ?", arrayOf(memoryId))
             db.delete("embeddings", "memory_id = ?", arrayOf(memoryId))
+            // Accepting a generated draft (draft → active) clears the route
+            // bookkeeping so the memory's later deletion as an Active memory
+            // is never misclassified as a Pending-proposal rejection.
+            if (status == "active") {
+                db.delete("generated_pending_drafts", "memory_id = ?", arrayOf(memoryId))
+            }
             logChange(db, memoryId, "user",
                 if (status == "active") "activated" else status, note,
                 prior?.let { snapshotMemoryJson(it) })

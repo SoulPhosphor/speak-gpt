@@ -449,10 +449,6 @@ data class MemoryRecord(
     val projectIds: List<String>,
     val protectionJson: String?,          // schema protection object, verbatim
     val modeHintsJson: String,            // JSON array of mode ids
-    val provenanceSource: String?,
-    val provenanceConfidence: String?,
-    val provenanceNotedOn: String?,
-    val provenanceContext: String?,
     val createdAt: String,
     val updatedAt: String?,
     val status: String,                   // draft | active | archived | superseded
@@ -461,25 +457,9 @@ data class MemoryRecord(
     val entityRefs: List<String>,         // memory_entities join rows
     val changeLog: List<ChangeLogEntry>,
     val origin: String = "user",
-    /** Archivist card-placement suggestion (DB v13, drafts only): proposed
-     *  CardType / card id / CardSections key, pre-selecting the Add-to-Card
-     *  and Link dropdowns and driving the §7 outline treatment. Cleared when
-     *  the draft is accepted without the card. */
     val suggestedCardType: String? = null,
     val suggestedCardId: String? = null,
     val suggestedSection: String? = null,
-    /** Legacy source chat id (DB v17). RETIRED as of Phase 1 (canonical recovery
-     *  plan §3.2 / item 1): a memory never remembers which chat produced it, so
-     *  new memories always store null here and rejected-draft dedup is keyed on
-     *  memory content alone in the separate rejected_drafts ledger. Old values
-     *  remain physically for compatibility but are never maintained or read.
-     *  Device-local, not exported. */
-    val sourceChatId: String? = null,
-    /** The memory's user-owned Type id (canonical recovery plan §5), or null
-     *  for No Type. References memory_types(type_id). This is the source of
-     *  truth for a memory's Type; the legacy [kind] column is inert
-     *  compatibility baggage. Migrated from [kind] for pre-Phase-1 rows
-     *  (recognized starter kind → its seeded id; `lore`/unknown → No Type). */
     val typeId: String? = null
 )
 

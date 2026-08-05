@@ -661,8 +661,6 @@ class MemoryEditorActivity : FragmentActivity() {
                     worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
                     projectIds = projectIds,
                     protectionJson = null, modeHintsJson = "[]",
-                    provenanceSource = "user_entered", provenanceConfidence = null,
-                    provenanceNotedOn = MemoryStore.nowIso(), provenanceContext = null,
                     createdAt = MemoryStore.nowIso(), updatedAt = null, status = "active",
                     supersedes = null, companionIds = companionIds, entityRefs = emptyList(),
                     changeLog = emptyList(), origin = "user"

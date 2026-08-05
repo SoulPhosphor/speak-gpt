@@ -115,14 +115,6 @@ class PendingMemoryRecordFactoryTest {
         )
         val record = PendingMemoryRecordFactory.build(wrapper.toCandidate(), "m-1", "2026-08-05T00:00:00Z")
 
-        // No permanent provenance (review finding 1) and no chat identity.
-        assertNull(record.provenanceSource)
-        assertNull(record.provenanceConfidence)
-        assertNull(record.provenanceNotedOn)
-        assertNull(record.provenanceContext)
-        assertNull(record.sourceChatId)
-        // The candidate has no source authorship; the legacy origin column is the
-        // one fixed inert placeholder, never the api/computer transport (item R2).
         assertEquals(PendingMemoryRecordFactory.COMPAT_ORIGIN, record.origin)
         assertFalse(record.origin == "api" || record.origin == "computer")
         // Structural importance 0 (item R3).

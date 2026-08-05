@@ -233,7 +233,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
                 else -> list.filter { it.status != "draft" && it.status != "superseded" }
             }
         }
-        if (f.source != "all") list = list.filter { sourceKey(it.provenanceSource) == f.source }
+        if (f.source != "all") list = list.filter { sourceKey(it.origin) == f.source }
         if (f.tags.isNotEmpty()) {
             val lowered = f.tags.map { it.lowercase() }.toSet()
             list = list.filter { parseTags(it.tagsJson).any { t -> t.lowercase() in lowered } }
@@ -350,10 +350,8 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
     }
 
-    /** "Learned from chat" once the Archivist exists; everything the user
-     *  typed (including legacy rows with no provenance) reads as by hand. */
-    private fun sourceKey(provenanceSource: String?): String =
-        if (provenanceSource == null || provenanceSource == "user_entered" || provenanceSource == "user_stated") "hand" else "learned"
+    private fun sourceKey(origin: String): String =
+        if (origin == "archivist") "learned" else "hand"
 
     private fun parseTags(tagsJson: String?): List<String> = try {
         if (tagsJson.isNullOrBlank()) emptyList() else {

@@ -502,15 +502,6 @@ class MemoryStoreInstrumentedTest {
         val stored = store.getMemory("m-p")!!
         assertEquals("draft", stored.status)
         assertEquals("mtype-fact", stored.typeId)
-        // No permanent provenance is stored on a canonical Pending memory
-        // (review finding 1): source, confidence, noted-on, chat name, chat id.
-        assertNull("no provenance source stored", stored.provenanceSource)
-        assertNull("no provenance confidence stored", stored.provenanceConfidence)
-        assertNull("no provenance noted-on stored", stored.provenanceNotedOn)
-        assertNull("no chat-name provenance stored", stored.provenanceContext)
-        assertNull("no chat identity stored", stored.sourceChatId)
-        // The candidate carries no source authorship; the legacy origin column is
-        // the one fixed inert placeholder (item R2).
         assertEquals(PendingMemoryRecordFactory.COMPAT_ORIGIN, stored.origin)
         // The stored draft is counted as Pending.
         assertTrue(store.countDrafts() >= 1)
@@ -577,6 +568,145 @@ class MemoryStoreInstrumentedTest {
         assertTrue(store.pendingCompanionDeletionIds().isEmpty())
     }
 
+    /* --------- generated-draft acceptance clears the marker (item 1) ------ */
+
+    @Test
+    fun deletingAGeneratedPendingDraftRecordsARejection() {
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "generated fact", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-gen", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record, generated = true)
+
+        assertTrue("generated marker present while draft",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-gen"))
+
+        store.deleteMemory("m-gen")
+        assertTrue("rejection recorded",
+            rowExists(store, "rejected_drafts", "content_hash",
+                store.javaClass.getDeclaredMethod("draftContentHash", String::class.java).apply {
+                    isAccessible = true
+                }.invoke(store, "generated fact") as String))
+    }
+
+    @Test
+    fun acceptingAGeneratedPendingDraftClearsItsMarker() {
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "accepted fact", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-acc", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record, generated = true)
+
+        assertTrue("marker present before acceptance",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-acc"))
+
+        store.setMemoryStatus("m-acc", "active", "accepted by user")
+
+        assertFalse("marker removed after acceptance",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-acc"))
+    }
+
+    @Test
+    fun deletingAnAcceptedGeneratedMemoryDoesNotRecordARejection() {
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "later-deleted fact", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-del", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record, generated = true)
+
+        store.setMemoryStatus("m-del", "active", "accepted")
+        store.deleteMemory("m-del")
+
+        assertFalse("no rejection for formerly-accepted memory",
+            rowExists(store, "rejected_drafts", "content_hash",
+                store.javaClass.getDeclaredMethod("draftContentHash", String::class.java).apply {
+                    isAccessible = true
+                }.invoke(store, "later-deleted fact") as String))
+    }
+
+    @Test
+    fun manualPendingMemoryIsNeverMarkedGenerated() {
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "hand-written memory", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-man", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record, generated = false)
+
+        assertFalse("manual draft has no generated marker",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-man"))
+
+        store.deleteMemory("m-man")
+        assertFalse("deleting manual draft records no rejection",
+            rowExists(store, "rejected_drafts", "content_hash",
+                store.javaClass.getDeclaredMethod("draftContentHash", String::class.java).apply {
+                    isAccessible = true
+                }.invoke(store, "hand-written memory") as String))
+    }
+
+    /* ----------- v24 migration: provenance columns removed (item 2) ------- */
+
+    @Test
+    fun freshDatabaseHasNoProvenanceColumns() {
+        val store = open(freshDbName())
+        assertFalse("provenance_source must not exist",
+            columnExists(store, "memories", "provenance_source"))
+        assertFalse("provenance_confidence must not exist",
+            columnExists(store, "memories", "provenance_confidence"))
+        assertFalse("provenance_noted_on must not exist",
+            columnExists(store, "memories", "provenance_noted_on"))
+        assertFalse("provenance_context must not exist",
+            columnExists(store, "memories", "provenance_context"))
+        assertFalse("source_chat_id must not exist",
+            columnExists(store, "memories", "source_chat_id"))
+    }
+
+    @Test
+    fun upgradedDatabaseDropsProvenanceColumnsAndPreservesData() {
+        val name = freshDbName()
+        buildV20Database(name) { db ->
+            db.insert("memories", null, ContentValues().apply {
+                put("memory_id", "m-legacy")
+                put("scope", "global")
+                put("kind", "fact")
+                put("title", "legacy title")
+                put("content", "important content")
+                put("importance", 4)
+                put("provenance_source", "inferred")
+                put("provenance_confidence", "likely")
+                put("provenance_noted_on", "2026-07-01T00:00:00Z")
+                put("provenance_context", "some chat")
+                put("source_chat_id", "chat-old-1")
+                put("created_at", "2026-07-01T00:00:00Z")
+                put("status", "active")
+            })
+        }
+        val store = open(name)
+
+        assertFalse("provenance_source dropped",
+            columnExists(store, "memories", "provenance_source"))
+        assertFalse("provenance_confidence dropped",
+            columnExists(store, "memories", "provenance_confidence"))
+        assertFalse("provenance_noted_on dropped",
+            columnExists(store, "memories", "provenance_noted_on"))
+        assertFalse("provenance_context dropped",
+            columnExists(store, "memories", "provenance_context"))
+        assertFalse("source_chat_id dropped",
+            columnExists(store, "memories", "source_chat_id"))
+
+        val m = store.getMemory("m-legacy")!!
+        assertEquals("content preserved", "important content", m.content)
+        assertEquals("importance preserved", 4, m.importance)
+        assertEquals("status preserved", "active", m.status)
+        assertEquals("scope preserved", "global", m.scope)
+        assertEquals("kind preserved", "fact", m.kind)
+        assertEquals("created_at preserved", "2026-07-01T00:00:00Z", m.createdAt)
+        assertNotNull("type_id migrated", m.typeId)
+    }
+
     /* ------------------------------ helpers ------------------------------- */
 
     private fun importanceOf(store: MemoryStore, id: String): Int =
@@ -598,6 +728,11 @@ class MemoryStoreInstrumentedTest {
     private fun rowExists(store: MemoryStore, table: String, col: String, value: String): Boolean =
         store.readableDatabase.rawQuery("SELECT 1 FROM $table WHERE $col = ?", arrayOf(value))
             .use { it.moveToFirst() }
+
+    private fun columnExists(store: MemoryStore, table: String, column: String): Boolean =
+        store.readableDatabase.rawQuery("PRAGMA table_info($table)", null).use { c ->
+            while (c.moveToNext()) { if (c.getString(1) == column) return true }; false
+        }
 
     private fun companion(id: String, name: String) = CompanionRecord(
         companionId = id, currentName = name, essence = "e", relationshipNotes = null,
@@ -621,8 +756,7 @@ class MemoryStoreInstrumentedTest {
         title = "", content = "content of $id", embeddingText = null, tagsJson = "[]",
         importance = importance, worldIds = worldIds, roleplayCharacterIds = roleplayCharacterIds,
         campaignIds = campaignIds, projectIds = emptyList(), protectionJson = null, modeHintsJson = "[]",
-        provenanceSource = null, provenanceConfidence = null, provenanceNotedOn = null,
-        provenanceContext = null, createdAt = "2026-08-04T00:00:00Z", updatedAt = null, status = status,
+        createdAt = "2026-08-04T00:00:00Z", updatedAt = null, status = status,
         supersedes = null, companionIds = companionIds, entityRefs = emptyList(), changeLog = emptyList(),
         origin = "user", typeId = typeId
     )

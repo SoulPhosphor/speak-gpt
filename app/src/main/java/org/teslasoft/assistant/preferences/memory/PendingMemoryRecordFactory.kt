@@ -103,15 +103,6 @@ object PendingMemoryRecordFactory {
             projectIds = projectIds,
             protectionJson = null,
             modeHintsJson = "[]",
-            // No permanent provenance on a canonical Pending memory (review
-            // finding 1): no source/confidence (no user_stated/inferred/certain/
-            // tentative), no noted-on date, no chat name (provenanceContext), and
-            // no chat id (sourceChatId). The legacy columns stay, inert and null.
-            provenanceSource = null,
-            provenanceConfidence = null,
-            provenanceNotedOn = null,
-            provenanceContext = null,
-            sourceChatId = null,
             createdAt = now,
             updatedAt = null,
             status = "draft",

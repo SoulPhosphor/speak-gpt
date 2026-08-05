@@ -148,24 +148,16 @@ object MemorySeedCodec {
         }
 
         val memories = each(root, "memories").map { m ->
-            val prov = if (m.has("provenance") && !m.isNull("provenance")) m.getJSONObject("provenance") else null
-            // Legacy kind stays as inert baggage; the Type comes from an explicit
-            // type_id when present, otherwise from mapping the legacy kind
-            // (recognized starter kind → seeded id, lore/unknown → No Type). §5.
             val legacyKind = m.str("kind") ?: ""
             MemoryRecord(
                 memoryId = m.reqStr("memory_id"),
                 scope = m.reqStr("scope"),
                 kind = legacyKind,
                 typeId = m.str("type_id") ?: MemoryTypeMigration.typeIdForLegacyKind(legacyKind),
-                // Titles are retired (§3.1); tolerate their absence in revised
-                // backups and keep any legacy value only as inert baggage.
                 title = m.str("title") ?: "",
                 content = m.reqStr("content"),
                 embeddingText = m.str("embedding_text"),
                 tagsJson = m.arrText("tags"),
-                // 0 = neutral, the default for new memories (§7). Existing 1–5
-                // values in older backups are always present and preserved.
                 importance = m.optInt("importance", 0),
                 worldIds = m.targetSet("world_ids", "world_id"),
                 roleplayCharacterIds = m.targetSet("roleplay_character_ids", "roleplay_character_id"),
@@ -173,10 +165,6 @@ object MemorySeedCodec {
                 projectIds = m.targetSet("project_ids", "project_id"),
                 protectionJson = m.objText("protection"),
                 modeHintsJson = m.arrText("mode_hints"),
-                provenanceSource = prov?.str("source"),
-                provenanceConfidence = prov?.str("confidence"),
-                provenanceNotedOn = prov?.str("noted_on"),
-                provenanceContext = prov?.str("context"),
                 createdAt = m.reqStr("created_at"),
                 updatedAt = m.str("updated_at"),
                 status = m.reqStr("status"),
@@ -559,16 +547,6 @@ object MemorySeedCodec {
                     put("importance", m.importance)
                     m.protectionJson?.let { putJsonText("protection", it) }
                     put("mode_hints", jsonArrayOrEmpty(m.modeHintsJson))
-                    if (m.provenanceSource != null || m.provenanceConfidence != null ||
-                        m.provenanceNotedOn != null || m.provenanceContext != null
-                    ) {
-                        put("provenance", JSONObject().apply {
-                            putIfNotNull("source", m.provenanceSource)
-                            putIfNotNull("confidence", m.provenanceConfidence)
-                            putIfNotNull("noted_on", m.provenanceNotedOn)
-                            putIfNotNull("context", m.provenanceContext)
-                        })
-                    }
                     if (m.changeLog.isNotEmpty()) {
                         put("change_log", JSONArray().apply {
                             m.changeLog.forEach { l ->
