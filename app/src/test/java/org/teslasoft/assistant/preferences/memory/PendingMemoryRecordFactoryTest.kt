@@ -62,8 +62,6 @@ class PendingMemoryRecordFactoryTest {
             typeId = typeId,
             tags = tags,
             importance = 0,
-            provenanceSource = "inferred",
-            provenanceConfidence = "tentative",
             origin = "archivist"
         )
         return (result as CandidateResult.Valid).candidate
@@ -108,9 +106,13 @@ class PendingMemoryRecordFactoryTest {
         )
         val record = PendingMemoryRecordFactory.build(wrapper.toCandidate(), "m-1", "2026-08-05T00:00:00Z")
 
-        // Chat identity is never attached (§3.2 / item 1).
-        assertNull(record.sourceChatId)
+        // No permanent provenance is stored on a canonical Pending memory
+        // (review finding 1): source, confidence, noted-on, chat name, chat id.
+        assertNull(record.provenanceSource)
+        assertNull(record.provenanceConfidence)
+        assertNull(record.provenanceNotedOn)
         assertNull(record.provenanceContext)
+        assertNull(record.sourceChatId)
         // The transport origin is not stored. `origin` is authorship only, one
         // of the record-source values — never the api/computer transport.
         org.junit.Assert.assertTrue(record.origin in setOf("user", "seed", "archivist"))

@@ -35,6 +35,14 @@ from `Archivist.fileMemoryDrafts` (the Associative-Memory path) — a rule draft
 never touches memory scope, Type, importance, targets, or the Pending memory
 filer.
 
+Each draft is validated through `MemoryCandidateValidator.validateModelRule`
+before the `ModelRuleRecord` is built (review finding 2). A valid Draft requires
+only nonblank text; the assigned model list stays empty until the user assigns
+it on approval, preserving the existing Draft review workflow. A blank-text
+suggestion is rejected and never filed. The validator produces a
+`ModelRuleCandidate` — a separate stream with no Memory Type and no importance —
+so a Model Rule can never pass through Associative-Memory filing.
+
 ## Pending / review presentation
 
 - `ModelRulesActivity` lists rules; a draft shows the "Draft" badge, a pending

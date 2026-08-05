@@ -85,11 +85,13 @@ object PendingMemoryRecordFactory {
             projectIds = projectIds,
             protectionJson = null,
             modeHintsJson = "[]",
-            provenanceSource = candidate.provenanceSource,
-            provenanceConfidence = candidate.provenanceConfidence,
-            provenanceNotedOn = now,
-            // Chat identity is never attached to a memory (§3.2 / item 1): no
-            // chat name (provenanceContext) and no chat id (sourceChatId).
+            // No permanent provenance on a canonical Pending memory (review
+            // finding 1): no source/confidence (no user_stated/inferred/certain/
+            // tentative), no noted-on date, no chat name (provenanceContext), and
+            // no chat id (sourceChatId). The legacy columns stay, inert and null.
+            provenanceSource = null,
+            provenanceConfidence = null,
+            provenanceNotedOn = null,
             provenanceContext = null,
             sourceChatId = null,
             createdAt = now,

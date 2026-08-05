@@ -33,6 +33,13 @@ import android.content.Context
  * in-flight temporary analysis candidates aimed at the companion, tombstones the
  * records, and leaves General memories and memories shared with a surviving
  * companion untouched.
+ *
+ * Durability (review finding 3): a confirmed deletion is recorded as a durable
+ * marker BEFORE the cascade runs and cleared only on success, so a cascade that
+ * fails or is interrupted (notably the best-effort persona-delete hook, where
+ * the app persona is already gone and the flow cannot block) is retried by
+ * [reconcilePendingDeletions] rather than silently left incomplete. The cascade
+ * is idempotent, so a retry after a partial or complete run is safe.
  */
 class CompanionDeletionService private constructor(private val appContext: Context) {
 
@@ -58,10 +65,37 @@ class CompanionDeletionService private constructor(private val appContext: Conte
         store.companionSoleOwnedMemoryCount(companionId)
 
     /**
-     * Run the full confirmed companion-deletion cascade atomically. Call only
-     * after explicit user confirmation, off the main thread.
+     * Run the full confirmed companion-deletion cascade. Call only after explicit
+     * user confirmation, off the main thread. Durable: the marker is written
+     * (and committed) before the cascade and cleared only after it succeeds, so a
+     * failure here leaves the marker for [reconcilePendingDeletions] to retry.
+     * Rethrows so a caller that CAN surface the failure still may — the marker
+     * guarantees completion regardless.
      */
     fun deleteCompanion(companionId: String) {
+        store.markCompanionPendingDeletion(companionId)
         store.deleteCompanion(companionId, deleteMemories = true)
+        store.clearCompanionPendingDeletion(companionId)
+    }
+
+    /**
+     * Retry every companion deletion that was confirmed but not proven complete
+     * (a durable marker survived). Best-effort per marker: a still-failing one
+     * keeps its marker for the next reconcile. Returns how many completed. Safe
+     * to call from any companion-bridge entry point; the cascade is idempotent.
+     */
+    fun reconcilePendingDeletions(): Int {
+        var completed = 0
+        for (companionId in store.pendingCompanionDeletionIds()) {
+            try {
+                store.deleteCompanion(companionId, deleteMemories = true)
+                store.clearCompanionPendingDeletion(companionId)
+                completed++
+            } catch (e: Exception) {
+                MemoryLog.log(appContext, "MemorySync", "error",
+                    "Pending companion deletion retry failed for $companionId: ${e.message}")
+            }
+        }
+        return completed
     }
 }

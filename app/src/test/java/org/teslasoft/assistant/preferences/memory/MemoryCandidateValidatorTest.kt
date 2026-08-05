@@ -131,6 +131,36 @@ class MemoryCandidateValidatorTest {
             MemoryCandidate::class.java.isInstance(rule))
     }
 
+    /* ------------------ item 6 / review finding 2: Model Rules ------------- */
+
+    @Test
+    fun modelRuleDraftIsValidWithAnEmptyModelList() {
+        // The approved Draft workflow lets the model list stay empty until the
+        // user assigns it on approval (review finding 2): nonblank text alone is
+        // a valid draft.
+        val result = MemoryCandidateValidator.validateModelRule("prefers terse replies")
+        assertTrue(result is CandidateResult.Valid)
+        val rule = (result as CandidateResult.Valid).candidate
+        assertEquals("prefers terse replies", rule.text)
+        assertTrue("draft keeps an empty model list until approval", rule.modelStrings.isEmpty())
+    }
+
+    @Test
+    fun modelRulePreservesAssignedModelStringsWhenPresent() {
+        val rule = (MemoryCandidateValidator.validateModelRule("no purple prose", listOf("glm-5", " glm-5 ", ""))
+            as CandidateResult.Valid).candidate
+        // Trimmed, de-duplicated, blanks dropped.
+        assertEquals(listOf("glm-5"), rule.modelStrings)
+    }
+
+    @Test
+    fun modelRuleWithBlankTextIsRejected() {
+        assertEquals(
+            CandidateError.MODEL_RULE_INCOMPLETE,
+            (MemoryCandidateValidator.validateModelRule("   ") as CandidateResult.Invalid).error
+        )
+    }
+
     @Test
     fun modelRuleCarriesNoTypeAndNoImportance() {
         // Item 14 at the domain level: ModelRuleCandidate has no Memory Type and

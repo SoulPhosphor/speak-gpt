@@ -24,6 +24,7 @@ import net.zetetic.database.sqlcipher.SQLiteDatabase
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -407,11 +408,77 @@ class MemoryStoreInstrumentedTest {
         val stored = store.getMemory("m-p")!!
         assertEquals("draft", stored.status)
         assertEquals("mtype-fact", stored.typeId)
-        assertNull("no chat identity stored", stored.sourceChatId)
+        // No permanent provenance is stored on a canonical Pending memory
+        // (review finding 1): source, confidence, noted-on, chat name, chat id.
+        assertNull("no provenance source stored", stored.provenanceSource)
+        assertNull("no provenance confidence stored", stored.provenanceConfidence)
+        assertNull("no provenance noted-on stored", stored.provenanceNotedOn)
         assertNull("no chat-name provenance stored", stored.provenanceContext)
+        assertNull("no chat identity stored", stored.sourceChatId)
         assertTrue("origin is authorship, not transport", stored.origin in setOf("user", "archivist", "seed"))
         // The stored draft is counted as Pending.
         assertTrue(store.countDrafts() >= 1)
+    }
+
+    /* ------- Phase 2 review finding 3: durable companion-deletion marker ---- */
+
+    @Test
+    fun pendingCompanionDeletionMarkerReconcilesAnIncompleteCascade() {
+        // The failure path: a confirmed deletion wrote its durable marker but the
+        // cascade never ran (interrupted). A later reconcile must complete it —
+        // sole-owned companion memories deleted (embeddings cascaded), a memory
+        // shared with a surviving companion kept (relinked), General untouched,
+        // and the marker cleared.
+        val store = open(freshDbName())
+        store.insertCompanion(companion("c-a", "Ash"))
+        store.insertCompanion(companion("c-b", "Blue"))
+        store.insertMemory(mem("sole", scope = "companion", companionIds = listOf("c-a")))
+        store.upsertEmbedding("sole", "test-model", byteArrayOf(1, 2, 3))
+        store.insertMemory(mem("shared", scope = "companion", companionIds = listOf("c-a", "c-b")))
+        store.insertMemory(mem("general", scope = "global"))
+
+        // Interrupted after the marker was written, before the cascade.
+        store.markCompanionPendingDeletion("c-a")
+        assertEquals(listOf("c-a"), store.pendingCompanionDeletionIds())
+        assertNotNull("cascade has not run yet", store.getMemory("sole"))
+
+        // Reconcile: drain each marker with the same cascade, then clear it. This
+        // is exactly what CompanionDeletionService.reconcilePendingDeletions does;
+        // it is exercised here against the real store (the service resolves the
+        // app-singleton store, which these throwaway-DB tests do not use).
+        for (id in store.pendingCompanionDeletionIds()) {
+            store.deleteCompanion(id, deleteMemories = true)
+            store.clearCompanionPendingDeletion(id)
+        }
+
+        assertNull("sole-owned companion memory deleted on reconcile", store.getMemory("sole"))
+        assertEquals("embedding cascaded", 0, embeddingCount(store, "sole"))
+        assertEquals("shared memory survives, relinked to c-b", listOf("c-b"), store.getMemory("shared")!!.companionIds)
+        assertEquals("General memory untouched", "global", store.getMemory("general")!!.scope)
+        assertTrue("marker cleared after completion", store.pendingCompanionDeletionIds().isEmpty())
+    }
+
+    @Test
+    fun completedCompanionDeletionClearsItsMarkerAndRetryIsIdempotent() {
+        // The success path plus retry-safety: the durable mark→cascade→clear flow
+        // leaves no marker, and re-running the cascade on an already-deleted
+        // companion is a safe no-op (so a reconcile after a completed run cannot
+        // corrupt anything).
+        val store = open(freshDbName())
+        store.insertCompanion(companion("c-a", "Ash"))
+        store.insertMemory(mem("sole", scope = "companion", companionIds = listOf("c-a")))
+
+        store.markCompanionPendingDeletion("c-a")
+        store.deleteCompanion("c-a", deleteMemories = true)
+        store.clearCompanionPendingDeletion("c-a")
+
+        assertTrue(store.pendingCompanionDeletionIds().isEmpty())
+        assertNull(store.getMemory("sole"))
+
+        // Idempotent retry: must not throw and must leave state consistent.
+        store.deleteCompanion("c-a", deleteMemories = true)
+        assertNull(store.getMemory("sole"))
+        assertTrue(store.pendingCompanionDeletionIds().isEmpty())
     }
 
     /* ------------------------------ helpers ------------------------------- */

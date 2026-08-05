@@ -60,13 +60,10 @@ sealed class MemoryCandidate {
      *  the user sets importance while reviewing Pending, only when the "Use
      *  Importance Ratings" setting is On. */
     abstract val importance: Int
-    /** Provenance authorship fields (user_stated / inferred, certain /
-     *  tentative). These describe how the memory was arrived at — never the
-     *  transport, chat identity, conversation policy, or processing method. */
-    abstract val provenanceSource: String?
-    abstract val provenanceConfidence: String?
     /** Record-source authorship: `archivist` for an AI proposal, `user` for a
-     *  hand-entered one. Not the API/computer transport. */
+     *  hand-entered one. Not the API/computer transport. Candidates carry NO
+     *  permanent provenance (no user_stated/inferred/certain/tentative,
+     *  no source chat): the canonical memory keeps none (review finding 1). */
     abstract val origin: String
     /** Optional roleplay card-placement suggestion (roleplay scopes only). */
     abstract val suggestedCardType: String?
@@ -89,8 +86,6 @@ sealed class MemoryCandidate {
         override val typeId: String? = null,
         override val tags: List<String> = emptyList(),
         override val importance: Int = 0,
-        override val provenanceSource: String? = null,
-        override val provenanceConfidence: String? = null,
         override val origin: String = "user",
         val worldIds: List<String> = emptyList(),
         val campaignIds: List<String> = emptyList(),
@@ -114,8 +109,6 @@ sealed class MemoryCandidate {
         override val typeId: String? = null,
         override val tags: List<String> = emptyList(),
         override val importance: Int = 0,
-        override val provenanceSource: String? = null,
-        override val provenanceConfidence: String? = null,
         override val origin: String = "user"
     ) : MemoryCandidate() {
         override val scope: String get() = SCOPE_COMPANION
@@ -158,7 +151,8 @@ enum class CandidateError {
     /** A General candidate declared the companion scope (it must use the
      *  companion validator instead). */
     GENERAL_SCOPE_IS_COMPANION,
-    /** A Model Rule candidate has blank text or no model strings. */
+    /** A Model Rule candidate has blank text. (An empty model list is allowed —
+     *  the user assigns model strings when approving the draft.) */
     MODEL_RULE_INCOMPLETE
 }
 
@@ -187,8 +181,6 @@ object MemoryCandidateValidator {
         typeId: String? = null,
         tags: List<String> = emptyList(),
         importance: Int = 0,
-        provenanceSource: String? = null,
-        provenanceConfidence: String? = null,
         origin: String = "user",
         worldIds: List<String> = emptyList(),
         campaignIds: List<String> = emptyList(),
@@ -211,8 +203,6 @@ object MemoryCandidateValidator {
                 typeId = typeId,
                 tags = tags,
                 importance = importance,
-                provenanceSource = provenanceSource,
-                provenanceConfidence = provenanceConfidence,
                 origin = origin,
                 worldIds = worldIds,
                 campaignIds = campaignIds,
@@ -244,8 +234,6 @@ object MemoryCandidateValidator {
         typeId: String? = null,
         tags: List<String> = emptyList(),
         importance: Int = 0,
-        provenanceSource: String? = null,
-        provenanceConfidence: String? = null,
         origin: String = "user"
     ): CandidateResult<MemoryCandidate.CompanionTargeted> {
         if (content.isBlank()) return CandidateResult.Invalid(CandidateError.EMPTY_CONTENT)
@@ -268,25 +256,28 @@ object MemoryCandidateValidator {
                 typeId = typeId,
                 tags = tags,
                 importance = importance,
-                provenanceSource = provenanceSource,
-                provenanceConfidence = provenanceConfidence,
                 origin = origin
             )
         )
     }
 
-    /** Validate a Model Rule proposal. Model Rules never receive a Memory Type
-     *  or importance, so none are accepted here. */
+    /**
+     * Validate a Model Rule proposal. Model Rules never receive a Memory Type or
+     * importance, so none are accepted here. A valid rule requires only nonblank
+     * text: the assigned model list MAY be empty, because the approved Draft
+     * workflow lets the user assign model strings when they approve the rule
+     * (review finding 2). Blank text is the only rejection.
+     */
     fun validateModelRule(
         text: String,
-        modelStrings: List<String>,
+        modelStrings: List<String> = emptyList(),
         sourceModelString: String? = null
     ): CandidateResult<ModelRuleCandidate> {
         val cleanText = text.trim()
-        val cleanModels = modelStrings.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-        if (cleanText.isEmpty() || cleanModels.isEmpty()) {
+        if (cleanText.isEmpty()) {
             return CandidateResult.Invalid(CandidateError.MODEL_RULE_INCOMPLETE)
         }
+        val cleanModels = modelStrings.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         return CandidateResult.Valid(ModelRuleCandidate(cleanText, cleanModels, sourceModelString))
     }
 }

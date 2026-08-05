@@ -923,8 +923,8 @@ object Archivist {
             // the computer-import and manual paths use. Every generated proposal
             // starts at the neutral importance 0 (§7.2) — the Memory Assistant
             // never assigns importance; the user sets it while reviewing Pending.
-            val provSource = if (d.stated) "user_stated" else "inferred"
-            val provConfidence = if (d.stated) "certain" else "tentative"
+            // No permanent provenance is generated or passed into a canonical
+            // candidate (review finding 1): the memory keeps none.
             val filingResult: CandidateResult<out MemoryCandidate> = if (d.scope == SCOPE_COMPANION) {
                 MemoryCandidateValidator.validateCompanion(
                     content = d.content,
@@ -934,8 +934,6 @@ object Archivist {
                     typeId = resolvedTypeId,
                     tags = d.tags,
                     importance = 0,
-                    provenanceSource = provSource,
-                    provenanceConfidence = provConfidence,
                     origin = "archivist"
                 )
             } else {
@@ -945,8 +943,6 @@ object Archivist {
                     typeId = resolvedTypeId,
                     tags = d.tags,
                     importance = 0,
-                    provenanceSource = provSource,
-                    provenanceConfidence = provConfidence,
                     origin = "archivist",
                     worldIds = worldIds,
                     campaignIds = campaignIds,
@@ -1011,14 +1007,25 @@ object Archivist {
         val existing = store.getModelRules().map { it.text.trim() }.toHashSet()
         for (d in drafts) {
             if (d.text.trim() in existing) continue
+            // Validate through the Model Rule candidate path (review finding 2):
+            // a valid Draft needs only nonblank text — the model list stays empty
+            // until the user assigns it on approval (§11). A blank-text draft is
+            // rejected here, never filed. Model Rules never touch Associative
+            // Memory filing.
+            val validated = MemoryCandidateValidator.validateModelRule(d.text, sourceModelString = sourceModel)
+            if (validated is CandidateResult.Invalid) {
+                MemoryLog.log(context, "Archivist", "info", "rule draft rejected (${validated.error}) — not filed")
+                continue
+            }
+            val candidate = (validated as CandidateResult.Valid).candidate
             val rule = ModelRuleRecord(
                 ruleId = MemoryStore.newId("mr_"),
-                text = d.text,
-                // §11: the user assigns model strings on accept; the source
-                // model string seeds that list.
-                modelStringsJson = "[]",
+                text = candidate.text,
+                // §11: the user assigns model strings on accept; the source model
+                // string seeds that list. A Draft is filed with the list empty.
+                modelStringsJson = listToJson(candidate.modelStrings),
                 status = "draft",
-                sourceModelString = sourceModel,
+                sourceModelString = candidate.sourceModelString,
                 createdAt = Instant.now().toString(),
                 updatedAt = null
             )

@@ -61,7 +61,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 21
+        private const val DATABASE_VERSION = 22
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -665,6 +665,20 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "candidate_hash TEXT, " +
                 "payload_json TEXT NOT NULL, " +
                 "created_at TEXT NOT NULL)"
+        )
+
+        // Durable companion-deletion markers (DB v22, review finding 3). A row
+        // here means "a confirmed companion deletion was requested but not yet
+        // proven complete." The shared deletion service writes the marker BEFORE
+        // running the cascade and clears it only on success, so a cascade that
+        // fails or is interrupted (e.g. the best-effort persona-delete hook,
+        // where the app persona is already gone and the flow cannot block) leaves
+        // a durable marker the reconcile retries. No FK to companions: the marker
+        // must outlive the companion row it is deleting. Device-local.
+        db.execSQL(
+            "CREATE TABLE pending_companion_deletions (" +
+                "companion_id TEXT PRIMARY KEY, " +
+                "requested_at TEXT NOT NULL)"
         )
 
         // Lorebook suggestions (Step 1.7, DB v18): a Memory Assistant run in
@@ -1690,6 +1704,21 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "21")
+            )
+        }
+        if (oldVersion < 22) {
+            // v22 (Phase 2 review finding 3): a durable companion-deletion marker.
+            // Additive only — a new table, no existing data touched. Lets a
+            // confirmed companion deletion whose cascade failed or was interrupted
+            // be reliably retried instead of silently left incomplete.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS pending_companion_deletions (" +
+                    "companion_id TEXT PRIMARY KEY, " +
+                    "requested_at TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "22")
             )
         }
     }
@@ -4237,6 +4266,35 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "WHERE o.memory_id = mc.memory_id AND o.companion_id != ?)",
             arrayOf(companionId, companionId)
         ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    /* -------- durable companion-deletion markers (review finding 3) -------- */
+
+    /** Record that a confirmed companion deletion is in progress (DB v22). The
+     *  shared deletion service writes this BEFORE the cascade (its own committed
+     *  statement) so a cascade that then fails or is interrupted leaves a durable
+     *  marker to retry — a confirmed deletion is never silently left incomplete. */
+    fun markCompanionPendingDeletion(companionId: String) {
+        writableDatabase.execSQL(
+            "INSERT INTO pending_companion_deletions (companion_id, requested_at) VALUES (?, ?) " +
+                "ON CONFLICT(companion_id) DO UPDATE SET requested_at = excluded.requested_at",
+            arrayOf(companionId, nowIso())
+        )
+    }
+
+    /** Clear a companion-deletion marker once its cascade has completed. */
+    fun clearCompanionPendingDeletion(companionId: String) {
+        writableDatabase.delete("pending_companion_deletions", "companion_id = ?", arrayOf(companionId))
+    }
+
+    /** Companion ids whose confirmed deletion has not yet been proven complete —
+     *  the retry queue the reconcile drains. */
+    fun pendingCompanionDeletionIds(): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.query(
+            "pending_companion_deletions", arrayOf("companion_id"), null, null, null, null, "requested_at ASC"
+        ).use { while (it.moveToNext()) out.add(it.getString(0)) }
+        return out
     }
 
     /* -------- memory types (§5) -------- */
