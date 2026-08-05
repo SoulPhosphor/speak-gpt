@@ -24,19 +24,17 @@ import org.json.JSONObject
  * model emitted and what may enter the store, per the owner rules and the
  * July 8 2026 addendum:
  *
- * - Only memory drafts and model-rule drafts come through. Anything else in
- *   the response — protection/handling fields (retired), companion or persona
- *   content, modes, directives, card placements (not yet designed) — is
- *   ignored, never stored.
+ * - Only memory drafts and model-rule drafts come through. Every other field —
+ *   protection/handling (retired), companion or persona content, modes,
+ *   directives, card placements, provenance, importance, titles, and the legacy
+ *   free-text `type`/`kind` — is simply not read. Unsupported extras are ignored
+ *   safely, never stored.
+ * - A memory's Type is the user-owned Type system: the suggestion is the stable
+ *   id of one current Type, read from `type_id` (never the legacy `kind`).
  * - A row missing required content or carrying an unknown scope is DROPPED and
- *   counted. But an absent or unrecognized Type suggestion is NOT a drop
- *   (canonical recovery plan §5.2): it simply becomes No Type — the supported
- *   memory text is never discarded because the Type was blank or unknown.
- * - Titles are retired (§3.1) and never requested or parsed. Importance is not
- *   an AI decision (§7.2) and is never requested, parsed, or clamped — every
- *   proposal starts neutral at the filing layer. Provenance defaults to
- *   "inferred" — a memory is never marked as the user's own words unless the
- *   model explicitly claimed so ("they told me" vs "I noticed" is sacred).
+ *   counted. An absent or unrecognized Type id is NOT a drop (canonical recovery
+ *   plan §5.2): it becomes No Type at the filing layer — the memory text is
+ *   never discarded because the Type was blank or unknown.
  */
 object ArchivistResponseParser {
 
@@ -52,14 +50,12 @@ object ArchivistResponseParser {
     data class DraftMemory(
         val content: String,
         val scope: String,
-        /** The model's raw Type suggestion (may be blank or unrecognized). The
-         *  filing layer maps it to a user-owned Type id — a recognized starter
-         *  Type, or No Type for `lore`/blank/unknown (§5.2). Never gates the
-         *  proposal. */
-        val kind: String,
+        /** The model's Memory Type suggestion: the stable id of ONE current
+         *  user-owned Type, or null for No Type. The filing layer validates it
+         *  against the live Type list — an unknown or absent id becomes No Type
+         *  and never drops the proposal. This is NOT the legacy `kind` string. */
+        val typeIdSuggestion: String?,
         val tags: List<String>,
-        /** true only when the model explicitly marked provenance "stated". */
-        val stated: Boolean,
         /** Free-text name of the proposed target (world/campaign/character/
          *  project) — resolved against existing records by the runner; never
          *  creates anything. Null for untargeted scopes. */
@@ -104,11 +100,12 @@ object ArchivistResponseParser {
                 if (o == null) { dropped++; continue }
                 val content = o.optString("content").trim()
                 val scope = o.optString("scope").trim().lowercase()
-                // The Type suggestion is optional and never a gate (§5.2). An
-                // unknown or blank value is carried as-is and becomes No Type at
-                // filing — it does not drop the proposal.
-                val kind = o.optString("type").trim().lowercase()
-                    .ifEmpty { o.optString("kind").trim().lowercase() }
+                // The Type suggestion is the stable id of a current Type, optional
+                // and never a gate: an absent or unrecognized id becomes No Type at
+                // filing — it does not drop the proposal. Unsupported legacy fields
+                // (a free-text "type"/"kind", "provenance", "card", ...) are simply
+                // ignored, never parsed.
+                val typeIdSuggestion = o.optString("type_id").trim().ifEmpty { null }
                 if (content.isEmpty() || scope !in SCOPES) {
                     dropped++; continue
                 }
@@ -127,9 +124,8 @@ object ArchivistResponseParser {
                     DraftMemory(
                         content = content,
                         scope = scope,
-                        kind = kind,
+                        typeIdSuggestion = typeIdSuggestion,
                         tags = tags,
-                        stated = o.optString("provenance").trim().equals("stated", ignoreCase = true),
                         targetName = o.optString("target").trim().ifEmpty { null }
                     )
                 )

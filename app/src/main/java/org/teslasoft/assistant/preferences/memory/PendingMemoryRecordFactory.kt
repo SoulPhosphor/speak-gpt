@@ -26,19 +26,33 @@ package org.teslasoft.assistant.preferences.memory
  * build step is separated from storage ([PendingMemoryFiler]) so the shared
  * shape is unit-testable on the JVM.
  *
- * What this factory deliberately does NOT put on the memory (item 8):
- *  - the API/computer transport origin — it is never stored on the memory and
- *    never displayed on the Pending card;
+ * What this factory deliberately does NOT put on the memory:
+ *  - any transport/route marker or source authorship — the candidate has no
+ *    origin, so the legacy `origin` column gets one fixed inert placeholder
+ *    ([COMPAT_ORIGIN]) for every route (item R2);
+ *  - any importance — every proposal files at 0 (item R3);
+ *  - any provenance (source/confidence/noted-on/chat name/chat id);
+ *  - any card-placement suggestion;
  *  - conversation policy, an Analysis Note, chat identity, or processing
  *    method — none of it is copied into the memory.
  *
  * The record carries only the approved memory fields needed for review and
- * later approval. Titles are retired (§3.1), so [MemoryRecord.title] is the
- * inert empty placeholder the legacy NOT NULL column requires, and the legacy
- * [MemoryRecord.kind] is derived from the Type id so the two can never disagree
- * (Phase 1 item 4). Pure Kotlin, unit tested (PendingMemoryRecordFactoryTest).
+ * later approval. The Type id is the sole Type authority; the legacy
+ * [MemoryRecord.kind] and [MemoryRecord.title] columns are written as inert
+ * empty placeholders, never derived from the Type. Pure Kotlin, unit tested
+ * (PendingMemoryRecordFactoryTest).
  */
 object PendingMemoryRecordFactory {
+
+    /**
+     * The single inert placeholder written to the legacy `origin` column for
+     * EVERY newly filed proposal, regardless of route (API, computer, manual).
+     * The canonical candidate carries no source authorship, so the storage
+     * compatibility boundary writes this one fixed value — matching the column's
+     * schema default. It is never exposed to domain behavior, retrieval, prompts,
+     * matching, embeddings, the revised export format, or the UI.
+     */
+    const val COMPAT_ORIGIN = "user"
 
     /**
      * Build a canonical draft [MemoryRecord] from [candidate]. [memoryId] and
@@ -79,7 +93,10 @@ object PendingMemoryRecordFactory {
             content = candidate.content,
             embeddingText = null,
             tagsJson = tagsToJson(candidate.tags),
-            importance = candidate.importance,
+            // Every newly filed proposal starts at neutral importance 0,
+            // regardless of route (Phase 2 review, item R3). Importance is set
+            // only later, through Pending review or ordinary memory editing.
+            importance = 0,
             worldIds = worldIds,
             roleplayCharacterIds = rpCharacterIds,
             campaignIds = campaignIds,
@@ -102,7 +119,9 @@ object PendingMemoryRecordFactory {
             companionIds = companionIds,
             entityRefs = emptyList(),
             changeLog = emptyList(),
-            origin = candidate.origin,
+            // The candidate carries no source authorship; the legacy origin column
+            // gets one fixed inert placeholder for every route (item R2).
+            origin = COMPAT_ORIGIN,
             // No analyzer-created card-placement metadata on a canonical candidate
             // (Phase 2 review): the legacy columns are stored null.
             suggestedCardType = null,

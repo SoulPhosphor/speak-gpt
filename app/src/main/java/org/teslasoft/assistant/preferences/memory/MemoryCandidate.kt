@@ -46,9 +46,14 @@ package org.teslasoft.assistant.preferences.memory
  *  specific companion target. */
 const val SCOPE_COMPANION = "companion"
 
-/** Approved memory fields common to both Associative candidate kinds. The
- *  transport that produced the candidate (API Memory Assistant vs computer
- *  import) is NOT here — it never reaches the memory object. */
+/**
+ * Approved memory fields common to both Associative candidate kinds. The
+ * candidate is deliberately transport-blind and authorship-blind: it does NOT
+ * carry where it came from (API Memory Assistant vs computer import vs manual),
+ * any source authorship (`origin`), any importance (every proposal files at 0 —
+ * importance is a review/edit decision, not a candidate input), or any
+ * provenance. None of that reaches the memory object through this path.
+ */
 sealed class MemoryCandidate {
     /** The memory body. Never blank (the validator rejects blank content). */
     abstract val content: String
@@ -56,15 +61,6 @@ sealed class MemoryCandidate {
     abstract val typeId: String?
     /** Organizing tags. */
     abstract val tags: List<String>
-    /** The importance the filed draft starts at. Proposals start neutral (0);
-     *  the user sets importance while reviewing Pending, only when the "Use
-     *  Importance Ratings" setting is On. */
-    abstract val importance: Int
-    /** Record-source authorship: `archivist` for an AI proposal, `user` for a
-     *  hand-entered one. Not the API/computer transport. Candidates carry NO
-     *  permanent provenance (no user_stated/inferred/certain/tentative,
-     *  no source chat): the canonical memory keeps none (review finding 1). */
-    abstract val origin: String
 
     /** The memory's primary scope category. */
     abstract val scope: String
@@ -82,8 +78,6 @@ sealed class MemoryCandidate {
         override val content: String,
         override val typeId: String? = null,
         override val tags: List<String> = emptyList(),
-        override val importance: Int = 0,
-        override val origin: String = "user",
         val worldIds: List<String> = emptyList(),
         val campaignIds: List<String> = emptyList(),
         val roleplayCharacterIds: List<String> = emptyList(),
@@ -101,9 +95,7 @@ sealed class MemoryCandidate {
         val companionId: String,
         override val content: String,
         override val typeId: String? = null,
-        override val tags: List<String> = emptyList(),
-        override val importance: Int = 0,
-        override val origin: String = "user"
+        override val tags: List<String> = emptyList()
     ) : MemoryCandidate() {
         override val scope: String get() = SCOPE_COMPANION
     }
@@ -170,8 +162,6 @@ object MemoryCandidateValidator {
         content: String,
         typeId: String? = null,
         tags: List<String> = emptyList(),
-        importance: Int = 0,
-        origin: String = "user",
         worldIds: List<String> = emptyList(),
         campaignIds: List<String> = emptyList(),
         roleplayCharacterIds: List<String> = emptyList(),
@@ -189,8 +179,6 @@ object MemoryCandidateValidator {
                 content = content.trim(),
                 typeId = typeId,
                 tags = tags,
-                importance = importance,
-                origin = origin,
                 worldIds = worldIds,
                 campaignIds = campaignIds,
                 roleplayCharacterIds = roleplayCharacterIds,
@@ -216,9 +204,7 @@ object MemoryCandidateValidator {
         intendedCompanionId: String?,
         availableCompanionIds: Set<String>,
         typeId: String? = null,
-        tags: List<String> = emptyList(),
-        importance: Int = 0,
-        origin: String = "user"
+        tags: List<String> = emptyList()
     ): CandidateResult<MemoryCandidate.CompanionTargeted> {
         if (content.isBlank()) return CandidateResult.Invalid(CandidateError.EMPTY_CONTENT)
         val targets = companionTargetIds.filter { it.isNotBlank() }.distinct()
@@ -238,9 +224,7 @@ object MemoryCandidateValidator {
                 companionId = target,
                 content = content.trim(),
                 typeId = typeId,
-                tags = tags,
-                importance = importance,
-                origin = origin
+                tags = tags
             )
         )
     }

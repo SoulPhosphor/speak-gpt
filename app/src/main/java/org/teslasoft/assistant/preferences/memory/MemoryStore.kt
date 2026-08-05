@@ -3663,9 +3663,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             branches.add("m.scope = 'project'")
         }
 
-        val sql = "SELECT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
-            "m.importance, m.created_at, m.updated_at, m.world_id, m.provenance_confidence, " +
-            "m.protection_json, m.provenance_source, m.type_id, m.kind, m.tags_json " +
+        val sql = "SELECT m.memory_id, m.scope, m.content, m.embedding_text, " +
+            "m.importance, m.created_at, m.updated_at, m.world_id, " +
+            "m.protection_json, m.type_id, m.tags_json " +
             "FROM memories m WHERE m.status = 'active' AND (" +
             branches.joinToString(" OR ") + ")"
         readableDatabase.rawQuery(sql, args.toTypedArray()).use {
@@ -3848,17 +3848,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     private fun readRetrievable(c: Cursor): RetrievableMemory = RetrievableMemory(
         memoryId = c.getString(c.getColumnIndexOrThrow("memory_id")),
         scope = c.getString(c.getColumnIndexOrThrow("scope")),
-        title = c.getString(c.getColumnIndexOrThrow("title")),
         content = c.getString(c.getColumnIndexOrThrow("content")),
         embeddingText = c.getStringOrNull("embedding_text"),
         importance = c.getInt(c.getColumnIndexOrThrow("importance")),
         createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: "",
         worldId = c.getStringOrNull("world_id"),
-        provenanceConfidence = c.getStringOrNull("provenance_confidence"),
         protectionJson = c.getStringOrNull("protection_json"),
-        provenanceSource = c.getStringOrNull("provenance_source"),
+        // The legacy title/kind/provenance columns are deliberately NOT selected
+        // (item R4): the runtime retrieval object cannot carry them.
         typeId = c.getStringOrNull("type_id"),
-        kind = c.getStringOrNull("kind") ?: "fact",
         tagsJson = c.getStringOrNull("tags_json") ?: "[]",
         updatedAt = c.getStringOrNull("updated_at")
     )
@@ -3992,9 +3990,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     fun activeMemoriesMissingEmbedding(embeddingModel: String): List<RetrievableMemory> {
         val out = ArrayList<RetrievableMemory>()
         readableDatabase.rawQuery(
-            "SELECT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
-                "m.importance, m.created_at, m.updated_at, m.world_id, m.provenance_confidence, " +
-                "m.protection_json, m.provenance_source, m.type_id, m.kind, m.tags_json " +
+            "SELECT m.memory_id, m.scope, m.content, m.embedding_text, " +
+                "m.importance, m.created_at, m.updated_at, m.world_id, " +
+                "m.protection_json, m.type_id, m.tags_json " +
                 "FROM memories m WHERE m.status = 'active' AND NOT EXISTS " +
                 "(SELECT 1 FROM embeddings e WHERE e.memory_id = m.memory_id AND e.embedding_model = ?) " +
                 "ORDER BY m.created_at ASC",
@@ -4432,8 +4430,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         try {
             db.insertOrThrow("memories", null, memoryValues(safe))
             writeMemoryLinks(db, safe)
-            val actor = if (safe.origin == "archivist") "archivist" else "user"
-            logChange(db, safe.memoryId, actor, "proposed", null, null)
+            // The canonical candidate carries no source authorship, so the
+            // change-log actor is a fixed "user" — origin is not read here (R2).
+            logChange(db, safe.memoryId, "user", "proposed", null, null)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()

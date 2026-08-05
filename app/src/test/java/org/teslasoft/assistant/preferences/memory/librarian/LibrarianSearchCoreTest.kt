@@ -38,12 +38,11 @@ class LibrarianSearchCoreTest {
     private fun mem(
         id: String,
         content: String = id,
-        title: String = id,
         importance: Int = 3
     ) = RetrievableMemory(
-        memoryId = id, scope = "global", title = title, content = content,
+        memoryId = id, scope = "global", content = content,
         embeddingText = null, importance = importance,
-        createdAt = "2026-07-01T00:00:00Z", worldId = null, provenanceConfidence = "certain"
+        createdAt = "2026-07-01T00:00:00Z", worldId = null
     )
 
     private fun row(
@@ -133,7 +132,7 @@ class LibrarianSearchCoreTest {
             { null },
             listOf(
                 row(
-                    mem("siege", title = "The siege", content = "it lasted a month"),
+                    mem("siege", content = "it lasted a month"),
                     aliases = listOf("Ravenhold")
                 )
             ),

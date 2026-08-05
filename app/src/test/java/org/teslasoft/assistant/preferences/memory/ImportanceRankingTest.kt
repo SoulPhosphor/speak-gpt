@@ -45,9 +45,9 @@ class ImportanceRankingTest {
     }
 
     private fun mem(id: String, importance: Int) = RetrievableMemory(
-        memoryId = id, scope = "global", title = id, content = id, embeddingText = null,
+        memoryId = id, scope = "global", content = id, embeddingText = null,
         importance = importance, createdAt = "2026-07-01T00:00:00Z", worldId = null,
-        provenanceConfidence = "certain", updatedAt = null
+        updatedAt = null
     )
 
     @Test

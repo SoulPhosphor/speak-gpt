@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.preferences.memory.librarian
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.memory.RetrievableMemory
@@ -32,18 +33,16 @@ class LibrarianRankingTest {
     private fun mem(
         id: String,
         importance: Int = 3,
-        confidence: String? = "certain",
         scope: String = "global",
-        title: String = id,
         content: String = id,
         embeddingText: String? = null,
         createdAt: String = "2026-07-01T00:00:00Z",
         updatedAt: String? = null
     ) =
         RetrievableMemory(
-            memoryId = id, scope = scope, title = title, content = content,
+            memoryId = id, scope = scope, content = content,
             embeddingText = embeddingText, importance = importance,
-            createdAt = createdAt, worldId = null, provenanceConfidence = confidence,
+            createdAt = createdAt, worldId = null,
             updatedAt = updatedAt
         )
 
@@ -87,19 +86,16 @@ class LibrarianRankingTest {
     }
 
     @Test
-    fun provenanceConfidenceDoesNotAffectRanking() {
-        // Phase 2 review: provenance (confidence/source) is no longer read into
-        // the score. Two candidates identical but for confidence score equally.
-        val query = floatArrayOf(1f, 0f, 0f)
-        val ranked = Librarian.rank(
-            query,
-            listOf(
-                cand(mem("tentative", confidence = "tentative"), floatArrayOf(1f, 0f, 0f)),
-                cand(mem("certain", confidence = "certain"), floatArrayOf(1f, 0f, 0f))
-            ),
-            weights, topK = 10
-        )
-        assertEquals(ranked[0].score, ranked[1].score, 1e-6f)
+    fun retrievalObjectHasNoLegacyTitleKindOrProvenanceFields() {
+        // Phase 2 review item R4: the runtime retrieval object is quarantined —
+        // title, kind, and provenance are not fields on it at all, so they
+        // structurally cannot enter ranking, matching, embedding text, or the
+        // prompt. Type authority is the single typeId field.
+        val fields = RetrievableMemory::class.java.declaredFields.map { it.name }
+        assertFalse("no legacy title field", fields.any { it.equals("title", true) })
+        assertFalse("no legacy kind field", fields.any { it.equals("kind", true) })
+        assertFalse("no provenance fields", fields.any { it.contains("provenance", true) })
+        assertTrue("typeId is the sole Type authority", fields.any { it == "typeId" })
     }
 
     @Test
@@ -242,29 +238,28 @@ class LibrarianRankingTest {
     }
 
     @Test
-    fun lexicalIgnoresTitle() {
-        // Titles are retired (§3.1): a query term that appears ONLY in a
-        // memory's title contributes nothing — the memory is not matched, and
-        // there is no title bonus.
-        val titleOnly = mem("title-only", title = "garden", content = "many plants grow here")
-        val body = mem("body", title = "plot notes", content = "the garden layout")
+    fun lexicalMatchesOnContentNotAbsentLegacyTitle() {
+        // Titles are retired and no longer part of the retrieval object (R4):
+        // a memory whose content does not contain the query term is not matched,
+        // while the one whose content does is. There is no title to match on.
+        val noTermInContent = mem("no-term", content = "many plants grow here")
+        val body = mem("body", content = "the garden layout")
         val ranked = Librarian.rankLexical(
-            "garden", listOf(lex(titleOnly), lex(body)), weights, topK = 5
+            "garden", listOf(lex(noTermInContent), lex(body)), weights, topK = 5
         )
         assertEquals(listOf("body"), ranked.map { it.memory.memoryId })
     }
 
     @Test
     fun lexicalAppliesTheSameRankingContract() {
-        // Equal relevance: provenance no longer affects the score (Phase 2
-        // review), so confidence does not reorder; a scope boost orders the more
-        // specific entry first — the fallback must not bypass the approved
-        // ranking contract (§5.5).
+        // A scope boost orders the more specific entry first — the fallback must
+        // not bypass the approved ranking contract (§5.5). Provenance is not part
+        // of the retrieval object at all (R4), so it cannot reorder anything.
         val q = "remember the harvest festival"
-        val certain = mem("certain", content = "the harvest festival")
-        val tentative = mem("tentative", content = "the harvest festival", confidence = "tentative")
-        val same = Librarian.rankLexical(q, listOf(lex(tentative), lex(certain)), weights, topK = 5)
-        assertEquals("confidence must not change the lexical score", same[0].score, same[1].score, 1e-6f)
+        val a = mem("a", content = "the harvest festival")
+        val b = mem("b", content = "the harvest festival")
+        val same = Librarian.rankLexical(q, listOf(lex(a), lex(b)), weights, topK = 5)
+        assertEquals("equal relevance scores equally", same[0].score, same[1].score, 1e-6f)
 
         val global = mem("global", content = "the harvest festival")
         val campaign = mem("campaign", scope = "campaign", content = "the harvest festival")

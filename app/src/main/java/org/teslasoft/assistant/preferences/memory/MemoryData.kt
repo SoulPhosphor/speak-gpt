@@ -704,27 +704,23 @@ data class RetrievalScope(
 data class RetrievableMemory(
     val memoryId: String,
     val scope: String,
-    val title: String,
     val content: String,
     val embeddingText: String?,
     val importance: Int,
     val createdAt: String,
     val worldId: String?,
-    val provenanceConfidence: String?,
     // Phase 4 (enforcer): a protected memory must be structurally inseparable
-    // from its handling, so the retrieval row carries the protection object and
-    // provenance source with it — the assembler never has to re-query (and can
-    // therefore never "forget" the HANDLE WITH CARE line).
+    // from its handling, so the retrieval row carries the protection object with
+    // it — the assembler never has to re-query (and can therefore never "forget"
+    // the HANDLE WITH CARE line).
     val protectionJson: String? = null,
-    val provenanceSource: String? = null,
-    // The user-owned Type id is the source of truth for a memory's Type and
-    // drives the render: an Instruction-Type memory (typeId ==
-    // MemoryTypeMigration.INSTRUCTION_TYPE_ID) becomes a handling rule (law 5).
-    // The legacy [kind] is inert compatibility baggage — never behavior.
+    // The user-owned Type id is the SOLE Type authority: an Instruction-Type
+    // memory (typeId == MemoryTypeMigration.INSTRUCTION_TYPE_ID) renders as a
+    // handling rule (law 5). The legacy title/kind/provenance columns are
+    // quarantined out of the runtime retrieval object entirely (Phase 2 review,
+    // item R4) — they are never selected, so they cannot enter ranking,
+    // assembly, matching, embedding text, or the prompt.
     val typeId: String? = null,
-    // Legacy fixed-enumeration Type value. Carried for compatibility only; it no
-    // longer controls retrieval or prompt-assembly behavior (Phase 2 review).
-    val kind: String = "fact",
     val tagsJson: String = "[]",
     // Phase A (counterplan §5.5): freshness ranks by the last edit, not only
     // creation — a corrected memory must outrank its obsolete peers.

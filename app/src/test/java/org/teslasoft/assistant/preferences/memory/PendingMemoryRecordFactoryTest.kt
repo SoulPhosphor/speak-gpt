@@ -17,35 +17,34 @@
 package org.teslasoft.assistant.preferences.memory
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
  * The one canonical Pending filing shape (canonical recovery plan Phase 2, item
- * 8). Covers:
+ * 8, plus review items R2/R3):
  *
- *  12. API Memory Assistant, computer import, and manual creation produce the
- *      SAME canonical Pending Associative Memory object for equivalent approved
- *      data.
- *  13. The API/computer transport origin does not appear in the stored memory
- *      data (nor, therefore, on the Pending card, which renders that data).
+ *  - API Memory Assistant, computer import, and manual creation produce the SAME
+ *    canonical Pending record for equivalent approved data.
+ *  - The candidate carries no source authorship (origin), no importance, and no
+ *    transport/chat identity; none of it reaches the memory.
+ *  - Every newly filed proposal begins at importance 0, and the legacy origin
+ *    column gets one fixed inert placeholder for every route.
  *
- * These are pure builder tests: three transport wrappers, each carrying its own
- * junk (conversation policy, analysis note, chat identity, processing method),
- * converge on the same validated [MemoryCandidate] and then the same
- * [PendingMemoryRecordFactory] output.
+ * The three transport wrappers below carry DIFFERENT transport-only data and
+ * converge — with no shared semantic origin hard-coded — on candidates that have
+ * no origin field at all.
  */
 class PendingMemoryRecordFactoryTest {
 
-    // A transport wrapper: approved memory fields PLUS transport-only junk that
-    // must never reach the memory. All three origins share this shape here only
-    // to make the test explicit; in production each has its own wrapper.
+    // A transport wrapper: the approved memory fields PLUS transport-only data
+    // that must never reach the memory (and differs per route).
     private data class TransportWrapper(
         val content: String,
         val scope: String,
         val typeId: String?,
         val tags: List<String>,
-        // Junk the item 8 rules forbid on the memory:
         val transport: String,            // "api" / "computer" / "manual"
         val conversationPolicy: String?,
         val analysisNote: String?,
@@ -54,22 +53,22 @@ class PendingMemoryRecordFactoryTest {
     )
 
     /** The convergence point: a wrapper validates to a candidate, dropping every
-     *  transport-only field. */
+     *  transport-only field. The candidate has no origin and no importance to
+     *  supply. */
     private fun TransportWrapper.toCandidate(): MemoryCandidate {
         val result = MemoryCandidateValidator.validateGeneral(
             scope = scope,
             content = content,
             typeId = typeId,
-            tags = tags,
-            importance = 0,
-            origin = "archivist"
+            tags = tags
         )
         return (result as CandidateResult.Valid).candidate
     }
 
     @Test
-    fun threeOriginsProduceTheSameCanonicalObject() {
+    fun threeRoutesWithDifferentTransportDataProduceIdenticalRecords() {
         val approvedContent = "the user's dog is named Pixel"
+        // Same approved data, deliberately DIFFERENT transport-only fields.
         val api = TransportWrapper(
             approvedContent, "global", "mtype-fact", listOf("pets"),
             transport = "api", conversationPolicy = "standard", analysisNote = "found in chat 12",
@@ -86,19 +85,29 @@ class PendingMemoryRecordFactoryTest {
             chatId = null, processingMethod = null
         )
 
-        // Same injected id + timestamp isolates the shape from id/clock noise.
+        // The candidates carry no origin field at all — nothing distinguishes the
+        // route once transport-only data is dropped.
+        assertEquals(api.toCandidate(), computer.toCandidate())
+        assertEquals(api.toCandidate(), manual.toCandidate())
+
         val id = "m-fixed"
         val now = "2026-08-05T00:00:00Z"
         val rApi = PendingMemoryRecordFactory.build(api.toCandidate(), id, now)
         val rComputer = PendingMemoryRecordFactory.build(computer.toCandidate(), id, now)
         val rManual = PendingMemoryRecordFactory.build(manual.toCandidate(), id, now)
 
-        assertEquals("API and computer must file identically", rApi, rComputer)
-        assertEquals("API and manual must file identically", rApi, rManual)
+        assertEquals("api and computer must file identically", rApi, rComputer)
+        assertEquals("api and manual must file identically", rApi, rManual)
+
+        // The legacy origin column is the SAME fixed inert placeholder for every
+        // route — never a per-route/transport value.
+        assertEquals(PendingMemoryRecordFactory.COMPAT_ORIGIN, rApi.origin)
+        assertEquals(rApi.origin, rComputer.origin)
+        assertEquals(rApi.origin, rManual.origin)
     }
 
     @Test
-    fun canonicalRecordCarriesNoTransportOrChatIdentity() {
+    fun canonicalRecordCarriesNoTransportOriginImportanceOrChatIdentity() {
         val wrapper = TransportWrapper(
             "a fact", "global", null, emptyList(),
             transport = "api", conversationPolicy = "policy", analysisNote = "note",
@@ -106,49 +115,53 @@ class PendingMemoryRecordFactoryTest {
         )
         val record = PendingMemoryRecordFactory.build(wrapper.toCandidate(), "m-1", "2026-08-05T00:00:00Z")
 
-        // No permanent provenance is stored on a canonical Pending memory
-        // (review finding 1): source, confidence, noted-on, chat name, chat id.
+        // No permanent provenance (review finding 1) and no chat identity.
         assertNull(record.provenanceSource)
         assertNull(record.provenanceConfidence)
         assertNull(record.provenanceNotedOn)
         assertNull(record.provenanceContext)
         assertNull(record.sourceChatId)
-        // The transport origin is not stored. `origin` is authorship only, one
-        // of the record-source values — never the api/computer transport.
-        org.junit.Assert.assertTrue(record.origin in setOf("user", "seed", "archivist"))
-        org.junit.Assert.assertFalse(record.origin == "api" || record.origin == "computer")
+        // The candidate has no source authorship; the legacy origin column is the
+        // one fixed inert placeholder, never the api/computer transport (item R2).
+        assertEquals(PendingMemoryRecordFactory.COMPAT_ORIGIN, record.origin)
+        assertFalse(record.origin == "api" || record.origin == "computer")
+        // Structural importance 0 (item R3).
+        assertEquals(0, record.importance)
         // Canonical Pending contract: a draft with no protection/handling fields.
         assertEquals("draft", record.status)
         assertNull(record.protectionJson)
-        // Legacy kind is inert: a new memory stores an empty kind, never a value
-        // derived from the Type (Phase 2 review, item B).
+        // Legacy kind is inert (item B) and no card-placement metadata (item C).
         assertEquals("", record.kind)
-        // No analyzer card-placement metadata on a canonical candidate (item C).
         assertNull(record.suggestedCardType)
         assertNull(record.suggestedCardId)
         assertNull(record.suggestedSection)
-        // No MemoryRecord field exists to hold conversation policy / analysis
-        // note / processing method — verify none leaked into a text field.
-        org.junit.Assert.assertFalse(record.content.contains("policy"))
-        org.junit.Assert.assertFalse(record.content.contains("note"))
+        // No MemoryRecord field holds conversation policy / analysis note /
+        // processing method — verify none leaked into a text field.
+        assertFalse(record.content.contains("policy"))
+        assertFalse(record.content.contains("note"))
     }
 
     @Test
-    fun generatedAnalyzerCandidateFilesWithNeutralImportanceAndTypeAuthority() {
-        // Item D: a generated (analyzer) candidate files with importance 0 — the
-        // model never proposes importance. Item B: the Type id carries through as
-        // the source of truth while the legacy kind stays empty.
-        val candidate = (MemoryCandidateValidator.validateGeneral(
-            scope = "global",
-            content = "the user's cat is named Pixel",
-            typeId = "mtype-fact",
-            origin = "archivist"
-            // importance intentionally omitted — defaults to 0, never model-set.
+    fun theCandidateContractHasNoImportanceOrOriginInputAtAll() {
+        // Item R2/R3 structurally: the candidate objects expose no importance and
+        // no origin field, so a nonzero analyzer/import importance or a route
+        // authorship cannot enter the contract in the first place.
+        val general = (MemoryCandidateValidator.validateGeneral("global", "a fact")
+            as CandidateResult.Valid).candidate
+        val comp = (MemoryCandidateValidator.validateCompanion(
+            content = "prefers formal greetings",
+            companionTargetIds = listOf("c-a"),
+            intendedCompanionId = "c-a",
+            availableCompanionIds = setOf("c-a")
         ) as CandidateResult.Valid).candidate
-        val record = PendingMemoryRecordFactory.build(candidate, "m-imp", "2026-08-05T00:00:00Z")
-        assertEquals(0, record.importance)
-        assertEquals("mtype-fact", record.typeId)
-        assertEquals("", record.kind)
+        for (c in listOf<MemoryCandidate>(general, comp)) {
+            val fields = c.javaClass.declaredFields.map { it.name }
+            assertFalse("candidate must have no importance input", fields.any { it.contains("importance", true) })
+            assertFalse("candidate must have no origin input", fields.any { it.equals("origin", true) })
+        }
+        // And every built record still begins at importance 0.
+        assertEquals(0, PendingMemoryRecordFactory.build(general, "m-g", "2026-08-05T00:00:00Z").importance)
+        assertEquals(0, PendingMemoryRecordFactory.build(comp, "m-c", "2026-08-05T00:00:00Z").importance)
     }
 
     @Test
@@ -157,8 +170,7 @@ class PendingMemoryRecordFactoryTest {
             content = "prefers to be greeted formally",
             companionTargetIds = listOf("c-a"),
             intendedCompanionId = "c-a",
-            availableCompanionIds = setOf("c-a"),
-            origin = "archivist"
+            availableCompanionIds = setOf("c-a")
         ) as CandidateResult.Valid).candidate
         val record = PendingMemoryRecordFactory.build(comp, "m-2", "2026-08-05T00:00:00Z")
 

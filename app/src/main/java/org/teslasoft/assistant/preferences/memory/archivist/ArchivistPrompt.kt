@@ -28,16 +28,24 @@ import org.teslasoft.assistant.preferences.memory.TranscriptRecord
  *
  * - The Archivist proposes; the user decides. Every output becomes a DRAFT.
  * - No protection/handling fields (retired), no companion/persona content,
- *   no modes/directives, no always-on rules, no card placements (not yet
- *   designed with the owner).
- * - Provenance honesty: "stated" only for things the user actually said.
+ *   no modes/directives, no always-on rules, no card placements, and no
+ *   provenance field — none of those are part of the analyzer contract.
+ * - A memory's Type is the user-owned Type system: a suggestion names one
+ *   current Type by its stable id, or omits it for No Type. There is no fixed
+ *   legacy Type enumeration and no legacy `lore` Type.
  * - Fiction never becomes real-life fact.
  *
- * The prompt text is internal machinery (sent to the model, never shown in
- * the app), so it carries no user-facing wording obligations — but keep it in
+ * [SYSTEM] is the editable default contract (also shown in advanced settings);
+ * [withCurrentTypes] appends the concrete, current Type list at run time so the
+ * model can pick a real Type id. The prompt is internal machinery (sent to the
+ * model), so it carries no user-facing wording obligations — but keep it in
  * sync with the rules above whenever they change.
  */
 object ArchivistPrompt {
+
+    /** Upper bound on how many Memory Types are listed in the prompt, so a large
+     *  user Type set can never make the appended block unbounded. */
+    const val MAX_TYPES_IN_PROMPT = 60
 
     val SYSTEM: String = """
 You are the memory archivist for a personal AI companion app. You read one finished conversation between the user and their AI companion, and you propose memories worth keeping. You never speak to the user; your only output is structured proposals, and every proposal is a DRAFT the user will review, edit, accept, or delete. Nothing you emit takes effect on its own.
@@ -51,12 +59,9 @@ Your core question: what would a wise friend remember from this conversation —
     {
       "content": "the memory itself, written as prose",
       "scope": "global | real_life | companion | project | world | campaign | rp_character",
-      "type": "fact | preference | event | status | instruction | lore",
+      "type_id": "optional: the id of ONE Memory Type from the current list provided below, or omit this field entirely for No Type",
       "tags": ["optional", "short", "labels"],
-      "provenance": "stated | inferred",
-      "target": "optional: the NAME of the world/campaign/character/project this belongs to, exactly as it appears in the conversation",
-      "card": "optional, roleplay memories only: the NAME of an existing lore card this belongs on, exactly as it appears in the conversation",
-      "card_section": "required when card is set: one section key from the list below"
+      "target": "optional: the NAME of the world/campaign/character/project this belongs to, exactly as it appears in the conversation"
     }
   ],
   "model_rules": [
@@ -75,32 +80,46 @@ Both arrays may be empty. A conversation that yields nothing is a successful run
 - campaign: true in one roleplay playthrough only.
 - rp_character: tied to a specific roleplay character.
 
-## Types (choose ONE per memory)
-- fact: stable information.
-- preference: likes, dislikes, style needs, response preferences.
-- event: something that happened.
-- status: currently true but expected to change.
-- instruction: a handling rule for the assistant that should activate only when its topic comes up (a context rule). A rule that must apply in EVERY message is not a memory — do not propose it at all.
-- lore: fictional/world/roleplay information.
+## Memory Type (optional — at most one per memory)
+A memory may carry at most one Memory Type from the current, user-owned list provided to you below. Each Type has an id and a name. Put the chosen Type's id in "type_id". Use ONLY an id from that list — never invent a Type, and never use a name in place of an id. If no Type fits, omit "type_id"; No Type is always a valid choice.
 
 ## Iron rules
 - Prose, always. Write memories the way a person who knows the user well would describe things. Never trait lists, never labels, never diagnoses.
-- Provenance honesty: "stated" ONLY when the user actually said the thing in this conversation. Anything you noticed, connected, or concluded is "inferred". This line is sacred.
-- Fiction is never real-life fact. Roleplay content gets world/campaign/rp_character scope (usually type lore); a dragon slain is story, not biography. How the user PLAYS may inform an inferred real_life/global observation, but mark it inferred and keep it grounded in what actually happened.
+- Fiction is never real-life fact. Roleplay content gets world/campaign/rp_character scope; a dragon slain is story, not biography. How the user PLAYS may inform a grounded real_life/global observation, but keep it grounded in what actually happened.
 - A sensitive fact keeps any needed care in its own text: if something should be handled gently, write that guidance INTO the memory's content as part of the prose. Never emit any separate protection, handling, or never_assume field — those do not exist.
 - Never propose content for the companion's own personality, card, or persona. Never propose modes, directives, or always-on rules. Those belong to the user alone.
 - Do not repeat what is already obviously permanent app configuration; propose what was NEW in this conversation.
 - Observations, not conclusions: "has twice described X right before Y", not "the user has a problem with Y".
 
-## Card placements (roleplay memories only)
-When a world/campaign/rp_character memory clearly belongs on a lore card the conversation names — gear acquired, a place discovered, an NPC met, a plot beat — you may suggest the placement with "card" (the card's exact name from the conversation) and "card_section" (one key below, matching the card's type). The user decides; a suggestion never places anything by itself. Never invent a card name. Section keys:
-- character or party member cards: abilities, inventory, relationships, traits, backstory, languages
-- world cards: regions, settlements, points_of_interest, races_species, languages_scripts, historical_events, arcane_knowledge, organizations_guilds, bands_threats, deities, faiths, sacred_artifacts, historical_figures, authority_figures, service_npcs, allies, antagonists
-- campaign cards: campaign_cast, campaign_locations, plot_ledger, reliquary, notes
-
 ## model_rules
 Only when the user repeatedly corrected the SAME habit of the AI model in this conversation (style, format, tone — the machine's own defects), propose a short imperative rule that would fix it, e.g. "Do not end responses with a follow-up question." Otherwise leave the array empty.
 """.trim()
+
+    /**
+     * The effective system prompt for a run: [base] (the default [SYSTEM] or the
+     * user's custom prompt) plus a bounded, explicit block listing the CURRENT
+     * user-owned Memory Types by stable id. This is how the analyzer contract
+     * uses the live Type list instead of a fixed enumeration — the model can only
+     * pick an id that actually exists (or omit it for No Type). [types] is
+     * (stableId, displayName) pairs; the list is capped at [MAX_TYPES_IN_PROMPT].
+     */
+    fun withCurrentTypes(base: String, types: List<Pair<String, String>>): String {
+        val sb = StringBuilder(base.trim())
+        sb.append("\n\n## Available Memory Types")
+        if (types.isEmpty()) {
+            sb.append(
+                "\nThere are no Memory Types available. Omit \"type_id\" for every memory (No Type)."
+            )
+            return sb.toString()
+        }
+        sb.append(
+            "\nUse one of these ids in \"type_id\", or omit \"type_id\" for No Type. These are the only valid ids:"
+        )
+        for ((id, name) in types.take(MAX_TYPES_IN_PROMPT)) {
+            sb.append("\n- ").append(id).append(" — ").append(name)
+        }
+        return sb.toString()
+    }
 
     /**
      * The system prompt for the Lorebook Memories analysis type (Step 1.7).

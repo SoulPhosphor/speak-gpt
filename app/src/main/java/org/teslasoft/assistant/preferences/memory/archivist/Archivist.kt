@@ -43,7 +43,6 @@ import org.teslasoft.assistant.preferences.memory.MemoryCandidateValidator
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryMatch
 import org.teslasoft.assistant.preferences.memory.MemoryStore
-import org.teslasoft.assistant.preferences.memory.MemoryTypeMigration
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.PendingMemoryFiler
 import org.teslasoft.assistant.preferences.memory.SCOPE_COMPANION
@@ -421,14 +420,19 @@ object Archivist {
         // saved prompt for that type, or its built-in default when the saved
         // prompt is empty. The two are kept strictly separate — a Lorebook run
         // never borrows the Associative prompt, because the two require
-        // different output schemas. Whatever text is shown in the matching field
-        // on the Advanced Memory Assistant Settings screen is exactly what is
-        // sent here; nothing is appended or substituted (the cap and importance
-        // floor are response-side filters, not prompt text).
+        // different output schemas. The base text is whatever is shown in the
+        // matching field on the Advanced Memory Assistant Settings screen. For the
+        // associative type the analyzer contract needs the CURRENT user-owned Type
+        // list, so it is appended as a bounded, explicit block (the only run-time
+        // addition) — the model can only pick a Type id that actually exists, or
+        // omit it for No Type. The lorebook type has no Types and is sent verbatim.
         val systemPrompt = if (lorebookMode)
             prefs.getArchivistLorebookPrompt().ifBlank { ArchivistPrompt.LOREBOOK_SYSTEM }
         else
-            prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM }
+            ArchivistPrompt.withCurrentTypes(
+                prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM },
+                store.getMemoryTypes().map { it.typeId to it.name }
+            )
 
         val memoryIds = ArrayList<String>()
         val ruleIds = ArrayList<String>()
@@ -835,6 +839,10 @@ object Archivist {
         if (drafts.isEmpty()) return 0
         var duplicates = 0
         val companionId = conversation.transcripts.firstNotNullOfOrNull { it.companionId }
+        // The current user-owned Type ids: a suggestion is honored only if it
+        // names one of these, otherwise the memory files as No Type (never
+        // dropped). Legacy `kind` is not consulted.
+        val validTypeIds = store.getMemoryTypes().map { it.typeId }.toHashSet()
         for (d in drafts) {
             // Resolve placement once: the target sets are both the Possible
             // Match identity (scope + sorted target IDs) and the record's links.
@@ -846,11 +854,11 @@ object Archivist {
             val projectIds = resolveTarget(d, "project") { store.getProjects().map { it.projectId to it.name } }
             val companionIds =
                 if (d.scope == "companion" && companionId != null) listOf(companionId) else emptyList()
-            // The user-owned Type is the source of truth (§5): map the model's
-            // raw suggestion to a Type id (recognized starter Type, or No Type
-            // for lore/blank/unknown). The legacy kind is never derived or
-            // stored for a new memory (Phase 2 review).
-            val resolvedTypeId = MemoryTypeMigration.typeIdForLegacyKind(d.kind)
+            // The user-owned Type is the source of truth (§5): honor the model's
+            // suggested stable Type id only when it names a current Type; anything
+            // else (absent or unknown) becomes No Type. Legacy `kind` is never
+            // consulted or stored for a new memory (Phase 2 review).
+            val resolvedTypeId = d.typeIdSuggestion?.takeIf { it in validTypeIds }
             // Step 1.5 staging gate (counterplan §5.2(b)): only an exact
             // normalized match with the same placement AND the same Type, on an
             // active or pending memory, is a true duplicate that must not create
@@ -882,11 +890,9 @@ object Archivist {
             // Pending filing service (Phase 2, items 5/6/8). The Memory Assistant
             // is just one transport wrapper: it resolves scope/targets/Type above,
             // then converges on the same validated candidate and the same filer
-            // the computer-import and manual paths use. Every generated proposal
-            // starts at the neutral importance 0 (§7.2) — the Memory Assistant
-            // never assigns importance; the user sets it while reviewing Pending.
-            // No permanent provenance is generated or passed into a canonical
-            // candidate (review finding 1): the memory keeps none.
+            // the computer-import and manual paths use. The candidate carries no
+            // importance (the factory always files a proposal at 0), no source
+            // authorship, and no provenance — the memory keeps none of them.
             val filingResult: CandidateResult<out MemoryCandidate> = if (d.scope == SCOPE_COMPANION) {
                 MemoryCandidateValidator.validateCompanion(
                     content = d.content,
@@ -894,9 +900,7 @@ object Archivist {
                     intendedCompanionId = companionId,
                     availableCompanionIds = if (companionId != null) setOf(companionId) else emptySet(),
                     typeId = resolvedTypeId,
-                    tags = d.tags,
-                    importance = 0,
-                    origin = "archivist"
+                    tags = d.tags
                 )
             } else {
                 MemoryCandidateValidator.validateGeneral(
@@ -904,8 +908,6 @@ object Archivist {
                     content = d.content,
                     typeId = resolvedTypeId,
                     tags = d.tags,
-                    importance = 0,
-                    origin = "archivist",
                     worldIds = worldIds,
                     campaignIds = campaignIds,
                     roleplayCharacterIds = rpCharIds,

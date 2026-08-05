@@ -106,12 +106,13 @@ object MemoryTypeMigration {
         LEGACY_KIND_TO_TYPE_ID.entries.associate { (kind, id) -> id to kind }
 
     /**
-     * The legacy `kind` string a memory should carry so it never disagrees with
-     * its [typeId] (Phase 1 Type transition, item 4). `type_id` is the source of
-     * truth; `kind` is written only as a consistent, inert shadow so the
-     * compatibility-period readers that still consult `kind` (dedup identity,
-     * Instruction rendering, browser filters) stay correct until they are moved
-     * onto `type_id` in a later phase.
+     * The legacy `kind` string that corresponds to a [typeId] (Phase 1 Type
+     * transition, item 4). `type_id` is the SOLE Type authority; nothing in the
+     * runtime consults `kind` for behavior anymore — retrieval, prompt assembly,
+     * Possible-Match dedup, and Instruction rendering all key on `type_id`
+     * (Phase 2 review). This mapping now serves only backup import of pre-Phase-1
+     * rows and the manual editor's inert compatibility write; the canonical
+     * Pending filer stores an empty `kind`.
      *
      *  - a seeded starter Type id → its legacy string (`fact`, `preference`, …);
      *  - No Type (null) → empty string;

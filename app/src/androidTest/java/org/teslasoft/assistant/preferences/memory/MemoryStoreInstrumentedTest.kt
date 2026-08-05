@@ -30,6 +30,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.teslasoft.assistant.preferences.memory.librarian.RetrievalDocument
 
 /**
  * Real SQLCipher-backed migration and deletion coverage for the Phase 1 storage
@@ -401,6 +402,36 @@ class MemoryStoreInstrumentedTest {
         assertNull(retrievedTypeId())
         assertEquals("content of inst", store.getMemory("inst")!!.content)
         assertEquals("active", store.getMemory("inst")!!.status)
+    }
+
+    @Test
+    fun legacyTitleKindProvenanceColumnsDoNotEnterRetrieval() {
+        // Item R4: populated legacy title/kind/provenance columns must not reach
+        // the runtime retrieval object, ranking, matching, or embedding text.
+        val store = open(freshDbName())
+        // A distinctive title word ("Zephyrgloom") appears ONLY in the legacy
+        // title column, never in the content; legacy kind/provenance are set too.
+        store.writableDatabase.execSQL(
+            "INSERT INTO memories (memory_id, scope, kind, type_id, title, content, importance, created_at, status, " +
+                "provenance_source, provenance_confidence) " +
+                "VALUES ('m-leg', 'global', 'fact', 'mtype-fact', 'Zephyrgloom', 'the harvest festival', 0, " +
+                "'2026-08-05T00:00:00Z', 'active', 'user_stated', 'tentative')"
+        )
+
+        val retrieved = store.activeMemoriesForScope(RetrievalScope.NONE).first { it.memoryId == "m-leg" }
+        // typeId is the sole Type authority; content is preserved.
+        assertEquals("mtype-fact", retrieved.typeId)
+        assertEquals("the harvest festival", retrieved.content)
+        // The runtime object carries no title/kind/provenance to leak.
+        val fields = retrieved.javaClass.declaredFields.map { it.name }
+        assertFalse(fields.any { it.equals("title", true) })
+        assertFalse(fields.any { it.equals("kind", true) })
+        assertFalse(fields.any { it.contains("provenance", true) })
+        // The embedding/semantic document is built from content (+tags), never
+        // the legacy title: the distinctive title word does not enter it.
+        val doc = RetrievalDocument.semanticDocument(retrieved.content, retrieved.embeddingText, emptyList())
+        assertFalse("legacy title must not enter embedding text", doc.contains("Zephyrgloom"))
+        assertTrue(doc.contains("harvest festival"))
     }
 
     /* --------------- Phase 2: companion memory isolation (item 5) ----------- */

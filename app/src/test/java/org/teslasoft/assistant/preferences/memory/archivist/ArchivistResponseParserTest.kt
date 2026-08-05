@@ -26,11 +26,12 @@ class ArchivistResponseParserTest {
 
     @Test
     fun parsesWellFormedResponse() {
-        // Any title/importance in the response is ignored (§3.1/§7.2): the
-        // parser never reads them and DraftMemory has no such fields.
+        // Unsupported legacy fields (title, importance, provenance, and the
+        // free-text "type") are ignored: DraftMemory has no such surface, and the
+        // Type suggestion is read only from the new "type_id" field.
         val parsed = ArchivistResponseParser.parse(
             """
-            {"memories":[{"title":"Coffee order","content":"Prefers oat-milk lattes.","scope":"real_life","type":"preference","importance":2,"tags":["Food"],"provenance":"stated"}],
+            {"memories":[{"title":"Coffee order","content":"Prefers oat-milk lattes.","scope":"real_life","type":"preference","type_id":"mtype-preference","importance":2,"tags":["Food"],"provenance":"stated"}],
              "model_rules":[{"text":"Do not end responses with a question."}]}
             """.trimIndent()
         )
@@ -38,9 +39,8 @@ class ArchivistResponseParserTest {
         val m = parsed.memories[0]
         assertEquals("Prefers oat-milk lattes.", m.content)
         assertEquals("real_life", m.scope)
-        assertEquals("preference", m.kind)
+        assertEquals("mtype-preference", m.typeIdSuggestion)
         assertEquals(listOf("Food"), m.tags)
-        assertTrue(m.stated)
         assertNull(m.targetName)
         assertEquals(1, parsed.rules.size)
         assertEquals(0, parsed.dropped)
@@ -56,29 +56,30 @@ class ArchivistResponseParserTest {
     }
 
     @Test
-    fun dropsUnknownScope_butKeepsUnknownOrBlankTypeAndTitlelessRows() {
-        // Only an unknown SCOPE drops a proposal. An unknown/blank Type is never
-        // a drop (§5.2 — it becomes No Type at filing), and a missing title is
-        // irrelevant (§3.1). Content is the only text requirement.
+    fun dropsUnknownScope_butNeverDropsOnTypeSuggestion() {
+        // Only an unknown SCOPE (or empty content) drops a proposal. The Type
+        // suggestion never drops a memory: a known id, an unknown id, and an
+        // absent id all survive — the id is validated to No Type only at filing.
         val parsed = ArchivistResponseParser.parse(
             """
             {"memories":[
-              {"content":"b","scope":"secret","type":"fact"},
-              {"content":"kept-unknown-type","scope":"real_life","type":"vibe"},
-              {"content":"kept-no-title","scope":"real_life","type":"fact"},
-              {"content":"","scope":"real_life","type":"fact"},
-              {"content":"kept-instruction","scope":"global","type":"instruction"}
+              {"content":"b","scope":"secret","type_id":"mtype-fact"},
+              {"content":"kept-known","scope":"real_life","type_id":"mtype-fact"},
+              {"content":"kept-unknown-id","scope":"real_life","type_id":"totally-made-up"},
+              {"content":"","scope":"real_life","type_id":"mtype-fact"},
+              {"content":"kept-no-type","scope":"global"}
             ]}
             """.trimIndent()
         )
-        // Kept: unknown-type, no-title, instruction. Dropped: unknown scope,
-        // empty content.
+        // Kept: known, unknown-id, no-type. Dropped: unknown scope, empty content.
         assertEquals(3, parsed.memories.size)
-        assertEquals(setOf("kept-unknown-type", "kept-no-title", "kept-instruction"),
+        assertEquals(setOf("kept-known", "kept-unknown-id", "kept-no-type"),
             parsed.memories.map { it.content }.toSet())
-        // The unknown Type suggestion is carried through unchanged (mapped to No
-        // Type only at the filing layer), never coerced or dropped here.
-        assertEquals("vibe", parsed.memories.first { it.content == "kept-unknown-type" }.kind)
+        assertEquals("mtype-fact", parsed.memories.first { it.content == "kept-known" }.typeIdSuggestion)
+        // An unknown id is carried as-is (filing maps it to No Type); an absent id
+        // is null (No Type). Neither drops the memory.
+        assertEquals("totally-made-up", parsed.memories.first { it.content == "kept-unknown-id" }.typeIdSuggestion)
+        assertNull(parsed.memories.first { it.content == "kept-no-type" }.typeIdSuggestion)
         assertEquals(2, parsed.dropped)
     }
 
@@ -115,11 +116,15 @@ class ArchivistResponseParserTest {
     }
 
     @Test
-    fun provenanceDefaultsToInferred() {
+    fun legacyProvenanceAndTypeFieldsAreIgnoredSafely() {
+        // A response that still uses the old "type"/"provenance" fields is parsed
+        // without error: those fields are simply not read, and no "type_id" means
+        // No Type. The memory is never dropped for carrying them.
         val parsed = ArchivistResponseParser.parse(
-            """{"memories":[{"title":"a","content":"c","scope":"real_life","type":"fact"}]}"""
+            """{"memories":[{"title":"a","content":"c","scope":"real_life","type":"fact","provenance":"stated"}]}"""
         )
-        assertFalse(parsed.memories[0].stated)
+        assertEquals(1, parsed.memories.size)
+        assertNull(parsed.memories[0].typeIdSuggestion)
     }
 
     @Test
