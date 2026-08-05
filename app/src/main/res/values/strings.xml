@@ -1953,7 +1953,45 @@
     <string name="backup_portable_export_done">Portable data copy saved.</string>
     <string name="backup_portable_saved_to">Portable data copy saved to %1$s</string>
     <string name="backup_portable_import_title">Import Portable Data Copy</string>
-    <!-- 6. Automatic Backups. The approved portable automatic system is NOT
+    <!-- 6. Companion & Roleplay Backup (companion-roleplay-backup-plan.md;
+         all wording owner-approved verbatim, §8/§9). One backup category,
+         no per-item selection. Memories and lorebooks are deliberately NOT
+         in this backup; lorebook LINKS are carried by id (plus name, for
+         the restore report) only. -->
+    <string name="companion_backup_section">Companion &amp; Roleplay Backup</string>
+    <string name="companion_backup_desc">Back up or restore companions, personas, prompts, and related roleplay data.</string>
+    <string name="companion_backup_download">Download Backup</string>
+    <string name="companion_backup_upload">Upload Backup</string>
+    <string name="companion_backup_backing_up">Backing up…</string>
+    <string name="companion_backup_restoring">Restoring…</string>
+    <!-- §8 error dialogs: each names the cause the app actually knows. -->
+    <string name="companion_backup_err_wrong_file">This file is not a companion backup. Choose a file that was created with Download Backup. No changes were made.</string>
+    <string name="companion_backup_err_newer">This backup was created by a newer version of the app and can\'t be read by this one. Update the app, then try again. No changes were made.</string>
+    <string name="companion_backup_err_damaged">This backup file is damaged or incomplete and can\'t be read safely. No changes were made.</string>
+    <string name="companion_backup_err_failed">The restore could not be completed: %1$s. Your existing data was restored to its previous state.</string>
+    <string name="companion_backup_err_save_failed">The backup could not be saved: %1$s.</string>
+    <!-- The specific reasons that fill the two templates above. -->
+    <string name="companion_backup_reason_memory_unavailable">the companion memory database is unavailable until it is repaired</string>
+    <string name="companion_backup_reason_lorebook_unavailable">the lorebook database is unavailable, so lorebook connections could not be checked</string>
+    <string name="companion_backup_reason_images">the profile images could not be copied</string>
+    <string name="companion_backup_reason_journal">the restore\'s safety record could not be written</string>
+    <string name="companion_backup_reason_database">the companion memory database could not be updated</string>
+    <string name="companion_backup_reason_settings">app settings could not be written</string>
+    <string name="companion_backup_reason_collect">the backup could not be assembled from the app\'s data</string>
+    <string name="companion_backup_reason_write">the file could not be written to the chosen location</string>
+    <string name="companion_backup_reason_verify">the saved copy could not be verified</string>
+    <!-- §9 replace confirmation. -->
+    <string name="companion_backup_confirm_title">Replace companion and roleplay data?</string>
+    <string name="companion_backup_confirm_body">This backup will replace your existing companions, personas, system prompts, activation prompts, and roleplay cards with the contents of the backup file. Memories, lorebooks, conversations, API settings, and other app settings will not be changed.</string>
+    <string name="companion_backup_confirm_replace">Replace</string>
+    <!-- §9 results. -->
+    <string name="companion_backup_success">Backup restored. Companions, personas, prompts, and roleplay cards are ready to use.</string>
+    <string name="companion_backup_saved_to">Backup saved to %1$s.</string>
+    <string name="companion_backup_report_title">Restore complete</string>
+    <string name="companion_backup_report_intro">Companions, personas, prompts, and roleplay cards were restored. These lorebook connections were removed because the lorebooks do not exist on this device:</string>
+    <string name="companion_backup_report_line">%1$s — %2$s</string>
+    <string name="companion_backup_report_footer">You can reconnect a lorebook in each companion\'s settings at any time.</string>
+    <!-- 7. Automatic Backups. The approved portable automatic system is NOT
          built yet; this section says so instead of exposing the unfinished
          legacy controls (owner correction, July 22 2026). -->
     <string name="backup_auto_section">Automatic Backups</string>

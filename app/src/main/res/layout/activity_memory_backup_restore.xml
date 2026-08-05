@@ -17,13 +17,15 @@
 **************************************************************************/
 -->
 <!-- Memory Backup & Restore (Database Health & Backups). Section order is
-     owner-directed and EXACT (July 24 2026, supersedes the July 22 order):
+     owner-directed and EXACT (August 5 2026, supersedes the July 24 order —
+     Companion & Roleplay Backup added directly after Portable Data Copy):
      1. Backup Status, 2. Database Health, 3. Recovery Backup, 4. Human-
-     Readable Chat Backup, 5. Portable Data Copy, 6. Automatic Backups,
-     7. Reset. Backup Status leads because it's the one section that's
-     always current the moment the screen opens — the Database Health
-     result lines stay blank until the user presses the check button. Do
-     not reorder. The manual and automatic backup locations are separate. -->
+     Readable Chat Backup, 5. Portable Data Copy, 6. Companion & Roleplay
+     Backup, 7. Automatic Backups, 8. Reset. Backup Status leads because
+     it's the one section that's always current the moment the screen opens
+     — the Database Health result lines stay blank until the user presses
+     the check button. Do not reorder. The manual and automatic backup
+     locations are separate. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -599,7 +601,74 @@
                 android:textSize="15sp"
                 android:visibility="gone" />
 
-            <!-- ============ 6. Automatic Backups ============ -->
+            <!-- ============ 6. Companion & Roleplay Backup ============ -->
+            <!-- Disaster recovery for companion and roleplay configuration
+                 (companion-roleplay-backup-plan.md). One backup category, no
+                 per-item selection; memories and lorebooks are deliberately
+                 not included. Reuses this screen's established section,
+                 button, progress and status-text styles. -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/companion_backup_section" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/companion_backup_desc" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_companion_download"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/companion_backup_download" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_companion_upload"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/companion_backup_upload" />
+
+            <!-- Rotating progress + label while working ("Backing up…" /
+                 "Restoring…"), same pattern as the database-restore row. -->
+            <LinearLayout
+                android:id="@+id/companion_backup_progress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/companion_backup_spinner"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:indeterminate="true" />
+
+                <TextView
+                    android:id="@+id/companion_backup_progress_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:textColor="@color/text"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Persistent inline result (saved-to / restored) — stays until
+                 replaced. Never a toast. -->
+            <TextView
+                android:id="@+id/text_companion_backup_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:textColor="@color/text"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
+            <!-- ============ 7. Automatic Backups ============ -->
             <!-- The approved portable automatic WRITER (the piece that would
                  actually run a backup on a schedule) is NOT built. This
                  section says so honestly. The toggle and frequency dropdown
@@ -712,7 +781,7 @@
                 android:layout_marginTop="12dp"
                 android:text="@string/backup_auto_change_location" />
 
-            <!-- ============ 7. Reset (destructive; bottom, unchanged) ============ -->
+            <!-- ============ 8. Reset (destructive; bottom, unchanged) ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/memory_controls_section_reset" />

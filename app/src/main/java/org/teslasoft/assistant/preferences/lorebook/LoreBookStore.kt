@@ -128,6 +128,12 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
             }
         }
 
+        /** True once the lorebook database file exists — lets callers (e.g.
+         *  the Companion & Roleplay Backup) ask about lorebooks without
+         *  creating the store as a side effect. */
+        fun isProvisioned(context: Context): Boolean =
+            context.getDatabasePath(DATABASE_NAME).exists()
+
         /**
          * Close and forget the cached helper so the database FILE can be
          * replaced underneath (repair swap / restore / fresh start —
