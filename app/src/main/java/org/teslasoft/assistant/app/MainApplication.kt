@@ -128,6 +128,17 @@ class MainApplication : Application() {
                 MemoryLog.log(this, "ChatRestore", "error", "Chat-restore recovery at startup failed: ${e.message}")
             }
             try {
+                // Settle a Companion & Roleplay restore interrupted by process
+                // death or power loss (companion-roleplay-backup-plan.md §6.3
+                // crash protection): roll it forward when its database
+                // transaction committed, roll it back otherwise — BEFORE the
+                // memory housekeeping below touches the store.
+                org.teslasoft.assistant.preferences.backup.companion
+                    .CompanionRoleplayRestoreManager.resumeIfPending(this)
+            } catch (e: Exception) {
+                MemoryLog.log(this, "CompanionRestore", "error", "Companion/roleplay restore recovery at startup failed: ${e.message}")
+            }
+            try {
                 // Recover anything the FIRST Round-4 build wrote to legacy
                 // outage.* files during a storage lock (that plaintext
                 // redirection was rejected and removed July 12 2026 — LOCKED

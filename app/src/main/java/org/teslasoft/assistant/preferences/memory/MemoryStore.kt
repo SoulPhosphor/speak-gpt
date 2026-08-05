@@ -92,6 +92,25 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         // run (owner_approved_rules.md §15 — the app pre-authors no modes).
         const val META_SYSTEM_MODES_PURGED = "system_modes_purged"
 
+        // Companion & Roleplay Backup restore pivot (companion-roleplay-
+        // backup-plan.md §6.3): while a restore is applying, its token is
+        // written into meta INSIDE the replace transaction, so the token is
+        // durable if and only if that transaction committed. The startup
+        // recovery journal compares its own token against this row to decide
+        // whether an interrupted restore rolls forward (token present) or
+        // back (absent). Cleared when the restore, or its recovery, finishes.
+        const val META_COMPANION_RESTORE_TOKEN = "companion_roleplay_restore_token"
+
+        // The §2.4 record sets of the Companion & Roleplay Backup, in a
+        // parents-before-children order (inserts run in this order; deletes in
+        // reverse). Defined once in the pure format object so the codec, the
+        // validator, and this store can never disagree about what the backup
+        // carries. rp_tag_links rows whose target is a memory are NOT part of
+        // the backup — see exportRoleplayTables/replaceRoleplayTables.
+        val ROLEPLAY_BACKUP_TABLES: List<String> =
+            org.teslasoft.assistant.preferences.backup.companion
+                .CompanionBackupFormat.ROLEPLAY_TABLES
+
         // A transcript row past this size closes and a new row opens: keeps the
         // per-turn parse-append-write affordable and Archivist inputs bounded.
         private const val MAX_TRANSCRIPT_CHARS = 200_000
@@ -1810,6 +1829,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             arrayOf(key, value)
         )
+    }
+
+    fun deleteMeta(key: String) {
+        writableDatabase.delete("meta", "key = ?", arrayOf(key))
     }
 
     /** Returns null when healthy, otherwise a short description of what failed. */
@@ -6404,6 +6427,187 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             "INSERT OR REPLACE INTO deleted_ids (record_type, record_id, deleted_at) VALUES (?, ?, ?)",
             arrayOf(recordType, recordId, nowIso())
         )
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* Companion & Roleplay Backup (companion-roleplay-backup-plan.md)         */
+    /* ---------------------------------------------------------------------- */
+
+    /** True when any §2.4 roleplay-structure row exists — drives the restore's
+     *  replace-confirmation (§6.2). */
+    fun hasAnyRoleplayStructure(): Boolean {
+        val db = readableDatabase
+        for (table in ROLEPLAY_BACKUP_TABLES) {
+            db.rawQuery("SELECT 1 FROM $table LIMIT 1", emptyArray<String>()).use {
+                if (it.moveToFirst()) return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * Every §2.4 row as a column -> value map, exactly as stored (all
+     * columns). rp_tag_links rows whose target is a memory are excluded
+     * (memories are not in this backup; §2.4). The restore side maps these
+     * rows onto whatever the current schema is (§3), which is why the shape
+     * is a plain map and never a raw database copy.
+     */
+    fun exportRoleplayTables(): LinkedHashMap<String, List<Map<String, Any?>>> {
+        val db = readableDatabase
+        val out = LinkedHashMap<String, List<Map<String, Any?>>>()
+        for (table in ROLEPLAY_BACKUP_TABLES) {
+            val rows = ArrayList<Map<String, Any?>>()
+            val sql = if (table == "rp_tag_links") {
+                "SELECT * FROM rp_tag_links WHERE target_type != 'memory'"
+            } else {
+                "SELECT * FROM $table"
+            }
+            db.rawQuery(sql, emptyArray<String>()).use { c ->
+                while (c.moveToNext()) {
+                    val row = LinkedHashMap<String, Any?>()
+                    for (i in 0 until c.columnCount) {
+                        row[c.getColumnName(i)] = when (c.getType(i)) {
+                            Cursor.FIELD_TYPE_NULL -> null
+                            Cursor.FIELD_TYPE_INTEGER -> c.getLong(i)
+                            Cursor.FIELD_TYPE_FLOAT -> c.getDouble(i)
+                            Cursor.FIELD_TYPE_BLOB ->
+                                // No §2.4 table defines a BLOB column. Failing
+                                // loudly beats silently dropping a value the
+                                // user expects the backup to carry.
+                                throw IllegalStateException(
+                                    "unsupported blob column in $table"
+                                )
+                            else -> c.getString(i)
+                        }
+                    }
+                    rows.add(row)
+                }
+            }
+            out[table] = rows
+        }
+        return out
+    }
+
+    /**
+     * The §6.3 step-2 replace: delete the existing §2.4 record sets, insert
+     * [tables]' rows, apply the §6.4 resolution rules, write the restore
+     * token into meta, run [beforeCommit] (the caller's staged app-settings
+     * apply), and only then commit — all one transaction with foreign-key
+     * enforcement deferred to commit. Any exception (including one thrown by
+     * [beforeCommit]) rolls the whole database change back automatically.
+     *
+     * Memories are never deleted or modified here beyond the §6.4 rules:
+     * join rows and mirror/context ids that no longer resolve are removed or
+     * cleared; everything that resolves is kept.
+     */
+    fun replaceRoleplayTables(
+        tables: Map<String, List<Map<String, Any?>>>,
+        restoreToken: String,
+        beforeCommit: () -> Unit
+    ) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            // FK checks deferred to commit (§6.3.2): the replace order stays
+            // simple and the backup's internal references are verified in one
+            // shot when the transaction commits.
+            db.execSQL("PRAGMA defer_foreign_keys = ON")
+
+            // Existing tag -> memory links survive the replace when their tag
+            // id does (§6.4). Deleting rp_tags cascades every link, so capture
+            // them first and re-add the survivors after the insert.
+            val memoryTagLinks = ArrayList<Pair<String, String>>()
+            db.rawQuery(
+                "SELECT tag_id, target_id FROM rp_tag_links WHERE target_type = 'memory'",
+                emptyArray<String>()
+            ).use {
+                while (it.moveToNext()) memoryTagLinks.add(it.getString(0) to it.getString(1))
+            }
+
+            for (table in ROLEPLAY_BACKUP_TABLES.asReversed()) {
+                db.delete(table, null, null)
+            }
+
+            for (table in ROLEPLAY_BACKUP_TABLES) {
+                val liveColumns = tableColumns(db, table)
+                for (row in tables[table].orEmpty()) {
+                    val values = ContentValues()
+                    for ((column, value) in row) {
+                        // A field the current schema no longer has is dropped;
+                        // a column the backup predates takes the schema default
+                        // (§3: restore maps fields to the current schema).
+                        if (column !in liveColumns) continue
+                        when (value) {
+                            null -> values.putNull(column)
+                            is Long -> values.put(column, value)
+                            is Int -> values.put(column, value.toLong())
+                            is Double -> values.put(column, value)
+                            is Boolean -> values.put(column, if (value) 1L else 0L)
+                            else -> values.put(column, value.toString())
+                        }
+                    }
+                    if (values.size() == 0) {
+                        throw IllegalStateException("row for $table has no usable columns")
+                    }
+                    db.insertOrThrow(table, null, values)
+                }
+            }
+
+            for ((tagId, targetId) in memoryTagLinks) {
+                db.execSQL(
+                    "INSERT OR IGNORE INTO rp_tag_links (tag_id, target_type, target_id) " +
+                        "SELECT ?, 'memory', ? WHERE EXISTS (SELECT 1 FROM rp_tags WHERE tag_id = ?)",
+                    arrayOf(tagId, targetId, tagId)
+                )
+            }
+
+            // §6.4: a link that resolves after restore is kept; a link that no
+            // longer resolves is removed. The memory rows themselves are
+            // untouched. project links/mirrors are not re-checked — projects
+            // are outside this backup and were not replaced.
+            db.execSQL("DELETE FROM memory_companions WHERE companion_id NOT IN (SELECT companion_id FROM companions)")
+            db.execSQL("DELETE FROM memory_worlds WHERE world_id NOT IN (SELECT world_id FROM worlds)")
+            db.execSQL("DELETE FROM memory_campaigns WHERE campaign_id NOT IN (SELECT campaign_id FROM campaigns)")
+            db.execSQL("DELETE FROM memory_roleplay_characters WHERE roleplay_character_id NOT IN (SELECT roleplay_character_id FROM roleplay_characters)")
+
+            // Primary-target mirror columns are display-only (join tables are
+            // the source of truth): cleared when the target is gone.
+            db.execSQL("UPDATE memories SET world_id = NULL WHERE world_id IS NOT NULL AND world_id NOT IN (SELECT world_id FROM worlds)")
+            db.execSQL("UPDATE memories SET campaign_id = NULL WHERE campaign_id IS NOT NULL AND campaign_id NOT IN (SELECT campaign_id FROM campaigns)")
+            db.execSQL("UPDATE memories SET roleplay_character_id = NULL WHERE roleplay_character_id IS NOT NULL AND roleplay_character_id NOT IN (SELECT roleplay_character_id FROM roleplay_characters)")
+
+            // Transcript context ids are nullable context; content untouched.
+            db.execSQL("UPDATE transcripts SET companion_id = NULL WHERE companion_id IS NOT NULL AND companion_id NOT IN (SELECT companion_id FROM companions)")
+            db.execSQL("UPDATE transcripts SET world_id = NULL WHERE world_id IS NOT NULL AND world_id NOT IN (SELECT world_id FROM worlds)")
+            db.execSQL("UPDATE transcripts SET roleplay_character_id = NULL WHERE roleplay_character_id IS NOT NULL AND roleplay_character_id NOT IN (SELECT roleplay_character_id FROM roleplay_characters)")
+            db.execSQL("UPDATE transcripts SET user_persona_id = NULL WHERE user_persona_id IS NOT NULL AND user_persona_id NOT IN (SELECT persona_id FROM user_personas)")
+
+            // Active selections: kept when they resolve, cleared otherwise.
+            db.execSQL("UPDATE app_state SET active_companion_id = NULL WHERE active_companion_id IS NOT NULL AND active_companion_id NOT IN (SELECT companion_id FROM companions)")
+            db.execSQL("UPDATE app_state SET active_world_id = NULL WHERE active_world_id IS NOT NULL AND active_world_id NOT IN (SELECT world_id FROM worlds)")
+            db.execSQL("UPDATE app_state SET active_roleplay_character_id = NULL WHERE active_roleplay_character_id IS NOT NULL AND active_roleplay_character_id NOT IN (SELECT roleplay_character_id FROM roleplay_characters)")
+            db.execSQL("UPDATE app_state SET active_user_persona_id = NULL WHERE active_user_persona_id IS NOT NULL AND active_user_persona_id NOT IN (SELECT persona_id FROM user_personas)")
+
+            // The crash pivot: durable exactly when this transaction commits.
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_COMPANION_RESTORE_TOKEN, restoreToken)
+            )
+
+            beforeCommit()
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun tableColumns(db: SQLiteDatabase, table: String): HashSet<String> {
+        val out = HashSet<String>()
+        db.rawQuery("PRAGMA table_info($table)", emptyArray<String>()).use {
+            val nameIdx = it.getColumnIndexOrThrow("name")
+            while (it.moveToNext()) out.add(it.getString(nameIdx))
+        }
+        return out
     }
 }
 
