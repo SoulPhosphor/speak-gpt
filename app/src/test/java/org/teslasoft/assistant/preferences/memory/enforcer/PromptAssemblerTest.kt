@@ -35,11 +35,11 @@ class PromptAssemblerTest {
         handling: List<String> = emptyList(),
         neverAssume: List<String> = emptyList(),
         content: String = "content of $id",
-        kind: String = "fact"
+        typeId: String? = null
     ) = AssembledMemory(
         memoryId = id, content = content,
-        provenanceMarker = "told", handling = handling, neverAssume = neverAssume,
-        score = score, kind = kind
+        handling = handling, neverAssume = neverAssume,
+        score = score, typeId = typeId
     )
 
     @Test
@@ -57,9 +57,43 @@ class PromptAssemblerTest {
     fun unprotectedMemoryHasNoHandlingLine() {
         val line = PromptAssembler.renderMemoryLine(mem("m1"))
         assertFalse(line.contains("HANDLE WITH CARE"))
-        // Titles are retired (§3.1): the line is the marker plus content only.
-        assertTrue(line.startsWith("- (told) content of m1"))
+        // Plain memory text (Phase 2 review): "- " + content, with no provenance
+        // marker and no title prefix.
+        assertTrue(line.startsWith("- content of m1"))
         assertFalse("no title prefix before content", line.contains("m1: content"))
+    }
+
+    @Test
+    fun provenanceNeverAppearsInTheRenderedPrompt() {
+        // Review: no (told)/(observed)/(guessed) marker on any line and no legend
+        // in the "Things you know" header — provenance is gone from the prompt.
+        val out = PromptAssembler.render(
+            AssemblyComponents(
+                memories = listOf(
+                    mem("m1", content = "she prefers tea"),
+                    mem("rule", content = "keep replies short", typeId = "mtype-instruction")
+                )
+            )
+        )
+        assertTrue(out.contains("## Things you know"))
+        assertFalse(out.contains("(told)"))
+        assertFalse(out.contains("(observed)"))
+        assertFalse(out.contains("(guessed)"))
+        assertFalse(out.contains("told = they said it"))
+        // Plain memory text is present.
+        assertTrue(out.contains("- she prefers tea"))
+    }
+
+    @Test
+    fun instructionBehaviorIsKeyedOnTheStableTypeIdNotAName() {
+        // Renaming the Instruction Type does not change its stable id, so a
+        // memory carrying that id still renders as a rule; a memory with any
+        // other (or no) type id renders as a fact. The renderer only ever sees
+        // the id, never a display name or the legacy kind string.
+        val ruleByTrueId = mem("r", content = "no purple prose", typeId = "mtype-instruction")
+        val notARule = mem("f", content = "a plain fact", typeId = "instruction") // display-name-like, not the id
+        assertTrue(ruleByTrueId.isInstruction)
+        assertFalse("only the stable Instruction Type id triggers rule rendering", notARule.isInstruction)
     }
 
     @Test
@@ -80,7 +114,7 @@ class PromptAssemblerTest {
         // fully-populated assembly must not contain their headers.
         val out = PromptAssembler.render(
             AssemblyComponents(
-                memories = listOf(mem("m1"), mem("rule", kind = "instruction")),
+                memories = listOf(mem("m1"), mem("rule", typeId = "mtype-instruction")),
                 loreNotes = listOf(LoreNote("Note", "hand-written fact")),
                 scene = SceneContext(cores = listOf(CardCore("World: W", listOf(CoreField("Premise / Vibe", "premise")))))
             )
@@ -98,7 +132,7 @@ class PromptAssemblerTest {
         // turn-variable material follows; fired card entries close the message.
         val out = PromptAssembler.render(
             AssemblyComponents(
-                memories = listOf(mem("m1"), mem("rule", kind = "instruction")),
+                memories = listOf(mem("m1"), mem("rule", typeId = "mtype-instruction")),
                 loreNotes = listOf(LoreNote("Note", "hand-written fact")),
                 scene = SceneContext(cores = listOf(CardCore("World: W", listOf(CoreField("Premise / Vibe", "premise"))))),
                 cardEntries = listOf(AssembledCardEntry("ce-1", "Regions", "Verdant Kingdom", "rolling farmland"))
@@ -119,7 +153,7 @@ class PromptAssemblerTest {
             AssemblyComponents(
                 memories = listOf(
                     mem("fact-mem", content = "a plain fact"),
-                    mem("rule-mem", content = "don't pity her when her mom comes up", kind = "instruction")
+                    mem("rule-mem", content = "don't pity her when her mom comes up", typeId = "mtype-instruction")
                 )
             )
         )
@@ -137,7 +171,7 @@ class PromptAssemblerTest {
         // memory can never render without its HANDLE WITH CARE line.
         val out = PromptAssembler.render(
             AssemblyComponents(
-                memories = listOf(mem("rule", kind = "instruction", handling = listOf("tread softly")))
+                memories = listOf(mem("rule", typeId = "mtype-instruction", handling = listOf("tread softly")))
             )
         )
         assertTrue(out.contains("HANDLE WITH CARE: tread softly."))

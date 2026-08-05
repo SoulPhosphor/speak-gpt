@@ -70,9 +70,10 @@ object PendingMemoryRecordFactory {
         return MemoryRecord(
             memoryId = memoryId,
             scope = candidate.scope,
-            // The Type id is the source of truth; the legacy kind is a derived,
-            // inert shadow that can never disagree (Phase 1 item 4).
-            kind = MemoryTypeMigration.legacyKindForTypeId(candidate.typeId),
+            // The Type id is the sole source of truth (Phase 2 review): a new
+            // memory stores an inert empty legacy kind, never a value derived
+            // from the Type. Nothing reads kind for behavior anymore.
+            kind = "",
             typeId = candidate.typeId,
             title = "",
             content = candidate.content,
@@ -102,9 +103,11 @@ object PendingMemoryRecordFactory {
             entityRefs = emptyList(),
             changeLog = emptyList(),
             origin = candidate.origin,
-            suggestedCardType = candidate.suggestedCardType,
-            suggestedCardId = candidate.suggestedCardId,
-            suggestedSection = candidate.suggestedSection
+            // No analyzer-created card-placement metadata on a canonical candidate
+            // (Phase 2 review): the legacy columns are stored null.
+            suggestedCardType = null,
+            suggestedCardId = null,
+            suggestedSection = null
         )
     }
 

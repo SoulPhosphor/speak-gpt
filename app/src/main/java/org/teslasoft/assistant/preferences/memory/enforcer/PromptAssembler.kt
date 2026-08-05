@@ -38,9 +38,6 @@ object PromptAssembler {
     // override via "memory_char_budget".
     const val DEFAULT_CHAR_BUDGET = 6000
 
-    private const val PROVENANCE_LEGEND =
-        "(told = they said it; observed = seen over time; guessed = tentative — hold guesses lightly, let them go gracefully if wrong)"
-
     /**
      * The atomic budget cost of one memory: content + protection handling +
      * never-assume lines (titles are retired, §3.1). A memory that does not fit
@@ -57,8 +54,9 @@ object PromptAssembler {
      *  can therefore never appear without its HANDLE WITH CARE line. */
     fun renderMemoryLine(m: AssembledMemory): String {
         val sb = StringBuilder()
-        sb.append("- (").append(m.provenanceMarker).append(") ")
-            .append(m.content.trim())
+        // Plain memory text (Phase 2 review): no (told)/(observed)/(guessed)
+        // provenance marker is ever rendered.
+        sb.append("- ").append(m.content.trim())
         if (m.isProtected) {
             sb.append("\n  HANDLE WITH CARE")
             if (m.handling.isNotEmpty()) {
@@ -112,7 +110,7 @@ object PromptAssembler {
         val (rules, known) = c.memories.partition { it.isInstruction }
 
         if (known.isNotEmpty()) {
-            val sb = StringBuilder("## Things you know\n").append(PROVENANCE_LEGEND)
+            val sb = StringBuilder("## Things you know")
             for (m in known) sb.append("\n").append(renderMemoryLine(m))
             sections.add(sb.toString())
         }

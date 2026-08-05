@@ -63,14 +63,7 @@ object ArchivistResponseParser {
         /** Free-text name of the proposed target (world/campaign/character/
          *  project) — resolved against existing records by the runner; never
          *  creates anything. Null for untargeted scopes. */
-        val targetName: String?,
-        /** Optional card-placement suggestion (roleplay memories only, owner
-         *  design §2/§7): the NAME of an existing lore card and one of the
-         *  fixed CardSections keys. Resolved and validated by the runner —
-         *  an unknown card or section simply drops the suggestion, never the
-         *  memory. */
-        val cardName: String? = null,
-        val cardSection: String? = null
+        val targetName: String?
     )
 
     data class DraftRule(val text: String)
@@ -137,9 +130,7 @@ object ArchivistResponseParser {
                         kind = kind,
                         tags = tags,
                         stated = o.optString("provenance").trim().equals("stated", ignoreCase = true),
-                        targetName = o.optString("target").trim().ifEmpty { null },
-                        cardName = o.optString("card").trim().ifEmpty { null },
-                        cardSection = o.optString("card_section").trim().lowercase().ifEmpty { null }
+                        targetName = o.optString("target").trim().ifEmpty { null }
                     )
                 )
             }

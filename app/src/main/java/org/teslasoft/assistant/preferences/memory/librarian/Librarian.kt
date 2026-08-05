@@ -49,8 +49,6 @@ class Librarian private constructor(private val appContext: Context) {
                 instance ?: Librarian(context.applicationContext).also { instance = it }
             }
 
-        private const val TENTATIVE_DAMPEN = 0.6
-
         // Relevance floor (seed-safety audit requirement 8): top-k alone
         // surfaces weak matches when the store is small, so results below
         // this cosine similarity are dropped even if they'd make the cut.
@@ -131,9 +129,8 @@ class Librarian private constructor(private val appContext: Context) {
         /**
          * Pure ranking: score each candidate and return the top [topK], highest
          * first. score = w_sim·cosine + w_imp·(importance/5) + w_rec·recency +
-         * boost; tentative-confidence memories are dampened (before the boost,
-         * so context can't launder a guess into a certainty). No Android/ORT —
-         * unit tested (LibrarianRankingTest).
+         * boost. Provenance (confidence/source) does not influence the score
+         * (Phase 2 review). No Android/ORT — unit tested (LibrarianRankingTest).
          *
          * The relevance floor is applied BEFORE top-K (counterplan §5.5):
          * importance/recency must not let an irrelevant hit consume a slot
@@ -152,7 +149,8 @@ class Librarian private constructor(private val appContext: Context) {
                 var s = weights.similarity * sim +
                     weights.importance * (c.memory.importance / 5.0) +
                     weights.recency * c.recency
-                if (c.memory.provenanceConfidence.equals("tentative", ignoreCase = true)) s *= TENTATIVE_DAMPEN
+                // Provenance no longer influences ranking (Phase 2 review): a
+                // memory's confidence/source is not read into its score.
                 s += c.boost
                 ScoredMemory(c.memory, sim, s.toFloat())
             }
@@ -192,7 +190,7 @@ class Librarian private constructor(private val appContext: Context) {
                 var s = weights.similarity * relevance +
                     weights.importance * (mem.importance / 5.0) +
                     weights.recency * c.recency
-                if (mem.provenanceConfidence.equals("tentative", ignoreCase = true)) s *= TENTATIVE_DAMPEN
+                // Provenance no longer influences ranking (Phase 2 review).
                 s += c.boost
                 // No title bonus (§3.1): retrieval never rewards a title.
                 ScoredMemory(mem, relevance, s.toFloat())

@@ -87,9 +87,10 @@ class LibrarianRankingTest {
     }
 
     @Test
-    fun tentativeMemoriesAreDampened() {
+    fun provenanceConfidenceDoesNotAffectRanking() {
+        // Phase 2 review: provenance (confidence/source) is no longer read into
+        // the score. Two candidates identical but for confidence score equally.
         val query = floatArrayOf(1f, 0f, 0f)
-        // Identical vectors, importance, recency — only confidence differs.
         val ranked = Librarian.rank(
             query,
             listOf(
@@ -98,8 +99,7 @@ class LibrarianRankingTest {
             ),
             weights, topK = 10
         )
-        assertEquals("certain", ranked.first().memory.memoryId)
-        assertTrue(ranked[0].score > ranked[1].score)
+        assertEquals(ranked[0].score, ranked[1].score, 1e-6f)
     }
 
     @Test
@@ -256,14 +256,15 @@ class LibrarianRankingTest {
 
     @Test
     fun lexicalAppliesTheSameRankingContract() {
-        // Equal relevance: tentative is dampened, a scope boost orders the
-        // more specific entry first — the fallback must not bypass the
-        // approved ranking contract (§5.5).
+        // Equal relevance: provenance no longer affects the score (Phase 2
+        // review), so confidence does not reorder; a scope boost orders the more
+        // specific entry first — the fallback must not bypass the approved
+        // ranking contract (§5.5).
         val q = "remember the harvest festival"
         val certain = mem("certain", content = "the harvest festival")
         val tentative = mem("tentative", content = "the harvest festival", confidence = "tentative")
-        val dampened = Librarian.rankLexical(q, listOf(lex(tentative), lex(certain)), weights, topK = 5)
-        assertEquals("certain", dampened.first().memory.memoryId)
+        val same = Librarian.rankLexical(q, listOf(lex(tentative), lex(certain)), weights, topK = 5)
+        assertEquals("confidence must not change the lexical score", same[0].score, same[1].score, 1e-6f)
 
         val global = mem("global", content = "the harvest festival")
         val campaign = mem("campaign", scope = "campaign", content = "the harvest festival")

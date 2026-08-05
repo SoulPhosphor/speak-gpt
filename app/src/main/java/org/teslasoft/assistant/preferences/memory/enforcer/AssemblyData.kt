@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.preferences.memory.enforcer
 
+import org.teslasoft.assistant.preferences.memory.MemoryTypeMigration
+
 /**
  * Pure inputs to [PromptAssembler]. Everything here is plain data with JSON
  * already parsed into lists by the Android-side [Enforcer], so the renderer
@@ -40,18 +42,19 @@ package org.teslasoft.assistant.preferences.memory.enforcer
 data class AssembledMemory(
     val memoryId: String,
     val content: String,
-    /** told | observed | guessed — the one-word provenance marker. */
-    val provenanceMarker: String,
     val handling: List<String> = emptyList(),
     val neverAssume: List<String> = emptyList(),
     /** Librarian score; budget cuts remove the lowest first. */
     val score: Float = 0f,
     val similarity: Float = 0f,
-    /** The §5 Type. 'instruction' renders as a context rule (law 5), not a fact. */
-    val kind: String = "fact"
+    /** The memory's user-owned Type id (the source of truth), or null for No
+     *  Type. An Instruction-Type memory renders as a context rule (law 5), not a
+     *  fact. Keyed on the STABLE Instruction Type id, so a rename keeps the
+     *  behavior and reassigning to No Type ends it. */
+    val typeId: String? = null
 ) {
     val isProtected: Boolean get() = handling.isNotEmpty() || neverAssume.isNotEmpty()
-    val isInstruction: Boolean get() = kind.equals("instruction", ignoreCase = true)
+    val isInstruction: Boolean get() = typeId == MemoryTypeMigration.INSTRUCTION_TYPE_ID
 }
 
 /** A matched lore entry — the user's hand-written notes tier. */

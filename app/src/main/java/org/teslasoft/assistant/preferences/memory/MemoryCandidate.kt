@@ -65,10 +65,6 @@ sealed class MemoryCandidate {
      *  permanent provenance (no user_stated/inferred/certain/tentative,
      *  no source chat): the canonical memory keeps none (review finding 1). */
     abstract val origin: String
-    /** Optional roleplay card-placement suggestion (roleplay scopes only). */
-    abstract val suggestedCardType: String?
-    abstract val suggestedCardId: String?
-    abstract val suggestedSection: String?
 
     /** The memory's primary scope category. */
     abstract val scope: String
@@ -78,7 +74,8 @@ sealed class MemoryCandidate {
      * no companion field at all, so it can never carry hidden companion
      * targeting. Named targets (world / campaign / rp_character / project) ride
      * their own id lists and are multi-select, exactly as [MemoryRecord] models
-     * them.
+     * them. It carries NO analyzer card-placement suggestion (Phase 2 review):
+     * that metadata is not part of the approved response contract.
      */
     data class General(
         override val scope: String,
@@ -90,10 +87,7 @@ sealed class MemoryCandidate {
         val worldIds: List<String> = emptyList(),
         val campaignIds: List<String> = emptyList(),
         val roleplayCharacterIds: List<String> = emptyList(),
-        val projectIds: List<String> = emptyList(),
-        override val suggestedCardType: String? = null,
-        override val suggestedCardId: String? = null,
-        override val suggestedSection: String? = null
+        val projectIds: List<String> = emptyList()
     ) : MemoryCandidate()
 
     /**
@@ -112,10 +106,6 @@ sealed class MemoryCandidate {
         override val origin: String = "user"
     ) : MemoryCandidate() {
         override val scope: String get() = SCOPE_COMPANION
-        // A Companion memory is never placed on a roleplay lore card.
-        override val suggestedCardType: String? get() = null
-        override val suggestedCardId: String? get() = null
-        override val suggestedSection: String? get() = null
     }
 }
 
@@ -186,10 +176,7 @@ object MemoryCandidateValidator {
         campaignIds: List<String> = emptyList(),
         roleplayCharacterIds: List<String> = emptyList(),
         projectIds: List<String> = emptyList(),
-        companionTargetIds: List<String> = emptyList(),
-        suggestedCardType: String? = null,
-        suggestedCardId: String? = null,
-        suggestedSection: String? = null
+        companionTargetIds: List<String> = emptyList()
     ): CandidateResult<MemoryCandidate.General> {
         if (content.isBlank()) return CandidateResult.Invalid(CandidateError.EMPTY_CONTENT)
         if (scope == SCOPE_COMPANION) return CandidateResult.Invalid(CandidateError.GENERAL_SCOPE_IS_COMPANION)
@@ -207,10 +194,7 @@ object MemoryCandidateValidator {
                 worldIds = worldIds,
                 campaignIds = campaignIds,
                 roleplayCharacterIds = roleplayCharacterIds,
-                projectIds = projectIds,
-                suggestedCardType = suggestedCardType,
-                suggestedCardId = suggestedCardId,
-                suggestedSection = suggestedSection
+                projectIds = projectIds
             )
         )
     }

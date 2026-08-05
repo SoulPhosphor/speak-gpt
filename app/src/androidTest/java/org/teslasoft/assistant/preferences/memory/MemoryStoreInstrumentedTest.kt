@@ -373,6 +373,36 @@ class MemoryStoreInstrumentedTest {
         assertEquals(1, embeddingCount(store, "m-b"))
     }
 
+    @Test
+    fun instructionBehaviorKeysOnStableTypeId_renameKeepsIt_deleteEndsIt() {
+        // Item B: Instruction behavior is keyed on the stable Instruction Type
+        // id, carried through retrieval. Renaming the Type (id unchanged) keeps a
+        // memory behaving as an Instruction; deleting it (memory -> No Type) ends
+        // that behavior without touching the memory's content or lifecycle.
+        val store = open(freshDbName())
+        store.insertMemory(
+            mem("inst", scope = "global", typeId = MemoryTypeMigration.INSTRUCTION_TYPE_ID, status = "active")
+        )
+
+        fun retrievedTypeId(): String? =
+            store.activeMemoriesForScope(RetrievalScope.NONE).first { it.memoryId == "inst" }.typeId
+
+        // Retrieval carries the stable Type id (not the inert legacy kind).
+        assertEquals(MemoryTypeMigration.INSTRUCTION_TYPE_ID, retrievedTypeId())
+
+        // Rename the Instruction Type: the id does not change, so it still behaves
+        // as an Instruction.
+        store.renameMemoryType(MemoryTypeMigration.INSTRUCTION_TYPE_ID, "Directives")
+        assertEquals(MemoryTypeMigration.INSTRUCTION_TYPE_ID, retrievedTypeId())
+
+        // Delete the Instruction Type: the memory becomes No Type and stops
+        // behaving as an Instruction; its content and lifecycle are untouched.
+        store.deleteMemoryType(MemoryTypeMigration.INSTRUCTION_TYPE_ID)
+        assertNull(retrievedTypeId())
+        assertEquals("content of inst", store.getMemory("inst")!!.content)
+        assertEquals("active", store.getMemory("inst")!!.status)
+    }
+
     /* --------------- Phase 2: companion memory isolation (item 5) ----------- */
 
     @Test

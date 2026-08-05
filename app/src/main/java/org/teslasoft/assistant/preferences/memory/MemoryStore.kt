@@ -3665,7 +3665,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
         val sql = "SELECT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
             "m.importance, m.created_at, m.updated_at, m.world_id, m.provenance_confidence, " +
-            "m.protection_json, m.provenance_source, m.kind, m.tags_json " +
+            "m.protection_json, m.provenance_source, m.type_id, m.kind, m.tags_json " +
             "FROM memories m WHERE m.status = 'active' AND (" +
             branches.joinToString(" OR ") + ")"
         readableDatabase.rawQuery(sql, args.toTypedArray()).use {
@@ -3857,6 +3857,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         provenanceConfidence = c.getStringOrNull("provenance_confidence"),
         protectionJson = c.getStringOrNull("protection_json"),
         provenanceSource = c.getStringOrNull("provenance_source"),
+        typeId = c.getStringOrNull("type_id"),
         kind = c.getStringOrNull("kind") ?: "fact",
         tagsJson = c.getStringOrNull("tags_json") ?: "[]",
         updatedAt = c.getStringOrNull("updated_at")
@@ -3993,7 +3994,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         readableDatabase.rawQuery(
             "SELECT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
                 "m.importance, m.created_at, m.updated_at, m.world_id, m.provenance_confidence, " +
-                "m.protection_json, m.provenance_source, m.kind, m.tags_json " +
+                "m.protection_json, m.provenance_source, m.type_id, m.kind, m.tags_json " +
                 "FROM memories m WHERE m.status = 'active' AND NOT EXISTS " +
                 "(SELECT 1 FROM embeddings e WHERE e.memory_id = m.memory_id AND e.embedding_model = ?) " +
                 "ORDER BY m.created_at ASC",
@@ -5894,7 +5895,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         val db = readableDatabase
         val out = ArrayList<MemoryMatch.Existing>()
         db.rawQuery(
-            "SELECT memory_id, content, scope, kind, status FROM memories WHERE scope = ?",
+            "SELECT memory_id, content, scope, type_id, status FROM memories WHERE scope = ?",
             arrayOf(scope)
         ).use {
             while (it.moveToNext()) {
@@ -5905,7 +5906,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         memoryId = id,
                         content = it.getString(1),
                         scope = it.getString(2),
-                        kind = it.getString(3),
+                        typeId = if (it.isNull(3)) null else it.getString(3),
                         status = it.getString(4),
                         targetIds = allTargetIds(db, id)
                     )
@@ -5936,7 +5937,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     fun deterministicMatchesForDraft(draftId: String): List<MemoryMatch.Match> {
         val m = getMemory(draftId) ?: return emptyList()
         if (m.status != "draft") return emptyList()
-        val candidate = MemoryMatch.Candidate(m.content, m.scope, m.kind, unionTargets(m))
+        val candidate = MemoryMatch.Candidate(m.content, m.scope, m.typeId, unionTargets(m))
         return when (val o = MemoryMatch.classify(candidate, loadComparableLibrary(m.scope, excludeId = draftId))) {
             is MemoryMatch.Outcome.Possible -> o.matches
             else -> emptyList()

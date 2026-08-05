@@ -120,10 +120,35 @@ class PendingMemoryRecordFactoryTest {
         // Canonical Pending contract: a draft with no protection/handling fields.
         assertEquals("draft", record.status)
         assertNull(record.protectionJson)
+        // Legacy kind is inert: a new memory stores an empty kind, never a value
+        // derived from the Type (Phase 2 review, item B).
+        assertEquals("", record.kind)
+        // No analyzer card-placement metadata on a canonical candidate (item C).
+        assertNull(record.suggestedCardType)
+        assertNull(record.suggestedCardId)
+        assertNull(record.suggestedSection)
         // No MemoryRecord field exists to hold conversation policy / analysis
         // note / processing method — verify none leaked into a text field.
         org.junit.Assert.assertFalse(record.content.contains("policy"))
         org.junit.Assert.assertFalse(record.content.contains("note"))
+    }
+
+    @Test
+    fun generatedAnalyzerCandidateFilesWithNeutralImportanceAndTypeAuthority() {
+        // Item D: a generated (analyzer) candidate files with importance 0 — the
+        // model never proposes importance. Item B: the Type id carries through as
+        // the source of truth while the legacy kind stays empty.
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global",
+            content = "the user's cat is named Pixel",
+            typeId = "mtype-fact",
+            origin = "archivist"
+            // importance intentionally omitted — defaults to 0, never model-set.
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-imp", "2026-08-05T00:00:00Z")
+        assertEquals(0, record.importance)
+        assertEquals("mtype-fact", record.typeId)
+        assertEquals("", record.kind)
     }
 
     @Test

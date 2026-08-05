@@ -59,8 +59,18 @@ object MemoryTypeMigration {
         StarterType("mtype-preference", "Preference"),
         StarterType("mtype-event", "Event"),
         StarterType("mtype-status", "Status"),
-        StarterType("mtype-instruction", "Instruction")
+        StarterType(INSTRUCTION_TYPE_ID, "Instruction")
     )
+
+    /**
+     * The stable id of the starter Instruction Type. Instruction behavior (a
+     * memory rendered as a handling rule, law 5) is keyed on THIS id — never on
+     * the legacy `kind` string and never on the display name. So renaming the
+     * Instruction Type keeps its memories behaving as Instructions, and deleting
+     * it (their type_id becomes No Type) stops that behavior. The id never
+     * changes, by the same stable-id guarantee every Type has.
+     */
+    const val INSTRUCTION_TYPE_ID = "mtype-instruction"
 
     /** Legacy `kind` value → starter Type id. Only the five recognized
      *  starter kinds appear here; `lore` and everything else fall through to

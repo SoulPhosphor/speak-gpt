@@ -717,8 +717,13 @@ data class RetrievableMemory(
     // therefore never "forget" the HANDLE WITH CARE line).
     val protectionJson: String? = null,
     val provenanceSource: String? = null,
-    // Stage 3: the Type drives the render (Instruction memories become handling
-    // rules) and the tags feed soft ranking hints (§6 — never gatekeepers).
+    // The user-owned Type id is the source of truth for a memory's Type and
+    // drives the render: an Instruction-Type memory (typeId ==
+    // MemoryTypeMigration.INSTRUCTION_TYPE_ID) becomes a handling rule (law 5).
+    // The legacy [kind] is inert compatibility baggage — never behavior.
+    val typeId: String? = null,
+    // Legacy fixed-enumeration Type value. Carried for compatibility only; it no
+    // longer controls retrieval or prompt-assembly behavior (Phase 2 review).
     val kind: String = "fact",
     val tagsJson: String = "[]",
     // Phase A (counterplan §5.5): freshness ranks by the last edit, not only
