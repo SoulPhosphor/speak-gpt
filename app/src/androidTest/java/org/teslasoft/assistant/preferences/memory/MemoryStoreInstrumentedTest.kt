@@ -271,18 +271,19 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
-    fun editingContentPreservesACustomType() {
-        // Regression (item 2): a memory with a user-created custom Type must keep
-        // that Type through a content-only edit — the editor now saves the actual
-        // type_id verbatim rather than deriving it from a starter display key,
-        // which previously turned any custom Type into No Type on save.
+    fun updateMemoryPreservesACustomTypeThroughAContentChange() {
+        // Store-level persistence contract behind item 2. This does NOT drive
+        // MemoryEditorActivity; it exercises MemoryStore.updateMemory directly to
+        // prove the guarantee the editor depends on: a record carrying a
+        // user-created custom Type keeps its exact type_id when only its content
+        // changes. The editor's own fix (holding the real type_id rather than a
+        // starter display key) is verified by reading that code, not by this test.
         val store = open(freshDbName())
         store.upsertMemoryType(MemoryTypeRecord("mtype-pets", "Pets", "2026-08-04T00:00:00Z"))
         store.insertMemory(mem("m-1", scope = "global", typeId = "mtype-pets"))
 
         val prior = store.getMemory("m-1")!!
-        // The save path the fixed editor uses: only content changes; type_id is
-        // carried through unchanged.
+        // Only content changes; the custom type_id is carried through verbatim.
         store.updateMemory(prior.copy(content = "an edited fact", title = ""), null)
 
         assertEquals("mtype-pets", store.getMemory("m-1")!!.typeId)
