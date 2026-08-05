@@ -148,13 +148,13 @@ object MemorySeedCodec {
         }
 
         val memories = each(root, "memories").map { m ->
-            val legacyKind = m.str("kind") ?: ""
+            // A pre-Phase-1 backup carries a legacy `kind` and possibly a
+            // `title`. The kind is translated to the user-owned Type here and
+            // then discarded; titles are retired (§3.1) and never imported.
             MemoryRecord(
                 memoryId = m.reqStr("memory_id"),
                 scope = m.reqStr("scope"),
-                kind = legacyKind,
-                typeId = m.str("type_id") ?: MemoryTypeMigration.typeIdForLegacyKind(legacyKind),
-                title = m.str("title") ?: "",
+                typeId = m.str("type_id") ?: MemoryTypeMigration.typeIdForLegacyKind(m.str("kind")),
                 content = m.reqStr("content"),
                 embeddingText = m.str("embedding_text"),
                 tagsJson = m.arrText("tags"),
@@ -535,10 +535,10 @@ object MemorySeedCodec {
                     if (m.roleplayCharacterIds.isNotEmpty()) put("roleplay_character_ids", JSONArray(m.roleplayCharacterIds))
                     if (m.campaignIds.isNotEmpty()) put("campaign_ids", JSONArray(m.campaignIds))
                     if (m.projectIds.isNotEmpty()) put("project_ids", JSONArray(m.projectIds))
-                    // Legacy kind is written only when a pre-Phase-1 value is
-                    // still present (inert baggage); the Type of record is the
-                    // user-owned type_id. Titles are never exported (§3.1).
-                    if (m.kind.isNotEmpty()) put("kind", m.kind)
+                    // The user-owned type_id is the only Type representation.
+                    // Legacy kind and titles no longer exist in storage and are
+                    // never exported (§3.1/§5); old backups' values are
+                    // translated or discarded at import.
                     putIfNotNull("type_id", m.typeId)
                     put("content", m.content)
                     putIfNotNull("embedding_text", m.embeddingText)

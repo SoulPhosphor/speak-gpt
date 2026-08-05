@@ -101,30 +101,4 @@ object MemoryTypeMigration {
     fun isLegacyLore(kind: String?): Boolean =
         kind?.trim()?.equals("lore", ignoreCase = true) == true
 
-    /** Type id → seeded starter id, reversed. */
-    private val TYPE_ID_TO_LEGACY_KIND: Map<String, String> =
-        LEGACY_KIND_TO_TYPE_ID.entries.associate { (kind, id) -> id to kind }
-
-    /**
-     * The legacy `kind` string that corresponds to a [typeId] (Phase 1 Type
-     * transition, item 4). `type_id` is the SOLE Type authority; nothing in the
-     * runtime consults `kind` for behavior anymore — retrieval, prompt assembly,
-     * Possible-Match dedup, and Instruction rendering all key on `type_id`
-     * (Phase 2 review). This mapping now serves only backup import of pre-Phase-1
-     * rows and the manual editor's inert compatibility write; the canonical
-     * Pending filer stores an empty `kind`.
-     *
-     *  - a seeded starter Type id → its legacy string (`fact`, `preference`, …);
-     *  - No Type (null) → empty string;
-     *  - any user-created custom Type → empty string (no legacy equivalent
-     *    exists; the memory simply has no legacy kind).
-     *
-     * Because `kind` is always derived from `typeId` this way, a writer can
-     * never produce the forbidden `kind = fact` with `typeId = null`, nor a
-     * stale `typeId` paired with a freshly chosen `kind`.
-     */
-    fun legacyKindForTypeId(typeId: String?): String {
-        if (typeId == null) return ""
-        return TYPE_ID_TO_LEGACY_KIND[typeId] ?: ""
-    }
 }

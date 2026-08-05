@@ -286,7 +286,7 @@ class MemoryStoreInstrumentedTest {
 
         val prior = store.getMemory("m-1")!!
         // Only content changes; the custom type_id is carried through verbatim.
-        store.updateMemory(prior.copy(content = "an edited fact", title = ""), null)
+        store.updateMemory(prior.copy(content = "an edited fact"), null)
 
         assertEquals("mtype-pets", store.getMemory("m-1")!!.typeId)
         assertEquals("an edited fact", store.getMemory("m-1")!!.content)
@@ -670,11 +670,13 @@ class MemoryStoreInstrumentedTest {
                 }.invoke(store, "hand-written memory") as String))
     }
 
-    /* ----------- v24 migration: provenance columns removed (item 2) ------- */
+    /* -- v24/v25 migrations: provenance, kind, and title columns removed --- */
 
     @Test
-    fun freshDatabaseHasNoProvenanceColumns() {
+    fun freshDatabaseHasNoLegacyColumns() {
         val store = open(freshDbName())
+        assertFalse("kind must not exist", columnExists(store, "memories", "kind"))
+        assertFalse("title must not exist", columnExists(store, "memories", "title"))
         assertFalse("provenance_source must not exist",
             columnExists(store, "memories", "provenance_source"))
         assertFalse("provenance_confidence must not exist",
@@ -688,7 +690,7 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
-    fun upgradedDatabaseDropsProvenanceColumnsAndPreservesData() {
+    fun upgradedDatabaseDropsLegacyColumnsAndPreservesData() {
         val name = freshDbName()
         buildV20Database(name) { db ->
             db.insert("memories", null, ContentValues().apply {
@@ -719,13 +721,14 @@ class MemoryStoreInstrumentedTest {
             columnExists(store, "memories", "provenance_context"))
         assertFalse("source_chat_id dropped",
             columnExists(store, "memories", "source_chat_id"))
+        assertFalse("kind dropped", columnExists(store, "memories", "kind"))
+        assertFalse("title dropped", columnExists(store, "memories", "title"))
 
         val m = store.getMemory("m-legacy")!!
         assertEquals("content preserved", "important content", m.content)
         assertEquals("importance preserved", 4, m.importance)
         assertEquals("status preserved", "active", m.status)
         assertEquals("scope preserved", "global", m.scope)
-        assertEquals("kind preserved", "fact", m.kind)
         assertEquals("created_at preserved", "2026-07-01T00:00:00Z", m.createdAt)
         assertNotNull("type_id migrated", m.typeId)
 
@@ -787,8 +790,8 @@ class MemoryStoreInstrumentedTest {
         campaignIds: List<String> = emptyList(),
         roleplayCharacterIds: List<String> = emptyList()
     ) = MemoryRecord(
-        memoryId = id, scope = scope, kind = MemoryTypeMigration.legacyKindForTypeId(typeId),
-        title = "", content = "content of $id", embeddingText = null, tagsJson = "[]",
+        memoryId = id, scope = scope,
+        content = "content of $id", embeddingText = null, tagsJson = "[]",
         importance = importance, worldIds = worldIds, roleplayCharacterIds = roleplayCharacterIds,
         campaignIds = campaignIds, projectIds = emptyList(), protectionJson = null, modeHintsJson = "[]",
         createdAt = "2026-08-04T00:00:00Z", updatedAt = null, status = status,

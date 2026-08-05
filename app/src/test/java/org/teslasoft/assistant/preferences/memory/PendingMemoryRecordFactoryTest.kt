@@ -122,8 +122,7 @@ class PendingMemoryRecordFactoryTest {
         // Canonical Pending contract: a draft with no protection/handling fields.
         assertEquals("draft", record.status)
         assertNull(record.protectionJson)
-        // Legacy kind is inert (item B) and no card-placement metadata (item C).
-        assertEquals("", record.kind)
+        // No card-placement metadata (item C).
         assertNull(record.suggestedCardType)
         assertNull(record.suggestedCardId)
         assertNull(record.suggestedSection)

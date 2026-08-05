@@ -73,6 +73,7 @@ class MemoryFilterPanelActivity : FragmentActivity() {
     private var availableTags: List<String> = emptyList()
     private var availableScopes: Set<String> = emptySet()
     private var availableTypes: Set<String> = emptySet()
+    private var typeOptions: List<Pair<String, String>> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,6 +84,8 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         availableTags = intent.getStringArrayExtra(EXTRA_AVAILABLE_TAGS)?.toList() ?: emptyList()
         availableScopes = intent.getStringArrayExtra(EXTRA_AVAILABLE_SCOPES)?.toSet() ?: emptySet()
         availableTypes = intent.getStringArrayExtra(EXTRA_AVAILABLE_TYPES)?.toSet() ?: emptySet()
+        typeOptions = (intent.getStringArrayExtra(EXTRA_TYPE_OPTION_IDS) ?: emptyArray())
+            .zip(intent.getStringArrayExtra(EXTRA_TYPE_OPTION_NAMES) ?: emptyArray())
 
         actionBar = findViewById(R.id.action_bar)
         btnClose = findViewById(R.id.btn_close)
@@ -199,7 +202,9 @@ class MemoryFilterPanelActivity : FragmentActivity() {
 
         addMultiDropdownSection(
             root, getString(R.string.mem_edit_label_type),
-            options = TYPE_KEYS.map { it to typeLabel(it) },
+            // User-owned Types (§5): options are the current Type list (id →
+            // live name) passed in by the browser; nothing is hard-coded.
+            options = typeOptions,
             available = availableTypes,
             selection = MemoryBrowserFilterState.type
         )
@@ -355,25 +360,15 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         else -> R.string.mem_scope_rp_character
     })
 
-    private fun typeLabel(key: String): String = getString(when (key) {
-        "fact" -> R.string.mem_type_fact
-        "preference" -> R.string.mem_type_preference
-        "event" -> R.string.mem_type_event
-        "status" -> R.string.mem_type_status
-        "instruction" -> R.string.mem_type_instruction
-        else -> R.string.mem_type_lore
-    })
-
     companion object {
         const val EXTRA_AVAILABLE_TAGS = "availableTags"
         const val EXTRA_AVAILABLE_SCOPES = "availableScopes"
         const val EXTRA_AVAILABLE_TYPES = "availableTypes"
+        const val EXTRA_TYPE_OPTION_IDS = "typeOptionIds"
+        const val EXTRA_TYPE_OPTION_NAMES = "typeOptionNames"
 
         private val SCOPE_KEYS = listOf(
             "global", "real_life", "companion", "project", "world", "campaign", "rp_character"
-        )
-        private val TYPE_KEYS = listOf(
-            "fact", "preference", "event", "status", "instruction", "lore"
         )
     }
 }

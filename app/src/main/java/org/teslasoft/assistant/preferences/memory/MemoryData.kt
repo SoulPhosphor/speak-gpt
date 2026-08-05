@@ -422,17 +422,10 @@ data class MemoryRecord(
     // companion | project | world | campaign | rp_character. Targets ride the
     // link columns below (companion via memory_companions).
     val scope: String,
-    // Legacy fixed-enumeration Type value (fact|preference|event|status|
-    // instruction|lore). Phase 1 (§5) replaces this with the user-owned
-    // [typeId]; `kind` stays as inert compatibility baggage — it is no longer
-    // the source of truth for a memory's Type and must not drive product
-    // behavior. New memories carry an empty kind and their Type in [typeId].
-    val kind: String,
-    // Compatibility baggage only (§3.1): no Associative Memory has a title.
-    // Never generated, displayed, embedded, ranked, or exported in the revised
-    // memory path; kept solely because the legacy column is NOT NULL. New
-    // memories store an inert empty placeholder.
-    val title: String,
+    // The user-owned Type id ([typeId], below) is the sole Type authority
+    // (§5). The retired legacy `kind` and `title` columns were dropped from
+    // storage (DB v25); old backups' values are translated at import
+    // (kind → Type via MemoryTypeMigration) and titles are discarded (§3.1).
     val content: String,
     val embeddingText: String?,
     val tagsJson: String,                 // JSON array of strings
@@ -717,7 +710,6 @@ data class RetrievableMemory(
  */
 data class MemoryComparisonDoc(
     val memoryId: String,
-    val title: String,
     val content: String,
     val embeddingText: String?,
     val tagsJson: String

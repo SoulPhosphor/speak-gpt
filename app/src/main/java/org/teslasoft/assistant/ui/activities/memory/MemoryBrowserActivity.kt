@@ -61,6 +61,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
      *  Aug 3 2026 — an absent scope/type shows greyed and can't be picked). */
     @Volatile private var availableScopes: Set<String> = emptySet()
     @Volatile private var availableTypes: Set<String> = emptySet()
+    @Volatile private var typeOptions: List<Pair<String, String>> = emptyList()
 
     /** Draft count in the current (global or scoped) view, for the count line
      *  under the Memories | Pending toggle (owner design, July 8 2026
@@ -108,6 +109,8 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             .putExtra(MemoryFilterPanelActivity.EXTRA_AVAILABLE_TAGS, availableTags.toTypedArray())
             .putExtra(MemoryFilterPanelActivity.EXTRA_AVAILABLE_SCOPES, availableScopes.toTypedArray())
             .putExtra(MemoryFilterPanelActivity.EXTRA_AVAILABLE_TYPES, availableTypes.toTypedArray())
+            .putExtra(MemoryFilterPanelActivity.EXTRA_TYPE_OPTION_IDS, typeOptions.map { it.first }.toTypedArray())
+            .putExtra(MemoryFilterPanelActivity.EXTRA_TYPE_OPTION_NAMES, typeOptions.map { it.second }.toTypedArray())
         startActivity(intent)
         // Pair with the panel's slide-out on close so the transition matches.
         @Suppress("DEPRECATION")
@@ -206,9 +209,11 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
         availableTags = base.flatMap { parseTags(it.tagsJson) }.distinct().sortedBy { it.lowercase() }
         availableScopes = base.map { it.scope }.toSet()
-        // The legacy kind is a derived, inert shadow of the Type (item 4); a No
-        // Type memory carries a blank kind, which is not a filter option.
-        availableTypes = base.map { it.kind }.filter { it.isNotBlank() }.toSet()
+        // The filter is keyed on the user-owned Type id (§5); No Type is not a
+        // filter option. The full current Type list rides along so the panel
+        // can label ids with their live names.
+        availableTypes = base.mapNotNull { it.typeId }.toSet()
+        typeOptions = store.getMemoryTypes().map { it.typeId to it.name }
         pendingCount = base.count { it.status == "draft" }
 
         val f = MemoryBrowserFilterState
@@ -217,7 +222,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         // Titles are retired (§3.1): search the memory content only.
         if (q.isNotEmpty()) list = list.filter { it.content.lowercase().contains(q) }
         if (!isScoped() && f.scope.isNotEmpty()) list = list.filter { it.scope in f.scope }
-        if (f.type.isNotEmpty()) list = list.filter { it.kind in f.type }
+        if (f.type.isNotEmpty()) list = list.filter { it.typeId in f.type }
         // The mode toggle IS the draft split (owner design, July 8 2026
         // evening): Pending = drafts only; Memories = everything approved
         // (non-draft). Within Memories, the Superseded Memories filter (owner

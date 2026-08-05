@@ -37,10 +37,8 @@ package org.teslasoft.assistant.preferences.memory
  *    method — none of it is copied into the memory.
  *
  * The record carries only the approved memory fields needed for review and
- * later approval. The Type id is the sole Type authority; the legacy
- * [MemoryRecord.kind] and [MemoryRecord.title] columns are written as inert
- * empty placeholders, never derived from the Type. Pure Kotlin, unit tested
- * (PendingMemoryRecordFactoryTest).
+ * later approval. The Type id is the sole Type authority. Pure Kotlin, unit
+ * tested (PendingMemoryRecordFactoryTest).
  */
 object PendingMemoryRecordFactory {
 
@@ -84,12 +82,7 @@ object PendingMemoryRecordFactory {
         return MemoryRecord(
             memoryId = memoryId,
             scope = candidate.scope,
-            // The Type id is the sole source of truth (Phase 2 review): a new
-            // memory stores an inert empty legacy kind, never a value derived
-            // from the Type. Nothing reads kind for behavior anymore.
-            kind = "",
             typeId = candidate.typeId,
-            title = "",
             content = candidate.content,
             embeddingText = null,
             tagsJson = tagsToJson(candidate.tags),
