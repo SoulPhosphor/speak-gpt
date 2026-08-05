@@ -95,6 +95,42 @@ class ProfileImageStore private constructor(context: Context) {
         return result.hash
     }
 
+    /** What a backup-restore image import did: the content hash, and whether
+     *  THIS call created the file / the catalog row (so a rollback removes
+     *  only what the restore added and never touches pre-existing content). */
+    data class ImportedImage(val hash: String, val fileWasNew: Boolean, val catalogWasNew: Boolean)
+
+    /**
+     * Companion & Roleplay Backup restore (companion-roleplay-backup-plan.md
+     * §6.3 step 1): writes already-encoded JPEG bytes into the permanent
+     * store under their content hash and catalogs them. Purely additive —
+     * identical content dedupes onto the existing file, and adding never
+     * overwrites different content (hash-named files are content-stable).
+     * Returns null when the file could not be written; the caller must fail
+     * its restore rather than continue with a missing picture.
+     */
+    fun importEncodedImage(encodedJpegBytes: ByteArray): ImportedImage? {
+        val dir = permanentDir() ?: return null
+        val result = ProfileImageFileStore.writeEncodedImage(dir, encodedJpegBytes) ?: return null
+        val catalogWasNew = !db.contains(result.hash)
+        db.insertOrIgnore(result.hash, System.currentTimeMillis())
+        return ImportedImage(result.hash, result.wasNewFile, catalogWasNew)
+    }
+
+    /**
+     * Rolls back ONE [importEncodedImage] addition: removes the file and/or
+     * catalog row only when that import created them. Best-effort by design —
+     * a leftover hash-named file is harmless and reconciliation already
+     * handles orphans (§6.3 step 4).
+     */
+    fun removeRestoredImage(hash: String, removeFile: Boolean, removeCatalogRow: Boolean) {
+        if (removeFile) {
+            val dir = permanentDir() ?: return
+            ProfileImageFileStore.deleteImageFile(dir, hash)
+        }
+        if (removeCatalogRow) db.delete(hash)
+    }
+
     fun listNewestFirst(): List<ProfileImageRecord> = db.listNewestFirst()
 
     fun contains(hash: String): Boolean = db.contains(hash)

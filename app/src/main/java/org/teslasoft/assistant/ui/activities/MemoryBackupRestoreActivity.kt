@@ -63,6 +63,12 @@ import org.teslasoft.assistant.preferences.backup.DatabaseRepairManager
 import org.teslasoft.assistant.preferences.backup.DatabaseRestoreManager
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
 import org.teslasoft.assistant.preferences.backup.RecoveryFileNaming
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporter
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupManifest
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupValidator
+import org.teslasoft.assistant.preferences.backup.companion.CompanionRoleplayRestoreManager
+import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatBackup
@@ -78,20 +84,24 @@ import java.security.MessageDigest
 
 /**
  * "Memory Backup & Restore" — the Database Health & Backups screen. Section
- * order is owner-directed and EXACT (July 24 2026, supersedes the July 22
- * order): 1. Backup Status, 2. Database Health, 3. Recovery Backup,
- * 4. Human-Readable Chat Backup, 5. Portable Data Copy, 6. Automatic Backups,
- * 7. Reset. Backup Status leads because it's always current on open, unlike
- * Database Health's result lines which stay blank until the check button is
- * pressed. Do not reorder. The two backup LOCATIONS (manual vs automatic)
- * are kept separate.
+ * order is owner-directed and EXACT (August 5 2026, supersedes the July 24
+ * order — Companion & Roleplay Backup added directly after Portable Data
+ * Copy): 1. Backup Status, 2. Database Health, 3. Recovery Backup,
+ * 4. Human-Readable Chat Backup, 5. Portable Data Copy, 6. Companion &
+ * Roleplay Backup, 7. Automatic Backups, 8. Reset. Backup Status leads
+ * because it's always current on open, unlike Database Health's result lines
+ * which stay blank until the check button is pressed. Do not reorder. The
+ * two backup LOCATIONS (manual vs automatic) are kept separate.
  *
- * Three distinct systems live here and stay separate on screen (never
+ * Four distinct systems live here and stay separate on screen (never
  * conflated — owner directive):
  *  - Recovery Backup — the portable recovery package (RecoveryBackupActivity).
  *  - Human-Readable Chat Backup — a ZIP of chats as readable Text/JSON files.
  *  - Portable Data Copy — the readable JSON export/import of memory data
  *    (import does NOT restore chats; the description says so).
+ *  - Companion & Roleplay Backup — the ZIP disaster-recovery file for
+ *    companions, personas, prompts, and roleplay structure
+ *    (companion-roleplay-backup-plan.md; memories and lorebooks excluded).
  *
  * NO TOASTS anywhere in this workflow (owner rule): results and failures are
  * persistent inline status text or Material dialogs. Location lines show a
@@ -193,7 +203,15 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var btnPortableImport: MaterialButton? = null
     private var textPortableStatus: TextView? = null
 
-    // 6. Automatic Backups. The toggle and frequency dropdown are restored/
+    // 6. Companion & Roleplay Backup (companion-roleplay-backup-plan.md §4)
+    private var btnCompanionDownload: MaterialButton? = null
+    private var btnCompanionUpload: MaterialButton? = null
+    private var companionProgress: LinearLayout? = null
+    private var companionSpinner: CircularProgressIndicator? = null
+    private var companionProgressText: TextView? = null
+    private var textCompanionStatus: TextView? = null
+
+    // 7. Automatic Backups. The toggle and frequency dropdown are restored/
     // visible (owner ruling, July 22 2026) and persist the user's choice
     // ahead of the portable automatic WRITER existing (that piece is still
     // unbuilt - these controls don't make anything run on a schedule yet).
@@ -222,7 +240,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     // they cancel the picker, the toggle reverts to off.
     private var pendingEnableAfterPick = false
 
-    // 7. Reset
+    // 8. Reset
     private var btnReset: MaterialButton? = null
 
     private val importSeedLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -254,6 +272,16 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private val readableSaveLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri -> onReadableSaveAsResult(uri) }
+
+    // 6. Companion & Roleplay Backup (§4/§5/§6): Download Backup opens the
+    // system Save As picker; Upload Backup opens the system file picker.
+    private val companionExportLauncher = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri -> onCompanionExportDestination(uri) }
+
+    private val companionImportLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) onCompanionImportPicked(uri) }
 
     // Human-Readable Chat Backup selections + the staged, verified ZIP waiting
     // for its Save As destination (build-before-Save-As, same architecture as
@@ -363,6 +391,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnPortableImport = findViewById(R.id.btn_portable_import)
         textPortableStatus = findViewById(R.id.text_portable_status)
 
+        btnCompanionDownload = findViewById(R.id.btn_companion_download)
+        btnCompanionUpload = findViewById(R.id.btn_companion_upload)
+        companionProgress = findViewById(R.id.companion_backup_progress)
+        companionSpinner = findViewById(R.id.companion_backup_spinner)
+        companionProgressText = findViewById(R.id.companion_backup_progress_text)
+        textCompanionStatus = findViewById(R.id.text_companion_backup_status)
+
         switchAutoBackup = findViewById(R.id.switch_auto_backup)
         btnAutoFrequency = findViewById(R.id.btn_auto_frequency)
         textAutoLocation = findViewById(R.id.text_auto_location)
@@ -456,7 +491,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             exportLauncher.launch("memory-export-$stamp.json")
         }
 
-        /* ---- 6. Automatic Backups: enabled flag + frequency + destination
+        /* ---- 6. Companion & Roleplay Backup ---- */
+        btnCompanionDownload?.setOnClickListener { onCompanionDownload() }
+        btnCompanionUpload?.setOnClickListener {
+            companionImportLauncher.launch(arrayOf("*/*"))
+        }
+
+        /* ---- 7. Automatic Backups: enabled flag + frequency + destination
              drive the WorkManager job and the app-open catch-up check. A
              valid, writable destination is REQUIRED before enabling — flipping
              the toggle on with no folder opens the picker and completes the
@@ -476,7 +517,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             autoFolderPicker.launch(null)
         }
 
-        /* ---- 7. Reset (bottom) ---- */
+        /* ---- 8. Reset (bottom) ---- */
         btnReset?.setOnClickListener { showResetDialog() }
 
         refreshLocations()
@@ -1489,7 +1530,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         }
     }
 
-    /* ------------------------------ 6. automatic backups (frequency) ------------------------------ */
+    /* ------------------------------ 7. automatic backups (frequency) ------------------------------ */
 
     private fun initAutoFrequencySection() {
         // Remember the last-selected frequency across visits, the same way
@@ -1811,7 +1852,278 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         }
     }
 
-    /* ------------------------------ 6. reset (destructive) ------------------------------ */
+    /* ------------------------------ 6. companion & roleplay backup ------------------------------ */
+
+    /** Both buttons disable and the rotating indicator shows while working
+     *  (§4). The label is "Backing up…" or "Restoring…". */
+    private fun setCompanionBusy(labelRes: Int) {
+        btnCompanionDownload?.isEnabled = false
+        btnCompanionUpload?.isEnabled = false
+        companionProgress?.visibility = View.VISIBLE
+        companionSpinner?.visibility = View.VISIBLE
+        companionProgressText?.text = getString(labelRes)
+    }
+
+    private fun setCompanionIdle() {
+        btnCompanionDownload?.isEnabled = true
+        btnCompanionUpload?.isEnabled = true
+        companionProgress?.visibility = View.GONE
+    }
+
+    /** Persistent inline result under the buttons — never a toast. */
+    private fun setCompanionStatus(text: String) {
+        textCompanionStatus?.text = text
+        textCompanionStatus?.visibility = View.VISIBLE
+    }
+
+    /** The owner-provided full message for a restore failure (August 5,
+     *  2026): each internal cause maps to one complete, standalone sentence
+     *  — never assembled from a template + fragment. */
+    private fun companionFailMessage(reason: CompanionRoleplayRestoreManager.FailReason): String =
+        getString(
+            when (reason) {
+                CompanionRoleplayRestoreManager.FailReason.MEMORY_UNAVAILABLE ->
+                    R.string.companion_backup_err_needs_memory_repair
+                CompanionRoleplayRestoreManager.FailReason.LOREBOOK_UNAVAILABLE ->
+                    R.string.companion_backup_err_needs_lorebook_repair
+                CompanionRoleplayRestoreManager.FailReason.IMAGES_WRITE_FAILED,
+                CompanionRoleplayRestoreManager.FailReason.JOURNAL_WRITE_FAILED,
+                CompanionRoleplayRestoreManager.FailReason.DATABASE_WRITE_FAILED,
+                CompanionRoleplayRestoreManager.FailReason.SETTINGS_WRITE_FAILED ->
+                    R.string.companion_backup_err_restore_write_failed
+            }
+        )
+
+    /* ---------- export (Download Backup, §5) ---------- */
+
+    private fun onCompanionDownload() {
+        // Picker first (§4/§5 step 3): the user chooses where to save, then
+        // the archive is built and written there. nowIso is the same date
+        // source the Portable Data Copy file name uses.
+        val stamp = MemoryStore.nowIso().substring(0, 10)
+        companionExportLauncher.launch(CompanionBackupFormat.defaultFileName(stamp))
+    }
+
+    private fun onCompanionExportDestination(uri: Uri?) {
+        if (uri == null) return // cancelled: nothing changed, nothing to say
+        setCompanionBusy(R.string.companion_backup_backing_up)
+        runOffThread {
+            val staged = File(cacheDir, "companion_backup_stage_${System.nanoTime()}.zip")
+            // Collect/assemble first, in its own failure scope, so a read-side
+            // problem is never reported as a destination-write problem.
+            try {
+                val build = CompanionBackupExporter.buildBackupZip(this, staged)
+                val refusalMessage = when (build) {
+                    is CompanionBackupExporter.BuildResult.Ok -> null
+                    CompanionBackupExporter.BuildResult.MemoryUnavailable ->
+                        R.string.companion_backup_err_needs_memory_repair
+                    CompanionBackupExporter.BuildResult.LorebookUnavailable ->
+                        R.string.companion_backup_err_needs_lorebook_repair
+                }
+                if (refusalMessage != null) {
+                    runCatching { if (staged.exists()) staged.delete() }
+                    runOnUiThread {
+                        setCompanionIdle()
+                        showCompanionSaveFailed(refusalMessage)
+                    }
+                    return@runOffThread
+                }
+            } catch (e: Exception) {
+                runCatching { if (staged.exists()) staged.delete() }
+                try {
+                    MemoryLog.log(this, "CompanionBackup", "error",
+                        "Companion backup collection failed (${e.javaClass.simpleName}).")
+                } catch (_: Exception) { }
+                runOnUiThread {
+                    setCompanionIdle()
+                    showCompanionSaveFailed(R.string.companion_backup_err_data_unreadable)
+                }
+                return@runOffThread
+            }
+            try {
+                // Same write-then-verify contract as the readable chat backup:
+                // the destination only counts once its bytes hash identically.
+                val expectedSha = sha256(staged)
+                contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    staged.inputStream().use { it.copyTo(out) }
+                } ?: throw IllegalStateException("could not open destination")
+                val (actualSha, _) = contentResolver.openInputStream(uri)?.use { sha256WithSize(it) }
+                    ?: throw IllegalStateException("could not reopen destination")
+                if (!MessageDigest.isEqual(expectedSha, actualSha)) {
+                    discardReadableDestination(uri) // shared discard-unverified-destination helper
+                    runOnUiThread {
+                        setCompanionIdle()
+                        showCompanionSaveFailed(R.string.companion_backup_err_save_location_failed)
+                    }
+                    return@runOffThread
+                }
+
+                val where = BackupLocationDisplay.describeSaveAs(this, uri)
+                runOnUiThread {
+                    setCompanionIdle()
+                    val destination = where.breadcrumb ?: where.providerLabel
+                        ?: getString(R.string.backup_location_selected_generic)
+                    setCompanionStatus(getString(R.string.companion_backup_saved_to, destination))
+                }
+            } catch (e: Exception) {
+                discardReadableDestination(uri)
+                try {
+                    MemoryLog.log(this, "CompanionBackup", "error",
+                        "Companion backup save failed (${e.javaClass.simpleName}).")
+                } catch (_: Exception) { }
+                runOnUiThread {
+                    setCompanionIdle()
+                    showCompanionSaveFailed(R.string.companion_backup_err_save_location_failed)
+                }
+            } finally {
+                runCatching { if (staged.exists()) staged.delete() }
+            }
+        }
+    }
+
+    private fun showCompanionSaveFailed(messageRes: Int) {
+        showNoticeDialog(getString(messageRes))
+    }
+
+    /* ---------- restore (Upload Backup, §6) ---------- */
+
+    private fun onCompanionImportPicked(uri: Uri) {
+        setCompanionBusy(R.string.companion_backup_restoring)
+        runOffThread {
+            // §6.1 step 1: read the selected file completely into private
+            // staging; every later step works from this verified copy.
+            val staged = File(cacheDir, "companion_restore_stage_${System.nanoTime()}.zip")
+            try {
+                contentResolver.openInputStream(uri)?.use { input ->
+                    staged.outputStream().use { input.copyTo(it) }
+                } ?: throw IllegalStateException("could not open selected file")
+            } catch (_: Exception) {
+                runCatching { staged.delete() }
+                runOnUiThread {
+                    setCompanionIdle()
+                    showNoticeDialog(getString(R.string.companion_backup_err_damaged))
+                }
+                return@runOffThread
+            }
+
+            when (val verdict = CompanionBackupValidator.validate(staged)) {
+                CompanionBackupValidator.Verdict.WrongFile -> companionReject(staged, R.string.companion_backup_err_wrong_file)
+                CompanionBackupValidator.Verdict.NewerFormat -> companionReject(staged, R.string.companion_backup_err_newer)
+                CompanionBackupValidator.Verdict.Damaged -> companionReject(staged, R.string.companion_backup_err_damaged)
+                is CompanionBackupValidator.Verdict.Valid -> {
+                    val manifest = verdict.manifest
+                    // Known-impossible restores are refused BEFORE the §6.2
+                    // confirmation, so the user never confirms a replace that
+                    // was already doomed. Nothing has been touched.
+                    val preflight = CompanionRoleplayRestoreManager.preflightFailure(this, manifest)
+                    if (preflight != null) {
+                        runCatching { staged.delete() }
+                        runOnUiThread {
+                            setCompanionIdle()
+                            showNoticeDialog(companionFailMessage(preflight))
+                        }
+                        return@runOffThread
+                    }
+                    val needsConfirmation = CompanionRoleplayRestoreManager.hasExistingData(this)
+                    runOnUiThread {
+                        if (needsConfirmation) {
+                            showCompanionReplaceConfirmation(manifest, staged)
+                        } else {
+                            // Fresh install (§6.2): no confirmation needed.
+                            executeCompanionRestore(manifest, staged)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun companionReject(staged: File, messageRes: Int) {
+        runCatching { staged.delete() }
+        runOnUiThread {
+            setCompanionIdle()
+            showNoticeDialog(getString(messageRes))
+        }
+    }
+
+    /** §6.2/§9: one confirmation when any covered data already exists.
+     *  Cancel makes no changes. */
+    private fun showCompanionReplaceConfirmation(manifest: CompanionBackupManifest, staged: File) {
+        if (isFinishing) {
+            runCatching { staged.delete() }
+            return
+        }
+        // The spinner pauses while the question is up; the buttons stay
+        // disabled so a second flow can't start underneath the dialog.
+        companionProgress?.visibility = View.GONE
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.companion_backup_confirm_title)
+            .setMessage(R.string.companion_backup_confirm_body)
+            .setPositiveButton(R.string.companion_backup_confirm_replace) { _, _ ->
+                executeCompanionRestore(manifest, staged)
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->
+                runCatching { staged.delete() }
+                setCompanionIdle()
+            }
+            .setOnCancelListener {
+                runCatching { staged.delete() }
+                setCompanionIdle()
+            }
+            .show()
+    }
+
+    private fun executeCompanionRestore(manifest: CompanionBackupManifest, staged: File) {
+        setCompanionBusy(R.string.companion_backup_restoring)
+        setDatabaseMutationRunning(true)
+        runOffThread {
+            val result = try {
+                CompanionRoleplayRestoreManager.restore(this, manifest, staged)
+            } finally {
+                runCatching { staged.delete() }
+            }
+            runOnUiThread {
+                setDatabaseMutationRunning(false)
+                setCompanionIdle()
+                when (result) {
+                    is CompanionRoleplayRestoreManager.RestoreResult.Success -> {
+                        // §7: the other screens refresh through their existing
+                        // on-resume/change-listener paths; this screen's own
+                        // status rows refresh here.
+                        refreshBackupStatus()
+                        if (result.removedLinks.isEmpty()) {
+                            setCompanionStatus(getString(R.string.companion_backup_success))
+                        } else {
+                            showCompanionRestoreReport(result.removedLinks)
+                        }
+                    }
+                    is CompanionRoleplayRestoreManager.RestoreResult.Failed -> {
+                        refreshBackupStatus()
+                        showNoticeDialog(companionFailMessage(result.reason))
+                    }
+                }
+            }
+        }
+    }
+
+    /** §6.5/§9: the stay-until-dismissed report, matching the screen's
+     *  existing import-report pattern. Shown only when lorebook connections
+     *  were removed. */
+    private fun showCompanionRestoreReport(removedLinks: List<RemovedLorebookLink>) {
+        if (isFinishing) return
+        val lines = removedLinks.joinToString("\n") {
+            getString(R.string.companion_backup_report_line, it.companionLabel, it.lorebookName)
+        }
+        val body = getString(R.string.companion_backup_report_intro) + "\n\n" + lines +
+            "\n\n" + getString(R.string.companion_backup_report_footer)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.companion_backup_report_title)
+            .setMessage(body)
+            .setPositiveButton(R.string.btn_ok) { _, _ -> }
+            .show()
+    }
+
+    /* ------------------------------ 8. reset (destructive) ------------------------------ */
 
     private fun showResetDialog() {
         if (!MemoryStore.isProvisioned(this)) {
