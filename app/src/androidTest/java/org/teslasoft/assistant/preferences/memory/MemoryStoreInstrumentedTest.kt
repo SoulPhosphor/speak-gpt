@@ -494,7 +494,7 @@ class MemoryStoreInstrumentedTest {
         // chat identity and no transport marker in the stored row.
         val store = open(freshDbName())
         val candidate = (MemoryCandidateValidator.validateGeneral(
-            scope = "global", content = "a canonical fact", typeId = "mtype-fact", origin = "archivist"
+            scope = "global", content = "a canonical fact", typeId = "mtype-fact"
         ) as CandidateResult.Valid).candidate
         val record = PendingMemoryRecordFactory.build(candidate, "m-p", "2026-08-05T00:00:00Z")
         store.insertPendingMemory(record)
@@ -509,7 +509,9 @@ class MemoryStoreInstrumentedTest {
         assertNull("no provenance noted-on stored", stored.provenanceNotedOn)
         assertNull("no chat-name provenance stored", stored.provenanceContext)
         assertNull("no chat identity stored", stored.sourceChatId)
-        assertTrue("origin is authorship, not transport", stored.origin in setOf("user", "archivist", "seed"))
+        // The candidate carries no source authorship; the legacy origin column is
+        // the one fixed inert placeholder (item R2).
+        assertEquals(PendingMemoryRecordFactory.COMPAT_ORIGIN, stored.origin)
         // The stored draft is counted as Pending.
         assertTrue(store.countDrafts() >= 1)
     }
