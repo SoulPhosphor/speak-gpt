@@ -61,7 +61,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 22
+        private const val DATABASE_VERSION = 23
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -679,6 +679,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             "CREATE TABLE pending_companion_deletions (" +
                 "companion_id TEXT PRIMARY KEY, " +
                 "requested_at TEXT NOT NULL)"
+        )
+
+        // Generated Pending drafts (DB v23). A row here means "this Pending draft
+        // was produced by the Memory Assistant / computer analysis" — separate,
+        // non-memory bookkeeping so deleting it can record a content rejection
+        // (so a rerun does not refile the exact proposal) WITHOUT stamping any
+        // source/route metadata on the memory object itself. Manual Pending
+        // creation is never marked here, so it is never misclassified as a
+        // rejection. Device-local; cascades away with the memory it references.
+        db.execSQL(
+            "CREATE TABLE generated_pending_drafts (" +
+                "memory_id TEXT PRIMARY KEY REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                "created_at TEXT NOT NULL)"
         )
 
         // Lorebook suggestions (Step 1.7, DB v18): a Memory Assistant run in
@@ -1719,6 +1732,21 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "22")
+            )
+        }
+        if (oldVersion < 23) {
+            // v23 (Phase 2 review): separate non-memory bookkeeping that marks a
+            // Pending draft as Memory Assistant / computer generated, so deleting
+            // it records a content rejection without any source metadata on the
+            // memory object. Additive only.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS generated_pending_drafts (" +
+                    "memory_id TEXT PRIMARY KEY REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "created_at TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "23")
             )
         }
     }
@@ -4422,7 +4450,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      * active memory without review). Never writes protection (the filing path
      * does not emit handling fields).
      */
-    fun insertPendingMemory(m: MemoryRecord) {
+    fun insertPendingMemory(m: MemoryRecord, generated: Boolean = false) {
         require(m.status == "draft") { "Pending memories must be drafts" }
         val safe = m.copy(protectionJson = null)
         val db = writableDatabase
@@ -4433,10 +4461,29 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             // The canonical candidate carries no source authorship, so the
             // change-log actor is a fixed "user" — origin is not read here (R2).
             logChange(db, safe.memoryId, "user", "proposed", null, null)
+            // Route-aware, non-memory bookkeeping (Phase 2 review): a Memory
+            // Assistant / computer-generated draft is marked here (keyed by id, no
+            // metadata on the memory) so its deletion records a content rejection.
+            // Manual creation passes generated=false and is never marked.
+            if (generated) {
+                db.execSQL(
+                    "INSERT OR IGNORE INTO generated_pending_drafts (memory_id, created_at) VALUES (?, ?)",
+                    arrayOf(safe.memoryId, nowIso())
+                )
+            }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
+    }
+
+    /** True when a Pending draft was filed by the Memory Assistant / computer
+     *  analysis (marked in the separate generated_pending_drafts bookkeeping),
+     *  not by manual creation. Read inside the deletion transaction. */
+    private fun isGeneratedPendingDraftTx(db: SQLiteDatabase, memoryId: String): Boolean {
+        db.rawQuery(
+            "SELECT 1 FROM generated_pending_drafts WHERE memory_id = ?", arrayOf(memoryId)
+        ).use { return it.moveToFirst() }
     }
 
     /* -------- entities -------- */
@@ -5845,20 +5892,26 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     /** The delete body, callable from a resolution transaction (Save & Replace)
      *  as well as the standalone [deleteMemory]. */
     private fun deleteMemoryTx(db: SQLiteDatabase, memoryId: String) {
-        // Deleting a Memory Assistant DRAFT is a rejection (owner preference,
-        // July 9 2026): remember it so a rerun does not refile the exact same
-        // draft. Keyed on the memory CONTENT only (canonical recovery plan §3.2 /
-        // item 1): a memory never remembers which chat produced it, so the
-        // rejection carries no source-chat identity and no title (§3.1). The
-        // chat_key column stays for schema compatibility but is written empty.
-        // User-authored memories and non-draft deletions register nothing.
+        // Deleting a Memory Assistant / computer-generated DRAFT is a rejection
+        // (owner preference, July 9 2026): remember it so a rerun does not refile
+        // the exact same draft. Keyed on the memory CONTENT only (canonical
+        // recovery plan §3.2 / item 1): a memory never remembers which chat
+        // produced it, so the rejection carries no source-chat identity and no
+        // title (§3.1). The chat_key column stays for schema compatibility but is
+        // written empty. Whether the draft was generated is read from the separate
+        // generated_pending_drafts bookkeeping — NOT from any source field on the
+        // memory (the canonical record has none). Manual creation is never marked,
+        // so deleting a manual draft registers nothing.
         val prior = getMemory(memoryId)
-        if (prior != null && prior.status == "draft" && prior.origin == "archivist") {
+        if (prior != null && prior.status == "draft" && isGeneratedPendingDraftTx(db, memoryId)) {
             db.execSQL(
                 "INSERT OR REPLACE INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
                 arrayOf(draftContentHash(prior.content), "", nowIso())
             )
         }
+        // Clear the generated marker for this id (also handled by the FK cascade
+        // on the memories delete below; explicit here for clarity/robustness).
+        db.delete("generated_pending_drafts", "memory_id = ?", arrayOf(memoryId))
         // Supersession safety (Step 1.5): the legacy memories.supersedes column
         // is a plain reference with no ON DELETE rule, so a newer memory still
         // pointing here would block this delete — breaking the rule that a

@@ -50,13 +50,19 @@ class PendingMemoryFiler private constructor(private val appContext: Context) {
     /**
      * File [candidate] as a canonical Pending draft. Returns the new memory id.
      * Runs the store write on the caller's thread — call it off the main thread.
+     *
+     * [generated] is a route hint, not memory data: true for a Memory Assistant /
+     * computer-analysis proposal, false for manual creation. It records separate,
+     * id-keyed bookkeeping so a generated draft's deletion counts as a content
+     * rejection (no rerun refile) while a manual draft's does not. The canonical
+     * memory object itself never learns which route filed it.
      */
-    fun file(candidate: MemoryCandidate): String {
+    fun file(candidate: MemoryCandidate, generated: Boolean = false): String {
         val store = MemoryStore.getInstance(appContext)
         val record = PendingMemoryRecordFactory.build(
             candidate, MemoryStore.newId("m-"), MemoryStore.nowIso()
         )
-        store.insertPendingMemory(record)
+        store.insertPendingMemory(record, generated = generated)
         return record.memoryId
     }
 }

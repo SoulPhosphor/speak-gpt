@@ -434,6 +434,39 @@ class MemoryStoreInstrumentedTest {
         assertTrue(doc.contains("harvest festival"))
     }
 
+    @Test
+    fun generatedDraftDeletionRecordsRejection_manualDeletionDoesNot() {
+        // Phase 2 review item 2: deleting a Memory Assistant / computer-generated
+        // Pending draft records a content rejection (so a rerun does not refile
+        // the exact proposal), while deleting a MANUAL Pending draft does not —
+        // and the decision uses separate id-keyed bookkeeping, never a source
+        // field on the memory (the canonical record has none).
+        val store = open(freshDbName())
+
+        // 1. A generated Pending draft is filed.
+        store.insertPendingMemory(
+            mem("gen", scope = "global", status = "draft").copy(content = "the harvest festival"),
+            generated = true
+        )
+        assertFalse("not yet rejected", store.isDraftRejected("the harvest festival"))
+
+        // 2. The user deletes it.
+        store.deleteMemory("gen")
+        // 3. An exact rerun proposal is now rejected — the analyzer consults this
+        //    before filing, so it is not refiled.
+        assertTrue("deleting a generated draft records a content rejection",
+            store.isDraftRejected("the harvest festival"))
+
+        // 4. A MANUALLY filed Pending draft's deletion records NO rejection.
+        store.insertPendingMemory(
+            mem("man", scope = "global", status = "draft").copy(content = "a manual note"),
+            generated = false
+        )
+        store.deleteMemory("man")
+        assertFalse("deleting a manual draft must not record a rejection",
+            store.isDraftRejected("a manual note"))
+    }
+
     /* --------------- Phase 2: companion memory isolation (item 5) ----------- */
 
     @Test

@@ -926,7 +926,8 @@ object Archivist {
                 }
                 is CandidateResult.Valid -> {
                     try {
-                        val id = PendingMemoryFiler.getInstance(context).file(filingResult.candidate)
+                        val id = PendingMemoryFiler.getInstance(context)
+                            .file(filingResult.candidate, generated = true)
                         collectedIds.add(id)
                     } catch (e: Exception) {
                         MemoryLog.logAlways(context, "Archivist", "error", "draft insert failed: ${e.message}")
