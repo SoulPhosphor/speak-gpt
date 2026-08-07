@@ -332,6 +332,7 @@
     <string name="title_logs">Logs</string>
     <string name="btn_clear_log">Clear log</string>
     <string name="btn_copy_log">Copy / Export</string>
+    <string name="logs_newest_first">Newest First</string>
     <string name="label_log_copied">Log copied to clipboard</string>
     <string name="label_error_copied">Error copied to clipboard</string>
     <string name="label_log_empty">The log is empty</string>

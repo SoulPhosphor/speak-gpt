@@ -1655,6 +1655,20 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Log entry ordering for the Logs viewer. On (the default) shows each log
+     * newest entry first; off shows oldest first. Remembered app-wide so a
+     * person's chosen order carries across every log and across sessions until
+     * they flip it again.
+     */
+    fun getLogsNewestFirst() : Boolean {
+        return getGlobalBoolean("logs_newest_first", true)
+    }
+
+    fun setLogsNewestFirst(enabled: Boolean) {
+        putGlobalBoolean("logs_newest_first", enabled, true)
+    }
+
+    /**
      * Per-log retention settings (owner spec, July 23 2026). Each of the three
      * user-configurable diagnostic logs — Memory Diagnostics, Whisper
      * Performance, Memory Usage — carries its own independent "Maximum Logs
