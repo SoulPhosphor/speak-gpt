@@ -357,6 +357,8 @@ This is **one feature** under the root roadmap's “feature ships whole” rule.
 
 ### Stage F — verification before any completion claim
 
+**Automated-test credential boundary:** the automated suite must be fully runnable without any external provider credential, paid model account, or owner-supplied API key. Do not make live Archivist network calls from unit/instrumentation tests. Add the minimum test seam needed to supply deterministic fake Archivist responses and provider failures so request construction, existing-memory/target context, parsing, retries, transaction boundaries, and failure behavior can be exercised without a real service. Lack of an API key in the coding environment is **not** a blocker and must never trigger a request for the owner to provide one.
+
 Automated tests must cover at least:
 
 1. **Already known:** existing Active memory “favorite color is green”; conversation repeats green; no duplicate proposal reaches Pending.
@@ -382,7 +384,7 @@ Automated tests must cover at least:
 
 ### End-to-end device proof
 
-The repair is not complete until a real on-device test proves the changed-fact path end to end:
+The repair is not complete until a real on-device test proves the changed-fact path end to end. **This is the only verification step in this repair that may require a real provider call.** It uses an endpoint/model and credential already configured by the owner inside the app. The owner must never be asked to paste, export, commit, or otherwise expose that credential to a coding environment. If the coding environment cannot access the configured app credential or cannot perform the physical-device run, that does not block the automated test suite; the on-device proof is performed separately on the built app.
 
 1. save an Active memory such as `The user's favorite color is green.`;
 2. have a conversation that clearly changes it to purple;
