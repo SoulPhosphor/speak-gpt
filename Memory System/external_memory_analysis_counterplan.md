@@ -1,14 +1,33 @@
-# Speak-GPT Memory Systems: Canonical Recovery Plan
+# Speak-GPT Memory System: Current Memory-System Plan
 
 **Revision 24, 2026-08-04**
 
+> **Authority (owner ruling, 2026-08-07):** this is the current
+> memory-system plan — the binding record of the owner's approved
+> memory-system product decisions, required implementation order, and
+> completion gates, including everything already built under its Phases
+> 0-2. It governs memory-system product behavior and build order.
+> `project-plan.md` at the repository root remains the sole roadmap for
+> which feature is currently active to work on across the whole app; where
+> this document's phase list and that roadmap's feature list overlap,
+> `project-plan.md` governs scheduling.
+>
+> An unrelated, older document once shared this exact filename — Revision
+> 9, marked "ROADMAP SUPERSEDED" on 2026-08-03 in favor of
+> `project-plan.md`. To prevent any future confusion between the two, it
+> was renamed 2026-08-07 to
+> `legacy/external_memory_analysis_counterplan_revision_9_legacy.md`. This
+> document, at `Memory System/external_memory_analysis_counterplan.md`,
+> begins at Revision 24 the following day and does not continue or
+> reference that file's numbering.
+>
 > **Read `revision_25_binding_clarifications.md` with this document.** It is
 > binding wherever this text disagrees with it — notably: no protected
 > companion capacity (Memory Priority is the only approved competition
 > mechanism), the chunk token values are decided, the bookmark architecture
 > is decided, and a Companion memory targets exactly one companion.
 
-This is the active memory-system plan. It records the owner's decisions, the required implementation order, the archiver contract, companion-memory behavior, conversation-level memory policies, and the completion gates for each phase. Existing code is evidence of what was built, not proof that the behavior was approved.
+This document records the owner's approved memory-system decisions: the required implementation order, the archiver contract, companion-memory behavior, conversation-level memory policies, and the completion gates for each phase. Existing code is evidence of what was built, not proof that the behavior was approved.
 
 ## 1. Product Goal
 

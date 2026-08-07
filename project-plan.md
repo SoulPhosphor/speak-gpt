@@ -405,8 +405,8 @@ creation. Ask the owner before writing any terminal-state wording.
 - The result contract references targets by stable ID only; the importer
   validates IDs against the exported catalog and current state. **Note:**
   the two bullets above predate and conflict with the binding rejection of
-  permanent memory provenance (canonical plan §3.2, §8.10;
-  `revision_25_binding_clarifications.md` §5) — "provenance stamping" and
+  permanent memory provenance (`external_memory_analysis_counterplan.md`
+  §3.2, §8.10; `revision_25_binding_clarifications.md` §5) — "provenance stamping" and
   evidence (package item ID, frozen conversation row IDs, a short excerpt)
   may be used only to validate a proposal at import time and must never be
   written onto the resulting Pending or Active memory. A memory never

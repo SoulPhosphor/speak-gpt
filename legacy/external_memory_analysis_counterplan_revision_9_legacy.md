@@ -1,11 +1,23 @@
-# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 9, numbered phases) (ROADMAP SUPERSEDED)
+# External Memory Analysis + RAG Compatibility — Counter Plan (Revision 9, numbered phases) (SUPERSEDED — HISTORICAL ONLY)
 
-> **The roadmap in this file (Phases 1–4, Steps 1.1–1.7, §10, §15) is
-> superseded (2026-08-03)** by `project-plan.md` at the repository root —
-> the single active plan. The technical audit material here (verified
-> findings, package/import contracts, RAG corrections) remains valid
-> reference for the stages that cite it. Do not pick work from this file's
-> step lists.
+> **⚠️ SUPERSEDED HISTORICAL DOCUMENT — do not use for implementation.**
+> This is Revision 9 of a now-retired plan, archived here 2026-08-03 in
+> favor of `project-plan.md` at the repository root, the single active
+> roadmap. It was renamed to `external_memory_analysis_counterplan_revision_9_legacy.md`
+> (2026-08-07) specifically so it can never be confused with the unrelated,
+> later document of the similar name that is the actual current
+> memory-system plan: `Memory System/external_memory_analysis_counterplan.md`
+> (Revision 24, begun 2026-08-04 — the day after this file was archived,
+> with its own unrelated revision numbering). That is the file to read and
+> implement from for anything memory-system-related; this one is not.
+>
+> The roadmap in this file (Phases 1–4, Steps 1.1–1.7, §10, §15) is
+> superseded. The technical audit material here (verified findings,
+> package/import contracts, RAG corrections) remains valid historical
+> reference only for the stages that cite it. Do not pick work from this
+> file's step lists, and do not treat any schema, field, or behavior
+> described below as current — consult `Memory System/external_memory_analysis_counterplan.md`
+> and `MemoryStore.kt`'s `onCreate`/`onUpgrade` for what is actually live.
 
 > **Agents: this file is not for the owner.** The owner reads
 > `plan_one_page.md` in this folder — nothing else. Never send her here,

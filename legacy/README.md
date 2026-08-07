@@ -19,9 +19,13 @@ not by reading the whole folder.
 - **`plan_one_page.md`** — the former single-page owner-facing plan and
   ruling record. Every still-binding ruling it held was copied into
   `project-plan.md`. Superseded.
-- **`external_memory_analysis_counterplan.md`** — the "Steps 1.1–1.7"
-  roadmap for the computer-review and RAG-correctness work, including the
-  full technical audit of the retrieval/enforcer engine and the detailed
+- **`external_memory_analysis_counterplan_revision_9_legacy.md`** (renamed
+  2026-08-07 from `external_memory_analysis_counterplan.md` — an unrelated,
+  later document reuses that exact filename at
+  `Memory System/external_memory_analysis_counterplan.md`; the rename
+  keeps the two from ever being confused) — the "Steps 1.1–1.7" roadmap
+  for the computer-review and RAG-correctness work, including the full
+  technical audit of the retrieval/enforcer engine and the detailed
   `.sgmemory` package/import contract (§9). Its roadmap is superseded by
   `project-plan.md`; its technical detail (package layout, incremental
   full/delta exchange, encryption/lost-key behavior) is the deepest
