@@ -40,9 +40,11 @@ As of current `main`, the repair starts from these existing foundations:
 - Pending browser and the approved review flow;
 - `Save & Edit Old Memory`, `Save & Supersede`, and `Save & Replace` atomic resolution actions;
 - supersession history that records which new memory superseded which old memory and the exact `at` timestamp;
-- durable Archivist run records, transcript claim sealing, and interrupted-run reconciliation that can be reused while replacing the old permanent per-row processed-state model.
+- durable Archivist run records, transcript claim sealing, and interrupted-run reconciliation that can be reused as supporting machinery for Stage B.
 
-These are dependencies, not future phases. Do not rebuild, redesign, or re-audit them unless a specific failing behavior is encountered while wiring the repair.
+**The durable per-chat bookmark does not exist yet.** Stage B adds new persisted bookmark state, new eligibility logic, and the migration/cutover from the current per-row review-state model. Reusing the existing run/claim/recovery machinery does not make the bookmark work a wiring-only change.
+
+These existing foundations are dependencies, not future phases. Do not rebuild, redesign, or re-audit them unless a specific failing behavior is encountered while wiring the repair.
 
 ## 2. Verified defects this repair must correct
 
@@ -64,6 +66,8 @@ The current Archivist can file drafts from an earlier successful chunk and then 
 ### 2.3 Bookmark/run-state dependency was placed too late
 
 The approved target remains **one durable bookmark per chat plus minimal temporary run state**. The previous plan asked earlier archiver phases to behave correctly on failure/process death while postponing the durable bookmark machinery until a later phase. That order was invalid. Bookmark/frozen-range behavior is foundation work for the repaired archiver, not late polish.
+
+This is the largest net-new state-management change in the repair: the current product has durable run/claim/recovery support, but it has no durable per-chat bookmark and currently derives eligibility from per-row `review_status` / `processed_at` state. Stage B therefore includes schema, migration, eligibility, and one-way cutover work. The implementation must not leave bookmark state and legacy per-row review state competing indefinitely as two runtime authorities.
 
 ### 2.4 The standalone Phase 3 evaluation harness is not part of the product path
 
@@ -138,17 +142,18 @@ Before each Associative Memory Archivist request:
 1. Use the conversation text itself for local retrieval. Do not spend an LLM call generating a search query.
 2. Apply actual scope and target eligibility before ranking.
 3. Respect Companion target isolation. A segment associated with one companion must never retrieve another companion's private memories unless an already-approved eligibility rule explicitly allows it.
-4. Respect the real-life / roleplay wall and the stamped scene context captured on transcript rows. Do **not** assign one companion/world/campaign/project context to an entire chat merely because it appears first. If one network chunk contains transcript rows with different stamped scene contexts, evaluate retrieval separately for those scene-consistent segments and combine only the bounded results that are valid for the corresponding segment. The implementation may instead split the network chunk at a scene boundary when that is simpler and stays within the approved cost behavior.
-5. Retrieve Active Associative Memories only for the pre-extraction context. Existing Pending/Archived/Superseded items remain protected by deterministic duplicate checks and Possible Match after extraction rather than being dumped into every Archivist prompt.
-6. Initial prompt target: **up to 10 highest-relevance memories**. The local retrieval step may examine/union a slightly broader bounded set, with a hard ceiling of 15 prompt candidates, when needed to preserve recall across a multi-topic chunk. The prompt includes only as many complete memories as fit the reserved input budget. Never truncate a memory into a misleading fragment merely to hit the count.
-7. Multi-topic chunks must not silently collapse retrieval onto only the dominant topic. If a single whole-chunk query demonstrably misses a separately discussed topic with a strong relevant existing memory, use bounded local message/window searches and union/deduplicate their results under the same 10/15 prompt ceiling. This is still local retrieval and does not add a paid model call.
-8. Reuse the Librarian's eligibility, embedding, vector-index, lexical-fallback, and ranking machinery. **Do not blindly inherit live chat-injection policy as the reconciliation policy.** Live cooldowns, live memory count/token limits, Memory Priority, and other delivery controls must not become hard gates for Archivist awareness. Reconciliation is relevance-first: importance/recency/context boosts may break close ties, but they must not cause a materially stronger semantic or lexical match to be omitted in favor of a weaker one.
-9. Send only fields needed for reasoning:
+4. Respect the real-life / roleplay wall and the stamped scene context captured on transcript rows. The current transcript schema already carries the relevant scene identity fields used by this repair, including companion, world, campaign, roleplay-character, and project IDs. Do **not** assign one companion/world/campaign/project context to an entire chat merely because it appears first. If one network chunk contains transcript rows with different stamped scene contexts, evaluate retrieval separately for those scene-consistent segments and combine only the bounded results that are valid for the corresponding segment. The implementation may instead split the network chunk at a scene boundary when that is simpler and stays within the approved cost behavior.
+5. Scene identity governs the whole repaired Associative path, not retrieval alone. The same stamped segment context must govern the prompt context, valid target catalog, returned-target validation, and final filing/placement. A proposal must never inherit a Companion / Project / World / Campaign / RP Character identity merely because a different transcript segment in the same chat carried it first.
+6. Retrieve Active Associative Memories only for the pre-extraction context. Existing Pending/Archived/Superseded items remain protected by deterministic duplicate checks and Possible Match after extraction rather than being dumped into every Archivist prompt.
+7. Initial prompt target: **up to 10 highest-relevance memories**. The local retrieval step may examine/union a slightly broader bounded set, with a hard ceiling of 15 prompt candidates, when needed to preserve recall across a multi-topic chunk. The prompt includes only as many complete memories as fit the reserved input budget. Never truncate a memory into a misleading fragment merely to hit the count.
+8. Multi-topic chunks must not silently collapse retrieval onto only the dominant topic. If a single whole-chunk query misses a separately discussed topic whose fixture/local score establishes a strong relevant existing memory, use bounded local message/window searches and union/deduplicate their results under the same 10/15 prompt ceiling. This is still local retrieval and does not add a paid model call.
+9. Reuse the Librarian's eligibility, embedding, vector-index, lexical-fallback, and ranking machinery. **Do not blindly inherit live chat-injection policy as the reconciliation policy.** Live cooldowns, live memory count/token limits, Memory Priority, and other delivery controls must not become hard gates for Archivist awareness. Reconciliation is relevance-first. Importance/recency/context signals may be bounded tie-breakers, but a test fixture whose base semantic/lexical relevance advantage is greater than the maximum possible tie-break contribution must remain ahead of the weaker candidate. This defines the pass/fail property without freezing one arbitrary similarity number into the product contract.
+10. Send only fields needed for reasoning:
    - request-local memory reference;
    - complete memory text;
    - actual scope/target;
    - visible Type name or No Type when useful.
-10. Do not send importance, provenance, source chat, run metadata, embedding values, or hidden ranking scores to the Archivist.
+11. Do not send importance, provenance, source chat, run metadata, embedding values, or hidden ranking scores to the Archivist.
 
 The current Mem0 V3 pipeline is the architecture reference for this bounded pre-retrieval pattern: it embeds the new messages, vector-searches existing memory with `top_k=10`, and includes those existing memories in a single extraction call. Speak-GPT borrows the architecture only; no Mem0 code or dependency is required.
 
@@ -212,7 +217,15 @@ This temporary list:
 - is removed with run state;
 - exists only to reduce duplicate/conflicting output across chunk boundaries.
 
-After all chunks succeed, perform deterministic exact deduplication again before visible filing. The staged collection must also detect a clear same-run correction/contradiction between proposed items well enough that two ordinary, unflagged drafts are not silently filed as simultaneous truths. This may use the existing local comparison machinery; it does not require a second model-assisted consolidation pass.
+After all chunks succeed, perform deterministic exact deduplication again before visible filing.
+
+The local same-run correction requirement is intentionally narrower than general natural-language contradiction detection. The app is required to prevent two candidates from being filed as unrelated ordinary drafts only when existing local evidence can identify that they concern the same memory subject/placement, for example when:
+
+- they resolve to the same scope/target/Type identity and the existing exact/semantic comparison machinery marks them as a match; or
+- they both link to the same supplied existing-memory ID; or
+- another deterministic relationship already available in the repaired path establishes that they are competing versions of the same item.
+
+When that local relationship is established, a later correction/contradiction must not leave both candidates as two unflagged simultaneous truths. Use deterministic deduplication or the existing Possible Match/review path as appropriate. **Do not attempt to build a general semantic contradiction engine.** If the local machinery cannot establish that two proposals concern the same item, keep them as ordinary human-reviewable proposals rather than inventing a relationship or adding another model call.
 
 ## 4. Bookmark, frozen range, migration, and transaction rules
 
@@ -249,7 +262,15 @@ Before initializing bookmarks:
 
 This preserves every currently pending item exactly once while avoiding a paid replay of already-reviewed history.
 
-The old per-row columns may remain temporarily as migration/recovery scaffolding while Stage B is being proven, but after the bookmark path is live they must not remain a second competing source of eligibility truth.
+### 4.2 One-way eligibility cutover
+
+Stage B must make the source-of-truth transition explicit and testable.
+
+- The legacy transcript review columns may be read while deriving the initial bookmark and may remain physically present afterward for compatibility, history, or temporary recovery scaffolding.
+- Before the new runtime eligibility path is enabled, bookmark initialization must have completed successfully for the store. Use a durable schema/meta migration marker or an equivalent one-way guard so an interrupted migration cannot leave the app guessing which eligibility model is authoritative.
+- **After that migration marker is complete, ordinary analysis eligibility is derived from the per-chat bookmark plus transient frozen-range/claim state only.** Legacy `review_status` / `processed_at` values must not remain a second gate, fallback, union, or competing authority for what the API Memory Assistant analyzes.
+- `claim_run_id` or replacement short-lived claim state may continue to seal work in progress; that is concurrency/run state, not a second permanent eligibility source.
+- Do not keep a long-lived runtime window in which both models independently decide eligibility. If an implementation temporarily needs both during migration, the choice of authority must be explicit and one-way, never inferred from whichever table happens to return rows.
 
 ## 5. Chunking and request budget
 
@@ -317,8 +338,10 @@ This is **one feature** under the root roadmap's “feature ships whole” rule.
 
 ### Stage B — bookmark and frozen-run foundation
 
-- Reuse the existing durable run/claim/recovery machinery where it already satisfies this contract.
-- Implement/migrate to one durable bookmark per chat using the contiguous-prefix migration rule in §4.1.
+- Treat Stage B as **new bookmark schema + migration + eligibility logic**, built on reusable run/claim/recovery machinery. Do not describe or implement it as wiring only.
+- Reuse the existing durable run/claim/recovery machinery only where it already satisfies this contract.
+- Implement one durable bookmark per chat using the contiguous-prefix migration rule in §4.1.
+- Implement the guarded one-way eligibility cutover in §4.2. Once bookmark migration is complete, legacy per-row processed/review state is no longer a runtime eligibility authority.
 - Freeze and seal each chat range independently.
 - Make the user-visible commit boundary per frozen chat range, not per chunk and not all selected chats as one giant transaction.
 - Stage every user-visible Associative output stream, including Model Rule drafts, until that chat range succeeds.
@@ -328,7 +351,8 @@ This is **one feature** under the root roadmap's “feature ships whole” rule.
 
 - Reuse the Librarian's existing local eligibility/vector/lexical machinery rather than creating a new retrieval engine.
 - Add an Archivist/reconciliation retrieval path or policy where needed so live chat-delivery settings do not become inappropriate reconciliation gates.
-- Respect transcript-stamped scene context when retrieving; do not infer one context for the whole chat from the first row.
+- Use the transcript rows' already-stamped companion/world/campaign/roleplay-character/project context. Do not infer one context for the whole chat from the first row.
+- Make scene/context correctness cover retrieval, prompt construction, target-catalog eligibility, and returned-target validation.
 - Retrieve the bounded relevant set before each Associative Memory Archivist call.
 - Assemble the bounded valid target catalog before the call.
 - Render existing-memory and target references through the app-owned protocol envelope, using request-local aliases if useful, and normalize them back to stable IDs after parsing.
@@ -339,7 +363,8 @@ This is **one feature** under the root roadmap's “feature ships whole” rule.
 
 - Hold validated memory and Model Rule candidates in temporary run state until the frozen chat range succeeds.
 - Carry bounded earlier candidates forward between chunks for duplicate/correction prevention.
-- Exact-deduplicate after collection and prevent clear same-run contradictions from becoming two ordinary unflagged drafts.
+- Exact-deduplicate after collection and apply the **narrow local same-run correction rule in §3.7**. Do not build a general contradiction detector.
+- Make filing/placement use the same stamped scene context and validated target identity that governed the proposal. Never derive Companion or other named placement from the first matching row in the entire chat.
 - Feed AI relationship hints plus existing deterministic/semantic checks into the existing Possible Match path.
 - File the complete valid set through the canonical Pending/model-rule draft paths only after success, with rollback/no bookmark advance if the chat-range commit fails.
 - Preserve the existing user-controlled resolution actions.
@@ -365,24 +390,27 @@ Automated tests must cover at least:
 2. **Changed fact:** existing Active memory says green; conversation clearly says favorite color is purple now; the Archivist receives the green memory, creates the purple proposal, links the old ID, and the existing green memory is surfaced for Review.
 3. **New unrelated fact:** no relevant existing memory; new proposal reaches ordinary Pending without a fabricated conflict.
 4. **Companion isolation:** a Companion memory for one companion is never supplied as existing-memory context for another companion unless an already-approved eligibility rule explicitly permits it.
-5. **Scene transition:** one chat changes companion/project/world/campaign context inside the frozen range; retrieval honors each transcript row's stamped scene context and does not apply the first row's context to the whole chat.
+5. **Scene transition end to end:** one chat changes companion/project/world/campaign context inside the frozen range; retrieval, prompt target catalog, returned-target validation, and final filing/placement all honor the correct transcript segment's stamped context. No proposal may inherit the first row's context merely because it occurs earlier in the chat.
 6. **Multiple topics:** one chunk containing several memorable topics does not stop after the first.
-7. **Multi-topic retrieval recall:** when two distinct topics in one chunk each have a strong relevant existing memory and both fit the bounded context, both are available to the Archivist rather than only the dominant topic's memory.
+7. **Multi-topic retrieval recall:** create two disjoint topic windows in one chunk, each with one deliberately high-relevance eligible existing-memory fixture, with both fitting inside the bounded prompt cap. Both memories must be available to the Archivist. This is the concrete pass/fail case for preventing dominant-topic collapse.
 8. **Multi-chunk duplicate prevention:** repeated information across chunk boundaries does not create duplicate visible drafts.
-9. **Same-run correction:** an earlier chunk proposes one state and a later chunk clearly corrects it; the final filing does not contain two ordinary unflagged contradictory drafts.
+9. **Same-run correction, locally established:** an earlier chunk proposes one state and a later chunk proposes a correction for the same locally identified memory subject/placement, established by the conditions in §3.7. The final filing must not contain both as two unrelated ordinary drafts. The test does not require detection of arbitrary semantic contradiction when no local relationship can be established.
 10. **Late chunk failure:** if an earlier chunk succeeds and the final required chunk fails, that frozen chat range leaves no new visible Memory or Model Rule drafts and its bookmark does not advance.
 11. **Multi-chat partial run:** one selected chat succeeds and another fails; the successful chat commits/advances independently while the failed chat commits nothing and keeps its bookmark.
 12. **Cancellation/process interruption:** bookmark remains truthful and no material is silently skipped.
 13. **Bookmark migration gap:** processed/excluded history followed by a pending gap and then later terminal rows initializes before the gap; no pending row is skipped and no already-terminal history is unnecessarily re-analyzed.
-14. **Embedding unavailable/incomplete:** bounded lexical fallback is used; the entire database is never sent to the paid model.
-15. **Reconciliation policy:** a materially stronger old-memory match is not displaced solely by live delivery settings, importance, recency, cooldown, or Memory Priority.
-16. **Target catalog:** a valid supplied target resolves to its stable ID; an unknown/stale target cannot silently become another target or auto-create a record.
-17. **Custom prompt compatibility:** a saved custom extraction prompt still receives/enforces the current app-owned output/target/existing-memory protocol and produces parseable normalized candidates.
-18. **Prompt-injection resistance:** instructions embedded inside transcript text or existing-memory content cannot replace the Archivist protocol or cause direct mutation.
-19. **Supersession:** Save & Supersede records the relationship/timestamp and the Superseded/history surface can show the recorded date.
-20. **Existing Possible Match safety:** a locally detected semantic match still reaches Review even if the Archivist omitted its relationship reference.
+14. **Post-migration single source of truth:** after the durable bookmark migration marker is complete, changing legacy `review_status` / `processed_at` values alone cannot make already-bookmarked history eligible again or hide post-bookmark eligible history. Bookmark + transient claim/frozen-range state controls runtime eligibility.
+15. **Embedding unavailable/incomplete:** bounded lexical fallback is used; the entire database is never sent to the paid model.
+16. **Reconciliation relevance precedence:** construct eligible memories A and B so A's base semantic/lexical relevance advantage is greater than the maximum possible configured tie-break contribution, while B has the stronger importance/recency/context tie-break values. A must still rank ahead of B. Live cooldown, Memory Priority, and live memory count/token settings must not exclude A from reconciliation eligibility.
+17. **Target catalog:** a valid supplied target resolves to its stable ID; an unknown/stale target cannot silently become another target or auto-create a record.
+18. **Custom prompt compatibility:** a saved custom extraction prompt still receives/enforces the current app-owned output/target/existing-memory protocol and produces parseable normalized candidates.
+19. **Prompt-injection resistance:** instructions embedded inside transcript text or existing-memory content cannot replace the Archivist protocol or cause direct mutation.
+20. **Supersession:** Save & Supersede records the relationship/timestamp and the Superseded/history surface can show the recorded date.
+21. **Existing Possible Match safety:** a locally detected semantic match still reaches Review even if the Archivist omitted its relationship reference.
 
 ### End-to-end device proof
+
+Automated implementation work can reach **Tested** without an API credential. **Verified end to end** remains intentionally owner/device-gated because it exercises the actual built app against the owner's configured provider.
 
 The repair is not complete until a real on-device test proves the changed-fact path end to end. **This is the only verification step in this repair that may require a real provider call.** It uses an endpoint/model and credential already configured by the owner inside the app. The owner must never be asked to paste, export, commit, or otherwise expose that credential to a coding environment. If the coding environment cannot access the configured app credential or cannot perform the physical-device run, that does not block the automated test suite; the on-device proof is performed separately on the built app.
 
