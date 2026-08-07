@@ -194,14 +194,15 @@ Behavior:
 - Large targets approximately 16,000 transcript tokens;
 - Custom uses a user-entered transcript-token target;
 - Auto chooses from verified model, provider, endpoint-profile, or manual limits when available;
+- when Auto has no verified limit, the Revision 26 repair contract uses the ordinary Standard-sized target rather than inventing a giant-context strategy;
 - the selected value is a transcript target, not the total request size;
-- the app still reserves space for prompts, structured-output or JSON overhead, Analysis Note, expected output, and a safety margin;
+- the app still reserves space for prompts, bounded existing-memory context, structured-output or JSON overhead, Analysis Note, expected output, and a safety margin;
 - the app may shrink below the selected target when a verified limit requires it;
 - when no verified limit exists, the selected Small, Standard, Large, or Custom target remains in effect rather than being replaced by an invented hidden value;
 - whole messages are preserved whenever possible;
 - the existing 200,000-character ceiling is not retained as a fallback.
 
-The evaluation harness may recommend later adjustments, but these are the approved initial user-facing choices and values.
+These are the approved initial user-facing choices and values. Later real on-device use may justify adjustments; a standalone multi-model evaluation harness is not required before the Memory Assistant can work.
 
 ## 4. Design Rule
 
