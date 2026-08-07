@@ -1,0 +1,33 @@
+{
+  "id": "06_projects_plans",
+  "chat_name": "Greenhouse build",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "A named project with concrete plans. Project-scoped memories with a target name.",
+  "conversation": [
+    {"role": "user", "content": "Starting a project I'm calling Greenhouse — a backyard greenhouse I'm building from reclaimed windows."},
+    {"role": "assistant", "content": "Love that. What's the plan?"},
+    {"role": "user", "content": "Phase one is the foundation this month, a 3 by 4 metre gravel base. Phase two is the frame in spring."},
+    {"role": "assistant", "content": "Sensible sequencing. Any constraints?"},
+    {"role": "user", "content": "Budget is tight, 600 euros total, so all glass has to be salvaged, nothing bought new."},
+    {"role": "assistant", "content": "Reclaimed-only, 600 euro cap. Noted for Greenhouse."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "greenhouse_desc", "stream": "general", "target": "Greenhouse",
+       "anchors": [["greenhouse"], ["reclaimed", "salvaged", "windows"]],
+       "note": "Greenhouse project: reclaimed windows."},
+      {"id": "greenhouse_phases", "stream": "general", "target": "Greenhouse",
+       "anchors": [["foundation", "gravel", "base", "frame"], ["phase", "spring", "this month"]],
+       "note": "Phased plan: foundation then frame."},
+      {"id": "greenhouse_budget", "stream": "general", "target": "Greenhouse",
+       "anchors": [["600", "budget"], ["salvaged", "reclaimed", "nothing new"]],
+       "note": "600 euro budget, salvaged glass only."}
+    ],
+    "rules": [],
+    "acceptable_extra": [],
+    "traps": [],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

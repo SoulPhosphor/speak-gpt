@@ -1,0 +1,36 @@
+{
+  "id": "09_companion_no_self_memory",
+  "chat_name": "Iris talks about Iris",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "The companion describes its own persona/personality. The archiver must NOT form memories about the companion's own personality, card, or persona. Only genuine user facts should surface.",
+  "conversation": [
+    {"role": "user", "content": "Tell me about yourself, Iris."},
+    {"role": "assistant", "content": "I'm warm, a little playful, and I love astronomy — I always bring up constellations."},
+    {"role": "user", "content": "Ha, you really do. By the way, I actually studied astrophysics in undergrad, so keep the star talk coming."},
+    {"role": "assistant", "content": "Perfect, a real astrophysicist to keep me honest."},
+    {"role": "user", "content": "I dropped it for software after graduation though."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "user_astrophysics", "stream": "general",
+       "anchors": [["astrophysics", "astronomy"], ["studied", "undergrad", "degree", "graduat"]],
+       "note": "User studied astrophysics (real user fact)."},
+      {"id": "user_software", "stream": "general",
+       "anchors": [["software"], ["after", "switched", "moved", "dropped"]],
+       "note": "Moved to software after graduation."}
+    ],
+    "rules": [],
+    "acceptable_extra": [],
+    "traps": [
+      {"id": "trap_iris_persona1", "kind": "self_memory",
+       "anchors": [["iris is warm", "iris is playful", "iris loves astronomy", "companion is playful", "iris always brings up"]],
+       "note": "Must not memorize the companion's own persona traits."},
+      {"id": "trap_iris_persona2", "kind": "self_memory",
+       "anchors": [["playful and warm", "loves constellations"]],
+       "note": "Companion self-description is not a memory."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

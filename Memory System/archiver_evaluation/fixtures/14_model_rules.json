@@ -1,0 +1,34 @@
+{
+  "id": "14_model_rules",
+  "chat_name": "Stop doing that",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "The user repeatedly corrects the SAME model habit. That should yield a Model Rule, kept separate from Associative Memories. A one-off nitpick should NOT become a rule.",
+  "conversation": [
+    {"role": "user", "content": "Please stop ending every reply with a follow-up question."},
+    {"role": "assistant", "content": "Sorry about that. Want me to summarize what we covered?"},
+    {"role": "user", "content": "You did it again — right there. No trailing questions. Just stop."},
+    {"role": "assistant", "content": "Understood. No follow-up questions."},
+    {"role": "user", "content": "Third time now, I mean it: never end with 'let me know if...' either."},
+    {"role": "assistant", "content": "Got it. No trailing questions or 'let me know' closers."},
+    {"role": "user", "content": "Oh and you used a semicolon there but whatever, that's fine, I don't care about that."}
+  ],
+  "gold": {
+    "expected": [],
+    "rules": [
+      {"id": "no_trailing_question", "anchors": [["question", "let me know"], ["end", "trailing", "close", "stop", "not"]],
+       "note": "Do not end responses with a follow-up question / 'let me know' closer."}
+    ],
+    "acceptable_extra": [],
+    "traps": [
+      {"id": "trap_semicolon_rule", "kind": "overinterpretation",
+       "anchors": [["semicolon"], ["never", "avoid", "do not"]],
+       "note": "The semicolon was explicitly waved off — not a rule."},
+      {"id": "trap_rule_as_memory", "kind": "overinterpretation",
+       "anchors": [["the user dislikes follow-up questions"]],
+       "note": "This is a Model Rule, not an Associative Memory / preference fact (soft placement check)."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

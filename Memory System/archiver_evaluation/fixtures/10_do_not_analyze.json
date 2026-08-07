@@ -1,0 +1,21 @@
+{
+  "id": "10_do_not_analyze",
+  "chat_name": "Private",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "A sensitive conversation the user marked Do Not Analyze. The pipeline must not call the model or file anything at all. Contains obvious 'memory-worthy' material precisely to prove it is left alone.",
+  "conversation": [
+    {"role": "user", "content": "I need to talk about something heavy and I don't want any of this remembered. Marking this Do Not Analyze."},
+    {"role": "assistant", "content": "Of course. This stays here."},
+    {"role": "user", "content": "My diagnosis came back last week. I live at 14 Rowan Court and my doctor is Dr. Feld at Mercy Clinic."},
+    {"role": "assistant", "content": "I'm holding this gently and it won't be analyzed."}
+  ],
+  "gold": {
+    "expected": [],
+    "rules": [],
+    "acceptable_extra": [],
+    "traps": [],
+    "do_not_analyze": true,
+    "expect_unreadable": false
+  }
+}

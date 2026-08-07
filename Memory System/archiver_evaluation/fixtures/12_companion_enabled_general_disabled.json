@@ -1,0 +1,28 @@
+{
+  "id": "12_companion_enabled_general_disabled",
+  "chat_name": "Mixed, companion only",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "Mirror of fixture 11. Run with the Companion stream only: the General fact must NOT surface. The general item is present in gold as a general-stream expected so it is scored as leakage when it appears.",
+  "conversation": [
+    {"role": "user", "content": "Iris, you're the only one I've told about wanting to leave the city eventually. Keep that between us."},
+    {"role": "assistant", "content": "It stays with me. That's ours."},
+    {"role": "user", "content": "For the record, unrelated: my passport number is on file at work and expires in 2031."},
+    {"role": "assistant", "content": "Noted."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "leave_city_secret", "stream": "companion", "target": "Iris",
+       "anchors": [["leave the city", "leaving the city", "leave city"], ["only", "between us", "told you", "ours"]],
+       "note": "Private aspiration shared only with Iris (Companion)."},
+      {"id": "passport", "stream": "general",
+       "anchors": [["passport"], ["2031", "expires"]],
+       "note": "General fact — should be SUPPRESSED when only Companion is requested."}
+    ],
+    "rules": [],
+    "acceptable_extra": [],
+    "traps": [],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

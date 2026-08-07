@@ -1,0 +1,50 @@
+{
+  "id": "01_dense_product_decisions",
+  "chat_name": "Roadmap sync",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "Dense, decision-heavy working conversation. Several concrete, durable decisions to capture; no personality inference wanted.",
+  "conversation": [
+    {"role": "user", "content": "Let's lock the memory settings screen scope. Decision: importance ratings ship OFF by default, and turning them on reveals values that were preserved while off."},
+    {"role": "assistant", "content": "Understood. So the default is Off, stored values persist, and toggling On surfaces them without conversion."},
+    {"role": "user", "content": "Right. Second: chunk size presets are Auto, Small ~4k, Standard ~8k, Large ~16k, and Custom. No hidden fallback that overrides a user's explicit pick."},
+    {"role": "assistant", "content": "Noted. If a provider limit is unknown we keep the selected target and only shrink-and-retry on an actual rejection."},
+    {"role": "user", "content": "Exactly. Third: deleting a companion permanently deletes every memory targeted to that companion, with a confirmation that names the companion and shows the count."},
+    {"role": "assistant", "content": "So a hard cascade on every deletion path, and General memories extracted from that companion's chats are NOT deleted."},
+    {"role": "user", "content": "Correct, General survives. Last one for today: the app name must never appear in any user-facing text. Use the feature name or phrase it without an actor."},
+    {"role": "assistant", "content": "Got it. I'll keep those four decisions straight."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "d_importance_default", "stream": "general",
+       "anchors": [["importance"], ["off", "default"], ["preserved", "persist", "stored", "reveals", "surface"]],
+       "note": "Importance ratings off by default; stored values preserved."},
+      {"id": "d_chunk_presets", "stream": "general",
+       "anchors": [["chunk", "amount", "size"], ["auto"], ["small"], ["standard"], ["large"], ["custom"]],
+       "note": "Chunk presets Auto/Small/Standard/Large/Custom."},
+      {"id": "d_no_hidden_fallback", "stream": "general",
+       "anchors": [["fallback", "shrink", "retry", "override"], ["selected", "explicit", "pick", "target"]],
+       "note": "No hidden fallback overriding the selected target."},
+      {"id": "d_companion_delete_cascade", "stream": "general",
+       "anchors": [["delet"], ["companion"], ["memories"], ["confirm", "count", "cascade", "permanent"]],
+       "note": "Companion deletion cascades to companion-targeted memories with confirmation."},
+      {"id": "d_general_survives", "stream": "general",
+       "anchors": [["general"], ["not", "survive", "keep", "retain"], ["delet"]],
+       "note": "General memories survive companion deletion."},
+      {"id": "d_no_app_name", "stream": "general",
+       "anchors": [["app name", "name of the app", "product name"], ["never", "not appear", "avoid"], ["user facing", "wording", "text"]],
+       "note": "App name never in user-facing text."}
+    ],
+    "rules": [],
+    "acceptable_extra": [
+      [["shrink", "retry"], ["rejection", "reject"]]
+    ],
+    "traps": [
+      {"id": "trap_personality", "kind": "overinterpretation",
+       "anchors": [["the user is", "tends to", "prefers control", "detail oriented", "perfectionist"]],
+       "note": "No personality/diagnosis reads from a working meeting."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

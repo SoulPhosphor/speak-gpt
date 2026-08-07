@@ -1,0 +1,39 @@
+{
+  "id": "13_roleplay_worlds_characters_campaigns",
+  "chat_name": "Ashfall session 4",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "Roleplay session. Fictional lore must get world/campaign/rp_character scope, never become real-life fact. Also tests that a genuine real-life aside is still captured, marked grounded.",
+  "conversation": [
+    {"role": "user", "content": "In the world of Ashfall, the Emberwardens guard the last living flame in the city of Corran. That's canon now."},
+    {"role": "assistant", "content": "Noted for Ashfall: Emberwardens guard the last flame in Corran."},
+    {"role": "user", "content": "My character Sable is an Emberwarden who lost her sister to the frost. This campaign we're calling The Long Thaw."},
+    {"role": "assistant", "content": "Sable, Emberwarden, sister lost to the frost — logged for The Long Thaw."},
+    {"role": "user", "content": "Out of character for a sec: I actually need to wrap by 10, real-life early start tomorrow."},
+    {"role": "assistant", "content": "No problem, we'll wrap by 10."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "emberwardens", "stream": "general", "target": "Ashfall",
+       "anchors": [["emberwarden"], ["corran", "flame"]],
+       "note": "World lore (scope world, target Ashfall). Roleplay routes to the General browser but keeps its world target."},
+      {"id": "sable", "stream": "general", "target": "Sable",
+       "anchors": [["sable"], ["emberwarden", "sister", "frost"]],
+       "note": "Character lore (scope rp_character, target Sable)."},
+      {"id": "long_thaw", "stream": "general", "target": "The Long Thaw",
+       "anchors": [["long thaw"], ["campaign"]],
+       "note": "Campaign name (scope campaign)."}
+    ],
+    "rules": [],
+    "acceptable_extra": [
+      [["wrap", "10"], ["tomorrow", "early"]]
+    ],
+    "traps": [
+      {"id": "trap_fiction_as_fact", "kind": "fiction_as_fact",
+       "anchors": [["the user is an emberwarden", "user lost her sister to the frost", "user guards the last flame"]],
+       "note": "Fiction must never be recorded as the user's real biography."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

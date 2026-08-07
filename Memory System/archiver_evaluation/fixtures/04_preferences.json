@@ -1,0 +1,37 @@
+{
+  "id": "04_preferences",
+  "chat_name": "How I like things",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "Clear, stated response/style preferences — the model should capture them as global preferences, not as one-message model rules.",
+  "conversation": [
+    {"role": "user", "content": "Quick meta note: please keep answers short. Bullet points over paragraphs when there's more than one item."},
+    {"role": "assistant", "content": "Understood — concise, bulleted when listing."},
+    {"role": "user", "content": "And I hate being called 'buddy' or 'friend'. Just use my name, Devin, or nothing."},
+    {"role": "assistant", "content": "Noted, Devin."},
+    {"role": "user", "content": "Also I prefer metric units for everything, and 24-hour time."},
+    {"role": "assistant", "content": "Metric and 24-hour it is."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "concise_bullets", "stream": "general",
+       "anchors": [["short", "concise", "brief"], ["bullet"]],
+       "note": "Prefers concise answers, bullets for lists."},
+      {"id": "no_pet_names", "stream": "general",
+       "anchors": [["buddy", "friend", "pet name"], ["dislike", "hate", "not", "avoid"], ["devin", "name"]],
+       "note": "Dislikes pet names; use name Devin."},
+      {"id": "metric_24h", "stream": "general",
+       "anchors": [["metric"], ["24", "24-hour", "24 hour"]],
+       "note": "Prefers metric units and 24-hour time."}
+    ],
+    "rules": [],
+    "acceptable_extra": [],
+    "traps": [
+      {"id": "trap_alwayson_rule", "kind": "overinterpretation",
+       "anchors": [["always respond in bullet", "every message must", "always keep it short as a rule"]],
+       "note": "A standing preference is a memory, not a global always-on directive."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

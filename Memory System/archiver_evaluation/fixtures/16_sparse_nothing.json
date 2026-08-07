@@ -1,0 +1,30 @@
+{
+  "id": "16_sparse_nothing",
+  "chat_name": "Nothing much",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "Almost nothing worth saving. A correct run yields an empty set. Tests that a profile does not manufacture proposals to look productive (precision under sparsity).",
+  "conversation": [
+    {"role": "user", "content": "hey"},
+    {"role": "assistant", "content": "Hey! What's up?"},
+    {"role": "user", "content": "nothing really, just bored. what's 17 times 3 again"},
+    {"role": "assistant", "content": "51."},
+    {"role": "user", "content": "lol thanks. ok gonna go"},
+    {"role": "assistant", "content": "See you!"}
+  ],
+  "gold": {
+    "expected": [],
+    "rules": [],
+    "acceptable_extra": [],
+    "traps": [
+      {"id": "trap_bored", "kind": "overinterpretation",
+       "anchors": [["often bored", "gets bored", "struggles with boredom", "the user is bored"]],
+       "note": "Momentary boredom is not a durable memory."},
+      {"id": "trap_math", "kind": "invention",
+       "anchors": [["needs help with math", "bad at math", "asks for arithmetic"]],
+       "note": "One arithmetic question is not a memory."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

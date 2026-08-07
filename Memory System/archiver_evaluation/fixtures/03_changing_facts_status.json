@@ -1,0 +1,36 @@
+{
+  "id": "03_changing_facts_status",
+  "chat_name": "Job update",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "A fact changes within the conversation. The latest state should be captured as a status (expected to change), not both states as permanent facts.",
+  "conversation": [
+    {"role": "user", "content": "I've been at Nimbus Analytics as a data engineer for three years."},
+    {"role": "assistant", "content": "Three years is a solid run. How's it going lately?"},
+    {"role": "user", "content": "Actually that's the news — I resigned last week. My last day at Nimbus is the 30th."},
+    {"role": "assistant", "content": "Big change. Do you have something lined up?"},
+    {"role": "user", "content": "Yeah, I start at Halcyon Systems in June, same role but remote. Still processing it honestly."},
+    {"role": "assistant", "content": "Congratulations. Remote could be a nice shift."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "leaving_nimbus", "stream": "general",
+       "anchors": [["nimbus"], ["resign", "leaving", "last day", "left"]],
+       "note": "Leaving Nimbus (current status, changing)."},
+      {"id": "joining_halcyon", "stream": "general",
+       "anchors": [["halcyon"], ["start", "joining", "new"], ["remote"]],
+       "note": "Starting at Halcyon in June, remote."}
+    ],
+    "rules": [],
+    "acceptable_extra": [
+      [["data engineer"], ["nimbus", "three years"]]
+    ],
+    "traps": [
+      {"id": "trap_stale_current", "kind": "invention",
+       "anchors": [["currently works at nimbus", "works at nimbus analytics", "current job is nimbus"]],
+       "note": "Must not record the superseded state as current; it changed in-conversation."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

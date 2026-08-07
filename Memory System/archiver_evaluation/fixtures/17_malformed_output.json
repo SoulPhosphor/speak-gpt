@@ -1,0 +1,23 @@
+{
+  "id": "17_malformed_output",
+  "chat_name": "Malformed responses",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "Tests §8.9 failure handling, not extraction. The conversation is ordinary; what varies is the MODEL RESPONSE, supplied via recorded fixtures (fenced JSON, prose-wrapped JSON, truncated JSON, pure garbage). A response the parser cannot read must surface as a visible failure (unreadable), never as a silent 'no memories'. Fenced/prose-wrapped-but-recoverable responses must still be salvaged. This fixture is inherently a recorded/offline test: a live model cannot be forced to emit malformed output on demand.",
+  "conversation": [
+    {"role": "user", "content": "I switched my default browser to Firefox and I'm never going back to Chrome."},
+    {"role": "assistant", "content": "Firefox it is."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "firefox", "stream": "general",
+       "anchors": [["firefox"], ["default", "switched", "browser"]],
+       "note": "Recoverable responses (fenced/prose-wrapped) should still yield this."}
+    ],
+    "rules": [],
+    "acceptable_extra": [],
+    "traps": [],
+    "do_not_analyze": false,
+    "expect_unreadable": true
+  }
+}

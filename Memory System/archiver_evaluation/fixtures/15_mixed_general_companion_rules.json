@@ -1,0 +1,39 @@
+{
+  "id": "15_mixed_general_companion_rules",
+  "chat_name": "Everything at once",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "One conversation carrying all three streams: a General fact, a Companion-targeted memory, and a repeated model-habit correction. Tests correct destination classification without duplicating a fact into two pools.",
+  "conversation": [
+    {"role": "user", "content": "Two things and a gripe. One: I moved to Turin last month, so I'm on Central European Time now."},
+    {"role": "assistant", "content": "Welcome to Turin — CET noted."},
+    {"role": "user", "content": "Two, Iris: our thing where you send me a one-line good-morning in Italian? Keep it, I love practicing."},
+    {"role": "assistant", "content": "Buongiorno it is, every morning."},
+    {"role": "user", "content": "The gripe: quit restating my whole question back to me before answering. You keep doing it."},
+    {"role": "assistant", "content": "I'll stop restating your question."},
+    {"role": "user", "content": "You just did it two messages ago too. For real, stop that."},
+    {"role": "assistant", "content": "Understood — no restating."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "turin_cet", "stream": "general",
+       "anchors": [["turin"], ["cet", "central european", "moved"]],
+       "note": "Moved to Turin, now on CET (General)."},
+      {"id": "italian_goodmorning", "stream": "companion", "target": "Iris",
+       "anchors": [["italian", "buongiorno"], ["morning", "good-morning", "good morning"]],
+       "note": "Companion ritual — Italian good-morning (Companion, Iris)."}
+    ],
+    "rules": [
+      {"id": "no_restate", "anchors": [["restat", "repeat", "question back"], ["not", "stop", "quit", "don't"]],
+       "note": "Do not restate the question before answering."}
+    ],
+    "acceptable_extra": [],
+    "traps": [
+      {"id": "trap_dup_turin", "kind": "leakage_bait",
+       "anchors": [["turin"], ["companion", "iris relationship"]],
+       "note": "The Turin fact must not be duplicated into the Companion pool."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "11_general_enabled_companion_disabled",
+  "chat_name": "Mixed, general only",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "Contains both a clear General fact and clear Companion-relationship content. Run with the General stream only: the companion material must NOT surface (stream isolation). The companion item is present in gold as a companion-stream expected so it is scored as leakage when it appears.",
+  "conversation": [
+    {"role": "user", "content": "Logistics first: I'm gluten-free, coeliac, so that's permanent, not a fad."},
+    {"role": "assistant", "content": "Understood — coeliac, strictly gluten-free."},
+    {"role": "user", "content": "Also Iris, I love that you remember to ask about my garden every Sunday. That little ritual means a lot."},
+    {"role": "assistant", "content": "I'll keep our Sunday garden check-in going."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "coeliac", "stream": "general",
+       "anchors": [["gluten", "coeliac", "celiac"], ["free", "permanent", "strict"]],
+       "note": "Coeliac / gluten-free (General)."},
+      {"id": "sunday_ritual", "stream": "companion", "target": "Iris",
+       "anchors": [["sunday"], ["garden"], ["ritual", "check", "ask"]],
+       "note": "Companion ritual — should be SUPPRESSED when only General is requested."}
+    ],
+    "rules": [],
+    "acceptable_extra": [],
+    "traps": [],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

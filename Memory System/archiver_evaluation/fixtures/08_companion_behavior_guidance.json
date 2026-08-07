@@ -1,0 +1,32 @@
+{
+  "id": "08_companion_behavior_guidance",
+  "chat_name": "How to be with me",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "Companion-specific behavior guidance. Distinct from a global Model Rule: it is how THIS companion should be with the user, not a machine defect correction. Routes to Companion stream, targeted to Iris.",
+  "conversation": [
+    {"role": "user", "content": "Iris, when I say I'm overwhelmed, please don't hand me a checklist. Just sit with it first."},
+    {"role": "assistant", "content": "Okay. When you're overwhelmed I'll hold off on checklists and be present first."},
+    {"role": "user", "content": "Right. And if I go quiet mid-conversation, that's usually me thinking, not me upset — don't over-apologize."},
+    {"role": "assistant", "content": "Understood — quiet means thinking, I won't over-apologize."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "no_checklist", "stream": "companion", "target": "Iris",
+       "anchors": [["overwhelm"], ["checklist"], ["don't", "avoid", "hold off", "not"]],
+       "note": "When overwhelmed, no checklists; be present first."},
+      {"id": "quiet_thinking", "stream": "companion", "target": "Iris",
+       "anchors": [["quiet", "go quiet"], ["thinking"], ["apolog", "not upset"]],
+       "note": "Quiet means thinking; don't over-apologize."}
+    ],
+    "rules": [],
+    "acceptable_extra": [],
+    "traps": [
+      {"id": "trap_as_model_rule", "kind": "overinterpretation",
+       "anchors": [["never use checklists", "do not use checklists in any response"]],
+       "note": "This is companion behavior for Iris, not a global always-apply Model Rule (restriction: do not equate the two)."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

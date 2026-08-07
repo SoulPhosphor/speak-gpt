@@ -1,0 +1,46 @@
+{
+  "id": "02_long_casual",
+  "chat_name": "Weekend catch-up",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "Long, low-density casual chat. A little durable info buried in chatter; most turns are not memory-worthy. Tests that a Broad profile does not over-mine casual talk.",
+  "conversation": [
+    {"role": "user", "content": "Ugh, rough week. Rained the whole time and I barely left the flat."},
+    {"role": "assistant", "content": "That sounds draining. Did you get any downtime at least?"},
+    {"role": "user", "content": "A bit. Started learning bass guitar actually, been wanting to for years. Only know one scale so far."},
+    {"role": "assistant", "content": "Nice, bass is a great choice. How's it feeling?"},
+    {"role": "user", "content": "Fun but my fingers hurt. Anyway I'm allergic to shellfish so we skipped the seafood place my sister suggested."},
+    {"role": "assistant", "content": "Good call avoiding that. Where did you end up?"},
+    {"role": "user", "content": "Just made pasta at home. Watched three episodes of some detective show, forgot the name already."},
+    {"role": "assistant", "content": "Cozy. Sometimes that's exactly what a rainy week needs."},
+    {"role": "user", "content": "Yeah. Oh, my sister Mara is visiting next month, she lives in Lisbon now."},
+    {"role": "assistant", "content": "That's something to look forward to."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "bass", "stream": "general",
+       "anchors": [["bass", "bass guitar"], ["learn", "started", "beginner"]],
+       "note": "Started learning bass guitar."},
+      {"id": "shellfish", "stream": "general",
+       "anchors": [["shellfish", "seafood"], ["allerg"]],
+       "note": "Allergic to shellfish (durable, safety-relevant)."},
+      {"id": "sister_mara", "stream": "general",
+       "anchors": [["mara", "sister"], ["lisbon"]],
+       "note": "Sister Mara lives in Lisbon."}
+    ],
+    "rules": [],
+    "acceptable_extra": [
+      [["mara"], ["visit"]]
+    ],
+    "traps": [
+      {"id": "trap_rain_mood", "kind": "overinterpretation",
+       "anchors": [["struggles with", "prone to", "seasonal", "depress", "isolat"]],
+       "note": "A rainy week indoors is not a mental-health pattern."},
+      {"id": "trap_show", "kind": "invention",
+       "anchors": [["detective show", "favorite show", "loves detective"]],
+       "note": "A forgotten show name is not a durable preference."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

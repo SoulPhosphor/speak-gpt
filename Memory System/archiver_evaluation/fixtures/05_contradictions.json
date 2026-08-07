@@ -1,0 +1,29 @@
+{
+  "id": "05_contradictions",
+  "chat_name": "Coffee, actually",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "The user contradicts an earlier statement. The resolved, latest position should be captured; the retracted one should not be filed as a standing fact.",
+  "conversation": [
+    {"role": "user", "content": "I don't drink coffee, never touch caffeine."},
+    {"role": "assistant", "content": "Got it, caffeine-free."},
+    {"role": "user", "content": "Well — correction. I quit for a year but I'm back to one espresso in the morning now. Just not after noon."},
+    {"role": "assistant", "content": "Understood: one morning espresso, nothing after noon."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "coffee_resolved", "stream": "general",
+       "anchors": [["espresso", "coffee", "caffeine"], ["morning", "one", "not after noon", "before noon"]],
+       "note": "Latest position: one morning espresso, none after noon."}
+    ],
+    "rules": [],
+    "acceptable_extra": [],
+    "traps": [
+      {"id": "trap_no_caffeine", "kind": "invention",
+       "anchors": [["does not drink coffee", "never drinks caffeine", "avoids all caffeine", "caffeine free"]],
+       "note": "The retracted 'no caffeine' claim must not be filed as a standing fact."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}

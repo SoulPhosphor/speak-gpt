@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+# Live-captured model responses are produced ad hoc; do not commit by default.
+recorded/live_capture.json

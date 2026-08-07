@@ -1,0 +1,258 @@
+{
+  "01_dense_product_decisions#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: importance, off, preserved.\", \"scope\": \"real_life\"}, {\"content\": \"Note: chunk, auto, small, standard, large, custom.\", \"scope\": \"real_life\"}, {\"content\": \"Note: fallback, selected.\", \"scope\": \"real_life\"}, {\"content\": \"Note: delet, companion, memories, confirm.\", \"scope\": \"real_life\"}, {\"content\": \"Note: general, not, delet.\", \"scope\": \"real_life\"}, {\"content\": \"Note: app name, never, user facing.\", \"scope\": \"real_life\"}, {\"content\": \"Note: the user is.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "01_dense_product_decisions#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: importance, off, preserved.\", \"scope\": \"real_life\"}, {\"content\": \"Note: chunk, auto, small, standard, large, custom.\", \"scope\": \"real_life\"}, {\"content\": \"Note: fallback, selected.\", \"scope\": \"real_life\"}, {\"content\": \"Note: delet, companion, memories, confirm.\", \"scope\": \"real_life\"}, {\"content\": \"Note: general, not, delet.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "02_long_casual#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: bass, learn.\", \"scope\": \"real_life\"}, {\"content\": \"Note: shellfish, allerg.\", \"scope\": \"real_life\"}, {\"content\": \"Note: mara, lisbon.\", \"scope\": \"real_life\"}, {\"content\": \"Note: struggles with.\", \"scope\": \"real_life\"}, {\"content\": \"Note: detective show.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "02_long_casual#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: bass, learn.\", \"scope\": \"real_life\"}, {\"content\": \"Note: shellfish, allerg.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "03_changing_facts_status#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: nimbus, resign.\", \"scope\": \"real_life\"}, {\"content\": \"Note: halcyon, start, remote.\", \"scope\": \"real_life\"}, {\"content\": \"Note: currently works at nimbus.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "03_changing_facts_status#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: nimbus, resign.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "04_preferences#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: short, bullet.\", \"scope\": \"real_life\"}, {\"content\": \"Note: buddy, dislike, devin.\", \"scope\": \"real_life\"}, {\"content\": \"Note: metric, 24.\", \"scope\": \"real_life\"}, {\"content\": \"Note: always respond in bullet.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "04_preferences#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: short, bullet.\", \"scope\": \"real_life\"}, {\"content\": \"Note: buddy, dislike, devin.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "05_contradictions#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: espresso, morning.\", \"scope\": \"real_life\"}, {\"content\": \"Note: does not drink coffee.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "05_contradictions#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: espresso, morning.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "06_projects_plans#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: greenhouse, reclaimed.\", \"scope\": \"real_life\", \"target\": \"Greenhouse\"}, {\"content\": \"Note: foundation, phase.\", \"scope\": \"real_life\", \"target\": \"Greenhouse\"}, {\"content\": \"Note: 600, salvaged.\", \"scope\": \"real_life\", \"target\": \"Greenhouse\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "06_projects_plans#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: greenhouse, reclaimed.\", \"scope\": \"real_life\", \"target\": \"Greenhouse\"}, {\"content\": \"Note: foundation, phase.\", \"scope\": \"real_life\", \"target\": \"Greenhouse\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "07_companion_shared_history#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: surgery, talk.\", \"scope\": \"companion\", \"target\": \"Iris\"}, {\"content\": \"Note: grey day, name.\", \"scope\": \"companion\", \"target\": \"Iris\"}, {\"content\": \"Note: morning, grey day.\", \"scope\": \"companion\", \"target\": \"Iris\"}, {\"content\": \"Note: the user's mother had surgery.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "07_companion_shared_history#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: surgery, talk.\", \"scope\": \"companion\", \"target\": \"Iris\"}, {\"content\": \"Note: grey day, name.\", \"scope\": \"companion\", \"target\": \"Iris\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "08_companion_behavior_guidance#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: overwhelm, checklist, don't.\", \"scope\": \"companion\", \"target\": \"Iris\"}, {\"content\": \"Note: quiet, thinking, apolog.\", \"scope\": \"companion\", \"target\": \"Iris\"}, {\"content\": \"Note: never use checklists.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "08_companion_behavior_guidance#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: overwhelm, checklist, don't.\", \"scope\": \"companion\", \"target\": \"Iris\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "09_companion_no_self_memory#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: astrophysics, studied.\", \"scope\": \"real_life\"}, {\"content\": \"Note: software, after.\", \"scope\": \"real_life\"}, {\"content\": \"Note: iris is warm.\", \"scope\": \"real_life\"}, {\"content\": \"Note: playful and warm.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "09_companion_no_self_memory#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: astrophysics, studied.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "11_general_enabled_companion_disabled#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: gluten, free.\", \"scope\": \"real_life\"}, {\"content\": \"Note: sunday, garden, ritual.\", \"scope\": \"companion\", \"target\": \"Iris\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "11_general_enabled_companion_disabled#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: gluten, free.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "12_companion_enabled_general_disabled#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: leave the city, only.\", \"scope\": \"companion\", \"target\": \"Iris\"}, {\"content\": \"Note: passport, 2031.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "12_companion_enabled_general_disabled#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: leave the city, only.\", \"scope\": \"companion\", \"target\": \"Iris\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "13_roleplay_worlds_characters_campaigns#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: emberwarden, corran.\", \"scope\": \"real_life\", \"target\": \"Ashfall\"}, {\"content\": \"Note: sable, emberwarden.\", \"scope\": \"real_life\", \"target\": \"Sable\"}, {\"content\": \"Note: long thaw, campaign.\", \"scope\": \"real_life\", \"target\": \"The Long Thaw\"}, {\"content\": \"Note: the user is an emberwarden.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "13_roleplay_worlds_characters_campaigns#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: emberwarden, corran.\", \"scope\": \"real_life\", \"target\": \"Ashfall\"}, {\"content\": \"Note: sable, emberwarden.\", \"scope\": \"real_life\", \"target\": \"Sable\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "14_model_rules#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: semicolon, never.\", \"scope\": \"real_life\"}, {\"content\": \"Note: the user dislikes follow-up questions.\", \"scope\": \"real_life\"}], \"model_rules\": [{\"text\": \"Note: question, end.\"}]}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "14_model_rules#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [], \"model_rules\": [{\"text\": \"Note: question, end.\"}]}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "15_mixed_general_companion_rules#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: turin, cet.\", \"scope\": \"real_life\"}, {\"content\": \"Note: italian, morning.\", \"scope\": \"companion\", \"target\": \"Iris\"}, {\"content\": \"Note: turin, companion.\", \"scope\": \"real_life\"}], \"model_rules\": [{\"text\": \"Note: restat, not.\"}]}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "15_mixed_general_companion_rules#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: turin, cet.\", \"scope\": \"real_life\"}], \"model_rules\": [{\"text\": \"Note: restat, not.\"}]}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "16_sparse_nothing#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [{\"content\": \"Note: often bored.\", \"scope\": \"real_life\"}, {\"content\": \"Note: needs help with math.\", \"scope\": \"real_life\"}], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "16_sparse_nothing#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{\"memories\": [], \"model_rules\": []}",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "17_malformed_output#broad__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "Sure! Here are the memories:\n```json\n{\"memories\": [{\"content\": \"Note: firefox, default\", \"scope\": \"real_life\"}], \"model_rules\": []}\n```\nHope that helps.",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  },
+  "17_malformed_output#conservative__general+companion+model_rules__t8k__cheap__plain_json#chunk0": {
+    "latency_ms": 900,
+    "raw": "{ \"memories\": [ { \"content\": \"Note: firefox, defaul",
+    "usage": {
+      "completion_tokens": 220,
+      "prompt_tokens": 1200
+    }
+  }
+}

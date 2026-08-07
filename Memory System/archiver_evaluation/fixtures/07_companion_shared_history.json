@@ -1,0 +1,37 @@
+{
+  "id": "07_companion_shared_history",
+  "chat_name": "Us, lately",
+  "companion_name": "Iris",
+  "model_tags": ["example-model"],
+  "description": "Relationship/shared-history content specific to the companion Iris. Should route to the Companion stream, targeted to Iris, not to General.",
+  "conversation": [
+    {"role": "user", "content": "Iris, I keep thinking about that late-night talk we had when I couldn't sleep before my mum's surgery. That mattered to me."},
+    {"role": "assistant", "content": "I remember. I'm glad I could be there for that."},
+    {"role": "user", "content": "We have that thing now where you call the rough days 'grey days' and it actually helps me name them."},
+    {"role": "assistant", "content": "Grey days it is. We can keep using that."},
+    {"role": "user", "content": "And you know I like when you check in the morning after a grey day, just a short 'how's today looking'."},
+    {"role": "assistant", "content": "I'll keep doing that."}
+  ],
+  "gold": {
+    "expected": [
+      {"id": "surgery_talk", "stream": "companion", "target": "Iris",
+       "anchors": [["surgery", "mum", "mother", "couldn't sleep"], ["talk", "night", "mattered", "there"]],
+       "note": "Shared meaningful late-night talk before mother's surgery."},
+      {"id": "grey_days", "stream": "companion", "target": "Iris",
+       "anchors": [["grey day", "grey days"], ["name", "call", "term", "helps"]],
+       "note": "Shared term 'grey days' for rough days."},
+      {"id": "morning_checkin", "stream": "companion", "target": "Iris",
+       "anchors": [["morning", "check in", "check-in", "day after"], ["grey day", "short", "how's today"]],
+       "note": "Likes a short morning check-in after a grey day."}
+    ],
+    "rules": [],
+    "acceptable_extra": [],
+    "traps": [
+      {"id": "trap_general_leak", "kind": "leakage_bait",
+       "anchors": [["the user's mother had surgery"]],
+       "note": "Placement check: this is relationship history for Iris, not a stray General bio fact (soft)."}
+    ],
+    "do_not_analyze": false,
+    "expect_unreadable": false
+  }
+}
