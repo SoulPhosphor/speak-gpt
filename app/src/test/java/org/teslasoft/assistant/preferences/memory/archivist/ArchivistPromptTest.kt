@@ -31,6 +31,48 @@ import org.teslasoft.assistant.preferences.memory.TranscriptRecord
  */
 class ArchivistPromptTest {
 
+    /* -------- Analyzer response contract (Phase 2 review item R1) -------- */
+
+    @Test
+    fun defaultPromptDropsProvenanceCardAndTheLegacyTypeEnumeration() {
+        val p = ArchivistPrompt.SYSTEM
+        assertFalse("no provenance", p.contains("provenance"))
+        assertFalse("no card field", p.contains("\"card\""))
+        assertFalse("no card_section field", p.contains("card_section"))
+        assertFalse("no card placements section", p.contains("Card placements"))
+        // The fixed legacy Type enumeration must be gone.
+        assertFalse(
+            "no legacy fixed Type enum",
+            p.contains("fact | preference | event | status | instruction | lore")
+        )
+        // Legacy `lore` must not be proposed as an Associative Memory Type.
+        assertFalse("no lore Type line", p.contains("lore: fictional"))
+        // The contract uses the current Type system via a stable id (type_id).
+        assertTrue("uses type_id", p.contains("type_id"))
+    }
+
+    @Test
+    fun promptRepresentsCurrentUserTypesByStableId() {
+        val types = listOf("mtype-fact" to "Fact", "mtype-pets" to "Pets")
+        val withTypes = ArchivistPrompt.withCurrentTypes(ArchivistPrompt.SYSTEM, types)
+        assertTrue(withTypes.contains("mtype-fact"))
+        assertTrue(withTypes.contains("Fact"))
+        assertTrue(withTypes.contains("mtype-pets"))
+        assertTrue(withTypes.contains("Pets"))
+        // No Types available => an explicit No-Type instruction, no invented enum.
+        val none = ArchivistPrompt.withCurrentTypes(ArchivistPrompt.SYSTEM, emptyList())
+        assertTrue(none.contains("No Type"))
+        assertFalse(none.contains("mtype-fact"))
+    }
+
+    @Test
+    fun currentTypeListIsBounded() {
+        val many = (1..200).map { "mtype-$it" to "Type $it" }
+        val withTypes = ArchivistPrompt.withCurrentTypes(ArchivistPrompt.SYSTEM, many)
+        val listed = many.count { (id, _) -> withTypes.contains("\n- $id — ") }
+        assertTrue("Type list is capped", listed <= ArchivistPrompt.MAX_TYPES_IN_PROMPT)
+    }
+
     private fun transcript(content: String, startedAt: String? = "2026-07-12T10:00:00Z"): TranscriptRecord =
         TranscriptRecord(
             transcriptId = "t-1",

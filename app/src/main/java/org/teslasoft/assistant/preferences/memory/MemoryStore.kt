@@ -32,18 +32,22 @@ import java.util.UUID
 /**
  * The companion memory store: a SEPARATE SQLCipher database
  * (companion_memory.db), NOT an extension of lorebook.db — lorebooks stay the
- * independent low-RAM tier. Schema follows `Memory System/sqlite_table_plan.md`
- * (v1.11) with four documented deviations:
+ * independent low-RAM tier.
  *
- *  - companions.status also allows 'draft' (the schema/seed require drafts;
- *    the table plan's CHECK list omitted it).
- *  - transcripts gains chat_id (the app's persistent chats map to transcript
- *    rows via a watermark — integration plan D5) and user_persona_id (the
- *    Archivist prompt lists persona_id among its inputs).
- *  - transcripts.companion_id is nullable: app chats can run with no persona.
- *  - deleted_ids tombstone table (integration plan D10): future cross-device
- *    merge must distinguish "deleted here" from "never had it"; impossible to
- *    retrofit after the fact.
+ * THIS FILE — [onCreate] for a fresh install, [onUpgrade] for every
+ * migration since — is the authoritative source of truth for the live
+ * schema, not `Memory System/sqlite_table_plan.md`. That document is the
+ * pre-revision v1.11 baseline and is kept for historical reference only
+ * (see its own banner); the schema has diverged from it extensively since,
+ * well beyond the four deviations once tracked here. Most notably, the
+ * Phase 1/2 memory-system rework (`external_memory_analysis_counterplan.md`,
+ * Revision 24, binding-clarified by `revision_25_binding_clarifications.md`)
+ * retired `memories.title`, `memories.kind` and its fixed six-value Type
+ * enumeration, and every permanent `memories.provenance_*`/`source_chat_id`
+ * field (DB v21, v24, v25) in favor of user-owned Types (`memory_types` +
+ * `memories.type_id`), 0-5 importance defaulting to neutral 0, and no
+ * permanent provenance at all. `rejected_drafts.chat_key` was dropped the
+ * same way in v26 — content-hash dedup never needed source-chat identity.
  *
  * Migrations: SQLiteOpenHelper's version drives onUpgrade; meta.db_migration
  * mirrors the applied number for exports/diagnostics. Always bump both, always
@@ -61,7 +65,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 21
+        private const val DATABASE_VERSION = 26
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -402,18 +406,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             "CREATE TABLE memories (" +
                 "memory_id TEXT PRIMARY KEY, " +
                 "scope TEXT NOT NULL CHECK (scope IN ('global','real_life','companion','project','world','campaign','rp_character')), " +
-                // Legacy fixed-Type enumeration, now inert compatibility baggage
-                // (§5): the user-owned type_id below is the source of truth for
-                // a memory's Type. New memories store an empty kind.
-                "kind TEXT NOT NULL DEFAULT '', " +
-                // User-owned Type (§5): nullable = No Type. Migrated from the
-                // legacy kind for pre-Phase-1 rows.
+                // User-owned Type (§5): nullable = No Type. The retired legacy
+                // kind/title columns are gone (v25); a legacy kind from an old
+                // backup is translated to a Type at import, titles are dropped.
                 "type_id TEXT REFERENCES memory_types(type_id), " +
-                // Compatibility baggage only (§3.1): no Associative Memory has a
-                // title. Never generated, shown, embedded, ranked, or exported
-                // in the revised path; the DEFAULT keeps the NOT NULL column
-                // inert for new title-less memories.
-                "title TEXT NOT NULL DEFAULT '', " +
                 "content TEXT NOT NULL, " +
                 "embedding_text TEXT, " +
                 "tags_json TEXT DEFAULT '[]', " +
@@ -427,26 +423,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "project_id TEXT REFERENCES projects(project_id), " +
                 "protection_json TEXT, " +
                 "mode_hints_json TEXT DEFAULT '[]', " +
-                "provenance_source TEXT, " +
-                "provenance_confidence TEXT, " +
-                "provenance_noted_on TEXT, " +
-                "provenance_context TEXT, " +
                 "created_at TEXT NOT NULL, " +
                 "updated_at TEXT, " +
                 "status TEXT NOT NULL CHECK (status IN ('draft','active','archived','superseded')), " +
                 "supersedes TEXT REFERENCES memories(memory_id), " +
                 "origin TEXT NOT NULL DEFAULT 'user', " +
-                // Archivist card-placement suggestion (DB v13): draft-only
-                // metadata, deliberately FK-less (a stale suggestion must
-                // never block a card delete); never exported.
                 "suggested_card_type TEXT, " +
                 "suggested_card_id TEXT, " +
-                // Legacy source chat id (DB v17), RETIRED in Phase 1 (§3.2): new
-                // memories store null and no code reads or maintains it; rejected-
-                // draft dedup is content-only in the separate ledger. Kept as an
-                // inert column so old rows preserve their value. Device-local.
-                "suggested_section TEXT, " +
-                "source_chat_id TEXT)"
+                "suggested_section TEXT)"
         )
 
         db.execSQL(
@@ -597,19 +581,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "claim_run_id TEXT)"
         )
 
-        // Rejected drafts (Phase 6, DB v14; rekeyed DB v17): deleting a
-        // Memory Assistant draft rejects it — a rerun of the same
-        // conversation must not refile the exact same draft. Specific by
-        // design: exact title+content hash + the source conversation; never
-        // broad similarity suppression. chat_key holds the source CHAT ID
-        // (counterplan §4(c)) — rename-safe because `repointChat` carries
-        // these rows across a rename. Device-local, never exported.
+        // Rejected drafts (Phase 6, DB v14; rekeyed DB v17; chat_key dropped
+        // DB v26): deleting a Memory Assistant draft rejects it — a rerun must
+        // not refile the exact same draft. Specific by design: exact content
+        // hash, never broad similarity suppression. No source-chat identity
+        // (§3.2). Device-local, never exported.
         db.execSQL(
             "CREATE TABLE rejected_drafts (" +
-                "content_hash TEXT NOT NULL, " +
-                "chat_key TEXT NOT NULL, " +
-                "deleted_at TEXT NOT NULL, " +
-                "PRIMARY KEY (content_hash, chat_key))"
+                "content_hash TEXT PRIMARY KEY, " +
+                "deleted_at TEXT NOT NULL)"
         )
 
         // Archivist run history (Phase 6, DB v11): powers the Memory
@@ -683,6 +663,33 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "target_id TEXT, " +
                 "candidate_hash TEXT, " +
                 "payload_json TEXT NOT NULL, " +
+                "created_at TEXT NOT NULL)"
+        )
+
+        // Durable companion-deletion markers (DB v22, review finding 3). A row
+        // here means "a confirmed companion deletion was requested but not yet
+        // proven complete." The shared deletion service writes the marker BEFORE
+        // running the cascade and clears it only on success, so a cascade that
+        // fails or is interrupted (e.g. the best-effort persona-delete hook,
+        // where the app persona is already gone and the flow cannot block) leaves
+        // a durable marker the reconcile retries. No FK to companions: the marker
+        // must outlive the companion row it is deleting. Device-local.
+        db.execSQL(
+            "CREATE TABLE pending_companion_deletions (" +
+                "companion_id TEXT PRIMARY KEY, " +
+                "requested_at TEXT NOT NULL)"
+        )
+
+        // Generated Pending drafts (DB v23). A row here means "this Pending draft
+        // was produced by the Memory Assistant / computer analysis" — separate,
+        // non-memory bookkeeping so deleting it can record a content rejection
+        // (so a rerun does not refile the exact proposal) WITHOUT stamping any
+        // source/route metadata on the memory object itself. Manual Pending
+        // creation is never marked here, so it is never misclassified as a
+        // rejection. Device-local; cascades away with the memory it references.
+        db.execSQL(
+            "CREATE TABLE generated_pending_drafts (" +
+                "memory_id TEXT PRIMARY KEY REFERENCES memories(memory_id) ON DELETE CASCADE, " +
                 "created_at TEXT NOT NULL)"
         )
 
@@ -1711,6 +1718,174 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "21")
             )
         }
+        if (oldVersion < 22) {
+            // v22 (Phase 2 review finding 3): a durable companion-deletion marker.
+            // Additive only — a new table, no existing data touched. Lets a
+            // confirmed companion deletion whose cascade failed or was interrupted
+            // be reliably retried instead of silently left incomplete.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS pending_companion_deletions (" +
+                    "companion_id TEXT PRIMARY KEY, " +
+                    "requested_at TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "22")
+            )
+        }
+        if (oldVersion < 23) {
+            // v23 (Phase 2 review): separate non-memory bookkeeping that marks a
+            // Pending draft as Memory Assistant / computer generated, so deleting
+            // it records a content rejection without any source metadata on the
+            // memory object. Additive only.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS generated_pending_drafts (" +
+                    "memory_id TEXT PRIMARY KEY REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "created_at TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "23")
+            )
+        }
+        if (oldVersion < 24) {
+            // v24 (Phase 2): drop the five retired provenance/chat-identity
+            // columns from the memories table. SQLite does not support DROP
+            // COLUMN on older versions — rebuild the table without them.
+            // Data in those columns is discarded (no code reads them anymore).
+            db.execSQL(
+                "CREATE TABLE memories_v24 (" +
+                    "memory_id TEXT PRIMARY KEY, " +
+                    "scope TEXT NOT NULL CHECK (scope IN ('global','real_life','companion','project','world','campaign','rp_character')), " +
+                    "kind TEXT NOT NULL DEFAULT '', " +
+                    "type_id TEXT REFERENCES memory_types(type_id), " +
+                    "title TEXT NOT NULL DEFAULT '', " +
+                    "content TEXT NOT NULL, " +
+                    "embedding_text TEXT, " +
+                    "tags_json TEXT DEFAULT '[]', " +
+                    "importance INTEGER NOT NULL DEFAULT 0, " +
+                    "always_load INTEGER NOT NULL DEFAULT 0, " +
+                    "world_id TEXT REFERENCES worlds(world_id), " +
+                    "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
+                    "campaign_id TEXT REFERENCES campaigns(campaign_id), " +
+                    "project_id TEXT REFERENCES projects(project_id), " +
+                    "protection_json TEXT, " +
+                    "mode_hints_json TEXT DEFAULT '[]', " +
+                    "created_at TEXT NOT NULL, " +
+                    "updated_at TEXT, " +
+                    "status TEXT NOT NULL CHECK (status IN ('draft','active','archived','superseded')), " +
+                    "supersedes TEXT REFERENCES memories(memory_id), " +
+                    "origin TEXT NOT NULL DEFAULT 'user', " +
+                    "suggested_card_type TEXT, " +
+                    "suggested_card_id TEXT, " +
+                    "suggested_section TEXT)"
+            )
+            db.execSQL(
+                "INSERT INTO memories_v24 (memory_id, scope, kind, type_id, title, content, embedding_text, " +
+                    "tags_json, importance, always_load, world_id, roleplay_character_id, campaign_id, " +
+                    "project_id, protection_json, mode_hints_json, created_at, updated_at, status, supersedes, " +
+                    "origin, suggested_card_type, suggested_card_id, suggested_section) " +
+                    "SELECT memory_id, scope, kind, type_id, title, content, embedding_text, " +
+                    "tags_json, importance, always_load, world_id, roleplay_character_id, campaign_id, " +
+                    "project_id, protection_json, mode_hints_json, created_at, updated_at, status, supersedes, " +
+                    "origin, suggested_card_type, suggested_card_id, suggested_section FROM memories"
+            )
+            db.execSQL("DROP TABLE memories")
+            db.execSQL("ALTER TABLE memories_v24 RENAME TO memories")
+            db.execSQL("CREATE INDEX idx_memories_status ON memories(status)")
+            db.execSQL("CREATE INDEX idx_memories_type ON memories(type_id)")
+            db.execSQL("CREATE INDEX idx_memories_always_load ON memories(always_load) WHERE always_load = 1")
+            db.execSQL("CREATE INDEX idx_memories_world ON memories(world_id)")
+            db.execSQL("CREATE INDEX idx_memories_rp_character ON memories(roleplay_character_id)")
+            db.execSQL("CREATE INDEX idx_memories_campaign ON memories(campaign_id)")
+            db.execSQL("CREATE INDEX idx_memories_project ON memories(project_id)")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "24")
+            )
+        }
+        if (oldVersion < 25) {
+            // v25: drop the retired legacy `kind` and `title` columns. Their
+            // behavior was already fully retired (kind → user-owned type_id in
+            // v21; titles never generated, shown, embedded, ranked, or exported
+            // since Phase 1) — this removes the last physical trace so nothing
+            // in the schema can suggest the old features back into existence.
+            // Rebuild-and-copy per the v4/v7/v21/v24 precedent; every kept
+            // column is copied verbatim, no memory row is deleted.
+            db.execSQL(
+                "CREATE TABLE memories_v25 (" +
+                    "memory_id TEXT PRIMARY KEY, " +
+                    "scope TEXT NOT NULL CHECK (scope IN ('global','real_life','companion','project','world','campaign','rp_character')), " +
+                    "type_id TEXT REFERENCES memory_types(type_id), " +
+                    "content TEXT NOT NULL, " +
+                    "embedding_text TEXT, " +
+                    "tags_json TEXT DEFAULT '[]', " +
+                    "importance INTEGER NOT NULL DEFAULT 0, " +
+                    "always_load INTEGER NOT NULL DEFAULT 0, " +
+                    "world_id TEXT REFERENCES worlds(world_id), " +
+                    "roleplay_character_id TEXT REFERENCES roleplay_characters(roleplay_character_id), " +
+                    "campaign_id TEXT REFERENCES campaigns(campaign_id), " +
+                    "project_id TEXT REFERENCES projects(project_id), " +
+                    "protection_json TEXT, " +
+                    "mode_hints_json TEXT DEFAULT '[]', " +
+                    "created_at TEXT NOT NULL, " +
+                    "updated_at TEXT, " +
+                    "status TEXT NOT NULL CHECK (status IN ('draft','active','archived','superseded')), " +
+                    "supersedes TEXT REFERENCES memories(memory_id), " +
+                    "origin TEXT NOT NULL DEFAULT 'user', " +
+                    "suggested_card_type TEXT, " +
+                    "suggested_card_id TEXT, " +
+                    "suggested_section TEXT)"
+            )
+            db.execSQL(
+                "INSERT INTO memories_v25 (memory_id, scope, type_id, content, embedding_text, " +
+                    "tags_json, importance, always_load, world_id, roleplay_character_id, campaign_id, " +
+                    "project_id, protection_json, mode_hints_json, created_at, updated_at, status, supersedes, " +
+                    "origin, suggested_card_type, suggested_card_id, suggested_section) " +
+                    "SELECT memory_id, scope, type_id, content, embedding_text, " +
+                    "tags_json, importance, always_load, world_id, roleplay_character_id, campaign_id, " +
+                    "project_id, protection_json, mode_hints_json, created_at, updated_at, status, supersedes, " +
+                    "origin, suggested_card_type, suggested_card_id, suggested_section FROM memories"
+            )
+            db.execSQL("DROP TABLE memories")
+            db.execSQL("ALTER TABLE memories_v25 RENAME TO memories")
+            db.execSQL("CREATE INDEX idx_memories_status ON memories(status)")
+            db.execSQL("CREATE INDEX idx_memories_type ON memories(type_id)")
+            db.execSQL("CREATE INDEX idx_memories_always_load ON memories(always_load) WHERE always_load = 1")
+            db.execSQL("CREATE INDEX idx_memories_world ON memories(world_id)")
+            db.execSQL("CREATE INDEX idx_memories_rp_character ON memories(roleplay_character_id)")
+            db.execSQL("CREATE INDEX idx_memories_campaign ON memories(campaign_id)")
+            db.execSQL("CREATE INDEX idx_memories_project ON memories(project_id)")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "25")
+            )
+        }
+        if (oldVersion < 26) {
+            // v26: drop the retired chat_key column from rejected_drafts.
+            // Source-chat identity was retired for rejection dedup back in
+            // Phase 1 (§3.2) — chat_key had stood empty (or, on an
+            // in-between device, holding only pre-Phase-1 legacy values)
+            // ever since; this removes the last physical trace, matching the
+            // memories.kind/title cleanup in v25. Rejections are collapsed
+            // to one row per content_hash, keeping the most recent
+            // deleted_at for any hash that had rows under several old keys.
+            db.execSQL(
+                "CREATE TABLE rejected_drafts_v26 (" +
+                    "content_hash TEXT PRIMARY KEY, " +
+                    "deleted_at TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO rejected_drafts_v26 (content_hash, deleted_at) " +
+                    "SELECT content_hash, MAX(deleted_at) FROM rejected_drafts GROUP BY content_hash"
+            )
+            db.execSQL("DROP TABLE rejected_drafts")
+            db.execSQL("ALTER TABLE rejected_drafts_v26 RENAME TO rejected_drafts")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "26")
+            )
+        }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -2194,33 +2369,24 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 if (rowExists(db, "memories", "memory_id", m.memoryId)) {
                     report.addSkipped("memories"); continue
                 }
-                // Resolve the memory's Type (§5): an explicit type_id from the
-                // backup wins; otherwise derive it from the legacy kind
-                // (recognized starter kind → seeded id, lore/unknown → No Type).
-                // A resolved id that no longer exists degrades to No Type.
-                val resolvedTypeId = (m.typeId ?: MemoryTypeMigration.typeIdForLegacyKind(m.kind))
-                    ?.takeIf { it in knownTypeIds }
+                // Resolve the memory's Type (§5): the codec already translated
+                // a legacy backup's kind into a type_id at parse time; an id
+                // that no longer exists degrades to No Type.
+                val resolvedTypeId = m.typeId?.takeIf { it in knownTypeIds }
                 db.insert("memories", null, ContentValues().apply {
                     put("memory_id", m.memoryId)
                     put("scope", m.scope)
-                    put("kind", m.kind)
                     put("type_id", resolvedTypeId)
-                    put("title", m.title)
                     put("content", m.content)
                     put("embedding_text", m.embeddingText)
                     put("tags_json", m.tagsJson)
                     put("importance", m.importance)
-                    // Primary-target mirror; full sets go to the join tables below.
                     put("world_id", m.worldIds.firstOrNull())
                     put("roleplay_character_id", m.roleplayCharacterIds.firstOrNull())
                     put("campaign_id", m.campaignIds.firstOrNull())
                     put("project_id", m.projectIds.firstOrNull())
                     put("protection_json", m.protectionJson)
                     put("mode_hints_json", m.modeHintsJson)
-                    put("provenance_source", m.provenanceSource)
-                    put("provenance_confidence", m.provenanceConfidence)
-                    put("provenance_noted_on", m.provenanceNotedOn)
-                    put("provenance_context", m.provenanceContext)
                     put("created_at", m.createdAt)
                     put("updated_at", m.updatedAt)
                     put("status", m.status)
@@ -2520,8 +2686,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     MemoryRecord(
                         memoryId = id,
                         scope = it.getString(it.getColumnIndexOrThrow("scope")),
-                        kind = it.getString(it.getColumnIndexOrThrow("kind")),
-                        title = it.getString(it.getColumnIndexOrThrow("title")),
                         content = it.getString(it.getColumnIndexOrThrow("content")),
                         embeddingText = it.getStringOrNull("embedding_text"),
                         tagsJson = it.getStringOrNull("tags_json") ?: "[]",
@@ -2532,10 +2696,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         projectIds = readJoin(db, "memory_projects", "project_id", id),
                         protectionJson = it.getStringOrNull("protection_json"),
                         modeHintsJson = it.getStringOrNull("mode_hints_json") ?: "[]",
-                        provenanceSource = it.getStringOrNull("provenance_source"),
-                        provenanceConfidence = it.getStringOrNull("provenance_confidence"),
-                        provenanceNotedOn = it.getStringOrNull("provenance_noted_on"),
-                        provenanceContext = it.getStringOrNull("provenance_context"),
                         createdAt = it.getString(it.getColumnIndexOrThrow("created_at")),
                         updatedAt = it.getStringOrNull("updated_at"),
                         status = it.getString(it.getColumnIndexOrThrow("status")),
@@ -3080,32 +3240,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     }
 
     /**
-     * File one Archivist-proposed memory draft. The record must arrive with
-     * status='draft' and origin='archivist' (enforced here — a bug upstream
-     * must not be able to file an ACTIVE memory: nothing the Archivist writes
-     * may take effect without the user's approval). Never writes protection
-     * (retired July 8 2026 — the Archivist must not emit handling fields).
-     */
-    fun insertArchivistDraftMemory(m: MemoryRecord) {
-        require(m.status == "draft") { "Archivist memories must be drafts" }
-        require(m.origin == "archivist") { "Archivist memories must carry origin='archivist'" }
-        val safe = m.copy(protectionJson = null)
-        val db = writableDatabase
-        db.beginTransaction()
-        try {
-            db.insertOrThrow("memories", null, memoryValues(safe))
-            writeMemoryLinks(db, safe)
-            logChange(db, safe.memoryId, "archivist", "proposed", safe.provenanceContext, null)
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /**
      * "Add to Card" (owner ruling, July 8 2026 evening): linking MOVES the
-     * memory onto the lore card — its title becomes the entry name, its
-     * content the description, and the memory row is deleted (tombstoned).
+     * memory onto the lore card — a content-derived name becomes the entry
+     * name, its content the description, and the memory row is deleted
+     * (tombstoned).
      * From then on the content lives and dies with the card ("think of it
      * like a d&d sheet… if you put it in the trash and take it out it's
      * never coming back") — it never returns to the browser. Returns false
@@ -3125,10 +3263,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     cardId = cardId,
                     section = section,
                     // Titles are retired (§3.1): a card entry still needs a name
-                    // (its trigger word), so derive one from the memory content
-                    // for a title-less memory. A legacy memory that still carries
-                    // a title keeps using it.
-                    name = m.title.ifBlank { m.content.trim().take(80) },
+                    // (its trigger word), so derive one from the memory content.
+                    name = m.content.trim().take(80),
                     description = m.content,
                     createdAt = nowIso()
                 )
@@ -3141,15 +3277,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         } finally {
             db.endTransaction()
         }
-    }
-
-    /** Content-level dedup so a rerun doesn't refile what already exists:
-     *  true when any memory row (any status) has this title+content. */
-    fun memoryExistsWithText(title: String, content: String): Boolean {
-        readableDatabase.query(
-            "memories", arrayOf("memory_id"), "title = ? AND content = ?",
-            arrayOf(title, content), null, null, null
-        ).use { return it.moveToNext() }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -3680,9 +3807,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             branches.add("m.scope = 'project'")
         }
 
-        val sql = "SELECT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
-            "m.importance, m.created_at, m.updated_at, m.world_id, m.provenance_confidence, " +
-            "m.protection_json, m.provenance_source, m.kind, m.tags_json " +
+        val sql = "SELECT m.memory_id, m.scope, m.content, m.embedding_text, " +
+            "m.importance, m.created_at, m.updated_at, m.world_id, " +
+            "m.protection_json, m.type_id, m.tags_json " +
             "FROM memories m WHERE m.status = 'active' AND (" +
             branches.joinToString(" OR ") + ")"
         readableDatabase.rawQuery(sql, args.toTypedArray()).use {
@@ -3797,25 +3924,18 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             }
         }
 
-        // Labels carry status + origin + provenance so the owner can tell a
-        // real user memory from a seed example or an archived draft at a
-        // glance (seed-safety audit requirement). Non-active memories are
-        // shown too — with their status — so "archived but still present"
-        // is verifiable from the debug box.
         scan(
-            "SELECT title, content, scope, status, origin, provenance_source FROM memories " +
-                "WHERE title LIKE ? OR content LIKE ? LIMIT $limit",
+            "SELECT content, scope, status, origin FROM memories " +
+                "WHERE content LIKE ? OR embedding_text LIKE ? LIMIT $limit",
             {
-                val status = it.getString(3)
-                val origin = it.getString(4)
-                val prov = it.getString(5)
+                val status = it.getString(2)
+                val origin = it.getString(3)
                 val marks = StringBuilder()
                 if (status != "active") marks.append(" [").append(status).append("]")
                 if (origin != "user") marks.append(" [").append(origin).append("]")
-                if (!prov.isNullOrBlank()) marks.append(" (").append(prov).append(")")
-                "Memory · ${it.getString(2)}$marks: ${it.getString(0)}"
+                "Memory · ${it.getString(1)}$marks: ${it.getString(0).substringBefore('\n').take(48)}"
             },
-            { it.getString(1) }
+            { it.getString(0) }
         )
         scan(
             "SELECT current_name, essence, status, origin FROM companions " +
@@ -3852,9 +3972,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         val out = ArrayList<RetrievableMemory>()
         readableDatabase.query(
             "memories",
-            arrayOf("memory_id", "scope", "title", "content", "embedding_text",
-                "importance", "created_at", "updated_at", "world_id", "provenance_confidence",
-                "protection_json", "provenance_source", "kind", "tags_json"),
+            arrayOf("memory_id", "scope", "content", "embedding_text",
+                "importance", "created_at", "updated_at", "world_id",
+                "protection_json", "type_id", "tags_json"),
             "status = 'active'", null, null, null, "created_at ASC"
         ).use {
             while (it.moveToNext()) out.add(readRetrievable(it))
@@ -3865,16 +3985,13 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     private fun readRetrievable(c: Cursor): RetrievableMemory = RetrievableMemory(
         memoryId = c.getString(c.getColumnIndexOrThrow("memory_id")),
         scope = c.getString(c.getColumnIndexOrThrow("scope")),
-        title = c.getString(c.getColumnIndexOrThrow("title")),
         content = c.getString(c.getColumnIndexOrThrow("content")),
         embeddingText = c.getStringOrNull("embedding_text"),
         importance = c.getInt(c.getColumnIndexOrThrow("importance")),
         createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: "",
         worldId = c.getStringOrNull("world_id"),
-        provenanceConfidence = c.getStringOrNull("provenance_confidence"),
         protectionJson = c.getStringOrNull("protection_json"),
-        provenanceSource = c.getStringOrNull("provenance_source"),
-        kind = c.getStringOrNull("kind") ?: "fact",
+        typeId = c.getStringOrNull("type_id"),
         tagsJson = c.getStringOrNull("tags_json") ?: "[]",
         updatedAt = c.getStringOrNull("updated_at")
     )
@@ -4008,9 +4125,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     fun activeMemoriesMissingEmbedding(embeddingModel: String): List<RetrievableMemory> {
         val out = ArrayList<RetrievableMemory>()
         readableDatabase.rawQuery(
-            "SELECT m.memory_id, m.scope, m.title, m.content, m.embedding_text, " +
-                "m.importance, m.created_at, m.updated_at, m.world_id, m.provenance_confidence, " +
-                "m.protection_json, m.provenance_source, m.kind, m.tags_json " +
+            "SELECT m.memory_id, m.scope, m.content, m.embedding_text, " +
+                "m.importance, m.created_at, m.updated_at, m.world_id, " +
+                "m.protection_json, m.type_id, m.tags_json " +
                 "FROM memories m WHERE m.status = 'active' AND NOT EXISTS " +
                 "(SELECT 1 FROM embeddings e WHERE e.memory_id = m.memory_id AND e.embedding_model = ?) " +
                 "ORDER BY m.created_at ASC",
@@ -4077,17 +4194,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "UPDATE OR REPLACE chat_turn_counters SET chat_id = ? WHERE chat_id = ?",
                 arrayOf(newChatId, oldChatId)
             )
-            // Rejected-draft dedup now lives ONLY in the separate rejected_drafts
-            // ledger and is keyed on memory content alone (canonical recovery plan
-            // §3.2 / item 1) — no memory remembers which chat produced it, so the
-            // memories.source_chat_id column is no longer maintained here (its old
-            // values remain physically, but inert). Any legacy chat_key rows in
-            // the ledger are carried across a rename for continuity; new
-            // rejections are content-keyed and unaffected.
-            db.execSQL(
-                "UPDATE OR REPLACE rejected_drafts SET chat_key = ? WHERE chat_key = ?",
-                arrayOf(newChatId, oldChatId)
-            )
+            // Rejected-draft dedup is keyed on memory content alone (§3.2 /
+            // item 1) — no chat identity to carry across a rename.
             // Step 1.7: pending lore book suggestions and their rejection
             // anchors are keyed by the same name-derived chat id and must ride
             // a rename too, or a rerun after rename would refile a rejected
@@ -4285,6 +4393,35 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
     }
 
+    /* -------- durable companion-deletion markers (review finding 3) -------- */
+
+    /** Record that a confirmed companion deletion is in progress (DB v22). The
+     *  shared deletion service writes this BEFORE the cascade (its own committed
+     *  statement) so a cascade that then fails or is interrupted leaves a durable
+     *  marker to retry — a confirmed deletion is never silently left incomplete. */
+    fun markCompanionPendingDeletion(companionId: String) {
+        writableDatabase.execSQL(
+            "INSERT INTO pending_companion_deletions (companion_id, requested_at) VALUES (?, ?) " +
+                "ON CONFLICT(companion_id) DO UPDATE SET requested_at = excluded.requested_at",
+            arrayOf(companionId, nowIso())
+        )
+    }
+
+    /** Clear a companion-deletion marker once its cascade has completed. */
+    fun clearCompanionPendingDeletion(companionId: String) {
+        writableDatabase.delete("pending_companion_deletions", "companion_id = ?", arrayOf(companionId))
+    }
+
+    /** Companion ids whose confirmed deletion has not yet been proven complete —
+     *  the retry queue the reconcile drains. */
+    fun pendingCompanionDeletionIds(): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.query(
+            "pending_companion_deletions", arrayOf("companion_id"), null, null, null, null, "requested_at ASC"
+        ).use { while (it.moveToNext()) out.add(it.getString(0)) }
+        return out
+    }
+
     /* -------- memory types (§5) -------- */
 
     /** Every user-owned Memory Type, seed order preserved by created_at then
@@ -4315,6 +4452,136 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "ON CONFLICT(type_id) DO UPDATE SET name = excluded.name",
             arrayOf(type.typeId, type.name, type.createdAt.ifBlank { nowIso() })
         )
+    }
+
+    /**
+     * Add a new user-owned Memory Type with a fresh stable id (canonical
+     * recovery plan Phase 2, item 1). The id is generated here and never
+     * changes; a later rename edits only the name. Returns the created record so
+     * the caller can reference it by id.
+     */
+    fun addMemoryType(name: String): MemoryTypeRecord {
+        val record = MemoryTypeRecord(newId("mtype-"), name.trim(), nowIso())
+        writableDatabase.execSQL(
+            "INSERT INTO memory_types (type_id, name, created_at) VALUES (?, ?, ?)",
+            arrayOf(record.typeId, record.name, record.createdAt)
+        )
+        return record
+    }
+
+    /**
+     * Rename a Memory Type by its stable id (Phase 2, item 1). Only the display
+     * name changes; the id is untouched, so every memory's `type_id` keeps
+     * resolving and no memory row is rewritten. Returns the ids of the memories
+     * assigned to this Type whose embeddings were queued for refresh (Phase 2,
+     * item 2): the stale vectors are dropped inside the same transaction so the
+     * librarian's background self-repair re-embeds them off the UI thread — old
+     * Type wording can never remain indefinitely in an active embedding
+     * document. Provenance/source metadata is deliberately NOT written.
+     */
+    fun renameMemoryType(typeId: String, newName: String): List<String> {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL("UPDATE memory_types SET name = ? WHERE type_id = ?", arrayOf(newName.trim(), typeId))
+            val affected = queueEmbeddingRefreshForTypeTx(db, typeId)
+            db.setTransactionSuccessful()
+            return affected
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Delete a Memory Type without deleting any of its memories (Phase 2, item
+     * 1). Atomic: affected memories are set to No Type (`type_id = NULL`) and the
+     * Type row is removed in one transaction, so the two can never diverge. A
+     * deleted Type's memories keep their content, scope, targets, tags,
+     * importance, lifecycle, and timestamps — nothing is archived, superseded,
+     * or altered. Returns the affected memory ids, whose embeddings are queued
+     * for refresh (item 2) exactly as in [renameMemoryType]. Deleting a starter
+     * Type does not re-seed it (item 1 / §5 item 7): the row simply goes.
+     */
+    fun deleteMemoryType(typeId: String): List<String> {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            // Capture the affected ids and drop their stale vectors BEFORE the
+            // reassignment, then detach (no ON DELETE rule on type_id) and delete.
+            val affected = queueEmbeddingRefreshForTypeTx(db, typeId)
+            db.execSQL("UPDATE memories SET type_id = NULL WHERE type_id = ?", arrayOf(typeId))
+            db.delete("memory_types", "type_id = ?", arrayOf(typeId))
+            db.setTransactionSuccessful()
+            return affected
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** How many memories are currently assigned to a Memory Type (Phase 2, item
+     *  1) — every lifecycle state, the source of truth being memories.type_id. */
+    fun countMemoriesForType(typeId: String): Int {
+        readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM memories WHERE type_id = ?", arrayOf(typeId)
+        ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    /** Drop the embeddings of every memory assigned to [typeId] and return their
+     *  ids (Phase 2, item 2). Dropping a vector queues that memory for the
+     *  librarian's existing background missing-vector repair — controlled,
+     *  off-UI-thread re-embedding — rather than a synchronous re-embed here. */
+    private fun queueEmbeddingRefreshForTypeTx(db: SQLiteDatabase, typeId: String): List<String> {
+        val affected = ArrayList<String>()
+        db.query("memories", arrayOf("memory_id"), "type_id = ?", arrayOf(typeId), null, null, "memory_id ASC")
+            .use { while (it.moveToNext()) affected.add(it.getString(0)) }
+        for (id in affected) db.delete("embeddings", "memory_id = ?", arrayOf(id))
+        return affected
+    }
+
+    /**
+     * File one validated candidate as a canonical Pending (draft) Associative
+     * Memory (canonical recovery plan Phase 2, item 8). This is the ONE storage
+     * path every filing origin converges on after validation — the API Memory
+     * Assistant, a validated computer-file import, and manual pending creation
+     * all reach Pending storage here, so none maintains its own filing behavior.
+     * The record must arrive with status='draft' (a bug upstream must not file an
+     * active memory without review). Never writes protection (the filing path
+     * does not emit handling fields).
+     */
+    fun insertPendingMemory(m: MemoryRecord, generated: Boolean = false) {
+        require(m.status == "draft") { "Pending memories must be drafts" }
+        val safe = m.copy(protectionJson = null)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.insertOrThrow("memories", null, memoryValues(safe))
+            writeMemoryLinks(db, safe)
+            // The canonical candidate carries no source authorship, so the
+            // change-log actor is a fixed "user" — origin is not read here (R2).
+            logChange(db, safe.memoryId, "user", "proposed", null, null)
+            // Route-aware, non-memory bookkeeping (Phase 2 review): a Memory
+            // Assistant / computer-generated draft is marked here (keyed by id, no
+            // metadata on the memory) so its deletion records a content rejection.
+            // Manual creation passes generated=false and is never marked.
+            if (generated) {
+                db.execSQL(
+                    "INSERT OR IGNORE INTO generated_pending_drafts (memory_id, created_at) VALUES (?, ?)",
+                    arrayOf(safe.memoryId, nowIso())
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** True when a Pending draft was filed by the Memory Assistant / computer
+     *  analysis (marked in the separate generated_pending_drafts bookkeeping),
+     *  not by manual creation. Read inside the deletion transaction. */
+    private fun isGeneratedPendingDraftTx(db: SQLiteDatabase, memoryId: String): Boolean {
+        db.rawQuery(
+            "SELECT 1 FROM generated_pending_drafts WHERE memory_id = ?", arrayOf(memoryId)
+        ).use { return it.moveToFirst() }
     }
 
     /* -------- entities -------- */
@@ -5446,7 +5713,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
-    /** Text browser (title/content LIKE, else most-recent). Archived rows are
+    /** Text browser (content LIKE, else most-recent). Archived rows are
      *  hidden unless [includeArchived]. */
     fun browseMemories(query: String?, includeArchived: Boolean, limit: Int): List<MemoryRecord> {
         val db = readableDatabase
@@ -5455,8 +5722,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         val q = query?.trim().orEmpty()
         if (q.isNotEmpty()) {
             val like = "%${q.replace("%", "").replace("_", "")}%"
-            where.append("(title LIKE ? OR content LIKE ?)")
-            args.add(like); args.add(like)
+            where.append("content LIKE ?")
+            args.add(like)
         }
         if (!includeArchived) {
             if (where.isNotEmpty()) where.append(" AND ")
@@ -5507,8 +5774,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         return MemoryRecord(
             memoryId = id,
             scope = it.getString(it.getColumnIndexOrThrow("scope")),
-            kind = it.getString(it.getColumnIndexOrThrow("kind")),
-            title = it.getString(it.getColumnIndexOrThrow("title")),
             content = it.getString(it.getColumnIndexOrThrow("content")),
             embeddingText = it.getStringOrNull("embedding_text"),
             tagsJson = it.getStringOrNull("tags_json") ?: "[]",
@@ -5519,10 +5784,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             projectIds = readJoin(db, "memory_projects", "project_id", id),
             protectionJson = it.getStringOrNull("protection_json"),
             modeHintsJson = it.getStringOrNull("mode_hints_json") ?: "[]",
-            provenanceSource = it.getStringOrNull("provenance_source"),
-            provenanceConfidence = it.getStringOrNull("provenance_confidence"),
-            provenanceNotedOn = it.getStringOrNull("provenance_noted_on"),
-            provenanceContext = it.getStringOrNull("provenance_context"),
             createdAt = it.getString(it.getColumnIndexOrThrow("created_at")) ?: "",
             updatedAt = it.getStringOrNull("updated_at"),
             status = it.getString(it.getColumnIndexOrThrow("status")),
@@ -5534,7 +5795,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             suggestedCardType = it.getStringOrNull("suggested_card_type"),
             suggestedCardId = it.getStringOrNull("suggested_card_id"),
             suggestedSection = it.getStringOrNull("suggested_section"),
-            sourceChatId = it.getStringOrNull("source_chat_id"),
             typeId = it.getStringOrNull("type_id")
         )
     }
@@ -5542,11 +5802,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     private fun memoryValues(m: MemoryRecord) = ContentValues().apply {
         put("memory_id", m.memoryId)
         put("scope", m.scope)
-        put("kind", m.kind)
-        // User-owned Type (§5); null = No Type. Source of truth for the Type;
-        // `kind` above is inert legacy baggage.
+        // User-owned Type (§5); null = No Type.
         put("type_id", m.typeId)
-        put("title", m.title)
         put("content", m.content)
         put("embedding_text", m.embeddingText)
         put("tags_json", m.tagsJson)
@@ -5561,10 +5818,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         put("project_id", m.projectIds.firstOrNull())
         put("protection_json", m.protectionJson)
         put("mode_hints_json", m.modeHintsJson)
-        put("provenance_source", m.provenanceSource)
-        put("provenance_confidence", m.provenanceConfidence)
-        put("provenance_noted_on", m.provenanceNotedOn)
-        put("provenance_context", m.provenanceContext)
         put("created_at", m.createdAt)
         put("updated_at", m.updatedAt)
         put("status", m.status)
@@ -5573,7 +5826,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         put("suggested_card_type", m.suggestedCardType)
         put("suggested_card_id", m.suggestedCardId)
         put("suggested_section", m.suggestedSection)
-        put("source_chat_id", m.sourceChatId)
     }
 
     private fun writeMemoryLinks(db: SQLiteDatabase, m: MemoryRecord) {
@@ -5630,10 +5882,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             // provided data — no editor exposes it as a user field. When any
             // source text field changes it is stale by definition and is
             // cleared, so a corrected memory can never stay discoverable by
-            // its old condensed wording.
-            // Titles are retired (§3.1) and never part of the embedding, so a
-            // title change is not a source-text change — only content and tags
-            // affect the semantic document.
+            // its old condensed wording. Only content and tags affect the
+            // semantic document.
             val sourceTextChanged = prior == null ||
                 prior.content != m.content || prior.tagsJson != m.tagsJson
             val updated = m.copy(
@@ -5675,6 +5925,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 putNull("suggested_section")
             }, "memory_id = ?", arrayOf(memoryId))
             db.delete("embeddings", "memory_id = ?", arrayOf(memoryId))
+            // Accepting a generated draft (draft → active) clears the route
+            // bookkeeping so the memory's later deletion as an Active memory
+            // is never misclassified as a Pending-proposal rejection.
+            if (status == "active") {
+                db.delete("generated_pending_drafts", "memory_id = ?", arrayOf(memoryId))
+            }
             logChange(db, memoryId, "user",
                 if (status == "active") "activated" else status, note,
                 prior?.let { snapshotMemoryJson(it) })
@@ -5723,20 +5979,25 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     /** The delete body, callable from a resolution transaction (Save & Replace)
      *  as well as the standalone [deleteMemory]. */
     private fun deleteMemoryTx(db: SQLiteDatabase, memoryId: String) {
-        // Deleting a Memory Assistant DRAFT is a rejection (owner preference,
-        // July 9 2026): remember it so a rerun does not refile the exact same
-        // draft. Keyed on the memory CONTENT only (canonical recovery plan §3.2 /
-        // item 1): a memory never remembers which chat produced it, so the
-        // rejection carries no source-chat identity and no title (§3.1). The
-        // chat_key column stays for schema compatibility but is written empty.
-        // User-authored memories and non-draft deletions register nothing.
+        // Deleting a Memory Assistant / computer-generated DRAFT is a rejection
+        // (owner preference, July 9 2026): remember it so a rerun does not refile
+        // the exact same draft. Keyed on the memory CONTENT only (canonical
+        // recovery plan §3.2 / item 1): a memory never remembers which chat
+        // produced it, so the rejection carries no source-chat identity and no
+        // title (§3.1). Whether the draft was generated is read from the separate
+        // generated_pending_drafts bookkeeping — NOT from any source field on the
+        // memory (the canonical record has none). Manual creation is never marked,
+        // so deleting a manual draft registers nothing.
         val prior = getMemory(memoryId)
-        if (prior != null && prior.status == "draft" && prior.origin == "archivist") {
+        if (prior != null && prior.status == "draft" && isGeneratedPendingDraftTx(db, memoryId)) {
             db.execSQL(
-                "INSERT OR REPLACE INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
-                arrayOf(draftContentHash(prior.content), "", nowIso())
+                "INSERT OR REPLACE INTO rejected_drafts (content_hash, deleted_at) VALUES (?, ?)",
+                arrayOf(draftContentHash(prior.content), nowIso())
             )
         }
+        // Clear the generated marker for this id (also handled by the FK cascade
+        // on the memories delete below; explicit here for clarity/robustness).
+        db.delete("generated_pending_drafts", "memory_id = ?", arrayOf(memoryId))
         // Supersession safety (Step 1.5): the legacy memories.supersedes column
         // is a plain reference with no ON DELETE rule, so a newer memory still
         // pointing here would block this delete — breaking the rule that a
@@ -5772,7 +6033,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         val db = readableDatabase
         val out = ArrayList<MemoryMatch.Existing>()
         db.rawQuery(
-            "SELECT memory_id, content, scope, kind, status FROM memories WHERE scope = ?",
+            "SELECT memory_id, content, scope, type_id, status FROM memories WHERE scope = ?",
             arrayOf(scope)
         ).use {
             while (it.moveToNext()) {
@@ -5783,7 +6044,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         memoryId = id,
                         content = it.getString(1),
                         scope = it.getString(2),
-                        kind = it.getString(3),
+                        typeId = if (it.isNull(3)) null else it.getString(3),
                         status = it.getString(4),
                         targetIds = allTargetIds(db, id)
                     )
@@ -5814,7 +6075,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     fun deterministicMatchesForDraft(draftId: String): List<MemoryMatch.Match> {
         val m = getMemory(draftId) ?: return emptyList()
         if (m.status != "draft") return emptyList()
-        val candidate = MemoryMatch.Candidate(m.content, m.scope, m.kind, unionTargets(m))
+        val candidate = MemoryMatch.Candidate(m.content, m.scope, m.typeId, unionTargets(m))
         return when (val o = MemoryMatch.classify(candidate, loadComparableLibrary(m.scope, excludeId = draftId))) {
             is MemoryMatch.Outcome.Possible -> o.matches
             else -> emptyList()
@@ -5858,7 +6119,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         val db = readableDatabase
         val out = ArrayList<MemoryComparisonDoc>()
         db.rawQuery(
-            "SELECT memory_id, title, content, embedding_text, tags_json FROM memories " +
+            "SELECT memory_id, content, embedding_text, tags_json FROM memories " +
                 "WHERE scope = ? AND status IN ('archived','superseded')",
             arrayOf(m.scope)
         ).use {
@@ -5869,8 +6130,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     out.add(
                         MemoryComparisonDoc(
                             memoryId = id,
-                            title = it.getString(1),
-                            content = it.getString(2),
+                            content = it.getString(1),
                             embeddingText = it.getStringOrNull("embedding_text"),
                             tagsJson = it.getStringOrNull("tags_json") ?: "[]"
                         )
@@ -5920,6 +6180,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             putNull("suggested_section")
         }, "memory_id = ?", arrayOf(proposalId))
         db.delete("embeddings", "memory_id = ?", arrayOf(proposalId))
+        // Acceptance clears the generated-draft route marker here too, exactly
+        // as in setMemoryStatus: no route/source bookkeeping may stay attached
+        // to an Active memory, whichever way the proposal was accepted.
+        db.delete("generated_pending_drafts", "memory_id = ?", arrayOf(proposalId))
         logChange(db, proposalId, "user", "activated", null, snapshotMemoryJson(p))
         clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, proposalId)
         return true
@@ -6048,10 +6312,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
-    /** Whether an identical draft (exact title+content) from this source
-     *  conversation was deleted before — the runner skips refiling it.
-     *  [chatKey] is the source CHAT ID (rename-safe since DB v17: renames
-     *  re-point the stored rows, so the current id always matches). */
+    /** Whether an identical draft (exact content) was deleted before — the
+     *  runner skips refiling it. */
     fun isDraftRejected(content: String): Boolean {
         readableDatabase.query(
             "rejected_drafts", arrayOf("content_hash"),
@@ -6087,10 +6349,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      *  prior_state (device-local; never exported). Enough for a field-level
      *  undo in Phase 6 and a "before" view in the change-log screen. */
     private fun snapshotMemoryJson(m: MemoryRecord): String = org.json.JSONObject().apply {
-        put("title", m.title)
         put("content", m.content)
         put("scope", m.scope)
-        put("kind", m.kind)
+        m.typeId?.let { put("type_id", it) }
         put("importance", m.importance)
         put("status", m.status)
         put("tags_json", m.tagsJson)

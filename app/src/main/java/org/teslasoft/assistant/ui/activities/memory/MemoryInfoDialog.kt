@@ -21,30 +21,12 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 
-/**
- * The Info control content for a memory (Step 1.5): its source, provenance, and
- * whatever evidence the store actually holds — nothing is invented. Shared by
- * the Associative Memory Pending cards and the Possible Match Review screen so
- * the proposed memory and each existing memory expose the same details.
- */
 object MemoryInfoDialog {
 
     fun show(context: Context, m: MemoryRecord) {
         val lines = ArrayList<String>()
         lines.add(context.getString(R.string.mem_info_source, sourceLabel(context, m)))
-
-        m.provenanceContext?.takeIf { it.isNotBlank() }?.let {
-            lines.add(context.getString(R.string.mem_info_from_chat, it))
-        }
-        m.provenanceNotedOn?.takeIf { it.isNotBlank() }?.let {
-            lines.add(context.getString(R.string.mem_info_noted, it.take(10)))
-        }
-        confidenceLabel(context, m.provenanceConfidence)?.let {
-            lines.add(context.getString(R.string.mem_info_confidence, it))
-        }
-        // "Available evidence": when the store holds nothing beyond the source
-        // label, say so plainly rather than implying more is known.
-        if (lines.size == 1) lines.add(context.getString(R.string.mem_info_none))
+        lines.add(context.getString(R.string.mem_info_none))
 
         MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.mem_info_title)
@@ -54,19 +36,6 @@ object MemoryInfoDialog {
     }
 
     private fun sourceLabel(context: Context, m: MemoryRecord): String = context.getString(
-        when {
-            m.provenanceSource == "imported" -> R.string.mem_source_imported
-            m.origin == "archivist" || m.provenanceSource == "inferred" -> R.string.mem_source_learned
-            m.provenanceSource == null || m.provenanceSource == "user_entered" ||
-                m.provenanceSource == "user_stated" -> R.string.mem_source_hand
-            else -> R.string.mem_source_learned
-        }
+        if (m.origin == "archivist") R.string.mem_source_learned else R.string.mem_source_hand
     )
-
-    private fun confidenceLabel(context: Context, confidence: String?): String? = when (confidence) {
-        "certain" -> context.getString(R.string.mem_conf_certain)
-        "likely" -> context.getString(R.string.mem_conf_likely)
-        "tentative" -> context.getString(R.string.mem_conf_tentative)
-        else -> null
-    }
 }

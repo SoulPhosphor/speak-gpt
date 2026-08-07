@@ -24,11 +24,13 @@ import net.zetetic.database.sqlcipher.SQLiteDatabase
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.teslasoft.assistant.preferences.memory.librarian.RetrievalDocument
 
 /**
  * Real SQLCipher-backed migration and deletion coverage for the Phase 1 storage
@@ -284,10 +286,619 @@ class MemoryStoreInstrumentedTest {
 
         val prior = store.getMemory("m-1")!!
         // Only content changes; the custom type_id is carried through verbatim.
-        store.updateMemory(prior.copy(content = "an edited fact", title = ""), null)
+        store.updateMemory(prior.copy(content = "an edited fact"), null)
 
         assertEquals("mtype-pets", store.getMemory("m-1")!!.typeId)
         assertEquals("an edited fact", store.getMemory("m-1")!!.content)
+    }
+
+    /* -------------------- Phase 2: canonical Type service ------------------- */
+
+    @Test
+    fun typeListAddAndRenameWorkByStableId() {
+        // Test 1. Add a Type; it gets a stable id. Rename by that id; the id is
+        // unchanged and only the name moves.
+        val store = open(freshDbName())
+        val created = store.addMemoryType("Recipes")
+        assertTrue(store.getMemoryTypes().any { it.typeId == created.typeId && it.name == "Recipes" })
+
+        store.renameMemoryType(created.typeId, "Cooking")
+        val after = store.getMemoryTypes().first { it.typeId == created.typeId }
+        assertEquals(created.typeId, after.typeId)   // stable id
+        assertEquals("Cooking", after.name)          // editable display name
+    }
+
+    @Test
+    fun renamingATypePreservesEveryAssignedMemory() {
+        // Test 2. A rename edits only the name; every assigned memory keeps its
+        // type_id and all its content.
+        val store = open(freshDbName())
+        val type = store.addMemoryType("Pets")
+        store.insertMemory(mem("m-1", scope = "global", typeId = type.typeId, importance = 3))
+        store.insertMemory(mem("m-2", scope = "global", typeId = type.typeId, importance = 4))
+
+        val affected = store.renameMemoryType(type.typeId, "Animals")
+
+        assertEquals(setOf("m-1", "m-2"), affected.toSet())
+        assertEquals(type.typeId, store.getMemory("m-1")!!.typeId)
+        assertEquals(type.typeId, store.getMemory("m-2")!!.typeId)
+        assertEquals("content of m-1", store.getMemory("m-1")!!.content)
+        assertEquals(3, store.getMemory("m-1")!!.importance)
+    }
+
+    @Test
+    fun deletingATypeLeavesItsMemoriesIntactAsNoType() {
+        // Test 3. Deletion reassigns memories to No Type atomically; nothing about
+        // the memories' content/scope/importance/lifecycle changes, and the Type
+        // is gone (a deleted starter is not re-seeded).
+        val store = open(freshDbName())
+        store.insertMemory(mem("m-fact", scope = "global", typeId = "mtype-fact", importance = 5, status = "active"))
+
+        val affected = store.deleteMemoryType("mtype-fact")
+
+        assertEquals(listOf("m-fact"), affected)
+        val m = store.getMemory("m-fact")!!
+        assertNull("memory kept, now No Type", m.typeId)
+        assertEquals("content of m-fact", m.content)
+        assertEquals("global", m.scope)
+        assertEquals(5, m.importance)
+        assertEquals("active", m.status)
+        assertFalse("deleted starter Type must not be re-seeded",
+            store.getMemoryTypes().any { it.typeId == "mtype-fact" })
+    }
+
+    @Test
+    fun typeRenameAndDeleteQueueEmbeddingRefreshForAffectedMemories() {
+        // Test 4. A rename or delete drops the affected memories' vectors so the
+        // librarian's background self-repair re-embeds them — old Type wording
+        // cannot linger in an active embedding document. Unaffected memories keep
+        // their vectors.
+        val store = open(freshDbName())
+        val a = store.addMemoryType("A")
+        val b = store.addMemoryType("B")
+        store.insertMemory(mem("m-a", scope = "global", typeId = a.typeId))
+        store.insertMemory(mem("m-b", scope = "global", typeId = b.typeId))
+        store.upsertEmbedding("m-a", "test-model", byteArrayOf(1, 2, 3))
+        store.upsertEmbedding("m-b", "test-model", byteArrayOf(4, 5, 6))
+
+        val renamed = store.renameMemoryType(a.typeId, "A2")
+        assertEquals(listOf("m-a"), renamed)
+        assertEquals("affected memory queued for refresh", 0, embeddingCount(store, "m-a"))
+        assertEquals("unrelated memory's vector is untouched", 1, embeddingCount(store, "m-b"))
+
+        // Re-embed m-a, then delete its Type: the vector is dropped (queued) again.
+        store.upsertEmbedding("m-a", "test-model", byteArrayOf(7, 8, 9))
+        val deleted = store.deleteMemoryType(a.typeId)
+        assertEquals(listOf("m-a"), deleted)
+        assertEquals(0, embeddingCount(store, "m-a"))
+        assertEquals(1, embeddingCount(store, "m-b"))
+    }
+
+    @Test
+    fun instructionBehaviorKeysOnStableTypeId_renameKeepsIt_deleteEndsIt() {
+        // Item B: Instruction behavior is keyed on the stable Instruction Type
+        // id, carried through retrieval. Renaming the Type (id unchanged) keeps a
+        // memory behaving as an Instruction; deleting it (memory -> No Type) ends
+        // that behavior without touching the memory's content or lifecycle.
+        val store = open(freshDbName())
+        store.insertMemory(
+            mem("inst", scope = "global", typeId = MemoryTypeMigration.INSTRUCTION_TYPE_ID, status = "active")
+        )
+
+        fun retrievedTypeId(): String? =
+            store.activeMemoriesForScope(RetrievalScope.NONE).first { it.memoryId == "inst" }.typeId
+
+        // Retrieval carries the stable Type id (not the inert legacy kind).
+        assertEquals(MemoryTypeMigration.INSTRUCTION_TYPE_ID, retrievedTypeId())
+
+        // Rename the Instruction Type: the id does not change, so it still behaves
+        // as an Instruction.
+        store.renameMemoryType(MemoryTypeMigration.INSTRUCTION_TYPE_ID, "Directives")
+        assertEquals(MemoryTypeMigration.INSTRUCTION_TYPE_ID, retrievedTypeId())
+
+        // Delete the Instruction Type: the memory becomes No Type and stops
+        // behaving as an Instruction; its content and lifecycle are untouched.
+        store.deleteMemoryType(MemoryTypeMigration.INSTRUCTION_TYPE_ID)
+        assertNull(retrievedTypeId())
+        assertEquals("content of inst", store.getMemory("inst")!!.content)
+        assertEquals("active", store.getMemory("inst")!!.status)
+    }
+
+    @Test
+    fun legacyTitleKindProvenanceColumnsDoNotEnterRetrieval() {
+        // Item R4: populated legacy title/kind/provenance columns must not reach
+        // the runtime retrieval object, ranking, matching, or embedding text.
+        val store = open(freshDbName())
+        // A distinctive title word ("Zephyrgloom") appears ONLY in the legacy
+        // title column, never in the content; legacy kind/provenance are set too.
+        store.writableDatabase.execSQL(
+            "INSERT INTO memories (memory_id, scope, kind, type_id, title, content, importance, created_at, status, " +
+                "provenance_source, provenance_confidence) " +
+                "VALUES ('m-leg', 'global', 'fact', 'mtype-fact', 'Zephyrgloom', 'the harvest festival', 0, " +
+                "'2026-08-05T00:00:00Z', 'active', 'user_stated', 'tentative')"
+        )
+
+        val retrieved = store.activeMemoriesForScope(RetrievalScope.NONE).first { it.memoryId == "m-leg" }
+        // typeId is the sole Type authority; content is preserved.
+        assertEquals("mtype-fact", retrieved.typeId)
+        assertEquals("the harvest festival", retrieved.content)
+        // The runtime object carries no title/kind/provenance to leak.
+        val fields = retrieved.javaClass.declaredFields.map { it.name }
+        assertFalse(fields.any { it.equals("title", true) })
+        assertFalse(fields.any { it.equals("kind", true) })
+        assertFalse(fields.any { it.contains("provenance", true) })
+        // The embedding/semantic document is built from content (+tags), never
+        // the legacy title: the distinctive title word does not enter it.
+        val doc = RetrievalDocument.semanticDocument(retrieved.content, retrieved.embeddingText, emptyList())
+        assertFalse("legacy title must not enter embedding text", doc.contains("Zephyrgloom"))
+        assertTrue(doc.contains("harvest festival"))
+    }
+
+    @Test
+    fun generatedDraftDeletionRecordsRejection_manualDeletionDoesNot() {
+        // Phase 2 review item 2: deleting a Memory Assistant / computer-generated
+        // Pending draft records a content rejection (so a rerun does not refile
+        // the exact proposal), while deleting a MANUAL Pending draft does not —
+        // and the decision uses separate id-keyed bookkeeping, never a source
+        // field on the memory (the canonical record has none).
+        val store = open(freshDbName())
+
+        // 1. A generated Pending draft is filed.
+        store.insertPendingMemory(
+            mem("gen", scope = "global", status = "draft").copy(content = "the harvest festival"),
+            generated = true
+        )
+        assertFalse("not yet rejected", store.isDraftRejected("the harvest festival"))
+
+        // 2. The user deletes it.
+        store.deleteMemory("gen")
+        // 3. An exact rerun proposal is now rejected — the analyzer consults this
+        //    before filing, so it is not refiled.
+        assertTrue("deleting a generated draft records a content rejection",
+            store.isDraftRejected("the harvest festival"))
+
+        // 4. A MANUALLY filed Pending draft's deletion records NO rejection.
+        store.insertPendingMemory(
+            mem("man", scope = "global", status = "draft").copy(content = "a manual note"),
+            generated = false
+        )
+        store.deleteMemory("man")
+        assertFalse("deleting a manual draft must not record a rejection",
+            store.isDraftRejected("a manual note"))
+    }
+
+    /* --------------- Phase 2: companion memory isolation (item 5) ----------- */
+
+    @Test
+    fun aCompanionMemoryIsRetrievableOnlyByItsOwnCompanion() {
+        // Test 10 (retrieval side). A memory filed for companion A is eligible in
+        // A's chat and NOT in B's chat — the scope gate lives in the query.
+        val store = open(freshDbName())
+        store.insertCompanion(companion("c-a", "Ash"))
+        store.insertCompanion(companion("c-b", "Blue"))
+        store.insertMemory(mem("for-a", scope = "companion", companionIds = listOf("c-a"), status = "active"))
+
+        val forA = store.activeMemoriesForScope(RetrievalScope("c-a", null, null, null)).map { it.memoryId }
+        val forB = store.activeMemoriesForScope(RetrievalScope("c-b", null, null, null)).map { it.memoryId }
+
+        assertTrue("companion A sees its own memory", forA.contains("for-a"))
+        assertFalse("companion B must NOT see companion A's memory", forB.contains("for-a"))
+    }
+
+    /* ------------- Phase 2: canonical Pending filing (items 8, 13) ---------- */
+
+    @Test
+    fun insertPendingMemoryStoresACanonicalDraftWithoutTransportOrChatIdentity() {
+        // Tests 12/13 (storage side). A validated candidate built by the canonical
+        // factory and stored via the canonical insert lands as a draft with no
+        // chat identity and no transport marker in the stored row.
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "a canonical fact", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-p", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record)
+
+        val stored = store.getMemory("m-p")!!
+        assertEquals("draft", stored.status)
+        assertEquals("mtype-fact", stored.typeId)
+        assertEquals(PendingMemoryRecordFactory.COMPAT_ORIGIN, stored.origin)
+        // The stored draft is counted as Pending.
+        assertTrue(store.countDrafts() >= 1)
+    }
+
+    /* ------- Phase 2 review finding 3: durable companion-deletion marker ---- */
+
+    @Test
+    fun pendingCompanionDeletionMarkerReconcilesAnIncompleteCascade() {
+        // The failure path: a confirmed deletion wrote its durable marker but the
+        // cascade never ran (interrupted). A later reconcile must complete it —
+        // sole-owned companion memories deleted (embeddings cascaded), a memory
+        // shared with a surviving companion kept (relinked), General untouched,
+        // and the marker cleared.
+        val store = open(freshDbName())
+        store.insertCompanion(companion("c-a", "Ash"))
+        store.insertCompanion(companion("c-b", "Blue"))
+        store.insertMemory(mem("sole", scope = "companion", companionIds = listOf("c-a")))
+        store.upsertEmbedding("sole", "test-model", byteArrayOf(1, 2, 3))
+        store.insertMemory(mem("shared", scope = "companion", companionIds = listOf("c-a", "c-b")))
+        store.insertMemory(mem("general", scope = "global"))
+
+        // Interrupted after the marker was written, before the cascade.
+        store.markCompanionPendingDeletion("c-a")
+        assertEquals(listOf("c-a"), store.pendingCompanionDeletionIds())
+        assertNotNull("cascade has not run yet", store.getMemory("sole"))
+
+        // Reconcile: drain each marker with the same cascade, then clear it. This
+        // is exactly what CompanionDeletionService.reconcilePendingDeletions does;
+        // it is exercised here against the real store (the service resolves the
+        // app-singleton store, which these throwaway-DB tests do not use).
+        for (id in store.pendingCompanionDeletionIds()) {
+            store.deleteCompanion(id, deleteMemories = true)
+            store.clearCompanionPendingDeletion(id)
+        }
+
+        assertNull("sole-owned companion memory deleted on reconcile", store.getMemory("sole"))
+        assertEquals("embedding cascaded", 0, embeddingCount(store, "sole"))
+        assertEquals("shared memory survives, relinked to c-b", listOf("c-b"), store.getMemory("shared")!!.companionIds)
+        assertEquals("General memory untouched", "global", store.getMemory("general")!!.scope)
+        assertTrue("marker cleared after completion", store.pendingCompanionDeletionIds().isEmpty())
+    }
+
+    @Test
+    fun completedCompanionDeletionClearsItsMarkerAndRetryIsIdempotent() {
+        // The success path plus retry-safety: the durable mark→cascade→clear flow
+        // leaves no marker, and re-running the cascade on an already-deleted
+        // companion is a safe no-op (so a reconcile after a completed run cannot
+        // corrupt anything).
+        val store = open(freshDbName())
+        store.insertCompanion(companion("c-a", "Ash"))
+        store.insertMemory(mem("sole", scope = "companion", companionIds = listOf("c-a")))
+
+        store.markCompanionPendingDeletion("c-a")
+        store.deleteCompanion("c-a", deleteMemories = true)
+        store.clearCompanionPendingDeletion("c-a")
+
+        assertTrue(store.pendingCompanionDeletionIds().isEmpty())
+        assertNull(store.getMemory("sole"))
+
+        // Idempotent retry: must not throw and must leave state consistent.
+        store.deleteCompanion("c-a", deleteMemories = true)
+        assertNull(store.getMemory("sole"))
+        assertTrue(store.pendingCompanionDeletionIds().isEmpty())
+    }
+
+    /* --------- generated-draft acceptance clears the marker (item 1) ------ */
+
+    @Test
+    fun deletingAGeneratedPendingDraftRecordsARejection() {
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "generated fact", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-gen", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record, generated = true)
+
+        assertTrue("generated marker present while draft",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-gen"))
+
+        store.deleteMemory("m-gen")
+        assertTrue("rejection recorded",
+            rowExists(store, "rejected_drafts", "content_hash",
+                store.javaClass.getDeclaredMethod("draftContentHash", String::class.java).apply {
+                    isAccessible = true
+                }.invoke(store, "generated fact") as String))
+    }
+
+    @Test
+    fun acceptingAGeneratedPendingDraftClearsItsMarker() {
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "accepted fact", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-acc", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record, generated = true)
+
+        assertTrue("marker present before acceptance",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-acc"))
+
+        store.setMemoryStatus("m-acc", "active", "accepted by user")
+
+        assertFalse("marker removed after acceptance",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-acc"))
+    }
+
+    @Test
+    fun deletingAnAcceptedGeneratedMemoryDoesNotRecordARejection() {
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "later-deleted fact", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-del", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record, generated = true)
+
+        store.setMemoryStatus("m-del", "active", "accepted")
+        store.deleteMemory("m-del")
+
+        assertFalse("no rejection for formerly-accepted memory",
+            rowExists(store, "rejected_drafts", "content_hash",
+                store.javaClass.getDeclaredMethod("draftContentHash", String::class.java).apply {
+                    isAccessible = true
+                }.invoke(store, "later-deleted fact") as String))
+    }
+
+    @Test
+    fun acceptingAGeneratedDraftThroughResolutionClearsItsMarker() {
+        // A Possible Match resolution is the second acceptance path (Save &
+        // Edit Old / Replace / Supersede all activate via the same transaction)
+        // and must clear the route marker exactly like setMemoryStatus.
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "resolution-accepted fact", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-res", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record, generated = true)
+
+        assertTrue("marker present before resolution",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-res"))
+
+        val result = store.resolveSaveAndEditOld("m-res", null)
+        assertTrue(result is MemoryStore.ResolutionResult.Applied)
+
+        assertEquals("active", store.getMemory("m-res")!!.status)
+        assertFalse("marker removed after resolution acceptance",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-res"))
+    }
+
+    @Test
+    fun manualPendingMemoryIsNeverMarkedGenerated() {
+        val store = open(freshDbName())
+        val candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = "global", content = "hand-written memory", typeId = "mtype-fact"
+        ) as CandidateResult.Valid).candidate
+        val record = PendingMemoryRecordFactory.build(candidate, "m-man", "2026-08-05T00:00:00Z")
+        store.insertPendingMemory(record, generated = false)
+
+        assertFalse("manual draft has no generated marker",
+            rowExists(store, "generated_pending_drafts", "memory_id", "m-man"))
+
+        store.deleteMemory("m-man")
+        assertFalse("deleting manual draft records no rejection",
+            rowExists(store, "rejected_drafts", "content_hash",
+                store.javaClass.getDeclaredMethod("draftContentHash", String::class.java).apply {
+                    isAccessible = true
+                }.invoke(store, "hand-written memory") as String))
+    }
+
+    /* -- v24/v25 migrations: provenance, kind, and title columns removed --- */
+
+    @Test
+    fun freshDatabaseHasNoLegacyColumns() {
+        val store = open(freshDbName())
+        assertFalse("kind must not exist", columnExists(store, "memories", "kind"))
+        assertFalse("title must not exist", columnExists(store, "memories", "title"))
+        assertFalse("provenance_source must not exist",
+            columnExists(store, "memories", "provenance_source"))
+        assertFalse("provenance_confidence must not exist",
+            columnExists(store, "memories", "provenance_confidence"))
+        assertFalse("provenance_noted_on must not exist",
+            columnExists(store, "memories", "provenance_noted_on"))
+        assertFalse("provenance_context must not exist",
+            columnExists(store, "memories", "provenance_context"))
+        assertFalse("source_chat_id must not exist",
+            columnExists(store, "memories", "source_chat_id"))
+    }
+
+    @Test
+    fun upgradedDatabaseDropsLegacyColumnsAndPreservesData() {
+        val name = freshDbName()
+        buildV20Database(name) { db ->
+            db.insert("memories", null, ContentValues().apply {
+                put("memory_id", "m-legacy")
+                put("scope", "global")
+                put("kind", "fact")
+                put("title", "legacy title")
+                put("content", "important content")
+                put("importance", 4)
+                put("provenance_source", "inferred")
+                put("provenance_confidence", "likely")
+                put("provenance_noted_on", "2026-07-01T00:00:00Z")
+                put("provenance_context", "some chat")
+                put("source_chat_id", "chat-old-1")
+                put("created_at", "2026-07-01T00:00:00Z")
+                put("status", "active")
+            })
+        }
+        val store = open(name)
+
+        assertFalse("provenance_source dropped",
+            columnExists(store, "memories", "provenance_source"))
+        assertFalse("provenance_confidence dropped",
+            columnExists(store, "memories", "provenance_confidence"))
+        assertFalse("provenance_noted_on dropped",
+            columnExists(store, "memories", "provenance_noted_on"))
+        assertFalse("provenance_context dropped",
+            columnExists(store, "memories", "provenance_context"))
+        assertFalse("source_chat_id dropped",
+            columnExists(store, "memories", "source_chat_id"))
+        assertFalse("kind dropped", columnExists(store, "memories", "kind"))
+        assertFalse("title dropped", columnExists(store, "memories", "title"))
+
+        val m = store.getMemory("m-legacy")!!
+        assertEquals("content preserved", "important content", m.content)
+        assertEquals("importance preserved", 4, m.importance)
+        assertEquals("status preserved", "active", m.status)
+        assertEquals("scope preserved", "global", m.scope)
+        assertEquals("created_at preserved", "2026-07-01T00:00:00Z", m.createdAt)
+        assertNotNull("type_id migrated", m.typeId)
+
+        // The rebuild must leave the same indexes a fresh install has — the
+        // Type index in particular is easy to lose in a table rebuild.
+        assertTrue("type index survives the rebuild",
+            indexExists(store, "idx_memories_type"))
+        assertTrue("status index survives the rebuild",
+            indexExists(store, "idx_memories_status"))
+    }
+
+    /* --------------- v26 migration: rejected_drafts.chat_key dropped ------- */
+
+    @Test
+    fun freshDatabaseHasNoRejectedDraftsChatKeyColumn() {
+        val store = open(freshDbName())
+        assertFalse("chat_key must not exist",
+            columnExists(store, "rejected_drafts", "chat_key"))
+    }
+
+    @Test
+    fun upgradedDatabaseDropsRejectedDraftsChatKeyAndCollapsesDuplicateHashes() {
+        val name = freshDbName()
+        buildV20Database(name) { db ->
+            // Two legacy rows sharing a content_hash under different chat_key
+            // values (the pre-v26 PK) must collapse to the single row v26
+            // keeps — the newer deleted_at wins.
+            db.execSQL(
+                "INSERT INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
+                arrayOf("hash-1", "chat-a", "2026-07-01T00:00:00Z")
+            )
+            db.execSQL(
+                "INSERT INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
+                arrayOf("hash-1", "chat-b", "2026-07-05T00:00:00Z")
+            )
+        }
+        val store = open(name)
+
+        assertFalse("chat_key dropped", columnExists(store, "rejected_drafts", "chat_key"))
+        assertTrue("row for the shared hash survives",
+            rowExists(store, "rejected_drafts", "content_hash", "hash-1"))
+        val count = store.readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM rejected_drafts WHERE content_hash = ?", arrayOf("hash-1")
+        ).use { if (it.moveToFirst()) it.getInt(0) else -1 }
+        assertEquals("duplicate chat_key rows collapse to one", 1, count)
+        val deletedAt = store.readableDatabase.rawQuery(
+            "SELECT deleted_at FROM rejected_drafts WHERE content_hash = ?", arrayOf("hash-1")
+        ).use { if (it.moveToFirst()) it.getString(0) else null }
+        assertEquals("newest deleted_at kept", "2026-07-05T00:00:00Z", deletedAt)
+    }
+
+    /* ------- full upgrade chain: a memory's child records all survive ------ */
+
+    @Test
+    fun upgradeFromV20PreservesAMemoryAndAllItsChildRecordsWithNoBrokenForeignKeys() {
+        val name = freshDbName()
+        buildV20Database(name) { db ->
+            // The v20-era tables a real device already has, that no v21-v26
+            // migration block touches — built here only so this fixture can
+            // carry genuine child records through the whole upgrade chain.
+            db.execSQL(
+                "CREATE TABLE companions (" +
+                    "companion_id TEXT PRIMARY KEY, " +
+                    "current_name TEXT NOT NULL, " +
+                    "essence TEXT NOT NULL, " +
+                    "memory_participation TEXT NOT NULL DEFAULT 'full', " +
+                    "hard_limits_json TEXT NOT NULL DEFAULT '[]', " +
+                    "created_at TEXT NOT NULL, " +
+                    "status TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "CREATE TABLE embeddings (" +
+                    "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "embedding_model TEXT NOT NULL, " +
+                    "vector BLOB NOT NULL, " +
+                    "embedded_at TEXT NOT NULL, " +
+                    "PRIMARY KEY (memory_id, embedding_model))"
+            )
+            db.execSQL(
+                "CREATE TABLE memory_companions (" +
+                    "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "companion_id TEXT NOT NULL REFERENCES companions(companion_id), " +
+                    "PRIMARY KEY (memory_id, companion_id))"
+            )
+            db.execSQL(
+                "CREATE TABLE change_log (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "memory_id TEXT REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "at TEXT NOT NULL, " +
+                    "actor TEXT NOT NULL, " +
+                    "action TEXT NOT NULL, " +
+                    "note TEXT, " +
+                    "prior_state_json TEXT)"
+            )
+            db.execSQL(
+                "CREATE TABLE memory_supersessions (" +
+                    "new_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "old_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "at TEXT NOT NULL, " +
+                    "PRIMARY KEY (new_memory_id, old_memory_id))"
+            )
+
+            db.insert("companions", null, ContentValues().apply {
+                put("companion_id", "c-legacy")
+                put("current_name", "Ash")
+                put("essence", "e")
+                put("created_at", "2026-07-01T00:00:00Z")
+                put("status", "active")
+            })
+            insertV20Memory(db, "m-child-legacy", "fact", 4)
+            insertV20Memory(db, "m-super-old", "fact", 2)
+            db.insert("embeddings", null, ContentValues().apply {
+                put("memory_id", "m-child-legacy")
+                put("embedding_model", "test-model")
+                put("vector", byteArrayOf(1, 2, 3, 4))
+                put("embedded_at", "2026-07-01T00:00:00Z")
+            })
+            db.insert("memory_companions", null, ContentValues().apply {
+                put("memory_id", "m-child-legacy")
+                put("companion_id", "c-legacy")
+            })
+            db.insert("change_log", null, ContentValues().apply {
+                put("memory_id", "m-child-legacy")
+                put("at", "2026-07-01T00:00:00Z")
+                put("actor", "user")
+                put("action", "created")
+            })
+            db.insert("memory_supersessions", null, ContentValues().apply {
+                put("new_memory_id", "m-child-legacy")
+                put("old_memory_id", "m-super-old")
+                put("at", "2026-07-02T00:00:00Z")
+            })
+        }
+
+        val store = open(name)
+
+        // The memory itself survives the whole v21-v26 chain.
+        val m = store.getMemory("m-child-legacy")!!
+        assertEquals("content preserved", "content of m-child-legacy", m.content)
+        assertEquals("importance preserved", 4, m.importance)
+        assertNotNull("legacy kind 'fact' migrated to a Type", m.typeId)
+
+        // Every child record survives — none was silently dropped or orphaned.
+        assertEquals("embedding survives", 1, embeddingCount(store, "m-child-legacy"))
+        assertTrue("target join survives",
+            store.readableDatabase.rawQuery(
+                "SELECT 1 FROM memory_companions WHERE memory_id = ? AND companion_id = ?",
+                arrayOf("m-child-legacy", "c-legacy")
+            ).use { it.moveToFirst() })
+        assertTrue("change_log entry survives",
+            store.readableDatabase.rawQuery(
+                "SELECT 1 FROM change_log WHERE memory_id = ? AND action = 'created'",
+                arrayOf("m-child-legacy")
+            ).use { it.moveToFirst() })
+        assertTrue("supersession record survives",
+            store.readableDatabase.rawQuery(
+                "SELECT 1 FROM memory_supersessions WHERE new_memory_id = ? AND old_memory_id = ?",
+                arrayOf("m-child-legacy", "m-super-old")
+            ).use { it.moveToFirst() })
+        assertNotNull("the superseded memory itself also survives",
+            store.getMemory("m-super-old"))
+
+        // The v21/v24/v25/v26 `memories` rebuilds run with foreign keys off
+        // (onConfigure) precisely so dropping/recreating the parent table
+        // cannot orphan these child rows; onOpen re-enables enforcement
+        // afterward. Confirm directly that nothing was left dangling.
+        val brokenRefs = store.readableDatabase.rawQuery("PRAGMA foreign_key_check", null)
+            .use { c -> val rows = ArrayList<String>(); while (c.moveToNext()) { rows.add(c.getString(0)) }; rows }
+        assertTrue("no broken foreign-key references after the full upgrade chain: $brokenRefs",
+            brokenRefs.isEmpty())
     }
 
     /* ------------------------------ helpers ------------------------------- */
@@ -312,6 +923,16 @@ class MemoryStoreInstrumentedTest {
         store.readableDatabase.rawQuery("SELECT 1 FROM $table WHERE $col = ?", arrayOf(value))
             .use { it.moveToFirst() }
 
+    private fun columnExists(store: MemoryStore, table: String, column: String): Boolean =
+        store.readableDatabase.rawQuery("PRAGMA table_info($table)", null).use { c ->
+            while (c.moveToNext()) { if (c.getString(1) == column) return true }; false
+        }
+
+    private fun indexExists(store: MemoryStore, name: String): Boolean =
+        store.readableDatabase.rawQuery(
+            "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?", arrayOf(name)
+        ).use { it.moveToFirst() }
+
     private fun companion(id: String, name: String) = CompanionRecord(
         companionId = id, currentName = name, essence = "e", relationshipNotes = null,
         memoryParticipation = "full", hardLimitsJson = "[]", appCharacterId = null,
@@ -330,12 +951,11 @@ class MemoryStoreInstrumentedTest {
         campaignIds: List<String> = emptyList(),
         roleplayCharacterIds: List<String> = emptyList()
     ) = MemoryRecord(
-        memoryId = id, scope = scope, kind = MemoryTypeMigration.legacyKindForTypeId(typeId),
-        title = "", content = "content of $id", embeddingText = null, tagsJson = "[]",
+        memoryId = id, scope = scope,
+        content = "content of $id", embeddingText = null, tagsJson = "[]",
         importance = importance, worldIds = worldIds, roleplayCharacterIds = roleplayCharacterIds,
         campaignIds = campaignIds, projectIds = emptyList(), protectionJson = null, modeHintsJson = "[]",
-        provenanceSource = null, provenanceConfidence = null, provenanceNotedOn = null,
-        provenanceContext = null, createdAt = "2026-08-04T00:00:00Z", updatedAt = null, status = status,
+        createdAt = "2026-08-04T00:00:00Z", updatedAt = null, status = status,
         supersedes = null, companionIds = companionIds, entityRefs = emptyList(), changeLog = emptyList(),
         origin = "user", typeId = typeId
     )
@@ -353,6 +973,17 @@ class MemoryStoreInstrumentedTest {
         val db = SQLiteDatabase.openOrCreateDatabase(file.path, key, null, null)
         db.execSQL("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         db.execSQL("INSERT INTO meta (key, value) VALUES ('db_migration', '20')")
+        // rejected_drafts (created at v14, rekeyed v17) exists on every genuine
+        // v20 database; the v26 migration reads it, so the fixture must carry
+        // it too or upgrading this hand-built database would fail on a table
+        // that only this minimal fixture — never a real device — lacks.
+        db.execSQL(
+            "CREATE TABLE rejected_drafts (" +
+                "content_hash TEXT NOT NULL, " +
+                "chat_key TEXT NOT NULL, " +
+                "deleted_at TEXT NOT NULL, " +
+                "PRIMARY KEY (content_hash, chat_key))"
+        )
         db.execSQL(
             "CREATE TABLE memories (" +
                 "memory_id TEXT PRIMARY KEY, " +

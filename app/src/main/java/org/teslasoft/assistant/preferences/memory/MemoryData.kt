@@ -422,17 +422,10 @@ data class MemoryRecord(
     // companion | project | world | campaign | rp_character. Targets ride the
     // link columns below (companion via memory_companions).
     val scope: String,
-    // Legacy fixed-enumeration Type value (fact|preference|event|status|
-    // instruction|lore). Phase 1 (§5) replaces this with the user-owned
-    // [typeId]; `kind` stays as inert compatibility baggage — it is no longer
-    // the source of truth for a memory's Type and must not drive product
-    // behavior. New memories carry an empty kind and their Type in [typeId].
-    val kind: String,
-    // Compatibility baggage only (§3.1): no Associative Memory has a title.
-    // Never generated, displayed, embedded, ranked, or exported in the revised
-    // memory path; kept solely because the legacy column is NOT NULL. New
-    // memories store an inert empty placeholder.
-    val title: String,
+    // The user-owned Type id ([typeId], below) is the sole Type authority
+    // (§5). The retired legacy `kind` and `title` columns were dropped from
+    // storage (DB v25); old backups' values are translated at import
+    // (kind → Type via MemoryTypeMigration) and titles are discarded (§3.1).
     val content: String,
     val embeddingText: String?,
     val tagsJson: String,                 // JSON array of strings
@@ -449,10 +442,6 @@ data class MemoryRecord(
     val projectIds: List<String>,
     val protectionJson: String?,          // schema protection object, verbatim
     val modeHintsJson: String,            // JSON array of mode ids
-    val provenanceSource: String?,
-    val provenanceConfidence: String?,
-    val provenanceNotedOn: String?,
-    val provenanceContext: String?,
     val createdAt: String,
     val updatedAt: String?,
     val status: String,                   // draft | active | archived | superseded
@@ -461,25 +450,9 @@ data class MemoryRecord(
     val entityRefs: List<String>,         // memory_entities join rows
     val changeLog: List<ChangeLogEntry>,
     val origin: String = "user",
-    /** Archivist card-placement suggestion (DB v13, drafts only): proposed
-     *  CardType / card id / CardSections key, pre-selecting the Add-to-Card
-     *  and Link dropdowns and driving the §7 outline treatment. Cleared when
-     *  the draft is accepted without the card. */
     val suggestedCardType: String? = null,
     val suggestedCardId: String? = null,
     val suggestedSection: String? = null,
-    /** Legacy source chat id (DB v17). RETIRED as of Phase 1 (canonical recovery
-     *  plan §3.2 / item 1): a memory never remembers which chat produced it, so
-     *  new memories always store null here and rejected-draft dedup is keyed on
-     *  memory content alone in the separate rejected_drafts ledger. Old values
-     *  remain physically for compatibility but are never maintained or read.
-     *  Device-local, not exported. */
-    val sourceChatId: String? = null,
-    /** The memory's user-owned Type id (canonical recovery plan §5), or null
-     *  for No Type. References memory_types(type_id). This is the source of
-     *  truth for a memory's Type; the legacy [kind] column is inert
-     *  compatibility baggage. Migrated from [kind] for pre-Phase-1 rows
-     *  (recognized starter kind → its seeded id; `lore`/unknown → No Type). */
     val typeId: String? = null
 )
 
@@ -704,22 +677,23 @@ data class RetrievalScope(
 data class RetrievableMemory(
     val memoryId: String,
     val scope: String,
-    val title: String,
     val content: String,
     val embeddingText: String?,
     val importance: Int,
     val createdAt: String,
     val worldId: String?,
-    val provenanceConfidence: String?,
     // Phase 4 (enforcer): a protected memory must be structurally inseparable
-    // from its handling, so the retrieval row carries the protection object and
-    // provenance source with it — the assembler never has to re-query (and can
-    // therefore never "forget" the HANDLE WITH CARE line).
+    // from its handling, so the retrieval row carries the protection object with
+    // it — the assembler never has to re-query (and can therefore never "forget"
+    // the HANDLE WITH CARE line).
     val protectionJson: String? = null,
-    val provenanceSource: String? = null,
-    // Stage 3: the Type drives the render (Instruction memories become handling
-    // rules) and the tags feed soft ranking hints (§6 — never gatekeepers).
-    val kind: String = "fact",
+    // The user-owned Type id is the SOLE Type authority: an Instruction-Type
+    // memory (typeId == MemoryTypeMigration.INSTRUCTION_TYPE_ID) renders as a
+    // handling rule (law 5). The legacy title/kind/provenance columns are
+    // quarantined out of the runtime retrieval object entirely (Phase 2 review,
+    // item R4) — they are never selected, so they cannot enter ranking,
+    // assembly, matching, embedding text, or the prompt.
+    val typeId: String? = null,
     val tagsJson: String = "[]",
     // Phase A (counterplan §5.5): freshness ranks by the last edit, not only
     // creation — a corrected memory must outrank its obsolete peers.
@@ -736,7 +710,6 @@ data class RetrievableMemory(
  */
 data class MemoryComparisonDoc(
     val memoryId: String,
-    val title: String,
     val content: String,
     val embeddingText: String?,
     val tagsJson: String

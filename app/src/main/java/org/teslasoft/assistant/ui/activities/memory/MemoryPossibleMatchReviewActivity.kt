@@ -285,14 +285,12 @@ class MemoryPossibleMatchReviewActivity : FragmentActivity() {
         var editedOld: MemoryRecord? = null
         if (kind == ResolutionKind.EDIT_OLD) {
             val holder = checked.singleOrNull() ?: return
-            // Titles are retired (§3.1): only content is edited; the title stays
-            // the inert empty placeholder.
             val content = holder.editContent.text?.toString()?.trim().orEmpty()
             if (content.isEmpty()) {
                 Toast.makeText(this, R.string.mem_edit_required, Toast.LENGTH_SHORT).show()
                 return
             }
-            editedOld = holder.record.copy(title = "", content = content)
+            editedOld = holder.record.copy(content = content)
         }
         val checkedIds = checked.map { it.record.memoryId }
 

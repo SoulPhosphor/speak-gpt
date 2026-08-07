@@ -2,28 +2,47 @@
 
 A layered, model-agnostic memory system for AI companions: global and per-companion memories, protected topics with handling instructions, communication modes, roleplay worlds and characters, and an AI "Archivist" that maintains it all under user-controlled autonomy dials. Design is complete; this package is the full specification for the coding phase.
 
-> **⚠️ DOCUMENT HIERARCHY (2026-08-03 — read this before anything else in
-> this folder).** The current authority order is:
+> **⚠️ DOCUMENT HIERARCHY (2026-08-03, corrected 2026-08-07 — read this
+> before anything else in this folder).** The current authority order is:
 > 1. **`project-plan.md`** at the repository root — the only active
 >    roadmap. It covers all remaining work (unfinished features only) and
->    inlines every still-binding requirement a builder needs. Old phase
->    lists and work orders (`memory-system-integration-plan.md`,
->    `plan_one_page.md`, `external_memory_analysis_counterplan.md`,
->    `phase5_rework_work_order.md`, `rag_engine_work_order.md`, and other
->    build-plan/work-order/design documents formerly in this folder) are
->    superseded and archived in **`legacy/`** at the repository root —
->    historical record only, not to be followed as a plan.
+>    inlines every still-binding requirement a builder needs; it governs
+>    which feature is currently active to work on across the whole app.
+>    Old phase lists and work orders (`memory-system-integration-plan.md`,
+>    `plan_one_page.md`, `phase5_rework_work_order.md`,
+>    `rag_engine_work_order.md`, and other build-plan/work-order/design
+>    documents formerly in this folder) are superseded and archived in
+>    **`legacy/`** at the repository root — historical record only, not to
+>    be followed as a plan. This includes an unrelated older document once
+>    also named `external_memory_analysis_counterplan.md`, renamed
+>    2026-08-07 to `external_memory_analysis_counterplan_revision_9_legacy.md`
+>    so it can never be confused with point 4 below.
 > 2. **`owner_approved_rules.md`** (Revision 4) — outranks everything for
 >    the memory-system behavior it covers.
 > 3. **`roleplay_cards_and_tags_spec.md`** — authoritative roleplay
 >    card + tag detail, incorporated into the rules as Revision 4. BUILT.
-> 4. The v1.11 package below — background and still-valid mechanics for
->    what is already built, each file carrying its own ⚠️ banner naming
->    what's superseded. (`companion_memory_schema.json` /
+> 4. **`external_memory_analysis_counterplan.md`** (Revision 24,
+>    binding-clarified by `revision_25_binding_clarifications.md`) — the
+>    current memory-system plan: the binding record of the owner's
+>    approved memory-system product decisions, required implementation
+>    order, and completion gates, including everything already built
+>    under its Phases 0-2. It governs memory-system product behavior and
+>    build order; `project-plan.md` (point 1) governs which feature is
+>    currently active to work on.
+> 5. The rest of the v1.11 package below — background and still-valid
+>    mechanics for what is already built, each file carrying its own ⚠️
+>    banner naming what's superseded. (`companion_memory_schema.json` /
 >    `seed_public_template.json` are the v1.11 export shape — the codec
 >    still reads schema-shaped JSON, but retired concepts inside them —
 >    modes, directives, entities, owner_profile, always_load — are
->    dormant fields, not features to build.)
+>    dormant fields, not features to build. So are `memories.title`,
+>    `memories.kind` and its fixed six-value enumeration, and every
+>    `memories.provenance` field: the Phase 1/2 memory-system rework
+>    retired all three from the live schema. No Associative Memory has a
+>    title or permanent provenance; Types are user-owned via a
+>    `memory_types` table and `memories.type_id`, not this fixed `kind`
+>    enum. See `MemoryStore.kt`'s `onCreate`/`onUpgrade` for the live
+>    shape.)
 
 1. **README.md** (this file) — orientation and glossary.
 2. **memory_system_guide.md** — plain-language tour of the concepts.

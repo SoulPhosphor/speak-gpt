@@ -1,8 +1,33 @@
-# Speak-GPT Memory Systems: Canonical Recovery Plan
+# Speak-GPT Memory System: Current Memory-System Plan
 
 **Revision 24, 2026-08-04**
 
-This is the active memory-system plan. It records the owner's decisions, the required implementation order, the archiver contract, companion-memory behavior, conversation-level memory policies, and the completion gates for each phase. Existing code is evidence of what was built, not proof that the behavior was approved.
+> **Authority (owner ruling, 2026-08-07):** this is the current
+> memory-system plan — the binding record of the owner's approved
+> memory-system product decisions, required implementation order, and
+> completion gates, including everything already built under its Phases
+> 0-2. It governs memory-system product behavior and build order.
+> `project-plan.md` at the repository root remains the sole roadmap for
+> which feature is currently active to work on across the whole app; where
+> this document's phase list and that roadmap's feature list overlap,
+> `project-plan.md` governs scheduling.
+>
+> An unrelated, older document once shared this exact filename — Revision
+> 9, marked "ROADMAP SUPERSEDED" on 2026-08-03 in favor of
+> `project-plan.md`. To prevent any future confusion between the two, it
+> was renamed 2026-08-07 to
+> `legacy/external_memory_analysis_counterplan_revision_9_legacy.md`. This
+> document, at `Memory System/external_memory_analysis_counterplan.md`,
+> begins at Revision 24 the following day and does not continue or
+> reference that file's numbering.
+>
+> **Read `revision_25_binding_clarifications.md` with this document.** It is
+> binding wherever this text disagrees with it — notably: no protected
+> companion capacity (Memory Priority is the only approved competition
+> mechanism), the chunk token values are decided, the bookmark architecture
+> is decided, and a Companion memory targets exactly one companion.
+
+This document records the owner's approved memory-system decisions: the required implementation order, the archiver contract, companion-memory behavior, conversation-level memory policies, and the completion gates for each phase. Existing code is evidence of what was built, not proof that the behavior was approved.
 
 ## 1. Product Goal
 
@@ -48,7 +73,7 @@ This section is the required execution order. The detailed product rules later i
 - Implement one phase at a time on a dedicated feature branch.
 - Do not begin the next phase until the current phase's tests pass and its completion gate is satisfied.
 - Keep migrations additive and reversible where practical. Never delete existing user data merely to simplify implementation, except where the approved companion-deletion action explicitly performs a confirmed permanent cascade.
-- When legacy storage conflicts with the approved product, first stop the legacy field from affecting prompts, UI, matching, embeddings, and retrieval. Physical column removal comes later.
+- When legacy storage conflicts with the approved product, first stop the legacy field from affecting prompts, UI, matching, embeddings, and retrieval. Then remove the field physically **in the same phase that ships its replacement** — do not park removals in a final cleanup phase. Legacy structure left sitting in the database invites later implementation work to build against it and reintroduce retired features (owner ruling, August 5 2026, superseding the earlier "physical column removal comes later" rule).
 - If a phase encounters a genuine product decision not answered here, stop only that decision path and return one focused question. Continue unrelated work within the approved phase.
 - At the end of every phase, record changed files, migrations, tests, unresolved items, and the exact commit.
 - Do not redesign Lorebooks, roleplay cards, VAD, Whisper, logging, provider routing, or unrelated app systems while implementing this plan.
@@ -56,7 +81,7 @@ This section is the required execution order. The detailed product rules later i
 
 ### Phase 0: Current-Code Audit and Migration Map
 
-**Status:** [ ] Not Started
+**Status:** [x] Complete (audit at `Memory System/memory_implementation_audit.md`; see `revision_25_binding_clarifications.md` §1)
 
 **Goal:** Establish the exact gap between the current implementation and this plan before changing behavior.
 
@@ -126,7 +151,11 @@ Restrictions:
 
 ### Phase 1: Storage Compatibility and Database Migration
 
-**Status:** [ ] Not Started
+**Status:** [x] Complete and merged to `main` (database v21, reviewed twice).
+Legacy-field physical cleanup that Phase 1 made possible — the
+provenance/source-chat columns (v24), the `kind`/`title` columns (v25), and
+`rejected_drafts.chat_key` (v26) — landed during Phase 2 work and is
+**not yet on `main`**; see the Phase 2 status below for where it lives.
 
 **Goal:** Make the database capable of representing the approved memory shape and conversation policies without losing existing data.
 
@@ -181,7 +210,15 @@ Required work:
 
 ### Phase 2: Memory Domain Services and Shared Filing Path
 
-**Status:** [ ] Not Started
+**Status:** [~] Substantial work done on branch
+`claude/memory-database-plan-review-kl52ed` (built on
+`claude/memory-system-phase-2-gq5wu9`) — canonical Pending filing path,
+companion-deletion durability marker (database v22), generated-draft
+bookkeeping (v23), and the physical retirement of the provenance/source-chat
+columns (v24), the `kind`/`title` columns (v25), and
+`rejected_drafts.chat_key` (v26). **Not merged to `main`; not yet verified
+against this phase's completion gate below or exercised on-device by the
+owner.**
 
 **Goal:** Provide one trustworthy application layer that every memory route uses.
 
@@ -556,7 +593,7 @@ Required work:
 
 **Status:** [ ] Not Started
 
-**Goal:** Remove obsolete behavior only after the replacement system is working and protected by tests.
+**Goal:** Final re-audit and release verification. Legacy removal is **not** deferred to this phase (owner ruling, August 5 2026): each phase removes the legacy structure its replacement retires. Already removed, on branch `claude/memory-database-plan-review-kl52ed` (not yet on `main`): the provenance/source-chat columns (database v24), the `kind`/`title` columns (v25), and `rejected_drafts.chat_key` (v26). What remains here is verification, plus any leftover cleanup tied to replacements shipped in Phases 4–9 (transcript row processing states once the bookmark exists; the 200,000-character ceiling once token budgets exist).
 
 Required work:
 

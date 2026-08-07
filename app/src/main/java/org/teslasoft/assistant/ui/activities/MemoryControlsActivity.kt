@@ -65,7 +65,6 @@ class MemoryControlsActivity : FragmentActivity() {
     private var switchCompanionInRoleplay: MaterialSwitch? = null
     private var switchChatListMemoryStatus: MaterialSwitch? = null
 
-    private var switchCardSuggestions: MaterialSwitch? = null
 
     private var textMemoryEngineValue: TextView? = null
 
@@ -93,7 +92,6 @@ class MemoryControlsActivity : FragmentActivity() {
         switchDefaultMemory = findViewById(R.id.switch_default_memory)
         switchCompanionInRoleplay = findViewById(R.id.switch_companion_in_roleplay)
         switchChatListMemoryStatus = findViewById(R.id.switch_chat_list_memory_status)
-        switchCardSuggestions = findViewById(R.id.switch_card_suggestions)
         textMemoryEngineValue = findViewById(R.id.text_memory_engine_value)
     }
 
@@ -144,12 +142,6 @@ class MemoryControlsActivity : FragmentActivity() {
             preferences?.getShowMemoryStatusOnChatList() ?: true
         switchChatListMemoryStatus?.setOnCheckedChangeListener { _, checked ->
             preferences?.setShowMemoryStatusOnChatList(checked)
-        }
-
-        /* ---- Memory Assistant ---- */
-        switchCardSuggestions?.isChecked = preferences?.getArchivistCardSuggestions() ?: true
-        switchCardSuggestions?.setOnCheckedChangeListener { _, checked ->
-            preferences?.setArchivistCardSuggestions(checked)
         }
 
         /* ---- Memory Engine ---- */

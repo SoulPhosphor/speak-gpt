@@ -42,6 +42,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
+import org.teslasoft.assistant.preferences.memory.MemoryScopeGrouping
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.MemoryTypeMigration
 import org.teslasoft.assistant.preferences.memory.ProjectRecord
@@ -265,7 +266,7 @@ class MemoryEditorActivity : FragmentActivity() {
                         // picking a card + section makes approval MOVE the
                         // memory onto the card (owner ruling — it leaves the
                         // browser and lives with the card).
-                        if (record.scope in setOf("world", "campaign", "rp_character")) {
+                        if (MemoryScopeGrouping.isRoleplayGroup(record.scope)) {
                             isRoleplayDraft = true
                             wireLinkCardDropdowns()
                             // A Memory Assistant placement suggestion
@@ -348,11 +349,13 @@ class MemoryEditorActivity : FragmentActivity() {
     )
 
     /** The starter dropdown key for a type_id, or "none" for No Type / a custom
-     *  Type (which the starter-only picker cannot represent as a selection). */
+     *  Type (which the starter-only picker cannot represent as a selection).
+     *  Starter ids and their initial labels are fixed literals, so the key is
+     *  the initial label lowercased ("fact", "preference", …). */
     private fun starterKeyFor(typeId: String?): String {
         if (typeId == null) return "none"
-        val kind = MemoryTypeMigration.legacyKindForTypeId(typeId)
-        return if (kind.isNotEmpty()) kind else "none"
+        return MemoryTypeMigration.STARTER_TYPES
+            .firstOrNull { it.typeId == typeId }?.name?.lowercase() ?: "none"
     }
 
     private fun refreshType() {
@@ -618,10 +621,8 @@ class MemoryEditorActivity : FragmentActivity() {
             return
         }
         // The user-owned Type id is the source of truth and is saved verbatim
-        // (a custom Type survives an edit — item 2); the legacy kind is derived
-        // from it so they can never disagree (item 4).
+        // (a custom Type survives an edit — item 2).
         val typeId = currentTypeId
-        val inertKind = MemoryTypeMigration.legacyKindForTypeId(typeId)
         val tagsJson = textToTagsJson(findViewById<TextInputEditText>(R.id.field_mem_tags)?.text?.toString().orEmpty())
         val targets = selectedTargets.keys.toList()
 
@@ -635,14 +636,14 @@ class MemoryEditorActivity : FragmentActivity() {
             val store = MemoryStore.getInstance(this)
             val prior = existing ?: memoryId?.let { store.getMemory(it) }
             // Approving a roleplay draft with a Lore Card picked MOVES it onto
-            // the card (owner ruling, July 8 2026 evening): the edited title/
-            // content become the entry, and the memory row is gone for good.
+            // the card (owner ruling, July 8 2026 evening): the edited content
+            // becomes the entry, and the memory row is gone for good.
             val cardType = linkCardType
             val cardId = linkCardId
             val section = linkSection
             if (activate && prior != null && cardType != null && cardId != null && section != null) {
                 store.updateMemory(
-                    prior.copy(title = "", content = content, kind = inertKind, typeId = typeId),
+                    prior.copy(content = content, typeId = typeId),
                     getString(R.string.memory_change_edited)
                 )
                 store.convertMemoryToCardEntry(prior.memoryId, cardType, cardId, section)
@@ -655,13 +656,11 @@ class MemoryEditorActivity : FragmentActivity() {
             if (prior == null) {
                 val record = MemoryRecord(
                     memoryId = MemoryStore.newId("m-"),
-                    scope = currentScope, kind = inertKind, typeId = typeId, title = "", content = content,
+                    scope = currentScope, typeId = typeId, content = content,
                     embeddingText = null, tagsJson = tagsJson, importance = currentImportance,
                     worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
                     projectIds = projectIds,
                     protectionJson = null, modeHintsJson = "[]",
-                    provenanceSource = "user_entered", provenanceConfidence = null,
-                    provenanceNotedOn = MemoryStore.nowIso(), provenanceContext = null,
                     createdAt = MemoryStore.nowIso(), updatedAt = null, status = "active",
                     supersedes = null, companionIds = companionIds, entityRefs = emptyList(),
                     changeLog = emptyList(), origin = "user"
@@ -670,7 +669,7 @@ class MemoryEditorActivity : FragmentActivity() {
                 Librarian.getInstance(this).reindexMemory(record.memoryId)
             } else {
                 val updated = prior.copy(
-                    scope = currentScope, kind = inertKind, typeId = typeId, title = "", content = content,
+                    scope = currentScope, typeId = typeId, content = content,
                     importance = currentImportance, tagsJson = tagsJson,
                     worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,
                     projectIds = projectIds, companionIds = companionIds,

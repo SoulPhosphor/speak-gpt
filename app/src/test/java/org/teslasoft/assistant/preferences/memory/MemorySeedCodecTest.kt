@@ -93,16 +93,9 @@ class MemorySeedCodecTest {
         val serialized = MemorySeedCodec.serialize(first)
         val second = MemorySeedCodec.parse(serialized)
 
-        // Titles are retired (§3.1): they are deliberately not written to a
-        // revised-model export, so a legacy title does not survive the trip.
-        // Every other field must be preserved exactly. Normalize the one
-        // intentionally-dropped field, then assert strict data-class equality.
-        val stripTitles = { d: MemoryStoreData ->
-            d.copy(memories = d.memories.map { it.copy(title = "") })
-        }
-        assertEquals("only the retired title differs", stripTitles(first), second)
-        // And prove the drop is real, not accidental preservation.
-        assertEquals("", second.memories.first().title)
+        // Titles and legacy kind no longer exist on the record (v25): both are
+        // consumed or discarded at parse, so the round trip is exactly lossless.
+        assertEquals(first, second)
     }
 
     @Test
@@ -149,10 +142,10 @@ class MemorySeedCodecTest {
         // Legacy single "campaign_id" key parses into the multi-select set (§2).
         assertEquals(listOf("camp-1"), data.memories.first().campaignIds)
 
-        // Round-trip preserving the new columns; the retired title is the only
-        // field intentionally not carried across (§3.1).
+        // Round-trip preserving the new columns; the legacy kind/title JSON
+        // keys are consumed or discarded at parse, so the trip is lossless.
         val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
-        assertEquals(data.copy(memories = data.memories.map { it.copy(title = "") }), back)
+        assertEquals(data, back)
         assertEquals(listOf("camp-1"), back.memories.first().campaignIds)
         assertEquals("It began in the rain.", back.campaigns.first().storySoFar)
     }
@@ -551,9 +544,6 @@ class MemorySeedCodecTest {
         val back = MemorySeedCodec.parse(MemorySeedCodec.serialize(data))
         assertEquals(data.memoryTypes, back.memoryTypes)
         assertEquals("mtype-pets", back.memories.first().typeId)
-        // A memory with no legacy kind and no title stays clean across the trip.
-        assertEquals("", back.memories.first().kind)
-        assertEquals("", back.memories.first().title)
     }
 
     @Test

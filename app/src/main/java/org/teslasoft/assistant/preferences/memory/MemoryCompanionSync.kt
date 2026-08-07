@@ -50,6 +50,10 @@ object MemoryCompanionSync {
      */
     fun bootstrapFromPersonas(context: Context): Int {
         val store = MemoryStore.getInstance(context)
+        // A memory-system init is a natural point to drain any confirmed-but-
+        // incomplete companion deletion left by an earlier interrupted cascade
+        // (review finding 3), so a marker never persists indefinitely.
+        try { CompanionDeletionService.getInstance(context).reconcilePendingDeletions() } catch (_: Exception) {}
         val personas = PersonaPreferences.getPersonaPreferences(context).getPersonasList()
         var created = 0
         for (persona in personas) {
@@ -137,11 +141,22 @@ object MemoryCompanionSync {
         try {
             if (personaId.isBlank() || !MemoryStore.isProvisioned(context)) return
             val store = MemoryStore.getInstance(context)
+            val service = CompanionDeletionService.getInstance(context)
+            // Drain any earlier confirmed-but-incomplete deletion first (review
+            // finding 3): a durable marker from a failed/interrupted cascade is
+            // retried here so it is never silently left behind.
+            service.reconcilePendingDeletions()
             val existing = store.findCompanionByAppCharacterId(personaId) ?: return
-            store.deleteCompanion(existing.companionId, deleteMemories = true)
+            // Both companion-deletion doorways run the SAME cascade through the
+            // one shared deletion service (Phase 2, item 9). The service marks the
+            // deletion durably before cascading, so even if this best-effort hook
+            // fails (the app persona is already gone and cannot be un-deleted) the
+            // marker guarantees the memory cascade completes on a later reconcile.
+            service.deleteCompanion(existing.companionId)
         } catch (e: Exception) {
-            // Persona deletes must always succeed; an orphaned companion record
-            // can be cleaned up later and never blocks the app-side delete.
+            // Persona deletes must always succeed; a durable marker (written before
+            // the cascade) ensures the memory-side deletion is retried and never
+            // silently left incomplete, without blocking the app-side delete.
             MemoryLog.log(context, "MemorySync", "error", "Persona->companion delete failed: ${e.message}")
         }
     }

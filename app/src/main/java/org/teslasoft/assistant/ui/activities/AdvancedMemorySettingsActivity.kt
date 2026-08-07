@@ -356,7 +356,7 @@ class AdvancedMemorySettingsActivity : FragmentActivity() {
                             sb.append(getString(R.string.memory_debug_semantic_header)).append("\n")
                             hits.forEach {
                                 sb.append(getString(
-                                    R.string.memory_debug_search_result_fmt, it.score, it.memory.title, it.memory.content
+                                    R.string.memory_debug_search_result_fmt, it.score, it.memory.content
                                 )).append("\n\n")
                             }
                         }

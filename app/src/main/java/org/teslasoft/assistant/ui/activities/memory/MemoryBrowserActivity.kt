@@ -26,6 +26,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
+import org.teslasoft.assistant.preferences.memory.MemoryScopeGrouping
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.PossibleMatchFinder
 import org.teslasoft.assistant.preferences.memory.librarian.EmbeddingModelStorage
@@ -60,6 +61,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
      *  Aug 3 2026 — an absent scope/type shows greyed and can't be picked). */
     @Volatile private var availableScopes: Set<String> = emptySet()
     @Volatile private var availableTypes: Set<String> = emptySet()
+    @Volatile private var typeOptions: List<Pair<String, String>> = emptyList()
 
     /** Draft count in the current (global or scoped) view, for the count line
      *  under the Memories | Pending toggle (owner design, July 8 2026
@@ -107,6 +109,8 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             .putExtra(MemoryFilterPanelActivity.EXTRA_AVAILABLE_TAGS, availableTags.toTypedArray())
             .putExtra(MemoryFilterPanelActivity.EXTRA_AVAILABLE_SCOPES, availableScopes.toTypedArray())
             .putExtra(MemoryFilterPanelActivity.EXTRA_AVAILABLE_TYPES, availableTypes.toTypedArray())
+            .putExtra(MemoryFilterPanelActivity.EXTRA_TYPE_OPTION_IDS, typeOptions.map { it.first }.toTypedArray())
+            .putExtra(MemoryFilterPanelActivity.EXTRA_TYPE_OPTION_NAMES, typeOptions.map { it.second }.toTypedArray())
         startActivity(intent)
         // Pair with the panel's slide-out on close so the transition matches.
         @Suppress("DEPRECATION")
@@ -205,9 +209,11 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
         availableTags = base.flatMap { parseTags(it.tagsJson) }.distinct().sortedBy { it.lowercase() }
         availableScopes = base.map { it.scope }.toSet()
-        // The legacy kind is a derived, inert shadow of the Type (item 4); a No
-        // Type memory carries a blank kind, which is not a filter option.
-        availableTypes = base.map { it.kind }.filter { it.isNotBlank() }.toSet()
+        // The filter is keyed on the user-owned Type id (§5); No Type is not a
+        // filter option. The full current Type list rides along so the panel
+        // can label ids with their live names.
+        availableTypes = base.mapNotNull { it.typeId }.toSet()
+        typeOptions = store.getMemoryTypes().map { it.typeId to it.name }
         pendingCount = base.count { it.status == "draft" }
 
         val f = MemoryBrowserFilterState
@@ -216,7 +222,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         // Titles are retired (§3.1): search the memory content only.
         if (q.isNotEmpty()) list = list.filter { it.content.lowercase().contains(q) }
         if (!isScoped() && f.scope.isNotEmpty()) list = list.filter { it.scope in f.scope }
-        if (f.type.isNotEmpty()) list = list.filter { it.kind in f.type }
+        if (f.type.isNotEmpty()) list = list.filter { it.typeId in f.type }
         // The mode toggle IS the draft split (owner design, July 8 2026
         // evening): Pending = drafts only; Memories = everything approved
         // (non-draft). Within Memories, the Superseded Memories filter (owner
@@ -232,7 +238,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
                 else -> list.filter { it.status != "draft" && it.status != "superseded" }
             }
         }
-        if (f.source != "all") list = list.filter { sourceKey(it.provenanceSource) == f.source }
+        if (f.source != "all") list = list.filter { sourceKey(it.origin) == f.source }
         if (f.tags.isNotEmpty()) {
             val lowered = f.tags.map { it.lowercase() }.toSet()
             list = list.filter { parseTags(it.tagsJson).any { t -> t.lowercase() in lowered } }
@@ -260,7 +266,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         // roleplay target." note and CANNOT be added to a card until the
         // user assigns a target in the editor. Nothing proposes or creates
         // worlds/campaigns automatically.
-        val roleplay = m.scope in ROLEPLAY_SCOPES
+        val roleplay = MemoryScopeGrouping.isRoleplayGroup(m.scope)
         val needsTarget = roleplay &&
             m.worldIds.isEmpty() && m.campaignIds.isEmpty() && m.roleplayCharacterIds.isEmpty()
         // Step 1.5: the new Associative Memory Pending card (full memory, caution/
@@ -349,10 +355,8 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
     }
 
-    /** "Learned from chat" once the Archivist exists; everything the user
-     *  typed (including legacy rows with no provenance) reads as by hand. */
-    private fun sourceKey(provenanceSource: String?): String =
-        if (provenanceSource == null || provenanceSource == "user_entered" || provenanceSource == "user_stated") "hand" else "learned"
+    private fun sourceKey(origin: String): String =
+        if (origin == "archivist") "learned" else "hand"
 
     private fun parseTags(tagsJson: String?): List<String> = try {
         if (tagsJson.isNullOrBlank()) emptyList() else {
@@ -684,9 +688,4 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
     }
 
-    companion object {
-        /** Scopes whose pending rows carry Add to Card (owner: "Roleplay
-         *  Memories: Accept Delete Edit Add to Card"). */
-        private val ROLEPLAY_SCOPES = setOf("world", "campaign", "rp_character")
-    }
 }

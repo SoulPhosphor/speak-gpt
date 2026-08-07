@@ -1445,7 +1445,7 @@
     <string name="memory_debug_search_hint">Search your memories</string>
     <string name="memory_debug_search_button">Search</string>
     <string name="memory_debug_search_empty">No matches.</string>
-    <string name="memory_debug_search_result_fmt">%1$.2f  %2$s\n%3$s</string>
+    <string name="memory_debug_search_result_fmt">%1$.2f\n%2$s</string>
     <string name="memory_debug_semantic_header">— Semantic memory matches —</string>
     <string name="memory_debug_all_header">— All records (keyword) —</string>
     <string name="memory_debug_logging_title">Memory diagnostics logging</string>
@@ -1658,8 +1658,6 @@
     <string name="mem_status_superseded">Superseded</string>
     <string name="mem_source_hand">Entered by hand</string>
     <string name="mem_source_learned">Learned from chat</string>
-    <string name="mem_source_imported">Imported</string>
-
     <!-- Associative Memory Pending + Possible Match review (Step 1.5, owner
          placement spec). Icon-only controls carry accessible labels; the
          caution icon has NO visible label beside it (this string is only its
@@ -1676,13 +1674,7 @@
     <!-- Info control content. -->
     <string name="mem_info_title">Source and evidence</string>
     <string name="mem_info_source">Source: %1$s</string>
-    <string name="mem_info_from_chat">From chat: %1$s</string>
-    <string name="mem_info_noted">Noted: %1$s</string>
-    <string name="mem_info_confidence">Confidence: %1$s</string>
     <string name="mem_info_none">No additional source information is recorded for this memory.</string>
-    <string name="mem_conf_certain">Stated by you</string>
-    <string name="mem_conf_likely">Likely</string>
-    <string name="mem_conf_tentative">Tentative</string>
 
     <!-- Possible Match Review screen. -->
     <string name="mem_review_title">Possible Match Review</string>
@@ -1758,16 +1750,10 @@
     <string name="memory_controls_companion_roleplay_hint">Let the active companion\'s approved memories be eligible during roleplay. Off keeps companion memories out of roleplay unless another rule allows them.</string>
     <string name="memory_controls_chat_list_status">Show Memory Status on Chat List</string>
     <string name="memory_controls_chat_list_status_hint">Show whether each chat is waiting for memory review, partially archived, archived, or excluded. This does not show backup status.</string>
-    <string name="memory_controls_section_assistant">Memory Assistant</string>
     <string name="memory_controls_row_assistant">Memory Assistant</string>
     <string name="memory_controls_row_assistant_hint">Find possible memories in finished conversations, then review them in Pending before saving.</string>
     <string name="memory_controls_max_suggestions">Maximum Suggestions Per Conversation</string>
     <string name="memory_controls_max_suggestions_hint">Limit how many memory drafts Memory Assistant can create from each conversation.</string>
-    <!-- Card-suggestions "danger switch" (placement ruling 6; owner phrasing verbatim
-         from phase6_card_suggestions_and_icons_design.md §2). ON by default. -->
-    <string name="memory_controls_card_suggestions">Allow card-relevant roleplay recommended memories to be automatically appended to appropriate system locations?</string>
-    <string name="memory_controls_card_suggestions_warning">Warning: turning this off could cause campaign relevant information to not line up with roleplay related information cards, causing information to be out of date. Only approved information will be applied to cards. You will have a chance to specify card to add data to. Smaller models may struggle more with accurately classifying proper memory card location.</string>
-    <string name="memory_controls_card_suggestions_hint">If auto-suggest is turned off you will still be able to manually assign memories to cards.</string>
     <string name="memory_controls_row_advanced_assistant">Advanced Memory Assistant Settings</string>
     <string name="memory_controls_row_advanced_assistant_subtitle">Tune extraction temperature, importance, and prompt behavior.</string>
     <string name="memory_controls_section_engine">Memory Engine</string>

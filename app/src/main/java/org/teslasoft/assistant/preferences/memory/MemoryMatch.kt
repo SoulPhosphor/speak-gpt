@@ -98,11 +98,13 @@ object MemoryMatch {
     private fun sameExactPlacement(a: Candidate, b: Existing): Boolean =
         a.scope == b.scope && a.targetIds.toSortedSet() == b.targetIds.toSortedSet()
 
-    /** The staged (or edited) memory being checked against the library. */
+    /** The staged (or edited) memory being checked against the library. Type
+     *  identity is the user-owned [typeId] (the source of truth), never the
+     *  inert legacy kind (Phase 2 review). */
     data class Candidate(
         val content: String,
         val scope: String,
-        val kind: String,
+        val typeId: String?,
         val targetIds: List<String>
     )
 
@@ -111,7 +113,7 @@ object MemoryMatch {
         val memoryId: String,
         val content: String,
         val scope: String,
-        val kind: String,
+        val typeId: String?,
         val status: String,        // active | draft | archived | superseded
         val targetIds: List<String>
     )
@@ -129,8 +131,8 @@ object MemoryMatch {
             normalizeContent(candidate.content) == normalizeContent(existing.content)
         if (!exact) return Relation.NONE
         return when (existing.status) {
-            "draft" -> if (existing.kind == candidate.kind) Relation.ALREADY_PRESENT else Relation.NONE
-            "active" -> if (existing.kind == candidate.kind) Relation.ALREADY_PRESENT else Relation.EXACT_DIFFERENT_KIND
+            "draft" -> if (existing.typeId == candidate.typeId) Relation.ALREADY_PRESENT else Relation.NONE
+            "active" -> if (existing.typeId == candidate.typeId) Relation.ALREADY_PRESENT else Relation.EXACT_DIFFERENT_KIND
             else -> Relation.EXACT_INACTIVE // archived | superseded
         }
     }

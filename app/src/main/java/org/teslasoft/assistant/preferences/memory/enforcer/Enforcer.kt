@@ -541,7 +541,7 @@ class Enforcer private constructor(private val appContext: Context) {
                 injected = kept.map {
                     AssemblyLog.Line(
                         memLogLabel(it),
-                        "(${it.provenanceMarker}) score %.3f sim %.3f%s%s · %s".format(
+                        "score %.3f sim %.3f%s%s · %s".format(
                             it.score, it.similarity,
                             if (it.isProtected) " [protected]" else "",
                             if (it.isInstruction) " [instruction rule]" else "",
@@ -716,21 +716,12 @@ class Enforcer private constructor(private val appContext: Context) {
         return AssembledMemory(
             memoryId = m.memoryId,
             content = m.content,
-            provenanceMarker = provenanceMarker(m.provenanceSource, m.provenanceConfidence),
             handling = handling,
             neverAssume = neverAssume,
             score = score,
             similarity = similarity,
-            kind = m.kind
+            typeId = m.typeId
         )
-    }
-
-    /** told = they said it; observed = seen over time; guessed = tentative. */
-    private fun provenanceMarker(source: String?, confidence: String?): String = when {
-        confidence.equals("tentative", ignoreCase = true) -> "guessed"
-        source.equals("user_stated", ignoreCase = true) -> "told"
-        source.equals("inferred", ignoreCase = true) -> "guessed"
-        else -> "observed"
     }
 
     /** A short label for a memory in the diagnostic assembly log. Titles are

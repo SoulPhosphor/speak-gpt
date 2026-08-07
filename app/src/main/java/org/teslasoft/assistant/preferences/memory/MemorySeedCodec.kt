@@ -148,24 +148,16 @@ object MemorySeedCodec {
         }
 
         val memories = each(root, "memories").map { m ->
-            val prov = if (m.has("provenance") && !m.isNull("provenance")) m.getJSONObject("provenance") else null
-            // Legacy kind stays as inert baggage; the Type comes from an explicit
-            // type_id when present, otherwise from mapping the legacy kind
-            // (recognized starter kind → seeded id, lore/unknown → No Type). §5.
-            val legacyKind = m.str("kind") ?: ""
+            // A pre-Phase-1 backup carries a legacy `kind` and possibly a
+            // `title`. The kind is translated to the user-owned Type here and
+            // then discarded; titles are retired (§3.1) and never imported.
             MemoryRecord(
                 memoryId = m.reqStr("memory_id"),
                 scope = m.reqStr("scope"),
-                kind = legacyKind,
-                typeId = m.str("type_id") ?: MemoryTypeMigration.typeIdForLegacyKind(legacyKind),
-                // Titles are retired (§3.1); tolerate their absence in revised
-                // backups and keep any legacy value only as inert baggage.
-                title = m.str("title") ?: "",
+                typeId = m.str("type_id") ?: MemoryTypeMigration.typeIdForLegacyKind(m.str("kind")),
                 content = m.reqStr("content"),
                 embeddingText = m.str("embedding_text"),
                 tagsJson = m.arrText("tags"),
-                // 0 = neutral, the default for new memories (§7). Existing 1–5
-                // values in older backups are always present and preserved.
                 importance = m.optInt("importance", 0),
                 worldIds = m.targetSet("world_ids", "world_id"),
                 roleplayCharacterIds = m.targetSet("roleplay_character_ids", "roleplay_character_id"),
@@ -173,10 +165,6 @@ object MemorySeedCodec {
                 projectIds = m.targetSet("project_ids", "project_id"),
                 protectionJson = m.objText("protection"),
                 modeHintsJson = m.arrText("mode_hints"),
-                provenanceSource = prov?.str("source"),
-                provenanceConfidence = prov?.str("confidence"),
-                provenanceNotedOn = prov?.str("noted_on"),
-                provenanceContext = prov?.str("context"),
                 createdAt = m.reqStr("created_at"),
                 updatedAt = m.str("updated_at"),
                 status = m.reqStr("status"),
@@ -547,10 +535,10 @@ object MemorySeedCodec {
                     if (m.roleplayCharacterIds.isNotEmpty()) put("roleplay_character_ids", JSONArray(m.roleplayCharacterIds))
                     if (m.campaignIds.isNotEmpty()) put("campaign_ids", JSONArray(m.campaignIds))
                     if (m.projectIds.isNotEmpty()) put("project_ids", JSONArray(m.projectIds))
-                    // Legacy kind is written only when a pre-Phase-1 value is
-                    // still present (inert baggage); the Type of record is the
-                    // user-owned type_id. Titles are never exported (§3.1).
-                    if (m.kind.isNotEmpty()) put("kind", m.kind)
+                    // The user-owned type_id is the only Type representation.
+                    // Legacy kind and titles no longer exist in storage and are
+                    // never exported (§3.1/§5); old backups' values are
+                    // translated or discarded at import.
                     putIfNotNull("type_id", m.typeId)
                     put("content", m.content)
                     putIfNotNull("embedding_text", m.embeddingText)
@@ -559,16 +547,6 @@ object MemorySeedCodec {
                     put("importance", m.importance)
                     m.protectionJson?.let { putJsonText("protection", it) }
                     put("mode_hints", jsonArrayOrEmpty(m.modeHintsJson))
-                    if (m.provenanceSource != null || m.provenanceConfidence != null ||
-                        m.provenanceNotedOn != null || m.provenanceContext != null
-                    ) {
-                        put("provenance", JSONObject().apply {
-                            putIfNotNull("source", m.provenanceSource)
-                            putIfNotNull("confidence", m.provenanceConfidence)
-                            putIfNotNull("noted_on", m.provenanceNotedOn)
-                            putIfNotNull("context", m.provenanceContext)
-                        })
-                    }
                     if (m.changeLog.isNotEmpty()) {
                         put("change_log", JSONArray().apply {
                             m.changeLog.forEach { l ->

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://example.local/companion-memory-store.schema.json",
   "title": "Companion Memory Store",
-  "description": "Model-agnostic memory store for AI companions. Any 'librarian' (embedding/retrieval layer) can read this. Embeddings are NOT stored here; they live in a sidecar index keyed by memory_id + embedding_model so the librarian can be swapped without touching memories.",
+  "description": "PRE-REVISION DOCUMENT, kept for historical reference only — NOT a spec for the current or any future Associative Memory shape. It predates the Phase 1/2 memory-system rework (Memory System/external_memory_analysis_counterplan.md, Revision 24, binding-clarified by Memory System/revision_25_binding_clarifications.md) and describes retired behavior in several places below (each marked RETIRED in its own description): memories.kind (the live system uses user-owned Types via a memory_types table and memories.type_id, not this fixed enum, and lore is not a Type), memories.title (no Associative Memory has a title — never generated, shown, embedded, or exported), memories.importance (the live range is 0-5 with 0 as neutral and the default for new memories, not this document's 1-5 default-unset shape, and is ignored entirely by retrieval while the Use Importance Ratings setting is Off), and memories.provenance (permanent memory provenance is rejected; only short-lived run bookkeeping outside the memory object is allowed). For the actual current schema, read MemoryStore.kt's onCreate (the live shape) and onUpgrade (every migration since). Original description follows — model-agnostic memory store for AI companions. Any 'librarian' (embedding/retrieval layer) can read this. Embeddings are NOT stored here; they live in a sidecar index keyed by memory_id + embedding_model so the librarian can be swapped without touching memories.",
   "type": "object",
   "required": ["schema_version", "companions", "memories", "modes", "directives"],
   "properties": {
@@ -138,7 +138,7 @@
       "description": "The heart of the system. Each memory is a narrative record, scoped globally or to specific companions.",
       "items": {
         "type": "object",
-        "required": ["memory_id", "scope", "kind", "title", "content", "created_at", "status"],
+        "required": ["memory_id", "scope", "content", "created_at", "status"],
         "properties": {
           "memory_id": { "type": "string", "description": "Permanent UUID." },
           "scope": {
@@ -162,9 +162,9 @@
           "kind": {
             "type": "string",
             "enum": ["identity", "preference", "project", "episode", "relationship", "spiritual", "insight", "practical", "calibration", "journal", "companion_lore", "other"],
-            "description": "Loose category to help retrieval, never a substitute for the narrative content."
+            "description": "RETIRED — not part of the live schema and never required. The live system uses user-owned Types (a memory_types table plus memories.type_id, zero or one Type per memory) instead of any fixed enum."
           },
-          "title": { "type": "string", "description": "Short human-readable handle." },
+          "title": { "type": "string", "description": "RETIRED — not part of the live schema and never required. No Associative Memory has a title: never generated, shown, embedded, ranked, or exported." },
           "content": {
             "type": "string",
             "description": "The memory itself, written as rich prose. This is the source of truth. Write it the way a person who knows the user well would describe it."
@@ -181,9 +181,9 @@
           },
           "importance": {
             "type": "integer",
-            "minimum": 1,
+            "minimum": 0,
             "maximum": 5,
-            "description": "Retrieval weight. 5 = core to who the user is."
+            "description": "Optional, user-controlled ranking aid — not assigned by the Memory Assistant. 0 = neutral and the default for every new memory (not 3, and not required); ignored entirely by retrieval while the Use Importance Ratings setting is Off; existing values are preserved either way."
           },
           "always_load": {
             "type": "boolean",
@@ -230,7 +230,7 @@
           },
           "provenance": {
             "type": "object",
-            "description": "Where this memory came from, so inferred things are never confused with things the user actually said.",
+            "description": "RETIRED — permanent memory provenance is rejected. No Associative Memory remembers which chat, request, or chunk produced it, and no stated/inferred or confidence marker is stored on the memory or rendered to the model. Only short-lived run bookkeeping outside the memory object is allowed, for safe completion, retry, and duplicate prevention.",
             "properties": {
               "source": { "type": "string", "enum": ["user_stated", "inferred", "imported", "companion_observed", "archivist"] },
               "confidence": { "type": "string", "enum": ["certain", "likely", "tentative"] },

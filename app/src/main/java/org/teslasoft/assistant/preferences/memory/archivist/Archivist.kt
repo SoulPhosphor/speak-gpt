@@ -36,15 +36,16 @@ import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
-import org.teslasoft.assistant.preferences.memory.CardSections
-import org.teslasoft.assistant.preferences.memory.CardType
+import org.teslasoft.assistant.preferences.memory.CandidateResult
 import org.teslasoft.assistant.preferences.memory.LorebookSuggestionRecord
+import org.teslasoft.assistant.preferences.memory.MemoryCandidate
+import org.teslasoft.assistant.preferences.memory.MemoryCandidateValidator
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryMatch
-import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
-import org.teslasoft.assistant.preferences.memory.MemoryTypeMigration
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
+import org.teslasoft.assistant.preferences.memory.PendingMemoryFiler
+import org.teslasoft.assistant.preferences.memory.SCOPE_COMPANION
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
@@ -419,17 +420,19 @@ object Archivist {
         // saved prompt for that type, or its built-in default when the saved
         // prompt is empty. The two are kept strictly separate — a Lorebook run
         // never borrows the Associative prompt, because the two require
-        // different output schemas. Whatever text is shown in the matching field
-        // on the Advanced Memory Assistant Settings screen is exactly what is
-        // sent here; nothing is appended or substituted (the cap and importance
-        // floor are response-side filters, not prompt text).
+        // different output schemas. The base text is whatever is shown in the
+        // matching field on the Advanced Memory Assistant Settings screen. For the
+        // associative type the analyzer contract needs the CURRENT user-owned Type
+        // list, so it is appended as a bounded, explicit block (the only run-time
+        // addition) — the model can only pick a Type id that actually exists, or
+        // omit it for No Type. The lorebook type has no Types and is sent verbatim.
         val systemPrompt = if (lorebookMode)
             prefs.getArchivistLorebookPrompt().ifBlank { ArchivistPrompt.LOREBOOK_SYSTEM }
         else
-            prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM }
-        // The card-append toggle (§2, ON by default): off discards any
-        // proposed placements — the memories themselves still file.
-        val cardSuggestionsOn = prefs.getArchivistCardSuggestions()
+            ArchivistPrompt.withCurrentTypes(
+                prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM },
+                store.getMemoryTypes().map { it.typeId to it.name }
+            )
 
         val memoryIds = ArrayList<String>()
         val ruleIds = ArrayList<String>()
@@ -557,7 +560,7 @@ object Archivist {
                             }
                             val before = memoryIds.size
                             duplicatesSkipped += fileMemoryDrafts(
-                                context, store, conversation, candidates, memoryIds, cardSuggestionsOn
+                                context, store, conversation, candidates, memoryIds
                             )
                             filedThisConversation += memoryIds.size - before
                             fileRuleDrafts(context, store, conversation, parsed.rules, ruleIds)
@@ -831,29 +834,15 @@ object Archivist {
         store: MemoryStore,
         conversation: Conversation,
         drafts: List<ArchivistResponseParser.DraftMemory>,
-        collectedIds: MutableList<String>,
-        cardSuggestionsOn: Boolean
+        collectedIds: MutableList<String>
     ): Int {
         if (drafts.isEmpty()) return 0
         var duplicates = 0
-        val now = Instant.now().toString()
         val companionId = conversation.transcripts.firstNotNullOfOrNull { it.companionId }
-        // Live cards for placement-suggestion resolution: name → (type, id).
-        // Loaded once per conversation; exact case-insensitive name match
-        // against EXISTING cards only — an unknown card name just drops the
-        // suggestion, never the memory, and nothing is ever created.
-        val liveCards: List<Triple<String, String, String>> = if (cardSuggestionsOn) {
-            buildList {
-                store.getAllWorlds().filter { it.status == "active" }
-                    .forEach { add(Triple(CardType.WORLD, it.worldId, it.name)) }
-                store.getActiveCampaigns()
-                    .forEach { add(Triple(CardType.CAMPAIGN, it.campaignId, it.name)) }
-                store.getAllRoleplayCharacters().filter { it.status == "active" }
-                    .forEach { add(Triple(CardType.RP_CHARACTER, it.roleplayCharacterId, it.name)) }
-                store.getPartyMembers(includeArchived = false)
-                    .forEach { add(Triple(CardType.PARTY_MEMBER, it.partyMemberId, it.name)) }
-            }
-        } else emptyList()
+        // The current user-owned Type ids: a suggestion is honored only if it
+        // names one of these, otherwise the memory files as No Type (never
+        // dropped). Legacy `kind` is not consulted.
+        val validTypeIds = store.getMemoryTypes().map { it.typeId }.toHashSet()
         for (d in drafts) {
             // Resolve placement once: the target sets are both the Possible
             // Match identity (scope + sorted target IDs) and the record's links.
@@ -865,23 +854,23 @@ object Archivist {
             val projectIds = resolveTarget(d, "project") { store.getProjects().map { it.projectId to it.name } }
             val companionIds =
                 if (d.scope == "companion" && companionId != null) listOf(companionId) else emptyList()
-            // The user-owned Type is the source of truth (§5): map the model's
-            // raw suggestion to a Type id (recognized starter Type, or No Type
-            // for lore/blank/unknown), and derive the inert legacy kind from it
-            // so the stored kind can never disagree with the Type (item 4).
-            val resolvedTypeId = MemoryTypeMigration.typeIdForLegacyKind(d.kind)
-            val inertKind = MemoryTypeMigration.legacyKindForTypeId(resolvedTypeId)
+            // The user-owned Type is the source of truth (§5): honor the model's
+            // suggested stable Type id only when it names a current Type; anything
+            // else (absent or unknown) becomes No Type. Legacy `kind` is never
+            // consulted or stored for a new memory (Phase 2 review).
+            val resolvedTypeId = d.typeIdSuggestion?.takeIf { it in validTypeIds }
             // Step 1.5 staging gate (counterplan §5.2(b)): only an exact
             // normalized match with the same placement AND the same Type, on an
             // active or pending memory, is a true duplicate that must not create
             // a second draft. Everything else — a different Type, an archived or
             // superseded exact match, or a semantic near-match — is filed and
-            // surfaces as a Possible Match at review time. Placement-aware and
+            // surfaces as a Possible Match at review time. Type identity is the
+            // stable type_id (the source of truth), placement-aware and
             // title-independent.
             val candidate = MemoryMatch.Candidate(
                 content = d.content,
                 scope = d.scope,
-                kind = inertKind,
+                typeId = resolvedTypeId,
                 targetIds = worldIds + rpCharIds + campaignIds + projectIds + companionIds
             )
             if (store.classifyCandidate(candidate) is MemoryMatch.Outcome.AlreadyPresent) {
@@ -897,71 +886,54 @@ object Archivist {
                     "chat=${conversation.chatId}: previously rejected draft not refiled")
                 continue
             }
-            // Resolve a proposed placement (roleplay scopes only): the section
-            // must be a real key for the matched card's type.
-            var sugType: String? = null
-            var sugId: String? = null
-            var sugSection: String? = null
-            if (cardSuggestionsOn && d.cardName != null && d.cardSection != null &&
-                d.scope in setOf("world", "campaign", "rp_character")
-            ) {
-                val match = liveCards.firstOrNull { it.third.equals(d.cardName, ignoreCase = true) }
-                if (match != null && d.cardSection in CardSections.sectionsFor(match.first)) {
-                    sugType = match.first
-                    sugId = match.second
-                    sugSection = d.cardSection
-                }
+            // Build a VALIDATED candidate and file it through the one canonical
+            // Pending filing service (Phase 2, items 5/6/8). The Memory Assistant
+            // is just one transport wrapper: it resolves scope/targets/Type above,
+            // then converges on the same validated candidate and the same filer
+            // the computer-import and manual paths use. The candidate carries no
+            // importance (the factory always files a proposal at 0), no source
+            // authorship, and no provenance — the memory keeps none of them.
+            val filingResult: CandidateResult<out MemoryCandidate> = if (d.scope == SCOPE_COMPANION) {
+                MemoryCandidateValidator.validateCompanion(
+                    content = d.content,
+                    companionTargetIds = companionIds,
+                    intendedCompanionId = companionId,
+                    availableCompanionIds = if (companionId != null) setOf(companionId) else emptySet(),
+                    typeId = resolvedTypeId,
+                    tags = d.tags
+                )
+            } else {
+                MemoryCandidateValidator.validateGeneral(
+                    scope = d.scope,
+                    content = d.content,
+                    typeId = resolvedTypeId,
+                    tags = d.tags,
+                    worldIds = worldIds,
+                    campaignIds = campaignIds,
+                    roleplayCharacterIds = rpCharIds,
+                    projectIds = projectIds
+                )
             }
-            val record = MemoryRecord(
-                memoryId = MemoryStore.newId("m-"),
-                scope = d.scope,
-                // The user-owned Type id is the source of truth (§5); the legacy
-                // kind is a derived, inert shadow that can never disagree (item
-                // 4). Title is retired (§3.1): new memories carry only the inert
-                // empty placeholder the legacy NOT NULL column requires.
-                kind = inertKind,
-                typeId = resolvedTypeId,
-                title = "",
-                content = d.content,
-                embeddingText = null,
-                tagsJson = listToJson(d.tags),
-                // Every generated proposal starts at the neutral 0 (§7.2): the
-                // Memory Assistant does not assign importance. The user sets it
-                // while reviewing Pending, only when importance ratings are On.
-                importance = 0,
-                worldIds = worldIds,
-                roleplayCharacterIds = rpCharIds,
-                campaignIds = campaignIds,
-                projectIds = projectIds,
-                protectionJson = null,
-                modeHintsJson = "[]",
-                provenanceSource = if (d.stated) "user_stated" else "inferred",
-                provenanceConfidence = if (d.stated) "certain" else "tentative",
-                provenanceNotedOn = now,
-                // Source-chat identity is never attached to a new memory
-                // (canonical recovery plan §3.2 / item 1): no chat name and no
-                // chat id. Rejected-draft dedup is keyed on content alone, in the
-                // separate rejected_drafts ledger — not on the memory.
-                provenanceContext = null,
-                sourceChatId = null,
-                createdAt = now,
-                updatedAt = null,
-                status = "draft",
-                supersedes = null,
-                companionIds = companionIds,
-                entityRefs = emptyList(),
-                changeLog = emptyList(),
-                origin = "archivist",
-                suggestedCardType = sugType,
-                suggestedCardId = sugId,
-                suggestedSection = sugSection
-            )
-            try {
-                store.insertArchivistDraftMemory(record)
-                collectedIds.add(record.memoryId)
-            } catch (e: Exception) {
-                MemoryLog.logAlways(context, "Archivist", "error", "draft insert failed: ${e.message}")
-                throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, e)
+            when (filingResult) {
+                is CandidateResult.Invalid -> {
+                    // A malformed candidate (e.g. a companion-scoped draft with no
+                    // resolvable companion target) is quarantined, never filed as
+                    // the wrong kind of memory (item 5).
+                    MemoryLog.log(
+                        context, "Archivist", "info",
+                        "chat=${conversation.chatId}: candidate quarantined (${filingResult.error}) — not filed"
+                    )
+                }
+                is CandidateResult.Valid -> {
+                    try {
+                        val id = PendingMemoryFiler.getInstance(context)
+                            .file(filingResult.candidate, generated = true)
+                        collectedIds.add(id)
+                    } catch (e: Exception) {
+                        MemoryLog.logAlways(context, "Archivist", "error", "draft insert failed: ${e.message}")
+                        throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, e)
+                    }
+                }
             }
         }
         return duplicates
@@ -997,14 +969,25 @@ object Archivist {
         val existing = store.getModelRules().map { it.text.trim() }.toHashSet()
         for (d in drafts) {
             if (d.text.trim() in existing) continue
+            // Validate through the Model Rule candidate path (review finding 2):
+            // a valid Draft needs only nonblank text — the model list stays empty
+            // until the user assigns it on approval (§11). A blank-text draft is
+            // rejected here, never filed. Model Rules never touch Associative
+            // Memory filing.
+            val validated = MemoryCandidateValidator.validateModelRule(d.text, sourceModelString = sourceModel)
+            if (validated is CandidateResult.Invalid) {
+                MemoryLog.log(context, "Archivist", "info", "rule draft rejected (${validated.error}) — not filed")
+                continue
+            }
+            val candidate = (validated as CandidateResult.Valid).candidate
             val rule = ModelRuleRecord(
                 ruleId = MemoryStore.newId("mr_"),
-                text = d.text,
-                // §11: the user assigns model strings on accept; the source
-                // model string seeds that list.
-                modelStringsJson = "[]",
+                text = candidate.text,
+                // §11: the user assigns model strings on accept; the source model
+                // string seeds that list. A Draft is filed with the list empty.
+                modelStringsJson = listToJson(candidate.modelStrings),
                 status = "draft",
-                sourceModelString = sourceModel,
+                sourceModelString = candidate.sourceModelString,
                 createdAt = Instant.now().toString(),
                 updatedAt = null
             )

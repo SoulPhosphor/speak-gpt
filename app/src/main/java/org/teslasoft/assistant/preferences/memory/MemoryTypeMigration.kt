@@ -59,8 +59,18 @@ object MemoryTypeMigration {
         StarterType("mtype-preference", "Preference"),
         StarterType("mtype-event", "Event"),
         StarterType("mtype-status", "Status"),
-        StarterType("mtype-instruction", "Instruction")
+        StarterType(INSTRUCTION_TYPE_ID, "Instruction")
     )
+
+    /**
+     * The stable id of the starter Instruction Type. Instruction behavior (a
+     * memory rendered as a handling rule, law 5) is keyed on THIS id — never on
+     * the legacy `kind` string and never on the display name. So renaming the
+     * Instruction Type keeps its memories behaving as Instructions, and deleting
+     * it (their type_id becomes No Type) stops that behavior. The id never
+     * changes, by the same stable-id guarantee every Type has.
+     */
+    const val INSTRUCTION_TYPE_ID = "mtype-instruction"
 
     /** Legacy `kind` value → starter Type id. Only the five recognized
      *  starter kinds appear here; `lore` and everything else fall through to
@@ -91,29 +101,4 @@ object MemoryTypeMigration {
     fun isLegacyLore(kind: String?): Boolean =
         kind?.trim()?.equals("lore", ignoreCase = true) == true
 
-    /** Type id → seeded starter id, reversed. */
-    private val TYPE_ID_TO_LEGACY_KIND: Map<String, String> =
-        LEGACY_KIND_TO_TYPE_ID.entries.associate { (kind, id) -> id to kind }
-
-    /**
-     * The legacy `kind` string a memory should carry so it never disagrees with
-     * its [typeId] (Phase 1 Type transition, item 4). `type_id` is the source of
-     * truth; `kind` is written only as a consistent, inert shadow so the
-     * compatibility-period readers that still consult `kind` (dedup identity,
-     * Instruction rendering, browser filters) stay correct until they are moved
-     * onto `type_id` in a later phase.
-     *
-     *  - a seeded starter Type id → its legacy string (`fact`, `preference`, …);
-     *  - No Type (null) → empty string;
-     *  - any user-created custom Type → empty string (no legacy equivalent
-     *    exists; the memory simply has no legacy kind).
-     *
-     * Because `kind` is always derived from `typeId` this way, a writer can
-     * never produce the forbidden `kind = fact` with `typeId = null`, nor a
-     * stale `typeId` paired with a freshly chosen `kind`.
-     */
-    fun legacyKindForTypeId(typeId: String?): String {
-        if (typeId == null) return ""
-        return TYPE_ID_TO_LEGACY_KIND[typeId] ?: ""
-    }
 }
