@@ -466,22 +466,40 @@ Read only the documents relevant to the current task.
 Examples:
 
 - **current roadmap and remaining work, any feature: `project-plan.md`**
-  at the repository root — the only active plan. Built features are
-  closed and are not reopened, audited, or redesigned from this file or
-  any other; the owner reports a problem with something built only if
-  they hit one.
+  at the repository root — the only active app-wide scheduling plan. Built
+  features are closed unless the owner reports a specific defect.
+- **active Associative Memory / API Memory Assistant repair:** after confirming
+  Feature 1 is active in `project-plan.md`, read
+  `Memory System/ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md`. This is the binding
+  technical implementation contract for that repair. Do not substitute an
+  older memory plan, audit, work order, or design package.
+- **approved Memory/Pending UI wording and layout:**
+  `Memory System/memory_controls_and_pending_ui_copy.md`.
+- **approved Associative Memory retrieval and analysis controls:**
+  `Memory System/memory_retrieval_and_analysis_ui_copy.md`.
+- **still-applicable memory behavior rulings:**
+  `Memory System/owner_approved_rules.md`, except where a later approved
+  contract explicitly supersedes an older ruling.
+- **historical Revision 25 decisions:**
+  `Memory System/revision_25_binding_clarifications.md`; use it only where the
+  active Revision 26 contract points to the decision record, never as a
+  competing implementation order.
+- **built roleplay-card/tag reference, when relevant:**
+  `Memory System/reference/roleplay_cards_and_tags_spec.md`.
+- **memory-system history and retired designs:** under
+  `legacy/memory-system-v1.11/`, `legacy/memory-system-repair-history/`, and
+  other `legacy/` memory files. Historical reference only. Never use them as
+  planning input or browse them to enlarge the active repair unless a current
+  regression specifically requires historical context.
 - UI style definitions and composition: `ui-style-guide.md`
 - current UI conversion and legacy status: `ui-style-adoption.md`
 - broad UI redesign work: `ui-redesign-plan.md`
-- memory-system behavior rulings: `Memory System/owner_approved_rules.md`
-- memory-system technical reference (schema, prompts, runtime spec):
-  `Memory System/` — `project-plan.md` inlines what a builder needs for
-  remaining work; consult these only for implementation depth
-- superseded memory-system roadmaps, work orders, and designs for
-  already-built work: archived in `legacy/` at the repository root —
-  historical reference only, never a plan to follow
 - document attachment work: `document-includes-plan.md`
 - local speech work: `whisper-local-plan.md`
+
+For active memory work, do **not** treat the whole `Memory System/` directory
+as a cumulative specification. Follow the named active contract and only the
+supporting files it explicitly requires.
 
 These documents support the owner's current direction. They do not overrule it.
 
