@@ -2,7 +2,7 @@
 
 **2026-08-04**
 
-This focused specification accompanies `external_memory_analysis_counterplan.md` and `memory_controls_and_pending_ui_copy.md`. It supplies the exact user-facing wording and behavior contract for live Associative Memory retrieval controls and analysis chunk choices. Where these controls are implemented, use this wording rather than asking the owner to decide it again.
+This focused specification accompanies `ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md` and `memory_controls_and_pending_ui_copy.md`. It supplies the exact user-facing wording and behavior contract for live Associative Memory retrieval controls and analysis chunk choices. Where these controls are implemented, use this wording rather than asking the owner to decide it again.
 
 ## 1. Memory Retrieval
 
