@@ -1,82 +1,102 @@
-# Companion Memory System — Design Package (v1.11)
+# Speak-GPT Memory System — Current Orientation
 
-A layered, model-agnostic memory system for AI companions: global and per-companion memories, protected topics with handling instructions, communication modes, roleplay worlds and characters, and an AI "Archivist" that maintains it all under user-controlled autonomy dials. Design is complete; this package is the full specification for the coding phase.
+**Updated 2026-08-06 for Associative Memory Repair Contract Revision 26**
 
-> **⚠️ DOCUMENT HIERARCHY (2026-08-03, corrected 2026-08-07 — read this
-> before anything else in this folder).** The current authority order is:
-> 1. **`project-plan.md`** at the repository root — the only active
->    roadmap. It covers all remaining work (unfinished features only) and
->    inlines every still-binding requirement a builder needs; it governs
->    which feature is currently active to work on across the whole app.
->    Old phase lists and work orders (`memory-system-integration-plan.md`,
->    `plan_one_page.md`, `phase5_rework_work_order.md`,
->    `rag_engine_work_order.md`, and other build-plan/work-order/design
->    documents formerly in this folder) are superseded and archived in
->    **`legacy/`** at the repository root — historical record only, not to
->    be followed as a plan. This includes an unrelated older document once
->    also named `external_memory_analysis_counterplan.md`, renamed
->    2026-08-07 to `external_memory_analysis_counterplan_revision_9_legacy.md`
->    so it can never be confused with point 4 below.
-> 2. **`owner_approved_rules.md`** (Revision 4) — outranks everything for
->    the memory-system behavior it covers.
-> 3. **`roleplay_cards_and_tags_spec.md`** — authoritative roleplay
->    card + tag detail, incorporated into the rules as Revision 4. BUILT.
-> 4. **`external_memory_analysis_counterplan.md`** (Revision 24,
->    binding-clarified by `revision_25_binding_clarifications.md`) — the
->    current memory-system plan: the binding record of the owner's
->    approved memory-system product decisions, required implementation
->    order, and completion gates, including everything already built
->    under its Phases 0-2. It governs memory-system product behavior and
->    build order; `project-plan.md` (point 1) governs which feature is
->    currently active to work on.
-> 5. The rest of the v1.11 package below — background and still-valid
->    mechanics for what is already built, each file carrying its own ⚠️
->    banner naming what's superseded. (`companion_memory_schema.json` /
->    `seed_public_template.json` are the v1.11 export shape — the codec
->    still reads schema-shaped JSON, but retired concepts inside them —
->    modes, directives, entities, owner_profile, always_load — are
->    dormant fields, not features to build. So are `memories.title`,
->    `memories.kind` and its fixed six-value enumeration, and every
->    `memories.provenance` field: the Phase 1/2 memory-system rework
->    retired all three from the live schema. No Associative Memory has a
->    title or permanent provenance; Types are user-owned via a
->    `memory_types` table and `memories.type_id`, not this fixed `kind`
->    enum. See `MemoryStore.kt`'s `onCreate`/`onUpgrade` for the live
->    shape.)
+This folder contains a mixture of current technical contracts, exact UI copy, implementation audits, and older design-package material. **Do not read every file as one cumulative specification.** Several older files describe concepts that have already been retired from the live app.
 
-1. **README.md** (this file) — orientation and glossary.
-2. **memory_system_guide.md** — plain-language tour of the concepts.
-3. **companion_memory_schema.json** — the canonical data schema. Also the export/import format.
-4. **seed_public_template.json** — a neutral starter store demonstrating the schema. New users begin here.
-5. **archivist_spec.md** — job description for the AI that reviews conversations and maintains memory.
-6. **sqlite_table_plan.md** — the Android storage shape. The DDL has been executed and verified.
-7. **enforcer_librarian_spec.md** — the runtime: retrieval, prompt assembly, change-set application, integration with the existing app (characters, activation prompts, lore books, multi-API switching).
-8. **app_adaptation_notes.md** (now archived in `legacy/`) — the concrete changes the app needed (settings, sync hooks, new UI areas, transcript capture) — already built.
-9. **archivist_prompt.md** — the literal operational prompt sent to the Archivist model, with its JSON output contract.
-10. **prompt_assembly_template.md** — the literal system-prompt skeleton the enforcer fills each turn, plus the standing-packet compressor prompt.
-11. **troubleshooting_guide.md** — symptom-level guide for the user: what problems look like in daily use, where to look, how to fix.
+## Document authority
 
-## Glossary (read this before touching code)
+Use this order:
 
-- **Companion** — an AI persona the user has a relationship with. In the app's current UI these live under Characters → Personas (recommended rename: "Companions"); in this store and these documents they are ALWAYS "companions." The app owns their character configuration (name, avatar, greeting, base prompt); the store owns their continuity (ID, memories, relationship history, hard limits).
-- **roleplay_character** — a playable persona in a fictional world (e.g., the user's Mage). Deliberately named to avoid collision with the app's "characters." Never conflate the two.
-- **Entity** — a durable real-life thing memories point at: a project, a person, a practice, a place.
-- **World** — a fictional roleplay setting whose memories are isolated to its sessions.
-- **Lore book** — the app's existing lightweight memory feature. Kept as the low-RAM tier; user-authored entries outrank system memories at injection (see enforcer spec).
-- **Librarian** — the embedding + retrieval layer. Swappable; embeddings live in a sidecar keyed by model name. Recommended model: EmbeddingGemma (308M) on-device.
-- **Enforcer** — the runtime code that assembles prompts, validates and applies changes, and guarantees invariants (e.g., protected memories always travel with their handling).
-- **Archivist** — the AI that runs after conversations (manually triggered, queue-based) to write, correct, protect, and compost memories, governed by per-category autonomy dials (auto vs. propose).
-- **Seed** — a complete memory store file in schema shape.
-- **User persona** — a presentation variant of the one real user ('casual me'); changes appearance handed to the model, never identity, memories, or protections.
+1. **`project-plan.md` at repository root** — the only app-wide roadmap and scheduling authority. It decides which feature is active.
+2. **Current code on `main`** — truth about what is already built. `MemoryStore.kt` is the live database-schema authority.
+3. **`Memory System/external_memory_analysis_counterplan.md` Revision 26** — the binding technical repair contract for the owner-reported Associative Memory / API Memory Assistant defect. It is not a second app-wide roadmap.
+4. **Focused exact-copy specifications** — where a control already has approved user-facing wording or layout, these files control that wording:
+   - `memory_controls_and_pending_ui_copy.md`
+   - `memory_retrieval_and_analysis_ui_copy.md`
+5. **`owner_approved_rules.md` and roleplay-focused approved specs** — binding for the behavior they still cover, except where a later owner ruling explicitly supersedes them.
+6. **`revision_25_binding_clarifications.md`** — historical decision record. Its still-binding decisions are incorporated into Revision 26; it no longer supplies a separate implementation order.
+7. Other older design-package files are reference/history only unless the current repair contract or current code explicitly points to them for a narrow mechanic.
 
-## Repo hygiene — read before committing
+The unrelated old Revision 9 file that once shared the `external_memory_analysis_counterplan.md` name remains archived as `legacy/external_memory_analysis_counterplan_revision_9_legacy.md`.
 
-- Commit: all eleven documents above, kept together in one folder (e.g. /design) so the coding AI reads them as a set.
-- **NEVER commit a personal seed.** A real seed contains the most private data a person has. Add your personal store and any `example_seed*.json` derived from real life to `.gitignore` immediately. The public template is the only seed that belongs in the repo.
-- Database files, exports, and transcripts are likewise personal: gitignore them.
-- The app ships with the neutral template; each user's real seed exists only on their device and in their own encrypted backups.
-- Pick a license before publishing (MIT and Apache-2.0 are the common permissive choices; both include no-warranty clauses).
+## Current Associative Memory model
 
-## Instructions for the coding AI
+Do not resurrect retired fields or behavior from old schema/design files.
 
-Read all eleven documents, then read the existing app codebase, then **ask your questions before writing code** — the specs intentionally leave code-level decisions (existing character storage format, API-switching internals, transcript capture) to be answered from the code. Non-negotiable invariants to preserve, wherever implementation details flex: protected memories are structurally inseparable from their handling; companion essence and hard limits change only through user action or accepted proposals; the Archivist can never expand its own permissions; every automatic change is logged with a prior-state snapshot and one-action undo; scope isolation (companion-private, world-isolated) is enforced in queries, not by convention; and all failure modes degrade gracefully mid-conversation. Build order suggestion: storage + migrations → librarian (embed/search) → enforcer turn loop → manual memory editor UI → Archivist pipeline → proposals/run-report UI.
+Current rules include:
+
+- no Associative Memory title;
+- user-owned Memory Types via stable IDs, with No Type allowed;
+- `Lore` is not a fixed Associative Memory Type;
+- importance is 0-5, new memories start at 0, and importance is ignored by retrieval while `Use Importance Ratings` is Off;
+- no permanent memory provenance/source-chat identity;
+- Companion memories target exactly one companion;
+- Pending/Active/Archived/Superseded are lifecycle states;
+- the AI proposes and the user decides;
+- the AI never directly approves, deletes, replaces, archives, or supersedes a memory;
+- API and computer-origin proposals ultimately use the same human Pending review boundaries.
+
+## Existing foundations are not work to rebuild
+
+Current `main` already contains substantial memory infrastructure, including:
+
+- SQLCipher memory storage through database v26;
+- Memory Types/domain services;
+- on-device Librarian embedding retrieval with lexical fallback;
+- exact duplicate classification;
+- local semantic Possible Match detection;
+- Memory Browser/Pending UI;
+- Possible Match Review;
+- atomic `Save & Edit Old Memory`, `Save & Supersede`, and `Save & Replace` actions;
+- recorded supersession relationships and timestamps.
+
+The root roadmap's rule applies: built features stay closed unless the owner reports a specific defect. Do not turn the Revision 26 repair into a general redesign of these systems.
+
+## Current owner-reported defect
+
+The current API Archivist sends conversation chunks to the paid model without first supplying a bounded set of relevant existing memories. It therefore cannot reliably know during extraction that a fact is already known, has changed, contradicts an existing memory, or meaningfully continues one.
+
+Revision 26 repairs that path using the already-built local Librarian:
+
+```text
+conversation chunk
+    ↓
+local Librarian retrieves a small relevant existing-memory set
+    ↓
+one Archivist call receives both conversation + relevant existing memories
+    ↓
+validated additive proposals / related existing-memory IDs
+    ↓
+existing local duplicate + Possible Match safety layers
+    ↓
+Pending
+    ↓
+user chooses the resolution
+```
+
+Do **not** replace this with a paid model scanning the entire database or a second paid reconciliation call by default.
+
+## Research reference
+
+For the bounded pre-retrieval architecture, Revision 26 uses current Mem0 OSS V3 as an external reference: Mem0 embeds the new messages, retrieves a top-10 existing-memory set, and includes that context in a single LLM extraction call. Speak-GPT borrows the architecture, not the Python package or code.
+
+Speak-GPT keeps its own stricter human-review model. Even if the Archivist identifies a related old memory, it only creates a proposal/hint. Existing memories change only through the owner's approved review actions.
+
+## Coding-agent rules
+
+Before changing Associative Memory behavior:
+
+1. Read `project-plan.md` to confirm the work is actually assigned.
+2. Read Revision 26 of `external_memory_analysis_counterplan.md`.
+3. Read only the focused copy/spec files required by the part being changed.
+4. Inspect current `main` before assuming a component is missing.
+5. Reuse current `Librarian`, Pending, Possible Match, lifecycle, and database services where Revision 26 says they are foundations.
+6. Do not build a standalone evaluation laboratory, graph database, second LLM reconciliation layer, new provenance system, or whole-memory-store LLM pass unless the owner explicitly adds that as a later feature.
+7. Do not call a feature complete because CI is green. Use the completion terminology and end-to-end proof in Revision 26.
+
+## Historical files
+
+Files such as `companion_memory_schema.json`, older Archivist/enforcer specifications, and other v1.11-era design documents may contain useful historical reasoning but also contain retired concepts. They are **not permission to add a field or behavior that conflicts with current code, Revision 26, focused approved copy, or a later owner ruling**.
+
+When historical text and live/current rules disagree, follow the current rules rather than trying to reconcile both into a larger system.
