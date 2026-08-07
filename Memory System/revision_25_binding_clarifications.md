@@ -1,8 +1,10 @@
-# Speak-GPT Memory System: Revision 25 Binding Clarifications
+# Speak-GPT Memory System: Revision 25 Decision Record
 
 **2026-08-04**
 
-This document records decisions approved after Revision 24 of `external_memory_analysis_counterplan.md` and after the Phase 0 audit began. It is binding wherever older wording in the canonical plan or `memory_implementation_audit.md` conflicts with it. It adds no new feature beyond the approved decisions below.
+> **Status after Revision 26 (2026-08-06):** Historical decision record. Every still-binding decision below has been incorporated into `external_memory_analysis_counterplan.md` Revision 26. Revision 26 controls wherever this file's older implementation-order or evaluation-harness language differs. Do not treat this file as a second execution plan.
+
+This document records decisions approved after Revision 24 of `external_memory_analysis_counterplan.md` and after the Phase 0 audit began. It remains useful for decision history and for confirming the owner's prior rulings, but implementation order now comes from Revision 26.
 
 ## 1. Phase 0 Status
 
@@ -52,6 +54,8 @@ The target architecture remains one durable bookmark per chat plus minimal tempo
 
 The Phase 0 audit may recommend the safest migration from the current transcript-row queue, but it may not treat whether the product wants the bookmark architecture as undecided.
 
+Revision 26 moves this architecture into the foundation of the Archivist repair because later failure/process-death guarantees depend on it.
+
 ## 7. Analysis Chunk Sizes
 
 The approved initial choices are:
@@ -62,7 +66,7 @@ The approved initial choices are:
 - `Large · About 16,000 Tokens`
 - `Custom`
 
-The evaluation harness may recommend later adjustments, but these are no longer an unresolved product decision.
+These are the approved initial values. Later real on-device use may justify adjustments, but no standalone evaluation harness is required before implementation.
 
 When no verified model/provider limit exists, a selected Small, Standard, Large, or Custom target remains in effect. Do not replace it with an invented hidden fallback. Context rejection or truncation uses the approved bounded shrink-and-retry behavior.
 
@@ -128,4 +132,4 @@ Do not expand the memory project with additional retrieval controls or tuning sy
 
 Specifically, do not add protected-capacity controls, raw threshold controls, subtype budgets, dynamic per-model presets, automatic tuning, or a generalized context allocator unless the owner explicitly approves them later.
 
-The immediate implementation sequence remains Phase 1 after the completed Phase 0 audit. Later-phase retrieval details must follow `memory_retrieval_and_analysis_ui_copy.md` and these clarifications without reopening product design.
+For the current Associative Memory repair, follow `external_memory_analysis_counterplan.md` Revision 26. Live retrieval details continue to follow `memory_retrieval_and_analysis_ui_copy.md` and the decisions above without reopening product design.
