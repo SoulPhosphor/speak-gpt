@@ -25,7 +25,7 @@
 
 ## Feature order
 
-1. **Existing API Memory Assistant Repair** — ACTIVE
+1. **Existing API Memory Assistant Repair** - ACTIVE
 2. **Memory Budget Calculator**
 3. **Computer Memory Review**
 4. **Memory Auditor**
@@ -34,7 +34,7 @@ The ordering after Feature 1 is unchanged from the previous roadmap. Computer Me
 
 ---
 
-# Feature 1 — Existing API Memory Assistant Repair
+# Feature 1 - Existing API Memory Assistant Repair
 
 **Status: Active.**
 
@@ -42,9 +42,25 @@ The owner reported a concrete defect after the previous roadmap was written: the
 
 The complete binding technical contract is:
 
-`Memory System/external_memory_analysis_counterplan.md` — **Revision 26**
+`Memory System/external_memory_analysis_counterplan.md` - **Revision 26**
 
 That document is the dependency-correct repair contract. Do not substitute Revision 24 phases, the old Phase 3 evaluation harness, or a different memory architecture.
+
+## Builder execution directive
+
+**This is an implementation order, not a request for another plan, audit, proposal, or architecture discussion.** When assigned Feature 1, make the required code and test changes in the repository.
+
+1. Read current `main`, this roadmap, Revision 26, and the focused copy specs named by Revision 26.
+2. Confirm only the current code facts needed to begin. Do not stop after inventorying or summarizing the repository.
+3. Create or use one Feature 1 implementation branch.
+4. Execute Revision 26 Stages B, C, D, E, and F in that dependency order. Stage A is documentation/status cleanup and is already represented by the repaired planning branch; it is not a substitute for implementation.
+5. Modify the real production code paths, database/migrations where required, prompts/parser/schema, tests, and only the existing UI surfaces explicitly required by Revision 26.
+6. After each internal stage, run the relevant focused tests and inspect the actual diff. Continue to the next stage when that stage is technically sound. Do not report an internal stage as a shipped feature.
+7. Do not stop because CI is green if the end-to-end behavior is not yet implemented.
+8. Do not invent new product features, new user-facing wording, a new retrieval engine, another evaluation harness, or a second paid-model reconciliation path.
+9. Continue until the automated Revision 26 checks are implemented and passing. The final on-device changed-fact proof is then performed before Feature 1 is declared complete.
+
+If a genuinely blocking product decision is not answered by the approved documents, stop only that decision path and identify the exact missing decision. Do not turn an implementation question that can be answered from current code or established prior art into a new owner design task.
 
 ## Required outcome
 
@@ -86,19 +102,19 @@ CI green by itself is not completion.
 
 ---
 
-# Feature 2 — Memory Budget Calculator
+# Feature 2 - Memory Budget Calculator
 
 **Status: Locked until Feature 1 is complete.**
 
-The full approved requirements and exact wording are preserved in `planning/project-plan_2026-08-03_feature-specs.md`, section **Feature 2 — Memory Budget Calculator**. Follow that section when this feature becomes active. Do not implement or refactor toward it during Feature 1.
+The full approved requirements and exact wording are preserved in `planning/project-plan_2026-08-03_feature-specs.md`, section **Feature 2 - Memory Budget Calculator**. Follow that section when this feature becomes active. Do not implement or refactor toward it during Feature 1.
 
 ---
 
-# Feature 3 — Computer Memory Review
+# Feature 3 - Computer Memory Review
 
 **Status: Locked until Features 1-2 are complete.**
 
-The full approved requirements and exact wording are preserved in `planning/project-plan_2026-08-03_feature-specs.md`, section **Feature 3 — Computer Memory Review**.
+The full approved requirements and exact wording are preserved in `planning/project-plan_2026-08-03_feature-specs.md`, section **Feature 3 - Computer Memory Review**.
 
 When this feature becomes active, its Associative Memory review package must also preserve Revision 26's memory-awareness principle: the external reviewer receives the bounded/searchable read-only memory/target context required to distinguish new information from existing, changed, or conflicting information. Imported proposals still pass through the phone's validation, Possible Match, and Pending review boundary.
 
@@ -106,11 +122,11 @@ Do not pull Computer Memory Review into Feature 1.
 
 ---
 
-# Feature 4 — Memory Auditor
+# Feature 4 - Memory Auditor
 
 **Status: Locked until Features 1-3 are complete.**
 
-The full approved requirements and exact wording are preserved in `planning/project-plan_2026-08-03_feature-specs.md`, section **Feature 4 — Memory Auditor**.
+The full approved requirements and exact wording are preserved in `planning/project-plan_2026-08-03_feature-specs.md`, section **Feature 4 - Memory Auditor**.
 
 This remains a separate later feature that audits the existing memory catalog. It is not part of normal conversation archiving and is not permission to make the Feature 1 Archivist scan the whole database.
 
