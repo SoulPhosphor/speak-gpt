@@ -64,12 +64,16 @@
             android:paddingHorizontal="24dp"
             android:paddingTop="12dp">
 
-            <!-- Sort/filter dropdowns, in the owner's order. Each value view is
-                 the tap target and opens an anchored ListPopupWindow, per the
-                 shared dropdown pattern. Numeric sorts offer None (default) /
-                 Highest to Lowest / Lowest to Highest — None disables that one
-                 sort without touching the others. Alphabetical offers only
-                 A to Z (the chart default and tie-breaker) / Z to A. -->
+            <!-- Sort/filter dropdowns, in the owner's order. Each row is the
+                 canonical labeled dropdown composition (matching
+                 view_memory_filter_dropdown.xml): the CanonicalLabel and the
+                 CanonicalValue share a line and the value fills the remaining
+                 width. The value is the tap target and opens the shared
+                 border-continuous AppDropdown menu. Numeric sorts offer None
+                 (default) / Highest to Lowest / Lowest to Highest — None
+                 disables that one sort without touching the others.
+                 Alphabetical offers only A to Z (the chart default and
+                 tie-breaker) / Z to A. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -78,12 +82,15 @@
                 android:paddingVertical="6dp">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/provider_filter_alphabetical" />
 
                 <TextView
                     android:id="@+id/value_alphabetical"
-                    style="@style/Widget.App.Dropdown.Value" />
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1" />
             </LinearLayout>
 
             <LinearLayout
@@ -94,12 +101,15 @@
                 android:paddingVertical="6dp">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/provider_filter_input_price" />
 
                 <TextView
                     android:id="@+id/value_input_price"
-                    style="@style/Widget.App.Dropdown.Value" />
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1" />
             </LinearLayout>
 
             <LinearLayout
@@ -110,12 +120,15 @@
                 android:paddingVertical="6dp">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/provider_filter_output_price" />
 
                 <TextView
                     android:id="@+id/value_output_price"
-                    style="@style/Widget.App.Dropdown.Value" />
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1" />
             </LinearLayout>
 
             <LinearLayout
@@ -126,12 +139,15 @@
                 android:paddingVertical="6dp">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/provider_filter_quantization" />
 
                 <TextView
                     android:id="@+id/value_quantization"
-                    style="@style/Widget.App.Dropdown.Value" />
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1" />
             </LinearLayout>
 
             <LinearLayout
@@ -142,12 +158,15 @@
                 android:paddingVertical="6dp">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/provider_filter_latency" />
 
                 <TextView
                     android:id="@+id/value_latency"
-                    style="@style/Widget.App.Dropdown.Value" />
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1" />
             </LinearLayout>
 
             <LinearLayout
@@ -158,12 +177,15 @@
                 android:paddingVertical="6dp">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/provider_filter_throughput" />
 
                 <TextView
                     android:id="@+id/value_throughput"
-                    style="@style/Widget.App.Dropdown.Value" />
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1" />
             </LinearLayout>
 
             <LinearLayout
@@ -174,12 +196,15 @@
                 android:paddingVertical="6dp">
 
                 <TextView
-                    style="@style/Widget.App.Dropdown.Label"
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/provider_filter_uptime" />
 
                 <TextView
                     android:id="@+id/value_uptime"
-                    style="@style/Widget.App.Dropdown.Value" />
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1" />
             </LinearLayout>
 
             <!-- Capability checkboxes: whole line toggles the box, but the rows
