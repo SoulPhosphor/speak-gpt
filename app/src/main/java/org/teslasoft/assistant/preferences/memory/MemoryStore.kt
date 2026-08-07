@@ -32,18 +32,22 @@ import java.util.UUID
 /**
  * The companion memory store: a SEPARATE SQLCipher database
  * (companion_memory.db), NOT an extension of lorebook.db — lorebooks stay the
- * independent low-RAM tier. Schema follows `Memory System/sqlite_table_plan.md`
- * (v1.11) with four documented deviations:
+ * independent low-RAM tier.
  *
- *  - companions.status also allows 'draft' (the schema/seed require drafts;
- *    the table plan's CHECK list omitted it).
- *  - transcripts gains chat_id (the app's persistent chats map to transcript
- *    rows via a watermark — integration plan D5) and user_persona_id (the
- *    Archivist prompt lists persona_id among its inputs).
- *  - transcripts.companion_id is nullable: app chats can run with no persona.
- *  - deleted_ids tombstone table (integration plan D10): future cross-device
- *    merge must distinguish "deleted here" from "never had it"; impossible to
- *    retrofit after the fact.
+ * THIS FILE — [onCreate] for a fresh install, [onUpgrade] for every
+ * migration since — is the authoritative source of truth for the live
+ * schema, not `Memory System/sqlite_table_plan.md`. That document is the
+ * pre-revision v1.11 baseline and is kept for historical reference only
+ * (see its own banner); the schema has diverged from it extensively since,
+ * well beyond the four deviations once tracked here. Most notably, the
+ * Phase 1/2 memory-system rework (`external_memory_analysis_counterplan.md`,
+ * Revision 24, binding-clarified by `revision_25_binding_clarifications.md`)
+ * retired `memories.title`, `memories.kind` and its fixed six-value Type
+ * enumeration, and every permanent `memories.provenance_*`/`source_chat_id`
+ * field (DB v21, v24, v25) in favor of user-owned Types (`memory_types` +
+ * `memories.type_id`), 0-5 importance defaulting to neutral 0, and no
+ * permanent provenance at all. `rejected_drafts.chat_key` was dropped the
+ * same way in v26 — content-hash dedup never needed source-chat identity.
  *
  * Migrations: SQLiteOpenHelper's version drives onUpgrade; meta.db_migration
  * mirrors the applied number for exports/diagnostics. Always bump both, always
@@ -61,7 +65,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 25
+        private const val DATABASE_VERSION = 26
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -577,18 +581,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "claim_run_id TEXT)"
         )
 
-        // Rejected drafts (Phase 6, DB v14; rekeyed DB v17): deleting a
-        // Memory Assistant draft rejects it — a rerun must not refile the
-        // exact same draft. Specific by design: exact content hash, never
-        // broad similarity suppression. chat_key is legacy schema baggage,
-        // written empty since the Phase 1 source-chat retirement.
-        // Device-local, never exported.
+        // Rejected drafts (Phase 6, DB v14; rekeyed DB v17; chat_key dropped
+        // DB v26): deleting a Memory Assistant draft rejects it — a rerun must
+        // not refile the exact same draft. Specific by design: exact content
+        // hash, never broad similarity suppression. No source-chat identity
+        // (§3.2). Device-local, never exported.
         db.execSQL(
             "CREATE TABLE rejected_drafts (" +
-                "content_hash TEXT NOT NULL, " +
-                "chat_key TEXT NOT NULL, " +
-                "deleted_at TEXT NOT NULL, " +
-                "PRIMARY KEY (content_hash, chat_key))"
+                "content_hash TEXT PRIMARY KEY, " +
+                "deleted_at TEXT NOT NULL)"
         )
 
         // Archivist run history (Phase 6, DB v11): powers the Memory
@@ -1858,6 +1859,31 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "25")
+            )
+        }
+        if (oldVersion < 26) {
+            // v26: drop the retired chat_key column from rejected_drafts.
+            // Source-chat identity was retired for rejection dedup back in
+            // Phase 1 (§3.2) — chat_key had stood empty (or, on an
+            // in-between device, holding only pre-Phase-1 legacy values)
+            // ever since; this removes the last physical trace, matching the
+            // memories.kind/title cleanup in v25. Rejections are collapsed
+            // to one row per content_hash, keeping the most recent
+            // deleted_at for any hash that had rows under several old keys.
+            db.execSQL(
+                "CREATE TABLE rejected_drafts_v26 (" +
+                    "content_hash TEXT PRIMARY KEY, " +
+                    "deleted_at TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO rejected_drafts_v26 (content_hash, deleted_at) " +
+                    "SELECT content_hash, MAX(deleted_at) FROM rejected_drafts GROUP BY content_hash"
+            )
+            db.execSQL("DROP TABLE rejected_drafts")
+            db.execSQL("ALTER TABLE rejected_drafts_v26 RENAME TO rejected_drafts")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "26")
             )
         }
     }
@@ -4169,12 +4195,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(newChatId, oldChatId)
             )
             // Rejected-draft dedup is keyed on memory content alone (§3.2 /
-            // item 1). Legacy chat_key rows in the ledger are carried across a
-            // rename for continuity; new rejections are content-keyed.
-            db.execSQL(
-                "UPDATE OR REPLACE rejected_drafts SET chat_key = ? WHERE chat_key = ?",
-                arrayOf(newChatId, oldChatId)
-            )
+            // item 1) — no chat identity to carry across a rename.
             // Step 1.7: pending lore book suggestions and their rejection
             // anchors are keyed by the same name-derived chat id and must ride
             // a rename too, or a rerun after rename would refile a rejected
@@ -5963,16 +5984,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         // the exact same draft. Keyed on the memory CONTENT only (canonical
         // recovery plan §3.2 / item 1): a memory never remembers which chat
         // produced it, so the rejection carries no source-chat identity and no
-        // title (§3.1). The chat_key column stays for schema compatibility but is
-        // written empty. Whether the draft was generated is read from the separate
+        // title (§3.1). Whether the draft was generated is read from the separate
         // generated_pending_drafts bookkeeping — NOT from any source field on the
         // memory (the canonical record has none). Manual creation is never marked,
         // so deleting a manual draft registers nothing.
         val prior = getMemory(memoryId)
         if (prior != null && prior.status == "draft" && isGeneratedPendingDraftTx(db, memoryId)) {
             db.execSQL(
-                "INSERT OR REPLACE INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
-                arrayOf(draftContentHash(prior.content), "", nowIso())
+                "INSERT OR REPLACE INTO rejected_drafts (content_hash, deleted_at) VALUES (?, ?)",
+                arrayOf(draftContentHash(prior.content), nowIso())
             )
         }
         // Clear the generated marker for this id (also handled by the FK cascade

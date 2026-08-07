@@ -1,17 +1,46 @@
 # SQLite Table Plan — Companion Memory System (schema v1.11)
 
-> **⚠️ PRE-REVISION DOCUMENT — the live schema has moved on.** This file
-> is the v1.11 baseline; the shipped database is at DB v6 (v4–v6
-> documented in CLAUDE.md and the `MemoryStore` header: seven-category
-> scope, projects, multi-select target join tables, cooldown tables) and
-> the rescoped Stage 3.6 (`rag_engine_work_order.md`, now archived in
-> `legacy/`) adds the roleplay card + tag tables per
-> `roleplay_cards_and_tags_spec.md` — already built; see `project-plan.md`
-> at the repo root for current remaining work. Note
-> especially: the world/character TEARDOWN recipe below (memories always
-> archived/deleted with the card) is SUPERSEDED by the per-deletion
-> choice and archive/link rules in the spec §5. `owner_approved_rules.md`
-> (Revision 4) outranks this file wherever they disagree.
+> **⚠️ PRE-REVISION DOCUMENT — the live schema has moved on, extensively,
+> since this v1.11 baseline.** It predates the Phase 1/2 memory-system
+> rework (`external_memory_analysis_counterplan.md`, Revision 24, and
+> `revision_25_binding_clarifications.md`, which is binding wherever they
+> disagree) and is kept for historical reference only. It is **not** a
+> spec for the current or any future Associative Memory schema. In
+> particular, the `memories` table below (and every field description
+> built on it) is obsolete on these specific points — none of them exist
+> on the live `memories` table (database v26):
+>
+> - **no `title` column.** Associative Memories do not have titles —
+>   never generated, shown, embedded, or exported (counterplan §3.1).
+> - **no `kind` column and no fixed six-value Type enumeration**
+>   (`fact`/`preference`/`event`/`status`/`instruction`/`lore`). Types are
+>   user-owned, stored in `memory_types` and referenced by
+>   `memories.type_id` (zero or one Type per memory); `lore` is not a Type
+>   (counterplan §5).
+> - **no permanent `provenance_source`/`provenance_confidence`/
+>   `provenance_noted_on`/`provenance_context`/`source_chat_id` columns.**
+>   Permanent memory provenance is rejected; only short-lived run
+>   bookkeeping outside the memory object is allowed (counterplan §3.2,
+>   §8.10; `revision_25_binding_clarifications.md` §5).
+> - **`importance` ranges 0–5 with 0 as neutral and the default for new
+>   memories** (not 1–5 with a default of 3), and is ignored by retrieval
+>   entirely while the `Use Importance Ratings` setting is Off
+>   (counterplan §7).
+>
+> The live schema also differs from this baseline in every way already
+> flagged below: DB v6's seven-category scope, projects, and multi-select
+> target join tables; the roleplay card + tag tables
+> (`roleplay_cards_and_tags_spec.md`); and the world/character TEARDOWN
+> recipe (superseded by the spec's per-deletion choice and archive/link
+> rules, §5). `owner_approved_rules.md` (Revision 4) and the memory-system
+> canonical plan outrank this file wherever they disagree.
+>
+> **For the actual current schema, read `MemoryStore.kt`'s `onCreate` (the
+> live shape) and `onUpgrade` (every migration since, including v21's
+> Type/importance/conversation-policy rework, v24's provenance-column
+> removal, v25's kind/title removal, and v26's `rejected_drafts` cleanup)
+> — that file is the authoritative source of truth, not this document.**
+> See `project-plan.md` at the repo root for current remaining work.
 
 This translates the JSON schema (v1.11) into concrete SQLite tables for Android. Same concepts, normalized where querying demands it, JSON columns where it doesn't. The JSON schema remains the canonical *export/import format*; these tables are its storage shape. No new behavior is introduced here.
 
@@ -126,6 +155,11 @@ CREATE TABLE roleplay_characters (
 -- plan snapshot. image_ref (v15) is likewise an approved additive extension.
 
 -- ---------- memories ----------
+-- ⚠️ OBSOLETE SNAPSHOT — see the banner at the top of this file. The live
+-- `memories` table has no `title` or `kind` column, no fixed Type
+-- enumeration, no permanent provenance columns, importance 0-5 default 0,
+-- and a `type_id` column referencing the user-owned `memory_types` table.
+-- Read `MemoryStore.kt`'s onCreate for the current shape.
 CREATE TABLE memories (
   memory_id             TEXT PRIMARY KEY,
   scope                 TEXT NOT NULL CHECK (scope IN ('global','companion')),
@@ -279,7 +313,7 @@ UPDATE worlds SET status='ended' WHERE world_id=:w;
 
 **Export / backup.** Export walks the tables back into the JSON schema shape (the schema file IS the export format) — one file the user owns, importable on any future device or the eventual PC setup. Embeddings are NOT exported; they're rebuilt by whatever librarian imports it. Recommend automatic periodic export to user-accessible storage.
 
-**Import / backfill.** Old conversations (e.g., exported chats from previous AI systems) are inserted as transcripts with source='imported' and queued for the Archivist like any other conversation. Resulting memories carry provenance_source='imported'. This is how a past companion's history can be rebuilt.
+**Import / backfill.** Old conversations (e.g., exported chats from previous AI systems) are inserted as transcripts with source='imported' and queued for the Archivist like any other conversation. This is how a past companion's history can be rebuilt. (⚠️ obsolete: resulting memories do **not** carry a `provenance_source` — that column no longer exists, per the banner at the top of this file.)
 
 **Vector search.** Options, in order of recommendation for Android: (1) sqlite-vec extension — vectors searchable inside this same database; (2) brute-force in app code — read active vectors, cosine similarity in memory; completely fine below ~50k memories and zero dependencies; (3) a dedicated index later if scale ever demands it. Start with (2) or (1); the embeddings table shape supports all three.
 

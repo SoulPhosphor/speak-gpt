@@ -132,7 +132,11 @@ Restrictions:
 
 ### Phase 1: Storage Compatibility and Database Migration
 
-**Status:** [x] Complete (merged to `main`, database v21; reviewed twice)
+**Status:** [x] Complete and merged to `main` (database v21, reviewed twice).
+Legacy-field physical cleanup that Phase 1 made possible — the
+provenance/source-chat columns (v24), the `kind`/`title` columns (v25), and
+`rejected_drafts.chat_key` (v26) — landed during Phase 2 work and is
+**not yet on `main`**; see the Phase 2 status below for where it lives.
 
 **Goal:** Make the database capable of representing the approved memory shape and conversation policies without losing existing data.
 
@@ -187,7 +191,15 @@ Required work:
 
 ### Phase 2: Memory Domain Services and Shared Filing Path
 
-**Status:** [ ] Not Started
+**Status:** [~] Substantial work done on branch
+`claude/memory-database-plan-review-kl52ed` (built on
+`claude/memory-system-phase-2-gq5wu9`) — canonical Pending filing path,
+companion-deletion durability marker (database v22), generated-draft
+bookkeeping (v23), and the physical retirement of the provenance/source-chat
+columns (v24), the `kind`/`title` columns (v25), and
+`rejected_drafts.chat_key` (v26). **Not merged to `main`; not yet verified
+against this phase's completion gate below or exercised on-device by the
+owner.**
 
 **Goal:** Provide one trustworthy application layer that every memory route uses.
 
@@ -562,7 +574,7 @@ Required work:
 
 **Status:** [ ] Not Started
 
-**Goal:** Final re-audit and release verification. Legacy removal is **not** deferred to this phase (owner ruling, August 5 2026): each phase removes the legacy structure its replacement retires. Already removed: the provenance/source-chat columns (database v24) and the title and kind columns (database v25). What remains here is verification, plus any leftover cleanup tied to replacements shipped in Phases 4–9 (transcript row processing states once the bookmark exists; the 200,000-character ceiling once token budgets exist).
+**Goal:** Final re-audit and release verification. Legacy removal is **not** deferred to this phase (owner ruling, August 5 2026): each phase removes the legacy structure its replacement retires. Already removed, on branch `claude/memory-database-plan-review-kl52ed` (not yet on `main`): the provenance/source-chat columns (database v24), the `kind`/`title` columns (v25), and `rejected_drafts.chat_key` (v26). What remains here is verification, plus any leftover cleanup tied to replacements shipped in Phases 4–9 (transcript row processing states once the bookmark exists; the 200,000-character ceiling once token budgets exist).
 
 Required work:
 

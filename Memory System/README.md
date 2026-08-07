@@ -23,7 +23,17 @@ A layered, model-agnostic memory system for AI companions: global and per-compan
 >    `seed_public_template.json` are the v1.11 export shape — the codec
 >    still reads schema-shaped JSON, but retired concepts inside them —
 >    modes, directives, entities, owner_profile, always_load — are
->    dormant fields, not features to build.)
+>    dormant fields, not features to build. So are `memories.title`,
+>    `memories.kind` and its fixed six-value enumeration, and every
+>    `memories.provenance` field: the Phase 1/2 memory-system rework
+>    (`external_memory_analysis_counterplan.md`, superseded as a *plan*
+>    per point 1 above but still the binding record of these product
+>    decisions, clarified by `revision_25_binding_clarifications.md`)
+>    retired all three from the live schema. No Associative Memory has a
+>    title or permanent provenance; Types are user-owned via a
+>    `memory_types` table and `memories.type_id`, not this fixed `kind`
+>    enum. See `MemoryStore.kt`'s `onCreate`/`onUpgrade` for the live
+>    shape.)
 
 1. **README.md** (this file) — orientation and glossary.
 2. **memory_system_guide.md** — plain-language tour of the concepts.

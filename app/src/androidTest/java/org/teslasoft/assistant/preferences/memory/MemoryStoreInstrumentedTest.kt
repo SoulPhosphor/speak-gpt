@@ -740,6 +740,167 @@ class MemoryStoreInstrumentedTest {
             indexExists(store, "idx_memories_status"))
     }
 
+    /* --------------- v26 migration: rejected_drafts.chat_key dropped ------- */
+
+    @Test
+    fun freshDatabaseHasNoRejectedDraftsChatKeyColumn() {
+        val store = open(freshDbName())
+        assertFalse("chat_key must not exist",
+            columnExists(store, "rejected_drafts", "chat_key"))
+    }
+
+    @Test
+    fun upgradedDatabaseDropsRejectedDraftsChatKeyAndCollapsesDuplicateHashes() {
+        val name = freshDbName()
+        buildV20Database(name) { db ->
+            // Two legacy rows sharing a content_hash under different chat_key
+            // values (the pre-v26 PK) must collapse to the single row v26
+            // keeps — the newer deleted_at wins.
+            db.execSQL(
+                "INSERT INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
+                arrayOf("hash-1", "chat-a", "2026-07-01T00:00:00Z")
+            )
+            db.execSQL(
+                "INSERT INTO rejected_drafts (content_hash, chat_key, deleted_at) VALUES (?, ?, ?)",
+                arrayOf("hash-1", "chat-b", "2026-07-05T00:00:00Z")
+            )
+        }
+        val store = open(name)
+
+        assertFalse("chat_key dropped", columnExists(store, "rejected_drafts", "chat_key"))
+        assertTrue("row for the shared hash survives",
+            rowExists(store, "rejected_drafts", "content_hash", "hash-1"))
+        val count = store.readableDatabase.rawQuery(
+            "SELECT COUNT(*) FROM rejected_drafts WHERE content_hash = ?", arrayOf("hash-1")
+        ).use { if (it.moveToFirst()) it.getInt(0) else -1 }
+        assertEquals("duplicate chat_key rows collapse to one", 1, count)
+        val deletedAt = store.readableDatabase.rawQuery(
+            "SELECT deleted_at FROM rejected_drafts WHERE content_hash = ?", arrayOf("hash-1")
+        ).use { if (it.moveToFirst()) it.getString(0) else null }
+        assertEquals("newest deleted_at kept", "2026-07-05T00:00:00Z", deletedAt)
+    }
+
+    /* ------- full upgrade chain: a memory's child records all survive ------ */
+
+    @Test
+    fun upgradeFromV20PreservesAMemoryAndAllItsChildRecordsWithNoBrokenForeignKeys() {
+        val name = freshDbName()
+        buildV20Database(name) { db ->
+            // The v20-era tables a real device already has, that no v21-v26
+            // migration block touches — built here only so this fixture can
+            // carry genuine child records through the whole upgrade chain.
+            db.execSQL(
+                "CREATE TABLE companions (" +
+                    "companion_id TEXT PRIMARY KEY, " +
+                    "current_name TEXT NOT NULL, " +
+                    "essence TEXT NOT NULL, " +
+                    "memory_participation TEXT NOT NULL DEFAULT 'full', " +
+                    "hard_limits_json TEXT NOT NULL DEFAULT '[]', " +
+                    "created_at TEXT NOT NULL, " +
+                    "status TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "CREATE TABLE embeddings (" +
+                    "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "embedding_model TEXT NOT NULL, " +
+                    "vector BLOB NOT NULL, " +
+                    "embedded_at TEXT NOT NULL, " +
+                    "PRIMARY KEY (memory_id, embedding_model))"
+            )
+            db.execSQL(
+                "CREATE TABLE memory_companions (" +
+                    "memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "companion_id TEXT NOT NULL REFERENCES companions(companion_id), " +
+                    "PRIMARY KEY (memory_id, companion_id))"
+            )
+            db.execSQL(
+                "CREATE TABLE change_log (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "memory_id TEXT REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "at TEXT NOT NULL, " +
+                    "actor TEXT NOT NULL, " +
+                    "action TEXT NOT NULL, " +
+                    "note TEXT, " +
+                    "prior_state_json TEXT)"
+            )
+            db.execSQL(
+                "CREATE TABLE memory_supersessions (" +
+                    "new_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "old_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "at TEXT NOT NULL, " +
+                    "PRIMARY KEY (new_memory_id, old_memory_id))"
+            )
+
+            db.insert("companions", null, ContentValues().apply {
+                put("companion_id", "c-legacy")
+                put("current_name", "Ash")
+                put("essence", "e")
+                put("created_at", "2026-07-01T00:00:00Z")
+                put("status", "active")
+            })
+            insertV20Memory(db, "m-child-legacy", "fact", 4)
+            insertV20Memory(db, "m-super-old", "fact", 2)
+            db.insert("embeddings", null, ContentValues().apply {
+                put("memory_id", "m-child-legacy")
+                put("embedding_model", "test-model")
+                put("vector", byteArrayOf(1, 2, 3, 4))
+                put("embedded_at", "2026-07-01T00:00:00Z")
+            })
+            db.insert("memory_companions", null, ContentValues().apply {
+                put("memory_id", "m-child-legacy")
+                put("companion_id", "c-legacy")
+            })
+            db.insert("change_log", null, ContentValues().apply {
+                put("memory_id", "m-child-legacy")
+                put("at", "2026-07-01T00:00:00Z")
+                put("actor", "user")
+                put("action", "created")
+            })
+            db.insert("memory_supersessions", null, ContentValues().apply {
+                put("new_memory_id", "m-child-legacy")
+                put("old_memory_id", "m-super-old")
+                put("at", "2026-07-02T00:00:00Z")
+            })
+        }
+
+        val store = open(name)
+
+        // The memory itself survives the whole v21-v26 chain.
+        val m = store.getMemory("m-child-legacy")!!
+        assertEquals("content preserved", "content of m-child-legacy", m.content)
+        assertEquals("importance preserved", 4, m.importance)
+        assertNotNull("legacy kind 'fact' migrated to a Type", m.typeId)
+
+        // Every child record survives — none was silently dropped or orphaned.
+        assertEquals("embedding survives", 1, embeddingCount(store, "m-child-legacy"))
+        assertTrue("target join survives",
+            store.readableDatabase.rawQuery(
+                "SELECT 1 FROM memory_companions WHERE memory_id = ? AND companion_id = ?",
+                arrayOf("m-child-legacy", "c-legacy")
+            ).use { it.moveToFirst() })
+        assertTrue("change_log entry survives",
+            store.readableDatabase.rawQuery(
+                "SELECT 1 FROM change_log WHERE memory_id = ? AND action = 'created'",
+                arrayOf("m-child-legacy")
+            ).use { it.moveToFirst() })
+        assertTrue("supersession record survives",
+            store.readableDatabase.rawQuery(
+                "SELECT 1 FROM memory_supersessions WHERE new_memory_id = ? AND old_memory_id = ?",
+                arrayOf("m-child-legacy", "m-super-old")
+            ).use { it.moveToFirst() })
+        assertNotNull("the superseded memory itself also survives",
+            store.getMemory("m-super-old"))
+
+        // The v21/v24/v25/v26 `memories` rebuilds run with foreign keys off
+        // (onConfigure) precisely so dropping/recreating the parent table
+        // cannot orphan these child rows; onOpen re-enables enforcement
+        // afterward. Confirm directly that nothing was left dangling.
+        val brokenRefs = store.readableDatabase.rawQuery("PRAGMA foreign_key_check", null)
+            .use { c -> val rows = ArrayList<String>(); while (c.moveToNext()) { rows.add(c.getString(0)) }; rows }
+        assertTrue("no broken foreign-key references after the full upgrade chain: $brokenRefs",
+            brokenRefs.isEmpty())
+    }
+
     /* ------------------------------ helpers ------------------------------- */
 
     private fun importanceOf(store: MemoryStore, id: String): Int =
@@ -812,6 +973,17 @@ class MemoryStoreInstrumentedTest {
         val db = SQLiteDatabase.openOrCreateDatabase(file.path, key, null, null)
         db.execSQL("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         db.execSQL("INSERT INTO meta (key, value) VALUES ('db_migration', '20')")
+        // rejected_drafts (created at v14, rekeyed v17) exists on every genuine
+        // v20 database; the v26 migration reads it, so the fixture must carry
+        // it too or upgrading this hand-built database would fail on a table
+        // that only this minimal fixture — never a real device — lacks.
+        db.execSQL(
+            "CREATE TABLE rejected_drafts (" +
+                "content_hash TEXT NOT NULL, " +
+                "chat_key TEXT NOT NULL, " +
+                "deleted_at TEXT NOT NULL, " +
+                "PRIMARY KEY (content_hash, chat_key))"
+        )
         db.execSQL(
             "CREATE TABLE memories (" +
                 "memory_id TEXT PRIMARY KEY, " +
