@@ -1,12 +1,13 @@
 # Roadmap
 
-**Updated 2026-08-06. This is the only app-wide scheduling roadmap.**
+**Updated 2026-08-07. This is the only app-wide scheduling roadmap.**
 
 ## Structure of truth
 
 - **Current code on `main`** is the truth about what already exists.
 - **This file** is the truth about which feature is active and the order of future features.
-- **Narrow technical specifications** define the implementation contract for the active feature or preserve exact approved UI wording. They are not competing roadmaps.
+- **`Memory System/ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md`** is the binding technical implementation contract for the active memory repair. It is not a competing roadmap.
+- **Narrow technical specifications** preserve exact approved behavior or wording. They do not create additional phase lists.
 - The previous 2026-08-03 roadmap, including the complete approved wording for future Features 2-4, is preserved byte-for-byte at `planning/project-plan_2026-08-03_feature-specs.md`. Its old Feature 1 and model-assignment sections are superseded by this file. Its detailed specifications for the three future features below remain binding when those features become active.
 
 ## Ground rules
@@ -22,6 +23,8 @@
 **Research before invention.** When an engineering question has established open-source or documented prior art, inspect that implementation before creating a bespoke experiment. A standalone evaluation harness or paid model tournament is not a substitute for building the actual product path unless the owner explicitly asks for one.
 
 **User-facing wording.** Existing approved wording remains binding in the named feature/copy specifications. Do not invent replacement wording merely because a different model is implementing the feature.
+
+**Legacy plans are not active plans.** Historical memory plans, work orders, old schemas, prompts, and completed audits live under `legacy/`. Do not treat those files as cumulative requirements for the current feature.
 
 ## Feature order
 
@@ -42,18 +45,18 @@ The owner reported a concrete defect after the previous roadmap was written: the
 
 The complete binding technical contract is:
 
-`Memory System/external_memory_analysis_counterplan.md` - **Revision 26**
+**`Memory System/ACTIVE_ASSOCIATIVE_MEMORY_REPAIR.md` - Revision 26**
 
-That document is the dependency-correct repair contract. Do not substitute Revision 24 phases, the old Phase 3 evaluation harness, or a different memory architecture.
+That document is the dependency-correct repair contract. Do not substitute Revision 24 phases, the old Phase 3 evaluation harness, an archived memory plan, or a different memory architecture.
 
 ## Builder execution directive
 
 **This is an implementation order, not a request for another plan, audit, proposal, or architecture discussion.** When assigned Feature 1, make the required code and test changes in the repository.
 
-1. Read current `main`, this roadmap, Revision 26, and the focused copy specs named by Revision 26.
+1. Read current `main`, this roadmap, Revision 26, and the focused active specs named by Revision 26.
 2. Confirm only the current code facts needed to begin. Do not stop after inventorying or summarizing the repository.
 3. Create or use one Feature 1 implementation branch.
-4. Execute Revision 26 Stages B, C, D, E, and F in that dependency order. Stage A is documentation/status cleanup and is already represented by the repaired planning branch; it is not a substitute for implementation.
+4. Execute Revision 26 Stages B, C, D, E, and F in that dependency order. Stage A is planning/status cleanup and is not a substitute for implementation.
 5. Modify the real production code paths, database/migrations where required, prompts/parser/schema, tests, and only the existing UI surfaces explicitly required by Revision 26.
 6. After each internal stage, run the relevant focused tests and inspect the actual diff. Continue to the next stage when that stage is technically sound. Do not report an internal stage as a shipped feature.
 7. Do not stop because CI is green if the end-to-end behavior is not yet implemented.
