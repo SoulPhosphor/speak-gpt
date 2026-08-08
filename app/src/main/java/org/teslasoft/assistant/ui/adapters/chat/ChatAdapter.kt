@@ -772,27 +772,40 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {
             val marker = statusMarker ?: return
             val state = chatMessage[MessageCompletionState.KEY_STATE]?.toString()
+            // A deliberate user Stop is not an error and shows no marker at all
+            // (owner ruling, Aug 8 2026); a complete or still-streaming reply
+            // never shows one either.
             if (chatMessage["isBot"] != true ||
                 MessageCompletionState.isComplete(state) ||
-                state == MessageCompletionState.STREAMING
+                state == MessageCompletionState.STREAMING ||
+                state == MessageCompletionState.STOPPED
             ) {
                 marker.visibility = View.GONE
                 return
             }
-            val label = when (state) {
-                MessageCompletionState.INTERRUPTED -> context.getString(R.string.message_state_interrupted)
-                MessageCompletionState.STOPPED -> context.getString(R.string.message_state_stopped)
-                MessageCompletionState.FAILED -> context.getString(R.string.message_state_failed)
+            // Each non-user termination names its own cause. START_FAILED and
+            // UNKNOWN_END ride on FAILED, distinguished by the state detail; a
+            // plain FAILED is a provider/network error; INTERRUPTED is an
+            // app/lifecycle interruption.
+            val detail = chatMessage[MessageCompletionState.KEY_STATE_DETAIL]?.toString()
+            val label = when {
+                state == MessageCompletionState.INTERRUPTED ->
+                    context.getString(R.string.message_state_interrupted)
+                state == MessageCompletionState.FAILED &&
+                    detail == MessageCompletionState.DETAIL_START_FAILED ->
+                    context.getString(R.string.message_state_start_failed)
+                state == MessageCompletionState.FAILED &&
+                    detail == MessageCompletionState.DETAIL_UNKNOWN_END ->
+                    context.getString(R.string.message_state_unknown_end)
+                state == MessageCompletionState.FAILED ->
+                    context.getString(R.string.message_state_failed)
                 else -> context.getString(R.string.message_state_incomplete)
             }
             val errorText = chatMessage[MessageCompletionState.KEY_ERROR_TEXT]?.toString().orEmpty()
-            // A failed reply always shows its error detail below the marker —
-            // failures are never hidden (owner ruling, July 31 2026).
-            marker.text = if (state == MessageCompletionState.FAILED && errorText.isNotBlank()) {
-                "$label\n$errorText"
-            } else {
-                label
-            }
+            // The cause (a provider/network error, or the known internal reason
+            // for an interruption) is shown below the label — failures are never
+            // hidden (owner ruling, July 31 2026).
+            marker.text = if (errorText.isNotBlank()) "$label\n$errorText" else label
             marker.visibility = View.VISIBLE
         }
 

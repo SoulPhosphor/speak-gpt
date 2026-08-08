@@ -441,6 +441,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var silenceMode = false
     private var autoLangDetect = false
     private var cancelState = false
+    // True only when the CURRENT generation was cancelled by a deliberate user
+    // action (Stop / Hang Up / mic or conversation-button cancel), so the
+    // cancellation funnel can tell a real user stop from an app/lifecycle or
+    // unknown cancellation. A cancelled coroutine alone never proves the user
+    // caused it. Reset at the start of every generation.
+    private var userRequestedStop = false
     private var disableAutoScroll = false
     private var inCost: Float = 0.0f
     private var outCost: Float = 0.0f
@@ -6819,6 +6825,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun cancelAllAiActivity(source: String) {
         logVoiceEvent("all AI activity cancelled ($source)")
         cancelState = true
+        // This funnel is only ever reached from a deliberate user action (Stop
+        // spinner, notification Hang Up, mic tap, conversation button). Mark the
+        // current generation's cancellation as user-initiated so it is treated
+        // as a benign stop, not an app/lifecycle or unknown interruption.
+        userRequestedStop = true
         // Stop is a deliberate user cancel, so it DOES end a running image
         // generation (unlike leaving the screen, which lets it finish).
         if (chatId != "") ImageGenerationJobRegistry.cancel(chatId)
@@ -7042,6 +7053,61 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         saveSettings()
     }
 
+    /**
+     * Enforce the invariant that a saved user message never ends with no
+     * explanation and no Regenerate target: guarantee the turn ends with a
+     * visible, regenerate-able assistant bubble carrying a comprehensible cause,
+     * and (for a real problem, never a user stop) record it to the Error Log so
+     * a future occurrence self-identifies.
+     *
+     * If no assistant bubble was ever created (a failure before streaming
+     * began), one is created here. An already-completed reply is never
+     * downgraded — only a still-streaming reply or a freshly-created empty
+     * bubble is stamped.
+     */
+    private fun showTerminalFailure(
+        state: String,
+        detail: String,
+        reason: String?,
+        logAsError: Boolean,
+        errorTag: String,
+        errorSummary: String
+    ) {
+        if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
+            putMessage("", true)
+        }
+        val idx = messages.size - 1
+        if (idx >= 0 && messages[idx]["isBot"] == true) {
+            val existing = messages[idx][MessageCompletionState.KEY_STATE]?.toString()
+            val stampable = existing == MessageCompletionState.STREAMING ||
+                (existing.isNullOrBlank() && messages[idx]["message"]?.toString().isNullOrEmpty())
+            if (stampable) {
+                messages[idx][MessageCompletionState.KEY_STATE] = state
+                messages[idx][MessageCompletionState.KEY_STATE_DETAIL] = detail
+                if (!reason.isNullOrBlank()) {
+                    messages[idx][MessageCompletionState.KEY_ERROR_TEXT] = reason
+                }
+                if (messages.size > 2) {
+                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                } else {
+                    adapter?.notifyItemChanged(messages.size - 1)
+                }
+            }
+        }
+        saveSettings()
+        if (logAsError) {
+            try {
+                org.teslasoft.assistant.preferences.Logger.log(
+                    this, "crash", errorTag, "error",
+                    errorSummary +
+                        "\nModel: ${model.ifBlank { "unknown" }}" +
+                        "\nScreen: ${screenState()}" +
+                        "\nNetwork: ${networkState()}"
+                )
+            } catch (_: Throwable) { /* diagnostics must never crash the failure path */ }
+        }
+    }
+
     /** Content of a message as the MODEL should see it, which is not always
      *  what the user sees.
      *
@@ -7168,6 +7234,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // flow through here, and a reply that can't be saved must not be
         // produced over the blocking "Chat unavailable" state.
         if (chatStorageUnavailable) return
+
+        // A fresh generation: any user-stop flag left from a previous turn is
+        // cleared, so only a Stop during THIS generation counts as a user stop.
+        userRequestedStop = false
 
         // Clear any provider error captured on a previous turn before this one
         // makes its request, so a failure never shows a stale provider.
@@ -7320,29 +7390,75 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
         } catch (_: CancellationException) {
-            // The stream was cut short. Stamp a terminal state on the reply that
-            // was streaming so it can't reopen looking finished, keeping whatever
-            // partial text already streamed in. A user stop (mic/hang-up/progress
-            // cancel) while the screen is alive is "stopped"; a cancellation from
-            // the activity being torn down is "interrupted". This save also
-            // closes the streaming marker so the load-time reconciler has nothing
-            // to fix (they are belt-and-suspenders for a hard process kill, which
-            // runs no code here at all). No suspension points below, so this runs
-            // even though the coroutine is already cancelled.
+            // The stream was cut short. A cancelled coroutine does NOT prove the
+            // user stopped it — only an actual Stop / Hang Up / cancel tap does,
+            // and that set userRequestedStop. Classify by the real cause so a
+            // benign user stop, an app/lifecycle interruption, and a genuinely
+            // unknown early end are never conflated (owner ruling, Aug 8 2026).
+            // No suspension points below, so this runs even though the coroutine
+            // is already cancelled.
             val destroying = isFinishing || isDestroyed
-            // Lifecycle: a user stop while the screen is alive is Stopped (not a
-            // red failure); a cancellation from the screen being torn down is
-            // Cancelled, with the source recorded. Neither is an error.
-            finalizeLifecycleTerminal(
-                if (destroying) ResponseLifecycle.Outcome.CANCELLED else ResponseLifecycle.Outcome.STOPPED,
-                "missing", true,
-                if (destroying) ResponseLifecycle.Termination.APP_CANCEL else ResponseLifecycle.Termination.USER_STOP,
-                if (destroying) "app cancelled: activity teardown" else null
+            val replyStarted = messages.isNotEmpty() &&
+                messages[messages.size - 1]["isBot"] == true
+            val (state, detail) = MessageCompletionState.classifyCancellation(
+                userRequestedStop, destroying, replyStarted
             )
-            finalizeStreamingMessageState(
-                if (destroying) MessageCompletionState.INTERRUPTED else MessageCompletionState.STOPPED,
-                if (destroying) MessageCompletionState.DETAIL_SCREEN_CLOSED else null
-            )
+            when (detail) {
+                MessageCompletionState.DETAIL_USER_STOP -> {
+                    // Deliberate user Stop: not an error. No chat marker and no
+                    // Error Log entry; the Response Lifecycle still records it
+                    // (kept on for now, for debugging).
+                    finalizeLifecycleTerminal(
+                        ResponseLifecycle.Outcome.STOPPED, "missing", true,
+                        ResponseLifecycle.Termination.USER_STOP, null
+                    )
+                    finalizeStreamingMessageState(state, detail)
+                }
+                MessageCompletionState.DETAIL_START_FAILED -> {
+                    // The reply never started. Include the known reason (a
+                    // teardown) when there is one.
+                    val reason = if (destroying)
+                        getString(R.string.gen_interrupt_reason_screen_closed) else null
+                    val summary = "reply could not start" + (reason?.let { ": $it" } ?: "")
+                    finalizeLifecycleTerminal(
+                        if (destroying) ResponseLifecycle.Outcome.CANCELLED
+                        else ResponseLifecycle.Outcome.INCOMPLETE,
+                        "missing", true,
+                        if (destroying) ResponseLifecycle.Termination.APP_CANCEL
+                        else ResponseLifecycle.Termination.STREAM_CLOSED,
+                        summary
+                    )
+                    showTerminalFailure(
+                        state, detail, reason, logAsError = true,
+                        errorTag = "GenStartFailed", errorSummary = summary
+                    )
+                }
+                MessageCompletionState.DETAIL_SCREEN_CLOSED -> {
+                    // The app's own lifecycle tore the screen down mid-reply.
+                    val reason = getString(R.string.gen_interrupt_reason_screen_closed)
+                    finalizeLifecycleTerminal(
+                        ResponseLifecycle.Outcome.CANCELLED, "missing", true,
+                        ResponseLifecycle.Termination.APP_CANCEL, "app interrupted: $reason"
+                    )
+                    showTerminalFailure(
+                        state, detail, reason, logAsError = true,
+                        errorTag = "GenInterrupted", errorSummary = "app interrupted the reply: $reason"
+                    )
+                }
+                else -> {
+                    // Cancelled mid-reply with no user stop and no teardown — the
+                    // app knows it ended early but cannot say why. A diagnostic
+                    // problem, not a benign stop.
+                    finalizeLifecycleTerminal(
+                        ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
+                        ResponseLifecycle.Termination.STREAM_CLOSED, "ended early; cause unknown"
+                    )
+                    showTerminalFailure(
+                        state, detail, null, logAsError = true,
+                        errorTag = "GenUnknownEnd", errorSummary = "reply ended early; cause unknown"
+                    )
+                }
+            }
             calculateCost()
             runOnUiThread {
                 restoreUIState()
