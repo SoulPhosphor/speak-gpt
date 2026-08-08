@@ -1454,6 +1454,47 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * The provider (API endpoint), model, and routing that the LAST conversation
+     * to receive a successful reply used. A brand-new chat restores these once so
+     * it opens on the setup that last worked, instead of a hardcoded default.
+     * Recorded only on a successful reply, so a config that only ever errored
+     * never propagates. Global, like the last-used companion. Routing defaults to
+     * "automatic" (mirrors FavoriteModelObject.ROUTING_AUTOMATIC) — the value a
+     * non-favorite model reads back as.
+     */
+    fun getLastSuccessfulEndpointId() : String {
+        return getGlobalString("last_success_endpoint_id", "")
+    }
+
+    fun getLastSuccessfulModel() : String {
+        return getGlobalString("last_success_model", "")
+    }
+
+    fun getLastSuccessfulRouting() : String {
+        return getGlobalString("last_success_routing", "automatic")
+    }
+
+    fun setLastSuccessfulConfig(endpointId: String, model: String, routing: String) {
+        putGlobalString("last_success_endpoint_id", endpointId)
+        putGlobalString("last_success_model", model)
+        putGlobalString("last_success_routing", routing)
+    }
+
+    /**
+     * One-shot per chat: a brand-new chat restores its provider/model from the
+     * last successful config exactly once. After that the chat's own choice
+     * always wins, so re-opening an untouched empty chat never overwrites a
+     * selection the user just made in the Summoning Circle.
+     */
+    fun isProviderSeeded() : Boolean {
+        return getBoolean("provider_seeded", false)
+    }
+
+    fun setProviderSeeded(seeded: Boolean) {
+        putBoolean("provider_seeded", seeded)
+    }
+
+    /**
      * The additional lorebooks currently checked for this chat. Memories from
      * these books (plus the persona's always-on core book) are matched against
      * messages and injected into the prompt. Stored comma-separated.
@@ -1652,6 +1693,20 @@ class Preferences private constructor(private var preferences: SharedPreferences
 
     fun setMemoryUsageLogging(enabled: Boolean) {
         putGlobalBoolean("memory_usage_logging", enabled, false)
+    }
+
+    /**
+     * Log entry ordering for the Logs viewer. On (the default) shows each log
+     * newest entry first; off shows oldest first. Remembered app-wide so a
+     * person's chosen order carries across every log and across sessions until
+     * they flip it again.
+     */
+    fun getLogsNewestFirst() : Boolean {
+        return getGlobalBoolean("logs_newest_first", true)
+    }
+
+    fun setLogsNewestFirst(enabled: Boolean) {
+        putGlobalBoolean("logs_newest_first", enabled, true)
     }
 
     /**

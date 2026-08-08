@@ -100,6 +100,15 @@ class ChooseProviderActivity : FragmentActivity() {
          *  caller, which applies them on its own save. */
         const val EXTRA_PERSIST_DIRECTLY = "persistDirectly"
 
+        /** When true, changing the model on this screen KEEPS the routing type
+         *  the user is currently on instead of adopting the newly-chosen model's
+         *  stored routing. Set only for the Summoning Circle mode-setup flow,
+         *  where the user deliberately picked a routing method and expects it to
+         *  carry to whatever model they land on. The Favorite Models routing
+         *  gear leaves this false so switching models there still shows each
+         *  model's own saved routing. */
+        const val EXTRA_KEEP_ROUTING_ON_MODEL_CHANGE = "keepRoutingOnModelChange"
+
         private val routingTypes = arrayOf(
             FavoriteModelObject.ROUTING_AUTOMATIC,
             FavoriteModelObject.ROUTING_PREFERRED,
@@ -148,6 +157,7 @@ class ChooseProviderActivity : FragmentActivity() {
 
     private var endpointId: String = ""
     private var persistDirectly: Boolean = false
+    private var keepRoutingOnModelChange: Boolean = false
     private var host: String = ""
     private var apiKey: String = ""
     private var authType: String = ApiEndpointObject.AUTH_BEARER
@@ -238,6 +248,7 @@ class ChooseProviderActivity : FragmentActivity() {
 
         endpointId = intent.getStringExtra(EXTRA_ENDPOINT_ID) ?: ""
         persistDirectly = intent.getBooleanExtra(EXTRA_PERSIST_DIRECTLY, false)
+        keepRoutingOnModelChange = intent.getBooleanExtra(EXTRA_KEEP_ROUTING_ON_MODEL_CHANGE, false)
         host = intent.getStringExtra(EXTRA_HOST) ?: ""
         apiKey = intent.getStringExtra(EXTRA_API_KEY) ?: ""
         authType = intent.getStringExtra(EXTRA_AUTH_TYPE) ?: ApiEndpointObject.AUTH_BEARER
@@ -256,9 +267,10 @@ class ChooseProviderActivity : FragmentActivity() {
         initLogic()
 
         // The caller may be opening this screen specifically to set up a mode
-        // just picked in Quick Settings or Memory Assistant. Load the saved
-        // provider details, but preserve that explicit initial mode. A later
-        // model change still adopts the newly chosen favorite's saved mode.
+        // just picked in the Summoning Circle. Load the saved provider details,
+        // but preserve that explicit initial mode. Whether a later model change
+        // keeps that mode or adopts the new model's own is decided per entry
+        // point by keepRoutingOnModelChange (see onModelChanged).
         seedProviderStateFromFavorite(adoptFavoriteRoutingType = false)
         if (selectedModel.isNotBlank()) startProviderFetch()
     }
@@ -400,7 +412,10 @@ class ChooseProviderActivity : FragmentActivity() {
         providerEndpoints = null
         availableSlugs = null
         zdrMatches = null
-        seedProviderStateFromFavorite(adoptFavoriteRoutingType = true)
+        // Keep the routing the user is on when they came here to set up a mode
+        // (Summoning Circle); otherwise adopt the newly-chosen model's own saved
+        // routing (the Favorite Models routing gear).
+        seedProviderStateFromFavorite(adoptFavoriteRoutingType = !keepRoutingOnModelChange)
         updateModeViews()
         if (selectedModel.isBlank()) {
             btnProviderFilters?.visibility = View.GONE
@@ -928,7 +943,10 @@ class ChooseProviderActivity : FragmentActivity() {
                     )
                 )
             }
-            setResult(RESULT_OK)
+            // Return the model saved here so the caller (the Summoning Circle)
+            // can switch the chat to it — the routing rode along on the favorite
+            // just written above.
+            setResult(RESULT_OK, Intent().putExtra(EXTRA_MODEL, selectedModel))
             finish()
             return
         }

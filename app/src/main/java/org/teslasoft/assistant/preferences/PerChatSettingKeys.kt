@@ -78,6 +78,9 @@ object PerChatSettingKeys {
         "persona_id",
         "activation_prompt_id",
         "persona_activation_seeded",
+        // One-shot guard: a new chat restores the last successful provider/model
+        // once. (The last-successful values themselves are global, not per-chat.)
+        "provider_seeded",
 
         // Lorebooks
         "active_lorebook_ids",

@@ -22,10 +22,8 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
-import android.widget.ArrayAdapter
 import android.widget.ImageButton
 import android.widget.TextView
-import androidx.appcompat.widget.ListPopupWindow
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -38,6 +36,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.providers.ProviderFilterState
 import org.teslasoft.assistant.providers.SortDirection
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.widgets.AppDropdown
 
 /**
  * Filters pull-out for the provider chart on the Choose Provider screen.
@@ -184,18 +183,12 @@ class ProviderFilterPanelActivity : FragmentActivity() {
         }
     }
 
+    /** Open the shared canonical dropdown menu under the tapped value control.
+     *  AppDropdown supplies the border-continuous, feedback-free menu and keeps
+     *  the current value as the selected top option. */
     private fun showDropdown(anchor: View, labels: List<String>, onPick: (Int) -> Unit) {
-        if (isFinishing) return
-        val popup = ListPopupWindow(this)
-        popup.anchorView = anchor
-        popup.isModal = true
-        popup.width = anchor.width
-        popup.setAdapter(ArrayAdapter(this, android.R.layout.simple_list_item_1, labels))
-        popup.setOnItemClickListener { _, _, position, _ ->
-            popup.dismiss()
-            onPick(position)
-        }
-        popup.show()
+        if (isFinishing || anchor !is TextView) return
+        AppDropdown.show(anchor, labels, onPick = onPick)
     }
 
     private fun refreshAllValues() {

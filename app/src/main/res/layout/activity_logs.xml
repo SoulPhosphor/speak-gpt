@@ -32,11 +32,21 @@
             android:id="@+id/btn_back"
             style="@style/Widget.App.ActionBar.BackButton" />
 
+        <!-- Two title styles, one shown at a time (LogsActivity picks per log):
+             the Voice Debug log carries the trailing icon below, so it uses the
+             left-aligned, icon-aware title; every other log has no trailing icon
+             and uses the plain centered title. -->
         <TextView
             android:id="@+id/activity_logs_title"
             style="@style/Widget.App.ActionBar.Title.NearBack"
             android:text="@string/title_logs"
+            android:visibility="gone"
             app:layout_constraintEnd_toStartOf="@+id/btn_voice_advanced" />
+
+        <TextView
+            android:id="@+id/activity_logs_title_centered"
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/title_logs" />
 
         <!-- One-tap jump to the advanced voice & debugging screen, shown only on
              the Event log (set in LogsActivity) so the user can read what's
@@ -52,44 +62,45 @@
             app:srcCompat="@drawable/ic_terminal" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
+    <!-- Clear (left) and Copy / Export (right) share one line. Clear uses the
+         destructive semantic style, Copy the primary style; the side-by-side
+         placement is local layout only. Copy sits on the right so the user can
+         hand the log off (paste to a developer or coding bot) before wiping it
+         with Clear. -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_clear_log"
-        style="@style/Widget.Material3.Button"
+        style="@style/AppButton.Destructive"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
-        android:layout_marginEnd="24dp"
+        android:layout_marginEnd="6dp"
         android:layout_marginBottom="24dp"
-        android:paddingHorizontal="24dp"
         android:paddingVertical="16dp"
         android:text="@string/btn_clear_log"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/btn_copy_log"
         app:layout_constraintStart_toStartOf="parent" />
 
-    <!-- Copy / Export sits above Clear so the user can hand the log off
-         (paste to a developer or coding bot) before wiping it. -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btn_copy_log"
-        style="@style/Widget.Material3.Button.OutlinedButton"
+        style="@style/AppButton.Primary"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="24dp"
+        android:layout_marginStart="6dp"
         android:layout_marginEnd="24dp"
-        android:layout_marginBottom="12dp"
-        android:paddingHorizontal="24dp"
         android:paddingVertical="16dp"
         android:text="@string/btn_copy_log"
-        app:layout_constraintBottom_toTopOf="@+id/btn_clear_log"
+        app:layout_constraintBottom_toBottomOf="@+id/btn_clear_log"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toEndOf="@+id/btn_clear_log"
+        app:layout_constraintTop_toTopOf="@+id/btn_clear_log" />
 
     <ScrollView
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginTop="16dp"
         android:layout_marginBottom="16dp"
-        app:layout_constraintBottom_toTopOf="@+id/btn_copy_log"
+        app:layout_constraintBottom_toTopOf="@+id/btn_clear_log"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/action_bar">
@@ -99,11 +110,34 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!-- Log ordering control. A toggle-row line (title + switch, no
+                 subtitle) that scrolls away with the log rather than pinning to
+                 the top. On = newest entry first (the default); the choice is
+                 remembered app-wide. -->
+            <LinearLayout
+                android:id="@+id/row_newest_first"
+                style="@style/Widget.App.Row.Toggle"
+                android:layout_marginHorizontal="24dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        android:id="@+id/newest_first_title"
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/logs_newest_first" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_newest_first"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/text_log"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="24dp"
+                android:layout_marginTop="16dp"
                 android:text="debug.log.content"
                 android:textIsSelectable="true" />
         </LinearLayout>

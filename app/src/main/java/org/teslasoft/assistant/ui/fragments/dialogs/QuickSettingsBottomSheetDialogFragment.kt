@@ -64,6 +64,7 @@ import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.WorldRecord
 import org.teslasoft.assistant.ui.activities.ActivationPromptsListActivity
 import org.teslasoft.assistant.ui.activities.ApiEndpointsListActivity
+import org.teslasoft.assistant.ui.activities.ChooseProviderActivity
 import org.teslasoft.assistant.ui.activities.LogitBiasConfigListActivity
 import org.teslasoft.assistant.ui.activities.LoreBookEntriesActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -292,8 +293,16 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
      *  set-up dialog. That screen persists the favorite itself, so just
      *  re-sync the dropdown to whatever routing is now stored (a save applies
      *  the new mode; a cancel leaves the old one, reverting the dropdown). */
-    private val chooseProviderLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+    private val chooseProviderLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (!isAdded) return@registerForActivityResult
+        // The provider screen may have switched to a different model. Adopt it as
+        // the chat's model so the model AND its just-saved routing become active,
+        // regardless of which model was selected when the screen was opened.
+        val savedModel = result.data?.getStringExtra(ChooseProviderActivity.EXTRA_MODEL)
+        if (!savedModel.isNullOrBlank() && savedModel != preferences?.getModel()) {
+            preferences?.setModel(savedModel)
+            textModel?.text = savedModel
+        }
         updateListener?.onUpdate()
         shouldForceUpdate = true
         refreshProviderModeDisplay()
@@ -688,7 +697,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 val model = preferences?.getModel() ?: return@setPositiveButton
                 val prefs = apiEndpointPreferences ?: return@setPositiveButton
                 val favPrefs = favoriteModelsPreferences ?: return@setPositiveButton
-                FavoriteRoutingActions.buildRoutingIntent(requireContext(), prefs, favPrefs, model, endpointId, mode)?.let {
+                FavoriteRoutingActions.buildRoutingIntent(requireContext(), prefs, favPrefs, model, endpointId, mode, keepRoutingOnModelChange = true)?.let {
                     launched = true
                     chooseProviderLauncher.launch(it)
                 }

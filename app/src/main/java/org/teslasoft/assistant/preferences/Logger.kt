@@ -526,6 +526,39 @@ class Logger {
             Regex("""(?m)^\[(\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}(?::\d{2})?(?: [AP]M)?)\](?=[ \n])""")
 
         /**
+         * Prepare a stored log for on-screen display. Splits the log into whole
+         * entries by the exact same header rule [trimByEntries] uses (so a
+         * multi-line stack trace or lifecycle block stays intact), optionally
+         * reverses to newest-first, and re-joins the entries with exactly one
+         * blank line between each.
+         *
+         * The single blank line is why every log reads clearly regardless of how
+         * its producer wrote it: the standard [log] path separates entries with
+         * only a line break (Memory Usage, Whisper, and the others ran together),
+         * while Provider Failure and Response Lifecycle wrote two blank lines —
+         * this normalizes both to one. Display-only: the stored bytes and their
+         * retention are untouched, and any log already on the device is spaced
+         * and ordered the same way when viewed.
+         */
+        fun formatForDisplay(log: String, newestFirst: Boolean): String {
+            if (log.isEmpty()) return log
+            val headers = ENTRY_HEADER.findAll(log).toList()
+            // No recognizable entry headers: show the content unchanged rather
+            // than risk mangling it.
+            if (headers.isEmpty()) return log
+            val entries = ArrayList<String>(headers.size)
+            for (i in headers.indices) {
+                val start = headers[i].range.first
+                val end = if (i + 1 < headers.size) headers[i + 1].range.first else log.length
+                // Trim each entry's own trailing whitespace so the join controls
+                // the spacing between entries exactly (one blank line, no more).
+                entries.add(log.substring(start, end).trimEnd())
+            }
+            val ordered = if (newestFirst) entries.asReversed() else entries
+            return ordered.joinToString("\n\n")
+        }
+
+        /**
          * Trim a stored log by **whole entries** — never by physical lines — so a
          * multi-line stack trace or GenError block is kept or dropped as a unit and
          * is never cut in half (the bug the old character-count trim could cause).

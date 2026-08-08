@@ -173,6 +173,8 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.ResponseLifecycle
 import org.teslasoft.assistant.preferences.ResponseLifecycleRecorder
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
+import org.teslasoft.assistant.providers.NewChatProviderRestore
 import org.teslasoft.assistant.providers.ProviderRoutingBlockedException
 import org.teslasoft.assistant.providers.ProviderRoutingDiagnostics
 import org.teslasoft.assistant.providers.ProviderRoutingResolver
@@ -223,6 +225,7 @@ import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
 import org.teslasoft.assistant.util.Hash
 import org.teslasoft.assistant.util.GenErrorResult
 import org.teslasoft.assistant.util.FrozenChatPayload
+import org.teslasoft.assistant.util.GenErrorCode
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 import org.teslasoft.assistant.imagegen.CreateImageTool
 import org.teslasoft.assistant.imagegen.ImageConfirmationSpeech
@@ -441,6 +444,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var silenceMode = false
     private var autoLangDetect = false
     private var cancelState = false
+    // True only when the CURRENT generation was cancelled by a deliberate user
+    // action (Stop / Hang Up / mic or conversation-button cancel), so the
+    // cancellation funnel can tell a real user stop from an app/lifecycle or
+    // unknown cancellation. A cancelled coroutine alone never proves the user
+    // caused it. Reset at the start of every generation.
+    private var userRequestedStop = false
+    // For a brand-new chat: the decision about restoring the last successful
+    // provider/model/routing, resolved during initSettings and acted on once the
+    // chat UI exists (a dialog + Summoning Circle, or the API Endpoints screen).
+    private var providerRestoreOutcome: NewChatProviderRestore.Outcome? = null
     private var disableAutoScroll = false
     private var inCost: Float = 0.0f
     private var outCost: Float = 0.0f
@@ -2332,6 +2345,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     @Suppress("unchecked")
     private fun initSettings(historyResult: ChatPreferences.ChatHistoryResult) {
+        // Brand-new chat: adopt the provider/model/routing the last conversation
+        // successfully used, before the endpoint/key below are read. Updates
+        // apiEndpointObject when it restores; otherwise records what the UI must
+        // do once it exists (a dialog, or the API Endpoints screen).
+        maybeRestoreProviderForNewChat(historyResult)
+
         key = apiEndpointObject?.apiKey!!
         // The auxiliary client (cloud Whisper, TTS, image generation,
         // function calling) must follow the active chat's endpoint. It used
@@ -2424,6 +2443,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             initTTS()
             initLogic()
             initAI()
+
+            // The chat UI now exists, so a missing/absent configuration can be
+            // surfaced (a dialog + Summoning Circle, or the API Endpoints screen).
+            handleProviderRestoreOutcome()
         }
     }
 
@@ -2568,28 +2591,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         activityTitle?.setOnClickListener {
-            val quickSettingsBottomSheetDialogFragment = QuickSettingsBottomSheetDialogFragment
-                .newInstance(
-                    chatId,
-                    usageIn,
-                    usageOut,
-                    priceIn,
-                    priceOut
-                )
-            quickSettingsBottomSheetDialogFragment.setOnUpdateListener(object : QuickSettingsBottomSheetDialogFragment.OnUpdateListener {
-                override fun onUpdate() {
-                    // The chat's Companion or user identity may have changed here
-                    // without a full reload; re-resolve both pictures (display-only).
-                    refreshCompanionAvatar()
-                    refreshUserAvatar()
-                }
-
-                override fun onForceUpdate() {
-                    startActivity(Intent(this@ChatActivity, ChatActivity::class.java).putExtra("chatId", chatId).putExtra("name", chatName).setAction(Intent.ACTION_VIEW))
-                    finishActivity()
-                }
-            })
-            quickSettingsBottomSheetDialogFragment.show(supportFragmentManager, "QuickSettingsBottomSheetDialogFragment")
+            openSummoningCircle()
         }
 
         val linearLayoutManager = LinearLayoutManager(this)
@@ -4978,6 +4980,109 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /**
+     * Brand-new chat only: adopt the provider/model/routing that the last
+     * conversation successfully used (owner spec, Aug 8 2026). Runs at most once
+     * per chat and never touches a chat that already has messages, so a later
+     * choice always wins. When the saved local setup is gone it records an
+     * outcome for [handleProviderRestoreOutcome]; it never claims the model is
+     * unavailable — that is decided only from the provider's own response on send.
+     */
+    private fun maybeRestoreProviderForNewChat(historyResult: ChatPreferences.ChatHistoryResult) {
+        if (!historyResult.messages.isNullOrEmpty()) return
+        if (preferences?.isProviderSeeded() == true) return
+        preferences?.setProviderSeeded(true)
+
+        val endpointId = preferences?.getLastSuccessfulEndpointId().orEmpty()
+        val lastModel = preferences?.getLastSuccessfulModel().orEmpty()
+        val routing = preferences?.getLastSuccessfulRouting() ?: FavoriteModelObject.ROUTING_AUTOMATIC
+
+        // A deleted provider profile reads back with a blank host; a favorite is
+        // present only while its (model, endpoint) star exists.
+        val endpointExists = endpointId.isNotBlank() &&
+            (apiEndpointPreferences?.getApiEndpoint(this, endpointId)?.host?.isNotBlank() == true)
+        val favoriteExists = endpointId.isNotBlank() && lastModel.isNotBlank() &&
+            FavoriteModelsPreferences.getPreferences(this).getFavorite(lastModel, endpointId) != null
+
+        when (NewChatProviderRestore.decide(endpointId, lastModel, routing, endpointExists, favoriteExists)) {
+            NewChatProviderRestore.Outcome.RESTORE -> {
+                preferences?.setApiEndpointId(endpointId)
+                preferences?.setModel(lastModel)
+                apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, endpointId)
+            }
+            // Surfaced once the UI exists (initSettings tail).
+            NewChatProviderRestore.Outcome.MISSING_CONFIG ->
+                providerRestoreOutcome = NewChatProviderRestore.Outcome.MISSING_CONFIG
+            NewChatProviderRestore.Outcome.NO_CONFIG ->
+                providerRestoreOutcome = NewChatProviderRestore.Outcome.NO_CONFIG
+        }
+    }
+
+    /** Act on a brand-new chat's restore outcome now that the chat UI exists:
+     *  a missing local setup gets the configuration dialog then the Summoning
+     *  Circle; nothing ever recorded goes to the API Endpoints screen. */
+    private fun handleProviderRestoreOutcome() {
+        val outcome = providerRestoreOutcome ?: return
+        providerRestoreOutcome = null
+        when (outcome) {
+            NewChatProviderRestore.Outcome.MISSING_CONFIG -> showConfigMissingDialog()
+            NewChatProviderRestore.Outcome.NO_CONFIG -> openApiEndpointsScreen()
+            NewChatProviderRestore.Outcome.RESTORE -> { /* applied already */ }
+        }
+    }
+
+    /** Missing local configuration (provider profile deleted, or Only/Preferred
+     *  routing whose favorite is gone). Describes it as missing configuration —
+     *  never as the model being unavailable. Okay opens the Summoning Circle;
+     *  there is nothing to cancel, so the dialog has no Cancel. */
+    private fun showConfigMissingDialog() {
+        if (isFinishing || isDestroyed) return
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setMessage(R.string.new_chat_config_missing)
+            .setCancelable(false)
+            .setPositiveButton(R.string.okay) { _, _ -> openSummoningCircle() }
+            .show()
+    }
+
+    /** The provider itself returned a definite model-not-found on send. Okay
+     *  opens the Summoning Circle. */
+    private fun showModelUnavailableDialog() {
+        if (isFinishing || isDestroyed) return
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setMessage(R.string.new_chat_model_unavailable)
+            .setCancelable(false)
+            .setPositiveButton(R.string.okay) { _, _ -> openSummoningCircle() }
+            .show()
+    }
+
+    /** Open the Summoning Circle (Quick Settings) sheet for this chat. Shared by
+     *  the header title tap and the recovery dialogs above. */
+    private fun openSummoningCircle() {
+        if (isFinishing || isDestroyed) return
+        val sheet = QuickSettingsBottomSheetDialogFragment
+            .newInstance(chatId, usageIn, usageOut, priceIn, priceOut)
+        sheet.setOnUpdateListener(object : QuickSettingsBottomSheetDialogFragment.OnUpdateListener {
+            override fun onUpdate() {
+                refreshCompanionAvatar()
+                refreshUserAvatar()
+            }
+
+            override fun onForceUpdate() {
+                startActivity(Intent(this@ChatActivity, ChatActivity::class.java).putExtra("chatId", chatId).putExtra("name", chatName).setAction(Intent.ACTION_VIEW))
+                finishActivity()
+            }
+        })
+        sheet.show(supportFragmentManager, "QuickSettingsBottomSheetDialogFragment")
+    }
+
+    /** Open the API Endpoints screen so the user can set up a provider + model
+     *  (used when nothing has ever produced a successful reply — never a
+     *  hardcoded default model). */
+    private fun openApiEndpointsScreen() {
+        if (isFinishing || isDestroyed) return
+        startActivity(Intent(this, ApiEndpointsListActivity::class.java).setAction(Intent.ACTION_VIEW))
+    }
+
+    /**
      * Just-before-send hook body. For a JSON Chat Completions request on an
      * OpenRouter-identity endpoint it either:
      *  - throws [ProviderRoutingBlockedException] when the saved routing cannot
@@ -6819,6 +6924,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun cancelAllAiActivity(source: String) {
         logVoiceEvent("all AI activity cancelled ($source)")
         cancelState = true
+        // This funnel is only ever reached from a deliberate user action (Stop
+        // spinner, notification Hang Up, mic tap, conversation button). Mark the
+        // current generation's cancellation as user-initiated so it is treated
+        // as a benign stop, not an app/lifecycle or unknown interruption.
+        userRequestedStop = true
         // Stop is a deliberate user cancel, so it DOES end a running image
         // generation (unlike leaving the screen, which lets it finish).
         if (chatId != "") ImageGenerationJobRegistry.cancel(chatId)
@@ -7026,7 +7136,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             last.remove(MessageCompletionState.KEY_STATE_DETAIL)
+            // This config just produced a successful reply — remember it so a
+            // future brand-new chat opens on the setup that last worked.
+            recordLastSuccessfulConfig()
         }
+    }
+
+    /** Remember the provider + model + routing that just produced a successful
+     *  reply, so a brand-new chat can restore it (see
+     *  [maybeRestoreProviderForNewChat]). Routing follows the favorite for the
+     *  (model, endpoint) pair, or Automatic when there is none. */
+    private fun recordLastSuccessfulConfig() {
+        val endpointId = apiEndpointObject?.id?.takeIf { it.isNotBlank() }
+            ?: preferences?.getApiEndpointId().orEmpty()
+        val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
+        if (endpointId.isBlank() || usedModel.isBlank()) return
+        val routing = favoriteForActiveEndpoint(usedModel)?.routingType
+            ?: FavoriteModelObject.ROUTING_AUTOMATIC
+        preferences?.setLastSuccessfulConfig(endpointId, usedModel, routing)
     }
 
     /** Stamp a terminal state onto the last assistant message ONLY if it is
@@ -7040,6 +7167,61 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         last[MessageCompletionState.KEY_STATE] = state
         if (detail != null) last[MessageCompletionState.KEY_STATE_DETAIL] = detail
         saveSettings()
+    }
+
+    /**
+     * Enforce the invariant that a saved user message never ends with no
+     * explanation and no Regenerate target: guarantee the turn ends with a
+     * visible, regenerate-able assistant bubble carrying a comprehensible cause,
+     * and (for a real problem, never a user stop) record it to the Error Log so
+     * a future occurrence self-identifies.
+     *
+     * If no assistant bubble was ever created (a failure before streaming
+     * began), one is created here. An already-completed reply is never
+     * downgraded — only a still-streaming reply or a freshly-created empty
+     * bubble is stamped.
+     */
+    private fun showTerminalFailure(
+        state: String,
+        detail: String,
+        reason: String?,
+        logAsError: Boolean,
+        errorTag: String,
+        errorSummary: String
+    ) {
+        if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
+            putMessage("", true)
+        }
+        val idx = messages.size - 1
+        if (idx >= 0 && messages[idx]["isBot"] == true) {
+            val existing = messages[idx][MessageCompletionState.KEY_STATE]?.toString()
+            val stampable = existing == MessageCompletionState.STREAMING ||
+                (existing.isNullOrBlank() && messages[idx]["message"]?.toString().isNullOrEmpty())
+            if (stampable) {
+                messages[idx][MessageCompletionState.KEY_STATE] = state
+                messages[idx][MessageCompletionState.KEY_STATE_DETAIL] = detail
+                if (!reason.isNullOrBlank()) {
+                    messages[idx][MessageCompletionState.KEY_ERROR_TEXT] = reason
+                }
+                if (messages.size > 2) {
+                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                } else {
+                    adapter?.notifyItemChanged(messages.size - 1)
+                }
+            }
+        }
+        saveSettings()
+        if (logAsError) {
+            try {
+                org.teslasoft.assistant.preferences.Logger.log(
+                    this, "crash", errorTag, "error",
+                    errorSummary +
+                        "\nModel: ${model.ifBlank { "unknown" }}" +
+                        "\nScreen: ${screenState()}" +
+                        "\nNetwork: ${networkState()}"
+                )
+            } catch (_: Throwable) { /* diagnostics must never crash the failure path */ }
+        }
     }
 
     /** Content of a message as the MODEL should see it, which is not always
@@ -7168,6 +7350,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // flow through here, and a reply that can't be saved must not be
         // produced over the blocking "Chat unavailable" state.
         if (chatStorageUnavailable) return
+
+        // A fresh generation: any user-stop flag left from a previous turn is
+        // cleared, so only a Stop during THIS generation counts as a user stop.
+        userRequestedStop = false
 
         // Clear any provider error captured on a previous turn before this one
         // makes its request, so a failure never shows a stale provider.
@@ -7320,29 +7506,75 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
         } catch (_: CancellationException) {
-            // The stream was cut short. Stamp a terminal state on the reply that
-            // was streaming so it can't reopen looking finished, keeping whatever
-            // partial text already streamed in. A user stop (mic/hang-up/progress
-            // cancel) while the screen is alive is "stopped"; a cancellation from
-            // the activity being torn down is "interrupted". This save also
-            // closes the streaming marker so the load-time reconciler has nothing
-            // to fix (they are belt-and-suspenders for a hard process kill, which
-            // runs no code here at all). No suspension points below, so this runs
-            // even though the coroutine is already cancelled.
+            // The stream was cut short. A cancelled coroutine does NOT prove the
+            // user stopped it — only an actual Stop / Hang Up / cancel tap does,
+            // and that set userRequestedStop. Classify by the real cause so a
+            // benign user stop, an app/lifecycle interruption, and a genuinely
+            // unknown early end are never conflated (owner ruling, Aug 8 2026).
+            // No suspension points below, so this runs even though the coroutine
+            // is already cancelled.
             val destroying = isFinishing || isDestroyed
-            // Lifecycle: a user stop while the screen is alive is Stopped (not a
-            // red failure); a cancellation from the screen being torn down is
-            // Cancelled, with the source recorded. Neither is an error.
-            finalizeLifecycleTerminal(
-                if (destroying) ResponseLifecycle.Outcome.CANCELLED else ResponseLifecycle.Outcome.STOPPED,
-                "missing", true,
-                if (destroying) ResponseLifecycle.Termination.APP_CANCEL else ResponseLifecycle.Termination.USER_STOP,
-                if (destroying) "app cancelled: activity teardown" else null
+            val replyStarted = messages.isNotEmpty() &&
+                messages[messages.size - 1]["isBot"] == true
+            val (state, detail) = MessageCompletionState.classifyCancellation(
+                userRequestedStop, destroying, replyStarted
             )
-            finalizeStreamingMessageState(
-                if (destroying) MessageCompletionState.INTERRUPTED else MessageCompletionState.STOPPED,
-                if (destroying) MessageCompletionState.DETAIL_SCREEN_CLOSED else null
-            )
+            when (detail) {
+                MessageCompletionState.DETAIL_USER_STOP -> {
+                    // Deliberate user Stop: not an error. No chat marker and no
+                    // Error Log entry; the Response Lifecycle still records it
+                    // (kept on for now, for debugging).
+                    finalizeLifecycleTerminal(
+                        ResponseLifecycle.Outcome.STOPPED, "missing", true,
+                        ResponseLifecycle.Termination.USER_STOP, null
+                    )
+                    finalizeStreamingMessageState(state, detail)
+                }
+                MessageCompletionState.DETAIL_START_FAILED -> {
+                    // The reply never started. Include the known reason (a
+                    // teardown) when there is one.
+                    val reason = if (destroying)
+                        getString(R.string.gen_interrupt_reason_screen_closed) else null
+                    val summary = "reply could not start" + (reason?.let { ": $it" } ?: "")
+                    finalizeLifecycleTerminal(
+                        if (destroying) ResponseLifecycle.Outcome.CANCELLED
+                        else ResponseLifecycle.Outcome.INCOMPLETE,
+                        "missing", true,
+                        if (destroying) ResponseLifecycle.Termination.APP_CANCEL
+                        else ResponseLifecycle.Termination.STREAM_CLOSED,
+                        summary
+                    )
+                    showTerminalFailure(
+                        state, detail, reason, logAsError = true,
+                        errorTag = "GenStartFailed", errorSummary = summary
+                    )
+                }
+                MessageCompletionState.DETAIL_SCREEN_CLOSED -> {
+                    // The app's own lifecycle tore the screen down mid-reply.
+                    val reason = getString(R.string.gen_interrupt_reason_screen_closed)
+                    finalizeLifecycleTerminal(
+                        ResponseLifecycle.Outcome.CANCELLED, "missing", true,
+                        ResponseLifecycle.Termination.APP_CANCEL, "app interrupted: $reason"
+                    )
+                    showTerminalFailure(
+                        state, detail, reason, logAsError = true,
+                        errorTag = "GenInterrupted", errorSummary = "app interrupted the reply: $reason"
+                    )
+                }
+                else -> {
+                    // Cancelled mid-reply with no user stop and no teardown — the
+                    // app knows it ended early but cannot say why. A diagnostic
+                    // problem, not a benign stop.
+                    finalizeLifecycleTerminal(
+                        ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
+                        ResponseLifecycle.Termination.STREAM_CLOSED, "ended early; cause unknown"
+                    )
+                    showTerminalFailure(
+                        state, detail, null, logAsError = true,
+                        errorTag = "GenUnknownEnd", errorSummary = "reply ended early; cause unknown"
+                    )
+                }
+            }
             calculateCost()
             runOnUiThread {
                 restoreUIState()
@@ -7446,6 +7678,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             saveSettings()
             calculateCost()
+
+            // The provider gave a definite model-not-found answer — the only
+            // honest "model no longer available" signal (owner spec, Aug 8 2026,
+            // no pre-send catalog check). Guide the user to pick another in the
+            // Summoning Circle; the failure bubble above still records it.
+            if (genError.code == GenErrorCode.M2) {
+                runOnUiThread { showModelUnavailableDialog() }
+            }
 
             runOnUiThread {
                 btnMicro?.isEnabled = true

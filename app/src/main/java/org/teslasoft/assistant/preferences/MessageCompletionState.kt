@@ -87,6 +87,20 @@ object MessageCompletionState {
      *  that ran no code on the way out. */
     const val DETAIL_PROCESS_DEATH = "process_death"
 
+    /** The user deliberately pressed Stop. A benign, non-error terminal state —
+     *  the chat shows no failure marker for it (owner ruling, Aug 8 2026). */
+    const val DETAIL_USER_STOP = "user_stop"
+
+    /** The reply ended early and the cause is genuinely unknown — carried on a
+     *  [FAILED] reply so the chat shows the "ended unexpectedly" wording. A
+     *  diagnostic problem, never treated as a user stop. */
+    const val DETAIL_UNKNOWN_END = "unknown_end"
+
+    /** Generation failed before any assistant reply was created — carried on a
+     *  [FAILED] reply created to satisfy the invariant that a saved user message
+     *  never ends with no explanation and no Regenerate target. */
+    const val DETAIL_START_FAILED = "start_failed"
+
     /**
      * Whether a reply with this state should be treated as a finished,
      * reliable reply everywhere (model context, transcript, export, memory).
@@ -136,6 +150,38 @@ object MessageCompletionState {
             if (isTerminalFailure(state)) sawFailure = true
         }
         return sawFailure
+    }
+
+    /**
+     * Classify how a **cancelled** generation should be recorded, from the real
+     * cause signals rather than the mere fact that the coroutine was cancelled
+     * (owner ruling, Aug 8 2026 — a cancelled coroutine never by itself proves
+     * the user stopped it):
+     *
+     *  - [userStop]  — an actual Stop / Hang-Up / cancel action fired for THIS
+     *                  generation. The only thing that counts as a user stop.
+     *  - [destroying]— the activity was being torn down (app lifecycle).
+     *  - [replyStarted] — an assistant reply bubble already existed.
+     *
+     * Returns the (state, detail) to stamp:
+     *  - user stop                         -> [STOPPED] / [DETAIL_USER_STOP]
+     *    (a benign, non-error state the chat shows no marker for).
+     *  - not started (nothing streamed)    -> [FAILED] / [DETAIL_START_FAILED].
+     *  - a reply in progress, teardown     -> [INTERRUPTED] / [DETAIL_SCREEN_CLOSED].
+     *  - a reply in progress, cause unknown-> [FAILED] / [DETAIL_UNKNOWN_END].
+     *
+     * Every non-user outcome is a visible failure so a turn is never left with a
+     * saved user message and no explanation. Pure Kotlin — unit-tested.
+     */
+    fun classifyCancellation(
+        userStop: Boolean,
+        destroying: Boolean,
+        replyStarted: Boolean
+    ): Pair<String, String> = when {
+        userStop -> STOPPED to DETAIL_USER_STOP
+        !replyStarted -> FAILED to DETAIL_START_FAILED
+        destroying -> INTERRUPTED to DETAIL_SCREEN_CLOSED
+        else -> FAILED to DETAIL_UNKNOWN_END
     }
 
     /**

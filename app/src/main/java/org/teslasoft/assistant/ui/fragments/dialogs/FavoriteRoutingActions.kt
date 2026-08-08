@@ -82,7 +82,11 @@ object FavoriteRoutingActions {
         /** When non-null, preselect this routing type on the screen instead of
          *  the model's stored one (used by the Quick Settings Provider Mode
          *  dropdown, which opens the screen on the mode the user just picked). */
-        routingTypeOverride: String? = null
+        routingTypeOverride: String? = null,
+        /** When true, changing the model on the screen keeps the routing the user
+         *  is on (instead of adopting the new model's saved routing). Only the
+         *  Summoning Circle passes true; other callers keep per-model behavior. */
+        keepRoutingOnModelChange: Boolean = false
     ): Intent? {
         val endpoint = apiEndpointPreferences.getApiEndpoint(context, endpointId)
         if (!endpoint.isOpenRouterRouting()) return null
@@ -91,6 +95,10 @@ object FavoriteRoutingActions {
 
         return Intent(context, ChooseProviderActivity::class.java)
             .putExtra(ChooseProviderActivity.EXTRA_PERSIST_DIRECTLY, true)
+            .putExtra(
+                ChooseProviderActivity.EXTRA_KEEP_ROUTING_ON_MODEL_CHANGE,
+                keepRoutingOnModelChange
+            )
             .putExtra(ChooseProviderActivity.EXTRA_ENDPOINT_ID, endpointId)
             .putExtra(ChooseProviderActivity.EXTRA_MODEL, modelId)
             .putExtra(ChooseProviderActivity.EXTRA_ROUTING_TYPE, routingType)

@@ -332,6 +332,7 @@
     <string name="title_logs">Logs</string>
     <string name="btn_clear_log">Clear log</string>
     <string name="btn_copy_log">Copy / Export</string>
+    <string name="logs_newest_first">Newest First</string>
     <string name="label_log_copied">Log copied to clipboard</string>
     <string name="label_error_copied">Error copied to clipboard</string>
     <string name="label_log_empty">The log is empty</string>
@@ -836,10 +837,19 @@
     <!-- Assistant-reply completion markers (Round 3). Small persistent inline
          status shown on a reply that did not finish streaming; the partial
          text stays visible above them. Wording pending owner approval. -->
-    <string name="message_state_interrupted">Reply interrupted and may be incomplete.</string>
+    <string name="message_state_interrupted">Reply interrupted and may be incomplete. The app interrupted the reply before it finished.</string>
     <string name="message_state_stopped">Reply stopped and may be incomplete.</string>
     <string name="message_state_failed">Reply failed and may be incomplete.</string>
     <string name="message_state_incomplete">Reply status is unknown and may be incomplete.</string>
+    <!-- The reply ended early and the app genuinely cannot determine why (a
+         diagnostic problem, not a benign user stop). -->
+    <string name="message_state_unknown_end">Reply ended unexpectedly and may be incomplete. The app could not determine why the response ended.</string>
+    <!-- The user's message was saved but the AI response never started (a
+         failure before any assistant reply was created). Enforces the invariant
+         that a saved message never ends with no explanation and no Regenerate. -->
+    <string name="message_state_start_failed">Reply could not start. Your message was sent, but the app could not start the AI response.</string>
+    <!-- Known internal reason appended under an app/lifecycle interruption. -->
+    <string name="gen_interrupt_reason_screen_closed">The screen was closed before the reply finished.</string>
     <!-- Screen-reader description for the red error avatar shown on a chat whose
          only reply so far failed (no successful reply yet). Not visible text. -->
     <string name="chat_avatar_error_desc">No successful reply yet — the last response failed.</string>
@@ -847,6 +857,16 @@
          unfinished reply in the model's context so it is not mistaken for an
          intentionally completed reply. -->
     <string name="message_incomplete_model_note">[System note: The previous assistant reply was interrupted and may be incomplete.]</string>
+
+    <!-- Shown when a brand-new chat cannot restore the last successful setup
+         because the local configuration is gone (provider profile deleted, or an
+         Only/Preferred routing whose favorite was removed). Says nothing about
+         whether the model still exists — only that the saved local setup is gone.
+         Okay opens the Summoning Circle. -->
+    <string name="new_chat_config_missing">Your last saved model and provider routing settings no longer exist. Please choose a new model in the Summoning Circle to start chatting.</string>
+    <!-- Shown when the provider itself returns a definite model-not-found on a
+         send (no pre-send catalog check). Okay opens the Summoning Circle. -->
+    <string name="new_chat_model_unavailable">The last model you used is no longer available. Please select a new one in the Summoning Circle.</string>
 
     <!-- Coded generation-error messages (see ERROR_CODES.md). Plain, neutral, no
          profile/URL/model/config (that lives in the Error Log). The [code] prefix
