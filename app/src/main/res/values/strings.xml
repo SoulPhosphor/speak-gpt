@@ -858,6 +858,16 @@
          intentionally completed reply. -->
     <string name="message_incomplete_model_note">[System note: The previous assistant reply was interrupted and may be incomplete.]</string>
 
+    <!-- Shown when a brand-new chat cannot restore the last successful setup
+         because the local configuration is gone (provider profile deleted, or an
+         Only/Preferred routing whose favorite was removed). Says nothing about
+         whether the model still exists — only that the saved local setup is gone.
+         Okay opens the Summoning Circle. -->
+    <string name="new_chat_config_missing">Your last saved model and provider routing settings no longer exist. Please choose a new model in the Summoning Circle to start chatting.</string>
+    <!-- Shown when the provider itself returns a definite model-not-found on a
+         send (no pre-send catalog check). Okay opens the Summoning Circle. -->
+    <string name="new_chat_model_unavailable">The last model you used is no longer available. Please select a new one in the Summoning Circle.</string>
+
     <!-- Coded generation-error messages (see ERROR_CODES.md). Plain, neutral, no
          profile/URL/model/config (that lives in the Error Log). The [code] prefix
          is added in code from GenErrorCode, not stored here. -->
