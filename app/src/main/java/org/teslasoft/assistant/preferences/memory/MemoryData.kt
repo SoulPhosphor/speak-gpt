@@ -604,6 +604,38 @@ data class TranscriptRecord(
     val claimRunId: String? = null
 )
 
+/**
+ * Stage-B durable eligibility state. There is exactly one row per captured
+ * chat. [lastTranscriptId] is meaningful only together with [lastStartedAt];
+ * the pair is the chronological bookmark. [skippedTranscriptIds] contains
+ * terminal rows beyond an earlier pending gap, snapshotted during cutover (or
+ * intentionally excluded later) so legacy transcript review columns never
+ * regain runtime authority.
+ */
+data class AnalysisChatBookmark(
+    val chatId: String,
+    val lastStartedAt: String?,
+    val lastTranscriptId: String?,
+    val skippedTranscriptIds: List<String> = emptyList(),
+    val updatedAt: String
+)
+
+/** One independently frozen chat range inside a possibly multi-chat run. */
+data class FrozenChatRange(
+    val rangeId: String,
+    val runId: String,
+    val chatId: String,
+    val transcripts: List<TranscriptRecord>,
+    val frozenEndStartedAt: String?,
+    val frozenEndTranscriptId: String
+)
+
+data class CommittedChatOutputs(
+    val memoryIds: List<String>,
+    val ruleIds: List<String>,
+    val lorebookSuggestionIds: List<String>
+)
+
 data class MemoryStoreData(
     val schemaVersion: String,
     val ownerProfile: OwnerProfile?,
@@ -635,7 +667,11 @@ data class MemoryStoreData(
     // backup so a restore preserves the user's category system and each
     // memory's type_id resolves to a real Type after import. Absent in
     // pre-Phase-1 backups → the store keeps its seeded starter Types.
-    val memoryTypes: List<MemoryTypeRecord> = emptyList()
+    val memoryTypes: List<MemoryTypeRecord> = emptyList(),
+    // Stage-B bookmarks travel with transcript backups. Claims and frozen
+    // ranges remain device-local, but the permanent reviewed boundary must
+    // survive restore or already-terminal history would become eligible again.
+    val analysisBookmarks: List<AnalysisChatBookmark> = emptyList()
 )
 
 /**

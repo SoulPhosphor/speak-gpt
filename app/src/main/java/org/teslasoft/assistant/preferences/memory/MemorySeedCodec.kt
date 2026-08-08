@@ -416,6 +416,16 @@ object MemorySeedCodec {
             )
         }
 
+        val analysisBookmarks = each(root, "analysis_bookmarks").map { b ->
+            AnalysisChatBookmark(
+                chatId = b.reqStr("chat_id"),
+                lastStartedAt = b.str("last_started_at"),
+                lastTranscriptId = b.str("last_transcript_id"),
+                skippedTranscriptIds = b.strList("skipped_transcript_ids"),
+                updatedAt = b.str("updated_at") ?: ""
+            )
+        }
+
         // User-owned Memory Types (§5). Absent in pre-Phase-1 backups → empty;
         // the store keeps its seeded starter Types and legacy memories map by
         // kind. A Type's created_at is optional (defaults blank; the store
@@ -451,7 +461,8 @@ object MemorySeedCodec {
             modelRules = modelRules,
             modelRuleTags = modelRuleTags,
             modelRuleTagLinks = modelRuleTagLinks,
-            memoryTypes = memoryTypes
+            memoryTypes = memoryTypes,
+            analysisBookmarks = analysisBookmarks
         )
     }
 
@@ -856,6 +867,20 @@ object MemorySeedCodec {
                         t.quickSettingsJson?.let { putJsonText("quick_settings", it) }
                         put("review_status", t.reviewStatus)
                         putIfNotNull("processed_at", t.processedAt)
+                    })
+                }
+            })
+        }
+
+        if (data.analysisBookmarks.isNotEmpty()) {
+            root.put("analysis_bookmarks", JSONArray().apply {
+                data.analysisBookmarks.forEach { b ->
+                    put(JSONObject().apply {
+                        put("chat_id", b.chatId)
+                        putIfNotNull("last_started_at", b.lastStartedAt)
+                        putIfNotNull("last_transcript_id", b.lastTranscriptId)
+                        put("skipped_transcript_ids", JSONArray(b.skippedTranscriptIds))
+                        put("updated_at", b.updatedAt)
                     })
                 }
             })

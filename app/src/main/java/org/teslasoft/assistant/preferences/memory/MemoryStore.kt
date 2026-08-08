@@ -65,7 +65,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 26
+        private const val DATABASE_VERSION = 27
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -87,6 +87,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         const val META_LAST_AUTO_EXPORT_AT = "last_auto_export_at"
         const val META_INDEX_MODEL_TAG = "index_model_tag"
         const val META_BACKFILL_DONE = "backfill_done"
+        /** One-way Stage-B authority switch. The bookmark runtime is allowed
+         *  to read eligibility only after this marker and every initial
+         *  bookmark were committed in the same migration transaction. */
+        const val META_ASSOCIATIVE_BOOKMARK_CUTOVER = "associative_bookmark_cutover_v1"
 
         // A scoped vector load passes the eligible memory ids as bound
         // parameters; chunk them so the IN(...) list stays well under
@@ -581,6 +585,35 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "claim_run_id TEXT)"
         )
 
+        // Stage B (DB v27): the sole permanent eligibility authority after
+        // cutover. The nullable boundary means the chat has no terminal prefix
+        // yet. skipped_transcript_ids_json is a cutover/exclusion snapshot,
+        // never a second read of mutable review_status state.
+        db.execSQL(
+            "CREATE TABLE analysis_chat_bookmarks (" +
+                "chat_id TEXT PRIMARY KEY, " +
+                "last_started_at TEXT, " +
+                "last_transcript_id TEXT, " +
+                "skipped_transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "updated_at TEXT NOT NULL)"
+        )
+
+        // One row per independently frozen chat range. A multi-chat run owns
+        // several rows and may commit each one separately. Rows are short-lived
+        // recovery/concurrency state and are never exported.
+        db.execSQL(
+            "CREATE TABLE analysis_chat_ranges (" +
+                "range_id TEXT PRIMARY KEY, " +
+                "run_id TEXT NOT NULL, " +
+                "chat_id TEXT NOT NULL, " +
+                "frozen_end_started_at TEXT, " +
+                "frozen_end_transcript_id TEXT NOT NULL, " +
+                "status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running','committed')), " +
+                "created_at TEXT NOT NULL, " +
+                "updated_at TEXT, " +
+                "UNIQUE(run_id, chat_id))"
+        )
+
         // Rejected drafts (Phase 6, DB v14; rekeyed DB v17; chat_key dropped
         // DB v26): deleting a Memory Assistant draft rejects it — a rerun must
         // not refile the exact same draft. Specific by design: exact content
@@ -906,6 +939,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.execSQL("CREATE INDEX idx_changelog_memory ON change_log(memory_id)")
         db.execSQL("CREATE INDEX idx_transcripts_queue ON transcripts(review_status) WHERE review_status = 'pending'")
         db.execSQL("CREATE INDEX idx_transcripts_chat ON transcripts(chat_id)")
+        db.execSQL("CREATE INDEX idx_transcripts_chat_order ON transcripts(chat_id, started_at, transcript_id)")
+        db.execSQL("CREATE INDEX idx_analysis_chat_ranges_run ON analysis_chat_ranges(run_id)")
         db.execSQL("CREATE INDEX idx_proposals_pending ON proposals(status) WHERE status = 'pending'")
         db.execSQL("CREATE INDEX idx_card_entries_card ON card_entries(card_type, card_id)")
         db.execSQL("CREATE INDEX idx_cpm_member ON campaign_party_members(party_member_id)")
@@ -918,6 +953,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         // A fresh install is created at the latest schema, so db_migration
         // starts at the current DATABASE_VERSION (never re-runs onUpgrade steps).
         db.execSQL("INSERT INTO meta (key, value) VALUES (?, ?)", arrayOf(META_DB_MIGRATION, DATABASE_VERSION.toString()))
+        db.execSQL(
+            "INSERT INTO meta (key, value) VALUES (?, ?)",
+            arrayOf(META_ASSOCIATIVE_BOOKMARK_CUTOVER, "complete")
+        )
         db.execSQL("INSERT INTO app_state (id) VALUES (1)")
         // Archivist defaults mirror the public template: memory work automatic,
         // anything touching rules or identity proposed.
@@ -1886,6 +1925,150 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "26")
             )
         }
+        if (oldVersion < 27) {
+            // Stage B: reconcile stale API claims BEFORE deriving the initial
+            // per-chat bookmarks. Otherwise a dead run could make a pending
+            // row look temporarily unavailable while the one-way cutover is
+            // being fixed in place.
+            val now = nowIso()
+            db.execSQL(
+                "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id IN (" +
+                    "SELECT run_id FROM archivist_runs WHERE status = 'running' AND transport = 'api')"
+            )
+            db.execSQL(
+                "UPDATE archivist_runs SET status = 'failed', outcome = 'interrupted', " +
+                    "failure_reason = 'interrupted', finished_at = ?, " +
+                    "error = 'process ended before bookmark migration' " +
+                    "WHERE status = 'running' AND transport = 'api'",
+                arrayOf(now)
+            )
+            db.execSQL(
+                "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id LIKE 'run-%' " +
+                    "AND claim_run_id NOT IN (SELECT run_id FROM archivist_runs)"
+            )
+            db.execSQL(
+                "CREATE TABLE analysis_chat_bookmarks (" +
+                    "chat_id TEXT PRIMARY KEY, " +
+                    "last_started_at TEXT, " +
+                    "last_transcript_id TEXT, " +
+                    "skipped_transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "updated_at TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "CREATE TABLE analysis_chat_ranges (" +
+                    "range_id TEXT PRIMARY KEY, " +
+                    "run_id TEXT NOT NULL, " +
+                    "chat_id TEXT NOT NULL, " +
+                    "frozen_end_started_at TEXT, " +
+                    "frozen_end_transcript_id TEXT NOT NULL, " +
+                    "status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running','committed')), " +
+                    "created_at TEXT NOT NULL, " +
+                    "updated_at TEXT, " +
+                    "UNIQUE(run_id, chat_id))"
+            )
+            db.execSQL(
+                "CREATE INDEX idx_transcripts_chat_order ON transcripts(chat_id, started_at, transcript_id)"
+            )
+            db.execSQL("CREATE INDEX idx_analysis_chat_ranges_run ON analysis_chat_ranges(run_id)")
+
+            initializeBookmarkCutoverTx(db, replaceExisting = true)
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "27")
+            )
+        }
+    }
+
+    /**
+     * Derive initial bookmarks from a stable snapshot of the legacy queue and
+     * install the one-way cutover marker last. The caller owns the transaction;
+     * SQLiteOpenHelper wraps onUpgrade in one, and test/import callers do the
+     * same explicitly. If any row fails, neither bookmarks nor the marker can
+     * commit, so runtime authority is never ambiguous.
+     */
+    private fun initializeBookmarkCutoverTx(
+        db: SQLiteDatabase,
+        replaceExisting: Boolean,
+        interruptBeforeMarkerForTest: Boolean = false
+    ) {
+        db.delete("meta", "key = ?", arrayOf(META_ASSOCIATIVE_BOOKMARK_CUTOVER))
+        if (replaceExisting) db.delete("analysis_chat_bookmarks", null, null)
+
+        val rowsByChat = linkedMapOf<String, MutableList<AnalysisBookmark.LegacyRow>>()
+        db.query(
+            "transcripts",
+            arrayOf("chat_id", "transcript_id", "started_at", "review_status"),
+            "chat_id IS NOT NULL", null, null, null,
+            "chat_id ASC, COALESCE(started_at, '') ASC, transcript_id ASC"
+        ).use { c ->
+            while (c.moveToNext()) {
+                val chatId = c.getString(0) ?: continue
+                rowsByChat.getOrPut(chatId) { ArrayList() }.add(
+                    AnalysisBookmark.LegacyRow(
+                        transcriptId = c.getString(1),
+                        startedAt = c.getStringOrNull("started_at"),
+                        reviewStatus = c.getString(3)
+                    )
+                )
+            }
+        }
+
+        val now = nowIso()
+        for ((chatId, rows) in rowsByChat) {
+            if (!replaceExisting && rowExists(db, "analysis_chat_bookmarks", "chat_id", chatId)) continue
+            val plan = AnalysisBookmark.planMigration(rows)
+            db.insertOrThrow("analysis_chat_bookmarks", null, ContentValues().apply {
+                put("chat_id", chatId)
+                put("last_started_at", plan.boundary?.startedAt)
+                put("last_transcript_id", plan.boundary?.transcriptId)
+                put("skipped_transcript_ids_json", stringsToJson(plan.skippedTranscriptIds))
+                put("updated_at", now)
+            })
+        }
+
+        if (interruptBeforeMarkerForTest) {
+            throw IllegalStateException("simulated bookmark migration interruption")
+        }
+
+        db.execSQL(
+            "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            arrayOf(META_ASSOCIATIVE_BOOKMARK_CUTOVER, "complete")
+        )
+    }
+
+    private fun requireBookmarkCutover(db: SQLiteDatabase) {
+        val complete = db.rawQuery(
+            "SELECT value FROM meta WHERE key = ?", arrayOf(META_ASSOCIATIVE_BOOKMARK_CUTOVER)
+        ).use { it.moveToFirst() && it.getString(0) == "complete" }
+        check(complete) { "Associative bookmark migration is incomplete" }
+    }
+
+    /** Instrumentation seam for the real encrypted cutover transaction. */
+    @androidx.annotation.VisibleForTesting
+    fun rebuildBookmarkCutoverForTest(interruptBeforeMarker: Boolean = false) {
+        reconcileInterruptedAnalysisRuns()
+        val db = writableDatabase
+        // Establish the same pre-v27 state (no bookmark rows and no marker) in
+        // its own committed transaction. The migration transaction below must
+        // either install both or leave both absent.
+        db.beginTransaction()
+        try {
+            db.delete("analysis_chat_bookmarks", null, null)
+            db.delete("meta", "key = ?", arrayOf(META_ASSOCIATIVE_BOOKMARK_CUTOVER))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        db.beginTransaction()
+        try {
+            initializeBookmarkCutoverTx(
+                db, replaceExisting = true,
+                interruptBeforeMarkerForTest = interruptBeforeMarker
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     /* ---------------------------------------------------------------------- */
@@ -1945,9 +2128,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 out[label] = if (it.moveToFirst()) it.getInt(0) else 0
             }
         }
-        db.rawQuery("SELECT COUNT(*) FROM transcripts WHERE review_status = 'pending'", emptyArray<String>()).use {
-            out["pending_transcripts"] = if (it.moveToFirst()) it.getInt(0) else 0
-        }
+        out["pending_transcripts"] = bookmarkEligibleTranscripts().size
         return out
     }
 
@@ -1986,12 +2167,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     }
 
     /** Distinct chats with a transcript still awaiting Archivist review. */
-    fun pendingReviewCount(): Int {
-        readableDatabase.rawQuery(
-            "SELECT COUNT(DISTINCT chat_id) FROM transcripts WHERE review_status = 'pending' AND chat_id IS NOT NULL",
-            emptyArray<String>()
-        ).use { return if (it.moveToFirst()) it.getInt(0) else 0 }
-    }
+    fun pendingReviewCount(): Int =
+        bookmarkEligibleTranscripts().mapNotNull { it.chatId }.toSet().size
 
     fun recordDeletion(recordType: String, recordId: String) {
         writableDatabase.execSQL(
@@ -2488,6 +2665,43 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 report.addAdded("transcripts")
             }
 
+            // The permanent bookmark travels with transcripts. A pre-Stage-B
+            // backup has no bookmark array, so missing chats are derived once
+            // from their imported legacy states using the same contiguous-
+            // prefix rule as the v27 migration. Existing device bookmarks are
+            // never overwritten by a merge import.
+            for (bookmark in data.analysisBookmarks) {
+                if (!rowExists(db, "transcripts", "chat_id", bookmark.chatId)) continue
+                val boundaryIsValid = bookmark.lastTranscriptId == null || db.rawQuery(
+                    "SELECT 1 FROM transcripts WHERE chat_id = ? AND transcript_id = ? LIMIT 1",
+                    arrayOf(bookmark.chatId, bookmark.lastTranscriptId)
+                ).use { it.moveToFirst() }
+                if (!boundaryIsValid) continue
+                val validSkips = bookmark.skippedTranscriptIds.filter { id ->
+                    db.rawQuery(
+                        "SELECT 1 FROM transcripts WHERE chat_id = ? AND transcript_id = ? LIMIT 1",
+                        arrayOf(bookmark.chatId, id)
+                    ).use { it.moveToFirst() }
+                }
+                val values = ContentValues().apply {
+                    put("chat_id", bookmark.chatId)
+                    put("last_started_at", bookmark.lastStartedAt)
+                    put("last_transcript_id", bookmark.lastTranscriptId)
+                    put("skipped_transcript_ids_json", stringsToJson(validSkips))
+                    put("updated_at", bookmark.updatedAt.ifBlank { nowIso() })
+                }
+                if (overwriteSingletons) {
+                    db.insertWithOnConflict(
+                        "analysis_chat_bookmarks", null, values, SQLiteDatabase.CONFLICT_REPLACE
+                    )
+                } else {
+                    db.insertWithOnConflict(
+                        "analysis_chat_bookmarks", null, values, SQLiteDatabase.CONFLICT_IGNORE
+                    )
+                }
+            }
+            initializeBookmarkCutoverTx(db, replaceExisting = false)
+
             // Roleplay card entries (3.6a). Their card/parent references are
             // soft by design, so entries import cleanly in any order.
             for (e in data.cardEntries) {
@@ -2859,7 +3073,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             modelRules = modelRules,
             modelRuleTags = modelRuleTags,
             modelRuleTagLinks = modelRuleTagLinks,
-            memoryTypes = getMemoryTypes()
+            memoryTypes = getMemoryTypes(),
+            analysisBookmarks = getAnalysisBookmarks()
         )
     }
 
@@ -2930,6 +3145,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         val db = writableDatabase
         db.beginTransaction()
         try {
+            requireBookmarkCutover(db)
+            val bookmark = analysisBookmarkTx(db, chatId)
             var rowId: String? = null
             var content = "[]"
             db.query(
@@ -2937,10 +3154,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(
                     "transcript_id", "content", "model_tag", "companion_id", "review_status",
                     "claim_run_id", "world_id", "campaign_id", "roleplay_character_id",
-                    "user_persona_id", "project_id"
+                    "user_persona_id", "project_id", "started_at"
                 ),
                 "chat_id = ? AND processed_at IS NULL", arrayOf(chatId),
-                null, null, "started_at DESC", "1"
+                null, null, "COALESCE(started_at, '') DESC, transcript_id DESC", "1"
             ).use {
                 if (it.moveToFirst()) {
                     val sameModel = it.getStringOrNull("model_tag") == modelTag
@@ -2948,6 +3165,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     // Sealed: the newest unprocessed row is claimed by a run
                     // (or a future review package) — never append into it.
                     val unclaimed = it.getStringOrNull("claim_run_id") == null
+                    val afterBookmark = AnalysisBookmark.isAfter(
+                        AnalysisBookmark.Boundary(
+                            it.getStringOrNull("started_at"), it.getString(0)
+                        ),
+                        bookmarkBoundary(bookmark)
+                    )
+                    val sameExclusion =
+                        (it.getString(it.getColumnIndexOrThrow("review_status")) == "excluded") == markExcluded
                     // Scene identity is part of the row's truth: a scene
                     // change closes the row like a model change does.
                     val sameScene = it.getStringOrNull("world_id") == worldId &&
@@ -2956,7 +3181,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         it.getStringOrNull("user_persona_id") == userPersonaId &&
                         it.getStringOrNull("project_id") == projectId
                     val existing = it.getString(it.getColumnIndexOrThrow("content"))
-                    if (sameModel && sameCompanion && unclaimed && sameScene &&
+                    if (sameModel && sameCompanion && unclaimed && afterBookmark && sameExclusion && sameScene &&
                         existing.length < MAX_TRANSCRIPT_CHARS
                     ) {
                         rowId = it.getString(0)
@@ -2999,6 +3224,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     put("quick_settings_json", quickSettingsJson)
                     put("review_status", if (markExcluded) "excluded" else "pending")
                 })
+                rowId = newRowId
                 outcome = "inserted $newRowId (${if (markExcluded) "excluded" else "pending"})"
             } else {
                 db.update("transcripts", ContentValues().apply {
@@ -3009,6 +3235,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 }, "transcript_id = ?", arrayOf(rowId))
                 outcome = "appended $rowId"
             }
+            if (markExcluded) excludeTranscriptIdsTx(db, chatId, listOfNotNull(rowId))
             db.setTransactionSuccessful()
             return outcome
         } finally {
@@ -3017,21 +3244,61 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     }
 
     /**
-     * User exclusion toggle: excluding marks every unprocessed row
-     * do-not-review; re-including re-queues them as pending (processed rows
-     * are history and never change). Capture start/stop is the recorder's job.
+     * User exclusion toggle. The bookmark-owned skip set is the eligibility
+     * change; legacy review columns are updated only for compatibility/UI
+     * history. Capture start/stop is the recorder's job.
      */
     fun setChatTranscriptsExcluded(chatId: String, excluded: Boolean) {
-        if (excluded) {
-            writableDatabase.execSQL(
-                "UPDATE transcripts SET review_status = 'excluded' WHERE chat_id = ? AND review_status = 'pending'",
-                arrayOf(chatId)
-            )
-        } else {
-            writableDatabase.execSQL(
-                "UPDATE transcripts SET review_status = 'pending' WHERE chat_id = ? AND review_status = 'excluded' AND processed_at IS NULL",
-                arrayOf(chatId)
-            )
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            requireBookmarkCutover(db)
+            ensureAnalysisBookmarkTx(db, chatId)
+            val bookmark = analysisBookmarkTx(db, chatId)
+            val ids = if (excluded) {
+                // Every row after the permanent boundary is still material the
+                // bookmark owns, regardless of what mutable legacy columns say.
+                transcriptsForChatTx(db, chatId)
+                    .filter { AnalysisBookmark.isAfter(transcriptBoundary(it), bookmarkBoundary(bookmark)) }
+                    .map { it.transcriptId }
+            } else {
+                // Only explicitly excluded, not-yet-contiguous rows are
+                // reversible. Migration-era processed skips stay terminal.
+                val reversible = ArrayList<String>()
+                for (id in bookmark.skippedTranscriptIds) {
+                    db.query(
+                        "transcripts", arrayOf("review_status", "processed_at"),
+                        "chat_id = ? AND transcript_id = ?", arrayOf(chatId, id),
+                        null, null, null
+                    ).use { c ->
+                        if (c.moveToFirst() && c.getString(0) == "excluded" && c.isNull(1)) {
+                            reversible.add(id)
+                        }
+                    }
+                }
+                reversible
+            }
+            if (excluded) {
+                db.execSQL(
+                    "UPDATE transcripts SET review_status = 'excluded' " +
+                        "WHERE chat_id = ? AND review_status = 'pending'",
+                    arrayOf(chatId)
+                )
+                excludeTranscriptIdsTx(db, chatId, ids)
+            } else {
+                db.execSQL(
+                    "UPDATE transcripts SET review_status = 'pending' " +
+                        "WHERE chat_id = ? AND review_status = 'excluded' AND processed_at IS NULL",
+                    arrayOf(chatId)
+                )
+                // Only not-yet-contiguous exclusions can be reversed. Anything
+                // already behind the bookmark was intentionally excluded and is
+                // permanent history, exactly like an already-reviewed range.
+                removeTranscriptSkipsTx(db, chatId, ids)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
     }
 
@@ -3041,10 +3308,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     /* The Archivist only ever files DRAFTS (owner rules: it proposes, the     */
     /* user decides). Memory drafts are memories.status='draft' rows — their   */
     /* ONE home (§14); the dormant proposals table is never used for them.     */
-    /* Eligibility is a live query on current state, never a stored watermark  */
-    /* (design: re-enabled conversations must be caught; deleted chats are     */
-    /* filtered by the caller against the app's live chat list, which this     */
-    /* store cannot see).                                                      */
+    /* Stage B eligibility is the durable per-chat bookmark plus temporary     */
+    /* claims. Deleted chats are filtered by the caller against app chat state,*/
+    /* which this store cannot see.                                             */
     /* ---------------------------------------------------------------------- */
 
     private fun readTranscript(it: Cursor): TranscriptRecord = TranscriptRecord(
@@ -3067,21 +3333,141 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         claimRunId = it.getStringOrNull("claim_run_id")
     )
 
-    /** Everything a run would analyze, chronological: pending, never
-     *  processed, unclaimed, tied to a chat. Rows claimed by a live run (or
-     *  a future review package) are frozen and simply not eligible until
-     *  their claim resolves. The caller filters against the live chat list
-     *  (deleted conversations don't count — owner rule). */
-    fun pendingUnprocessedTranscripts(): List<TranscriptRecord> {
-        val out = ArrayList<TranscriptRecord>()
+    private fun readAnalysisBookmark(c: Cursor) = AnalysisChatBookmark(
+        chatId = c.getString(c.getColumnIndexOrThrow("chat_id")),
+        lastStartedAt = c.getStringOrNull("last_started_at"),
+        lastTranscriptId = c.getStringOrNull("last_transcript_id"),
+        skippedTranscriptIds = jsonToStrings(c.getStringOrNull("skipped_transcript_ids_json")),
+        updatedAt = c.getString(c.getColumnIndexOrThrow("updated_at"))
+    )
+
+    private fun ensureAnalysisBookmarkTx(db: SQLiteDatabase, chatId: String) {
+        db.execSQL(
+            "INSERT OR IGNORE INTO analysis_chat_bookmarks " +
+                "(chat_id, last_started_at, last_transcript_id, skipped_transcript_ids_json, updated_at) " +
+                "VALUES (?, NULL, NULL, '[]', ?)",
+            arrayOf(chatId, nowIso())
+        )
+    }
+
+    private fun analysisBookmarkTx(db: SQLiteDatabase, chatId: String): AnalysisChatBookmark {
+        ensureAnalysisBookmarkTx(db, chatId)
+        db.query(
+            "analysis_chat_bookmarks", null, "chat_id = ?", arrayOf(chatId),
+            null, null, null
+        ).use {
+            check(it.moveToFirst()) { "Missing analysis bookmark for $chatId" }
+            return readAnalysisBookmark(it)
+        }
+    }
+
+    /** Add intentionally excluded rows to the bookmark-owned skip snapshot and
+     *  immediately advance through any that are now contiguous. */
+    private fun excludeTranscriptIdsTx(db: SQLiteDatabase, chatId: String, ids: Collection<String>) {
+        val bookmark = analysisBookmarkTx(db, chatId)
+        val skipped = (bookmark.skippedTranscriptIds + ids).toSet()
+        val rows = transcriptsForChatTx(db, chatId)
+        var boundary = bookmarkBoundary(bookmark)
+        val remaining = skipped.toMutableSet()
+        for (row in rows) {
+            val rowBoundary = transcriptBoundary(row)
+            if (!AnalysisBookmark.isAfter(rowBoundary, boundary)) continue
+            if (row.claimRunId != null) break
+            if (row.transcriptId !in remaining) break
+            remaining.remove(row.transcriptId)
+            boundary = rowBoundary
+        }
+        db.update("analysis_chat_bookmarks", ContentValues().apply {
+            put("last_started_at", boundary?.startedAt)
+            put("last_transcript_id", boundary?.transcriptId)
+            put("skipped_transcript_ids_json", stringsToJson(remaining.sorted()))
+            put("updated_at", nowIso())
+        }, "chat_id = ?", arrayOf(chatId))
+    }
+
+    private fun removeTranscriptSkipsTx(db: SQLiteDatabase, chatId: String, ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        val bookmark = analysisBookmarkTx(db, chatId)
+        val remaining = bookmark.skippedTranscriptIds.filterNot { it in ids.toSet() }
+        db.update("analysis_chat_bookmarks", ContentValues().apply {
+            put("skipped_transcript_ids_json", stringsToJson(remaining))
+            put("updated_at", nowIso())
+        }, "chat_id = ?", arrayOf(chatId))
+    }
+
+    fun getAnalysisBookmark(chatId: String): AnalysisChatBookmark? {
         readableDatabase.query(
-            "transcripts", null,
-            "review_status = 'pending' AND processed_at IS NULL AND chat_id IS NOT NULL " +
-                "AND claim_run_id IS NULL",
-            null, null, null, "started_at ASC, transcript_id ASC"
+            "analysis_chat_bookmarks", null, "chat_id = ?", arrayOf(chatId),
+            null, null, null
+        ).use { return if (it.moveToFirst()) readAnalysisBookmark(it) else null }
+    }
+
+    fun getAnalysisBookmarks(): List<AnalysisChatBookmark> {
+        val out = ArrayList<AnalysisChatBookmark>()
+        readableDatabase.query(
+            "analysis_chat_bookmarks", null, null, null, null, null, "chat_id ASC"
+        ).use { while (it.moveToNext()) out.add(readAnalysisBookmark(it)) }
+        return out
+    }
+
+    private fun bookmarkBoundary(bookmark: AnalysisChatBookmark): AnalysisBookmark.Boundary? =
+        bookmark.lastTranscriptId?.let { AnalysisBookmark.Boundary(bookmark.lastStartedAt, it) }
+
+    private fun transcriptBoundary(row: TranscriptRecord) =
+        AnalysisBookmark.Boundary(row.startedAt, row.transcriptId)
+
+    private fun transcriptsForChatTx(db: SQLiteDatabase, chatId: String): List<TranscriptRecord> {
+        val out = ArrayList<TranscriptRecord>()
+        db.query(
+            "transcripts", null, "chat_id = ?", arrayOf(chatId), null, null,
+            "COALESCE(started_at, '') ASC, transcript_id ASC"
         ).use { while (it.moveToNext()) out.add(readTranscript(it)) }
         return out
     }
+
+    /**
+     * The one post-cutover eligibility reader. It deliberately does not inspect
+     * review_status or processed_at. Bookmark position, snapshotted skips, and
+     * temporary claims/ranges are the complete authority.
+     */
+    private fun eligibleTranscriptsForChatTx(db: SQLiteDatabase, chatId: String): List<TranscriptRecord> {
+        val bookmark = analysisBookmarkTx(db, chatId)
+        val ordered = transcriptsForChatTx(db, chatId)
+        val unskipped = AnalysisBookmark.eligibleRange(
+            rows = ordered,
+            boundary = bookmarkBoundary(bookmark),
+            skippedTranscriptIds = bookmark.skippedTranscriptIds.toSet(),
+            idOf = { it.transcriptId },
+            boundaryOf = { transcriptBoundary(it) }
+        )
+        // A claim is a temporary concurrency seal. Stop at it; never jump over
+        // an in-flight range and claim later history out of order.
+        return unskipped.takeWhile { it.claimRunId == null }
+    }
+
+    /** Everything the next API run may freeze, chronological and bookmark-led. */
+    fun bookmarkEligibleTranscripts(): List<TranscriptRecord> {
+        val db = writableDatabase
+        val out = ArrayList<TranscriptRecord>()
+        db.beginTransaction()
+        try {
+            requireBookmarkCutover(db)
+            val chatIds = ArrayList<String>()
+            db.rawQuery(
+                "SELECT DISTINCT chat_id FROM transcripts WHERE chat_id IS NOT NULL ORDER BY chat_id",
+                emptyArray<String>()
+            ).use { while (it.moveToNext()) chatIds.add(it.getString(0)) }
+            for (chatId in chatIds) out.addAll(eligibleTranscriptsForChatTx(db, chatId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        out.sortWith(compareBy({ it.startedAt ?: "" }, { it.transcriptId }))
+        return out
+    }
+
+    /** Compatibility name for existing callers; no legacy state is read. */
+    fun pendingUnprocessedTranscripts(): List<TranscriptRecord> = bookmarkEligibleTranscripts()
 
     /** Rerun support: re-fetch exactly the rows a past run fed, regardless of
      *  their current review state. Rows deleted since simply drop out. */
@@ -3100,70 +3486,243 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     }
 
     /**
-     * Advance the watermark after a conversation is analyzed. Only rows
-     * still carrying [runId]'s claim stamp advance (counterplan §4(a)) — a
-     * run can never mark text it did not read: a row that was reclaimed,
-     * released, or never claimed is left untouched, and the claim is
-     * cleared as the row is processed.
+     * Open a durable multi-chat run and freeze each selected chat independently.
+     * The supplied ids are the eligibility snapshot the caller displayed; rows
+     * appended after that snapshot are deliberately not claimed and belong to
+     * the next run. All claims and frozen-range records are sealed beside the
+     * running history row in one transaction.
      */
-    fun markTranscriptsProcessed(ids: List<String>, runId: String) {
-        if (ids.isEmpty()) return
-        val now = nowIso()
+    fun beginAnalysisRun(
+        run: ArchivistRunRecord,
+        transcriptIdsByChat: Map<String, List<String>>
+    ): Map<String, FrozenChatRange> {
         val db = writableDatabase
+        val frozen = linkedMapOf<String, FrozenChatRange>()
         db.beginTransaction()
         try {
-            for (id in ids) {
-                db.update("transcripts", ContentValues().apply {
-                    put("review_status", "processed")
-                    put("processed_at", now)
-                    putNull("claim_run_id")
-                }, "transcript_id = ? AND claim_run_id = ?", arrayOf(id, runId))
-            }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /**
-     * Open a durable analysis run (counterplan §4(a)): writes the 'running'
-     * run row — the active-run record — and stamps the claim seal on the
-     * selected transcript rows in the SAME transaction. Only rows that are
-     * still pending, unprocessed, and unclaimed take the stamp; the returned
-     * set is what the run may analyze. Everything else (claimed meanwhile,
-     * excluded, processed) is simply not in the run.
-     */
-    fun beginAnalysisRun(run: ArchivistRunRecord, transcriptIds: List<String>): Set<String> {
-        val db = writableDatabase
-        val claimed = HashSet<String>()
-        db.beginTransaction()
-        try {
+            requireBookmarkCutover(db)
             db.insertWithOnConflict(
                 "archivist_runs", null, archivistRunValues(run), SQLiteDatabase.CONFLICT_REPLACE
             )
-            for (id in transcriptIds) {
-                val n = db.update(
-                    "transcripts",
-                    ContentValues().apply { put("claim_run_id", run.runId) },
-                    "transcript_id = ? AND claim_run_id IS NULL " +
-                        "AND review_status = 'pending' AND processed_at IS NULL",
-                    arrayOf(id)
+            for ((chatId, requestedIds) in transcriptIdsByChat) {
+                if (requestedIds.isEmpty()) continue
+                val requested = requestedIds.toHashSet()
+                val eligible = eligibleTranscriptsForChatTx(db, chatId)
+                val selected = ArrayList<TranscriptRecord>()
+                // Freeze only the requested contiguous prefix. A late row is
+                // the first non-requested row and stays unclaimed for next time.
+                for (row in eligible) {
+                    if (row.transcriptId !in requested) break
+                    val claimed = db.update(
+                        "transcripts",
+                        ContentValues().apply { put("claim_run_id", run.runId) },
+                        "transcript_id = ? AND chat_id = ? AND claim_run_id IS NULL",
+                        arrayOf(row.transcriptId, chatId)
+                    )
+                    if (claimed != 1) break
+                    selected.add(row.copy(claimRunId = run.runId))
+                }
+                if (selected.isEmpty()) continue
+
+                val end = selected.last()
+                val range = FrozenChatRange(
+                    rangeId = newId("range-"),
+                    runId = run.runId,
+                    chatId = chatId,
+                    transcripts = selected,
+                    frozenEndStartedAt = end.startedAt,
+                    frozenEndTranscriptId = end.transcriptId
                 )
-                if (n == 1) claimed.add(id)
+                db.insertOrThrow("analysis_chat_ranges", null, ContentValues().apply {
+                    put("range_id", range.rangeId)
+                    put("run_id", range.runId)
+                    put("chat_id", range.chatId)
+                    put("frozen_end_started_at", range.frozenEndStartedAt)
+                    put("frozen_end_transcript_id", range.frozenEndTranscriptId)
+                    put("status", "running")
+                    put("created_at", nowIso())
+                })
+                frozen[chatId] = range
             }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
-        return claimed
+        return frozen
     }
 
     /** Release every claim a run still holds (terminal cleanup: completion,
      *  failure, or interruption). Processed rows already dropped theirs. */
     fun releaseAnalysisClaims(runId: String) {
-        writableDatabase.execSQL(
-            "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id = ?",
-            arrayOf(runId)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val affectedChats = ArrayList<String>()
+            db.rawQuery(
+                "SELECT DISTINCT chat_id FROM transcripts WHERE claim_run_id = ? AND chat_id IS NOT NULL",
+                arrayOf(runId)
+            ).use { while (it.moveToNext()) affectedChats.add(it.getString(0)) }
+            db.execSQL(
+                "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id = ?",
+                arrayOf(runId)
+            )
+            db.delete("analysis_chat_ranges", "run_id = ? AND status = 'running'", arrayOf(runId))
+            for (chatId in affectedChats) excludeTranscriptIdsTx(db, chatId, emptyList())
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun insertPreparedOutputsTx(
+        db: SQLiteDatabase,
+        memories: List<MemoryRecord>,
+        rules: List<ModelRuleRecord>,
+        lorebookSuggestions: List<LorebookSuggestionRecord>
+    ) {
+        for (memory in memories) insertPendingMemoryTx(db, memory, generated = true)
+        for (rule in rules) db.insertOrThrow("model_rules", null, modelRuleValues(rule))
+        for (suggestion in lorebookSuggestions) {
+            db.insertOrThrow("lorebook_suggestions", null, ContentValues().apply {
+                put("suggestion_id", suggestion.suggestionId)
+                put("run_id", suggestion.runId)
+                put("content", suggestion.content)
+                put("triggers_json", stringsToJson(suggestion.triggers))
+                put("source_chat_id", suggestion.sourceChatId)
+                put("source_chat_name", suggestion.sourceChatName)
+                put("assigned_lorebook_id", suggestion.assignedLorebookId)
+                put("created_at", suggestion.createdAt)
+            })
+        }
+    }
+
+    /**
+     * Atomically expose every staged output from one frozen chat and advance
+     * only that chat's bookmark. A failure at any insert or verification point
+     * rolls back Memory drafts, Model Rule drafts, Lorebook suggestions, legacy
+     * compatibility stamps, and the bookmark together.
+     */
+    fun commitFrozenChatRange(
+        range: FrozenChatRange,
+        memories: List<MemoryRecord>,
+        rules: List<ModelRuleRecord>,
+        lorebookSuggestions: List<LorebookSuggestionRecord>,
+        runProgress: ArchivistRunRecord? = null
+    ): CommittedChatOutputs {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            requireBookmarkCutover(db)
+            val storedRange = db.query(
+                "analysis_chat_ranges", null,
+                "range_id = ? AND run_id = ? AND chat_id = ? AND status = 'running'",
+                arrayOf(range.rangeId, range.runId, range.chatId), null, null, null
+            ).use { c ->
+                check(c.moveToFirst()) { "Frozen chat range is no longer active" }
+                Pair(c.getStringOrNull("frozen_end_started_at"), c.getString(c.getColumnIndexOrThrow("frozen_end_transcript_id")))
+            }
+            check(storedRange.first == range.frozenEndStartedAt &&
+                storedRange.second == range.frozenEndTranscriptId) {
+                "Frozen chat range boundary changed"
+            }
+
+            val claimed = ArrayList<TranscriptRecord>()
+            db.query(
+                "transcripts", null, "chat_id = ? AND claim_run_id = ?",
+                arrayOf(range.chatId, range.runId), null, null,
+                "COALESCE(started_at, '') ASC, transcript_id ASC"
+            ).use { while (it.moveToNext()) claimed.add(readTranscript(it)) }
+            check(claimed.map { it.transcriptId } == range.transcripts.map { it.transcriptId }) {
+                "Frozen chat range claim set changed"
+            }
+            check(claimed.lastOrNull()?.transcriptId == range.frozenEndTranscriptId) {
+                "Frozen chat range is incomplete"
+            }
+
+            val bookmark = analysisBookmarkTx(db, range.chatId)
+            val allRows = transcriptsForChatTx(db, range.chatId)
+            val expectedPrefix = AnalysisBookmark.eligibleRange(
+                rows = allRows,
+                boundary = bookmarkBoundary(bookmark),
+                skippedTranscriptIds = bookmark.skippedTranscriptIds.toSet(),
+                idOf = { it.transcriptId },
+                boundaryOf = { transcriptBoundary(it) }
+            ).take(claimed.size)
+            check(expectedPrefix.map { it.transcriptId } == claimed.map { it.transcriptId }) {
+                "Frozen chat range no longer begins at the bookmark"
+            }
+
+            insertPreparedOutputsTx(db, memories, rules, lorebookSuggestions)
+
+            val frozenEnd = AnalysisBookmark.Boundary(
+                range.frozenEndStartedAt, range.frozenEndTranscriptId
+            )
+            val (advanced, remainingSkips) = AnalysisBookmark.advanceAfterCommit(
+                rows = allRows,
+                frozenEnd = frozenEnd,
+                skippedTranscriptIds = bookmark.skippedTranscriptIds.toSet(),
+                idOf = { it.transcriptId },
+                boundaryOf = { transcriptBoundary(it) }
+            )
+            val now = nowIso()
+            db.update("analysis_chat_bookmarks", ContentValues().apply {
+                put("last_started_at", advanced.startedAt)
+                put("last_transcript_id", advanced.transcriptId)
+                put("skipped_transcript_ids_json", stringsToJson(remainingSkips.sorted()))
+                put("updated_at", now)
+            }, "chat_id = ?", arrayOf(range.chatId))
+
+            // Compatibility/history only. Runtime eligibility no longer reads
+            // either column after cutover.
+            for (row in claimed) {
+                db.update("transcripts", ContentValues().apply {
+                    put("review_status", "processed")
+                    put("processed_at", now)
+                    putNull("claim_run_id")
+                }, "transcript_id = ? AND claim_run_id = ?", arrayOf(row.transcriptId, range.runId))
+            }
+            db.delete("analysis_chat_ranges", "range_id = ?", arrayOf(range.rangeId))
+            runProgress?.let {
+                db.insertWithOnConflict(
+                    "archivist_runs", null, archivistRunValues(it), SQLiteDatabase.CONFLICT_REPLACE
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return CommittedChatOutputs(
+            memoryIds = memories.map { it.memoryId },
+            ruleIds = rules.map { it.ruleId },
+            lorebookSuggestionIds = lorebookSuggestions.map { it.suggestionId }
+        )
+    }
+
+    /** Rerun rows are deliberately outside permanent eligibility. Their staged
+     *  outputs still commit as one chat transaction, but no bookmark moves. */
+    fun commitRerunChatOutputs(
+        memories: List<MemoryRecord>,
+        rules: List<ModelRuleRecord>,
+        lorebookSuggestions: List<LorebookSuggestionRecord>,
+        runProgress: ArchivistRunRecord? = null
+    ): CommittedChatOutputs {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            insertPreparedOutputsTx(db, memories, rules, lorebookSuggestions)
+            runProgress?.let {
+                db.insertWithOnConflict(
+                    "archivist_runs", null, archivistRunValues(it), SQLiteDatabase.CONFLICT_REPLACE
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return CommittedChatOutputs(
+            memoryIds = memories.map { it.memoryId },
+            ruleIds = rules.map { it.ruleId },
+            lorebookSuggestionIds = lorebookSuggestions.map { it.suggestionId }
         )
     }
 
@@ -3194,6 +3753,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id = ?",
                     arrayOf(runId)
                 )
+                db.delete("analysis_chat_ranges", "run_id = ?", arrayOf(runId))
                 db.update("archivist_runs", ContentValues().apply {
                     put("status", "failed")
                     put("outcome", "interrupted")
@@ -3209,6 +3769,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.execSQL(
                 "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id LIKE 'run-%' " +
                     "AND claim_run_id NOT IN (SELECT run_id FROM archivist_runs)"
+            )
+            db.execSQL(
+                "DELETE FROM analysis_chat_ranges WHERE run_id NOT IN (" +
+                    "SELECT run_id FROM archivist_runs WHERE status = 'running')"
             )
             // Minimal temporary analysis-run recovery (§8.10): an unfiled run
             // is interrupted — discard its temporary candidates and state so
@@ -4154,10 +4718,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         modelTag: String?,
         markExcluded: Boolean
     ): Boolean {
+        val db = writableDatabase
+        db.beginTransaction()
         return try {
+            requireBookmarkCutover(db)
+            ensureAnalysisBookmarkTx(db, chatId)
             val now = nowIso()
-            writableDatabase.insertOrThrow("transcripts", null, ContentValues().apply {
-                put("transcript_id", newId("t-"))
+            val transcriptId = newId("t-")
+            db.insertOrThrow("transcripts", null, ContentValues().apply {
+                put("transcript_id", transcriptId)
                 put("chat_id", chatId)
                 put("companion_id", companionId)
                 put("source", "imported")
@@ -4167,9 +4736,13 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 put("model_tag", modelTag)
                 put("review_status", if (markExcluded) "excluded" else "pending")
             })
+            if (markExcluded) excludeTranscriptIdsTx(db, chatId, listOf(transcriptId))
+            db.setTransactionSuccessful()
             true
         } catch (_: Exception) {
             false
+        } finally {
+            db.endTransaction()
         }
     }
 
@@ -4182,6 +4755,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         try {
             db.execSQL(
                 "UPDATE transcripts SET chat_id = ? WHERE chat_id = ?", arrayOf(newChatId, oldChatId)
+            )
+            db.execSQL(
+                "UPDATE OR REPLACE analysis_chat_bookmarks SET chat_id = ? WHERE chat_id = ?",
+                arrayOf(newChatId, oldChatId)
+            )
+            db.execSQL(
+                "UPDATE OR REPLACE analysis_chat_ranges SET chat_id = ? WHERE chat_id = ?",
+                arrayOf(newChatId, oldChatId)
             )
             // The cooldown state and turn clock are keyed by chat id too — a
             // rename must carry them or every memory re-injects and the clock
@@ -4214,32 +4795,26 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
-    /**
-     * Review-state summary per chat for the chat-list markers:
-     * "pending" (unreviewed content, nothing processed), "partial" (processed
-     * AND new unreviewed content — the partially-processed marker), "processed"
-     * (everything reviewed), "excluded" (only excluded rows). Chats with no
-     * transcripts are absent.
-     */
+    /** Review-state summary derived from the Stage-B bookmark authority. */
     fun chatReviewStates(): HashMap<String, String> {
         val out = HashMap<String, String>()
-        readableDatabase.rawQuery(
-            "SELECT chat_id, " +
-                "SUM(CASE WHEN review_status = 'pending' THEN 1 ELSE 0 END), " +
-                "SUM(CASE WHEN review_status = 'processed' THEN 1 ELSE 0 END) " +
-                "FROM transcripts WHERE chat_id IS NOT NULL GROUP BY chat_id",
+        val eligibleByChat = bookmarkEligibleTranscripts()
+            .mapNotNull { row -> row.chatId?.let { it to row } }
+            .groupBy({ it.first }, { it.second })
+        val db = readableDatabase
+        val chatIds = ArrayList<String>()
+        db.rawQuery(
+            "SELECT DISTINCT chat_id FROM transcripts WHERE chat_id IS NOT NULL ORDER BY chat_id",
             emptyArray<String>()
-        ).use {
-            while (it.moveToNext()) {
-                val chatId = it.getString(0) ?: continue
-                val pending = it.getInt(1)
-                val processed = it.getInt(2)
-                out[chatId] = when {
-                    pending > 0 && processed > 0 -> "partial"
-                    pending > 0 -> "pending"
-                    processed > 0 -> "processed"
-                    else -> "excluded"
-                }
+        ).use { while (it.moveToNext()) chatIds.add(it.getString(0)) }
+        for (chatId in chatIds) {
+            val bookmark = getAnalysisBookmark(chatId)
+            val hasReviewedPrefix = bookmark?.lastTranscriptId != null
+            val hasEligible = eligibleByChat[chatId].orEmpty().isNotEmpty()
+            out[chatId] = when {
+                hasEligible && hasReviewedPrefix -> "partial"
+                hasEligible -> "pending"
+                else -> "processed"
             }
         }
         return out
@@ -4554,24 +5129,28 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         val db = writableDatabase
         db.beginTransaction()
         try {
-            db.insertOrThrow("memories", null, memoryValues(safe))
-            writeMemoryLinks(db, safe)
-            // The canonical candidate carries no source authorship, so the
-            // change-log actor is a fixed "user" — origin is not read here (R2).
-            logChange(db, safe.memoryId, "user", "proposed", null, null)
-            // Route-aware, non-memory bookkeeping (Phase 2 review): a Memory
-            // Assistant / computer-generated draft is marked here (keyed by id, no
-            // metadata on the memory) so its deletion records a content rejection.
-            // Manual creation passes generated=false and is never marked.
-            if (generated) {
-                db.execSQL(
-                    "INSERT OR IGNORE INTO generated_pending_drafts (memory_id, created_at) VALUES (?, ?)",
-                    arrayOf(safe.memoryId, nowIso())
-                )
-            }
+            insertPendingMemoryTx(db, safe, generated)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
+        }
+    }
+
+    /** Same canonical filing operation, reusable by the Stage-B chat-range
+     *  transaction so drafts and bookmark advance commit together. */
+    private fun insertPendingMemoryTx(db: SQLiteDatabase, m: MemoryRecord, generated: Boolean) {
+        require(m.status == "draft") { "Pending memories must be drafts" }
+        val safe = m.copy(protectionJson = null)
+        db.insertOrThrow("memories", null, memoryValues(safe))
+        writeMemoryLinks(db, safe)
+        // The canonical candidate carries no source authorship, so the
+        // change-log actor is a fixed "user" — origin is not read here (R2).
+        logChange(db, safe.memoryId, "user", "proposed", null, null)
+        if (generated) {
+            db.execSQL(
+                "INSERT OR IGNORE INTO generated_pending_drafts (memory_id, created_at) VALUES (?, ?)",
+                arrayOf(safe.memoryId, nowIso())
+            )
         }
     }
 
@@ -5672,6 +6251,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.beginTransaction()
         try {
             db.delete("memories", null, null) // cascades memory_* joins, change_log, embeddings
+            db.delete("analysis_chat_ranges", null, null)
+            db.delete("analysis_chat_bookmarks", null, null)
             db.delete("transcripts", null, null)
             db.delete("proposals", null, null)
             // Roleplay cards + tags (3.6a): links and entries before the

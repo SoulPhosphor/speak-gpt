@@ -36,7 +36,7 @@ import org.teslasoft.assistant.preferences.memory.librarian.RetrievalDocument
  * Real SQLCipher-backed migration and deletion coverage for the Phase 1 storage
  * work (canonical recovery plan §5, §7, §8.10, §4.6). These are instrumentation
  * tests: they open the actual [MemoryStore] against throwaway database files via
- * [MemoryStore.openForTest], so onCreate (fresh v21), onUpgrade (from a
+ * [MemoryStore.openForTest], so onCreate (the current schema), onUpgrade (from a
  * hand-built v20 database), import, and companion deletion all execute against
  * genuine encrypted SQLite — not a pure mapping stand-in.
  *
@@ -112,8 +112,13 @@ class MemoryStoreInstrumentedTest {
             insertV20Memory(db, "m-blank", "", 4)
         }
 
-        // Opening at v21 runs onUpgrade(20 -> 21).
+        // Opening runs the complete supported upgrade chain through v27.
         val store = open(name)
+
+        assertEquals(
+            "complete",
+            store.getMeta(MemoryStore.META_ASSOCIATIVE_BOOKMARK_CUTOVER)
+        )
 
         assertEquals("mtype-fact", typeIdOf(store, "m-fact"))
         assertEquals("mtype-preference", typeIdOf(store, "m-pref"))
@@ -235,6 +240,190 @@ class MemoryStoreInstrumentedTest {
         assertFalse(rowExists(store, "analysis_candidates", "candidate_id", "c1"))
     }
 
+    /* ---------------- Stage B bookmark + frozen range -------------------- */
+
+    @Test
+    fun bookmarkMigrationUsesContiguousTerminalPrefixAndStopsAtPendingGap() {
+        val store = open(freshDbName())
+        insertTranscript(store, "t1", "chat-a", "1", "processed", "1")
+        insertTranscript(store, "t2", "chat-a", "2", "excluded", null)
+        insertTranscript(store, "t3", "chat-a", "3", "pending", null)
+        insertTranscript(store, "t4", "chat-a", "4", "processed", "4")
+        insertTranscript(store, "t5", "chat-a", "5", "excluded", null)
+        store.insertArchivistRun(runRecord("run-stale"))
+        store.writableDatabase.execSQL(
+            "UPDATE transcripts SET claim_run_id = 'run-stale' WHERE transcript_id = 't3'"
+        )
+
+        store.rebuildBookmarkCutoverForTest()
+
+        val bookmark = store.getAnalysisBookmark("chat-a")!!
+        assertEquals("t2", bookmark.lastTranscriptId)
+        assertEquals(listOf("t4", "t5"), bookmark.skippedTranscriptIds)
+        assertEquals(listOf("t3"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
+        assertNull(store.transcriptsByIds(listOf("t3")).single().claimRunId)
+        assertEquals("interrupted", store.getArchivistRun("run-stale")!!.outcome)
+    }
+
+    @Test
+    fun postCutoverLegacyReviewColumnsCannotChangeEligibility() {
+        val store = open(freshDbName())
+        insertTranscript(store, "old", "chat-a", "1", "processed", "1")
+        insertTranscript(store, "new", "chat-a", "2", "pending", null)
+        store.rebuildBookmarkCutoverForTest()
+
+        assertEquals(listOf("new"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
+        store.writableDatabase.execSQL(
+            "UPDATE transcripts SET review_status = 'excluded', processed_at = 'changed' WHERE transcript_id = 'new'"
+        )
+        store.writableDatabase.execSQL(
+            "UPDATE transcripts SET review_status = 'pending', processed_at = NULL WHERE transcript_id = 'old'"
+        )
+        assertEquals(listOf("new"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
+    }
+
+    @Test
+    fun frozenRangeCommitAdvancesBookmarkAndLeavesLateMessageForNextRun() {
+        val store = open(freshDbName())
+        insertTranscript(store, "t1", "chat-a", "1", "pending", null)
+        insertTranscript(store, "t2", "chat-a", "2", "pending", null)
+        val run = runRecord("run-stage-b")
+        val frozen = store.beginAnalysisRun(
+            run, mapOf("chat-a" to listOf("t1", "t2"))
+        ).getValue("chat-a")
+
+        // The newest row is claimed, so capture seals it and creates a new row.
+        val lateOutcome = store.appendTranscriptTurn(
+            chatId = "chat-a", companionId = null,
+            userMessage = "late user", assistantMessage = "late assistant",
+            modelTag = "model", quickSettingsJson = null, markExcluded = false
+        )
+        assertTrue(lateOutcome.startsWith("inserted "))
+
+        val memory = mem("stage-b-memory", scope = "global", status = "draft")
+        val rule = ModelRuleRecord(
+            ruleId = "stage-b-rule", text = "Use complete sentences.",
+            modelStringsJson = "[]", status = "draft", sourceModelString = "model",
+            createdAt = "2026-08-08T00:00:00Z"
+        )
+        store.commitFrozenChatRange(frozen, listOf(memory), listOf(rule), emptyList())
+
+        assertEquals("t2", store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
+        assertNotNull(store.getMemory("stage-b-memory"))
+        assertNotNull(store.getModelRule("stage-b-rule"))
+        val next = store.bookmarkEligibleTranscripts().filter { it.chatId == "chat-a" }
+        assertEquals(1, next.size)
+        assertTrue(next.single().transcriptId != "t1" && next.single().transcriptId != "t2")
+    }
+
+    @Test
+    fun failedChatCommitRollsBackMemoryRuleAndBookmarkTogether() {
+        val store = open(freshDbName())
+        insertTranscript(store, "t1", "chat-a", "1", "pending", null)
+        val frozen = store.beginAnalysisRun(
+            runRecord("run-rollback"), mapOf("chat-a" to listOf("t1"))
+        ).getValue("chat-a")
+        val memory = mem("must-not-leak", scope = "global", status = "draft")
+        val invalidRule = ModelRuleRecord(
+            ruleId = "must-not-leak-rule", text = "draft",
+            modelStringsJson = "[]", status = "invalid", sourceModelString = null,
+            createdAt = "2026-08-08T00:00:00Z"
+        )
+
+        var failed = false
+        try {
+            store.commitFrozenChatRange(frozen, listOf(memory), listOf(invalidRule), emptyList())
+        } catch (_: Exception) {
+            failed = true
+        }
+        assertTrue(failed)
+        assertNull(store.getMemory("must-not-leak"))
+        assertNull(store.getModelRule("must-not-leak-rule"))
+        assertNull(store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
+        store.releaseAnalysisClaims("run-rollback")
+        assertEquals(listOf("t1"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
+    }
+
+    @Test
+    fun interruptedFrozenRangeReleasesClaimWithoutSkippingMaterial() {
+        val store = open(freshDbName())
+        insertTranscript(store, "t1", "chat-a", "1", "pending", null)
+        store.beginAnalysisRun(
+            runRecord("run-interrupted"), mapOf("chat-a" to listOf("t1"))
+        )
+
+        assertEquals(1, store.reconcileInterruptedAnalysisRuns())
+        assertNull(store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
+        assertEquals(listOf("t1"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
+        assertNull(store.transcriptsByIds(listOf("t1")).single().claimRunId)
+    }
+
+    @Test
+    fun multiChatRunCommitsSuccessfulChatWhileFailedChatKeepsBookmark() {
+        val store = open(freshDbName())
+        insertTranscript(store, "a1", "chat-a", "1", "pending", null)
+        insertTranscript(store, "b1", "chat-b", "1", "pending", null)
+        val ranges = store.beginAnalysisRun(
+            runRecord("run-multi"),
+            mapOf("chat-a" to listOf("a1"), "chat-b" to listOf("b1"))
+        )
+
+        store.commitFrozenChatRange(
+            ranges.getValue("chat-a"),
+            listOf(mem("visible-a", scope = "global", status = "draft")),
+            emptyList(), emptyList()
+        )
+        try {
+            store.commitFrozenChatRange(
+                ranges.getValue("chat-b"),
+                listOf(mem("hidden-b", scope = "global", status = "draft")),
+                listOf(
+                    ModelRuleRecord(
+                        "invalid-b", "bad", "[]", "invalid", null,
+                        "2026-08-08T00:00:00Z"
+                    )
+                ),
+                emptyList()
+            )
+        } catch (_: Exception) {
+            // Deterministic save failure for chat B.
+        }
+
+        assertEquals("a1", store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
+        assertNotNull(store.getMemory("visible-a"))
+        assertNull(store.getAnalysisBookmark("chat-b")!!.lastTranscriptId)
+        assertNull(store.getMemory("hidden-b"))
+        store.releaseAnalysisClaims("run-multi")
+        assertEquals(listOf("b1"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
+    }
+
+    @Test
+    fun interruptedBookmarkMigrationInstallsNeitherRowsNorCutoverMarker() {
+        val store = open(freshDbName())
+        insertTranscript(store, "t1", "chat-a", "1", "processed", "1")
+
+        var interrupted = false
+        try {
+            store.rebuildBookmarkCutoverForTest(interruptBeforeMarker = true)
+        } catch (_: IllegalStateException) {
+            interrupted = true
+        }
+        assertTrue(interrupted)
+        assertNull(store.getMeta(MemoryStore.META_ASSOCIATIVE_BOOKMARK_CUTOVER))
+        assertTrue(store.getAnalysisBookmarks().isEmpty())
+        var eligibilityGuarded = false
+        try {
+            store.bookmarkEligibleTranscripts()
+        } catch (_: IllegalStateException) {
+            eligibilityGuarded = true
+        }
+        assertTrue(eligibilityGuarded)
+
+        store.rebuildBookmarkCutoverForTest()
+        assertEquals("complete", store.getMeta(MemoryStore.META_ASSOCIATIVE_BOOKMARK_CUTOVER))
+        assertEquals("t1", store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
+    }
+
     /* --------------------------- backup / restore -------------------------- */
 
     @Test
@@ -242,6 +431,9 @@ class MemoryStoreInstrumentedTest {
         val src = open(freshDbName())
         src.insertMemory(mem("typed", scope = "global", typeId = "mtype-fact", importance = 4))
         src.insertMemory(mem("untyped", scope = "global", typeId = null, importance = 0))
+        insertTranscript(src, "reviewed", "chat-backup", "1", "processed", "1")
+        insertTranscript(src, "waiting", "chat-backup", "2", "pending", null)
+        src.rebuildBookmarkCutoverForTest()
         val exported = MemorySeedCodec.serialize(src.exportData())
 
         // Restore into a fresh store via the first-seed (overwrite) path.
@@ -252,6 +444,8 @@ class MemoryStoreInstrumentedTest {
         assertEquals(4, dest.getMemory("typed")!!.importance)
         assertNull(dest.getMemory("untyped")!!.typeId)
         assertEquals(0, dest.getMemory("untyped")!!.importance)
+        assertEquals("reviewed", dest.getAnalysisBookmark("chat-backup")!!.lastTranscriptId)
+        assertEquals(listOf("waiting"), dest.bookmarkEligibleTranscripts().map { it.transcriptId })
     }
 
     @Test
@@ -903,6 +1097,43 @@ class MemoryStoreInstrumentedTest {
 
     /* ------------------------------ helpers ------------------------------- */
 
+    private fun insertTranscript(
+        store: MemoryStore,
+        id: String,
+        chatId: String,
+        startedAt: String,
+        reviewStatus: String,
+        processedAt: String?
+    ) {
+        store.writableDatabase.insertOrThrow("transcripts", null, ContentValues().apply {
+            put("transcript_id", id)
+            put("chat_id", chatId)
+            put("source", "live")
+            put("started_at", startedAt)
+            put("ended_at", startedAt)
+            put("content", "[]")
+            put("model_tag", "model")
+            put("review_status", reviewStatus)
+            put("processed_at", processedAt)
+        })
+    }
+
+    private fun runRecord(id: String) = ArchivistRunRecord(
+        runId = id,
+        startedAt = "2026-08-08T00:00:00Z",
+        finishedAt = null,
+        status = "running",
+        chatIdsJson = "[]",
+        transcriptIdsJson = "[]",
+        memoryIdsJson = "[]",
+        ruleIdsJson = "[]",
+        foundCount = 0,
+        failedChatIdsJson = "[]",
+        error = null,
+        transport = "api",
+        analysisType = "associative"
+    )
+
     private fun importanceOf(store: MemoryStore, id: String): Int =
         store.readableDatabase.rawQuery("SELECT importance FROM memories WHERE memory_id = ?", arrayOf(id))
             .use { if (it.moveToFirst()) it.getInt(0) else -999 }
@@ -983,6 +1214,28 @@ class MemoryStoreInstrumentedTest {
                 "chat_key TEXT NOT NULL, " +
                 "deleted_at TEXT NOT NULL, " +
                 "PRIMARY KEY (content_hash, chat_key))"
+        )
+        // These operational tables existed on every genuine v20 store. The
+        // v27 bookmark migration reconciles stale API claims and reads the
+        // transcript queue before deriving its one-way cutover state.
+        db.execSQL(
+            "CREATE TABLE transcripts (" +
+                "transcript_id TEXT PRIMARY KEY, chat_id TEXT, companion_id TEXT, " +
+                "world_id TEXT, roleplay_character_id TEXT, user_persona_id TEXT, " +
+                "campaign_id TEXT, project_id TEXT, source TEXT NOT NULL DEFAULT 'live', " +
+                "started_at TEXT, ended_at TEXT, content TEXT NOT NULL, model_tag TEXT, " +
+                "quick_settings_json TEXT, review_status TEXT NOT NULL DEFAULT 'pending', " +
+                "processed_at TEXT, claim_run_id TEXT)"
+        )
+        db.execSQL(
+            "CREATE TABLE archivist_runs (" +
+                "run_id TEXT PRIMARY KEY, started_at TEXT NOT NULL, finished_at TEXT, " +
+                "status TEXT NOT NULL, chat_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "transcript_ids_json TEXT NOT NULL DEFAULT '[]', memory_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "rule_ids_json TEXT NOT NULL DEFAULT '[]', found_count INTEGER NOT NULL DEFAULT 0, " +
+                "failed_chat_ids_json TEXT NOT NULL DEFAULT '[]', error TEXT, outcome TEXT, " +
+                "failure_reason TEXT, transport TEXT NOT NULL DEFAULT 'api', " +
+                "analysis_type TEXT NOT NULL DEFAULT 'associative')"
         )
         db.execSQL(
             "CREATE TABLE memories (" +

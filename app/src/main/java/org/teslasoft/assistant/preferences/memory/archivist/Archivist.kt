@@ -37,6 +37,8 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
 import org.teslasoft.assistant.preferences.memory.CandidateResult
+import org.teslasoft.assistant.preferences.memory.FrozenChatRange
+import org.teslasoft.assistant.preferences.memory.FrozenChatRangeExecutor
 import org.teslasoft.assistant.preferences.memory.LorebookSuggestionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryCandidate
 import org.teslasoft.assistant.preferences.memory.MemoryCandidateValidator
@@ -44,7 +46,6 @@ import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryMatch
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
-import org.teslasoft.assistant.preferences.memory.PendingMemoryFiler
 import org.teslasoft.assistant.preferences.memory.SCOPE_COMPANION
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
 import org.teslasoft.assistant.R
@@ -93,6 +94,28 @@ object Archivist {
         val chatId: String,
         val chatName: String,
         val transcripts: List<TranscriptRecord>
+    )
+
+    private data class ParsedChunk(
+        val memories: List<ArchivistResponseParser.DraftMemory> = emptyList(),
+        val rules: List<ArchivistResponseParser.DraftRule> = emptyList(),
+        val loreEntries: List<ArchivistResponseParser.DraftLoreEntry> = emptyList()
+    )
+
+    private data class PreparedMemories(
+        val records: List<org.teslasoft.assistant.preferences.memory.MemoryRecord>,
+        val duplicatesSkipped: Int
+    )
+
+    private data class PreparedLore(
+        val records: List<LorebookSuggestionRecord>,
+        val duplicatesSkipped: Int
+    )
+
+    private data class ChatCommit(
+        val memoryIds: List<String>,
+        val ruleIds: List<String>,
+        val duplicatesSkipped: Int
     )
 
     data class RunOutcome(
@@ -170,17 +193,13 @@ object Archivist {
         val overallCount: Int = 0
     )
 
-    /**
-     * Live eligibility (owner rules: a query on CURRENT state, never a stored
-     * watermark): pending, unprocessed, and belonging to a chat that still
-     * exists. Deleted conversations don't count; a chat re-included after
-     * "don't archive" re-queues its rows as pending upstream and reappears
-     * here automatically.
-     */
+    /** Bookmark-led eligibility for chats that still exist in app storage.
+     * Deleted conversations do not count; claim state temporarily seals an
+     * in-flight range, while legacy transcript review columns are not gates. */
     fun eligibleConversations(context: Context): List<Conversation> {
         if (!MemoryStore.isProvisioned(context)) return emptyList()
         val liveChats = liveChatNamesById(context)
-        return MemoryStore.getInstance(context).pendingUnprocessedTranscripts()
+        return MemoryStore.getInstance(context).bookmarkEligibleTranscripts()
             .filter { it.chatId != null && liveChats.containsKey(it.chatId) }
             .groupBy { it.chatId!! }
             .map { (chatId, rows) -> Conversation(chatId, liveChats[chatId] ?: chatId, rows) }
@@ -393,15 +412,17 @@ object Archivist {
             transport = "api",
             analysisType = analysisType
         )
+        val frozenRanges: Map<String, FrozenChatRange>
         if (markProcessed) {
-            val claimed = store.beginAnalysisRun(
-                runningRow, conversations.flatMap { c -> c.transcripts.map { it.transcriptId } }
+            frozenRanges = store.beginAnalysisRun(
+                runningRow,
+                conversations.associate { c -> c.chatId to c.transcripts.map { it.transcriptId } }
             )
             conversations = conversations.mapNotNull { c ->
-                val rows = c.transcripts.filter { it.transcriptId in claimed }
-                if (rows.isEmpty()) null else c.copy(transcripts = rows)
+                frozenRanges[c.chatId]?.let { c.copy(transcripts = it.transcripts) }
             }
         } else {
+            frozenRanges = emptyMap()
             store.insertArchivistRun(runningRow)
         }
 
@@ -478,102 +499,151 @@ object Archivist {
                             MemoryLog.log(context, "Archivist", "info",
                                 "chat=${conversation.chatId}: oversized conversation split into ${chunks.size} requests")
                         }
-                        var filedThisConversation = 0
-                        for (chunk in chunks) {
-                            val rows = chunk.map { conversation.transcripts[it] }
-                            val rendered = ArchivistPrompt.userMessage(
-                                conversation.chatName, companionName, rows
-                            )
-                            incompleteTurnsExcluded += rendered.incompleteAssistantTurnsDropped
-                            // Fresh capture window per request: the observer only
-                            // writes on an error response, so a success leaves
-                            // this null.
-                            capturedErrorBody = null
-                            val response = ai.chatCompletion(
-                                ChatCompletionRequest(
-                                    model = ModelId(model),
-                                    messages = listOf(
-                                        ChatMessage(role = ChatRole.System, content = systemPrompt),
-                                        ChatMessage(
-                                            role = ChatRole.User,
-                                            content = rendered.text
-                                        )
-                                    ),
-                                    temperature = temperature
+                        val committed = FrozenChatRangeExecutor.execute(
+                            chunks = chunks,
+                            analyzeChunk = { chunk ->
+                                val rows = chunk.map { conversation.transcripts[it] }
+                                val rendered = ArchivistPrompt.userMessage(
+                                    conversation.chatName, companionName, rows
                                 )
-                            )
-                            val raw = response.choices.firstOrNull()?.message?.content.orEmpty()
-                            if (lorebookMode) {
-                                // Lorebook Memories analysis (Step 1.7): parse
-                                // lore book entries and file them as pending
-                                // suggestions instead of memory drafts. The
-                                // per-conversation cap still applies; there is
-                                // no importance floor (lore entries carry none).
-                                val parsedLore = try {
-                                    ArchivistResponseParser.parseLore(raw)
-                                } catch (e: Exception) {
-                                    throw TaggedArchivistException(ArchivistFailure.UNREADABLE, e)
-                                }
-                                if (parsedLore.dropped > 0) {
-                                    MemoryLog.log(context, "Archivist", "warn",
-                                        "chat=${conversation.chatId}: ${parsedLore.dropped} lore proposal(s) failed validation and were dropped")
-                                }
-                                var loreCandidates = parsedLore.entries
-                                if (maxSuggestions > 0) {
-                                    val room = (maxSuggestions - filedThisConversation).coerceAtLeast(0)
-                                    if (loreCandidates.size > room) {
-                                        MemoryLog.log(context, "Archivist", "info",
-                                            "chat=${conversation.chatId}: cap $maxSuggestions reached, ${loreCandidates.size - room} lore suggestion(s) not filed")
-                                        loreCandidates = loreCandidates.take(room)
+                                incompleteTurnsExcluded += rendered.incompleteAssistantTurnsDropped
+                                // Fresh capture window per request: the observer
+                                // writes only on an error response.
+                                capturedErrorBody = null
+                                val response = ai.chatCompletion(
+                                    ChatCompletionRequest(
+                                        model = ModelId(model),
+                                        messages = listOf(
+                                            ChatMessage(role = ChatRole.System, content = systemPrompt),
+                                            ChatMessage(role = ChatRole.User, content = rendered.text)
+                                        ),
+                                        temperature = temperature
+                                    )
+                                )
+                                val raw = response.choices.firstOrNull()?.message?.content.orEmpty()
+                                if (lorebookMode) {
+                                    val parsed = try {
+                                        ArchivistResponseParser.parseLore(raw)
+                                    } catch (e: Exception) {
+                                        throw TaggedArchivistException(ArchivistFailure.UNREADABLE, e)
                                     }
+                                    if (parsed.dropped > 0) {
+                                        MemoryLog.log(
+                                            context, "Archivist", "warn",
+                                            "chat=${conversation.chatId}: ${parsed.dropped} lore proposal(s) failed validation and were dropped"
+                                        )
+                                    }
+                                    ParsedChunk(loreEntries = parsed.entries)
+                                } else {
+                                    val parsed = try {
+                                        ArchivistResponseParser.parse(raw)
+                                    } catch (e: Exception) {
+                                        throw TaggedArchivistException(ArchivistFailure.UNREADABLE, e)
+                                    }
+                                    if (parsed.dropped > 0) {
+                                        MemoryLog.log(
+                                            context, "Archivist", "warn",
+                                            "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped"
+                                        )
+                                    }
+                                    ParsedChunk(memories = parsed.memories, rules = parsed.rules)
                                 }
-                                val before = memoryIds.size
-                                duplicatesSkipped += fileLorebookSuggestions(
-                                    context, store, conversation, runId, loreCandidates, memoryIds
-                                )
-                                filedThisConversation += memoryIds.size - before
-                            } else {
-                            // A parse failure is reason D (unreadable result) —
-                            // tag it so the generic classifier can't misfile it.
-                            val parsed = try {
-                                ArchivistResponseParser.parse(raw)
-                            } catch (e: Exception) {
-                                throw TaggedArchivistException(ArchivistFailure.UNREADABLE, e)
-                            }
-                            if (parsed.dropped > 0) {
-                                MemoryLog.log(context, "Archivist", "warn",
-                                    "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped")
-                            }
-                            // Code-enforced tuning (owner spec): the per-
-                            // conversation cap across all of the conversation's
-                            // chunks. No importance floor (§7.2) — the analyzer no
-                            // longer rates memories, so nothing is dropped for a
-                            // low AI importance it never assigned.
-                            var candidates = parsed.memories
-                            if (maxSuggestions > 0) {
-                                val room = (maxSuggestions - filedThisConversation).coerceAtLeast(0)
-                                if (candidates.size > room) {
-                                    MemoryLog.log(context, "Archivist", "info",
-                                        "chat=${conversation.chatId}: cap $maxSuggestions reached, ${candidates.size - room} draft(s) not filed")
-                                    candidates = candidates.take(room)
+                            },
+                            commit = { stagedChunks ->
+                                if (lorebookMode) {
+                                    val prepared = prepareLorebookSuggestions(
+                                        context = context,
+                                        store = store,
+                                        conversation = conversation,
+                                        runId = runId,
+                                        entries = stagedChunks.flatMap { it.loreEntries },
+                                        maxSuggestions = maxSuggestions
+                                    )
+                                    val preparedIds = prepared.records.map { it.suggestionId }
+                                    val progressRow = runningRow.copy(
+                                        chatIdsJson = listToJson(analyzedChatIds + conversation.chatId),
+                                        transcriptIdsJson = listToJson(
+                                            fedTranscriptIds + conversation.transcripts.map { it.transcriptId }
+                                        ),
+                                        memoryIdsJson = listToJson(memoryIds + preparedIds),
+                                        ruleIdsJson = listToJson(ruleIds),
+                                        foundCount = memoryIds.size + preparedIds.size,
+                                        failedChatIdsJson = listToJson(failedChats)
+                                    )
+                                    val stored = try {
+                                        if (markProcessed) {
+                                            store.commitFrozenChatRange(
+                                                frozenRanges.getValue(conversation.chatId),
+                                                memories = emptyList(), rules = emptyList(),
+                                                lorebookSuggestions = prepared.records,
+                                                runProgress = progressRow
+                                            )
+                                        } else {
+                                            store.commitRerunChatOutputs(
+                                                memories = emptyList(), rules = emptyList(),
+                                                lorebookSuggestions = prepared.records,
+                                                runProgress = progressRow
+                                            )
+                                        }
+                                    } catch (e: Exception) {
+                                        throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, e)
+                                    }
+                                    ChatCommit(
+                                        memoryIds = stored.lorebookSuggestionIds,
+                                        ruleIds = emptyList(),
+                                        duplicatesSkipped = prepared.duplicatesSkipped
+                                    )
+                                } else {
+                                    val preparedMemories = prepareMemoryDrafts(
+                                        context = context,
+                                        store = store,
+                                        conversation = conversation,
+                                        drafts = stagedChunks.flatMap { it.memories },
+                                        maxSuggestions = maxSuggestions
+                                    )
+                                    val preparedRules = prepareRuleDrafts(
+                                        context, store, conversation,
+                                        stagedChunks.flatMap { it.rules }
+                                    )
+                                    val preparedMemoryIds = preparedMemories.records.map { it.memoryId }
+                                    val preparedRuleIds = preparedRules.map { it.ruleId }
+                                    val progressRow = runningRow.copy(
+                                        chatIdsJson = listToJson(analyzedChatIds + conversation.chatId),
+                                        transcriptIdsJson = listToJson(
+                                            fedTranscriptIds + conversation.transcripts.map { it.transcriptId }
+                                        ),
+                                        memoryIdsJson = listToJson(memoryIds + preparedMemoryIds),
+                                        ruleIdsJson = listToJson(ruleIds + preparedRuleIds),
+                                        foundCount = memoryIds.size + preparedMemoryIds.size,
+                                        failedChatIdsJson = listToJson(failedChats)
+                                    )
+                                    val stored = try {
+                                        if (markProcessed) {
+                                            store.commitFrozenChatRange(
+                                                frozenRanges.getValue(conversation.chatId),
+                                                preparedMemories.records, preparedRules, emptyList(),
+                                                runProgress = progressRow
+                                            )
+                                        } else {
+                                            store.commitRerunChatOutputs(
+                                                preparedMemories.records, preparedRules, emptyList(),
+                                                runProgress = progressRow
+                                            )
+                                        }
+                                    } catch (e: Exception) {
+                                        throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, e)
+                                    }
+                                    ChatCommit(
+                                        memoryIds = stored.memoryIds,
+                                        ruleIds = stored.ruleIds,
+                                        duplicatesSkipped = preparedMemories.duplicatesSkipped
+                                    )
                                 }
                             }
-                            val before = memoryIds.size
-                            duplicatesSkipped += fileMemoryDrafts(
-                                context, store, conversation, candidates, memoryIds
-                            )
-                            filedThisConversation += memoryIds.size - before
-                            fileRuleDrafts(context, store, conversation, parsed.rules, ruleIds)
-                            }
-                        }
-                        if (markProcessed) {
-                            // Only rows still carrying THIS run's claim stamp
-                            // advance — a turn appended mid-run started a new
-                            // unclaimed row and stays pending (§4(a)).
-                            store.markTranscriptsProcessed(
-                                conversation.transcripts.map { it.transcriptId }, runId
-                            )
-                        }
+                        )
+                        memoryIds.addAll(committed.memoryIds)
+                        ruleIds.addAll(committed.ruleIds)
+                        duplicatesSkipped += committed.duplicatesSkipped
                         analyzedChatIds.add(conversation.chatId)
                         fedTranscriptIds.addAll(conversation.transcripts.map { it.transcriptId })
                         // Durable per-conversation progress on the 'running'
@@ -598,10 +668,10 @@ object Archivist {
                         // failure — handled by the outer catch.
                         throw ce
                     } catch (e: Exception) {
-                        // One conversation failing must not sink the run: its
-                        // rows stay pending for the next run (drafts a partial
-                        // chunk already filed stay pending drafts; the text
-                        // dedup stops identical refiling on the retry).
+                        // One conversation failing must not sink the run. Its
+                        // staged chunks are discarded, its bookmark stays put,
+                        // and its claims are released for the next run. Another
+                        // chat that already committed remains successful.
                         val reason = ArchivistFailure.classify(e)
                         failedChats.add(conversation.chatId)
                         failedReasons.add(reason)
@@ -637,7 +707,7 @@ object Archivist {
         // engine-level abort or an all-conversations-failed run is reported as a
         // partial/incomplete run so the saved items are acknowledged, never
         // denied.
-        val anySaved = memoryIds.isNotEmpty()
+        val anySaved = memoryIds.isNotEmpty() || ruleIds.isNotEmpty()
         val outcome = when {
             // An in-process stop (the Cancel button, or the Android 15+ dataSync
             // timeout) is reported as "cancelled". A process DEATH is recovered
@@ -648,7 +718,7 @@ object Archivist {
             selected == 0 -> "nothing"
             failedChats.size >= selected -> if (anySaved) "partial_failed" else "full_failed"
             failedChats.isNotEmpty() -> "partial_failed"
-            memoryIds.isEmpty() -> "no_new"
+            !anySaved -> "no_new"
             else -> "completed"
         }
         // Dominant per-conversation reason picks the on-screen sentence; an
@@ -778,7 +848,7 @@ object Archivist {
 
     /**
      * File the run's proposed lore book entries as pending suggestions (Step
-     * 1.7, Lorebook Memories analysis type). Mirrors [fileMemoryDrafts]'s
+     * 1.7, Lorebook Memories analysis type). Mirrors [prepareMemoryDrafts]'s
      * durability rules: an identical pending suggestion from the same chat is
      * skipped (content dedup, so an interrupted-then-rerun conversation never
      * doubles up), and a suggestion the user already deleted from this chat is
@@ -786,19 +856,30 @@ object Archivist {
      * as duplicates. A store insert failure aborts the conversation as reason E
      * (save failed), exactly like the memory path.
      */
-    private fun fileLorebookSuggestions(
+    private fun prepareLorebookSuggestions(
         context: Context,
         store: MemoryStore,
         conversation: Conversation,
         runId: String,
         entries: List<ArchivistResponseParser.DraftLoreEntry>,
-        collectedIds: MutableList<String>
-    ): Int {
-        if (entries.isEmpty()) return 0
+        maxSuggestions: Int
+    ): PreparedLore {
+        if (entries.isEmpty()) return PreparedLore(emptyList(), 0)
         var duplicates = 0
         val now = Instant.now().toString()
-        for (e in entries) {
-            if (store.lorebookSuggestionExists(e.content, conversation.chatId)) { duplicates++; continue }
+        val records = ArrayList<LorebookSuggestionRecord>()
+        val stagedContent = HashSet<String>()
+        for ((index, e) in entries.withIndex()) {
+            if (maxSuggestions > 0 && records.size >= maxSuggestions) {
+                MemoryLog.log(
+                    context, "Archivist", "info",
+                    "chat=${conversation.chatId}: cap $maxSuggestions reached, ${entries.size - index} lore suggestion(s) not filed"
+                )
+                break
+            }
+            if (store.lorebookSuggestionExists(e.content, conversation.chatId) ||
+                !stagedContent.add(e.content)
+            ) { duplicates++; continue }
             if (store.isLorebookSuggestionRejected(e.content, conversation.chatId)) {
                 MemoryLog.log(context, "Archivist", "info",
                     "chat=${conversation.chatId}: previously rejected lore suggestion not refiled")
@@ -814,36 +895,39 @@ object Archivist {
                 assignedLorebookId = null,
                 createdAt = now
             )
-            try {
-                store.insertLorebookSuggestion(record)
-                collectedIds.add(record.suggestionId)
-            } catch (ex: Exception) {
-                MemoryLog.logAlways(context, "Archivist", "error", "lore suggestion insert failed: ${ex.message}")
-                throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, ex)
-            }
+            records.add(record)
         }
-        return duplicates
+        return PreparedLore(records, duplicates)
     }
 
     /** Returns how many candidates were skipped as duplicates of memories
      *  that already exist ("Archivist found only memories that already
      *  exist" needs the distinction). A store insert failure aborts the
      *  conversation as reason E (save failed). */
-    private fun fileMemoryDrafts(
+    private fun prepareMemoryDrafts(
         context: Context,
         store: MemoryStore,
         conversation: Conversation,
         drafts: List<ArchivistResponseParser.DraftMemory>,
-        collectedIds: MutableList<String>
-    ): Int {
-        if (drafts.isEmpty()) return 0
+        maxSuggestions: Int
+    ): PreparedMemories {
+        if (drafts.isEmpty()) return PreparedMemories(emptyList(), 0)
         var duplicates = 0
+        val records = ArrayList<org.teslasoft.assistant.preferences.memory.MemoryRecord>()
+        val stagedIdentities = HashSet<String>()
         val companionId = conversation.transcripts.firstNotNullOfOrNull { it.companionId }
         // The current user-owned Type ids: a suggestion is honored only if it
         // names one of these, otherwise the memory files as No Type (never
         // dropped). Legacy `kind` is not consulted.
         val validTypeIds = store.getMemoryTypes().map { it.typeId }.toHashSet()
-        for (d in drafts) {
+        for ((index, d) in drafts.withIndex()) {
+            if (maxSuggestions > 0 && records.size >= maxSuggestions) {
+                MemoryLog.log(
+                    context, "Archivist", "info",
+                    "chat=${conversation.chatId}: cap $maxSuggestions reached, ${drafts.size - index} draft(s) not filed"
+                )
+                break
+            }
             // Resolve placement once: the target sets are both the Possible
             // Match identity (scope + sorted target IDs) and the record's links.
             val worldIds = resolveTarget(d, "world") { store.getAllWorlds().map { it.worldId to it.name } }
@@ -873,7 +957,14 @@ object Archivist {
                 typeId = resolvedTypeId,
                 targetIds = worldIds + rpCharIds + campaignIds + projectIds + companionIds
             )
-            if (store.classifyCandidate(candidate) is MemoryMatch.Outcome.AlreadyPresent) {
+            val stagedIdentity = listOf(
+                MemoryMatch.normalizeContent(candidate.content),
+                MemoryMatch.placementKey(candidate.scope, candidate.targetIds),
+                candidate.typeId.orEmpty()
+            ).joinToString("\u0000")
+            if (store.classifyCandidate(candidate) is MemoryMatch.Outcome.AlreadyPresent ||
+                !stagedIdentities.add(stagedIdentity)
+            ) {
                 duplicates++; continue
             }
             // A draft the user deleted is a rejection (owner preference,
@@ -925,18 +1016,17 @@ object Archivist {
                     )
                 }
                 is CandidateResult.Valid -> {
-                    try {
-                        val id = PendingMemoryFiler.getInstance(context)
-                            .file(filingResult.candidate, generated = true)
-                        collectedIds.add(id)
-                    } catch (e: Exception) {
-                        MemoryLog.logAlways(context, "Archivist", "error", "draft insert failed: ${e.message}")
-                        throw TaggedArchivistException(ArchivistFailure.SAVE_FAILED, e)
-                    }
+                    records.add(
+                        org.teslasoft.assistant.preferences.memory.PendingMemoryRecordFactory.build(
+                            filingResult.candidate,
+                            MemoryStore.newId("m-"),
+                            MemoryStore.nowIso()
+                        )
+                    )
                 }
             }
         }
-        return duplicates
+        return PreparedMemories(records, duplicates)
     }
 
     /** A proposed target NAME only ever links to a record that already exists
@@ -957,16 +1047,16 @@ object Archivist {
             .take(1)
     }
 
-    private fun fileRuleDrafts(
+    private fun prepareRuleDrafts(
         context: Context,
         store: MemoryStore,
         conversation: Conversation,
-        drafts: List<ArchivistResponseParser.DraftRule>,
-        collectedIds: MutableList<String>
-    ) {
-        if (drafts.isEmpty()) return
+        drafts: List<ArchivistResponseParser.DraftRule>
+    ): List<ModelRuleRecord> {
+        if (drafts.isEmpty()) return emptyList()
         val sourceModel = conversation.transcripts.firstNotNullOfOrNull { it.modelTag }
         val existing = store.getModelRules().map { it.text.trim() }.toHashSet()
+        val records = ArrayList<ModelRuleRecord>()
         for (d in drafts) {
             if (d.text.trim() in existing) continue
             // Validate through the Model Rule candidate path (review finding 2):
@@ -991,14 +1081,10 @@ object Archivist {
                 createdAt = Instant.now().toString(),
                 updatedAt = null
             )
-            try {
-                store.upsertModelRule(rule)
-                collectedIds.add(rule.ruleId)
-                existing.add(d.text.trim())
-            } catch (e: Exception) {
-                MemoryLog.log(context, "Archivist", "error", "rule draft insert failed: ${e.message}")
-            }
+            records.add(rule)
+            existing.add(d.text.trim())
         }
+        return records
     }
 
     private fun buildClient(
