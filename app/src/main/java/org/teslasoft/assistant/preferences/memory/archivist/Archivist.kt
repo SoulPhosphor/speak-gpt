@@ -516,7 +516,8 @@ object Archivist {
                                 }
                             }
                         }
-                        val committed = FrozenChatRangeExecutor.executeWithStaged(
+                        val committed = FrozenChatRangeExecutor
+                            .executeWithStaged<IntRange, ParsedChunk, ChatCommit>(
                             chunks = chunks,
                             analyzeChunk = { chunk, earlierChunks ->
                                 val rows = chunk.map { conversation.transcripts[it] }
