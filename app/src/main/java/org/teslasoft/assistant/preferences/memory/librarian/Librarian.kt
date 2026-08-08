@@ -102,6 +102,15 @@ class Librarian private constructor(private val appContext: Context) {
         private const val TAG_BONUS_PER_HIT = 0.02
         private const val TAG_BONUS_CAP = 0.06
 
+        /** Archivist reconciliation is relevance-first and deliberately does
+         * not inherit live delivery quotas, cooldowns, Memory Priority, or
+         * stored live weighting. Importance, recency, and context together can
+         * contribute at most this much after base semantic/lexical relevance. */
+        const val RECONCILIATION_MAX_TIE_BREAK = 0.06
+        private const val RECONCILIATION_IMPORTANCE_WEIGHT = 0.02
+        private const val RECONCILIATION_RECENCY_WEIGHT = 0.02
+        private const val RECONCILIATION_CONTEXT_CAP = 0.02
+
         /**
          * The Stage 3.2 context boost for one memory, pure and unit-tested:
          * scope-specificity tier + selected-project boost + tag hints (a tag
@@ -124,6 +133,31 @@ class Librarian private constructor(private val appContext: Context) {
                 }
             }
             return boost + tagBonus.coerceAtMost(TAG_BONUS_CAP)
+        }
+
+        /** Bound the live-context boost before it participates in Archivist
+         * reconciliation. Scope/project/tag signals remain useful only as a
+         * small tie-break and cannot overpower a larger relevance advantage. */
+        fun reconciliationContextBoost(liveBoost: Double): Double =
+            liveBoost.coerceIn(0.0, RECONCILIATION_CONTEXT_CAP)
+
+        /** Union independent local topic-window searches by stable memory id.
+         * The best score a memory achieved in any window wins. */
+        fun mergeReconciliationWindows(
+            windows: List<List<ScoredMemory>>,
+            limit: Int
+        ): List<ScoredMemory> {
+            if (limit <= 0) return emptyList()
+            val best = LinkedHashMap<String, ScoredMemory>()
+            for (window in windows) {
+                for (hit in window) {
+                    val prior = best[hit.memory.memoryId]
+                    if (prior == null || hit.score > prior.score) {
+                        best[hit.memory.memoryId] = hit
+                    }
+                }
+            }
+            return best.values.sortedByDescending { it.score }.take(limit)
         }
 
         /**
@@ -497,6 +531,20 @@ class Librarian private constructor(private val appContext: Context) {
         return Weights(bounded.value[0], importanceWeight, bounded.value[2])
     }
 
+    /** Reconciliation has its own fixed relevance-first policy. The owner's
+     * importance toggle is still respected: Off means stored importance is
+     * ignored everywhere, including Archivist awareness. */
+    private fun reconciliationWeights(): Weights {
+        val useImportance = try {
+            Preferences.getPreferences(appContext, "").getUseImportanceRatings()
+        } catch (_: Exception) { false }
+        return Weights(
+            similarity = 1.0,
+            importance = if (useImportance) RECONCILIATION_IMPORTANCE_WEIGHT else 0.0,
+            recency = RECONCILIATION_RECENCY_WEIGHT
+        )
+    }
+
     /**
      * Semantic search within a conversation's scope (Stage 3.1/3.2). Returns
      * up to [topK] scored memories, best first.
@@ -520,6 +568,61 @@ class Librarian private constructor(private val appContext: Context) {
         topK: Int,
         selectedProjectId: String? = null,
         diag: ((RetrievalDiagnostics) -> Unit)? = null
+    ): List<ScoredMemory> = searchInternal(
+        scope = scope,
+        query = query,
+        topK = topK,
+        selectedProjectId = selectedProjectId,
+        rankingWeights = null,
+        reconciliation = false,
+        diag = diag
+    )
+
+    /**
+     * Stage C local pre-extraction retrieval. Each supplied text window is
+     * searched through the same scope eligibility, vector completeness, and
+     * lexical fallback machinery as live retrieval; results are unioned by
+     * stable id under [candidateCeiling]. Live count/token limits, cooldown,
+     * and Memory Priority are not consulted.
+     */
+    fun searchForReconciliation(
+        scope: RetrievalScope,
+        queryWindows: List<String>,
+        candidateCeiling: Int,
+        selectedProjectId: String? = null,
+        diag: ((RetrievalDiagnostics) -> Unit)? = null
+    ): List<ScoredMemory> {
+        val boundedCeiling = candidateCeiling.coerceIn(1, 15)
+        val windows = queryWindows.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (windows.isEmpty()) return emptyList()
+        var reported = false
+        val results = windows.map { query ->
+            searchInternal(
+                scope = scope,
+                query = query,
+                topK = boundedCeiling,
+                selectedProjectId = selectedProjectId,
+                rankingWeights = reconciliationWeights(),
+                reconciliation = true,
+                diag = { d ->
+                    if (!reported) {
+                        reported = true
+                        diag?.invoke(d)
+                    }
+                }
+            )
+        }
+        return mergeReconciliationWindows(results, boundedCeiling)
+    }
+
+    private fun searchInternal(
+        scope: RetrievalScope,
+        query: String,
+        topK: Int,
+        selectedProjectId: String?,
+        rankingWeights: Weights?,
+        reconciliation: Boolean,
+        diag: ((RetrievalDiagnostics) -> Unit)?
     ): List<ScoredMemory> {
         if (!MemoryStore.isProvisioned(appContext)) return emptyList()
         val store = MemoryStore.getInstance(appContext)
@@ -574,7 +677,7 @@ class Librarian private constructor(private val appContext: Context) {
                 boost = retrievalBoost(
                     mem.scope, projectMemoryIds.contains(mem.memoryId),
                     tagsById[mem.memoryId].orEmpty(), queryLower
-                )
+                ).let { if (reconciliation) reconciliationContextBoost(it) else it }
             )
         }
         val embedQuery: () -> FloatArray? = embed@{
@@ -586,7 +689,9 @@ class Librarian private constructor(private val appContext: Context) {
                 null
             }
         }
-        val result = searchCore(query, embedQuery, corpus, weights(store), topK) { semantic ->
+        val result = searchCore(
+            query, embedQuery, corpus, rankingWeights ?: weights(store), topK
+        ) { semantic ->
             diag?.invoke(
                 RetrievalDiagnostics(
                     eligible = candidates.size,

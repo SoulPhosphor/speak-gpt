@@ -163,6 +163,85 @@ class ArchivistResponseParserTest {
         assertEquals(3, parsed.dropped) // 2 over the cap + 1 blank
     }
 
+    @Test
+    fun suppliedTargetAndExistingMemoryAliasesNormalizeToStableIds() {
+        val scene = ArchivistSceneContext(
+            companionId = "companion-stable",
+            worldId = null,
+            campaignId = null,
+            roleplayCharacterId = null,
+            projectId = "project-stable"
+        )
+        val protocol = ArchivistRuntimeProtocol.create(
+            scene,
+            listOf(
+                ArchivistExistingMemory(
+                    "memory-stable", "Favorite color is green.",
+                    "real_life", emptyList(), "Fact"
+                )
+            ),
+            listOf(
+                ArchivistTarget("project-stable", "project", "Repair", "active")
+            )
+        )
+        val parsed = ArchivistResponseParser.parse(
+            """
+            {"memories":[{
+              "content":"Favorite color is purple now.",
+              "scope":"project",
+              "target_refs":["T1"],
+              "related_existing_memory_refs":["M1"]
+            }],"model_rules":[]}
+            """.trimIndent(),
+            protocol
+        )
+
+        val memory = parsed.memories.single()
+        assertEquals(listOf("project-stable"), memory.targetIds)
+        assertEquals(listOf("memory-stable"), memory.relatedExistingMemoryIds)
+        assertEquals(scene, memory.scene)
+        assertFalse(memory.unresolvedTargetReference)
+    }
+
+    @Test
+    fun unknownOrWrongKindTargetNeverFallsThroughToAnotherTarget() {
+        val protocol = ArchivistRuntimeProtocol.create(
+            ArchivistSceneContext(null, "world-stable", null, null, null),
+            emptyList(),
+            listOf(ArchivistTarget("world-stable", "world", "Eldoria", "active"))
+        )
+        val parsed = ArchivistResponseParser.parse(
+            """
+            {"memories":[
+              {"content":"unknown","scope":"world","target_refs":["T99"]},
+              {"content":"wrong kind","scope":"project","target_refs":["T1"]},
+              {"content":"name only","scope":"world","target":"Eldoria"}
+            ]}
+            """.trimIndent(),
+            protocol
+        )
+
+        assertEquals(3, parsed.memories.size)
+        assertTrue(parsed.memories.all { it.targetIds.isEmpty() })
+        assertTrue(parsed.memories.all { it.unresolvedTargetReference })
+    }
+
+    @Test
+    fun unknownRelatedMemoryAliasIsDiscardedWithoutInventingAnId() {
+        val protocol = ArchivistRuntimeProtocol.create(
+            ArchivistSceneContext(null, null, null, null, null),
+            listOf(
+                ArchivistExistingMemory("known-id", "known", "global", emptyList(), null)
+            ),
+            emptyList()
+        )
+        val parsed = ArchivistResponseParser.parse(
+            """{"memories":[{"content":"new","scope":"global","related_existing_memory_refs":["M1","M404"]}]}""",
+            protocol
+        )
+        assertEquals(listOf("known-id"), parsed.memories.single().relatedExistingMemoryIds)
+    }
+
     /* ---------------- Lorebook Memories analysis (Step 1.7) ---------------- */
 
     @Test

@@ -73,6 +73,27 @@ class ArchivistPromptTest {
         assertTrue("Type list is capped", listed <= ArchivistPrompt.MAX_TYPES_IN_PROMPT)
     }
 
+    @Test
+    fun customPromptStillReceivesAppOwnedRuntimeProtocol() {
+        val protocol = ArchivistRuntimeProtocol.create(
+            ArchivistSceneContext(null, null, null, null, null),
+            listOf(
+                ArchivistExistingMemory("stable-id", "Known fact", "global", emptyList(), "Fact")
+            ),
+            emptyList()
+        )
+        val prompt = ArchivistPrompt.withRuntimeProtocol(
+            "CUSTOM EXTRACTION STYLE",
+            listOf("mtype-fact" to "Fact"),
+            protocol
+        )
+        assertTrue(prompt.startsWith("CUSTOM EXTRACTION STYLE"))
+        assertTrue(prompt.contains("App-Owned Runtime Protocol"))
+        assertTrue(prompt.contains("related_existing_memory_refs"))
+        assertTrue(prompt.contains("mtype-fact"))
+        assertFalse(prompt.contains("stable-id"))
+    }
+
     private fun transcript(content: String, startedAt: String? = "2026-07-12T10:00:00Z"): TranscriptRecord =
         TranscriptRecord(
             transcriptId = "t-1",
@@ -98,6 +119,8 @@ class ArchivistPromptTest {
              {"role":"assistant","content":"Hello, how can I help?"}]
         """.trimIndent()
         val rendered = ArchivistPrompt.userMessage("Chat A", "Ada", listOf(transcript(json)))
+        assertTrue(rendered.text.contains("<conversation_data>"))
+        assertTrue(rendered.text.contains("</conversation_data>"))
 
         assertEquals(0, rendered.incompleteAssistantTurnsDropped)
         assertTrue(rendered.text.contains("User: Hi there"))

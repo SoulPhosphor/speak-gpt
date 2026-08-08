@@ -48,6 +48,8 @@ import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.SCOPE_COMPANION
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
+import org.teslasoft.assistant.preferences.memory.RetrievalScope
+import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
@@ -447,13 +449,12 @@ object Archivist {
         // list, so it is appended as a bounded, explicit block (the only run-time
         // addition) — the model can only pick a Type id that actually exists, or
         // omit it for No Type. The lorebook type has no Types and is sent verbatim.
-        val systemPrompt = if (lorebookMode)
+        val basePrompt = if (lorebookMode)
             prefs.getArchivistLorebookPrompt().ifBlank { ArchivistPrompt.LOREBOOK_SYSTEM }
         else
-            ArchivistPrompt.withCurrentTypes(
-                prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM },
-                store.getMemoryTypes().map { it.typeId to it.name }
-            )
+            prefs.getArchivistCustomPrompt().ifBlank { ArchivistPrompt.SYSTEM }
+        val memoryTypes = if (lorebookMode) emptyList()
+            else store.getMemoryTypes().map { it.typeId to it.name }
 
         val memoryIds = ArrayList<String>()
         val ruleIds = ArrayList<String>()
@@ -486,15 +487,19 @@ object Archivist {
                         overallCount = conversations.size
                     ))
                     try {
-                        val companionName = conversation.transcripts
-                            .firstNotNullOfOrNull { it.companionId }
-                            ?.let { store.getCompanion(it)?.currentName }
                         // A single oversized conversation (the "30 pages" case)
                         // is split across several calls, whole rows at a time,
                         // so one request never overruns the model's context.
-                        val chunks = ArchivistBatchPlanner.splitIntoRequests(
+                        val sizeChunks = ArchivistBatchPlanner.splitIntoRequests(
                             conversation.transcripts.map { it.content.length }
                         )
+                        // Associative requests are also split at captured scene
+                        // changes. Lorebook analysis is a separate output path
+                        // and keeps its existing size-only request shape.
+                        val chunks = if (lorebookMode) sizeChunks else
+                            ArchivistScenePlanner.splitAtSceneBoundaries(
+                                sizeChunks, conversation.transcripts
+                            )
                         if (chunks.size > 1) {
                             MemoryLog.log(context, "Archivist", "info",
                                 "chat=${conversation.chatId}: oversized conversation split into ${chunks.size} requests")
@@ -503,10 +508,65 @@ object Archivist {
                             chunks = chunks,
                             analyzeChunk = { chunk ->
                                 val rows = chunk.map { conversation.transcripts[it] }
+                                val scene = ArchivistSceneContext.from(rows.first())
+                                val companionName = scene.companionId
+                                    ?.let { store.getCompanion(it)?.currentName }
                                 val rendered = ArchivistPrompt.userMessage(
                                     conversation.chatName, companionName, rows
                                 )
                                 incompleteTurnsExcluded += rendered.incompleteAssistantTurnsDropped
+
+                                val protocol: ArchivistRequestProtocol?
+                                val requestSystemPrompt: String
+                                if (lorebookMode) {
+                                    protocol = null
+                                    requestSystemPrompt = basePrompt
+                                } else {
+                                    val retrievalScope = reconciliationScope(store, prefs, scene)
+                                    var retrievalDiag: Librarian.RetrievalDiagnostics? = null
+                                    val retrieved = Librarian.getInstance(context)
+                                        .searchForReconciliation(
+                                            scope = retrievalScope,
+                                            queryWindows = ArchivistPrompt.retrievalWindows(rows),
+                                            candidateCeiling = ArchivistRuntimeProtocol.MAX_RETRIEVAL_CANDIDATES,
+                                            selectedProjectId = scene.projectId
+                                                ?.takeIf { !scene.isRoleplay },
+                                            diag = { retrievalDiag = it }
+                                        )
+                                    retrievalDiag?.takeIf { !it.semantic }?.let { d ->
+                                        MemoryLog.log(
+                                            context, "Archivist", "info",
+                                            "chat=${conversation.chatId}: reconciliation used bounded lexical retrieval " +
+                                                "(${d.eligible} eligible; ${d.withVector} current vectors)"
+                                        )
+                                    }
+
+                                    val targetNames = store.activeMemoryTargetNames()
+                                    val typeNames = memoryTypes.associate { it.first to it.second }
+                                    val retrievedRecords = retrieved.mapNotNull { hit ->
+                                        store.getMemory(hit.memory.memoryId)
+                                    }
+                                    val existingContext = retrieved.map { hit ->
+                                        ArchivistExistingMemory(
+                                            stableId = hit.memory.memoryId,
+                                            content = hit.memory.content,
+                                            scope = hit.memory.scope,
+                                            targetNames = targetNames[hit.memory.memoryId].orEmpty(),
+                                            typeName = hit.memory.typeId?.let { typeNames[it] }
+                                        )
+                                    }
+                                    val builtProtocol = ArchivistRuntimeProtocol.create(
+                                        scene = scene,
+                                        existingMemories = existingContext,
+                                        validTargets = validTargetCatalog(
+                                            store, scene, retrievalScope, retrievedRecords
+                                        )
+                                    )
+                                    protocol = builtProtocol
+                                    requestSystemPrompt = ArchivistPrompt.withRuntimeProtocol(
+                                        basePrompt, memoryTypes, builtProtocol
+                                    )
+                                }
                                 // Fresh capture window per request: the observer
                                 // writes only on an error response.
                                 capturedErrorBody = null
@@ -514,7 +574,7 @@ object Archivist {
                                     ChatCompletionRequest(
                                         model = ModelId(model),
                                         messages = listOf(
-                                            ChatMessage(role = ChatRole.System, content = systemPrompt),
+                                            ChatMessage(role = ChatRole.System, content = requestSystemPrompt),
                                             ChatMessage(role = ChatRole.User, content = rendered.text)
                                         ),
                                         temperature = temperature
@@ -536,7 +596,7 @@ object Archivist {
                                     ParsedChunk(loreEntries = parsed.entries)
                                 } else {
                                     val parsed = try {
-                                        ArchivistResponseParser.parse(raw)
+                                        ArchivistResponseParser.parse(raw, protocol)
                                     } catch (e: Exception) {
                                         throw TaggedArchivistException(ArchivistFailure.UNREADABLE, e)
                                     }
@@ -846,6 +906,73 @@ object Archivist {
         )
     }
 
+    /** Build reconciliation eligibility from this chunk's stamped scene, not
+     * from any earlier row in the chat. The same owner-approved scope gate the
+     * Librarian uses for live retrieval remains authoritative; only the live
+     * delivery quotas/cooldown/priority are bypassed. */
+    private fun reconciliationScope(
+        store: MemoryStore,
+        prefs: Preferences,
+        scene: ArchivistSceneContext
+    ): RetrievalScope {
+        val companion = scene.companionId?.let { store.getCompanion(it) }
+        val eligibleCompanionId = companion
+            ?.takeIf { it.status != "draft" && it.memoryParticipation == "full" }
+            ?.companionId
+        val campaign = scene.campaignId?.let { store.getCampaign(it) }
+        val narratorMatch = campaign?.companionId != null &&
+            campaign.companionId == eligibleCompanionId
+        val allowCompanion = narratorMatch || prefs.getAllowCompanionMemoriesInRoleplay()
+        return RetrievalScope(
+            companionId = eligibleCompanionId,
+            worldId = scene.worldId,
+            campaignId = scene.campaignId,
+            roleplayCharacterId = scene.roleplayCharacterId,
+            allowCompanionInRoleplay = allowCompanion
+        )
+    }
+
+    /** Only targets stamped on this scene can be referenced by this request.
+     * Existing lifecycle status is included as data; a missing/deleted target
+     * is absent and therefore cannot be normalized by the parser. */
+    private fun validTargetCatalog(
+        store: MemoryStore,
+        scene: ArchivistSceneContext,
+        retrievalScope: RetrievalScope,
+        existingMemories: List<org.teslasoft.assistant.preferences.memory.MemoryRecord>
+    ): List<ArchivistTarget> {
+        val available = ArrayList<ArchivistTarget>()
+        store.getCompanions().forEach {
+            available.add(ArchivistTarget(it.companionId, "companion", it.currentName, it.status))
+        }
+        store.getAllWorlds().forEach {
+            available.add(ArchivistTarget(it.worldId, "world", it.name, it.status))
+        }
+        store.getCampaigns().forEach {
+            available.add(ArchivistTarget(it.campaignId, "campaign", it.name, it.status))
+        }
+        store.getAllRoleplayCharacters().forEach {
+            available.add(
+                ArchivistTarget(it.roleplayCharacterId, "rp_character", it.name, it.status)
+            )
+        }
+        store.getProjects().forEach {
+            available.add(ArchivistTarget(it.projectId, "project", it.name, it.status))
+        }
+        val relevantTargetIds = mapOf(
+            "world" to existingMemories.flatMap { it.worldIds }.toSet(),
+            "campaign" to existingMemories.flatMap { it.campaignIds }.toSet(),
+            "rp_character" to existingMemories.flatMap { it.roleplayCharacterIds }.toSet(),
+            "project" to existingMemories.flatMap { it.projectIds }.toSet()
+        )
+        return ArchivistTargetCatalog.select(
+            scene = scene,
+            eligibleCompanionId = retrievalScope.companionId,
+            relevantTargetIds = relevantTargetIds,
+            availableTargets = available
+        )
+    }
+
     /**
      * File the run's proposed lore book entries as pending suggestions (Step
      * 1.7, Lorebook Memories analysis type). Mirrors [prepareMemoryDrafts]'s
@@ -915,11 +1042,21 @@ object Archivist {
         var duplicates = 0
         val records = ArrayList<org.teslasoft.assistant.preferences.memory.MemoryRecord>()
         val stagedIdentities = HashSet<String>()
-        val companionId = conversation.transcripts.firstNotNullOfOrNull { it.companionId }
         // The current user-owned Type ids: a suggestion is honored only if it
         // names one of these, otherwise the memory files as No Type (never
         // dropped). Legacy `kind` is not consulted.
         val validTypeIds = store.getMemoryTypes().map { it.typeId }.toHashSet()
+        val worlds = store.getAllWorlds()
+        val roleplayCharacters = store.getAllRoleplayCharacters()
+        val campaigns = store.getCampaigns()
+        val projects = store.getProjects()
+        val companions = store.getCompanions()
+        val worldIdsNow = worlds.map { it.worldId }.toSet()
+        val roleplayCharacterIdsNow = roleplayCharacters
+            .map { it.roleplayCharacterId }.toSet()
+        val campaignIdsNow = campaigns.map { it.campaignId }.toSet()
+        val projectIdsNow = projects.map { it.projectId }.toSet()
+        val companionIdsNow = companions.map { it.companionId }.toSet()
         for ((index, d) in drafts.withIndex()) {
             if (maxSuggestions > 0 && records.size >= maxSuggestions) {
                 MemoryLog.log(
@@ -930,14 +1067,30 @@ object Archivist {
             }
             // Resolve placement once: the target sets are both the Possible
             // Match identity (scope + sorted target IDs) and the record's links.
-            val worldIds = resolveTarget(d, "world") { store.getAllWorlds().map { it.worldId to it.name } }
-            val rpCharIds = resolveTarget(d, "rp_character") {
-                store.getAllRoleplayCharacters().map { it.roleplayCharacterId to it.name }
+            val worldIds = resolvedDraftTargets(d, "world") {
+                worlds.map { it.worldId to it.name }
+            }.filter { it in worldIdsNow }
+            val rpCharIds = resolvedDraftTargets(d, "rp_character") {
+                roleplayCharacters.map { it.roleplayCharacterId to it.name }
+            }.filter { it in roleplayCharacterIdsNow }
+            val campaignIds = resolvedDraftTargets(d, "campaign") {
+                campaigns.map { it.campaignId to it.name }
+            }.filter { it in campaignIdsNow }
+            val projectIds = resolvedDraftTargets(d, "project") {
+                projects.map { it.projectId to it.name }
+            }.filter { it in projectIdsNow }
+            val intendedCompanionId = d.scene?.companionId
+                ?: conversation.transcripts.firstNotNullOfOrNull { it.companionId }
+            val suppliedCompanionIds = resolvedDraftTargets(d, "companion") {
+                companions.map { it.companionId to it.currentName }
             }
-            val campaignIds = resolveTarget(d, "campaign") { store.getCampaigns().map { it.campaignId to it.name } }
-            val projectIds = resolveTarget(d, "project") { store.getProjects().map { it.projectId to it.name } }
-            val companionIds =
-                if (d.scope == "companion" && companionId != null) listOf(companionId) else emptyList()
+            val companionIds = if (d.scope == "companion") {
+                when {
+                    suppliedCompanionIds.isNotEmpty() -> suppliedCompanionIds
+                    d.scene == null && intendedCompanionId != null -> listOf(intendedCompanionId)
+                    else -> emptyList()
+                }
+            } else emptyList()
             // The user-owned Type is the source of truth (§5): honor the model's
             // suggested stable Type id only when it names a current Type; anything
             // else (absent or unknown) becomes No Type. Legacy `kind` is never
@@ -988,8 +1141,8 @@ object Archivist {
                 MemoryCandidateValidator.validateCompanion(
                     content = d.content,
                     companionTargetIds = companionIds,
-                    intendedCompanionId = companionId,
-                    availableCompanionIds = if (companionId != null) setOf(companionId) else emptySet(),
+                    intendedCompanionId = intendedCompanionId,
+                    availableCompanionIds = companionIdsNow,
                     typeId = resolvedTypeId,
                     tags = d.tags
                 )
@@ -1029,17 +1182,25 @@ object Archivist {
         return PreparedMemories(records, duplicates)
     }
 
-    /** A proposed target NAME only ever links to a record that already exists
-     *  (exact name match, case-insensitive). The Archivist never creates
-     *  worlds/campaigns/characters/projects — emergence stays a Phase 6+
-     *  question for the owner. No match → the draft arrives untargeted and
-     *  the user assigns targets in the editor before accepting. */
-    private fun resolveTarget(
+    /** Production requests use only stable ids normalized from the supplied
+     * request-local target catalog and re-check them against the draft's exact
+     * stamped scene. The name-match branch remains only for legacy/parser-only
+     * callers. The Archivist never creates a target record. */
+    private fun resolvedDraftTargets(
         d: ArchivistResponseParser.DraftMemory,
         scope: String,
         candidates: () -> List<Pair<String, String>>
     ): List<String> {
         if (d.scope != scope) return emptyList()
+        if (d.scene != null) {
+            // Production Stage-C responses already contain stable ids resolved
+            // from the request-local catalog. Defense in depth: the id must
+            // still equal this proposal's stamped scene target for its scope.
+            val stamped = d.scene.targetIdFor(scope) ?: return emptyList()
+            return d.targetIds.filter { it == stamped }.distinct()
+        }
+        // Compatibility for parser-only/legacy callers that did not receive a
+        // runtime protocol. Production requests never use display-name guessing.
         val name = d.targetName ?: return emptyList()
         return candidates()
             .filter { it.second.equals(name, ignoreCase = true) }

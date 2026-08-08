@@ -311,4 +311,62 @@ class LibrarianRankingTest {
         // Whole-word only: "rose" must not match inside "roses"... but "roses" does.
         assertEquals(0.0, Librarian.retrievalBoost("global", false, listOf("den"), query), 1e-9)
     }
+
+    @Test
+    fun reconciliationRelevanceAdvantageBeatsMaximumTieBreak() {
+        val query = floatArrayOf(1f, 0f)
+        val stronger = cand(
+            mem("stronger", importance = 0),
+            floatArrayOf(0.90f, 0.4358899f),
+            recency = 0.0,
+            boost = 0.0
+        )
+        val weakerWithEveryTieBreak = cand(
+            mem("weaker", importance = 5, scope = "campaign"),
+            floatArrayOf(0.83f, 0.557763f),
+            recency = 1.0,
+            boost = Librarian.reconciliationContextBoost(99.0)
+        )
+        val reconciliationWeights = Librarian.Weights(
+            similarity = 1.0,
+            importance = 0.02,
+            recency = 0.02
+        )
+
+        val ranked = Librarian.rank(
+            query,
+            listOf(weakerWithEveryTieBreak, stronger),
+            reconciliationWeights,
+            topK = 2
+        )
+
+        assertEquals("stronger", ranked.first().memory.memoryId)
+        assertEquals(
+            0.02,
+            Librarian.reconciliationContextBoost(99.0),
+            1e-9
+        )
+        assertEquals(0.06, Librarian.RECONCILIATION_MAX_TIE_BREAK, 1e-9)
+    }
+
+    @Test
+    fun disjointTopicWindowsUnionBothStrongMemoriesWithinBound() {
+        val topicA = org.teslasoft.assistant.preferences.memory.ScoredMemory(
+            mem("topic-a", content = "green favorite color"), 0.91f, 0.91f
+        )
+        val topicB = org.teslasoft.assistant.preferences.memory.ScoredMemory(
+            mem("topic-b", content = "old lighthouse project"), 0.93f, 0.93f
+        )
+        val duplicateAWeaker = org.teslasoft.assistant.preferences.memory.ScoredMemory(
+            topicA.memory, 0.60f, 0.60f
+        )
+
+        val merged = Librarian.mergeReconciliationWindows(
+            listOf(listOf(topicA), listOf(topicB, duplicateAWeaker)),
+            limit = 15
+        )
+
+        assertEquals(setOf("topic-a", "topic-b"), merged.map { it.memory.memoryId }.toSet())
+        assertEquals(0.91f, merged.first { it.memory.memoryId == "topic-a" }.score, 0f)
+    }
 }

@@ -46,6 +46,8 @@ object ArchivistResponseParser {
     const val MAX_MEMORIES_PER_CONVERSATION = 40
     const val MAX_RULES_PER_CONVERSATION = 5
     private const val MAX_TAGS_PER_MEMORY = 8
+    private const val MAX_TARGET_REFS_PER_MEMORY = 5
+    private const val MAX_RELATED_MEMORY_REFS = 10
 
     data class DraftMemory(
         val content: String,
@@ -56,10 +58,23 @@ object ArchivistResponseParser {
          *  and never drops the proposal. This is NOT the legacy `kind` string. */
         val typeIdSuggestion: String?,
         val tags: List<String>,
-        /** Free-text name of the proposed target (world/campaign/character/
-         *  project) — resolved against existing records by the runner; never
-         *  creates anything. Null for untargeted scopes. */
-        val targetName: String?
+        /** Legacy free-text target name retained only for parser compatibility.
+         * Production Stage-C requests normalize supplied aliases into
+         * [targetIds] and never resolve this display text by guessing. */
+        val targetName: String?,
+        /** Stable ids normalized only from request-local target aliases that
+         * were actually supplied for this request and match [scope]. */
+        val targetIds: List<String> = emptyList(),
+        /** Stable Active-memory ids normalized only from supplied M aliases.
+         * Stage D consumes these review hints; Stage C validates and carries
+         * them without mutating any existing memory. */
+        val relatedExistingMemoryIds: List<String> = emptyList(),
+        /** True when the model returned a missing, stale, or wrong-kind target
+         * reference. The proposal remains untargeted for human placement; it
+         * can never silently fall through to a different target. */
+        val unresolvedTargetReference: Boolean = false,
+        /** The exact stamped scene of the request that produced this draft. */
+        val scene: ArchivistSceneContext? = null
     )
 
     data class DraftRule(val text: String)
@@ -88,7 +103,12 @@ object ArchivistResponseParser {
         val dropped: Int
     )
 
-    fun parse(raw: String): Parsed {
+    fun parse(raw: String): Parsed = parse(raw, null)
+
+    /** Parse and normalize one response against the exact request-local alias
+     * maps used for that call. Unknown aliases are never treated as ids or
+     * resolved by display-name guessing. */
+    fun parse(raw: String, protocol: ArchivistRequestProtocol?): Parsed {
         val json = JSONObject(extractJsonObject(raw))
         var dropped = 0
 
@@ -120,13 +140,61 @@ object ArchivistResponseParser {
                         ) tags.add(tag)
                     }
                 }
+
+                val returnedTargetRefs = readRefs(
+                    o, "target_refs", "target_ref", MAX_TARGET_REFS_PER_MEMORY
+                )
+                val resolvedTargets = ArrayList<String>()
+                var unresolvedTarget = false
+                if (protocol != null) {
+                    for (ref in returnedTargetRefs) {
+                        val target = protocol.targetByAlias[ref]
+                        if (target == null || target.kind != scope) {
+                            unresolvedTarget = true
+                        } else if (target.stableId !in resolvedTargets) {
+                            resolvedTargets.add(target.stableId)
+                        }
+                    }
+                    // Preserve the established Companion behavior without a
+                    // name guess: when this request supplied exactly the
+                    // stamped companion target, companion scope resolves to
+                    // that stable id even if the model omitted the optional
+                    // array. No other named scope receives an implicit target.
+                    if (scope == "companion" && returnedTargetRefs.isEmpty()) {
+                        protocol.targets.singleOrNull {
+                            it.target.kind == "companion" &&
+                                it.target.stableId == protocol.scene.companionId
+                        }?.target?.stableId?.let { resolvedTargets.add(it) }
+                    }
+                }
+                val legacyTargetName = o.optString("target").trim().ifEmpty { null }
+                if (protocol != null && legacyTargetName != null && returnedTargetRefs.isEmpty()) {
+                    // A name is untrusted display data, not a stable reference.
+                    unresolvedTarget = true
+                }
+
+                val relatedIds = ArrayList<String>()
+                if (protocol != null) {
+                    for (ref in readRefs(
+                        o, "related_existing_memory_refs", "related_existing_memory_ref",
+                        MAX_RELATED_MEMORY_REFS
+                    )) {
+                        protocol.memoryIdByAlias[ref]?.let { id ->
+                            if (id !in relatedIds) relatedIds.add(id)
+                        }
+                    }
+                }
                 memories.add(
                     DraftMemory(
                         content = content,
                         scope = scope,
                         typeIdSuggestion = typeIdSuggestion,
                         tags = tags,
-                        targetName = o.optString("target").trim().ifEmpty { null }
+                        targetName = legacyTargetName,
+                        targetIds = resolvedTargets,
+                        relatedExistingMemoryIds = relatedIds,
+                        unresolvedTargetReference = unresolvedTarget,
+                        scene = protocol?.scene
                     )
                 )
             }
@@ -145,6 +213,26 @@ object ArchivistResponseParser {
         }
 
         return Parsed(memories, rules, dropped)
+    }
+
+    private fun readRefs(
+        o: JSONObject,
+        arrayKey: String,
+        singleKey: String,
+        limit: Int
+    ): List<String> {
+        val out = ArrayList<String>()
+        o.optJSONArray(arrayKey)?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val ref = arr.optString(i).trim()
+                if (ref.isNotEmpty() && ref !in out && out.size < limit) out.add(ref)
+            }
+        }
+        if (out.size < limit) {
+            val single = o.optString(singleKey).trim()
+            if (single.isNotEmpty() && single !in out) out.add(single)
+        }
+        return out
     }
 
     /**
