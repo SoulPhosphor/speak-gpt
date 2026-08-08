@@ -47,6 +47,7 @@ import org.teslasoft.assistant.preferences.memory.MemoryMatch
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.SCOPE_COMPANION
+import org.teslasoft.assistant.preferences.memory.StagedAnalysisCandidate
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
 import org.teslasoft.assistant.preferences.memory.RetrievalScope
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
@@ -106,6 +107,7 @@ object Archivist {
 
     private data class PreparedMemories(
         val records: List<org.teslasoft.assistant.preferences.memory.MemoryRecord>,
+        val relationshipHintsByMemoryId: Map<String, List<String>>,
         val duplicatesSkipped: Int
     )
 
@@ -486,6 +488,7 @@ object Archivist {
                         overallIndex = range.first + posInBatch + 1,
                         overallCount = conversations.size
                     ))
+                    var candidateCollectionId: String? = null
                     try {
                         // A single oversized conversation (the "30 pages" case)
                         // is split across several calls, whole rows at a time,
@@ -504,9 +507,18 @@ object Archivist {
                             MemoryLog.log(context, "Archivist", "info",
                                 "chat=${conversation.chatId}: oversized conversation split into ${chunks.size} requests")
                         }
-                        val committed = FrozenChatRangeExecutor.execute(
+                        if (!lorebookMode) {
+                            candidateCollectionId = if (markProcessed) {
+                                frozenRanges.getValue(conversation.chatId).rangeId
+                            } else {
+                                MemoryStore.newId("range-").also {
+                                    store.beginCandidateCollection(it, conversation.chatId)
+                                }
+                            }
+                        }
+                        val committed = FrozenChatRangeExecutor.executeWithStaged(
                             chunks = chunks,
-                            analyzeChunk = { chunk ->
+                            analyzeChunk = { chunk, earlierChunks ->
                                 val rows = chunk.map { conversation.transcripts[it] }
                                 val scene = ArchivistSceneContext.from(rows.first())
                                 val companionName = scene.companionId
@@ -555,12 +567,32 @@ object Archivist {
                                             typeName = hit.memory.typeId?.let { typeNames[it] }
                                         )
                                     }
+                                    val earlierMemoryCandidates = ArchivistCandidateBoundary.collect(
+                                        earlierChunks.map { it.memories }
+                                    ).memories.map { draft ->
+                                        earlierCandidateForPrompt(store, typeNames, draft)
+                                    }
+                                    val earlierRuleCandidates = earlierChunks
+                                        .flatMap { it.rules }
+                                        .distinctBy { MemoryMatch.normalizeContent(it.text) }
+                                        .map {
+                                            ArchivistEarlierCandidate(
+                                                content = it.text,
+                                                scope = null,
+                                                targetNames = emptyList(),
+                                                typeName = null,
+                                                tags = emptyList(),
+                                                stream = "model_rule"
+                                            )
+                                        }
                                     val builtProtocol = ArchivistRuntimeProtocol.create(
                                         scene = scene,
                                         existingMemories = existingContext,
                                         validTargets = validTargetCatalog(
                                             store, scene, retrievalScope, retrievedRecords
-                                        )
+                                        ),
+                                        earlierCandidates =
+                                            earlierMemoryCandidates + earlierRuleCandidates
                                     )
                                     protocol = builtProtocol
                                     requestSystemPrompt = ArchivistPrompt.withRuntimeProtocol(
@@ -606,7 +638,16 @@ object Archivist {
                                             "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped"
                                         )
                                     }
-                                    ParsedChunk(memories = parsed.memories, rules = parsed.rules)
+                                    val parsedChunk = ParsedChunk(
+                                        memories = parsed.memories,
+                                        rules = parsed.rules
+                                    )
+                                    store.stageAnalysisCandidates(
+                                        collectionId = checkNotNull(candidateCollectionId),
+                                        chunkOrdinal = earlierChunks.size + 1,
+                                        candidates = stagedCandidates(parsedChunk)
+                                    )
+                                    parsedChunk
                                 }
                             },
                             commit = { stagedChunks ->
@@ -682,11 +723,16 @@ object Archivist {
                                             store.commitFrozenChatRange(
                                                 frozenRanges.getValue(conversation.chatId),
                                                 preparedMemories.records, preparedRules, emptyList(),
+                                                relationshipHintsByMemoryId =
+                                                    preparedMemories.relationshipHintsByMemoryId,
                                                 runProgress = progressRow
                                             )
                                         } else {
                                             store.commitRerunChatOutputs(
                                                 preparedMemories.records, preparedRules, emptyList(),
+                                                relationshipHintsByMemoryId =
+                                                    preparedMemories.relationshipHintsByMemoryId,
+                                                candidateCollectionId = candidateCollectionId,
                                                 runProgress = progressRow
                                             )
                                         }
@@ -726,6 +772,9 @@ object Archivist {
                     } catch (ce: kotlinx.coroutines.CancellationException) {
                         // Interruption is a RUN-level state, not a conversation
                         // failure — handled by the outer catch.
+                        candidateCollectionId?.let {
+                            discardCandidateCollectionSafely(context, store, it)
+                        }
                         throw ce
                     } catch (e: Exception) {
                         // One conversation failing must not sink the run. Its
@@ -733,6 +782,9 @@ object Archivist {
                         // and its claims are released for the next run. Another
                         // chat that already committed remains successful.
                         val reason = ArchivistFailure.classify(e)
+                        candidateCollectionId?.let {
+                            discardCandidateCollectionSafely(context, store, it)
+                        }
                         failedChats.add(conversation.chatId)
                         failedReasons.add(reason)
                         genResults.add(GenerationErrorClassifier.classify(e))
@@ -906,6 +958,83 @@ object Archivist {
         )
     }
 
+    private fun stagedCandidates(chunk: ParsedChunk): List<StagedAnalysisCandidate> {
+        val out = ArrayList<StagedAnalysisCandidate>()
+        val memories = ArchivistCandidateBoundary.collectFlat(chunk.memories).memories
+        for (draft in memories) {
+            val targetId = draft.targetIds.firstOrNull()
+                ?: draft.scene?.targetIdFor(draft.scope)
+            out.add(
+                StagedAnalysisCandidate(
+                    stream = "memory",
+                    targetType = draft.scope.takeIf {
+                        it in setOf("companion", "project", "world", "campaign", "rp_character")
+                    },
+                    targetId = targetId,
+                    candidateHash = ArchivistCandidateBoundary.candidateHash(draft),
+                    payloadJson = ArchivistCandidateBoundary.payload(draft)
+                )
+            )
+        }
+        for (rule in chunk.rules.distinctBy { MemoryMatch.normalizeContent(it.text) }) {
+            out.add(
+                StagedAnalysisCandidate(
+                    stream = "model_rule",
+                    targetType = null,
+                    targetId = null,
+                    candidateHash = ArchivistCandidateBoundary.ruleHash(rule),
+                    payloadJson = ArchivistCandidateBoundary.payload(rule)
+                )
+            )
+        }
+        return out
+    }
+
+    private fun earlierCandidateForPrompt(
+        store: MemoryStore,
+        typeNames: Map<String, String>,
+        draft: ArchivistResponseParser.DraftMemory
+    ): ArchivistEarlierCandidate {
+        val ids = draft.targetIds.ifEmpty {
+            listOfNotNull(draft.scene?.targetIdFor(draft.scope))
+        }.toSet()
+        val names = when (draft.scope) {
+            "companion" -> store.getCompanions()
+                .filter { it.companionId in ids }.map { it.currentName }
+            "world" -> store.getAllWorlds()
+                .filter { it.worldId in ids }.map { it.name }
+            "campaign" -> store.getCampaigns()
+                .filter { it.campaignId in ids }.map { it.name }
+            "rp_character" -> store.getAllRoleplayCharacters()
+                .filter { it.roleplayCharacterId in ids }.map { it.name }
+            "project" -> store.getProjects()
+                .filter { it.projectId in ids }.map { it.name }
+            else -> emptyList()
+        }
+        return ArchivistEarlierCandidate(
+            content = draft.content,
+            scope = draft.scope,
+            targetNames = names,
+            typeName = draft.typeIdSuggestion?.let { typeNames[it] },
+            tags = draft.tags
+        )
+    }
+
+    private fun discardCandidateCollectionSafely(
+        context: Context,
+        store: MemoryStore,
+        collectionId: String
+    ) {
+        try {
+            store.discardCandidateCollection(collectionId)
+        } catch (cleanup: Exception) {
+            MemoryLog.log(
+                context, "Archivist", "error",
+                "temporary candidate cleanup failed: ${cleanup.message}"
+            )
+        }
+    }
+
     /** Build reconciliation eligibility from this chunk's stamped scene, not
      * from any earlier row in the chat. The same owner-approved scope gate the
      * Librarian uses for live retrieval remains authoritative; only the live
@@ -1038,9 +1167,11 @@ object Archivist {
         drafts: List<ArchivistResponseParser.DraftMemory>,
         maxSuggestions: Int
     ): PreparedMemories {
-        if (drafts.isEmpty()) return PreparedMemories(emptyList(), 0)
-        var duplicates = 0
+        if (drafts.isEmpty()) return PreparedMemories(emptyList(), emptyMap(), 0)
+        val collected = ArchivistCandidateBoundary.collectFlat(drafts)
+        var duplicates = collected.exactDuplicatesRemoved
         val records = ArrayList<org.teslasoft.assistant.preferences.memory.MemoryRecord>()
+        val relationshipHints = linkedMapOf<String, List<String>>()
         val stagedIdentities = HashSet<String>()
         // The current user-owned Type ids: a suggestion is honored only if it
         // names one of these, otherwise the memory files as No Type (never
@@ -1057,11 +1188,11 @@ object Archivist {
         val campaignIdsNow = campaigns.map { it.campaignId }.toSet()
         val projectIdsNow = projects.map { it.projectId }.toSet()
         val companionIdsNow = companions.map { it.companionId }.toSet()
-        for ((index, d) in drafts.withIndex()) {
+        for ((index, d) in collected.memories.withIndex()) {
             if (maxSuggestions > 0 && records.size >= maxSuggestions) {
                 MemoryLog.log(
                     context, "Archivist", "info",
-                    "chat=${conversation.chatId}: cap $maxSuggestions reached, ${drafts.size - index} draft(s) not filed"
+                    "chat=${conversation.chatId}: cap $maxSuggestions reached, ${collected.memories.size - index} draft(s) not filed"
                 )
                 break
             }
@@ -1079,11 +1210,11 @@ object Archivist {
             val projectIds = resolvedDraftTargets(d, "project") {
                 projects.map { it.projectId to it.name }
             }.filter { it in projectIdsNow }
-            val intendedCompanionId = d.scene?.companionId
-                ?: conversation.transcripts.firstNotNullOfOrNull { it.companionId }
             val suppliedCompanionIds = resolvedDraftTargets(d, "companion") {
                 companions.map { it.companionId to it.currentName }
             }
+            val intendedCompanionId = d.scene?.companionId
+                ?: suppliedCompanionIds.singleOrNull()
             val companionIds = if (d.scope == "companion") {
                 when {
                     suppliedCompanionIds.isNotEmpty() -> suppliedCompanionIds
@@ -1169,23 +1300,29 @@ object Archivist {
                     )
                 }
                 is CandidateResult.Valid -> {
-                    records.add(
+                    val record =
                         org.teslasoft.assistant.preferences.memory.PendingMemoryRecordFactory.build(
-                            filingResult.candidate,
-                            MemoryStore.newId("m-"),
-                            MemoryStore.nowIso()
+                            filingResult.candidate, MemoryStore.newId("m-"), MemoryStore.nowIso()
                         )
-                    )
+                    records.add(record)
+                    // Request-local M aliases were validated by the parser.
+                    // Re-check existence at the complete chat boundary; a
+                    // vanished reference is discarded rather than guessed.
+                    val validHints = d.relatedExistingMemoryIds
+                        .filter { it != record.memoryId && store.getMemory(it) != null }
+                        .distinct()
+                    if (validHints.isNotEmpty()) relationshipHints[record.memoryId] = validHints
                 }
             }
         }
-        return PreparedMemories(records, duplicates)
+        return PreparedMemories(records, relationshipHints, duplicates)
     }
 
-    /** Production requests use only stable ids normalized from the supplied
-     * request-local target catalog and re-check them against the draft's exact
-     * stamped scene. The name-match branch remains only for legacy/parser-only
-     * callers. The Archivist never creates a target record. */
+    /** Production requests use only stable ids normalized from that exact
+     * scene request's supplied target catalog. This preserves a validated
+     * relevant Project/roleplay target as well as the directly stamped target;
+     * it never falls back to a different row in the chat. The name-match branch
+     * remains only for legacy/parser-only callers. */
     private fun resolvedDraftTargets(
         d: ArchivistResponseParser.DraftMemory,
         scope: String,
@@ -1194,10 +1331,8 @@ object Archivist {
         if (d.scope != scope) return emptyList()
         if (d.scene != null) {
             // Production Stage-C responses already contain stable ids resolved
-            // from the request-local catalog. Defense in depth: the id must
-            // still equal this proposal's stamped scene target for its scope.
-            val stamped = d.scene.targetIdFor(scope) ?: return emptyList()
-            return d.targetIds.filter { it == stamped }.distinct()
+            // from this request's bounded catalog and matching this scope.
+            return d.targetIds.distinct()
         }
         // Compatibility for parser-only/legacy callers that did not receive a
         // runtime protocol. Production requests never use display-name guessing.
@@ -1216,10 +1351,12 @@ object Archivist {
     ): List<ModelRuleRecord> {
         if (drafts.isEmpty()) return emptyList()
         val sourceModel = conversation.transcripts.firstNotNullOfOrNull { it.modelTag }
-        val existing = store.getModelRules().map { it.text.trim() }.toHashSet()
+        val existing = store.getModelRules()
+            .map { MemoryMatch.normalizeContent(it.text) }.toHashSet()
         val records = ArrayList<ModelRuleRecord>()
         for (d in drafts) {
-            if (d.text.trim() in existing) continue
+            val identity = MemoryMatch.normalizeContent(d.text)
+            if (!existing.add(identity)) continue
             // Validate through the Model Rule candidate path (review finding 2):
             // a valid Draft needs only nonblank text — the model list stays empty
             // until the user assigns it on approval (§11). A blank-text draft is
@@ -1243,7 +1380,6 @@ object Archivist {
                 updatedAt = null
             )
             records.add(rule)
-            existing.add(d.text.trim())
         }
         return records
     }

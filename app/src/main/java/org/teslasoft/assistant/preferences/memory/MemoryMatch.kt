@@ -66,6 +66,11 @@ object MemoryMatch {
          *  [PossibleMatchFinder] tags its vector-search candidates with it. */
         SEMANTIC_NEAR,
 
+        /** The Archivist linked this new additive proposal to an Active memory
+         * that was supplied under a validated request-local alias. This is a
+         * review hint only; it never mutates or auto-resolves either memory. */
+        AI_RELATED,
+
         /** Unrelated. */
         NONE
     }

@@ -154,6 +154,17 @@ data class ReferencedArchivistMemory(
     val memory: ArchivistExistingMemory
 )
 
+/** A validated proposal from an earlier chunk in this frozen chat range.
+ * Stable target ids and run metadata never enter this prompt-only shape. */
+data class ArchivistEarlierCandidate(
+    val content: String,
+    val scope: String?,
+    val targetNames: List<String>,
+    val typeName: String?,
+    val tags: List<String>,
+    val stream: String = "memory"
+)
+
 /**
  * One request's non-editable transport contract. Stable database ids never go
  * over the wire for memories or named targets: the model sees M1/T1 aliases,
@@ -162,7 +173,8 @@ data class ReferencedArchivistMemory(
 data class ArchivistRequestProtocol(
     val scene: ArchivistSceneContext,
     val memories: List<ReferencedArchivistMemory>,
-    val targets: List<ReferencedArchivistTarget>
+    val targets: List<ReferencedArchivistTarget>,
+    val earlierCandidates: List<ArchivistEarlierCandidate> = emptyList()
 ) {
     val memoryIdByAlias: Map<String, String> =
         memories.associate { it.alias to it.memory.stableId }
@@ -179,11 +191,14 @@ object ArchivistRuntimeProtocol {
      * never truncated into a misleading fragment. */
     const val MAX_EXISTING_MEMORY_CHARS = 16_000
     const val MAX_TARGETS_IN_PROMPT = 20
+    const val MAX_EARLIER_CANDIDATES_IN_PROMPT = 10
+    const val MAX_EARLIER_CANDIDATE_CHARS = 8_000
 
     fun create(
         scene: ArchivistSceneContext,
         existingMemories: List<ArchivistExistingMemory>,
-        validTargets: List<ArchivistTarget>
+        validTargets: List<ArchivistTarget>,
+        earlierCandidates: List<ArchivistEarlierCandidate> = emptyList()
     ): ArchivistRequestProtocol {
         val boundedMemories = ArrayList<ReferencedArchivistMemory>()
         var usedChars = 0
@@ -203,7 +218,21 @@ object ArchivistRuntimeProtocol {
             .take(MAX_TARGETS_IN_PROMPT)
             .mapIndexed { index, target -> ReferencedArchivistTarget("T${index + 1}", target) }
 
-        return ArchivistRequestProtocol(scene, boundedMemories, boundedTargets)
+        val boundedEarlier = ArrayList<ArchivistEarlierCandidate>()
+        var earlierChars = 0
+        for (candidate in earlierCandidates.asReversed()) {
+            if (boundedEarlier.size >= MAX_EARLIER_CANDIDATES_IN_PROMPT) break
+            val cost = candidate.content.length + (candidate.scope?.length ?: 0) +
+                candidate.targetNames.sumOf { it.length } +
+                (candidate.typeName?.length ?: 0) + candidate.tags.sumOf { it.length } +
+                candidate.stream.length + 64
+            if (earlierChars + cost > MAX_EARLIER_CANDIDATE_CHARS) continue
+            boundedEarlier.add(candidate)
+            earlierChars += cost
+        }
+        boundedEarlier.reverse()
+
+        return ArchivistRequestProtocol(scene, boundedMemories, boundedTargets, boundedEarlier)
     }
 
     /** App-owned protocol appended after the editable extraction prompt. */
@@ -244,6 +273,20 @@ object ArchivistRuntimeProtocol {
             sceneArray.put(JSONObject().put("kind", scope).put("target_ref", ref))
         }
 
+        val earlierArray = JSONArray()
+        for (candidate in protocol.earlierCandidates) {
+            earlierArray.put(JSONObject().apply {
+                put("stream", candidate.stream)
+                put("content", candidate.content)
+                if (candidate.stream == "memory") {
+                    put("scope", candidate.scope)
+                    put("targets", JSONArray(candidate.targetNames))
+                    put("type", candidate.typeName ?: "No Type")
+                    put("tags", JSONArray(candidate.tags))
+                }
+            })
+        }
+
         return """
 ## App-Owned Runtime Protocol — mandatory
 This block is enforced by the app after the editable extraction prompt. Follow it if any earlier custom instruction conflicts with the transport format.
@@ -267,6 +310,8 @@ Return exactly one JSON object with this Associative Memory shape:
 
 Use only target_refs supplied below and only when each target kind matches the proposal scope. Do not return target names as references. If no supplied target is correct, leave target_refs empty. Use related_existing_memory_refs when a new proposal updates, contradicts, narrows, extends, or meaningfully continues a supplied existing memory. Emit no proposal when the information is already adequately represented by an existing memory.
 
+The already-proposed-this-run list contains validated candidates from earlier chunks of this same frozen chat range. Do not repeat them. If this chunk clearly corrects one, emit only the corrected proposal from this chunk; the app will apply its narrow local same-run review rules after collection.
+
 <app_stamped_scene_data>
 ${sceneArray}
 </app_stamped_scene_data>
@@ -278,6 +323,10 @@ ${targetArray}
 <relevant_existing_memories_data>
 ${memoryArray}
 </relevant_existing_memories_data>
+
+<already_proposed_this_run_data>
+${earlierArray}
+</already_proposed_this_run_data>
 """.trim()
     }
 }

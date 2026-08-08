@@ -76,7 +76,7 @@ class MemoryStoreInstrumentedTest {
 
     private fun open(name: String): MemoryStore = MemoryStore.openForTest(ctx, name, key)
 
-    /* ------------------------------ fresh v21 ------------------------------ */
+    /* --------------------------- fresh current schema ---------------------- */
 
     @Test
     fun freshV21_seedsFiveStarterTypes() {
@@ -113,7 +113,7 @@ class MemoryStoreInstrumentedTest {
             insertV20Memory(db, "m-blank", "", 4)
         }
 
-        // Opening runs the complete supported upgrade chain through v27.
+        // Opening runs the complete supported upgrade chain through v28.
         val store = open(name)
 
         assertEquals(
@@ -379,6 +379,115 @@ class MemoryStoreInstrumentedTest {
         val next = store.bookmarkEligibleTranscripts().filter { it.chatId == "chat-a" }
         assertEquals(1, next.size)
         assertTrue(next.single().transcriptId != "t1" && next.single().transcriptId != "t2")
+    }
+
+    @Test
+    fun stageDCandidateBoundaryCommitsRelationshipHintAndCleansTemporaryState() {
+        val store = open(freshDbName())
+        store.insertMemory(
+            mem("old-green", scope = "real_life", typeId = "mtype-fact")
+                .copy(content = "The user's favorite color is green.")
+        )
+        insertTranscript(store, "t1", "chat-a", "1", "pending", null)
+        val frozen = store.beginAnalysisRun(
+            runRecord("run-stage-d"), mapOf("chat-a" to listOf("t1"))
+        ).getValue("chat-a")
+        store.stageAnalysisCandidates(
+            collectionId = frozen.rangeId,
+            chunkOrdinal = 1,
+            candidates = listOf(
+                StagedAnalysisCandidate(
+                    stream = "memory",
+                    targetType = null,
+                    targetId = null,
+                    candidateHash = "purple-hash",
+                    payloadJson = "{\"content\":\"purple\"}"
+                ),
+                StagedAnalysisCandidate(
+                    stream = "model_rule",
+                    targetType = null,
+                    targetId = null,
+                    candidateHash = "rule-hash",
+                    payloadJson = "{\"text\":\"be concise\"}"
+                )
+            )
+        )
+        assertTrue(rowExists(store, "analysis_run_state", "run_id", frozen.rangeId))
+        assertEquals(
+            2,
+            store.readableDatabase.rawQuery(
+                "SELECT COUNT(*) FROM analysis_candidates WHERE run_id = ?",
+                arrayOf(frozen.rangeId)
+            ).use { it.moveToFirst(); it.getInt(0) }
+        )
+
+        val changed = mem(
+            "new-purple", scope = "real_life", typeId = "mtype-fact", status = "draft"
+        ).copy(content = "The user's favorite color is purple now.")
+        store.commitFrozenChatRange(
+            frozen,
+            memories = listOf(changed),
+            rules = emptyList(),
+            lorebookSuggestions = emptyList(),
+            relationshipHintsByMemoryId = mapOf("new-purple" to listOf("old-green"))
+        )
+
+        assertEquals(
+            listOf(MemoryMatch.Match("old-green", MemoryMatch.Relation.AI_RELATED)),
+            store.relationshipHintsForDraft("new-purple")
+        )
+        assertFalse(rowExists(store, "analysis_run_state", "run_id", frozen.rangeId))
+        assertFalse(rowExists(store, "analysis_candidates", "run_id", frozen.rangeId))
+        assertEquals("t1", store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
+
+        val result = store.resolveSupersede("new-purple", listOf("old-green"))
+        assertTrue(result is MemoryStore.ResolutionResult.Applied)
+        assertTrue(store.relationshipHintsForDraft("new-purple").isEmpty())
+        assertNotNull(store.supersededAt("old-green"))
+        assertEquals("superseded", store.getMemory("old-green")!!.status)
+    }
+
+    @Test
+    fun stageDFilingFailureRollsBackHintsAndBookmarkThenDiscardsCandidates() {
+        val store = open(freshDbName())
+        store.insertMemory(mem("existing", scope = "global"))
+        insertTranscript(store, "t1", "chat-a", "1", "pending", null)
+        val frozen = store.beginAnalysisRun(
+            runRecord("run-stage-d-rollback"), mapOf("chat-a" to listOf("t1"))
+        ).getValue("chat-a")
+        store.stageAnalysisCandidates(
+            frozen.rangeId, 1,
+            listOf(
+                StagedAnalysisCandidate(
+                    "memory", null, null, "hash", "{\"content\":\"candidate\"}"
+                )
+            )
+        )
+        val invalidRule = ModelRuleRecord(
+            "invalid-rule", "bad", "[]", "invalid", null,
+            "2026-08-08T00:00:00Z"
+        )
+
+        var failed = false
+        try {
+            store.commitFrozenChatRange(
+                frozen,
+                memories = listOf(mem("candidate", scope = "global", status = "draft")),
+                rules = listOf(invalidRule),
+                lorebookSuggestions = emptyList(),
+                relationshipHintsByMemoryId = mapOf("candidate" to listOf("existing"))
+            )
+        } catch (_: Exception) {
+            failed = true
+        }
+
+        assertTrue(failed)
+        assertNull(store.getMemory("candidate"))
+        assertNull(store.getAnalysisBookmark("chat-a")!!.lastTranscriptId)
+        assertTrue(rowExists(store, "analysis_run_state", "run_id", frozen.rangeId))
+        store.discardCandidateCollection(frozen.rangeId)
+        assertFalse(rowExists(store, "analysis_run_state", "run_id", frozen.rangeId))
+        assertFalse(rowExists(store, "analysis_candidates", "run_id", frozen.rangeId))
     }
 
     @Test
@@ -1305,6 +1414,20 @@ class MemoryStoreInstrumentedTest {
                 "failed_chat_ids_json TEXT NOT NULL DEFAULT '[]', error TEXT, outcome TEXT, " +
                 "failure_reason TEXT, transport TEXT NOT NULL DEFAULT 'api', " +
                 "analysis_type TEXT NOT NULL DEFAULT 'associative')"
+        )
+        db.execSQL(
+            "CREATE TABLE analysis_run_state (" +
+                "run_id TEXT PRIMARY KEY, chat_id TEXT, frozen_end_marker TEXT, " +
+                "effective_policy_json TEXT, processing_method TEXT, prompt_profile TEXT, " +
+                "chunk_setting TEXT, budgets_json TEXT, chunk_ordinal INTEGER NOT NULL DEFAULT 0, " +
+                "chunk_success_json TEXT NOT NULL DEFAULT '[]', retry_count INTEGER NOT NULL DEFAULT 0, " +
+                "filed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT)"
+        )
+        db.execSQL(
+            "CREATE TABLE analysis_candidates (" +
+                "candidate_id TEXT PRIMARY KEY, run_id TEXT NOT NULL, " +
+                "stream TEXT NOT NULL DEFAULT 'general', target_type TEXT, target_id TEXT, " +
+                "candidate_hash TEXT, payload_json TEXT NOT NULL, created_at TEXT NOT NULL)"
         )
         db.execSQL(
             "CREATE TABLE memories (" +

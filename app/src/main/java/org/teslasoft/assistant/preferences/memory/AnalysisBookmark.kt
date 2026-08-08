@@ -140,9 +140,26 @@ object FrozenChatRangeExecutor {
         chunks: List<Chunk>,
         analyzeChunk: suspend (Chunk) -> Output,
         commit: (List<Output>) -> CommitResult
+    ): CommitResult = executeWithStaged(
+        chunks = chunks,
+        analyzeChunk = { chunk, _ -> analyzeChunk(chunk) },
+        commit = commit
+    )
+
+    /**
+     * Stage-D variant of [execute]. Each chunk receives an immutable snapshot
+     * of the candidates validated from earlier chunks in the same frozen chat
+     * range. Callers may render a bounded form of that snapshot into the next
+     * request to prevent cross-chunk duplicates/corrections. Nothing becomes
+     * visible until the single [commit] after every chunk succeeds.
+     */
+    suspend fun <Chunk, Output, CommitResult> executeWithStaged(
+        chunks: List<Chunk>,
+        analyzeChunk: suspend (Chunk, List<Output>) -> Output,
+        commit: (List<Output>) -> CommitResult
     ): CommitResult {
         val staged = ArrayList<Output>(chunks.size)
-        for (chunk in chunks) staged.add(analyzeChunk(chunk))
+        for (chunk in chunks) staged.add(analyzeChunk(chunk, staged.toList()))
         return commit(staged)
     }
 }
