@@ -25,6 +25,7 @@ import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.CorruptionErrorHandlers
 import org.teslasoft.assistant.preferences.backup.DatabaseDegradedException
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
+import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.util.Hash
 import java.time.Instant
 import java.util.UUID
@@ -62,6 +63,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         CorruptionErrorHandlers.Cipher(context, BackupType.MEMORY),
         null, true
     ) {
+
+    private val appContext = context.applicationContext
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
@@ -595,6 +598,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "last_started_at TEXT, " +
                 "last_transcript_id TEXT, " +
                 "skipped_transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                "archive_paused INTEGER NOT NULL DEFAULT 0 CHECK (archive_paused IN (0,1)), " +
                 "updated_at TEXT NOT NULL)"
         )
 
@@ -1952,6 +1956,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     "last_started_at TEXT, " +
                     "last_transcript_id TEXT, " +
                     "skipped_transcript_ids_json TEXT NOT NULL DEFAULT '[]', " +
+                    "archive_paused INTEGER NOT NULL DEFAULT 0 CHECK (archive_paused IN (0,1)), " +
                     "updated_at TEXT NOT NULL)"
             )
             db.execSQL(
@@ -2016,12 +2021,18 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         val now = nowIso()
         for ((chatId, rows) in rowsByChat) {
             if (!replaceExisting && rowExists(db, "analysis_chat_bookmarks", "chat_id", chatId)) continue
-            val plan = AnalysisBookmark.planMigration(rows)
+            val archivePaused = try {
+                Preferences.getPreferences(appContext, chatId).isChatExcludedFromMemory()
+            } catch (_: Exception) {
+                false
+            }
+            val plan = AnalysisBookmark.planMigration(rows, archivePaused)
             db.insertOrThrow("analysis_chat_bookmarks", null, ContentValues().apply {
                 put("chat_id", chatId)
                 put("last_started_at", plan.boundary?.startedAt)
                 put("last_transcript_id", plan.boundary?.transcriptId)
                 put("skipped_transcript_ids_json", stringsToJson(plan.skippedTranscriptIds))
+                put("archive_paused", if (archivePaused) 1 else 0)
                 put("updated_at", now)
             })
         }
@@ -2688,6 +2699,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     put("last_started_at", bookmark.lastStartedAt)
                     put("last_transcript_id", bookmark.lastTranscriptId)
                     put("skipped_transcript_ids_json", stringsToJson(validSkips))
+                    put("archive_paused", if (bookmark.archivePaused) 1 else 0)
                     put("updated_at", bookmark.updatedAt.ifBlank { nowIso() })
                 }
                 if (overwriteSingletons) {
@@ -3120,9 +3132,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      * be marked processed without ever being read — it starts a fresh
      * pending row instead. Scene context (§4(e)) is stamped in the typed
      * columns at capture time, never inferred later.
-     * [markExcluded] implements the memory kill switch: content is still
-     * captured (so exclusion is reversible and the experiment can be
-     * recovered) but the row is marked do-not-review.
+     * [markExcluded] is reserved for a permanent policy exclusion such as a
+     * companion whose memory participation is `none`. [archivePaused] is the
+     * reversible per-chat Archive toggle: content is captured as pending while
+     * the bookmark keeps it ineligible, ready to be reviewed after resume.
      */
     /** Returns a short outcome string for the Event Log (capture is otherwise
      *  invisible): "inserted <id>", "appended <id>", or "insert failed (rc)". */
@@ -3134,6 +3147,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         modelTag: String,
         quickSettingsJson: String?,
         markExcluded: Boolean,
+        archivePaused: Boolean = false,
         assistantComplete: Boolean = true,
         worldId: String? = null,
         campaignId: String? = null,
@@ -3146,6 +3160,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.beginTransaction()
         try {
             requireBookmarkCutover(db)
+            ensureAnalysisBookmarkTx(db, chatId)
+            db.update("analysis_chat_bookmarks", ContentValues().apply {
+                put("archive_paused", if (archivePaused) 1 else 0)
+                put("updated_at", now)
+            }, "chat_id = ?", arrayOf(chatId))
             val bookmark = analysisBookmarkTx(db, chatId)
             var rowId: String? = null
             var content = "[]"
@@ -3243,59 +3262,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
-    /**
-     * User exclusion toggle. The bookmark-owned skip set is the eligibility
-     * change; legacy review columns are updated only for compatibility/UI
-     * history. Capture start/stop is the recorder's job.
-     */
+    /** User Archive toggle. This is a reversible eligibility pause, never a
+     * terminal exclusion: the completed boundary and waiting transcript rows
+     * are left untouched so resume exposes the whole post-bookmark range. */
     fun setChatTranscriptsExcluded(chatId: String, excluded: Boolean) {
         val db = writableDatabase
         db.beginTransaction()
         try {
             requireBookmarkCutover(db)
             ensureAnalysisBookmarkTx(db, chatId)
-            val bookmark = analysisBookmarkTx(db, chatId)
-            val ids = if (excluded) {
-                // Every row after the permanent boundary is still material the
-                // bookmark owns, regardless of what mutable legacy columns say.
-                transcriptsForChatTx(db, chatId)
-                    .filter { AnalysisBookmark.isAfter(transcriptBoundary(it), bookmarkBoundary(bookmark)) }
-                    .map { it.transcriptId }
-            } else {
-                // Only explicitly excluded, not-yet-contiguous rows are
-                // reversible. Migration-era processed skips stay terminal.
-                val reversible = ArrayList<String>()
-                for (id in bookmark.skippedTranscriptIds) {
-                    db.query(
-                        "transcripts", arrayOf("review_status", "processed_at"),
-                        "chat_id = ? AND transcript_id = ?", arrayOf(chatId, id),
-                        null, null, null
-                    ).use { c ->
-                        if (c.moveToFirst() && c.getString(0) == "excluded" && c.isNull(1)) {
-                            reversible.add(id)
-                        }
-                    }
-                }
-                reversible
-            }
-            if (excluded) {
-                db.execSQL(
-                    "UPDATE transcripts SET review_status = 'excluded' " +
-                        "WHERE chat_id = ? AND review_status = 'pending'",
-                    arrayOf(chatId)
-                )
-                excludeTranscriptIdsTx(db, chatId, ids)
-            } else {
-                db.execSQL(
-                    "UPDATE transcripts SET review_status = 'pending' " +
-                        "WHERE chat_id = ? AND review_status = 'excluded' AND processed_at IS NULL",
-                    arrayOf(chatId)
-                )
-                // Only not-yet-contiguous exclusions can be reversed. Anything
-                // already behind the bookmark was intentionally excluded and is
-                // permanent history, exactly like an already-reviewed range.
-                removeTranscriptSkipsTx(db, chatId, ids)
-            }
+            db.update("analysis_chat_bookmarks", ContentValues().apply {
+                put("archive_paused", if (excluded) 1 else 0)
+                put("updated_at", nowIso())
+            }, "chat_id = ?", arrayOf(chatId))
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -3338,14 +3317,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         lastStartedAt = c.getStringOrNull("last_started_at"),
         lastTranscriptId = c.getStringOrNull("last_transcript_id"),
         skippedTranscriptIds = jsonToStrings(c.getStringOrNull("skipped_transcript_ids_json")),
+        archivePaused = c.getInt(c.getColumnIndexOrThrow("archive_paused")) != 0,
         updatedAt = c.getString(c.getColumnIndexOrThrow("updated_at"))
     )
 
     private fun ensureAnalysisBookmarkTx(db: SQLiteDatabase, chatId: String) {
         db.execSQL(
             "INSERT OR IGNORE INTO analysis_chat_bookmarks " +
-                "(chat_id, last_started_at, last_transcript_id, skipped_transcript_ids_json, updated_at) " +
-                "VALUES (?, NULL, NULL, '[]', ?)",
+                "(chat_id, last_started_at, last_transcript_id, skipped_transcript_ids_json, archive_paused, updated_at) " +
+                "VALUES (?, NULL, NULL, '[]', 0, ?)",
             arrayOf(chatId, nowIso())
         )
     }
@@ -3381,16 +3361,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             put("last_started_at", boundary?.startedAt)
             put("last_transcript_id", boundary?.transcriptId)
             put("skipped_transcript_ids_json", stringsToJson(remaining.sorted()))
-            put("updated_at", nowIso())
-        }, "chat_id = ?", arrayOf(chatId))
-    }
-
-    private fun removeTranscriptSkipsTx(db: SQLiteDatabase, chatId: String, ids: Collection<String>) {
-        if (ids.isEmpty()) return
-        val bookmark = analysisBookmarkTx(db, chatId)
-        val remaining = bookmark.skippedTranscriptIds.filterNot { it in ids.toSet() }
-        db.update("analysis_chat_bookmarks", ContentValues().apply {
-            put("skipped_transcript_ids_json", stringsToJson(remaining))
             put("updated_at", nowIso())
         }, "chat_id = ?", arrayOf(chatId))
     }
@@ -3432,6 +3402,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      */
     private fun eligibleTranscriptsForChatTx(db: SQLiteDatabase, chatId: String): List<TranscriptRecord> {
         val bookmark = analysisBookmarkTx(db, chatId)
+        if (bookmark.archivePaused) return emptyList()
         val ordered = transcriptsForChatTx(db, chatId)
         val unskipped = AnalysisBookmark.eligibleRange(
             rows = ordered,
@@ -4716,7 +4687,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         companionId: String?,
         contentJson: String,
         modelTag: String?,
-        markExcluded: Boolean
+        markExcluded: Boolean,
+        archivePaused: Boolean = false
     ): Boolean {
         val db = writableDatabase
         db.beginTransaction()
@@ -4724,6 +4696,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             requireBookmarkCutover(db)
             ensureAnalysisBookmarkTx(db, chatId)
             val now = nowIso()
+            db.update("analysis_chat_bookmarks", ContentValues().apply {
+                put("archive_paused", if (archivePaused) 1 else 0)
+                put("updated_at", now)
+            }, "chat_id = ?", arrayOf(chatId))
             val transcriptId = newId("t-")
             db.insertOrThrow("transcripts", null, ContentValues().apply {
                 put("transcript_id", transcriptId)

@@ -422,6 +422,7 @@ object MemorySeedCodec {
                 lastStartedAt = b.str("last_started_at"),
                 lastTranscriptId = b.str("last_transcript_id"),
                 skippedTranscriptIds = b.strList("skipped_transcript_ids"),
+                archivePaused = b.optBoolean("archive_paused", false),
                 updatedAt = b.str("updated_at") ?: ""
             )
         }
@@ -880,6 +881,7 @@ object MemorySeedCodec {
                         putIfNotNull("last_started_at", b.lastStartedAt)
                         putIfNotNull("last_transcript_id", b.lastTranscriptId)
                         put("skipped_transcript_ids", JSONArray(b.skippedTranscriptIds))
+                        put("archive_paused", b.archivePaused)
                         put("updated_at", b.updatedAt)
                     })
                 }

@@ -21,12 +21,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pins the Step 1.1 capture consent contract (counterplan §4(f), §5.4):
+ * Pins the live-capture policy contract:
  * storage and injection are independent. Live-capture exclusion depends on
  * companion participation ONLY — the policy function has no injection-switch
  * parameter at all, so "Use memory in this chat" cannot influence whether a
- * captured turn is review-eligible. "Archive this chat" (excludedByUser)
- * stops capture entirely before this policy is even consulted.
+ * captured turn is review-eligible. "Archive this chat" is a separate durable
+ * bookmark pause; it does not turn the captured row into terminal history.
  */
 class TranscriptRecorderPolicyTest {
 

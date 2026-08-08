@@ -67,6 +67,28 @@ class AnalysisBookmarkTest {
     }
 
     @Test
+    fun pausedArchiveMigrationLeavesLegacyExcludedSpanAfterCompletedPrefix() {
+        val plan = AnalysisBookmark.planMigration(
+            listOf(
+                AnalysisBookmark.LegacyRow("t40", "1", "processed"),
+                AnalysisBookmark.LegacyRow("t41", "2", "excluded"),
+                AnalysisBookmark.LegacyRow("t60", "3", "excluded")
+            ),
+            archivePaused = true
+        )
+
+        assertEquals(AnalysisBookmark.Boundary("1", "t40"), plan.boundary)
+        assertTrue(plan.skippedTranscriptIds.isEmpty())
+        val waiting = listOf(Row("t40", "1"), Row("t41", "2"), Row("t60", "3"))
+        assertEquals(
+            listOf("t41", "t60"),
+            AnalysisBookmark.eligibleRange(
+                waiting, plan.boundary, emptySet(), { it.id }, ::boundary
+            ).map { it.id }
+        )
+    }
+
+    @Test
     fun postMigrationEligibilityIgnoresLegacyStatusChanges() {
         val rows = listOf(
             Row("old", "1", "pending"),

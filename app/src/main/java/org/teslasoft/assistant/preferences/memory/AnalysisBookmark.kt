@@ -58,13 +58,19 @@ object AnalysisBookmark {
      * after the first pending gap are snapshotted as migration skips when they
      * were already terminal; their legacy columns are never consulted again.
      */
-    fun planMigration(rows: List<LegacyRow>): MigrationPlan {
+    fun planMigration(rows: List<LegacyRow>, archivePaused: Boolean = false): MigrationPlan {
         val ordered = rows.sortedWith(compareBy({ it.startedAt ?: "" }, { it.transcriptId }))
         var boundary: Boundary? = null
         var foundPendingGap = false
         val skipped = ArrayList<String>()
         for (row in ordered) {
-            val terminal = row.reviewStatus == "processed" || row.reviewStatus == "excluded"
+            // The old Archive toggle represented its reversible pause by
+            // writing `excluded`. If that chat is still paused at cutover,
+            // those rows are waiting material, not terminal history. A chat
+            // that is not paused keeps the contract's normal processed /
+            // excluded terminal-prefix rule.
+            val terminal = row.reviewStatus == "processed" ||
+                (!archivePaused && row.reviewStatus == "excluded")
             if (!foundPendingGap && terminal) {
                 boundary = row.boundary
             } else {

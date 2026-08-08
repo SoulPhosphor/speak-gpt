@@ -1776,13 +1776,12 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * User exclusion (do-not-review): while excluded, NO further messages are
-     * captured into the transcript queue and the chat's existing transcript
-     * rows are marked excluded so the Archivist never reads them. Reversible:
-     * flipping back re-queues the rows and resumes capture from that point
-     * (the excluded span is not retroactively captured). Distinct from the
-     * kill switch above — exclusion stops recording, the kill switch stops
-     * memory *use* (and capture continues under an excluded marker).
+     * Reversible per-chat Archive pause. New turns continue accumulating in
+     * the private transcript queue while paused, but the durable analysis
+     * bookmark keeps the chat out of review. Resuming makes every turn after
+     * the last successfully archived boundary eligible, including the whole
+     * paused span. Distinct from the injection switch above, which controls
+     * whether saved memory is used in this chat.
      * */
     fun isChatExcludedFromMemory() : Boolean {
         return getBoolean("memory_excluded", false)

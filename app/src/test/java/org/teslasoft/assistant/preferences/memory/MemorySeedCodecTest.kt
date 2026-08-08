@@ -425,6 +425,29 @@ class MemorySeedCodecTest {
         )
     }
 
+    @Test
+    fun archivePauseRoundTripsWithDurableBookmark() {
+        val data = MemorySeedCodec.parse(fixtureJson()).copy(
+            analysisBookmarks = listOf(
+                AnalysisChatBookmark(
+                    chatId = "chat-paused",
+                    lastStartedAt = "40",
+                    lastTranscriptId = "t40",
+                    skippedTranscriptIds = emptyList(),
+                    archivePaused = true,
+                    updatedAt = "2026-08-08T00:00:00Z"
+                )
+            )
+        )
+
+        val encoded = MemorySeedCodec.serialize(data)
+        assertTrue(
+            JSONObject(encoded).getJSONArray("analysis_bookmarks")
+                .getJSONObject(0).getBoolean("archive_paused")
+        )
+        assertTrue(MemorySeedCodec.parse(encoded).analysisBookmarks.single().archivePaused)
+    }
+
     /* --------------------- Phase 1: Types / importance --------------------- */
 
     /** A pre-Phase-1 backup: memories carry the legacy six-value `kind` (no

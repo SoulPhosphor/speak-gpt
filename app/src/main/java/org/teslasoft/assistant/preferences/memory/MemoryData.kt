@@ -610,13 +610,15 @@ data class TranscriptRecord(
  * the pair is the chronological bookmark. [skippedTranscriptIds] contains
  * terminal rows beyond an earlier pending gap, snapshotted during cutover (or
  * intentionally excluded later) so legacy transcript review columns never
- * regain runtime authority.
+ * regain runtime authority. [archivePaused] is the reversible Archive switch;
+ * it blocks selection without moving the boundary or consuming waiting rows.
  */
 data class AnalysisChatBookmark(
     val chatId: String,
     val lastStartedAt: String?,
     val lastTranscriptId: String?,
     val skippedTranscriptIds: List<String> = emptyList(),
+    val archivePaused: Boolean = false,
     val updatedAt: String
 )
 

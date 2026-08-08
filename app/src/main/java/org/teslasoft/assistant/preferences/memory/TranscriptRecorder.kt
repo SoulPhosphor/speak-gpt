@@ -31,8 +31,8 @@ import org.teslasoft.assistant.util.Hash
  * whether and how that turn is captured:
  *
  *  - Store not provisioned -> no-op (capture never creates the encrypted DB).
- *  - Chat excluded by the user ("Archive this chat" off) -> no capture at
- *    all, from this point forward.
+ *  - Chat archive paused by the user -> capture continues locally, but the
+ *    durable bookmark makes the waiting range ineligible until resume.
  *  - Companion memory_participation 'none' -> captured but marked excluded
  *    (the spec: such transcripts "arrive pre-excluded"). 'global_only' is a
  *    Archivist-side rule and captures normally.
@@ -40,9 +40,8 @@ import org.teslasoft.assistant.util.Hash
  * The per-chat memory (injection) switch is deliberately NOT an input to
  * live capture (external-memory counterplan §4(f), Step 1.1): storage and
  * injection are independent, so turning "Use memory in this chat" off must
- * not mark new turns excluded from review. Archive consent is the only
- * user capture control. Rows excluded under the old coupling keep their
- * stored state until the user explicitly re-includes them.
+ * not mark new turns excluded from review. The Archive toggle pauses review;
+ * it does not discard conversation material needed for a later resume.
  *
  * Always best-effort and always on the caller's worker thread: a capture
  * failure must never disturb the conversation.
@@ -89,11 +88,6 @@ object TranscriptRecorder {
                 MemoryLog.log(context, "Transcript", "info", "skip: memory store not provisioned")
                 return
             }
-            if (excludedByUser) {
-                MemoryLog.log(context, "Transcript", "info", "skip: chat is set to \"Don't archive\"")
-                return
-            }
-
             val store = MemoryStore.getInstance(context)
 
             var companionId: String? = null
@@ -121,6 +115,7 @@ object TranscriptRecorder {
                 modelTag = modelTag,
                 quickSettingsJson = quickSettingsJson,
                 markExcluded = markExcluded,
+                archivePaused = excludedByUser,
                 assistantComplete = assistantComplete,
                 worldId = worldId,
                 campaignId = campaignId,
@@ -213,14 +208,15 @@ object TranscriptRecorder {
                 val companionId = if (personaId.isNotBlank())
                     store.findCompanionByAppCharacterId(personaId)?.companionId else null
 
-                // Backfill imports PRE-EXISTING history, so it deliberately
-                // keeps the legacy coupling that live capture dropped in
-                // Step 1.1 (counterplan §5.4): a chat whose memory switch is
-                // off backfills excluded rather than silently becoming
-                // review-eligible. Earlier history joins the review queue
-                // only through an explicit user choice, never a migration.
-                val markExcluded = prefs.isChatExcludedFromMemory() || !prefs.getChatMemoryEnabled()
-                if (store.insertBackfillTranscript(chatId, companionId, turns.toString(), prefs.getModel(), markExcluded)) {
+                // Backfill obeys the same reversible Archive pause as live
+                // capture. The injection switch controls memory use only and
+                // cannot permanently consume imported conversation history.
+                if (store.insertBackfillTranscript(
+                        chatId, companionId, turns.toString(), prefs.getModel(),
+                        markExcluded = false,
+                        archivePaused = prefs.isChatExcludedFromMemory()
+                    )
+                ) {
                     created++
                 } else {
                     allSucceeded = false

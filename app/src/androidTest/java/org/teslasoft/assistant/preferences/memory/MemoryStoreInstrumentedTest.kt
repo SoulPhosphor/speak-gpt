@@ -30,6 +30,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.librarian.RetrievalDocument
 
 /**
@@ -266,6 +267,31 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
+    fun migrationPreservesLegacyExcludedRowsForAChatThatIsStillPaused() {
+        val store = open(freshDbName())
+        val chatId = "chat-paused-migration-${System.nanoTime()}"
+        Preferences.getPreferences(ctx, chatId).setChatExcludedFromMemory(true)
+        try {
+            insertTranscript(store, "through-40", chatId, "1", "processed", "1")
+            insertTranscript(store, "waiting-41", chatId, "2", "excluded", null)
+
+            store.rebuildBookmarkCutoverForTest()
+
+            val paused = store.getAnalysisBookmark(chatId)!!
+            assertEquals("through-40", paused.lastTranscriptId)
+            assertTrue(paused.archivePaused)
+            assertTrue(store.bookmarkEligibleTranscripts().none { it.chatId == chatId })
+            store.setChatTranscriptsExcluded(chatId, false)
+            assertEquals(
+                listOf("waiting-41"),
+                store.bookmarkEligibleTranscripts().filter { it.chatId == chatId }.map { it.transcriptId }
+            )
+        } finally {
+            Preferences.getPreferences(ctx, chatId).setChatExcludedFromMemory(false)
+        }
+    }
+
+    @Test
     fun postCutoverLegacyReviewColumnsCannotChangeEligibility() {
         val store = open(freshDbName())
         insertTranscript(store, "old", "chat-a", "1", "processed", "1")
@@ -280,6 +306,45 @@ class MemoryStoreInstrumentedTest {
             "UPDATE transcripts SET review_status = 'pending', processed_at = NULL WHERE transcript_id = 'old'"
         )
         assertEquals(listOf("new"), store.bookmarkEligibleTranscripts().map { it.transcriptId })
+    }
+
+    @Test
+    fun archivePauseCapturesWholeWaitingSpanAndResumeStartsAfterLastSuccess() {
+        val store = open(freshDbName())
+        insertTranscript(store, "through-40", "chat-paused", "1", "processed", "1")
+        store.rebuildBookmarkCutoverForTest()
+
+        store.setChatTranscriptsExcluded("chat-paused", true)
+        for (messageNumber in 41..60) {
+            store.appendTranscriptTurn(
+                chatId = "chat-paused",
+                companionId = null,
+                userMessage = "user-$messageNumber",
+                assistantMessage = "assistant-$messageNumber",
+                modelTag = "model",
+                quickSettingsJson = null,
+                markExcluded = false,
+                archivePaused = true
+            )
+        }
+
+        val paused = store.getAnalysisBookmark("chat-paused")!!
+        assertEquals("through-40", paused.lastTranscriptId)
+        assertTrue(paused.archivePaused)
+        assertTrue(store.bookmarkEligibleTranscripts().none { it.chatId == "chat-paused" })
+
+        store.setChatTranscriptsExcluded("chat-paused", false)
+        val waiting = store.bookmarkEligibleTranscripts().filter { it.chatId == "chat-paused" }
+        assertTrue(waiting.isNotEmpty())
+        val userMessages = waiting.sumOf { row ->
+            val turns = org.json.JSONArray(row.content)
+            (0 until turns.length()).count { index ->
+                turns.getJSONObject(index).optString("role") == "user"
+            }
+        }
+        assertEquals(20, userMessages)
+        assertEquals("through-40", store.getAnalysisBookmark("chat-paused")!!.lastTranscriptId)
+        assertFalse(store.getAnalysisBookmark("chat-paused")!!.archivePaused)
     }
 
     @Test
@@ -434,6 +499,7 @@ class MemoryStoreInstrumentedTest {
         insertTranscript(src, "reviewed", "chat-backup", "1", "processed", "1")
         insertTranscript(src, "waiting", "chat-backup", "2", "pending", null)
         src.rebuildBookmarkCutoverForTest()
+        src.setChatTranscriptsExcluded("chat-backup", true)
         val exported = MemorySeedCodec.serialize(src.exportData())
 
         // Restore into a fresh store via the first-seed (overwrite) path.
@@ -445,6 +511,9 @@ class MemoryStoreInstrumentedTest {
         assertNull(dest.getMemory("untyped")!!.typeId)
         assertEquals(0, dest.getMemory("untyped")!!.importance)
         assertEquals("reviewed", dest.getAnalysisBookmark("chat-backup")!!.lastTranscriptId)
+        assertTrue(dest.getAnalysisBookmark("chat-backup")!!.archivePaused)
+        assertTrue(dest.bookmarkEligibleTranscripts().none { it.chatId == "chat-backup" })
+        dest.setChatTranscriptsExcluded("chat-backup", false)
         assertEquals(listOf("waiting"), dest.bookmarkEligibleTranscripts().map { it.transcriptId })
     }
 

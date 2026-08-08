@@ -825,9 +825,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         topPSeekbar = view.findViewById(R.id.top_p_slider)
         fieldSeed = view.findViewById(R.id.field_seed)
 
-        // Memory system (Phase 2): per-chat kill switch + do-not-archive
-        // exclusion. Toggling exclusion also flips the chat's already-queued
-        // transcripts so the Archivist's view matches immediately.
+        // Memory system (Phase 2): per-chat injection switch + reversible
+        // Archive pause. The durable bookmark hides a paused chat without
+        // consuming its already-queued or subsequently captured turns.
         switchChatMemory = view.findViewById(R.id.switch_chat_memory)
         switchChatExcluded = view.findViewById(R.id.switch_chat_excluded)
         containerMemoryScene = view.findViewById(R.id.container_memory_scene)
@@ -867,7 +867,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                     if (MemoryStore.isProvisioned(appContext)) {
                         MemoryStore.getInstance(appContext).setChatTranscriptsExcluded(chatId, excluded)
                     }
-                } catch (_: Exception) { /* queue flip is best-effort; the pref alone already stops capture */ }
+                } catch (_: Exception) { /* capture also reconciles the durable pause bit on the next turn */ }
             }.start()
         }
         setupMemorySceneRows()

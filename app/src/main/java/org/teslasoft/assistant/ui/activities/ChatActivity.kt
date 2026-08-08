@@ -7528,8 +7528,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val turnChatId = chatId
             val turnPersonaId = preferences?.getPersonaId().orEmpty()
             val turnModel = model
-            // Capture consent is "Archive this chat" alone (counterplan §4(f),
-            // Step 1.1) — the memory injection switch is not read here.
+            // The Archive pause is passed into capture so the turn and the
+            // bookmark's durable pause bit are reconciled atomically. The
+            // memory injection switch is independent and is not read here.
             val excluded = preferences?.isChatExcludedFromMemory() ?: false
             val quickSettings = try {
                 org.json.JSONObject()
