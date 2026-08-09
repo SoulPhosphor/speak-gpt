@@ -502,7 +502,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
                 val when0 = if (e.action == "superseded" && recordedSupersessionAt != null) {
                     MemoryDateFormatter.format(recordedSupersessionAt)
                 } else {
-                    e.at.take(19).replace("T", " ")
+                    MemoryDateFormatter.format(e.at)
                 }
                 val note = if (!e.note.isNullOrBlank()) " — ${e.note}" else ""
                 "• ${e.action} (${e.actor}) $when0$note"

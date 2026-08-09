@@ -3693,6 +3693,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 db.delete("analysis_candidates", "run_id = ?", arrayOf(collectionId))
                 db.delete("analysis_run_state", "run_id = ?", arrayOf(collectionId))
             }
+            // A rerun has no analysis_chat_ranges row. Its temporary candidate
+            // collection deliberately uses the parent run id, so terminal
+            // cleanup owns it directly as well as the startup reaper's
+            // unconditional temporary-state sweep after a hard process kill.
+            db.delete("analysis_candidates", "run_id = ?", arrayOf(runId))
+            db.delete("analysis_run_state", "run_id = ?", arrayOf(runId))
             for (chatId in affectedChats) excludeTranscriptIdsTx(db, chatId, emptyList())
             db.setTransactionSuccessful()
         } finally {

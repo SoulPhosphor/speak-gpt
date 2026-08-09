@@ -21,11 +21,11 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Matches the app's existing long date presentation used by Memory Analysis. */
+/** One presentation for every user-facing Memory timestamp. */
 object MemoryDateFormatter {
     fun format(iso: String, locale: Locale = Locale.getDefault(), zoneId: ZoneId = ZoneId.systemDefault()): String =
         try {
-            DateTimeFormatter.ofPattern("MMMM d, yyyy", locale)
+            DateTimeFormatter.ofPattern("MMMM d, yyyy h:mm a", locale)
                 .withZone(zoneId)
                 .format(Instant.parse(iso))
         } catch (_: Exception) {

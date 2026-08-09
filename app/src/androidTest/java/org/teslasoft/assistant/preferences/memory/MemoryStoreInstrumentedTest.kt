@@ -491,6 +491,29 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
+    fun stageDRerunTemporaryStateIsOwnedByRunCleanup() {
+        val store = open(freshDbName())
+        val runId = "run-stage-d-rerun"
+        store.beginCandidateCollection(runId, "chat-rerun")
+        store.stageAnalysisCandidates(
+            runId, 1,
+            listOf(
+                StagedAnalysisCandidate(
+                    "memory", null, null, "rerun-hash", "{\"content\":\"candidate\"}"
+                )
+            )
+        )
+
+        assertTrue(rowExists(store, "analysis_run_state", "run_id", runId))
+        assertTrue(rowExists(store, "analysis_candidates", "run_id", runId))
+
+        store.releaseAnalysisClaims(runId)
+
+        assertFalse(rowExists(store, "analysis_run_state", "run_id", runId))
+        assertFalse(rowExists(store, "analysis_candidates", "run_id", runId))
+    }
+
+    @Test
     fun failedChatCommitRollsBackMemoryRuleAndBookmarkTogether() {
         val store = open(freshDbName())
         insertTranscript(store, "t1", "chat-a", "1", "pending", null)

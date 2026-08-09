@@ -24,11 +24,11 @@ import org.junit.Test
 class MemoryDateFormatterTest {
 
     @Test
-    fun supersessionTimestampUsesExistingLongDatePresentation() {
+    fun memoryTimestampUsesOneLongDateAndTimePresentation() {
         assertEquals(
-            "August 8, 2026",
+            "July 5, 2026 4:23 PM",
             MemoryDateFormatter.format(
-                "2026-08-08T22:15:00Z", Locale.US, ZoneId.of("UTC")
+                "2026-07-05T16:23:00Z", Locale.US, ZoneId.of("UTC")
             )
         )
     }

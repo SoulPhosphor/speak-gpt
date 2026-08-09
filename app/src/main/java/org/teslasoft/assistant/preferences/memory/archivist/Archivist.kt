@@ -511,7 +511,7 @@ object Archivist {
                             candidateCollectionId = if (markProcessed) {
                                 frozenRanges.getValue(conversation.chatId).rangeId
                             } else {
-                                MemoryStore.newId("range-").also {
+                                runId.also {
                                     store.beginCandidateCollection(it, conversation.chatId)
                                 }
                             }

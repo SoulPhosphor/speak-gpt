@@ -59,11 +59,8 @@ import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.ui.activities.memory.MemoryBrowserActivity
 import org.teslasoft.assistant.ui.activities.memory.MemoryBrowserFilterState
+import org.teslasoft.assistant.ui.activities.memory.MemoryDateFormatter
 import org.teslasoft.assistant.ui.widgets.AppDropdown
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * The Memory Assistant — the Phase 6 Archivist's user-facing surface. Layout
@@ -1048,13 +1045,7 @@ class MemoryAssistantActivity : FragmentActivity() {
         emptyList()
     }
 
-    private fun formatDate(iso: String): String = try {
-        DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.getDefault())
-            .withZone(ZoneId.systemDefault())
-            .format(Instant.parse(iso))
-    } catch (_: Exception) {
-        iso
-    }
+    private fun formatDate(iso: String): String = MemoryDateFormatter.format(iso)
 
     /* ---------------- theming (house pattern) ---------------- */
 
