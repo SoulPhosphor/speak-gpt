@@ -632,6 +632,17 @@ data class FrozenChatRange(
     val frozenEndTranscriptId: String
 )
 
+/** One validated, encrypted, temporary output from an in-flight chat range.
+ * It exists only so later chunks and interruption recovery have a truthful
+ * candidate boundary; it is never exported or copied into a memory. */
+data class StagedAnalysisCandidate(
+    val stream: String,
+    val targetType: String?,
+    val targetId: String?,
+    val candidateHash: String,
+    val payloadJson: String
+)
+
 data class CommittedChatOutputs(
     val memoryIds: List<String>,
     val ruleIds: List<String>,

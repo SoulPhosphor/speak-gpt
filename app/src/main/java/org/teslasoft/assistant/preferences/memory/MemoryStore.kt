@@ -68,7 +68,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 27
+        private const val DATABASE_VERSION = 28
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -505,6 +505,18 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "PRIMARY KEY (new_memory_id, old_memory_id))"
         )
 
+        // Stage-D review routing. These validated Archivist relationships live
+        // outside the memory object and disappear when the Pending draft is
+        // accepted/deleted. They are hints only; deterministic and semantic
+        // Possible Match checks still run and retain priority.
+        db.execSQL(
+            "CREATE TABLE memory_possible_match_hints (" +
+                "draft_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                "existing_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                "created_at TEXT NOT NULL, " +
+                "PRIMARY KEY (draft_memory_id, existing_memory_id))"
+        )
+
         db.execSQL(
             "CREATE TABLE change_log (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -699,6 +711,8 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "target_type TEXT, " +
                 "target_id TEXT, " +
                 "candidate_hash TEXT, " +
+                "chunk_ordinal INTEGER NOT NULL DEFAULT 0, " +
+                "candidate_ordinal INTEGER NOT NULL DEFAULT 0, " +
                 "payload_json TEXT NOT NULL, " +
                 "created_at TEXT NOT NULL)"
         )
@@ -940,6 +954,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.execSQL("CREATE INDEX idx_memrpchars_rp ON memory_roleplay_characters(roleplay_character_id)")
         db.execSQL("CREATE INDEX idx_memprojects_project ON memory_projects(project_id)")
         db.execSQL("CREATE INDEX idx_supersessions_old ON memory_supersessions(old_memory_id)")
+        db.execSQL("CREATE INDEX idx_possible_match_hints_existing ON memory_possible_match_hints(existing_memory_id)")
         db.execSQL("CREATE INDEX idx_changelog_memory ON change_log(memory_id)")
         db.execSQL("CREATE INDEX idx_transcripts_queue ON transcripts(review_status) WHERE review_status = 'pending'")
         db.execSQL("CREATE INDEX idx_transcripts_chat ON transcripts(chat_id)")
@@ -1980,6 +1995,32 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.execSQL(
                 "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 arrayOf(META_DB_MIGRATION, "27")
+            )
+        }
+        if (oldVersion < 28) {
+            // Stage D: keep AI-supplied existing-memory relationships as
+            // separate Pending-review hints, never as permanent memory data.
+            db.execSQL(
+                "CREATE TABLE memory_possible_match_hints (" +
+                    "draft_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "existing_memory_id TEXT NOT NULL REFERENCES memories(memory_id) ON DELETE CASCADE, " +
+                    "created_at TEXT NOT NULL, " +
+                    "PRIMARY KEY (draft_memory_id, existing_memory_id))"
+            )
+            db.execSQL(
+                "CREATE INDEX idx_possible_match_hints_existing " +
+                    "ON memory_possible_match_hints(existing_memory_id)"
+            )
+            db.execSQL(
+                "ALTER TABLE analysis_candidates ADD COLUMN chunk_ordinal INTEGER NOT NULL DEFAULT 0"
+            )
+            db.execSQL(
+                "ALTER TABLE analysis_candidates ADD COLUMN candidate_ordinal INTEGER NOT NULL DEFAULT 0"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "28")
             )
         }
     }
@@ -3513,6 +3554,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     put("status", "running")
                     put("created_at", nowIso())
                 })
+                insertCandidateCollectionTx(
+                    db = db,
+                    collectionId = range.rangeId,
+                    chatId = range.chatId,
+                    frozenEndMarker = listOfNotNull(
+                        range.frozenEndStartedAt, range.frozenEndTranscriptId
+                    ).joinToString("\u0000")
+                )
                 frozen[chatId] = range
             }
             db.setTransactionSuccessful()
@@ -3522,6 +3571,103 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         return frozen
     }
 
+    private fun insertCandidateCollectionTx(
+        db: SQLiteDatabase,
+        collectionId: String,
+        chatId: String,
+        frozenEndMarker: String?
+    ) {
+        db.insertWithOnConflict(
+            "analysis_run_state", null, ContentValues().apply {
+                put("run_id", collectionId)
+                put("chat_id", chatId)
+                put("frozen_end_marker", frozenEndMarker)
+                put("processing_method", "api")
+                put("chunk_ordinal", 0)
+                put("chunk_success_json", "[]")
+                put("retry_count", 0)
+                put("filed", 0)
+                put("created_at", nowIso())
+                put("updated_at", nowIso())
+            },
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
+    /** Reruns do not own a bookmark range, but still use the same encrypted
+     * temporary candidate boundary until their complete chat output commits. */
+    fun beginCandidateCollection(collectionId: String, chatId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            insertCandidateCollectionTx(db, collectionId, chatId, null)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Persist one successfully parsed chunk's validated memory/rule outputs.
+     * Exact identities already staged for this chat range are not duplicated. */
+    fun stageAnalysisCandidates(
+        collectionId: String,
+        chunkOrdinal: Int,
+        candidates: List<StagedAnalysisCandidate>
+    ) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            check(rowExists(db, "analysis_run_state", "run_id", collectionId)) {
+                "Candidate collection is not active"
+            }
+            for ((candidateOrdinal, candidate) in candidates.withIndex()) {
+                val exists = db.rawQuery(
+                    "SELECT 1 FROM analysis_candidates " +
+                        "WHERE run_id = ? AND stream = ? AND candidate_hash = ? LIMIT 1",
+                    arrayOf(collectionId, candidate.stream, candidate.candidateHash)
+                ).use { it.moveToFirst() }
+                if (exists) continue
+                db.insertOrThrow("analysis_candidates", null, ContentValues().apply {
+                    put("candidate_id", newId("cand-"))
+                    put("run_id", collectionId)
+                    put("stream", candidate.stream)
+                    put("target_type", candidate.targetType)
+                    put("target_id", candidate.targetId)
+                    put("candidate_hash", candidate.candidateHash)
+                    put("chunk_ordinal", chunkOrdinal)
+                    put("candidate_ordinal", candidateOrdinal)
+                    put("payload_json", candidate.payloadJson)
+                    put("created_at", nowIso())
+                })
+            }
+            val completed = db.rawQuery(
+                "SELECT chunk_success_json FROM analysis_run_state WHERE run_id = ?",
+                arrayOf(collectionId)
+            ).use { c -> if (c.moveToFirst()) jsonToStrings(c.getString(0)) else emptyList() }
+                .plus(chunkOrdinal.toString()).distinct()
+            db.update("analysis_run_state", ContentValues().apply {
+                put("chunk_ordinal", chunkOrdinal)
+                put("chunk_success_json", stringsToJson(completed))
+                put("updated_at", nowIso())
+            }, "run_id = ?", arrayOf(collectionId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun discardCandidateCollection(collectionId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("analysis_candidates", "run_id = ?", arrayOf(collectionId))
+            db.delete("analysis_run_state", "run_id = ?", arrayOf(collectionId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /** Release every claim a run still holds (terminal cleanup: completion,
      *  failure, or interruption). Processed rows already dropped theirs. */
     fun releaseAnalysisClaims(runId: String) {
@@ -3529,15 +3675,30 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.beginTransaction()
         try {
             val affectedChats = ArrayList<String>()
+            val candidateCollections = ArrayList<String>()
             db.rawQuery(
                 "SELECT DISTINCT chat_id FROM transcripts WHERE claim_run_id = ? AND chat_id IS NOT NULL",
                 arrayOf(runId)
             ).use { while (it.moveToNext()) affectedChats.add(it.getString(0)) }
+            db.rawQuery(
+                "SELECT range_id FROM analysis_chat_ranges WHERE run_id = ?",
+                arrayOf(runId)
+            ).use { while (it.moveToNext()) candidateCollections.add(it.getString(0)) }
             db.execSQL(
                 "UPDATE transcripts SET claim_run_id = NULL WHERE claim_run_id = ?",
                 arrayOf(runId)
             )
             db.delete("analysis_chat_ranges", "run_id = ? AND status = 'running'", arrayOf(runId))
+            for (collectionId in candidateCollections) {
+                db.delete("analysis_candidates", "run_id = ?", arrayOf(collectionId))
+                db.delete("analysis_run_state", "run_id = ?", arrayOf(collectionId))
+            }
+            // A rerun has no analysis_chat_ranges row. Its temporary candidate
+            // collection deliberately uses the parent run id, so terminal
+            // cleanup owns it directly as well as the startup reaper's
+            // unconditional temporary-state sweep after a hard process kill.
+            db.delete("analysis_candidates", "run_id = ?", arrayOf(runId))
+            db.delete("analysis_run_state", "run_id = ?", arrayOf(runId))
             for (chatId in affectedChats) excludeTranscriptIdsTx(db, chatId, emptyList())
             db.setTransactionSuccessful()
         } finally {
@@ -3549,9 +3710,24 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db: SQLiteDatabase,
         memories: List<MemoryRecord>,
         rules: List<ModelRuleRecord>,
-        lorebookSuggestions: List<LorebookSuggestionRecord>
+        lorebookSuggestions: List<LorebookSuggestionRecord>,
+        relationshipHintsByMemoryId: Map<String, List<String>>
     ) {
-        for (memory in memories) insertPendingMemoryTx(db, memory, generated = true)
+        for (memory in memories) {
+            insertPendingMemoryTx(db, memory, generated = true)
+            for (existingId in relationshipHintsByMemoryId[memory.memoryId].orEmpty().distinct()) {
+                if (existingId == memory.memoryId ||
+                    !rowExists(db, "memories", "memory_id", existingId)
+                ) continue
+                db.insertWithOnConflict(
+                    "memory_possible_match_hints", null, ContentValues().apply {
+                        put("draft_memory_id", memory.memoryId)
+                        put("existing_memory_id", existingId)
+                        put("created_at", nowIso())
+                    }, SQLiteDatabase.CONFLICT_IGNORE
+                )
+            }
+        }
         for (rule in rules) db.insertOrThrow("model_rules", null, modelRuleValues(rule))
         for (suggestion in lorebookSuggestions) {
             db.insertOrThrow("lorebook_suggestions", null, ContentValues().apply {
@@ -3578,6 +3754,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         memories: List<MemoryRecord>,
         rules: List<ModelRuleRecord>,
         lorebookSuggestions: List<LorebookSuggestionRecord>,
+        relationshipHintsByMemoryId: Map<String, List<String>> = emptyMap(),
         runProgress: ArchivistRunRecord? = null
     ): CommittedChatOutputs {
         val db = writableDatabase
@@ -3623,7 +3800,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "Frozen chat range no longer begins at the bookmark"
             }
 
-            insertPreparedOutputsTx(db, memories, rules, lorebookSuggestions)
+            insertPreparedOutputsTx(
+                db, memories, rules, lorebookSuggestions, relationshipHintsByMemoryId
+            )
 
             val frozenEnd = AnalysisBookmark.Boundary(
                 range.frozenEndStartedAt, range.frozenEndTranscriptId
@@ -3653,6 +3832,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 }, "transcript_id = ? AND claim_run_id = ?", arrayOf(row.transcriptId, range.runId))
             }
             db.delete("analysis_chat_ranges", "range_id = ?", arrayOf(range.rangeId))
+            db.update("analysis_run_state", ContentValues().apply {
+                put("filed", 1)
+                put("updated_at", now)
+            }, "run_id = ?", arrayOf(range.rangeId))
+            db.delete("analysis_candidates", "run_id = ?", arrayOf(range.rangeId))
+            db.delete("analysis_run_state", "run_id = ?", arrayOf(range.rangeId))
             runProgress?.let {
                 db.insertWithOnConflict(
                     "archivist_runs", null, archivistRunValues(it), SQLiteDatabase.CONFLICT_REPLACE
@@ -3675,12 +3860,24 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         memories: List<MemoryRecord>,
         rules: List<ModelRuleRecord>,
         lorebookSuggestions: List<LorebookSuggestionRecord>,
+        relationshipHintsByMemoryId: Map<String, List<String>> = emptyMap(),
+        candidateCollectionId: String? = null,
         runProgress: ArchivistRunRecord? = null
     ): CommittedChatOutputs {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            insertPreparedOutputsTx(db, memories, rules, lorebookSuggestions)
+            insertPreparedOutputsTx(
+                db, memories, rules, lorebookSuggestions, relationshipHintsByMemoryId
+            )
+            candidateCollectionId?.let { collectionId ->
+                db.update("analysis_run_state", ContentValues().apply {
+                    put("filed", 1)
+                    put("updated_at", nowIso())
+                }, "run_id = ?", arrayOf(collectionId))
+                db.delete("analysis_candidates", "run_id = ?", arrayOf(collectionId))
+                db.delete("analysis_run_state", "run_id = ?", arrayOf(collectionId))
+            }
             runProgress?.let {
                 db.insertWithOnConflict(
                     "archivist_runs", null, archivistRunValues(it), SQLiteDatabase.CONFLICT_REPLACE
@@ -6487,6 +6684,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             // is never misclassified as a Pending-proposal rejection.
             if (status == "active") {
                 db.delete("generated_pending_drafts", "memory_id = ?", arrayOf(memoryId))
+                db.delete(
+                    "memory_possible_match_hints", "draft_memory_id = ?", arrayOf(memoryId)
+                )
             }
             logChange(db, memoryId, "user",
                 if (status == "active") "activated" else status, note,
@@ -6639,6 +6839,26 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
+    /** Validated Archivist relationship hints for a still-Pending draft.
+     * Stored separately from memory data and re-read live so deleted targets
+     * disappear automatically. */
+    fun relationshipHintsForDraft(draftId: String): List<MemoryMatch.Match> {
+        val draft = getMemory(draftId) ?: return emptyList()
+        if (draft.status != "draft") return emptyList()
+        val out = ArrayList<MemoryMatch.Match>()
+        readableDatabase.rawQuery(
+            "SELECT h.existing_memory_id FROM memory_possible_match_hints h " +
+                "JOIN memories m ON m.memory_id = h.existing_memory_id " +
+                "WHERE h.draft_memory_id = ? ORDER BY h.created_at ASC, h.existing_memory_id ASC",
+            arrayOf(draftId)
+        ).use {
+            while (it.moveToNext()) {
+                out.add(MemoryMatch.Match(it.getString(0), MemoryMatch.Relation.AI_RELATED))
+            }
+        }
+        return out
+    }
+
     /** Active memory ids whose placement is comparable to the draft's (same
      *  scope, sharing a target or both untargeted) — the bounded working set the
      *  embedding layer scores for semantic Possible Matches using the STORED
@@ -6708,6 +6928,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         return out
     }
 
+    /** The exact recorded relationship timestamp for an old Superseded memory.
+     * A defensive MAX handles a history imported with more than one newer row. */
+    fun supersededAt(oldMemoryId: String): String? = readableDatabase.rawQuery(
+        "SELECT MAX(at) FROM memory_supersessions WHERE old_memory_id = ?",
+        arrayOf(oldMemoryId)
+    ).use { c ->
+        if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null
+    }
+
     /** Outcome of an atomic Possible Match resolution. */
     sealed class ResolutionResult {
         /** Applied. [reindexMemoryIds] are now-active memories whose embeddings
@@ -6741,6 +6970,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         // as in setMemoryStatus: no route/source bookkeeping may stay attached
         // to an Active memory, whichever way the proposal was accepted.
         db.delete("generated_pending_drafts", "memory_id = ?", arrayOf(proposalId))
+        db.delete(
+            "memory_possible_match_hints", "draft_memory_id = ?", arrayOf(proposalId)
+        )
         logChange(db, proposalId, "user", "activated", null, snapshotMemoryJson(p))
         clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, proposalId)
         return true

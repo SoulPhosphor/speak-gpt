@@ -245,7 +245,10 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         }
         list = if (f.sort == "oldest") list.sortedBy { it.createdAt } else list.sortedByDescending { it.createdAt }
 
-        return list.map { rowFor(it) }
+        val supersededDates = list.asSequence()
+            .filter { it.status == "superseded" }
+            .associate { it.memoryId to store.supersededAt(it.memoryId) }
+        return list.map { rowFor(it, supersededDates[it.memoryId]) }
     }
 
     // Row layout: title / tags line / first line of content, with a leading
@@ -253,14 +256,19 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
     // 2026). Badge is intentionally suppressed for "active" — the Active
     // pill added visual noise on the row that meant nothing (the browser
     // filters to Active by default).
-    private fun rowFor(m: MemoryRecord): MemoryRow {
+    private fun rowFor(m: MemoryRecord, supersededAt: String?): MemoryRow {
         val tags = parseTags(m.tagsJson)
         val firstLine = m.content.substringBefore('\n').trim()
         val tagsLine = if (tags.isEmpty()) null else formatTagsLine(tags)
         val pending = mode == "pending"
         // In Pending view every row is a draft, so the "Pending" badge would
         // repeat the mode — suppressed, same reasoning as the Active badge.
-        val badge = if (m.status == "active" || pending) null else statusLabel(m.status)
+        val badge = if (m.status == "active" || pending) null else {
+            val status = statusLabel(m.status)
+            if (m.status == "superseded" && supersededAt != null) {
+                "$status · ${MemoryDateFormatter.format(supersededAt)}"
+            } else status
+        }
         // Emergence scope (owner ruling, July 9 2026): a roleplay draft with
         // no world/campaign/character target carries a persistent "Needs
         // roleplay target." note and CANNOT be added to a card until the
@@ -486,10 +494,16 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
 
     private fun showHistory(memoryId: String) {
         runOffThread {
-            val log = MemoryStore.getInstance(this).getMemoryChangeLog(memoryId)
+            val store = MemoryStore.getInstance(this)
+            val log = store.getMemoryChangeLog(memoryId)
+            val recordedSupersessionAt = store.supersededAt(memoryId)
             val text = if (log.isEmpty()) getString(R.string.memory_history_empty)
             else log.joinToString("\n\n") { e ->
-                val when0 = e.at.take(19).replace("T", " ")
+                val when0 = if (e.action == "superseded" && recordedSupersessionAt != null) {
+                    MemoryDateFormatter.format(recordedSupersessionAt)
+                } else {
+                    MemoryDateFormatter.format(e.at)
+                }
                 val note = if (!e.note.isNullOrBlank()) " — ${e.note}" else ""
                 "• ${e.action} (${e.actor}) $when0$note"
             }

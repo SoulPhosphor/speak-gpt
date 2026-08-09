@@ -24,8 +24,9 @@ import org.teslasoft.assistant.preferences.memory.librarian.VectorMath
 
 /**
  * The full Possible Match set for a pending draft: the deterministic exact layer
- * ([MemoryStore.deterministicMatchesForDraft]) PLUS the differently-worded
- * semantically-related layer found by the installed LOCAL embedding model.
+ * ([MemoryStore.deterministicMatchesForDraft]), validated Archivist relationship
+ * hints, and the differently-worded semantically-related layer found by the
+ * installed LOCAL embedding model.
  *
  * Design (owner ruling, Step 1.5):
  *  - Deterministic matching (exact normalized duplicates, placement, type,
@@ -68,12 +69,23 @@ object PossibleMatchFinder {
      * @param semanticAvailable whether the embedding layer actually ran. False
      *   means no usable model (or embedding failed): the caller should tell the
      *   user semantic detection is unavailable until a model is installed;
-     *   [matches] then holds exact matches only.
+     *   [matches] then holds deterministic matches and any validated Archivist
+     *   relationship hints.
      */
     data class Result(
         val matches: List<MemoryMatch.Match>,
         val semanticAvailable: Boolean
     )
+
+    /** Deterministic/semantic evidence is ordered first and owns the relation
+     * for duplicate ids; AI hints add only otherwise-missing review targets. */
+    fun mergeRelationshipHints(
+        localMatches: List<MemoryMatch.Match>,
+        relationshipHints: List<MemoryMatch.Match>
+    ): List<MemoryMatch.Match> {
+        val seen = localMatches.mapTo(HashSet()) { it.memoryId }
+        return localMatches + relationshipHints.filter { seen.add(it.memoryId) }
+    }
 
     fun find(context: Context, draftId: String): Result {
         val store = MemoryStore.getInstance(context)
@@ -81,18 +93,27 @@ object PossibleMatchFinder {
             ?: return Result(emptyList(), semanticAvailable = false)
 
         val deterministic = store.deterministicMatchesForDraft(draftId)
+        val relationshipHints = store.relationshipHintsForDraft(draftId)
 
         val librarian = Librarian.getInstance(context)
         val tag = librarian.activeTag()
         if (tag == null || !librarian.hasUsableModel()) {
-            return Result(deterministic, semanticAvailable = false)
+            return Result(
+                mergeRelationshipHints(deterministic, relationshipHints),
+                semanticAvailable = false
+            )
         }
 
         val doc = RetrievalDocument.semanticDocument(
             draft.content, draft.embeddingText, parseTags(draft.tagsJson)
         )
         val queryVec = librarian.embedComparisonCached(doc)
-            ?: return Result(deterministic, semanticAvailable = false)
+            ?: run {
+                return Result(
+                    mergeRelationshipHints(deterministic, relationshipHints),
+                    semanticAvailable = false
+                )
+            }
 
         val alreadyMatched = deterministic.mapTo(HashSet()) { it.memoryId }
         val semantic = ArrayList<MemoryMatch.Match>()
@@ -120,7 +141,13 @@ object PossibleMatchFinder {
                 semantic.add(MemoryMatch.Match(cmp.memoryId, MemoryMatch.Relation.SEMANTIC_NEAR))
             }
         }
-        return Result(deterministic + semantic, semanticAvailable = true)
+        // Local deterministic/semantic evidence wins for an id that also has
+        // an AI hint. The hint only adds an otherwise-missing review candidate;
+        // it can never suppress a stronger safety classification.
+        return Result(
+            mergeRelationshipHints(deterministic + semantic, relationshipHints),
+            semanticAvailable = true
+        )
     }
 
     private fun parseTags(tagsJson: String): List<String> = try {
