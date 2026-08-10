@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.preferences.memory.archivist
 
 import org.json.JSONArray
+import org.json.JSONObject
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
 
 /**
@@ -137,6 +138,17 @@ Only when the user repeatedly corrected the SAME habit of the AI model in this c
         protocol: ArchivistRequestProtocol
     ): String = withCurrentTypes(base, types) +
         "\n\n" + ArchivistRuntimeProtocol.render(protocol)
+
+    /** A conversation's optional, user-authored extraction guidance. It stays
+     * inside the request only: it is never copied into a proposal, provenance,
+     * or run record. JSON quoting prevents delimiter text inside the note from
+     * changing the surrounding prompt structure. */
+    fun withAnalysisNote(base: String, analysisNote: String): String {
+        if (analysisNote.isBlank()) return base
+        return base.trim() + "\n\n## Analysis Note\n" +
+            "Apply this user-authored guidance while analyzing this conversation: " +
+            JSONObject.quote(analysisNote.trim())
+    }
 
     /**
      * The system prompt for the Lorebook Memories analysis type (Step 1.7).

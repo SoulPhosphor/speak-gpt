@@ -46,6 +46,7 @@ enum class ArchivistFailure(val key: String, val settingsRelated: Boolean) {
          *  them. */
         fun classify(error: Throwable): ArchivistFailure {
             if (error is TaggedArchivistException) return error.failure
+            if (error is ArchivistShrinkRequiredException) return LIMIT
             return when (GenerationErrorClassifier.classify(error).code) {
                 GenErrorCode.N1, GenErrorCode.N2, GenErrorCode.N3, GenErrorCode.N4 -> UNREACHABLE
                 GenErrorCode.A1, GenErrorCode.S1, GenErrorCode.S3,

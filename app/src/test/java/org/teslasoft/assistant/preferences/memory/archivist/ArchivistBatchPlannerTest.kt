@@ -23,28 +23,7 @@ import org.junit.Test
 class ArchivistBatchPlannerTest {
 
     @Test
-    fun smallConversationIsOneRequest() {
-        val chunks = ArchivistBatchPlanner.splitIntoRequests(listOf(1000, 2000, 3000))
-        assertEquals(listOf(listOf(0, 1, 2)), chunks)
-    }
-
-    @Test
-    fun oversizedConversationSplitsOnRowBoundaries() {
-        val chunks = ArchivistBatchPlanner.splitIntoRequests(listOf(60, 60, 60, 60), maxChars = 100)
-        assertEquals(listOf(listOf(0), listOf(1), listOf(2), listOf(3)), chunks)
-        val chunks2 = ArchivistBatchPlanner.splitIntoRequests(listOf(40, 40, 40, 40), maxChars = 100)
-        assertEquals(listOf(listOf(0, 1), listOf(2, 3)), chunks2)
-    }
-
-    @Test
-    fun singleRowOverBudgetTravelsAlone() {
-        val chunks = ArchivistBatchPlanner.splitIntoRequests(listOf(10, 500, 10), maxChars = 100)
-        assertEquals(listOf(listOf(0), listOf(1), listOf(2)), chunks)
-    }
-
-    @Test
     fun emptyInputsYieldNoPlans() {
-        assertTrue(ArchivistBatchPlanner.splitIntoRequests(emptyList()).isEmpty())
         assertTrue(ArchivistBatchPlanner.planBatches(emptyList()).isEmpty())
     }
 

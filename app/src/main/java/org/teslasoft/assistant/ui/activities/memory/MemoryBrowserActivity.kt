@@ -265,9 +265,11 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         // repeat the mode — suppressed, same reasoning as the Active badge.
         val badge = if (m.status == "active" || pending) null else {
             val status = statusLabel(m.status)
-            if (m.status == "superseded" && supersededAt != null) {
-                "$status · ${MemoryDateFormatter.format(supersededAt)}"
-            } else status
+            MemorySupersessionPresentation.badge(
+                m.status, status, supersededAt
+            ) {
+                MemoryDateFormatter.format(it)
+            }
         }
         // Emergence scope (owner ruling, July 9 2026): a roleplay draft with
         // no world/campaign/character target carries a persistent "Needs
@@ -499,11 +501,11 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             val recordedSupersessionAt = store.supersededAt(memoryId)
             val text = if (log.isEmpty()) getString(R.string.memory_history_empty)
             else log.joinToString("\n\n") { e ->
-                val when0 = if (e.action == "superseded" && recordedSupersessionAt != null) {
-                    MemoryDateFormatter.format(recordedSupersessionAt)
-                } else {
-                    MemoryDateFormatter.format(e.at)
-                }
+                val when0 = MemoryDateFormatter.format(
+                    MemorySupersessionPresentation.timestamp(
+                        e.action, e.at, recordedSupersessionAt
+                    )
+                )
                 val note = if (!e.note.isNullOrBlank()) " — ${e.note}" else ""
                 "• ${e.action} (${e.actor}) $when0$note"
             }

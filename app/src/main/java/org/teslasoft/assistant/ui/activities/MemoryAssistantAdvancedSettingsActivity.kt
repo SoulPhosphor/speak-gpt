@@ -48,6 +48,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistPrompt
+import org.teslasoft.assistant.preferences.memory.archivist.ArchivistRequestBudget
 import org.teslasoft.assistant.providers.DedicatedModelRoutingPolicy
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.FavoriteRoutingActions
@@ -79,6 +80,9 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
     private var switchMaxSuggestions: MaterialSwitch? = null
     private var fieldMaxSuggestions: TextInputEditText? = null
+    private var textConversationAmountValue: TextView? = null
+    private var sectionCustomConversationTokens: View? = null
+    private var fieldCustomConversationTokens: TextInputEditText? = null
 
     private var textArchivistEndpointValue: TextView? = null
     private var btnEditArchivistEndpoint: ImageButton? = null
@@ -102,6 +106,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
     /** Held until Save (spec §2 has an explicit Save button). */
     private var selectedImportance = 1
+    private var selectedConversationAmount = ArchivistRequestBudget.CHOICE_AUTO
 
     // The endpoint gear edits only the currently selected stable-id profile.
     // Selection itself stays in this screen's dropdown and never opens a new
@@ -158,6 +163,9 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         btnBack = findViewById(R.id.btn_back)
         switchMaxSuggestions = findViewById(R.id.switch_max_suggestions)
         fieldMaxSuggestions = findViewById(R.id.field_max_suggestions)
+        textConversationAmountValue = findViewById(R.id.text_conversation_amount_value)
+        sectionCustomConversationTokens = findViewById(R.id.section_custom_conversation_tokens)
+        fieldCustomConversationTokens = findViewById(R.id.field_custom_conversation_tokens)
         textArchivistEndpointValue = findViewById(R.id.text_archivist_endpoint_value)
         btnEditArchivistEndpoint = findViewById(R.id.btn_edit_archivist_endpoint)
         textArchivistModelValue = findViewById(R.id.text_archivist_model_value)
@@ -203,6 +211,16 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
         /* ---- Maximum Suggestions Per Conversation ---- */
         setupMaxSuggestions()
+
+        /* ---- Conversation Amount Per Request ---- */
+        selectedConversationAmount = preferences?.getArchivistConversationAmount()
+            ?: ArchivistRequestBudget.CHOICE_AUTO
+        fieldCustomConversationTokens?.setText(
+            (preferences?.getArchivistCustomConversationTokens()
+                ?: ArchivistRequestBudget.CUSTOM_SUGGESTED_TOKENS).toString()
+        )
+        updateConversationAmount()
+        textConversationAmountValue?.setOnClickListener { showConversationAmountPicker() }
 
         /* ---- Memory Assistant Endpoint & Model ---- */
         refreshArchivistRows()
@@ -283,6 +301,59 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         fieldMaxSuggestions?.setText(text)
         fieldMaxSuggestions?.setSelection(text.length)
         suppressSuggestionWatcher = false
+    }
+
+    /* ------------------------------ Conversation Amount ------------------------------ */
+
+    private val conversationAmountChoices: List<String>
+        get() = listOf(
+            ArchivistRequestBudget.CHOICE_AUTO,
+            ArchivistRequestBudget.CHOICE_SMALL,
+            ArchivistRequestBudget.CHOICE_STANDARD,
+            ArchivistRequestBudget.CHOICE_LARGE,
+            ArchivistRequestBudget.CHOICE_CUSTOM
+        )
+
+    private fun conversationAmountLabel(choice: String): String = when (choice) {
+        ArchivistRequestBudget.CHOICE_SMALL ->
+            getString(R.string.memory_assistant_conversation_amount_small)
+        ArchivistRequestBudget.CHOICE_STANDARD ->
+            getString(R.string.memory_assistant_conversation_amount_standard)
+        ArchivistRequestBudget.CHOICE_LARGE ->
+            getString(R.string.memory_assistant_conversation_amount_large)
+        ArchivistRequestBudget.CHOICE_CUSTOM ->
+            getString(R.string.memory_assistant_conversation_amount_custom)
+        else -> getString(R.string.memory_assistant_conversation_amount_auto)
+    }
+
+    private fun updateConversationAmount() {
+        textConversationAmountValue?.text = conversationAmountLabel(selectedConversationAmount)
+        sectionCustomConversationTokens?.visibility =
+            if (selectedConversationAmount == ArchivistRequestBudget.CHOICE_CUSTOM) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+    }
+
+    private fun showConversationAmountPicker() {
+        val anchor = textConversationAmountValue ?: return
+        val choices = conversationAmountChoices
+        val labels = choices.map(::conversationAmountLabel)
+        val current = choices.indexOf(selectedConversationAmount).coerceAtLeast(0)
+        AppDropdown.show(anchor, labels, current) { position ->
+            selectedConversationAmount = choices[position]
+            if (selectedConversationAmount == ArchivistRequestBudget.CHOICE_CUSTOM &&
+                ArchivistRequestBudget.validateCustomTarget(
+                    fieldCustomConversationTokens?.text?.toString()?.trim()?.toIntOrNull()
+                ) == null
+            ) {
+                fieldCustomConversationTokens?.setText(
+                    ArchivistRequestBudget.CUSTOM_SUGGESTED_TOKENS.toString()
+                )
+            }
+            updateConversationAmount()
+        }
     }
 
     /* ------------------------------ Memory Assistant Endpoint & Model ------------------------------ */
@@ -520,6 +591,18 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     /* ------------------------------ Save ------------------------------ */
 
     private fun save() {
+        val customTokens = fieldCustomConversationTokens?.text
+            ?.toString()?.trim()?.toIntOrNull()
+        if (selectedConversationAmount == ArchivistRequestBudget.CHOICE_CUSTOM &&
+            ArchivistRequestBudget.validateCustomTarget(customTokens) == null
+        ) {
+            fieldCustomConversationTokens?.requestFocus()
+            fieldCustomConversationTokens?.selectAll()
+            return
+        }
+        preferences?.setArchivistConversationAmount(selectedConversationAmount)
+        if (customTokens != null) preferences?.setArchivistCustomConversationTokens(customTokens)
+
         preferences?.setArchivistTemperature(sliderTemperature?.value ?: RECOMMENDED_TEMPERATURE)
         preferences?.setArchivistMinImportance(selectedImportance)
 

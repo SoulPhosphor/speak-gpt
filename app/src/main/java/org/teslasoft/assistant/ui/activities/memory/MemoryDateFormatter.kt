@@ -32,3 +32,29 @@ object MemoryDateFormatter {
             iso
         }
 }
+
+/** Pure supersession presentation policy shared by the browser row and its
+ * history dialog. The recorded relationship timestamp wins over a generic
+ * change-log timestamp whenever the lifecycle event is supersession. */
+object MemorySupersessionPresentation {
+    fun badge(
+        status: String,
+        statusLabel: String,
+        recordedSupersessionAt: String?,
+        format: (String) -> String
+    ): String = if (status == "superseded" && recordedSupersessionAt != null) {
+        "$statusLabel · ${format(recordedSupersessionAt)}"
+    } else {
+        statusLabel
+    }
+
+    fun timestamp(
+        action: String,
+        eventAt: String,
+        recordedSupersessionAt: String?
+    ): String = if (action == "superseded" && recordedSupersessionAt != null) {
+        recordedSupersessionAt
+    } else {
+        eventAt
+    }
+}

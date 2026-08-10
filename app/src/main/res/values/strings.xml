@@ -1774,6 +1774,14 @@
     <string name="memory_controls_row_assistant_hint">Find possible memories in finished conversations, then review them in Pending before saving.</string>
     <string name="memory_controls_max_suggestions">Maximum Suggestions Per Conversation</string>
     <string name="memory_controls_max_suggestions_hint">Limit how many memory drafts Memory Assistant can create from each conversation.</string>
+    <string name="memory_assistant_conversation_amount">Conversation Amount Per Request</string>
+    <string name="memory_assistant_conversation_amount_hint">Controls how much conversation text is sent in each AI request. Smaller amounts work with more models and providers but require more requests.</string>
+    <string name="memory_assistant_conversation_amount_auto">Auto</string>
+    <string name="memory_assistant_conversation_amount_small">Small · About 4,000 Tokens</string>
+    <string name="memory_assistant_conversation_amount_standard">Standard · About 8,000 Tokens</string>
+    <string name="memory_assistant_conversation_amount_large">Large · About 16,000 Tokens</string>
+    <string name="memory_assistant_conversation_amount_custom">Custom</string>
+    <string name="memory_assistant_conversation_tokens">Conversation Tokens Per Request</string>
     <string name="memory_controls_row_advanced_assistant">Advanced Memory Assistant Settings</string>
     <string name="memory_controls_row_advanced_assistant_subtitle">Tune extraction temperature, importance, and prompt behavior.</string>
     <string name="memory_controls_section_engine">Memory Engine</string>

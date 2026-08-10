@@ -41,4 +41,16 @@ class PossibleMatchFinderTest {
             PossibleMatchFinder.mergeRelationshipHints(local, hints)
         )
     }
+
+    @Test
+    fun localSemanticMatchSurvivesWhenArchivistProvidesNoRelationshipHint() {
+        val local = listOf(
+            MemoryMatch.Match("semantic-only", MemoryMatch.Relation.SEMANTIC_NEAR)
+        )
+
+        assertEquals(
+            local,
+            PossibleMatchFinder.mergeRelationshipHints(local, emptyList())
+        )
+    }
 }

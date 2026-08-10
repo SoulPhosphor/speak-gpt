@@ -51,28 +51,6 @@ class ArchivistContextTest {
     )
 
     @Test
-    fun sceneTransitionsSplitExistingSizeChunksWithoutFirstRowBleed() {
-        val rows = listOf(
-            transcript("t1", companionId = "comp-a", projectId = "project-a"),
-            transcript("t2", companionId = "comp-a", projectId = "project-a"),
-            transcript(
-                "t3", companionId = "comp-b", worldId = "world-b",
-                campaignId = "campaign-b", roleplayCharacterId = "rp-b"
-            ),
-            transcript("t4", companionId = "comp-b", projectId = "project-c")
-        )
-
-        val chunks = ArchivistScenePlanner.splitAtSceneBoundaries(
-            listOf(listOf(0, 1, 2, 3)), rows
-        )
-
-        assertEquals(listOf(listOf(0, 1), listOf(2), listOf(3)), chunks)
-        assertEquals("project-a", ArchivistSceneContext.from(rows[0]).projectId)
-        assertEquals("campaign-b", ArchivistSceneContext.from(rows[2]).campaignId)
-        assertEquals("project-c", ArchivistSceneContext.from(rows[3]).projectId)
-    }
-
-    @Test
     fun runtimeProtocolUsesOnlyRequestLocalAliasesAndCompleteBoundedMemories() {
         val scene = ArchivistSceneContext(
             companionId = "stable-companion-7",

@@ -112,6 +112,42 @@
                 android:singleLine="true"
                 android:visibility="gone" />
 
+            <!-- ============ Conversation Amount Per Request ============ -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/memory_assistant_conversation_amount" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/memory_assistant_conversation_amount_hint" />
+
+            <TextView
+                android:id="@+id/text_conversation_amount_value"
+                style="@style/Widget.App.Dropdown.CanonicalValue"
+                android:layout_width="match_parent"
+                android:layout_marginTop="12dp"
+                android:text="@string/memory_assistant_conversation_amount_auto" />
+
+            <LinearLayout
+                android:id="@+id/section_custom_conversation_tokens"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/memory_assistant_conversation_tokens" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_custom_conversation_tokens"
+                    style="@style/Widget.App.Field.Box"
+                    android:inputType="number"
+                    android:maxLength="8"
+                    android:singleLine="true" />
+            </LinearLayout>
+
             <!-- ============ Memory Assistant Model ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"
