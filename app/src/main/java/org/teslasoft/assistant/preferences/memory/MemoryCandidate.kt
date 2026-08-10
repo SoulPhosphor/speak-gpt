@@ -109,7 +109,6 @@ sealed class MemoryCandidate {
  */
 data class ModelRuleCandidate(
     val text: String,
-    val modelStrings: List<String>,
     val sourceModelString: String? = null
 )
 
@@ -133,8 +132,8 @@ enum class CandidateError {
     /** A General candidate declared the companion scope (it must use the
      *  companion validator instead). */
     GENERAL_SCOPE_IS_COMPANION,
-    /** A Model Rule candidate has blank text. (An empty model list is allowed —
-     *  the user assigns model strings when approving the draft.) */
+    /** A Model Rule candidate has blank text. Exact targets are assigned only
+     *  by the user when approving the draft. */
     MODEL_RULE_INCOMPLETE
 }
 
@@ -232,20 +231,18 @@ object MemoryCandidateValidator {
     /**
      * Validate a Model Rule proposal. Model Rules never receive a Memory Type or
      * importance, so none are accepted here. A valid rule requires only nonblank
-     * text: the assigned model list MAY be empty, because the approved Draft
-     * workflow lets the user assign model strings when they approve the rule
-     * (review finding 2). Blank text is the only rejection.
+     * text. Archivist candidates cannot carry model targets: the approved
+     * Draft workflow requires the user to assign an exact endpoint/model pair
+     * when approving the rule. Blank text is the only rejection.
      */
     fun validateModelRule(
         text: String,
-        modelStrings: List<String> = emptyList(),
         sourceModelString: String? = null
     ): CandidateResult<ModelRuleCandidate> {
         val cleanText = text.trim()
         if (cleanText.isEmpty()) {
             return CandidateResult.Invalid(CandidateError.MODEL_RULE_INCOMPLETE)
         }
-        val cleanModels = modelStrings.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
-        return CandidateResult.Valid(ModelRuleCandidate(cleanText, cleanModels, sourceModelString))
+        return CandidateResult.Valid(ModelRuleCandidate(cleanText, sourceModelString))
     }
 }

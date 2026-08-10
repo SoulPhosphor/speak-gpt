@@ -119,7 +119,7 @@ class MemoryCandidateValidatorTest {
         val general: MemoryCandidate =
             (MemoryCandidateValidator.validateGeneral("global", "a general fact") as CandidateResult.Valid).candidate
         val comp: MemoryCandidate = (companion(listOf("c-a"), "c-a") as CandidateResult.Valid).candidate
-        val rule = (MemoryCandidateValidator.validateModelRule("avoid purple prose", listOf("glm-5"))
+        val rule = (MemoryCandidateValidator.validateModelRule("avoid purple prose")
             as CandidateResult.Valid).candidate
 
         assertTrue(general is MemoryCandidate.General)
@@ -134,23 +134,23 @@ class MemoryCandidateValidatorTest {
     /* ------------------ item 6 / review finding 2: Model Rules ------------- */
 
     @Test
-    fun modelRuleDraftIsValidWithAnEmptyModelList() {
-        // The approved Draft workflow lets the model list stay empty until the
-        // user assigns it on approval (review finding 2): nonblank text alone is
+    fun modelRuleDraftIsValidWithoutAnAssignedTarget() {
+        // The approved Draft workflow leaves exact targets to the user on
+        // approval (review finding 2): nonblank text alone is
         // a valid draft.
         val result = MemoryCandidateValidator.validateModelRule("prefers terse replies")
         assertTrue(result is CandidateResult.Valid)
         val rule = (result as CandidateResult.Valid).candidate
         assertEquals("prefers terse replies", rule.text)
-        assertTrue("draft keeps an empty model list until approval", rule.modelStrings.isEmpty())
+        assertFalse(rule.javaClass.declaredFields.any { it.name == "modelStrings" })
     }
 
     @Test
-    fun modelRulePreservesAssignedModelStringsWhenPresent() {
-        val rule = (MemoryCandidateValidator.validateModelRule("no purple prose", listOf("glm-5", " glm-5 ", ""))
+    fun modelRuleCandidateCannotCreateLegacyFuzzyTargets() {
+        val rule = (MemoryCandidateValidator.validateModelRule("no purple prose")
             as CandidateResult.Valid).candidate
-        // Trimmed, de-duplicated, blanks dropped.
-        assertEquals(listOf("glm-5"), rule.modelStrings)
+        assertFalse(rule.javaClass.declaredFields.any { it.name.contains("modelStrings") })
+        assertFalse(rule.javaClass.declaredFields.any { it.name.contains("modelTargets") })
     }
 
     @Test
@@ -165,7 +165,7 @@ class MemoryCandidateValidatorTest {
     fun modelRuleCarriesNoTypeAndNoImportance() {
         // Item 14 at the domain level: ModelRuleCandidate has no Memory Type and
         // no importance to acquire — the fields simply do not exist on the type.
-        val rule = (MemoryCandidateValidator.validateModelRule("keep replies short", listOf("glm-5", "glm-5-air"))
+        val rule = (MemoryCandidateValidator.validateModelRule("keep replies short")
             as CandidateResult.Valid).candidate
         val fieldNames = rule.javaClass.declaredFields.map { it.name }
         assertFalse("Model Rule must have no Memory Type", fieldNames.any { it.equals("typeId", true) })

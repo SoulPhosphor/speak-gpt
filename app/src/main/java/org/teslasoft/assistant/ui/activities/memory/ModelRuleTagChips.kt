@@ -21,10 +21,11 @@ import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
 import android.widget.Filter
 import androidx.fragment.app.FragmentActivity
-import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
+import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.ModelRuleTagRecord
+import org.teslasoft.assistant.ui.widgets.AppRemovableChip
 
 /**
  * The model-rule tag input (§11 Revision 5): typing ≥3 characters fuzzy-
@@ -84,22 +85,31 @@ class ModelRuleTagChips(
 
     /** Creates/attaches whatever is typed — called on Save too, so a typed but
      *  unconfirmed tag isn't silently dropped. */
-    fun confirmText() {
+    fun confirmText(onComplete: () -> Unit = {}) {
         val text = input.text?.toString()?.trim().orEmpty()
-        if (text.isEmpty()) return
+        if (text.isEmpty()) {
+            onComplete()
+            return
+        }
         input.setText("")
         pool.firstOrNull { it.name.equals(text, ignoreCase = true) }?.let {
             addTag(it)
+            onComplete()
             return
         }
         Thread {
             try {
-                val tag = MemoryStore.getInstance(activity).findOrCreateModelRuleTag(text) ?: return@Thread
+                val tag = MemoryStore.getInstance(activity).findOrCreateModelRuleTag(text)
                 activity.runOnUiThread {
-                    if (pool.none { it.tagId == tag.tagId }) pool.add(tag)
-                    addTag(tag)
+                    if (tag != null) {
+                        if (pool.none { it.tagId == tag.tagId }) pool.add(tag)
+                        addTag(tag)
+                    }
+                    onComplete()
                 }
-            } catch (_: Exception) { /* nothing attached */ }
+            } catch (_: Exception) {
+                activity.runOnUiThread { onComplete() }
+            }
         }.start()
     }
 
@@ -112,7 +122,7 @@ class ModelRuleTagChips(
     private fun renderChips() {
         chipGroup.removeAllViews()
         for ((id, tag) in selected) {
-            val chip = Chip(activity).apply {
+            val chip = AppRemovableChip.create(activity, chipGroup).apply {
                 text = tag.name
                 isCloseIconVisible = true
                 setOnCloseIconClickListener {
@@ -126,7 +136,7 @@ class ModelRuleTagChips(
 
     /** Case-insensitive contains-match over the pool. */
     private inner class FuzzyTagAdapter :
-        ArrayAdapter<String>(activity, android.R.layout.simple_dropdown_item_1line) {
+        ArrayAdapter<String>(activity, R.layout.view_dropdown_option) {
 
         private var results: List<ModelRuleTagRecord> = emptyList()
 

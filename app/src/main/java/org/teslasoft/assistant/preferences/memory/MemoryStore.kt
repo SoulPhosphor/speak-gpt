@@ -25,7 +25,12 @@ import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.CorruptionErrorHandlers
 import org.teslasoft.assistant.preferences.backup.DatabaseDegradedException
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.models.ModelIdentity
+import org.teslasoft.assistant.preferences.models.ModelIdentityCodec
+import org.teslasoft.assistant.preferences.models.LegacyModelTargetResolver
 import org.teslasoft.assistant.util.Hash
 import java.time.Instant
 import java.util.UUID
@@ -68,7 +73,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 28
+        private const val DATABASE_VERSION = 29
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -909,10 +914,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "PRIMARY KEY (tag_id, target_type, target_id))"
         )
 
-        // Model rules (Stage 4, owner_approved_rules §11 Revision 5): user-
-        // written patches for a specific AI model's habits. The model string
-        // is the primary identity — no profiles/groups. Each rule carries its
-        // own model_strings_json (the models it applies to) and any number of
+        // Model rules (owner_approved_rules §11 Revision 6): user-written
+        // patches for specific endpoint/model identities. Exact targets live
+        // in model_targets_json; model_strings_json preserves unresolved
+        // pre-Revision-6 fuzzy strings only. Each rule also carries any number of
         // tags (organizing labels, own pool). status='draft' = a Phase 6
         // Archivist suggestion awaiting review. Starts EMPTY: rules are hand-
         // written or arrive as Phase 6 drafts; tags are created inline.
@@ -921,6 +926,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "rule_id TEXT PRIMARY KEY, " +
                 "text TEXT NOT NULL, " +
                 "model_strings_json TEXT NOT NULL DEFAULT '[]', " +
+                "model_targets_json TEXT NOT NULL DEFAULT '[]', " +
                 "status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('draft','active')), " +
                 "source_model_string TEXT, " +
                 "created_at TEXT NOT NULL, " +
@@ -2023,6 +2029,20 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "28")
             )
         }
+        if (oldVersion < 29) {
+            // Model Rules identity redesign: exact endpoint/model pairs live in
+            // their own column. The old fuzzy strings remain untouched as
+            // legacy targets until an unambiguous local identity is known or
+            // the user replaces them in the editor.
+            db.execSQL(
+                "ALTER TABLE model_rules ADD COLUMN model_targets_json TEXT NOT NULL DEFAULT '[]'"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "29")
+            )
+        }
     }
 
     /**
@@ -2803,7 +2823,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 }
             }
 
-            // Model rules (Stage 4, §11 Revision 5): rules, their tags, and the
+            // Model rules (§11 Revision 6): targets, legacy strings, tags, and
             // links between them. Each is id-keyed and de-duped on import.
             for (r in data.modelRules) {
                 if (rowExists(db, "model_rules", "rule_id", r.ruleId)) {
@@ -5781,13 +5801,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     fun memoriesForProject(projectId: String, includeArchived: Boolean): List<MemoryRecord> =
         memoriesForTarget("memory_projects", "project_id", projectId, includeArchived)
 
-    /* -------- model rules (Stage 4, owner_approved_rules §11 Revision 5) --------
-     * User-written patches for a specific AI model's habits. The MODEL STRING
-     * is the primary identity — no profiles/groups. Each rule carries its own
-     * model_strings_json (which models it applies to) and any number of tags
+    /* -------- model rules (owner_approved_rules §11 Revision 6) --------
+     * User-written patches for a specific endpoint/model identity. Each rule
+     * carries exact model_targets_json, preserved legacy model_strings_json,
+     * and any number of tags
      * (organizing labels only — a separate pool that never decides injection).
      * A rule with status='draft' is a Phase 6 Archivist suggestion awaiting
-     * review. Injection matches by model string; the on/off decision is the
+     * review. Injection matches by endpoint + exact model (with a legacy-only
+     * compatibility path); the on/off decision is the
      * global default + per-chat toggle in Preferences, never in this store. */
 
     /** All rules, or only those with [status] ('active' | 'draft'). Oldest
@@ -5808,18 +5829,23 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         ).use { return if (it.moveToFirst()) readModelRule(it) else null }
     }
 
-    /** The injection read (Stage 4): every ACTIVE rule whose model-strings
-     *  list matches [chatModelId] (case-insensitive contains, provider prefix
-     *  ignored — ModelRuleMatcher). Matching is fuzzy, so it can't live in
-     *  SQL; we pull the active rows in deterministic order and filter in
-     *  Kotlin. The order is fixed (oldest first, id tiebreak) so the rendered
-     *  block is byte-identical across turns (prompt-layer contract). Rules are
-     *  never truncated here — §11 forbids silently dropping matches. */
-    fun getActiveModelRulesForModel(chatModelId: String): List<ModelRuleRecord> {
-        if (chatModelId.isBlank()) return emptyList()
+    /**
+     * Every ACTIVE rule matching the current endpoint and exact model id.
+     * Conservatively preserved legacy strings keep their former fuzzy behavior
+     * until the user replaces them; newly created rules cannot produce them.
+     * The comparison is entirely local and deterministic.
+     */
+    fun getActiveModelRulesForModel(endpointId: String, chatModelId: String): List<ModelRuleRecord> {
+        if (endpointId.isBlank() || chatModelId.isBlank()) return emptyList()
+        migrateUnambiguousLegacyModelTargets()
         return getModelRules("active").filter {
             org.teslasoft.assistant.preferences.memory.enforcer.ModelRuleMatcher
-                .profileMatchesModel(it.modelStringsJson, chatModelId)
+                .ruleMatches(
+                    modelTargetsJson = it.modelTargetsJson,
+                    legacyModelStringsJson = it.modelStringsJson,
+                    endpointId = endpointId,
+                    modelId = chatModelId
+                )
         }
     }
 
@@ -5830,13 +5856,15 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         status = c.getString(c.getColumnIndexOrThrow("status")),
         sourceModelString = c.getStringOrNull("source_model_string"),
         createdAt = c.getString(c.getColumnIndexOrThrow("created_at")) ?: "",
-        updatedAt = c.getStringOrNull("updated_at")
+        updatedAt = c.getStringOrNull("updated_at"),
+        modelTargetsJson = c.getStringOrNull("model_targets_json") ?: "[]"
     )
 
     private fun modelRuleValues(r: ModelRuleRecord) = ContentValues().apply {
         put("rule_id", r.ruleId)
         put("text", r.text)
         put("model_strings_json", r.modelStringsJson)
+        put("model_targets_json", r.modelTargetsJson)
         put("status", r.status)
         put("source_model_string", r.sourceModelString)
         put("created_at", r.createdAt.ifEmpty { nowIso() })
@@ -5861,6 +5889,123 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.endTransaction()
         }
     }
+
+    /**
+     * Convert only legacy strings that exactly name one locally known model on
+     * exactly one endpoint. No case folding, prefix stripping, substring, or
+     * network request is allowed here; ambiguous strings remain legacy.
+     */
+    fun migrateUnambiguousLegacyModelTargets() {
+        val known = LinkedHashSet<ModelIdentity>()
+        try {
+            ApiEndpointPreferences.getApiEndpointPreferences(appContext)
+                .getApiEndpointsList(appContext)
+                .forEach { endpoint ->
+                    if (endpoint.id.isNotBlank() && endpoint.model.isNotBlank()) {
+                        known.add(ModelIdentity(endpoint.id, endpoint.model))
+                    }
+                }
+            FavoriteModelsPreferences.getPreferences(appContext).getFavoriteModels().forEach { favorite ->
+                val endpointId = favorite["endpointId"].orEmpty()
+                val modelId = favorite["modelId"].orEmpty()
+                if (endpointId.isNotBlank() && modelId.isNotBlank()) {
+                    known.add(ModelIdentity(endpointId, modelId))
+                }
+            }
+        } catch (_: Exception) {
+            return
+        }
+        if (known.isEmpty()) return
+
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val rules = ArrayList<ModelRuleRecord>()
+            db.query("model_rules", null, null, null, null, null, null).use { cursor ->
+                while (cursor.moveToNext()) rules.add(readModelRule(cursor))
+            }
+            for (rule in rules) {
+                val legacy = parseStringArray(rule.modelStringsJson)
+                if (legacy.isEmpty()) continue
+                val resolution = LegacyModelTargetResolver.resolve(legacy, known)
+                val targets = ModelIdentityCodec.decode(rule.modelTargetsJson) + resolution.resolved
+                if (resolution.unresolved.size != legacy.size) {
+                    db.update(
+                        "model_rules",
+                        ContentValues().apply {
+                            put("model_strings_json", stringArrayJson(resolution.unresolved))
+                            put("model_targets_json", ModelIdentityCodec.encode(targets))
+                            put("updated_at", nowIso())
+                        },
+                        "rule_id = ?",
+                        arrayOf(rule.ruleId)
+                    )
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Remove exact unavailable targets from every affected rule. A rule is
+     * deleted only when no exact target and no legacy target remains.
+     */
+    fun removeModelTargets(targetsToRemove: Set<ModelIdentity>): ModelRuleTargetRemoval {
+        if (targetsToRemove.isEmpty()) return ModelRuleTargetRemoval(0, 0, 0)
+        var removedTargets = 0
+        var updatedRules = 0
+        var deletedRules = 0
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val rules = ArrayList<ModelRuleRecord>()
+            db.query("model_rules", null, null, null, null, null, null).use { cursor ->
+                while (cursor.moveToNext()) rules.add(readModelRule(cursor))
+            }
+            for (rule in rules) {
+                val before = ModelIdentityCodec.decode(rule.modelTargetsJson)
+                val after = before.filterNot { it in targetsToRemove }
+                val removedHere = before.size - after.size
+                if (removedHere == 0) continue
+                removedTargets += removedHere
+                if (after.isEmpty() && parseStringArray(rule.modelStringsJson).isEmpty()) {
+                    db.delete("model_rule_tag_links", "rule_id = ?", arrayOf(rule.ruleId))
+                    db.delete("model_rules", "rule_id = ?", arrayOf(rule.ruleId))
+                    recordDeletionTx(db, "model_rule", rule.ruleId)
+                    deletedRules++
+                } else {
+                    db.update(
+                        "model_rules",
+                        ContentValues().apply {
+                            put("model_targets_json", ModelIdentityCodec.encode(after))
+                            put("updated_at", nowIso())
+                        },
+                        "rule_id = ?",
+                        arrayOf(rule.ruleId)
+                    )
+                    updatedRules++
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return ModelRuleTargetRemoval(removedTargets, updatedRules, deletedRules)
+    }
+
+    private fun parseStringArray(json: String): List<String> = try {
+        val array = org.json.JSONArray(json)
+        (0 until array.length()).mapNotNull { index ->
+            array.optString(index).trim().takeIf { it.isNotEmpty() }
+        }.distinct()
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    private fun stringArrayJson(values: Collection<String>): String =
+        org.json.JSONArray(values.toList()).toString()
 
     /** Accept a draft (§11): draft -> active. The user assigns the model
      *  strings and tags separately (via the editor) before accepting. */

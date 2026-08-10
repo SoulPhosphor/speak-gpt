@@ -347,6 +347,11 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.ModelCleanupActivity"
+            android:exported="false"
+            android:label="@string/model_cleanup_title" />
+
+        <activity
             android:name=".ui.activities.MemoryManagerActivity"
             android:exported="false"
             android:label="@string/title_memory_manager"

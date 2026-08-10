@@ -154,7 +154,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var textChatRoleplayCharacter: TextView? = null
     private var textChatProject: TextView? = null
 
-    // Model rules (Stage 4, owner_approved_rules §11 Revision 5): the per-chat
+    // Model rules (owner_approved_rules §11 Revision 6): the per-chat
     // "Apply Model Rules" toggle. NOT part of the memory-scene container —
     // model rules are their own prompt layer and apply at any memory-engine
     // tier. Follows the global "Automatically Apply Model Rules" default (on);
@@ -1259,7 +1259,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     /* ------------------------------ model rules (Stage 4, §11) ------------------------------ */
 
     /**
-     * The per-chat "Apply Model Rules" toggle (§11 Revision 5). Unlike the
+     * The per-chat "Apply Model Rules" toggle (§11 Revision 6). Unlike the
      * scene rows it is not gated on the full memory engine — model rules are
      * their own prompt layer at any tier. Follows the global "Automatically
      * Apply Model Rules" default (on); flipping it overrides for this chat.

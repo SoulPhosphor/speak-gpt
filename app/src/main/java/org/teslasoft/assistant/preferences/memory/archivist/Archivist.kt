@@ -1515,9 +1515,9 @@ object Archivist {
             val rule = ModelRuleRecord(
                 ruleId = MemoryStore.newId("mr_"),
                 text = candidate.text,
-                // §11: the user assigns model strings on accept; the source model
-                // string seeds that list. A Draft is filed with the list empty.
-                modelStringsJson = listToJson(candidate.modelStrings),
+                // §11 Revision 6: the user assigns exact endpoint/model targets
+                // on accept. A Draft is filed with no exact or legacy target.
+                modelStringsJson = "[]",
                 status = "draft",
                 sourceModelString = candidate.sourceModelString,
                 createdAt = Instant.now().toString(),
