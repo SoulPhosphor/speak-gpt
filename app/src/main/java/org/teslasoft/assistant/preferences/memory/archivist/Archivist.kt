@@ -432,6 +432,31 @@ object Archivist {
         }
 
         val ai = buildClient(endpoint, providerRouting)
+        val modelTransport = ArchivistModelTransport { request ->
+            // Fresh capture window per attempt: the observer writes only on an
+            // error response. Tests replace this transport and exercise the
+            // same Stage-E request shape without a provider credential.
+            capturedErrorBody = null
+            val response = ai.chatCompletion(
+                ChatCompletionRequest(
+                    model = ModelId(request.model),
+                    messages = listOf(
+                        ChatMessage(role = ChatRole.System, content = request.systemPrompt),
+                        ChatMessage(role = ChatRole.User, content = request.conversationData)
+                    ),
+                    temperature = request.temperature
+                )
+            )
+            val responseChoice = response.choices.firstOrNull()
+            val raw = responseChoice?.message?.content.orEmpty()
+            if (ArchivistRetryPolicy.looksClearlyTruncated(
+                    raw, responseChoice?.finishReason?.value
+                )
+            ) {
+                throw ArchivistClearlyTruncatedException()
+            }
+            raw
+        }
 
         // Memory Assistant tuning (owner spec, July 9 2026): the per-conversation
         // cap is enforced HERE in code — the prompt is never trusted to do it.
@@ -650,28 +675,55 @@ object Archivist {
                                             )
                                         }
 
-                                        // Fresh capture window per request: the observer
-                                        // writes only on an error response.
-                                        capturedErrorBody = null
-                                        val response = try {
-                                            ai.chatCompletion(
-                                                ChatCompletionRequest(
-                                                    model = ModelId(model),
-                                                    messages = listOf(
-                                                        ChatMessage(
-                                                            role = ChatRole.System,
-                                                            content = requestSystemPrompt
-                                                        ),
-                                                        ChatMessage(
-                                                            role = ChatRole.User,
-                                                            content = rendered.text
-                                                        )
-                                                    ),
-                                                    temperature = temperature
+                                        val parsedChunk = try {
+                                            if (lorebookMode) {
+                                                val raw = modelTransport.complete(
+                                                    ArchivistModelRequest(
+                                                        systemPrompt = requestSystemPrompt,
+                                                        conversationData = rendered.text,
+                                                        model = model,
+                                                        temperature = temperature,
+                                                        attempt = 1
+                                                    )
                                                 )
-                                            )
+                                                val parsed = try {
+                                                    ArchivistResponseParser.parseLore(raw)
+                                                } catch (e: Exception) {
+                                                    throw TaggedArchivistException(
+                                                        ArchivistFailure.UNREADABLE, e
+                                                    )
+                                                }
+                                                if (parsed.dropped > 0) {
+                                                    MemoryLog.log(
+                                                        context, "Archivist", "warn",
+                                                        "chat=${conversation.chatId}: ${parsed.dropped} lore proposal(s) failed validation and were dropped"
+                                                    )
+                                                }
+                                                ParsedChunk(loreEntries = parsed.entries)
+                                            } else {
+                                                val parsed = ArchivistRequestExecutor
+                                                    .associativePrepared(
+                                                        systemPrompt = requestSystemPrompt,
+                                                        protocol = checkNotNull(protocol),
+                                                        conversationData = rendered.text,
+                                                        model = model,
+                                                        temperature = temperature,
+                                                        transport = modelTransport
+                                                    )
+                                                if (parsed.dropped > 0) {
+                                                    MemoryLog.log(
+                                                        context, "Archivist", "warn",
+                                                        "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped"
+                                                    )
+                                                }
+                                                ParsedChunk(
+                                                    memories = parsed.memories,
+                                                    rules = parsed.rules
+                                                )
+                                            }
                                         } catch (e: Exception) {
-                                            if (ArchivistRetryPolicy.isVerifiedContextRejection(
+                                            if (e is ArchivistClearlyTruncatedException ||
+                                                ArchivistRetryPolicy.isVerifiedContextRejection(
                                                     e, capturedErrorBody
                                                 )
                                             ) {
@@ -681,65 +733,21 @@ object Archivist {
                                                             .MIN_RUNTIME_TRANSCRIPT_TOKENS,
                                                         requestChunk.estimatedTranscriptTokens / 2
                                                     ),
-                                                    message = "provider rejected the request context size",
+                                                    message = if (
+                                                        e is ArchivistClearlyTruncatedException
+                                                    ) {
+                                                        "Archivist response was clearly truncated"
+                                                    } else {
+                                                        "provider rejected the request context size"
+                                                    },
                                                     cause = e
                                                 )
                                             }
                                             throw e
                                         }
-                                        val responseChoice = response.choices.firstOrNull()
-                                        val raw = responseChoice?.message?.content.orEmpty()
-                                        val finishReason = responseChoice?.finishReason?.value
-                                        if (ArchivistRetryPolicy.looksClearlyTruncated(
-                                                raw, finishReason
-                                            )
-                                        ) {
-                                            throw ArchivistShrinkRequiredException(
-                                                nextTargetTokens = maxOf(
-                                                    ArchivistRequestBudget
-                                                        .MIN_RUNTIME_TRANSCRIPT_TOKENS,
-                                                    requestChunk.estimatedTranscriptTokens / 2
-                                                ),
-                                                message = "Archivist response was clearly truncated"
-                                            )
-                                        }
-
                                         incompleteTurnsExcluded +=
                                             rendered.incompleteAssistantTurnsDropped
-                                        if (lorebookMode) {
-                                            val parsed = try {
-                                                ArchivistResponseParser.parseLore(raw)
-                                            } catch (e: Exception) {
-                                                throw TaggedArchivistException(
-                                                    ArchivistFailure.UNREADABLE, e
-                                                )
-                                            }
-                                            if (parsed.dropped > 0) {
-                                                MemoryLog.log(
-                                                    context, "Archivist", "warn",
-                                                    "chat=${conversation.chatId}: ${parsed.dropped} lore proposal(s) failed validation and were dropped"
-                                                )
-                                            }
-                                            ParsedChunk(loreEntries = parsed.entries)
-                                        } else {
-                                            val parsed = try {
-                                                ArchivistResponseParser.parse(raw, protocol)
-                                            } catch (e: Exception) {
-                                                throw TaggedArchivistException(
-                                                    ArchivistFailure.UNREADABLE, e
-                                                )
-                                            }
-                                            if (parsed.dropped > 0) {
-                                                MemoryLog.log(
-                                                    context, "Archivist", "warn",
-                                                    "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped"
-                                                )
-                                            }
-                                            ParsedChunk(
-                                                memories = parsed.memories,
-                                                rules = parsed.rules
-                                            )
-                                        }
+                                        parsedChunk
                                     },
                                     shouldShrink = { error ->
                                         ArchivistRetryPolicy.isVerifiedContextRejection(
