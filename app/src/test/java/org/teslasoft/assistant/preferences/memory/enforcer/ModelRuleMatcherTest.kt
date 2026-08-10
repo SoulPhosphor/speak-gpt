@@ -62,6 +62,32 @@ class ModelRuleMatcherTest {
     }
 
     @Test
+    fun ruleWithMultipleExactTargetsMatchesEachTargetIndependently() {
+        val multiple = ModelIdentityCodec.encode(
+            listOf(
+                ModelIdentity("openrouter-endpoint", "openai/gpt-5.1"),
+                ModelIdentity("deepseek-endpoint", "deepseek-chat")
+            )
+        )
+
+        assertTrue(
+            ModelRuleMatcher.exactTargetsMatch(
+                multiple, "openrouter-endpoint", "openai/gpt-5.1"
+            )
+        )
+        assertTrue(
+            ModelRuleMatcher.exactTargetsMatch(
+                multiple, "deepseek-endpoint", "deepseek-chat"
+            )
+        )
+        assertFalse(
+            ModelRuleMatcher.exactTargetsMatch(
+                multiple, "deepseek-endpoint", "openai/gpt-5.1"
+            )
+        )
+    }
+
+    @Test
     fun preservedLegacyTargetsKeepOldFuzzyBehaviorOnlyInLegacyPath() {
         assertTrue(ModelRuleMatcher.legacyMatches("glm-5", "openrouter/glm-5-0502"))
         assertTrue(ModelRuleMatcher.legacyListMatches("""["glm-5"]""", "glm-5-0219"))

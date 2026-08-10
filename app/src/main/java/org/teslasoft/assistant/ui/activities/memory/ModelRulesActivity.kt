@@ -181,16 +181,15 @@ class ModelRulesActivity : MemoryScreenActivity() {
         val modelsLine = if (modelLabels.isEmpty()) getString(R.string.model_rules_no_models)
         else modelLabels.joinToString(", ")
         val tags = tagNamesFor(r.ruleId)
-        val subtitle = if (tags.isEmpty()) modelsLine
-        else tags.joinToString(" ") { "#$it" } + "\n" + modelsLine
         val badge = if (r.status == "draft") getString(R.string.mem_status_draft) else null
         val hasUnavailableTarget = ModelIdentityCodec.decode(r.modelTargetsJson).any { it in unavailableTargets }
         return MemoryRow(
             id = r.ruleId,
             title = firstLine,
-            subtitle = subtitle,
+            subtitle = modelsLine,
             badge = badge,
             hasAction = true,
+            tagsLine = tags.takeIf { it.isNotEmpty() }?.joinToString(" · "),
             iconRes = if (hasUnavailableTarget) R.drawable.ic_report else null,
             iconTintError = hasUnavailableTarget
         )

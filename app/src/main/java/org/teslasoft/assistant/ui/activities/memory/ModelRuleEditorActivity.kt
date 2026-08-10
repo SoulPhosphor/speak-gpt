@@ -23,6 +23,7 @@ import android.os.Bundle
 import android.view.View
 import android.view.WindowInsets
 import android.widget.AutoCompleteTextView
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ScrollView
 import android.widget.TextView
@@ -33,11 +34,9 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.elevation.SurfaceColors
-import com.google.android.material.textfield.TextInputEditText
 import org.json.JSONArray
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
@@ -45,10 +44,13 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.models.ModelCleanupReportStore
 import org.teslasoft.assistant.preferences.models.ModelIdentity
 import org.teslasoft.assistant.preferences.models.ModelIdentityCodec
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.widgets.AppDropdown
+import org.teslasoft.assistant.ui.widgets.AppRemovableChip
 
 /**
  * The full-screen model-rule add/edit form (§11 Revision 6). The rule
@@ -75,12 +77,16 @@ class ModelRuleEditorActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var titleView: TextView? = null
-    private var fieldText: TextInputEditText? = null
+    private var fieldText: EditText? = null
     private var textSize: TextView? = null
     private var chipsModels: ChipGroup? = null
+    private var fieldModelEndpoint: TextView? = null
+    private var btnChooseModel: MaterialButton? = null
+    private var textSelectedModel: TextView? = null
     private var btnAddModel: MaterialButton? = null
     private var chipsTags: ChipGroup? = null
     private var fieldTagInput: AutoCompleteTextView? = null
+    private var btnAddTag: MaterialButton? = null
     private var btnSave: MaterialButton? = null
     private var btnAccept: MaterialButton? = null
 
@@ -89,6 +95,9 @@ class ModelRuleEditorActivity : FragmentActivity() {
     /** New exact targets and conservatively preserved pre-Revision-6 strings. */
     private val targets = ArrayList<ModelIdentity>()
     private val legacyModels = ArrayList<String>()
+    private var selectedEndpointId: String = ""
+    private var selectedModelId: String = ""
+    private var unavailableTargets: Set<ModelIdentity> = emptySet()
 
     companion object {
         /** Soft warning threshold for one rule's length (§11 — a nudge, never a
@@ -111,9 +120,13 @@ class ModelRuleEditorActivity : FragmentActivity() {
         fieldText = findViewById(R.id.field_rule_text)
         textSize = findViewById(R.id.text_rule_size)
         chipsModels = findViewById(R.id.chips_models)
+        fieldModelEndpoint = findViewById(R.id.field_model_endpoint)
+        btnChooseModel = findViewById(R.id.btn_choose_model)
+        textSelectedModel = findViewById(R.id.text_selected_model)
         btnAddModel = findViewById(R.id.btn_add_model)
         chipsTags = findViewById(R.id.chips_tags)
         fieldTagInput = findViewById(R.id.field_tag_input)
+        btnAddTag = findViewById(R.id.btn_add_tag)
         btnSave = findViewById(R.id.btn_rule_save)
         btnAccept = findViewById(R.id.btn_rule_accept)
 
@@ -122,9 +135,14 @@ class ModelRuleEditorActivity : FragmentActivity() {
         applyTheme()
 
         tagChips = ModelRuleTagChips(this, chipsTags!!, fieldTagInput!!)
+        unavailableTargets = ModelCleanupReportStore.get(this).load().unavailable
+        initializeEndpointSelection()
 
         btnBack?.setOnClickListener { finish() }
-        btnAddModel?.setOnClickListener { showAddModelDialog() }
+        fieldModelEndpoint?.setOnClickListener { showEndpointDropdown() }
+        btnChooseModel?.setOnClickListener { openPendingModelPicker() }
+        btnAddModel?.setOnClickListener { addSelectedTarget() }
+        btnAddTag?.setOnClickListener { tagChips?.confirmText() }
         btnSave?.setOnClickListener { save(activate = false) }
         btnAccept?.setOnClickListener { save(activate = true) }
 
@@ -183,13 +201,21 @@ class ModelRuleEditorActivity : FragmentActivity() {
         val group = chipsModels ?: return
         group.removeAllViews()
         for (target in targets.toList()) {
-            val chip = Chip(this).apply {
+            val chip = AppRemovableChip.create(this, group).apply {
                 text = getString(
                     R.string.model_rule_target_label,
                     endpointLabel(target.endpointId),
                     target.modelId
                 )
                 isCloseIconVisible = true
+                if (target in unavailableTargets) {
+                    setChipIconResource(R.drawable.ic_report)
+                    isChipIconVisible = true
+                    chipIconTint = ColorStateList.valueOf(
+                        MaterialColors.getColor(this, androidx.appcompat.R.attr.colorError)
+                    )
+                    contentDescription = "${getString(R.string.model_cleanup_unavailable)}. $text"
+                }
                 setOnCloseIconClickListener {
                     targets.remove(target)
                     renderModelChips()
@@ -198,7 +224,7 @@ class ModelRuleEditorActivity : FragmentActivity() {
             group.addView(chip)
         }
         for (legacy in legacyModels.toList()) {
-            val chip = Chip(this).apply {
+            val chip = AppRemovableChip.create(this, group).apply {
                 text = getString(R.string.model_rule_legacy_target_label, legacy)
                 isCloseIconVisible = true
                 setOnCloseIconClickListener {
@@ -210,54 +236,89 @@ class ModelRuleEditorActivity : FragmentActivity() {
         }
     }
 
-    private fun showAddModelDialog() {
+    private fun initializeEndpointSelection() {
+        val endpoints = endpointProfiles()
+        if (endpoints.isEmpty()) {
+            selectedEndpointId = ""
+            fieldModelEndpoint?.apply {
+                text = getString(R.string.model_rule_select_endpoint)
+                isEnabled = false
+            }
+            btnChooseModel?.isEnabled = false
+            btnAddModel?.isEnabled = false
+            return
+        }
+        val currentEndpointId = preferences?.getApiEndpointId().orEmpty()
+        val initial = endpoints.firstOrNull { it.id == currentEndpointId } ?: endpoints.first()
+        selectedEndpointId = initial.id
+        fieldModelEndpoint?.apply {
+            text = endpointDisplayLabel(initial)
+            isEnabled = true
+        }
+        btnChooseModel?.isEnabled = true
+        btnAddModel?.isEnabled = true
+        renderPendingModel()
+    }
+
+    private fun showEndpointDropdown() {
+        val dropdown = fieldModelEndpoint ?: return
         val endpoints = endpointProfiles()
         if (endpoints.isEmpty()) {
             Toast.makeText(this, R.string.model_rule_no_endpoints, Toast.LENGTH_SHORT).show()
             return
         }
-        val currentEndpointId = preferences?.getApiEndpointId().orEmpty()
-        val currentModelId = preferences?.getModel().orEmpty()
-        val currentEndpoint = endpoints.firstOrNull { it.id == currentEndpointId }
-        val options = ArrayList<String>()
-        val useCurrent = currentEndpoint != null && currentModelId.isNotBlank()
-        if (useCurrent) {
-            options.add(
-                getString(
-                    R.string.model_rule_use_current_chat_model_value,
-                    endpointDisplayLabel(currentEndpoint!!),
-                    currentModelId
-                )
-            )
-        }
-        options.addAll(endpoints.map(::endpointDisplayLabel))
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.model_rule_select_endpoint)
-            .setItems(options.toTypedArray()) { _, which ->
-                if (useCurrent && which == 0) {
-                    addTarget(currentEndpointId, currentModelId)
-                } else {
-                    val endpointIndex = which - if (useCurrent) 1 else 0
-                    endpoints.getOrNull(endpointIndex)?.let(::openModelPicker)
-                }
+        val labels = endpoints.map(::endpointDisplayLabel)
+        val current = endpoints.indexOfFirst { it.id == selectedEndpointId }
+        AppDropdown.show(dropdown, labels, current) { position ->
+            val endpoint = endpoints[position]
+            if (endpoint.id != selectedEndpointId) {
+                selectedEndpointId = endpoint.id
+                selectedModelId = ""
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+            dropdown.text = endpointDisplayLabel(endpoint)
+            renderPendingModel()
+        }
     }
 
-    private fun openModelPicker(endpoint: ApiEndpointObject) {
+    private fun openPendingModelPicker() {
+        val endpoint = endpointProfiles().firstOrNull { it.id == selectedEndpointId }
+        if (endpoint == null) {
+            Toast.makeText(this, R.string.model_rule_no_endpoints, Toast.LENGTH_SHORT).show()
+            return
+        }
         val dialog = AdvancedModelSelectorDialogFragment.newModelRuleTargetInstance(
             chatId = chatId,
-            endpointId = endpoint.id
+            endpointId = endpoint.id,
+            currentChatModel = preferences?.getModel().orEmpty().takeIf {
+                preferences?.getApiEndpointId().orEmpty() == endpoint.id
+            }.orEmpty()
         )
-        dialog.setModelSelectedListener { modelId -> addTarget(endpoint.id, modelId) }
+        dialog.setModelSelectedListener { modelId ->
+            selectedModelId = modelId
+            renderPendingModel()
+        }
         dialog.show(supportFragmentManager, "ModelRuleModelSelector")
+    }
+
+    private fun renderPendingModel() {
+        textSelectedModel?.apply {
+            text = selectedModelId
+            visibility = if (selectedModelId.isBlank()) View.GONE else View.VISIBLE
+        }
+    }
+
+    private fun addSelectedTarget() {
+        if (selectedEndpointId.isBlank() || selectedModelId.isBlank()) {
+            openPendingModelPicker()
+            return
+        }
+        addTarget(selectedEndpointId, selectedModelId)
     }
 
     private fun endpointProfiles(): List<ApiEndpointObject> =
         ApiEndpointPreferences.getApiEndpointPreferences(this)
             .getApiEndpointsList(this)
-            .filter { it.id.isNotBlank() && it.label.isNotBlank() }
+            .filter { it.id.isNotBlank() && endpointDisplayLabel(it).isNotBlank() }
             .distinctBy { it.id }
             .sortedBy { endpointDisplayLabel(it).lowercase() }
 
@@ -295,10 +356,10 @@ class ModelRuleEditorActivity : FragmentActivity() {
         val tv = textSize ?: return
         if (len >= SIZE_WARN_CHARS) {
             tv.text = getString(R.string.model_rule_size_warn, len)
-            tv.setTextColor(ResourcesCompat.getColor(resources, R.color.light_red, theme))
+            tv.setTextColor(MaterialColors.getColor(tv, androidx.appcompat.R.attr.colorError))
         } else {
             tv.text = getString(R.string.model_rule_size_count, len)
-            tv.setTextColor(ResourcesCompat.getColor(resources, R.color.text_subtitle, theme))
+            tv.setTextColor(MaterialColors.getColor(tv, R.attr.appSubtleTextColor))
         }
     }
 
@@ -309,9 +370,15 @@ class ModelRuleEditorActivity : FragmentActivity() {
             Toast.makeText(this, R.string.mem_edit_still_loading, Toast.LENGTH_SHORT).show()
             return
         }
-        // Flush a typed-but-unconfirmed tag so it isn't silently dropped.
-        tagChips?.confirmText()
 
+        // Flush a typed-but-unconfirmed tag before reading the selected ids.
+        // A newly typed tag is created off-thread, so saving continues only
+        // after that work has finished and its chip is part of the selection.
+        tagChips?.confirmText { saveAfterTagFlush(activate) }
+            ?: saveAfterTagFlush(activate)
+    }
+
+    private fun saveAfterTagFlush(activate: Boolean) {
         val text = fieldText?.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) {
             Toast.makeText(this, R.string.model_rule_edit_required, Toast.LENGTH_SHORT).show()

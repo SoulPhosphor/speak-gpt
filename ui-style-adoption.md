@@ -112,7 +112,7 @@ Do not guess its status from appearance or old documentation.
 | Memory Assistant | `activity_memory_assistant.xml` | Unconverted | None | Unconverted | Header, buttons, and rows local. |
 | Memory Editor | `activity_memory_editor.xml` | Unconverted | None | Unconverted | Fields and buttons local. |
 | Advanced Memory Settings | `activity_advanced_memory_settings.xml` | Unconverted | None | Unconverted | Fields and buttons local. |
-| Model Rule Editor | `activity_model_rule_editor.xml` | Unconverted | None | Unconverted | Fields and buttons local. |
+| Model Rule Editor | `activity_model_rule_editor.xml` | Shared | Rule field (`Field.Label`/`.Box`/`.Hint`), Applied Models/Add Model/Tags sections (`Section.Title`/`.Hint`), API endpoint selector (`Dropdown.CanonicalValue`), selected-model value (`Row.Title`), actions (`AppButton.Primary`), and removable model/tag chips (`Widget.App.Chip.Removable`) | Shared | The exact model picker reuses Select AI Model's Favorites-first screen; its Model Rule entry also offers Use Current Chat Model when the chosen endpoint is the current chat endpoint. Unavailable exact targets add `ic_report` to their normal removable chip without changing the chip style. |
 | Card Entry Editor | `activity_card_entry_editor.xml` | Unconverted | None | Unconverted | Large editor (30+ inputs), all local field styling. |
 | Companion Detail | `activity_companion_detail.xml` | Unconverted | None | Unconverted | Buttons and image treatment local. |
 | API Endpoints List | `activity_api_endpoint_list.xml` | Unconverted | None | Unconverted | Header local; list item layout unconverted. |

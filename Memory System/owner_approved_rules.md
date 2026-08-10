@@ -310,12 +310,18 @@ Memories have four statuses: **Draft · Active · Archived · Superseded.**
   mid-sentence"). They live under **Settings → AI System Settings → Model
   rules**, alongside the global system prompt.
 - **A model target is one stable API endpoint id plus one exact model id
-  returned by that endpoint.** Adding a target is: Add Model → select an API
-  Endpoint → select a model available from it. The endpoint's Favorites may
-  appear first, with search/browse access to its full catalog. The selected
-  model need not be a Favorite and is never automatically favorited. When a
-  current chat supplies both identities, **Use Current Chat Model** is a
-  shortcut.
+  returned by that endpoint.** The editor shows every saved target under
+  **Applied Models** as an individually removable **Endpoint: Model** chip.
+  Adding one is: choose an API Endpoint from the endpoint-profile dropdown →
+  **Choose Model** → select from that endpoint's Favorites-first picker or
+  search/browse its full catalog → **Add Model**. The chosen model is staged
+  until Add Model is pressed, and the process may be repeated to put multiple
+  exact targets on one rule. The selected model need not be a Favorite and is
+  never automatically favorited. When the selected endpoint is the current
+  chat endpoint and the chat supplies a model id, **Use Current Chat Model** is
+  available in the picker as a shortcut. A target marked unavailable by the
+  latest cleanup report keeps its normal chip and adds the shared `ic_report`
+  warning icon.
 - **Runtime matching is exact and local.** A rule applies only when both the
   current chat endpoint id and model id exactly equal a saved target. Applying
   Model Rules never requires a network request. New targets do not strip
