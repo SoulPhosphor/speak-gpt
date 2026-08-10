@@ -2006,6 +2006,35 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("archivist_max_suggestions", value.coerceAtLeast(0).toString())
     }
 
+    /** Conversation Amount Per Request. Values are transcript-token targets,
+     * not total request sizes; request headroom is applied by the runner. */
+    fun getArchivistConversationAmount(): String =
+        org.teslasoft.assistant.preferences.memory.archivist.ArchivistRequestBudget
+            .normalizeChoice(getGlobalString("archivist_conversation_amount", "auto"))
+
+    fun setArchivistConversationAmount(value: String) {
+        putGlobalString(
+            "archivist_conversation_amount",
+            org.teslasoft.assistant.preferences.memory.archivist.ArchivistRequestBudget
+                .normalizeChoice(value)
+        )
+    }
+
+    /** Custom Conversation Tokens Per Request. Invalid legacy values fall back
+     * to the approved suggested value; the UI rejects new values below 1,000. */
+    fun getArchivistCustomConversationTokens(): Int {
+        val budget = org.teslasoft.assistant.preferences.memory.archivist.ArchivistRequestBudget
+        return budget.validateCustomTarget(
+            getGlobalString("archivist_custom_conversation_tokens", "8000").toIntOrNull()
+        ) ?: budget.CUSTOM_SUGGESTED_TOKENS
+    }
+
+    fun setArchivistCustomConversationTokens(value: Int) {
+        val budget = org.teslasoft.assistant.preferences.memory.archivist.ArchivistRequestBudget
+        val valid = budget.validateCustomTarget(value) ?: budget.CUSTOM_SUGGESTED_TOKENS
+        putGlobalString("archivist_custom_conversation_tokens", valid.toString())
+    }
+
     /** Analysis temperature, 0.0–2.0. Recommended/default 0.3. */
     fun getArchivistTemperature(): Float =
         getGlobalString("archivist_temperature", "0.3").toFloatOrNull()?.coerceIn(0.0f, 2.0f) ?: 0.3f

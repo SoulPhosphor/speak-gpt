@@ -35,6 +35,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
 import org.teslasoft.assistant.preferences.memory.ArchivistRunRecord
 import org.teslasoft.assistant.preferences.memory.CandidateResult
 import org.teslasoft.assistant.preferences.memory.FrozenChatRange
@@ -441,6 +442,11 @@ object Archivist {
         // extraction prompt replaces the built-in one (Reset clears to built-in).
         val maxSuggestions = prefs.getArchivistMaxSuggestions()
         val temperature = prefs.getArchivistTemperature().toDouble()
+        val conversationAmount = prefs.getArchivistConversationAmount()
+        val customConversationTokens = prefs.getArchivistCustomConversationTokens()
+        val verifiedContextTokens = endpoint.contextWindowTokens?.takeIf {
+            endpoint.contextWindowModelId == model
+        }
         // Each analysis type sends its OWN editable prompt (Step 1.7): the
         // saved prompt for that type, or its built-in default when the saved
         // prompt is empty. The two are kept strictly separate — a Lorebook run
@@ -490,22 +496,31 @@ object Archivist {
                     ))
                     var candidateCollectionId: String? = null
                     try {
-                        // A single oversized conversation (the "30 pages" case)
-                        // is split across several calls, whole rows at a time,
-                        // so one request never overruns the model's context.
-                        val sizeChunks = ArchivistBatchPlanner.splitIntoRequests(
-                            conversation.transcripts.map { it.content.length }
+                        val analysisNote = Preferences.getPreferences(
+                            context, conversation.chatId
+                        ).getChatAnalysisNote()
+                        val conversationBasePrompt = ArchivistPrompt.withAnalysisNote(
+                            basePrompt, analysisNote
                         )
-                        // Associative requests are also split at captured scene
-                        // changes. Lorebook analysis is a separate output path
-                        // and keeps its existing size-only request shape.
-                        val chunks = if (lorebookMode) sizeChunks else
-                            ArchivistScenePlanner.splitAtSceneBoundaries(
-                                sizeChunks, conversation.transcripts
+                        val baselinePrompt = if (lorebookMode) {
+                            conversationBasePrompt
+                        } else {
+                            ArchivistPrompt.withCurrentTypes(conversationBasePrompt, memoryTypes)
+                        }
+                        val initialTranscriptTarget = ArchivistRequestBudget
+                            .effectiveTranscriptTarget(
+                                choice = conversationAmount,
+                                customTokens = customConversationTokens,
+                                verifiedContextTokens = verifiedContextTokens,
+                                requestHeadroomTokens = ArchivistRequestBudget
+                                    .headroomTokens(baselinePrompt)
                             )
+                        val chunks = ArchivistConversationChunker.split(
+                            conversation.transcripts, initialTranscriptTarget
+                        )
                         if (chunks.size > 1) {
                             MemoryLog.log(context, "Archivist", "info",
-                                "chat=${conversation.chatId}: oversized conversation split into ${chunks.size} requests")
+                                "chat=${conversation.chatId}: conversation split into ${chunks.size} token-targeted requests")
                         }
                         if (!lorebookMode) {
                             candidateCollectionId = if (markProcessed) {
@@ -517,139 +532,247 @@ object Archivist {
                             }
                         }
                         val committed = FrozenChatRangeExecutor
-                            .executeWithStaged<List<Int>, ParsedChunk, ChatCommit>(
+                            .executeWithStaged<ArchivistRequestChunk, ParsedChunk, ChatCommit>(
                             chunks = chunks,
                             analyzeChunk = { chunk, earlierChunks ->
-                                val rows = chunk.map { conversation.transcripts[it] }
-                                val scene = ArchivistSceneContext.from(rows.first())
-                                val companionName = scene.companionId
-                                    ?.let { store.getCompanion(it)?.currentName }
-                                val rendered = ArchivistPrompt.userMessage(
-                                    conversation.chatName, companionName, rows
-                                )
-                                incompleteTurnsExcluded += rendered.incompleteAssistantTurnsDropped
+                                val retried = ArchivistBoundedShrinkExecutor
+                                    .execute<ArchivistRequestChunk, ParsedChunk>(
+                                    initial = chunk,
+                                    analyze = { requestChunk, successfulSubChunks ->
+                                        val rows = requestChunk.transcripts
+                                        val scene = ArchivistSceneContext.from(rows.first())
+                                        val companionName = scene.companionId
+                                            ?.let { store.getCompanion(it)?.currentName }
+                                        val rendered = ArchivistPrompt.userMessage(
+                                            conversation.chatName, companionName, rows
+                                        )
 
-                                val protocol: ArchivistRequestProtocol?
-                                val requestSystemPrompt: String
-                                if (lorebookMode) {
-                                    protocol = null
-                                    requestSystemPrompt = basePrompt
-                                } else {
-                                    val retrievalScope = reconciliationScope(store, prefs, scene)
-                                    var retrievalDiag: Librarian.RetrievalDiagnostics? = null
-                                    val retrieved = Librarian.getInstance(context)
-                                        .searchForReconciliation(
-                                            scope = retrievalScope,
-                                            queryWindows = ArchivistPrompt.retrievalWindows(rows),
-                                            candidateCeiling = ArchivistRuntimeProtocol.MAX_RETRIEVAL_CANDIDATES,
-                                            selectedProjectId = scene.projectId
-                                                ?.takeIf { !scene.isRoleplay },
-                                            diag = { retrievalDiag = it }
-                                        )
-                                    retrievalDiag?.takeIf { !it.semantic }?.let { d ->
-                                        MemoryLog.log(
-                                            context, "Archivist", "info",
-                                            "chat=${conversation.chatId}: reconciliation used bounded lexical retrieval " +
-                                                "(${d.eligible} eligible; ${d.withVector} current vectors)"
-                                        )
-                                    }
+                                        val protocol: ArchivistRequestProtocol?
+                                        val requestSystemPrompt: String
+                                        if (lorebookMode) {
+                                            protocol = null
+                                            requestSystemPrompt = conversationBasePrompt
+                                        } else {
+                                            val retrievalScope = reconciliationScope(store, prefs, scene)
+                                            var retrievalDiag: Librarian.RetrievalDiagnostics? = null
+                                            val retrieved = Librarian.getInstance(context)
+                                                .searchForReconciliation(
+                                                    scope = retrievalScope,
+                                                    queryWindows = ArchivistPrompt.retrievalWindows(rows),
+                                                    candidateCeiling =
+                                                        ArchivistRuntimeProtocol.MAX_RETRIEVAL_CANDIDATES,
+                                                    selectedProjectId = scene.projectId
+                                                        ?.takeIf { !scene.isRoleplay },
+                                                    diag = { retrievalDiag = it }
+                                                )
+                                            retrievalDiag?.takeIf { !it.semantic }?.let { d ->
+                                                MemoryLog.log(
+                                                    context, "Archivist", "info",
+                                                    "chat=${conversation.chatId}: reconciliation used bounded lexical retrieval " +
+                                                        "(${d.eligible} eligible; ${d.withVector} current vectors)"
+                                                )
+                                            }
 
-                                    val targetNames = store.activeMemoryTargetNames()
-                                    val typeNames = memoryTypes.associate { it.first to it.second }
-                                    val retrievedRecords = retrieved.mapNotNull { hit ->
-                                        store.getMemory(hit.memory.memoryId)
-                                    }
-                                    val existingContext = retrieved.map { hit ->
-                                        ArchivistExistingMemory(
-                                            stableId = hit.memory.memoryId,
-                                            content = hit.memory.content,
-                                            scope = hit.memory.scope,
-                                            targetNames = targetNames[hit.memory.memoryId].orEmpty(),
-                                            typeName = hit.memory.typeId?.let { typeNames[it] }
-                                        )
-                                    }
-                                    val earlierMemoryCandidates = ArchivistCandidateBoundary.collect(
-                                        earlierChunks.map { it.memories }
-                                    ).memories.map { draft ->
-                                        earlierCandidateForPrompt(store, typeNames, draft)
-                                    }
-                                    val earlierRuleCandidates = earlierChunks
-                                        .flatMap { it.rules }
-                                        .distinctBy { MemoryMatch.normalizeContent(it.text) }
-                                        .map {
-                                            ArchivistEarlierCandidate(
-                                                content = it.text,
-                                                scope = null,
-                                                targetNames = emptyList(),
-                                                typeName = null,
-                                                tags = emptyList(),
-                                                stream = "model_rule"
+                                            val targetNames = store.activeMemoryTargetNames()
+                                            val typeNames = memoryTypes.associate { it.first to it.second }
+                                            val retrievedRecords = retrieved.mapNotNull { hit ->
+                                                store.getMemory(hit.memory.memoryId)
+                                            }
+                                            val existingContext = retrieved.map { hit ->
+                                                ArchivistExistingMemory(
+                                                    stableId = hit.memory.memoryId,
+                                                    content = hit.memory.content,
+                                                    scope = hit.memory.scope,
+                                                    targetNames =
+                                                        targetNames[hit.memory.memoryId].orEmpty(),
+                                                    typeName = hit.memory.typeId?.let { typeNames[it] }
+                                                )
+                                            }
+                                            val allEarlier = earlierChunks + successfulSubChunks
+                                            val earlierMemoryCandidates =
+                                                ArchivistCandidateBoundary.collect(
+                                                    allEarlier.map { it.memories }
+                                                ).memories.map { draft ->
+                                                    earlierCandidateForPrompt(
+                                                        store, typeNames, draft
+                                                    )
+                                                }
+                                            val earlierRuleCandidates = allEarlier
+                                                .flatMap { it.rules }
+                                                .distinctBy {
+                                                    MemoryMatch.normalizeContent(it.text)
+                                                }
+                                                .map {
+                                                    ArchivistEarlierCandidate(
+                                                        content = it.text,
+                                                        scope = null,
+                                                        targetNames = emptyList(),
+                                                        typeName = null,
+                                                        tags = emptyList(),
+                                                        stream = "model_rule"
+                                                    )
+                                                }
+                                            val builtProtocol = ArchivistRuntimeProtocol.create(
+                                                scene = scene,
+                                                existingMemories = existingContext,
+                                                validTargets = validTargetCatalog(
+                                                    store, scene, retrievalScope, retrievedRecords
+                                                ),
+                                                earlierCandidates =
+                                                    earlierMemoryCandidates + earlierRuleCandidates
+                                            )
+                                            protocol = builtProtocol
+                                            requestSystemPrompt =
+                                                ArchivistPrompt.withRuntimeProtocol(
+                                                    conversationBasePrompt,
+                                                    memoryTypes,
+                                                    builtProtocol
+                                                )
+                                        }
+
+                                        val requestHeadroom = ArchivistRequestBudget
+                                            .headroomTokens(requestSystemPrompt)
+                                        val safeTranscriptTarget = ArchivistRequestBudget
+                                            .effectiveTranscriptTarget(
+                                                choice = conversationAmount,
+                                                customTokens = customConversationTokens,
+                                                verifiedContextTokens = verifiedContextTokens,
+                                                requestHeadroomTokens = requestHeadroom
+                                            )
+                                        val renderedTranscriptTokens =
+                                            IncludeTextPolicy.estimateTokens(rendered.text)
+                                        if (verifiedContextTokens != null &&
+                                            renderedTranscriptTokens > safeTranscriptTarget
+                                        ) {
+                                            throw ArchivistShrinkRequiredException(
+                                                nextTargetTokens = safeTranscriptTarget,
+                                                message = "verified request headroom requires a smaller transcript chunk"
                                             )
                                         }
-                                    val builtProtocol = ArchivistRuntimeProtocol.create(
-                                        scene = scene,
-                                        existingMemories = existingContext,
-                                        validTargets = validTargetCatalog(
-                                            store, scene, retrievalScope, retrievedRecords
-                                        ),
-                                        earlierCandidates =
-                                            earlierMemoryCandidates + earlierRuleCandidates
-                                    )
-                                    protocol = builtProtocol
-                                    requestSystemPrompt = ArchivistPrompt.withRuntimeProtocol(
-                                        basePrompt, memoryTypes, builtProtocol
-                                    )
-                                }
-                                // Fresh capture window per request: the observer
-                                // writes only on an error response.
-                                capturedErrorBody = null
-                                val response = ai.chatCompletion(
-                                    ChatCompletionRequest(
-                                        model = ModelId(model),
-                                        messages = listOf(
-                                            ChatMessage(role = ChatRole.System, content = requestSystemPrompt),
-                                            ChatMessage(role = ChatRole.User, content = rendered.text)
-                                        ),
-                                        temperature = temperature
-                                    )
+
+                                        // Fresh capture window per request: the observer
+                                        // writes only on an error response.
+                                        capturedErrorBody = null
+                                        val response = try {
+                                            ai.chatCompletion(
+                                                ChatCompletionRequest(
+                                                    model = ModelId(model),
+                                                    messages = listOf(
+                                                        ChatMessage(
+                                                            role = ChatRole.System,
+                                                            content = requestSystemPrompt
+                                                        ),
+                                                        ChatMessage(
+                                                            role = ChatRole.User,
+                                                            content = rendered.text
+                                                        )
+                                                    ),
+                                                    temperature = temperature
+                                                )
+                                            )
+                                        } catch (e: Exception) {
+                                            if (ArchivistRetryPolicy.isVerifiedContextRejection(
+                                                    e, capturedErrorBody
+                                                )
+                                            ) {
+                                                throw ArchivistShrinkRequiredException(
+                                                    nextTargetTokens = maxOf(
+                                                        ArchivistRequestBudget
+                                                            .MIN_RUNTIME_TRANSCRIPT_TOKENS,
+                                                        requestChunk.estimatedTranscriptTokens / 2
+                                                    ),
+                                                    message = "provider rejected the request context size",
+                                                    cause = e
+                                                )
+                                            }
+                                            throw e
+                                        }
+                                        val responseChoice = response.choices.firstOrNull()
+                                        val raw = responseChoice?.message?.content.orEmpty()
+                                        val finishReason = responseChoice?.finishReason?.value
+                                        if (ArchivistRetryPolicy.looksClearlyTruncated(
+                                                raw, finishReason
+                                            )
+                                        ) {
+                                            throw ArchivistShrinkRequiredException(
+                                                nextTargetTokens = maxOf(
+                                                    ArchivistRequestBudget
+                                                        .MIN_RUNTIME_TRANSCRIPT_TOKENS,
+                                                    requestChunk.estimatedTranscriptTokens / 2
+                                                ),
+                                                message = "Archivist response was clearly truncated"
+                                            )
+                                        }
+
+                                        incompleteTurnsExcluded +=
+                                            rendered.incompleteAssistantTurnsDropped
+                                        if (lorebookMode) {
+                                            val parsed = try {
+                                                ArchivistResponseParser.parseLore(raw)
+                                            } catch (e: Exception) {
+                                                throw TaggedArchivistException(
+                                                    ArchivistFailure.UNREADABLE, e
+                                                )
+                                            }
+                                            if (parsed.dropped > 0) {
+                                                MemoryLog.log(
+                                                    context, "Archivist", "warn",
+                                                    "chat=${conversation.chatId}: ${parsed.dropped} lore proposal(s) failed validation and were dropped"
+                                                )
+                                            }
+                                            ParsedChunk(loreEntries = parsed.entries)
+                                        } else {
+                                            val parsed = try {
+                                                ArchivistResponseParser.parse(raw, protocol)
+                                            } catch (e: Exception) {
+                                                throw TaggedArchivistException(
+                                                    ArchivistFailure.UNREADABLE, e
+                                                )
+                                            }
+                                            if (parsed.dropped > 0) {
+                                                MemoryLog.log(
+                                                    context, "Archivist", "warn",
+                                                    "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped"
+                                                )
+                                            }
+                                            ParsedChunk(
+                                                memories = parsed.memories,
+                                                rules = parsed.rules
+                                            )
+                                        }
+                                    },
+                                    shouldShrink = { error ->
+                                        ArchivistRetryPolicy.isVerifiedContextRejection(
+                                            error, capturedErrorBody
+                                        )
+                                    },
+                                    shrink = { failedChunk, error ->
+                                        val nextTarget =
+                                            (error as? ArchivistShrinkRequiredException)
+                                                ?.nextTargetTokens
+                                                ?: maxOf(
+                                                    ArchivistRequestBudget
+                                                        .MIN_RUNTIME_TRANSCRIPT_TOKENS,
+                                                    failedChunk.estimatedTranscriptTokens / 2
+                                                )
+                                        ArchivistConversationChunker.split(
+                                            failedChunk.transcripts, nextTarget
+                                        )
+                                    }
                                 )
-                                val raw = response.choices.firstOrNull()?.message?.content.orEmpty()
-                                if (lorebookMode) {
-                                    val parsed = try {
-                                        ArchivistResponseParser.parseLore(raw)
-                                    } catch (e: Exception) {
-                                        throw TaggedArchivistException(ArchivistFailure.UNREADABLE, e)
-                                    }
-                                    if (parsed.dropped > 0) {
-                                        MemoryLog.log(
-                                            context, "Archivist", "warn",
-                                            "chat=${conversation.chatId}: ${parsed.dropped} lore proposal(s) failed validation and were dropped"
-                                        )
-                                    }
-                                    ParsedChunk(loreEntries = parsed.entries)
-                                } else {
-                                    val parsed = try {
-                                        ArchivistResponseParser.parse(raw, protocol)
-                                    } catch (e: Exception) {
-                                        throw TaggedArchivistException(ArchivistFailure.UNREADABLE, e)
-                                    }
-                                    if (parsed.dropped > 0) {
-                                        MemoryLog.log(
-                                            context, "Archivist", "warn",
-                                            "chat=${conversation.chatId}: ${parsed.dropped} proposal(s) failed validation and were dropped"
-                                        )
-                                    }
-                                    val parsedChunk = ParsedChunk(
-                                        memories = parsed.memories,
-                                        rules = parsed.rules
-                                    )
+                                val parsedChunk = ParsedChunk(
+                                    memories = retried.flatMap { it.memories },
+                                    rules = retried.flatMap { it.rules },
+                                    loreEntries = retried.flatMap { it.loreEntries }
+                                )
+                                if (!lorebookMode) {
                                     store.stageAnalysisCandidates(
                                         collectionId = checkNotNull(candidateCollectionId),
                                         chunkOrdinal = earlierChunks.size + 1,
                                         candidates = stagedCandidates(parsedChunk)
                                     )
-                                    parsedChunk
                                 }
+                                parsedChunk
                             },
                             commit = { stagedChunks ->
                                 if (lorebookMode) {
@@ -788,7 +911,7 @@ object Archivist {
                         }
                         failedChats.add(conversation.chatId)
                         failedReasons.add(reason)
-                        genResults.add(GenerationErrorClassifier.classify(e))
+                        genResults.add(classifyGenerationFailure(e, capturedErrorBody))
                         capturedErrorBody?.let { failureBody = it }
                         MemoryLog.logAlways(context, "Archivist", "error",
                             "chat=${conversation.chatId} failed (${reason.key}): ${e.message}")
@@ -807,7 +930,7 @@ object Archivist {
         } catch (e: Exception) {
             runError = e.message ?: e.javaClass.simpleName
             runErrorFailure = ArchivistFailure.classify(e)
-            genResults.add(GenerationErrorClassifier.classify(e))
+            genResults.add(classifyGenerationFailure(e, capturedErrorBody))
             capturedErrorBody?.let { failureBody = it }
         }
 
@@ -989,6 +1112,18 @@ object Archivist {
             )
         }
         return out
+    }
+
+    /** The response observer can hold a more specific provider body than the
+     * client exception exposes. Prefer its classified limit kind when present
+     * so a final bounded context failure is reported as request-too-large, not
+     * an unknown local error. */
+    private fun classifyGenerationFailure(error: Throwable, providerBody: String?): GenErrorResult {
+        val direct = GenerationErrorClassifier.classify(error)
+        val body = providerBody?.takeIf { it.isNotBlank() }?.let {
+            GenerationErrorClassifier.classify(IllegalStateException(it))
+        }
+        return if (body?.providerLimit != null) body else direct
     }
 
     private fun earlierCandidateForPrompt(
