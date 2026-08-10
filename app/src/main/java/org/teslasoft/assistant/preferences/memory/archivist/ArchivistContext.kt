@@ -57,33 +57,6 @@ data class ArchivistSceneContext(
     }
 }
 
-/** Pure row planning: retain the existing size chunks, then split only where
- * the captured scene changes. Every returned chunk is scene-consistent and is
- * still sent in exactly one Archivist request. */
-object ArchivistScenePlanner {
-    fun splitAtSceneBoundaries(
-        chunks: List<List<Int>>,
-        transcripts: List<TranscriptRecord>
-    ): List<List<Int>> {
-        val out = ArrayList<List<Int>>()
-        for (chunk in chunks) {
-            var current = ArrayList<Int>()
-            var currentScene: ArchivistSceneContext? = null
-            for (index in chunk) {
-                val scene = ArchivistSceneContext.from(transcripts[index])
-                if (current.isNotEmpty() && scene != currentScene) {
-                    out.add(current)
-                    current = ArrayList()
-                }
-                current.add(index)
-                currentScene = scene
-            }
-            if (current.isNotEmpty()) out.add(current)
-        }
-        return out
-    }
-}
-
 /** A stable phone target before it receives a short request-local alias. */
 data class ArchivistTarget(
     val stableId: String,
