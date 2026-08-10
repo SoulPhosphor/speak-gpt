@@ -58,7 +58,6 @@ class SettingsActivity : FragmentActivity() {
     private var rowRoleplay: LinearLayout? = null
     private var rowProfileImageProperties: LinearLayout? = null
     private var rowVoiceSettings: LinearLayout? = null
-    private var rowSummarizerSettings: LinearLayout? = null
     private var rowImages: LinearLayout? = null
     private var tileChatLayout: TileFragment? = null
     private var tileDesktopMode: TileFragment? = null
@@ -391,7 +390,6 @@ class SettingsActivity : FragmentActivity() {
         rowRoleplay = findViewById(R.id.tile_roleplay)
         rowProfileImageProperties = findViewById(R.id.tile_profile_image_properties)
         rowVoiceSettings = findViewById(R.id.tile_voice_settings)
-        rowSummarizerSettings = findViewById(R.id.tile_summarizer_settings)
         rowImages = findViewById(R.id.tile_images)
         rowAboutApp = findViewById(R.id.tile_about_app)
         rowAlertDebugMenu = findViewById(R.id.tile_alert_debug_menu)
@@ -418,10 +416,6 @@ class SettingsActivity : FragmentActivity() {
 
         rowVoiceSettings?.setOnClickListener {
             startActivity(Intent(this, VoiceSettingsActivity::class.java).putExtra("chatId", chatId))
-        }
-
-        rowSummarizerSettings?.setOnClickListener {
-            startActivity(Intent(this, SummarizerSettingsActivity::class.java))
         }
 
         // The Images row opens the app-wide Image Generation settings

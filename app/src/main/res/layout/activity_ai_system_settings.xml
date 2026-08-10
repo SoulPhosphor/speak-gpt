@@ -159,6 +159,30 @@
                     android:id="@+id/switch_auto_apply_model_rules"
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
+
+            <!-- Summarizer Settings: moved here off the main Settings screen,
+                 same as the API profiles/system prompts/model rules rows above. -->
+            <LinearLayout
+                android:id="@+id/row_summarizer_settings"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:layout_marginTop="8dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/title_summarizer_settings" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/tile_summarizer_settings_subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/title_summarizer_settings" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

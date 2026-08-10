@@ -66,6 +66,7 @@ class AiSystemSettingsActivity : FragmentActivity() {
     private var textSystemPromptSubtitle: TextView? = null
     private var rowModelRules: LinearLayout? = null
     private var switchAutoApplyModelRules: MaterialSwitch? = null
+    private var rowSummarizerSettings: LinearLayout? = null
 
     private var systemPromptsPreferences: SystemPromptsPreferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
@@ -105,6 +106,7 @@ class AiSystemSettingsActivity : FragmentActivity() {
         textSystemPromptSubtitle = findViewById(R.id.text_system_prompt_subtitle)
         rowModelRules = findViewById(R.id.row_model_rules)
         switchAutoApplyModelRules = findViewById(R.id.switch_auto_apply_model_rules)
+        rowSummarizerSettings = findViewById(R.id.row_summarizer_settings)
     }
 
     @Suppress("DEPRECATION")
@@ -160,6 +162,10 @@ class AiSystemSettingsActivity : FragmentActivity() {
 
         switchAutoApplyModelRules?.setOnCheckedChangeListener { _, checked ->
             preferences?.setAutoApplyModelRules(checked)
+        }
+
+        rowSummarizerSettings?.setOnClickListener {
+            startActivity(Intent(this, SummarizerSettingsActivity::class.java))
         }
     }
 
