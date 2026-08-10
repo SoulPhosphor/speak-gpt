@@ -36,6 +36,8 @@ import org.teslasoft.assistant.preferences.memory.archivist.ArchivistPrompt
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistRuntimeProtocol
 import org.teslasoft.assistant.preferences.memory.archivist.ArchivistSceneContext
 import org.teslasoft.assistant.preferences.memory.librarian.RetrievalDocument
+import org.teslasoft.assistant.preferences.models.ModelIdentity
+import org.teslasoft.assistant.preferences.models.ModelIdentityCodec
 
 /**
  * Real SQLCipher-backed migration and deletion coverage for the Phase 1 storage
@@ -383,6 +385,61 @@ class MemoryStoreInstrumentedTest {
         val next = store.bookmarkEligibleTranscripts().filter { it.chatId == "chat-a" }
         assertEquals(1, next.size)
         assertTrue(next.single().transcriptId != "t1" && next.single().transcriptId != "t2")
+    }
+
+    @Test
+    fun cleanupRemovesOnlyUnavailableTargetsAndKeepsMultiModelRule() {
+        val store = open(freshDbName())
+        val unavailable = ModelIdentity("openrouter", "openai/gpt-5.1")
+        val stillAvailable = ModelIdentity("openrouter", "tngtech/longcat")
+        store.upsertModelRule(
+            ModelRuleRecord(
+                ruleId = "multi-target-rule",
+                text = "Keep the useful rule.",
+                modelStringsJson = "[]",
+                status = "active",
+                createdAt = "2026-08-10T00:00:00Z",
+                modelTargetsJson = ModelIdentityCodec.encode(
+                    listOf(unavailable, stillAvailable)
+                )
+            )
+        )
+
+        val first = store.removeModelTargets(setOf(unavailable))
+        assertEquals(1, first.removedTargets)
+        assertEquals(1, first.updatedRules)
+        assertEquals(0, first.deletedRules)
+        assertEquals(
+            listOf(stillAvailable),
+            ModelIdentityCodec.decode(store.getModelRule("multi-target-rule")!!.modelTargetsJson)
+        )
+
+        val second = store.removeModelTargets(setOf(stillAvailable))
+        assertEquals(1, second.removedTargets)
+        assertEquals(1, second.deletedRules)
+        assertNull(store.getModelRule("multi-target-rule"))
+    }
+
+    @Test
+    fun cleanupKeepsRuleWhenLegacyTargetStillExists() {
+        val store = open(freshDbName())
+        val unavailable = ModelIdentity("openrouter", "openai/gpt-5.1")
+        store.upsertModelRule(
+            ModelRuleRecord(
+                ruleId = "legacy-survives",
+                text = "Keep legacy until manually replaced.",
+                modelStringsJson = "[\"glm-5\"]",
+                status = "active",
+                createdAt = "2026-08-10T00:00:00Z",
+                modelTargetsJson = ModelIdentityCodec.encode(listOf(unavailable))
+            )
+        )
+
+        store.removeModelTargets(setOf(unavailable))
+        val kept = store.getModelRule("legacy-survives")
+        assertNotNull(kept)
+        assertEquals("[\"glm-5\"]", kept!!.modelStringsJson)
+        assertTrue(ModelIdentityCodec.decode(kept.modelTargetsJson).isEmpty())
     }
 
     @Test

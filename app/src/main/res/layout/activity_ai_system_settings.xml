@@ -53,7 +53,7 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
-            <!-- Owner-approved mindfulness hint (§11 Revision 5): covers both the
+            <!-- Owner-approved mindfulness hint (§11 Revision 6): covers both the
                  system prompt and the model rules, which both ride every turn. -->
             <TextView
                 style="@style/Widget.App.Screen.Intro"
@@ -82,6 +82,29 @@
                 <ImageView
                     style="@style/Widget.App.Row.Chevron"
                     android:contentDescription="@string/title_api_endpoint_profiles" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/row_model_cleanup"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:layout_marginTop="8dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/model_cleanup_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:ellipsize="none"
+                        android:maxLines="3"
+                        android:text="@string/model_cleanup_settings_subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/model_cleanup_title" />
             </LinearLayout>
 
             <!-- System prompts: opens the user's library of saved system prompts

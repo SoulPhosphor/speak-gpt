@@ -2167,8 +2167,9 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * Model rules (owner_approved_rules §11, Revision 5). Rules apply
-     * automatically to any chat whose model string matches, ON by default.
+     * Model rules (owner_approved_rules §11, Revision 6). Rules apply
+     * automatically to any chat whose endpoint id and exact model id match,
+     * ON by default. Preserved legacy strings use their compatibility path.
      * Two toggles gate that, mirroring the "Use memory" pattern:
      *  - a GLOBAL default ("Automatically Apply Model Rules", AI System
      *    Settings) — default on;

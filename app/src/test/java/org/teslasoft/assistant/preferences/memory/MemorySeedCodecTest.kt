@@ -333,10 +333,8 @@ class MemorySeedCodecTest {
 
     @Test
     fun modelRulesRoundTrip() {
-        // Stage 4 (owner_approved_rules §11 Revision 5): model rules are user-
-        // authored, so backups must carry the rules (with their own model-
-        // strings list), the tag pool, and the links between them — including a
-        // draft with its source model string.
+        // Owner-approved rules §11 Revision 6: backups carry exact endpoint /
+        // model targets, preserved legacy strings, tags, and draft provenance.
         val withModelRules = """
             {
               "schema_version": "1.11.0",
@@ -347,6 +345,9 @@ class MemorySeedCodecTest {
                 { "rule_id": "mr-1",
                   "text": "Never open with an apology.", "status": "active",
                   "model_strings": ["glm-5-0502", "glm-5-0219"],
+                  "model_targets": [
+                    {"endpoint_id":"openrouter", "model_id":"openai/gpt-5.1"}
+                  ],
                   "created_at": "2026-07-07T00:00:00Z" },
                 { "rule_id": "mr-2", "text": "Stop repeating the question back.",
                   "status": "draft", "source_model_string": "glm-experimental",
@@ -367,6 +368,7 @@ class MemorySeedCodecTest {
         assertEquals(2, data.modelRules.size)
         // The active rule keeps its own model-strings list.
         assertEquals(2, JSONArray(data.modelRules[0].modelStringsJson).length())
+        assertEquals(1, JSONArray(data.modelRules[0].modelTargetsJson).length())
         // The draft (no model strings yet) and its source model string survive.
         assertEquals("draft", data.modelRules[1].status)
         assertEquals("glm-experimental", data.modelRules[1].sourceModelString)

@@ -23,16 +23,19 @@ import android.widget.Toast
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.json.JSONArray
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.ModelRuleTagRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
-import org.teslasoft.assistant.preferences.memory.enforcer.ModelRuleMatcher
+import org.teslasoft.assistant.preferences.models.ModelCleanupReportStore
+import org.teslasoft.assistant.preferences.models.ModelIdentity
+import org.teslasoft.assistant.preferences.models.ModelIdentityCodec
 import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
 
 /**
- * The Model rules browser (Stage 4, §11 Revision 5): the memory-browser-style
- * list of model-specific rules. Model string is the identity — each row shows
- * the rule text, its model strings and tags. A filter/sort chip row (sort,
+ * The Model rules browser (§11 Revision 6): the memory-browser-style
+ * list of model-specific rules. Endpoint + exact model id is the identity — each row shows
+ * the rule text, its endpoint/model targets, legacy strings, and tags. A filter/sort chip row (sort,
  * model, tag, status) narrows the view; picking a specific model also shows the
  * honest size readout §11 asks for (≈ characters that model pulls, with a soft
  * warning when large). A tag action in the bar opens the tag index; tapping a
@@ -41,6 +44,13 @@ import org.teslasoft.assistant.ui.adapters.memory.MemoryRow
  * mode — empty until Phase 6 files any. All store work is off the main thread.
  */
 class ModelRulesActivity : MemoryScreenActivity() {
+
+    private data class ModelFilterOption(
+        val key: String,
+        val label: String,
+        val target: ModelIdentity? = null,
+        val legacy: String? = null
+    )
 
     /** Filter/sort state, held statically so it survives leaving to the editor
      *  and back (same pattern as the memory browser). */
@@ -54,9 +64,10 @@ class ModelRulesActivity : MemoryScreenActivity() {
 
     private var pendingOnly = false
 
-    @Volatile private var availableModels: List<String> = emptyList()
+    @Volatile private var availableModels: List<ModelFilterOption> = emptyList()
     @Volatile private var availableTags: List<ModelRuleTagRecord> = emptyList()
     @Volatile private var pendingCount: Int = 0
+    @Volatile private var unavailableTargets: Set<ModelIdentity> = emptySet()
 
     override fun screenTitle(): String =
         if (pendingOnly) getString(R.string.model_rules_pending_title) else getString(R.string.row_model_rules_title)
@@ -96,12 +107,34 @@ class ModelRulesActivity : MemoryScreenActivity() {
     override fun loadRows(query: String): List<MemoryRow> {
         if (!MemoryStore.isProvisioned(this)) return emptyList()
         val store = MemoryStore.getInstance(this)
+        store.migrateUnambiguousLegacyModelTargets()
 
         val all = store.getModelRules(null)
-        availableModels = all.flatMap { parseModels(it.modelStringsJson) }
-            .distinct().sortedBy { it.lowercase() }
+        val exactOptions = all.flatMap { ModelIdentityCodec.decode(it.modelTargetsJson) }
+            .distinct()
+            .map { target ->
+                ModelFilterOption(
+                    key = exactFilterKey(target),
+                    label = targetLabel(target),
+                    target = target
+                )
+            }
+        val legacyOptions = all.flatMap { parseModels(it.modelStringsJson) }
+            .distinct()
+            .map { legacy ->
+                ModelFilterOption(
+                    key = "legacy\u0000$legacy",
+                    label = getString(R.string.model_rule_legacy_target_label, legacy),
+                    legacy = legacy
+                )
+            }
+        availableModels = (exactOptions + legacyOptions).sortedBy { it.label.lowercase() }
+        if (F.model != "all" && availableModels.none { it.key == F.model }) {
+            F.model = "all"
+        }
         availableTags = store.getModelRuleTags()
         pendingCount = all.count { it.status == "draft" }
+        unavailableTargets = ModelCleanupReportStore.get(this).load().unavailable
 
         // Tag filter is by id; resolve the member rule-ids once when active.
         val tagRuleIds: Set<String>? = if (F.tag != "all") {
@@ -113,7 +146,11 @@ class ModelRulesActivity : MemoryScreenActivity() {
         list = if (pendingOnly) list.filter { it.status == "draft" }
         else if (F.status != "all") list.filter { it.status == F.status } else list
         if (q.isNotEmpty()) list = list.filter { it.text.lowercase().contains(q) }
-        if (F.model != "all") list = list.filter { ModelRuleMatcher.profileMatchesModel(it.modelStringsJson, F.model) }
+        val selectedModel = availableModels.firstOrNull { it.key == F.model }
+        if (F.model != "all") {
+            list = if (selectedModel == null) emptyList()
+            else list.filter { ruleMatchesFilter(it, selectedModel) }
+        }
         if (tagRuleIds != null) list = list.filter { tagRuleIds.contains(it.ruleId) }
         list = if (F.sort == "oldest") list.sortedBy { it.createdAt } else list.sortedByDescending { it.createdAt }
 
@@ -122,11 +159,12 @@ class ModelRulesActivity : MemoryScreenActivity() {
         // characters that model actually pulls (sum of active matching rules).
         if (!pendingOnly && F.model != "all") {
             val chars = all.filter {
-                it.status == "active" && ModelRuleMatcher.profileMatchesModel(it.modelStringsJson, F.model)
+                it.status == "active" && selectedModel != null && ruleMatchesFilter(it, selectedModel)
             }.sumOf { it.text.length }
+            val selectedLabel = selectedModel?.label ?: F.model
             val header = if (chars >= SIZE_WARN_CHARS)
-                getString(R.string.model_rules_size_header_warn, F.model, chars)
-            else getString(R.string.model_rules_size_header, F.model, chars)
+                getString(R.string.model_rules_size_header_warn, selectedLabel, chars)
+            else getString(R.string.model_rules_size_header, selectedLabel, chars)
             rows.add(MemoryRow(id = "size", title = header, isHeader = true))
         }
         list.forEach { rows.add(rowFor(it)) }
@@ -135,14 +173,27 @@ class ModelRulesActivity : MemoryScreenActivity() {
 
     private fun rowFor(r: ModelRuleRecord): MemoryRow {
         val firstLine = r.text.substringBefore('\n').trim()
-        val modelStrings = parseModels(r.modelStringsJson)
-        val modelsLine = if (modelStrings.isEmpty()) getString(R.string.model_rules_no_models)
-        else modelStrings.joinToString(", ")
+        val targetLabels = ModelIdentityCodec.decode(r.modelTargetsJson).map(::targetLabel)
+        val legacyLabels = parseModels(r.modelStringsJson).map {
+            getString(R.string.model_rule_legacy_target_label, it)
+        }
+        val modelLabels = targetLabels + legacyLabels
+        val modelsLine = if (modelLabels.isEmpty()) getString(R.string.model_rules_no_models)
+        else modelLabels.joinToString(", ")
         val tags = tagNamesFor(r.ruleId)
         val subtitle = if (tags.isEmpty()) modelsLine
         else tags.joinToString(" ") { "#$it" } + "\n" + modelsLine
         val badge = if (r.status == "draft") getString(R.string.mem_status_draft) else null
-        return MemoryRow(id = r.ruleId, title = firstLine, subtitle = subtitle, badge = badge, hasAction = true)
+        val hasUnavailableTarget = ModelIdentityCodec.decode(r.modelTargetsJson).any { it in unavailableTargets }
+        return MemoryRow(
+            id = r.ruleId,
+            title = firstLine,
+            subtitle = subtitle,
+            badge = badge,
+            hasAction = true,
+            iconRes = if (hasUnavailableTarget) R.drawable.ic_report else null,
+            iconTintError = hasUnavailableTarget
+        )
     }
 
     private fun tagNamesFor(ruleId: String): List<String> = try {
@@ -182,7 +233,8 @@ class ModelRulesActivity : MemoryScreenActivity() {
 
     private fun allLabel() = getString(R.string.mem_filter_all)
     private fun sortLabel() = getString(if (F.sort == "oldest") R.string.mem_filter_sort_oldest else R.string.mem_filter_sort_newest)
-    private fun modelFilterLabel() = if (F.model == "all") allLabel() else F.model
+    private fun modelFilterLabel() = if (F.model == "all") allLabel()
+        else availableModels.firstOrNull { it.key == F.model }?.label ?: allLabel()
     private fun tagFilterLabel() = if (F.tag == "all") allLabel() else (availableTags.firstOrNull { it.tagId == F.tag }?.name ?: allLabel())
     private fun statusFilterLabel() = when (F.status) {
         "active" -> getString(R.string.mem_status_active)
@@ -197,9 +249,39 @@ class ModelRulesActivity : MemoryScreenActivity() {
     ) { F.sort = it }
 
     private fun showModelDialog() {
-        val keys = listOf("all") + availableModels
-        val labels = (listOf(allLabel()) + availableModels).toTypedArray()
+        val keys = listOf("all") + availableModels.map { it.key }
+        val labels = (listOf(allLabel()) + availableModels.map { it.label }).toTypedArray()
         pickFilter(R.string.model_rules_filter_model, labels, keys, F.model) { F.model = it }
+    }
+
+    private fun exactFilterKey(target: ModelIdentity): String =
+        "exact\u0000${target.endpointId}\u0000${target.modelId}"
+
+    private fun ruleMatchesFilter(rule: ModelRuleRecord, option: ModelFilterOption): Boolean = when {
+        option.target != null -> option.target in ModelIdentityCodec.decode(rule.modelTargetsJson)
+        option.legacy != null -> option.legacy in parseModels(rule.modelStringsJson)
+        else -> false
+    }
+
+    private fun targetLabel(target: ModelIdentity): String = getString(
+        R.string.model_rule_target_label,
+        endpointLabel(target.endpointId),
+        target.modelId
+    )
+
+    private fun endpointLabel(endpointId: String): String = try {
+        val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(this)
+            .getApiEndpoint(this, endpointId)
+        when {
+            endpoint.provider.isNotBlank() &&
+                !endpoint.provider.equals(endpoint.label, ignoreCase = true) ->
+                "${endpoint.provider} — ${endpoint.label}"
+            endpoint.label.isNotBlank() -> endpoint.label
+            endpoint.provider.isNotBlank() -> endpoint.provider
+            else -> getString(R.string.model_rule_missing_endpoint)
+        }
+    } catch (_: Exception) {
+        getString(R.string.model_rule_missing_endpoint)
     }
 
     private fun showTagDialog() {

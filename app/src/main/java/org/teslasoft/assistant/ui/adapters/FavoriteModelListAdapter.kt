@@ -24,6 +24,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
@@ -33,6 +34,8 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
+import org.teslasoft.assistant.preferences.models.ModelCleanupReportStore
+import org.teslasoft.assistant.preferences.models.ModelIdentity
 
 /** ListView adapter to display list of voices */
 /**
@@ -43,6 +46,7 @@ import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 class FavoriteModelListAdapter(private val context: Context, private val items: ArrayList<Map<String, String>>, private var chatId: String, private val showRoutingGear: Boolean = false) : BaseAdapter() {
 
     private var listener: OnItemClickListener? = null
+    private val unavailableTargets = ModelCleanupReportStore.get(context).load().unavailable
 
     override fun getCount(): Int {
         return items.size
@@ -73,6 +77,9 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
         val modelId = item["modelId"]!!
         val endpointId = item["endpointId"]!!
         viewHolder.textView.text = modelId
+        viewHolder.unavailableWarning.visibility = if (
+            ModelIdentity(endpointId, modelId) in unavailableTargets
+        ) View.VISIBLE else View.GONE
 
         val preferences: Preferences = Preferences.getPreferences(context, chatId)
 
@@ -175,6 +182,7 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
         val voiceBg: ConstraintLayout = view.findViewById(R.id.voice_bg)
         val modelAction: ImageButton = view.findViewById(R.id.btn_action)
         val routingSettings: ImageButton = view.findViewById(R.id.btn_routing_settings)
+        val unavailableWarning: ImageView = view.findViewById(R.id.model_unavailable_warning)
     }
 
     interface OnItemClickListener {

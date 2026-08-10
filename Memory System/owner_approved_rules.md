@@ -59,6 +59,14 @@ global default in AI System Settings and a per-chat "Apply Model Rules"
 toggle in Quick Settings — superseding revisions 1–4's "default none, user
 picks a profile per chat." §10's exemption line and §11 are rewritten in
 place; this revision supersedes revisions 1–4 where they differ.**
+**Revision 6 — August 10 2026: the owner replaced §11's fuzzy
+model-string identity with stable API-endpoint id + exact endpoint-returned
+model id. New rules select an endpoint and then a real model from that
+endpoint; they do not type a family string, strip provider prefixes, or use
+substring matching. Existing ambiguous strings remain visibly legacy until
+the user replaces them. This revision also adds the explicit, saved,
+user-triggered Model Cleanup report in AI System Settings. Revision 6
+supersedes Revision 5 wherever §11 differs.**
 
 This document OUTRANKS every other document in this folder and the
 integration plan wherever they disagree. The wording below was reviewed and
@@ -301,28 +309,39 @@ Memories have four statuses: **Draft · Active · Archived · Superseded.**
   specific AI model's habits** ("stop the therapy-speak," "quit ending
   mid-sentence"). They live under **Settings → AI System Settings → Model
   rules**, alongside the global system prompt.
-- **The model string is the primary thing — there are no profiles or
-  groups.** Each rule carries **its own list of model strings** it applies
-  to. Matching is case-insensitive contains with the provider prefix
-  ignored — a rule targeting `glm-5` applies to `glm-5-0502`,
-  `openrouter/glm-5-0219`, and every other snapshot; a rule targeting
-  `glm-5-0219` applies to that snapshot only. Broad and narrow rules simply
-  stack when both match. (The group abstraction was dropped because the same
-  model could land in two groups and only one could win — model string as
-  the identity removes that.)
+- **A model target is one stable API endpoint id plus one exact model id
+  returned by that endpoint.** Adding a target is: Add Model → select an API
+  Endpoint → select a model available from it. The endpoint's Favorites may
+  appear first, with search/browse access to its full catalog. The selected
+  model need not be a Favorite and is never automatically favorited. When a
+  current chat supplies both identities, **Use Current Chat Model** is a
+  shortcut.
+- **Runtime matching is exact and local.** A rule applies only when both the
+  current chat endpoint id and model id exactly equal a saved target. Applying
+  Model Rules never requires a network request. New targets do not strip
+  provider prefixes, compare case-insensitively, or use substrings. There is
+  no hidden family inference: "glm-5", "glm-5-0502", and "glm-5-0219" are
+  separate ids unless a future explicit family feature says otherwise.
+- **Legacy fuzzy strings are preserved, not guessed.** An old stored string
+  may convert automatically only when it exactly resolves, from current local
+  data, to one and only one endpoint/model pair. Ambiguous strings remain
+  labeled **Legacy** and removable/editable in the rule editor. They may keep
+  their former matching behavior until replaced so existing configuration is
+  not silently broken. New hand-written rules and newly assigned targets can
+  never create a legacy fuzzy string.
 - **Tags organize rules for the human, not the machine.** A rule can carry
   any number of tags (plain names, no colors, created inline as you type
   them). Tapping a tag anywhere shows every rule that carries it — the same
   "tap a tag, see everything" browsing as the roleplay tags, but a separate
-  pool. Tags never decide what gets injected; the model strings do that.
-- **Injection is automatic and on by default.** Every active rule whose
-  model string matches the chat's current model is injected, in
+  pool. Tags never decide what gets injected; endpoint/model targets do that.
+- **Injection is automatic and on by default.** Every active rule with a
+  matching exact endpoint/model target (or a still-preserved legacy match) is injected, in
   deterministic order (oldest first). A global **"Automatically Apply Model
   Rules"** toggle in AI System Settings sets the default (on); Quick
   Settings gets a per-chat **"Apply Model Rules"** toggle that follows that
   default and overrides it for one chat. Per-chat → auto-naming copy block.
 - **Matching rules are never silently dropped.** Because rules are scoped by
-  model string, only the handful written for the current model ever land in
+  endpoint/model identity, only the handful written for the current model ever land in
   one prompt — the natural limiter. Everything that matches is injected in
   full; nothing is truncated to fit a budget. The rules browser shows the
   real character size of what a given model pulls, and warns softly when
@@ -333,17 +352,45 @@ Memories have four statuses: **Draft · Active · Archived · Superseded.**
   persona/system prefix, never inside the memory message; absent entirely
   when nothing matches or the chat has rules turned off (see the
   prompt-layer contract).
-- **Filing is automatic by model string (Phase 6).** When the Archivist
+- **Filing remains a draft workflow (Phase 6).** When the Archivist
   notices repeated corrections to a model, it files a **draft** rule
-  carrying that chat's model string (`status='draft'`, `source_model_string`
-  set, no tags yet). Drafts land in a **Pending** area, pinned to the top of
+  with the source model noted for review (status "draft",
+  source_model_string set, no exact target or tags yet). Drafts land in a
+  **Pending** area, pinned to the top of
   the Model rules screen whenever any draft exists. For each draft the user
-  can **edit** it, **accept** it (assigning the model strings and tags it
+  can **edit** it, **accept** it (assigning exact endpoint/model targets and tags it
   should carry, then it goes active), or **delete** it. Model-rule drafting
   is **always on** — it touches nothing intimate; the rules are about the
   machine's own defects. Model rules are the accepted special case of
   "injected every turn," because the user chose to write them and can switch
   them off per chat.
+- **Model Cleanup is explicit and saved.** **AI System Settings → Clean Up
+  Models** checks only when the user presses **Check Available Models**. It
+  checks saved Favorites and exact Model Rule targets, at most once per
+  relevant endpoint catalog (or by a reliable direct-model endpoint when one
+  is truly supported), and never sends inference requests. Opening the screen
+  later reads the saved report and locally removes references already deleted;
+  it does not contact providers. The report carries its generation date/time.
+- **Unavailable means only "not present in that saved endpoint's conclusive
+  result for this scan."** The endpoint id is part of the result: the same
+  model id can be available on OpenRouter and unavailable on DeepSeek.
+  Authentication errors, unreachable/deleted endpoints, malformed data,
+  unsupported checks, and empty/unreliable results are inconclusive and do
+  not create a new unavailable status. The report names endpoints that could
+  not be checked. On aggregator endpoints such as OpenRouter, the overall
+  endpoint catalog's base model id decides availability; one preferred
+  upstream route being offline does not make that base model unavailable.
+- **Unavailable state is shared by endpoint/model identity.** Any Favorite
+  and any Model Rule using that exact pair show the existing "ic_report"
+  warning treatment until the item is deleted or a later conclusive scan finds
+  the model again. There is no background scan, continuous polling, automatic
+  deletion, family matching, or audit history.
+- **Cleanup deletion is confirmed and target-safe.** Delete All Favorites
+  removes only the currently listed unavailable Favorites. Delete All for
+  Model Rules removes each listed unavailable target from every affected
+  rule; it deletes the whole rule only if no other exact or legacy target
+  remains. Removing a Favorite never removes a Model Rule, and assigning a
+  Model Rule target never creates a Favorite.
 
 ## 12. Priority order
 

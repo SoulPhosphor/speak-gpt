@@ -76,6 +76,7 @@ import kotlin.time.Duration.Companion.seconds
 class AdvancedModelSelectorDialogFragment : DialogFragment() {
     companion object {
         private const val ARG_START_WITH_ALL_MODELS = "startWithAllModels"
+        private const val ARG_RAW_MODEL_CATALOG = "rawModelCatalog"
 
         /** [endpointId], when non-blank, fetches models for that specific saved
          *  endpoint instead of the chat's own active endpoint (Preferences'
@@ -117,6 +118,19 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             newInstance(name, chatId, endpointId).apply {
                 requireArguments().putBoolean(ARG_START_WITH_ALL_MODELS, true)
             }
+
+        /**
+         * Model Rule entry point: keep the Favorites-first landing, but make
+         * View all/search use every exact id advertised by the endpoint rather
+         * than the chat picker's name-based exclusions.
+         */
+        fun newModelRuleTargetInstance(
+            chatId: String,
+            endpointId: String
+        ): AdvancedModelSelectorDialogFragment =
+            newInstance(name = "", chatId = chatId, endpointId = endpointId).apply {
+                requireArguments().putBoolean(ARG_RAW_MODEL_CATALOG, true)
+            }
     }
 
     private var modelList: ListView? = null
@@ -148,6 +162,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     private var showingAll = false
     /** True when the caller's purpose is the provider-wide catalog itself. */
     private var startsWithAllModels = false
+    private var rawModelCatalog = false
     private var query = ""
 
     private var requestNetwork: RequestNetwork? = null
@@ -407,6 +422,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
         imageMode = requireArguments().getBoolean("imageModels", false)
         startsWithAllModels = requireArguments().getBoolean(ARG_START_WITH_ALL_MODELS, false)
+        rawModelCatalog = requireArguments().getBoolean(ARG_RAW_MODEL_CATALOG, false)
         selectorTitle?.text = getString(
             if (imageMode) R.string.label_select_image_model else R.string.label_select_ai_model
         )
@@ -495,7 +511,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
      *  filtering, and image mode keeps the raw capability-aware path. */
     private fun startCatalogFetch() {
         val endpoint = apiEndpointObject ?: return
-        if (imageMode || startsWithAllModels) {
+        if (imageMode || startsWithAllModels || rawModelCatalog) {
             startRawModelsRequest()
             return
         }

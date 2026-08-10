@@ -19,48 +19,71 @@ package org.teslasoft.assistant.preferences.memory.enforcer
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.preferences.models.ModelIdentity
+import org.teslasoft.assistant.preferences.models.ModelIdentityCodec
 
-/**
- * The "(matches this chat's model)" hint (owner_approved_rules §11) must be
- * right in both directions: a false hint nudges the user toward the wrong
- * profile, and a missed match hides the right one. The matching rule from the
- * work order: case-insensitive contains, provider prefix ignored.
- */
 class ModelRuleMatcherTest {
 
+    private val exact = ModelIdentityCodec.encode(
+        listOf(ModelIdentity("openrouter-endpoint", "openai/gpt-5.1"))
+    )
+
     @Test
-    fun exactAndCaseInsensitiveMatch() {
-        assertTrue(ModelRuleMatcher.matches("glm-5-0502", "glm-5-0502"))
-        assertTrue(ModelRuleMatcher.matches("GLM-5-0502", "glm-5-0502"))
+    fun exactTargetRequiresSameEndpointAndExactModelId() {
+        assertTrue(
+            ModelRuleMatcher.exactTargetsMatch(
+                exact, "openrouter-endpoint", "openai/gpt-5.1"
+            )
+        )
+        assertFalse(
+            ModelRuleMatcher.exactTargetsMatch(
+                exact, "deepseek-endpoint", "openai/gpt-5.1"
+            )
+        )
+        assertFalse(
+            ModelRuleMatcher.exactTargetsMatch(
+                exact, "openrouter-endpoint", "gpt-5.1"
+            )
+        )
     }
 
     @Test
-    fun providerPrefixIsIgnored() {
-        assertTrue(ModelRuleMatcher.matches("openrouter/glm-5-0502", "glm-5-0502"))
-        assertTrue(ModelRuleMatcher.matches("glm-5-0502", "z-ai/glm-5-0502"))
+    fun exactTargetDoesNotInferModelFamiliesOrIgnoreCase() {
+        assertFalse(
+            ModelRuleMatcher.exactTargetsMatch(
+                exact, "openrouter-endpoint", "openai/gpt-5.1-0810"
+            )
+        )
+        assertFalse(
+            ModelRuleMatcher.exactTargetsMatch(
+                exact, "openrouter-endpoint", "OPENAI/GPT-5.1"
+            )
+        )
     }
 
     @Test
-    fun containsWorksBothWays() {
-        // A profile may hold the family string while the chat runs a snapshot…
-        assertTrue(ModelRuleMatcher.matches("glm-5", "glm-5-0502"))
-        // …or hold the dated snapshot while the chat uses the family id.
-        assertTrue(ModelRuleMatcher.matches("glm-5-0502", "glm-5"))
+    fun preservedLegacyTargetsKeepOldFuzzyBehaviorOnlyInLegacyPath() {
+        assertTrue(ModelRuleMatcher.legacyMatches("glm-5", "openrouter/glm-5-0502"))
+        assertTrue(ModelRuleMatcher.legacyListMatches("""["glm-5"]""", "glm-5-0219"))
+        assertFalse(ModelRuleMatcher.legacyListMatches("not json", "glm-5"))
     }
 
     @Test
-    fun unrelatedAndBlankNeverMatch() {
-        assertFalse(ModelRuleMatcher.matches("glm-5", "gpt-4o"))
-        assertFalse(ModelRuleMatcher.matches("", "gpt-4o"))
-        assertFalse(ModelRuleMatcher.matches("gpt-4o", ""))
-    }
-
-    @Test
-    fun profileListMatchesOnAnyString() {
-        val json = """["glm-5-0502", "glm-5-0219"]"""
-        assertTrue(ModelRuleMatcher.profileMatchesModel(json, "z-ai/GLM-5-0219"))
-        assertFalse(ModelRuleMatcher.profileMatchesModel(json, "gpt-4o"))
-        // Malformed JSON is cosmetic-only: never a match, never a crash.
-        assertFalse(ModelRuleMatcher.profileMatchesModel("not json", "glm-5"))
+    fun ruleMatchesEitherExactOrPreservedLegacyTarget() {
+        assertTrue(
+            ModelRuleMatcher.ruleMatches(
+                exact, "[]", "openrouter-endpoint", "openai/gpt-5.1"
+            )
+        )
+        assertTrue(
+            ModelRuleMatcher.ruleMatches(
+                "[]", """["glm-5"]""", "any-endpoint", "glm-5-0502"
+            )
+        )
+        assertFalse(
+            ModelRuleMatcher.ruleMatches(
+                exact, "[]", "deepseek-endpoint", "openai/gpt-5.1"
+            )
+        )
     }
 }
