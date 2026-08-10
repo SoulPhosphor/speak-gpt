@@ -187,8 +187,8 @@ class MemoryRowAdapter(
             icon.imageTintList = ColorStateList.valueOf(
                 MaterialColors.getColor(
                     icon,
-                    if (row.iconTintError) com.google.android.material.R.attr.colorError
-                    else com.google.android.material.R.attr.colorPrimary
+                    if (row.iconTintError) androidx.appcompat.R.attr.colorError
+                    else androidx.appcompat.R.attr.colorPrimary
                 )
             )
         } else {
