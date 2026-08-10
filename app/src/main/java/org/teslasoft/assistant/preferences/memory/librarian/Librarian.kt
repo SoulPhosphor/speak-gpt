@@ -141,6 +141,16 @@ class Librarian private constructor(private val appContext: Context) {
         fun reconciliationContextBoost(liveBoost: Double): Double =
             liveBoost.coerceIn(0.0, RECONCILIATION_CONTEXT_CAP)
 
+        /** Fixed reconciliation weights. This pure seam makes the Stage F
+         * boundary explicit: live delivery priority, cooldown, memory-count,
+         * and token settings are not inputs and therefore cannot gate or
+         * reweight Archivist awareness. */
+        internal fun reconciliationWeights(useImportance: Boolean): Weights = Weights(
+            similarity = 1.0,
+            importance = if (useImportance) RECONCILIATION_IMPORTANCE_WEIGHT else 0.0,
+            recency = RECONCILIATION_RECENCY_WEIGHT
+        )
+
         /** Union independent local topic-window searches by stable memory id.
          * The best score a memory achieved in any window wins. */
         fun mergeReconciliationWindows(
@@ -538,11 +548,7 @@ class Librarian private constructor(private val appContext: Context) {
         val useImportance = try {
             Preferences.getPreferences(appContext, "").getUseImportanceRatings()
         } catch (_: Exception) { false }
-        return Weights(
-            similarity = 1.0,
-            importance = if (useImportance) RECONCILIATION_IMPORTANCE_WEIGHT else 0.0,
-            recency = RECONCILIATION_RECENCY_WEIGHT
-        )
+        return reconciliationWeights(useImportance)
     }
 
     /**

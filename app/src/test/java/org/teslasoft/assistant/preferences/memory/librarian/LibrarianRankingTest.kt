@@ -350,6 +350,21 @@ class LibrarianRankingTest {
     }
 
     @Test
+    fun reconciliationPolicyCannotInheritLiveDeliverySettings() {
+        val withImportance = Librarian.reconciliationWeights(useImportance = true)
+        val withoutImportance = Librarian.reconciliationWeights(useImportance = false)
+
+        assertEquals(1.0, withImportance.similarity, 0.0)
+        assertEquals(0.02, withImportance.importance, 0.0)
+        assertEquals(0.02, withImportance.recency, 0.0)
+        assertEquals(1.0, withoutImportance.similarity, 0.0)
+        assertEquals(0.0, withoutImportance.importance, 0.0)
+        assertEquals(0.02, withoutImportance.recency, 0.0)
+        // No live priority/cooldown/count/token input exists at this boundary.
+        assertEquals(0.06, Librarian.RECONCILIATION_MAX_TIE_BREAK, 0.0)
+    }
+
+    @Test
     fun disjointTopicWindowsUnionBothStrongMemoriesWithinBound() {
         val topicA = org.teslasoft.assistant.preferences.memory.ScoredMemory(
             mem("topic-a", content = "green favorite color"), 0.91f, 0.91f

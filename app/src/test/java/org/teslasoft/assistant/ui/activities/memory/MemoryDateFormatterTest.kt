@@ -37,4 +37,29 @@ class MemoryDateFormatterTest {
     fun unreadableLegacyTimestampRemainsVisible() {
         assertEquals("legacy-date", MemoryDateFormatter.format("legacy-date", Locale.US))
     }
+
+    @Test
+    fun supersededBrowserAndHistoryUseTheRecordedRelationshipDate() {
+        val recorded = "2026-08-10T04:15:53Z"
+        val unrelatedLogTime = "2026-08-11T10:00:00Z"
+
+        assertEquals(
+            "Superseded · recorded:$recorded",
+            MemorySupersessionPresentation.badge(
+                "superseded", "Superseded", recorded
+            ) { "recorded:$it" }
+        )
+        assertEquals(
+            recorded,
+            MemorySupersessionPresentation.timestamp(
+                "superseded", unrelatedLogTime, recorded
+            )
+        )
+        assertEquals(
+            unrelatedLogTime,
+            MemorySupersessionPresentation.timestamp(
+                "edited", unrelatedLogTime, recorded
+            )
+        )
+    }
 }

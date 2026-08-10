@@ -25,10 +25,16 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import org.teslasoft.assistant.preferences.memory.CandidateResult
 import org.teslasoft.assistant.preferences.memory.FrozenChatRangeExecutor
 import org.teslasoft.assistant.preferences.memory.MemoryMatch
+import org.teslasoft.assistant.preferences.memory.MemoryCandidateValidator
+import org.teslasoft.assistant.preferences.memory.PendingMemoryRecordFactory
 import org.teslasoft.assistant.preferences.memory.PossibleMatchFinder
+import org.teslasoft.assistant.preferences.memory.RetrievableMemory
+import org.teslasoft.assistant.preferences.memory.ScoredMemory
 import org.teslasoft.assistant.preferences.memory.TranscriptRecord
+import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 
 /**
  * Stage F's credential boundary. These tests drive the production request
@@ -78,6 +84,7 @@ class ArchivistRequestExecutorTest {
         }
 
         assertTrue(parsed.memories.isEmpty())
+        assertTrue(parsed.memories.mapIndexed(::pendingRecord).isEmpty())
     }
 
     @Test
@@ -108,6 +115,9 @@ class ArchivistRequestExecutorTest {
         }
 
         val proposal = parsed.memories.single()
+        val pending = pendingRecord(0, proposal)
+        assertEquals("draft", pending.status)
+        assertEquals("The user's favorite color is purple now.", pending.content)
         assertEquals(listOf("old-green"), proposal.relatedExistingMemoryIds)
         val review = PossibleMatchFinder.mergeRelationshipHints(
             localMatches = emptyList(),
@@ -137,6 +147,7 @@ class ArchivistRequestExecutorTest {
         }
 
         val proposal = parsed.memories.single()
+        val pending = pendingRecord(0, proposal)
         val outcome = MemoryMatch.classify(
             MemoryMatch.Candidate(
                 proposal.content, proposal.scope, proposal.typeIdSuggestion,
@@ -145,6 +156,8 @@ class ArchivistRequestExecutorTest {
             emptyList()
         )
         assertTrue(outcome is MemoryMatch.Outcome.Unique)
+        assertEquals("draft", pending.status)
+        assertEquals("The user bought binoculars.", pending.content)
         assertTrue(proposal.relatedExistingMemoryIds.isEmpty())
     }
 
@@ -231,6 +244,8 @@ class ArchivistRequestExecutorTest {
         assertEquals(listOf("project-a"), projectDraft.targetIds)
         assertEquals(roleplayScene, campaignDraft.scene)
         assertEquals(listOf("campaign-b"), campaignDraft.targetIds)
+        assertEquals(listOf("project-a"), pendingRecord(0, projectDraft).projectIds)
+        assertEquals(listOf("campaign-b"), pendingRecord(1, campaignDraft).campaignIds)
     }
 
     @Test
@@ -252,6 +267,145 @@ class ArchivistRequestExecutorTest {
             setOf("real_life", "project"),
             parsed.memories.map { it.scope }.toSet()
         )
+        assertEquals(2, parsed.memories.mapIndexed(::pendingRecord).size)
+    }
+
+    @Test
+    fun disjointRetrievalWindowsPutBothStrongMemoriesInTheArchivistRequest() = runBlocking {
+        val color = scored("color", "The user's favorite color is green.", 0.91f)
+        val lighthouse = scored("lighthouse", "The user is restoring a lighthouse.", 0.93f)
+        val retrieved = Librarian.mergeReconciliationWindows(
+            listOf(listOf(color), listOf(lighthouse)),
+            ArchivistRuntimeProtocol.MAX_RETRIEVAL_CANDIDATES
+        )
+        val protocol = ArchivistRuntimeProtocol.create(
+            emptyScene,
+            retrieved.map { hit ->
+                ArchivistExistingMemory(
+                    hit.memory.memoryId, hit.memory.content, hit.memory.scope,
+                    emptyList(), "Fact"
+                )
+            },
+            emptyList()
+        )
+
+        execute(protocol, "color and lighthouse topic windows") { request ->
+            assertTrue(request.systemPrompt.contains(color.memory.content))
+            assertTrue(request.systemPrompt.contains(lighthouse.memory.content))
+            """{"memories":[],"model_rules":[]}"""
+        }
+        assertEquals(2, protocol.memories.size)
+    }
+
+    @Test
+    fun incompleteEmbeddingFallbackSendsOnlyTheBoundedLexicalSet() = runBlocking {
+        var embedCalls = 0
+        val completeDatabase = (1..18).map { index ->
+            Librarian.CorpusMemory(
+                memory = retrievable(
+                    "memory-$index", "shared archive topic memory number $index"
+                ),
+                vector = if (index == 18) null else floatArrayOf(1f, 0f),
+                tags = emptyList(),
+                aliases = emptyList(),
+                recency = 0.0,
+                boost = 0.0
+            )
+        }
+        val retrieved = Librarian.searchCore(
+            query = "shared archive topic",
+            embedQuery = { embedCalls++; floatArrayOf(1f, 0f) },
+            corpus = completeDatabase,
+            weights = Librarian.Weights(1.0, 0.0, 0.0),
+            topK = ArchivistRuntimeProtocol.MAX_RETRIEVAL_CANDIDATES
+        )
+        val protocol = ArchivistRuntimeProtocol.create(
+            emptyScene,
+            retrieved.map { hit ->
+                ArchivistExistingMemory(
+                    hit.memory.memoryId, hit.memory.content, hit.memory.scope,
+                    emptyList(), "Fact"
+                )
+            },
+            emptyList()
+        )
+
+        execute(protocol, "shared archive topic") { request ->
+            protocol.memories.forEach {
+                assertTrue(request.systemPrompt.contains(it.memory.content))
+            }
+            completeDatabase
+                .map { it.memory.content }
+                .filter { content -> protocol.memories.none { it.memory.content == content } }
+                .forEach { assertFalse(request.systemPrompt.contains(it)) }
+            """{"memories":[],"model_rules":[]}"""
+        }
+
+        assertEquals(0, embedCalls)
+        assertEquals(15, retrieved.size)
+        assertEquals(ArchivistRuntimeProtocol.MAX_MEMORIES_IN_PROMPT, protocol.memories.size)
+        assertTrue(protocol.memories.size < completeDatabase.size)
+    }
+
+    @Test
+    fun repeatedInformationAcrossFakeModelChunksFilesOnePendingDraft() = runBlocking {
+        val protocol = ArchivistRuntimeProtocol.create(emptyScene, emptyList(), emptyList())
+        val filed = FrozenChatRangeExecutor.executeWithStaged(
+            chunks = listOf("chunk one", "chunk two"),
+            analyzeChunk = { chunk, _ ->
+                execute(protocol, chunk) {
+                    """{"memories":[{"content":"The user likes cedar tea.","scope":"real_life"}]}"""
+                }
+            },
+            commit = { parsed ->
+                ArchivistCandidateBoundary.collect(parsed.map { it.memories })
+                    .memories.mapIndexed(::pendingRecord)
+            }
+        )
+
+        assertEquals(1, filed.size)
+        assertEquals("draft", filed.single().status)
+        assertEquals("The user likes cedar tea.", filed.single().content)
+    }
+
+    @Test
+    fun locallyLinkedSameRunCorrectionCannotFileAsTwoUnrelatedDrafts() = runBlocking {
+        val protocol = ArchivistRuntimeProtocol.create(
+            emptyScene,
+            listOf(
+                ArchivistExistingMemory(
+                    "old-color", "The user's favorite color was blue.",
+                    "real_life", emptyList(), "Fact"
+                )
+            ),
+            emptyList()
+        )
+        val collected = FrozenChatRangeExecutor.executeWithStaged(
+            chunks = listOf("earlier", "later"),
+            analyzeChunk = { chunk, _ ->
+                execute(protocol, chunk) {
+                    if (chunk == "earlier") {
+                        """{"memories":[{"content":"The user's favorite color is green.","scope":"real_life","related_existing_memory_refs":["M1"]}]}"""
+                    } else {
+                        """{"memories":[{"content":"The user's favorite color is purple now.","scope":"real_life","related_existing_memory_refs":["M1"]}]}"""
+                    }
+                }
+            },
+            commit = { parsed ->
+                ArchivistCandidateBoundary.collect(parsed.map { it.memories }).memories
+            }
+        )
+
+        assertEquals(2, collected.size)
+        assertTrue(collected.all { it.relatedExistingMemoryIds == listOf("old-color") })
+        assertTrue(collected.all { draft ->
+            PossibleMatchFinder.mergeRelationshipHints(
+                emptyList(),
+                draft.relatedExistingMemoryIds.map {
+                    MemoryMatch.Match(it, MemoryMatch.Relation.AI_RELATED)
+                }
+            ).isNotEmpty()
+        })
     }
 
     @Test
@@ -401,5 +555,38 @@ class ArchivistRequestExecutorTest {
         quickSettingsJson = null,
         reviewStatus = "pending",
         processedAt = null
+    )
+
+    private fun retrievable(id: String, content: String) = RetrievableMemory(
+        memoryId = id,
+        scope = "global",
+        content = content,
+        embeddingText = null,
+        importance = 0,
+        createdAt = "2026-08-10T00:00:00Z",
+        worldId = null
+    )
+
+    private fun scored(id: String, content: String, score: Float) = ScoredMemory(
+        retrievable(id, content), similarity = score, score = score
+    )
+
+    private fun pendingRecord(
+        index: Int,
+        draft: ArchivistResponseParser.DraftMemory
+    ) = PendingMemoryRecordFactory.build(
+        candidate = (MemoryCandidateValidator.validateGeneral(
+            scope = draft.scope,
+            content = draft.content,
+            typeId = draft.typeIdSuggestion,
+            tags = draft.tags,
+            worldIds = draft.targetIds.takeIf { draft.scope == "world" }.orEmpty(),
+            campaignIds = draft.targetIds.takeIf { draft.scope == "campaign" }.orEmpty(),
+            roleplayCharacterIds = draft.targetIds
+                .takeIf { draft.scope == "rp_character" }.orEmpty(),
+            projectIds = draft.targetIds.takeIf { draft.scope == "project" }.orEmpty()
+        ) as CandidateResult.Valid).candidate,
+        memoryId = "pending-$index",
+        now = "2026-08-10T00:00:00Z"
     )
 }

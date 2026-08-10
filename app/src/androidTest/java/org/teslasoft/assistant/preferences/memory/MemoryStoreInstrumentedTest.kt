@@ -31,6 +31,10 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.memory.archivist.ArchivistExistingMemory
+import org.teslasoft.assistant.preferences.memory.archivist.ArchivistPrompt
+import org.teslasoft.assistant.preferences.memory.archivist.ArchivistRuntimeProtocol
+import org.teslasoft.assistant.preferences.memory.archivist.ArchivistSceneContext
 import org.teslasoft.assistant.preferences.memory.librarian.RetrievalDocument
 
 /**
@@ -871,13 +875,37 @@ class MemoryStoreInstrumentedTest {
         val store = open(freshDbName())
         store.insertCompanion(companion("c-a", "Ash"))
         store.insertCompanion(companion("c-b", "Blue"))
-        store.insertMemory(mem("for-a", scope = "companion", companionIds = listOf("c-a"), status = "active"))
+        store.insertMemory(
+            mem("for-a", scope = "companion", companionIds = listOf("c-a"), status = "active")
+                .copy(content = "Ash-only private memory")
+        )
+        store.insertMemory(
+            mem("for-b", scope = "companion", companionIds = listOf("c-b"), status = "active")
+                .copy(content = "Blue-only private memory")
+        )
 
-        val forA = store.activeMemoriesForScope(RetrievalScope("c-a", null, null, null)).map { it.memoryId }
-        val forB = store.activeMemoriesForScope(RetrievalScope("c-b", null, null, null)).map { it.memoryId }
+        val forA = store.activeMemoriesForScope(RetrievalScope("c-a", null, null, null))
+        val forB = store.activeMemoriesForScope(RetrievalScope("c-b", null, null, null))
 
-        assertTrue("companion A sees its own memory", forA.contains("for-a"))
-        assertFalse("companion B must NOT see companion A's memory", forB.contains("for-a"))
+        assertTrue("companion A sees its own memory", forA.any { it.memoryId == "for-a" })
+        assertFalse("companion A must NOT see companion B's memory", forA.any { it.memoryId == "for-b" })
+        assertTrue("companion B sees its own memory", forB.any { it.memoryId == "for-b" })
+        assertFalse("companion B must NOT see companion A's memory", forB.any { it.memoryId == "for-a" })
+
+        val protocolForB = ArchivistRuntimeProtocol.create(
+            scene = ArchivistSceneContext("c-b", null, null, null, null),
+            existingMemories = forB.map {
+                ArchivistExistingMemory(
+                    it.memoryId, it.content, it.scope, listOf("Blue"), "Fact"
+                )
+            },
+            validTargets = emptyList()
+        )
+        val outgoingPrompt = ArchivistPrompt.withRuntimeProtocol(
+            "BASE", listOf("mtype-fact" to "Fact"), protocolForB
+        )
+        assertTrue(outgoingPrompt.contains("Blue-only private memory"))
+        assertFalse(outgoingPrompt.contains("Ash-only private memory"))
     }
 
     /* ------------- Phase 2: canonical Pending filing (items 8, 13) ---------- */
