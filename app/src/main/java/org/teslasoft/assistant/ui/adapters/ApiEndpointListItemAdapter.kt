@@ -17,14 +17,12 @@
 package org.teslasoft.assistant.ui.adapters
 
 import android.content.Context
-import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
+import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.constraintlayout.widget.ConstraintLayout
-import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 
 class ApiEndpointListItemAdapter(private val dataArray: ArrayList<HashMap<String, String>>, private var mContext: Context) : BaseAdapter() {
@@ -40,7 +38,7 @@ class ApiEndpointListItemAdapter(private val dataArray: ArrayList<HashMap<String
         return position.toLong()
     }
 
-    private var ui: ConstraintLayout? = null
+    private var ui: LinearLayout? = null
     private var endpointLabel: TextView? = null
     private var endpointHost: TextView? = null
 
@@ -62,8 +60,6 @@ class ApiEndpointListItemAdapter(private val dataArray: ArrayList<HashMap<String
         ui = mView?.findViewById(R.id.ui)
         endpointLabel = mView?.findViewById(R.id.endpoint_label)
         endpointHost = mView?.findViewById(R.id.endpoint_host)
-
-        ui?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_2.getColor(mContext))
 
         val item = dataArray[position]
 

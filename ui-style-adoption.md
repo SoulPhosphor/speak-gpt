@@ -114,7 +114,7 @@ Do not guess its status from appearance or old documentation.
 | Model Rule Editor | `activity_model_rule_editor.xml` | Unconverted | None | Unconverted | Fields and buttons local. |
 | Card Entry Editor | `activity_card_entry_editor.xml` | Unconverted | None | Unconverted | Large editor (30+ inputs), all local field styling. |
 | Companion Detail | `activity_companion_detail.xml` | Unconverted | None | Unconverted | Buttons and image treatment local. |
-| API Endpoints List | `activity_api_endpoint_list.xml` | Unconverted | None | Unconverted | Header local; list item layout unconverted. |
+| API Endpoints List | `activity_api_endpoint_list.xml` | Shared | Each row (`view_api_endpoint_item.xml`) uses `Widget.App.Row.WithSubtitle`/`TextColumn`/`Title`/`Subtitle`/`Chevron` (profile name as title, provider as subtitle, no leading icon) | Shared | None. The FAB has no approved shared style family (none exists yet for FABs). |
 | About | `activity_about_new.xml` | Unconverted | None | Unconverted | Buttons rely on the theme-default `App.Button` shape only. |
 | Documentation | `activity_documentation.xml` | Unconverted | None | Unconverted | Header local. |
 | Lorebook Debug | `activity_lorebook_debug.xml` | Unconverted | None | Unconverted | Debug-only screen, low priority. |
