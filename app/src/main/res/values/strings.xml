@@ -1557,7 +1557,7 @@
     <string name="model_rule_use_current_chat_model">Use Current Chat Model</string>
     <string name="model_rule_use_current_chat_model_value">Use Current Chat Model — %1$s: %2$s</string>
     <string name="model_rule_target_label">%1$s: %2$s</string>
-    <string name="model_rule_legacy_target_label">Legacy: %1$s</string>
+    <string name="model_rule_legacy_target_label">%1$s</string>
     <string name="model_rule_missing_endpoint">Unavailable Endpoint</string>
     <string name="model_rule_edit_model_required">Add at least one endpoint and model before activating this rule.</string>
     <string name="model_rule_no_endpoints">Add an API endpoint before selecting a model.</string>
@@ -1580,14 +1580,13 @@
     <!-- User-triggered Model Cleanup. -->
     <string name="model_cleanup_title">Clean Up Models</string>
     <string name="model_cleanup_settings_subtitle">Checks for unavailable models associated with Favorites or Rules</string>
-    <string name="model_cleanup_explanation">This check looks at your saved Favorite Models and Model Rules to see whether their models are currently available from their saved API endpoints.\n\nA model marked Unavailable was not available when this report was generated. This does not necessarily mean the model has been permanently removed.\n\nYou can delete unavailable items or leave them as they are. Items you keep will remain marked as unavailable until a future check finds the model available again. Availability can change, and a provider may not always return complete or reliable model information.</string>
+    <string name="model_cleanup_explanation">This check looks at your saved Favorite Models and Model Rules to see whether their models are currently available from their saved API endpoints.\n\nA model marked unavailable was not available when this report was generated. This does not necessarily mean the model has been permanently removed.\n\nYou can delete unavailable items or leave them as they are. Items you keep will remain marked as unavailable until a future check finds the model available again. Availability can change, and a provider may not always return complete or reliable model information.</string>
     <string name="model_cleanup_check">Check Available Models</string>
     <string name="model_cleanup_check_failed">Couldn’t check saved models. Try again later.</string>
     <string name="model_cleanup_unavailable">Unavailable</string>
     <string name="model_cleanup_report_generated">Report generated: %1$s</string>
     <string name="model_cleanup_no_report">No cleanup report has been generated yet.</string>
     <string name="model_cleanup_endpoint_unchecked">Models associated with %1$s were not available to be checked as endpoint was not available. Try again later.</string>
-    <string name="model_cleanup_legacy_note">Legacy Model Rule targets cannot be checked until they are replaced with an API endpoint and exact model selection.</string>
     <string name="model_cleanup_favorites_heading">Unavailable Model Favorites</string>
     <string name="model_cleanup_rules_heading">Model Rules Using Unavailable Models</string>
     <string name="model_cleanup_none">None</string>
@@ -1595,7 +1594,7 @@
     <string name="model_cleanup_delete_favorites_confirm_title">Delete Unavailable Favorites?</string>
     <string name="model_cleanup_delete_favorites_confirm_message">Delete all unavailable Favorites currently listed in this report?</string>
     <string name="model_cleanup_delete_rules_confirm_title">Remove Unavailable Models from Model Rules?</string>
-    <string name="model_cleanup_delete_rules_confirm_message">Remove every unavailable model currently listed from the Model Rules that use it? A rule will be deleted only if it has no other exact or legacy model target.</string>
+    <string name="model_cleanup_delete_rules_confirm_message">Remove every unavailable model currently listed from the Model Rules that use it? A rule will be deleted only if it has no other model target.</string>
     <string name="model_cleanup_unknown_endpoint">Unavailable Endpoint</string>
     <plurals name="model_cleanup_removed_favorites">
         <item quantity="one">Successfully removed %d unavailable favorite.</item>

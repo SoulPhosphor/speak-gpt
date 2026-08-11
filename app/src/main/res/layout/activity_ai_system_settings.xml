@@ -84,29 +84,6 @@
                     android:contentDescription="@string/title_api_endpoint_profiles" />
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/row_model_cleanup"
-                style="@style/Widget.App.Row.WithSubtitle"
-                android:layout_marginTop="8dp">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/model_cleanup_title" />
-
-                    <TextView
-                        style="@style/Widget.App.Row.Subtitle"
-                        android:ellipsize="none"
-                        android:maxLines="3"
-                        android:text="@string/model_cleanup_settings_subtitle" />
-                </LinearLayout>
-
-                <ImageView
-                    style="@style/Widget.App.Row.Chevron"
-                    android:contentDescription="@string/model_cleanup_title" />
-            </LinearLayout>
-
             <!-- System prompts: opens the user's library of saved system prompts
                  (SystemPromptsListActivity). The subtitle mirrors whichever
                  prompt is currently active for the chat, or "None". -->
@@ -205,6 +182,29 @@
                 <ImageView
                     style="@style/Widget.App.Row.Chevron"
                     android:contentDescription="@string/title_summarizer_settings" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/row_model_cleanup"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:layout_marginTop="8dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/model_cleanup_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:ellipsize="none"
+                        android:maxLines="3"
+                        android:text="@string/model_cleanup_settings_subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/model_cleanup_title" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

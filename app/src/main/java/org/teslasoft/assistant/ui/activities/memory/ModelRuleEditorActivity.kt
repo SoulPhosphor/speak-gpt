@@ -37,7 +37,6 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.elevation.SurfaceColors
-import org.json.JSONArray
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -92,9 +91,8 @@ class ModelRuleEditorActivity : FragmentActivity() {
 
     private var tagChips: ModelRuleTagChips? = null
 
-    /** New exact targets and conservatively preserved pre-Revision-6 strings. */
+    /** Exact endpoint/model targets shown by the editor. */
     private val targets = ArrayList<ModelIdentity>()
-    private val legacyModels = ArrayList<String>()
     private var selectedEndpointId: String = ""
     private var selectedModelId: String = ""
     private var unavailableTargets: Set<ModelIdentity> = emptySet()
@@ -166,7 +164,6 @@ class ModelRuleEditorActivity : FragmentActivity() {
                 return@runOffThread
             }
             val store = MemoryStore.getInstance(this)
-            store.migrateUnambiguousLegacyModelTargets()
             val record = ruleId?.let { store.getModelRule(it) }
             val tags = ruleId?.let { store.getTagsForRule(it) } ?: emptyList()
             runOnUiThread {
@@ -175,8 +172,6 @@ class ModelRuleEditorActivity : FragmentActivity() {
                     fieldText?.setText(record.text)
                     targets.clear()
                     targets.addAll(ModelIdentityCodec.decode(record.modelTargetsJson))
-                    legacyModels.clear()
-                    legacyModels.addAll(parseModelStrings(record.modelStringsJson))
                     renderModelChips()
                     tagChips?.setInitial(tags)
                     if (record.status == "draft") btnAccept?.visibility = View.VISIBLE
@@ -218,17 +213,6 @@ class ModelRuleEditorActivity : FragmentActivity() {
                 }
                 setOnCloseIconClickListener {
                     targets.remove(target)
-                    renderModelChips()
-                }
-            }
-            group.addView(chip)
-        }
-        for (legacy in legacyModels.toList()) {
-            val chip = AppRemovableChip.create(this, group).apply {
-                text = getString(R.string.model_rule_legacy_target_label, legacy)
-                isCloseIconVisible = true
-                setOnCloseIconClickListener {
-                    legacyModels.remove(legacy)
                     renderModelChips()
                 }
             }
@@ -303,7 +287,6 @@ class ModelRuleEditorActivity : FragmentActivity() {
     private fun renderPendingModel() {
         textSelectedModel?.apply {
             text = selectedModelId
-            visibility = if (selectedModelId.isBlank()) View.GONE else View.VISIBLE
         }
     }
 
@@ -336,17 +319,6 @@ class ModelRuleEditorActivity : FragmentActivity() {
             ?: getString(R.string.model_rule_missing_endpoint)
     } catch (_: Exception) {
         getString(R.string.model_rule_missing_endpoint)
-    }
-
-    private fun parseModelStrings(json: String): List<String> = try {
-        val arr = JSONArray(json)
-        (0 until arr.length()).map { arr.getString(it) }
-    } catch (_: Exception) { emptyList() }
-
-    private fun legacyModelsToJson(): String {
-        val arr = JSONArray()
-        legacyModels.forEach { arr.put(it) }
-        return arr.toString()
     }
 
     /* ------------------------------ size readout ------------------------------ */
@@ -384,7 +356,6 @@ class ModelRuleEditorActivity : FragmentActivity() {
             Toast.makeText(this, R.string.model_rule_edit_required, Toast.LENGTH_SHORT).show()
             return
         }
-        val legacyModelsJson = legacyModelsToJson()
         val targetsJson = ModelIdentityCodec.encode(targets)
         val tagIds = tagChips?.selectedTagIds() ?: emptyList()
 
@@ -392,7 +363,7 @@ class ModelRuleEditorActivity : FragmentActivity() {
             val store = MemoryStore.getInstance(this)
             val prior = existing ?: ruleId?.let { store.getModelRule(it) }
             val willBeActive = prior == null || prior.status == "active" || activate
-            if (willBeActive && targets.isEmpty() && legacyModels.isEmpty()) {
+            if (willBeActive && targets.isEmpty()) {
                 runOnUiThread {
                     Toast.makeText(this, R.string.model_rule_edit_model_required, Toast.LENGTH_SHORT).show()
                 }
@@ -403,7 +374,7 @@ class ModelRuleEditorActivity : FragmentActivity() {
                 ModelRuleRecord(
                     ruleId = id,
                     text = text,
-                    modelStringsJson = legacyModelsJson,
+                    modelStringsJson = "[]",
                     status = "active",
                     sourceModelString = null,
                     createdAt = MemoryStore.nowIso(),
@@ -413,7 +384,9 @@ class ModelRuleEditorActivity : FragmentActivity() {
             } else {
                 prior.copy(
                     text = text,
-                    modelStringsJson = legacyModelsJson,
+                    // Editing a rule replaces the obsolete fuzzy target list
+                    // with the exact endpoint/model chips shown on this screen.
+                    modelStringsJson = "[]",
                     modelTargetsJson = targetsJson,
                     // Save keeps a draft a draft; Accept activates it.
                     status = if (activate) "active" else prior.status,
