@@ -396,7 +396,7 @@ class MemoryStoreInstrumentedTest {
             ModelRuleRecord(
                 ruleId = "multi-target-rule",
                 text = "Keep the useful rule.",
-                modelStringsJson = "[]",
+                modelStringsJson = "[\"obsolete-old-model\"]",
                 status = "active",
                 createdAt = "2026-08-10T00:00:00Z",
                 modelTargetsJson = ModelIdentityCodec.encode(
@@ -413,6 +413,7 @@ class MemoryStoreInstrumentedTest {
             listOf(stillAvailable),
             ModelIdentityCodec.decode(store.getModelRule("multi-target-rule")!!.modelTargetsJson)
         )
+        assertEquals("[]", store.getModelRule("multi-target-rule")!!.modelStringsJson)
 
         val second = store.removeModelTargets(setOf(stillAvailable))
         assertEquals(1, second.removedTargets)
@@ -421,13 +422,13 @@ class MemoryStoreInstrumentedTest {
     }
 
     @Test
-    fun cleanupKeepsRuleWhenLegacyTargetStillExists() {
+    fun cleanupDoesNotKeepRuleForObsoleteFuzzyTarget() {
         val store = open(freshDbName())
         val unavailable = ModelIdentity("openrouter", "openai/gpt-5.1")
         store.upsertModelRule(
             ModelRuleRecord(
-                ruleId = "legacy-survives",
-                text = "Keep legacy until manually replaced.",
+                ruleId = "obsolete-fuzzy-target",
+                text = "Remove the unavailable exact target.",
                 modelStringsJson = "[\"glm-5\"]",
                 status = "active",
                 createdAt = "2026-08-10T00:00:00Z",
@@ -436,10 +437,7 @@ class MemoryStoreInstrumentedTest {
         )
 
         store.removeModelTargets(setOf(unavailable))
-        val kept = store.getModelRule("legacy-survives")
-        assertNotNull(kept)
-        assertEquals("[\"glm-5\"]", kept!!.modelStringsJson)
-        assertTrue(ModelIdentityCodec.decode(kept.modelTargetsJson).isEmpty())
+        assertNull(store.getModelRule("obsolete-fuzzy-target"))
     }
 
     @Test

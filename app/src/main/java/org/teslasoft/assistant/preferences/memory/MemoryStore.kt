@@ -5948,10 +5948,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
     }
 
-    /**
-     * Remove exact unavailable targets from every affected rule. A rule is
-     * deleted only when no exact target and no legacy target remains.
-     */
+    /** Remove exact unavailable targets from every affected rule. */
     fun removeModelTargets(targetsToRemove: Set<ModelIdentity>): ModelRuleTargetRemoval {
         if (targetsToRemove.isEmpty()) return ModelRuleTargetRemoval(0, 0, 0)
         var removedTargets = 0
@@ -5970,7 +5967,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 val removedHere = before.size - after.size
                 if (removedHere == 0) continue
                 removedTargets += removedHere
-                if (after.isEmpty() && parseStringArray(rule.modelStringsJson).isEmpty()) {
+                if (after.isEmpty()) {
                     db.delete("model_rule_tag_links", "rule_id = ?", arrayOf(rule.ruleId))
                     db.delete("model_rules", "rule_id = ?", arrayOf(rule.ruleId))
                     recordDeletionTx(db, "model_rule", rule.ruleId)
@@ -5980,6 +5977,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         "model_rules",
                         ContentValues().apply {
                             put("model_targets_json", ModelIdentityCodec.encode(after))
+                            // A touched rule is now governed only by the exact
+                            // endpoint/model targets retained above.
+                            put("model_strings_json", "[]")
                             put("updated_at", nowIso())
                         },
                         "rule_id = ?",
