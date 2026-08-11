@@ -68,7 +68,6 @@ class ModelCleanupActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var textUnchecked: TextView? = null
-    private var textLegacy: TextView? = null
     private var textGenerated: TextView? = null
     private var btnCheck: MaterialButton? = null
     private var progress: View? = null
@@ -103,7 +102,6 @@ class ModelCleanupActivity : FragmentActivity() {
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         textUnchecked = findViewById(R.id.text_unchecked_endpoints)
-        textLegacy = findViewById(R.id.text_legacy_note)
         textGenerated = findViewById(R.id.text_report_generated)
         btnCheck = findViewById(R.id.btn_check_models)
         progress = findViewById(R.id.model_cleanup_progress)
@@ -209,8 +207,6 @@ class ModelCleanupActivity : FragmentActivity() {
             visibility = if (uncheckedNotes.isEmpty()) View.GONE else View.VISIBLE
             text = uncheckedNotes.joinToString("\n\n")
         }
-        textLegacy?.visibility = if (data.references.legacyRuleTargetCount > 0) View.VISIBLE else View.GONE
-
         val unavailableFavorites = data.references.favorites.intersect(report.unavailable)
         val unavailableRules = data.references.ruleTargets.intersect(report.unavailable)
         renderGroups(favoritesContainer, unavailableFavorites, data)

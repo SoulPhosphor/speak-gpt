@@ -63,8 +63,8 @@ place; this revision supersedes revisions 1–4 where they differ.**
 model-string identity with stable API-endpoint id + exact endpoint-returned
 model id. New rules select an endpoint and then a real model from that
 endpoint; they do not type a family string, strip provider prefixes, or use
-substring matching. Existing ambiguous strings remain visibly legacy until
-the user replaces them. This revision also adds the explicit, saved,
+substring matching. Editing a rule replaces its obsolete fuzzy targets with
+the exact endpoint/model chips shown in the editor. This revision also adds the explicit, saved,
 user-triggered Model Cleanup report in AI System Settings. Revision 6
 supersedes Revision 5 wherever §11 differs.**
 
@@ -328,20 +328,17 @@ Memories have four statuses: **Draft · Active · Archived · Superseded.**
   provider prefixes, compare case-insensitively, or use substrings. There is
   no hidden family inference: "glm-5", "glm-5-0502", and "glm-5-0219" are
   separate ids unless a future explicit family feature says otherwise.
-- **Legacy fuzzy strings are preserved, not guessed.** An old stored string
-  may convert automatically only when it exactly resolves, from current local
-  data, to one and only one endpoint/model pair. Ambiguous strings remain
-  labeled **Legacy** and removable/editable in the rule editor. They may keep
-  their former matching behavior until replaced so existing configuration is
-  not silently broken. New hand-written rules and newly assigned targets can
-  never create a legacy fuzzy string.
+- **Editing removes obsolete fuzzy targets.** The editor only shows exact
+  endpoint/model targets. Saving a rule replaces any older fuzzy target list
+  with the exact targets currently shown as chips. New hand-written rules and
+  newly assigned targets can never create a fuzzy target.
 - **Tags organize rules for the human, not the machine.** A rule can carry
   any number of tags (plain names, no colors, created inline as you type
   them). Tapping a tag anywhere shows every rule that carries it — the same
   "tap a tag, see everything" browsing as the roleplay tags, but a separate
   pool. Tags never decide what gets injected; endpoint/model targets do that.
 - **Injection is automatic and on by default.** Every active rule with a
-  matching exact endpoint/model target (or a still-preserved legacy match) is injected, in
+  matching exact endpoint/model target is injected, in
   deterministic order (oldest first). A global **"Automatically Apply Model
   Rules"** toggle in AI System Settings sets the default (on); Quick
   Settings gets a per-chat **"Apply Model Rules"** toggle that follows that
@@ -394,7 +391,7 @@ Memories have four statuses: **Draft · Active · Archived · Superseded.**
 - **Cleanup deletion is confirmed and target-safe.** Delete All Favorites
   removes only the currently listed unavailable Favorites. Delete All for
   Model Rules removes each listed unavailable target from every affected
-  rule; it deletes the whole rule only if no other exact or legacy target
+  rule; it deletes the whole rule only if no other exact target
   remains. Removing a Favorite never removes a Model Rule, and assigning a
   Model Rule target never creates a Favorite.
 
