@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 67288)
-Total output lines: 3131
-
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name" translatable="false">Phosphor Shines</string>
     <string name="app_name_lite" translatable="false">Phosphor Shines Lite</string>
@@ -912,7 +909,1231 @@ Total output lines: 3131
     <string name="label_permission_denied">Permission denied</string>
     <string name="label_use_camera">Use camera</string>
     <string name="label_use_microphone">Use microphone</string>
-    <string name="msg_use_camera">This app allows you to interact with ChatGPT Vision using your photos taken directly from camera in this app. To enable camera for GPT Vision please allow us to use your camera. You can stil…27288 tokens truncated… damaged and couldn\'t be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent user image records to be lost.\n\nUntil then, the user image database will be unavailable to use or save to prevent further corruption.</string>
+    <string name="msg_use_camera">This app allows you to interact with ChatGPT Vision using your photos taken directly from camera in this app. To enable camera for GPT Vision please allow us to use your camera. You can still pick your existing pictures from gallery without camera permission. Allow camera access?</string>
+    <string name="msg_use_microphone">This app allows you to interact with ChatGPT via voice activation. To enable voice activation please allow this app to use your device microphone. Allow microphone access?</string>
+    <string name="btn_allow">Allow</string>
+    <string name="btn_no_thanks">No thanks</string>
+    <string name="msg_camera_denied">You cannot use this feature because app do not have camera access.</string>
+    <string name="msg_microphone_denied">You cannot use this feature because app do not have microphone access.</string>
+    <string name="label_error">Error</string>
+    <string name="msg_error_importing_chat">An error is occurred while analyzing file. The file might be corrupted or invalid.</string>
+    <string name="label_error_details">Error details</string>
+    <string name="label_api_endpoint_set_globally">API endpoint set globally</string>
+    <string name="label_error_fill_all_blanks">Please fill all blanks</string>
+    <string name="label_server_error">Server error. Please try again later.</string>
+    <string name="msg_failed_to_post_prompt">Failed to post prompt. Please check your Internet connection.</string>
+    <string name="btn_ok">OK</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="btn_delete">Delete</string>
+
+
+    <string name="label_confirm_deletion">Confirm deletion</string>
+    <string name="msg_confirm_deletion_chat">This action cannot be undone.</string>
+    <string name="msg_api_compatibility_change">API endpoint has changed to support this model.</string>
+    <string name="label_favorite_ai_models">Favorite AI models</string>
+    <string name="label_added_to_favorites">Added to favorites</string>
+    <string name="msg_model_loading_error_with_details">"An error occurred while fetching models. Please check your Internet and API key and try again later. Error message: "</string>
+    <string name="msg_error_loading_models">An error occurred while fetching models. Please check your Internet and API key and try again later.</string>
+    <string name="label_select_ai_model">Select AI model</string>
+    <string name="label_add_api_endpoint">Add API endpoint</string>
+    <string name="label_delete_api_endpoint">Delete API endpoint</string>
+    <string name="message_delete_api_endpoint">Are you sure you want to delete this API endpoint?</string>
+    <string name="label_error_api_endpoint_empty">Label cannot be empty</string>
+    <string name="label_error_api_endpoint_invalid_url">API endpoint must be a valid http:// or https:// URL</string>
+    <string name="warning_http_endpoint_inline">http:// — traffic to this endpoint is not encrypted</string>
+    <string name="title_http_endpoint_warning">Unencrypted endpoint</string>
+    <string name="message_http_endpoint_warning">This endpoint uses plain http://. Your API key and every message you send (including voice transcripts) will travel unencrypted and can be read or altered by anyone on the same network.\n\nOnly continue if this is a local or trusted LAN server.</string>
+    <string name="btn_http_endpoint_accept">I understand, use http://</string>
+    <string name="label_delete_logit_bias_config">Delete config</string>
+    <string name="msg_delete_logit_bias_config">Are you sure you want to delete this config?</string>
+    <string name="label_error_logit_bias_config_name_empty">Label be empty</string>
+    <string name="label_delete_message">Delete message</string>
+    <string name="msg_delete_message">Are you sure you want to delete this message?</string>
+    <string name="btn_post">Post</string>
+    <string name="msg_error_calculating_cost">Cost: Error calculating cost. Please check your connection.</string>
+    <string name="msg_cost_not_enough_data"><![CDATA[Cost: <This app hasn\'t enough data to calculate cost for this model. Look for documentation and calculate cost manually based on the usage above.>]]></string>
+    <string name="cost_template" translatable="false">Cost: $%.5f in / $%.5f out\nTotal: $%.5f\nPrice: $%.2f (in) $%.2f (out) per 1M tokens</string>
+    <string name="cost_loading" tools:ignore="TypographyEllipsis">Cost: Loading...</string>
+    <string formatted="false"  name="cost_counter_usage">Usage (tokens): %s in / %s out</string>
+    <string name="prompt_no_model_provided" translatable="false">No model has been provided.</string>
+
+    <string name="cat_all_new">All categories</string>
+    <string name="search_chats">search chats</string>
+    <string name="waffle_play_01">search chats icon</string>
+    <string name="label_search_chats">Search chats</string>
+    <string name="waffle_play_2">search prompts icon</string>
+    <string name="label_search_prompts">Search prompts</string>
+    <string name="function">Function</string>
+    <string name="icon">Icon</string>
+    <string name="set_temperature">Set temperature</string>
+    <string name="set_frequency_penalty">Set frequency penalty</string>
+    <string name="set_top_p">Set top_p</string>
+    <string name="set_presence_penalty">Set presence penalty</string>
+    <string name="text_warn_shitposting">WARNING! Shitposting like random sequence of characters or words is not allowed. Please fill title and description properly so other people can understand what your prompt is about. Additionally, search algorithm indexes description and title. All prompts with unusual names will be either renamed or removed without notice. Thanks for understanding.\n\nFaithfully, App Developer!</string>
+    <string name="ds_lite_dont_collect_explanation">SpeakGPT does not collect these info, but depending on API provider used (like OpenAI, OpenRouter, etc) some of these data may be saved by these providers. When you chat with SpeakGPT, we transfer your conversation directly to API provider and do not save it on our servers. All data saved locally is secured with a military-grade encryption (AES-256-GCM). Please review Privacy Policy of API provider you are using to learn more about how your data is processed.</string>
+    <string name="prompt_desc_conf1">Don\'t confuse the description with a prompt. Description is a short information about the prompt that will be displayed in the search results. Prompt description should not be long and will be cut into 3 lines.</string>
+    <string name="prompt_desc_conf2">The contents of the prompt field above will be actually sent to the AI. PS: Added this warning after many users confused description and prompt fields. It is not the same things.</string>
+    <string name="abuse_last_warning">And the last warning. By publishing something like \"Generate a song with offensive words\" you are creating the problems only for you but not for the app developer. Most of AI models will not accept such deceptive prompts. Auto-moderation is being implemented soon. Abusing prompt library system is a subject of banning you from the further prompt publishing. Additionally, please do not publish any personal information as your prompts and other content may pass human review to ensure it is safe and follows the Safety Guidelines.</string>
+    <string name="msg_post_prompt_spam">Your prompt contains spam or has already been published. Publishing identical prompts is not allowed. Please review the prompt and try again.</string>
+    <string name="msg_post_prompt_inappropriate">Your prompt contains inappropriate content. Posting prompts that contains (but not limited to) hate speech, violence, sexual content, child harassment, jailbreaks, or any other form of inappropriate content is strictly prohibited. Please review the prompt and try again.</string>
+    <string name="msg_post_prompt_ban">You have violated the Terms of Service multiple times and have been banned from posting prompts. If you think this is a mistake, please contact the app developer. Although, we don\'t know anything about you, don\'t try to bypass this ban by reinstalling the app or using the app on the other device. Internet sees everything :)</string>
+    <string name="msg_post_prompt_outdated">You need to update the app to the latest version to post prompts. It is security requirement to prevent abuse of our systems.</string>
+    <string name="msg_post_prompt_weirdest_error">Some mandatory fields are not filled or your prompt contains invalid characters.</string>
+    <string name="msg_post_prompt_api_key_invalid">The API key is invalid. Is this app modified? Or compiled from the original sources? This is the client-side error that will likely occur only when you compile the app from the source and change something wrongly. If you sure that all info is correct, please report that error.</string>
+    <string name="msg_post_prompt_report_error">\nPlease report the following error:\n\n</string>
+    <string name="title_before_you_begin">Before you begin</string>
+    <string name="before_you_begin">Please read this carefully before using this app. In case you haven\'t read app description, we would like to notice you that this app is the OPEN-SOURCE CLIENT for AI APIs. You will not find GPT or Gemini for free here. This app is just a convenient tool you can access your AI models through. THIS APP IS PROVIDED AS IS WITH NO WARRANTY UNDER LICENSE APACHE 2.0. By using this app you are agreeing that all your question about free usage will be rejected with no answer. Although some free APIs exists so you can use it with this app.\n\n\"Free cheese could be only in a mousetrap so you cannot use work of someone else for free making no effort and giving no credit. It is unethical.\"\n\nP.S This disclaimer has been put here after some of users reported that SpeakGPT does not contain free access to flagship ChatGPT models.</string>
+    <string name="app_description_new">SpeakGPT is an advanced and highly intuitive open-source assistant that uses the powerful LLMs. You can use online models like ChatGPT, Gemini, Perplexity, or your local models with this app.</string>
+
+    <!-- Voice &amp; speech consolidated settings -->
+    <string name="voice_settings_title">Voice &amp; Speech</string>
+    <string name="tile_voice_settings_title">Voice &amp; Speech</string>
+    <string name="tile_voice_settings_subtitle">Settings related to transcription and text to speech.</string>
+    <string name="tile_voice_settings_desc">Everything related to speech in one place: text-to-speech voice and engine, speech-to-text (dictation) engine, hands-free mode, voice-activity detection, and audio feedback. Tap to open.</string>
+    <string name="voice_section_tts">Text-to-speech</string>
+    <string name="read_formatting_language_toggle">Read Formatting Language</string>
+    <string name="voice_section_stt">Speech-to-text (dictation)</string>
+    <string name="voice_section_handsfree">Hands-free &amp; voice activity</string>
+    <string name="voice_section_feedback">Audio feedback</string>
+    <string name="tile_transcription_sound_title">Transcription tone</string>
+    <string name="tile_transcription_sound_desc">Play a short, pleasant ascending tone once your speech has been transcribed, so you know dictation finished and a reply is on the way without watching the screen. Uses the alarm volume, so it stays audible even when the phone is on silent.</string>
+    <string name="voice_section_debug">Advanced &amp; debugging</string>
+    <string name="tile_vad_log_energy_title">Energy VAD logging</string>
+    <string name="tile_vad_log_energy_desc">Record voice diagnostics: every hands-free decision (mic opened/closed and why, readback, failures) goes to the Event log in Settings, plus detailed Energy VAD state (RMS, noise floor, timing) to logcat. Turn off when not debugging.</string>
+    <string name="tile_vad_log_webrtc_title">WebRTC VAD logging</string>
+    <string name="tile_vad_log_webrtc_desc">Record voice diagnostics: every hands-free decision (mic opened/closed and why, readback, failures) goes to the Event log in Settings, plus detailed WebRTC VAD state (RMS, voiced frames, timing) to logcat. Turn off when not debugging.</string>
+    <string name="tile_vad_log_silero_title">Silero VAD logging</string>
+    <string name="audio_health_title">Audio Health</string>
+    <string name="audio_health_desc">When on, records microphone input health for each hands-free turn: received frames, sound levels, clipping, sample format, and input device. It also records hands-free CPU wake-lock status and on-device transcription timing (capture shutdown, model preparation, lock wait, native decoding, and total time). Writes to the Event log alongside any VAD diagnostics. Turn off when not debugging.</string>
+
+    <!-- Advanced voice & debugging screen -->
+    <string name="title_voice_advanced">Advanced Voice Settings</string>
+    <string name="tile_voice_advanced_title">Advanced Voice Settings</string>
+    <string name="tile_voice_advanced_subtitle">Finetune Whisper and VAD settings.</string>
+    <string name="tile_voice_advanced_desc">Tune how speech is detected, how on-device Whisper decodes it, and how replies are spoken. Includes plain-language hints for fixing “it never hears me” and “it cuts me off mid-sentence”. (Diagnostic logging lives in Voice Debugging.)</string>
+    <string name="title_audio_debugging">Audio Debugging</string>
+    <string name="tile_voice_debugging_title">Voice Debugging</string>
+    <string name="tile_voice_debugging_subtitle">Choose voice diagnostics.</string>
+    <string name="tile_voice_debugging_desc">Everything microphone/voice related in one place: turn on detector logging (Energy, WebRTC, Silero) and microphone Audio Health before reporting a voice bug, and toggle the chime that plays once your speech is transcribed.</string>
+    <string name="audio_debugging_intro">Everything to do with the microphone, voice detection, and transcription. Turn the logging switches on before reporting a voice problem, then reproduce it and open the Event log.</string>
+    <string name="audio_debugging_section_sounds">Sounds</string>
+    <string name="adv_intro">Defaults match the app’s long-standing behaviour — you only need this screen when voice misbehaves on your device. Changes apply from the next turn. Settings marked on-device only do not affect Google voice input or cloud Whisper.</string>
+
+    <string name="adv_section_vad">Voice detection — on-device hands-free only</string>
+    <string name="adv_section_vad_caption">How the app decides you are speaking when using on-device Whisper hands-free. Rule of thumb: “it never hears me” or “it cuts me off mid-sentence” → lower the minimum speech energy or turn the energy gate off; “noise keeps starting turns” → raise it, or raise the minimum speech duration.</string>
+    <string name="adv_energy_gate_title">Energy gate</string>
+    <string name="adv_energy_gate_desc">Speech must also be louder than the gate, which blocks fans/AC that the WebRTC detector mistakes for voice. If the Event log says “speech was heard but stayed below the energy gate”, turn this off or lower the minimum below. (Applies to the WebRTC method; the Energy method is itself a gate.)</string>
+    <string name="adv_min_rms_title">Minimum speech energy</string>
+    <string name="adv_min_rms_desc">Loudness (RMS) a moment of audio needs to count as speech. Default 600. A quiet voice or distant mic can sit at 200–400 — check voiceRms in the Event log and set this below it.</string>
+    <string name="adv_floor_factor_title">Noise floor multiplier</string>
+    <string name="adv_floor_factor_desc">How many times louder than the room’s background noise speech must be. Default 2.5.</string>
+    <string name="adv_ceiling_title">Energy gate ceiling</string>
+    <string name="adv_ceiling_desc">Upper limit of the adaptive gate, so a loud first moment can’t raise the bar above your own voice. Default 1400.</string>
+    <string name="adv_min_speech_title">Minimum speech duration</string>
+    <string name="adv_min_speech_desc">Detected speech must last this long before a turn starts. 0 ms = the first speech sound opens the turn. Raise it so a cough or door slam doesn’t start one.</string>
+    <string name="adv_hysteresis_title">Hysteresis (two-level gate)</string>
+    <string name="adv_hysteresis_desc">Speech must cross the full gate to start, but then only has to stay above the exit level below — so the quieter words of your sentence still count as speech instead of silence. Built for rooms whose loudness keeps changing; the usual fix for being cut off mid-sentence. Default on.</string>
+    <string name="adv_hyst_exit_title">Hysteresis exit level</string>
+    <string name="adv_hyst_exit_desc">While you are speaking, audio only needs to stay above this percentage of the gate. Lower it if you still get cut off mid-sentence; raise it if background noise keeps turns alive after you stop. Default 50%.</string>
+    <string name="adv_hangover_title">Speech hold time</string>
+    <string name="adv_hangover_desc">After speech, dips up to this long still count as speech — bridges breaths and soft syllables entirely below the gate. Note it effectively adds to the pause time before your turn ends. 0 ms = off.</string>
+    <string name="adv_silero_threshold_title">Silero speech threshold</string>
+    <string name="adv_silero_threshold_desc">Silero method only: how confident the neural detector must be that a moment is speech. Lower it to catch quiet or distant speech; raise it if the TV or other voices keep starting turns. The energy-gate settings above don’t apply to Silero — it tells speech from noise by itself, which is the point. Default 50%.</string>
+    <string name="adv_reset_vad">Reset detection to defaults</string>
+
+    <string name="adv_section_whisper">Whisper decoding — on-device only</string>
+    <string name="adv_section_whisper_caption">How the on-device Whisper model turns your recorded audio into text.</string>
+    <string name="adv_decoder_title">Decoder</string>
+    <string name="adv_decoder_beam">Beam search (better quality)</string>
+    <string name="adv_decoder_greedy">Greedy (faster)</string>
+    <string name="adv_beam_size_title">Beam size</string>
+    <string name="adv_beam_size_desc">Candidate sentences kept alive during beam search. Higher = slightly better, slower. Default 5.</string>
+    <string name="adv_temperature_title">Temperature</string>
+    <string name="adv_temperature_desc">0 = deterministic (recommended). Raise slightly only if transcripts get stuck repeating a phrase.</string>
+    <string name="adv_suppress_blank_title">Suppress blank output</string>
+    <string name="adv_suppress_blank_desc">Discourages empty transcriptions at the start of decoding. Default on.</string>
+    <string name="adv_single_segment_title">Single segment</string>
+    <string name="adv_single_segment_desc">Force the whole clip into one segment. Can help short commands; leave off for normal speech.</string>
+    <string name="adv_initial_prompt_title">Initial prompt</string>
+    <string name="adv_initial_prompt_desc">Optional text that primes the decoder with names, jargon and spellings you want recognised correctly (e.g. “Phosphor, lorebook, Silero”).</string>
+    <string name="adv_initial_prompt_hint">Words and names to recognise</string>
+    <string name="adv_prev_context_title">Use previous context</string>
+    <string name="adv_prev_context_desc">Let each clip’s decoding see the text of earlier clips. Can improve continuity across turns; can also propagate a mistake. Default off.</string>
+    <string name="adv_cleanup_title">Transcript cleanup</string>
+    <string name="adv_cleanup_desc">Remove non-speech annotations like [Music] and (applause) before the text is used. Default on.</string>
+    <string name="adv_whisper_debug_title">Log decode parameters</string>
+    <string name="adv_whisper_debug_desc">Write every transcription’s exact parameters and timing to the Event log.</string>
+
+    <string name="adv_section_tts">Text-to-speech delivery</string>
+    <string name="adv_section_tts_caption">Device (Google) text-to-speech only — the OpenAI voice is generated by the server and ignores these.</string>
+    <string name="adv_tts_rate_title">Speech rate</string>
+    <string name="adv_tts_rate_desc">1.0 = normal speed.</string>
+    <string name="adv_tts_pitch_title">Pitch</string>
+    <string name="adv_tts_pitch_desc">1.0 = the voice’s natural pitch.</string>
+
+    <string name="vad_method_silero">Silero (neural, recommended)</string>
+    <string name="vad_silero_unavailable">The Silero detector couldn’t load on this device. Energy detection will be used instead.</string>
+
+    <string name="adv_section_diag">Voice Diagnostics</string>
+    <string name="adv_section_diag_caption">With any of these on, every hands-free decision (mic opened/closed and why, readback, failures, stop reasons) is written to the Event log, plus detailed per-frame detector state to logcat. This is what to turn on before reporting a voice bug.</string>
+    <string name="adv_open_event_log">Open Event log</string>
+
+    <!-- Memory Manager hub (rows) — the entry point that groups the memory
+         browser, the (coming-soon) memory assistant, lorebooks and the memory
+         settings/plumbing screen. Owner-approved wording, July 8 2026. -->
+    <string name="title_memory_manager">Memory Manager</string>
+    <string name="row_memory_browser_title">Memory Browser</string>
+    <string name="row_memory_browser_subtitle">View, search, edit, approve, or remove saved and pending memories.</string>
+    <string name="row_memory_assistant_title">Memory Assistant</string>
+    <string name="row_memory_assistant_subtitle">Analyze conversation history and review pending memories.</string>
+    <string name="row_lorebooks_subtitle">Simple memory notes triggered invisibly by keywords for your companion.</string>
+    <!-- Memory Manager hub, fourth row (memory_settings_reorg_spec.md placement
+         ruling 1, July 9 2026): the row now opens the Memory Controls screen. -->
+    <string name="row_memory_settings_title">Memory Controls</string>
+    <string name="row_memory_settings_subtitle">Set memory defaults, models, backups, and review limits.</string>
+    <!-- Memory Manager hub, Memory Backup & Restore row + screen title (owner
+         request, July 18 2026 — the row label is the owner's exact words). The
+         Backups section and the Reset section were moved here out of Memory
+         Controls; every string inside those sections is unchanged. No row
+         subtitle is authored here — the owner has not approved subtitle wording
+         for this row. -->
+    <string name="title_memory_backup_restore">Memory Backup &amp; Restore</string>
+
+    <!-- Memory Assistant (Phase 6). Every user-visible sentence here is the
+         owner's approved wording (memory_assistant_design.md §1–§2 + the
+         July 8 2026 evening answers in phase6_owner_answers_2026-07-08.md).
+         Failure wording is deliberately ABSENT — the owner supplies it after
+         seeing the real failure cases; do not invent any. -->
+    <string name="title_memory_assistant">Memory Assistant</string>
+    <string name="memory_assistant_hint">Use AI to analyze conversations for possible memories. Found memories will be set to pending in the memory browser.</string>
+    <string name="memory_assistant_fact_since_run">Total conversations since last run: %1$d</string>
+    <string name="memory_assistant_fact_pending">Conversations pending review: %1$d</string>
+    <string name="memory_assistant_fact_last_run">Date of Last Run: %1$s</string>
+    <string name="memory_assistant_btn_idle">Analyze Conversations</string>
+    <string name="memory_assistant_btn_running">Analyzing History…</string>
+    <string name="memory_assistant_btn_done">Complete!</string>
+    <string name="memory_assistant_analyzing">Analyzing Conversations</string>
+    <string name="memory_assistant_analyzing_percent">%1$d%%</string>
+    <string name="memory_assistant_done_found">%1$d memories found.</string>
+    <string name="memory_assistant_view_pending">View Pending Memories.</string>
+    <!-- "No new memory candidates found." was superseded by the No New
+         Memories Added state in archivist_status_wording_spec.md. -->
+    <string name="memory_assistant_recent_header">Recent Memory Analysis</string>
+    <string name="memory_assistant_run_found">%1$d found</string>
+    <string name="memory_assistant_run_none">None found</string>
+    <string name="memory_assistant_rerun">Rerun</string>
+
+    <!-- Archivist run status/failure wording — implemented verbatim from
+         Memory System/archivist_status_wording_spec.md (owner-sanctioned,
+         July 8 2026; the one area with a no-separate-approval dispensation). -->
+    <string name="mem_arch_not_ready_label">Archivist Not Ready</string>
+    <string name="mem_arch_not_ready_msg">Memory Archivist needs a model before it can run.</string>
+    <string name="mem_arch_btn_setup">Set Up Archivist Model</string>
+    <string name="mem_arch_full_label">Run Fully Failed</string>
+    <string name="mem_arch_full_msg">Memory extraction failed. No memories were created from this run.</string>
+    <string name="mem_arch_full_unreachable">Archivist could not reach the selected AI service. Check your connection or try again later.</string>
+    <string name="mem_arch_full_rejected">Archivist could not access the selected AI service. Check the endpoint settings, API key, or model access.</string>
+    <string name="mem_arch_full_limit">Archivist hit a usage limit before memories could be created. Try again later or choose fewer conversations.</string>
+    <string name="mem_arch_full_unreadable">Archivist returned a response the app could not read. No memories were saved from this run.</string>
+    <string name="mem_arch_full_save">Archivist found possible memories, but the app could not save them. No unsaved memories were added.</string>
+    <string name="mem_arch_full_interrupted">Memory extraction was interrupted before it could finish. No memories were created from this run.</string>
+    <string name="mem_arch_full_unknown">Memory extraction failed for an unknown reason. No memories were created from this run.</string>
+    <string name="mem_arch_partial_label">Run Partially Failed</string>
+    <string name="mem_arch_partial_msg">Memory extraction finished with some skipped conversations. Some memories were created, but a few conversations could not be processed.</string>
+    <string name="mem_arch_partial_counts">Created memories: %1$d\nProcessed conversations: %2$d\nSkipped conversations: %3$d</string>
+    <string name="mem_arch_part_unreachable">Some conversations were skipped because Archivist could not reach the selected AI service.</string>
+    <string name="mem_arch_part_rejected">Some conversations were skipped because the selected AI service rejected access. Check endpoint settings, API key, or model access.</string>
+    <string name="mem_arch_part_limit">Archivist hit a usage limit before all conversations could be processed. Saved memories were kept.</string>
+    <string name="mem_arch_part_unreadable">Some conversations returned responses the app could not read. Saved memories from the rest of the run were kept.</string>
+    <string name="mem_arch_part_save">Archivist found possible memories for some conversations, but the app could not save those items. Other saved memories were kept.</string>
+    <string name="mem_arch_part_interrupted">The run was interrupted before all conversations could be processed. Saved memories were kept.</string>
+    <string name="mem_arch_part_unknown">Some conversations could not be processed for an unknown reason. Saved memories from the rest of the run were kept.</string>
+    <string name="mem_arch_nothing_label">Nothing To Extract</string>
+    <string name="mem_arch_nothing_msg">No eligible conversations were found for this run.</string>
+    <string name="mem_arch_nonew_label">No New Memories Added</string>
+    <string name="mem_arch_nonew_msg">Archivist finished the run, but no new memories were added.</string>
+    <string name="mem_arch_nonew_nothing">Archivist did not find anything new to save.</string>
+    <string name="mem_arch_nonew_dupes">Archivist found only memories that already exist.</string>
+    <string name="mem_arch_interrupted_label">Run Interrupted</string>
+    <string name="mem_arch_interrupted_msg">Memory extraction was interrupted before it could finish.</string>
+    <string name="mem_arch_interrupted_saved">Saved memories were kept. Some conversations may not have been processed.</string>
+    <string name="mem_arch_interrupted_none">No memories were created from this run.</string>
+    <string name="mem_arch_btn_try_again">Try Again</string>
+    <string name="mem_arch_btn_check_settings">Check Archivist Settings</string>
+    <string name="mem_arch_btn_run_again">Run Again</string>
+    <string name="mem_arch_row_completed">Completed</string>
+    <string name="mem_arch_deleted_badge">Some Memories Deleted Later</string>
+    <string name="mem_arch_deleted_explain">This run created memories that no longer exist because they were deleted after extraction.</string>
+
+    <!-- Archivist full-failure states (owner-approved wording, Aug 1 2026).
+         Title + subtitle per cause; shown beneath the run button, above the
+         expanded provider-detail block (Function: Archiving) and logged to the
+         Provider Failure Log. Cause-to-state mapping is wired separately. -->
+    <string name="mem_arch_fail_connection_title">Connection Failed</string>
+    <string name="mem_arch_fail_connection_msg">The app could not connect to the selected provider. Check your internet connection and endpoint settings, then try again.</string>
+    <string name="mem_arch_fail_timeout_title">Request Timed Out</string>
+    <string name="mem_arch_fail_timeout_msg">The provider did not finish the request in time. Try again, or choose a model that responds more reliably.</string>
+    <string name="mem_arch_fail_rejected_title">Request Rejected</string>
+    <string name="mem_arch_fail_rejected_msg">The provider rejected the analysis request. Check the provider response and the selected model’s settings before trying again.</string>
+
+    <!-- Rejection sub-reasons (owner-approved, Aug 3 2026): shown instead of the
+         generic Request Rejected state when every conversation in a full-failure
+         run failed with the same detectable rejection subtype. -->
+    <string name="mem_arch_fail_api_key_title">API Key Rejected</string>
+    <string name="mem_arch_fail_api_key_msg">The provider rejected the API key. Check the API key saved for the selected endpoint.</string>
+    <string name="mem_arch_fail_access_denied_title">Access Denied</string>
+    <string name="mem_arch_fail_access_denied_msg">The provider denied access to the analysis requests. Check the selected model and the account’s access permissions.</string>
+    <string name="mem_arch_fail_content_refused_title">Content Refused</string>
+    <string name="mem_arch_fail_content_refused_msg">The provider refused the analysis requests because of its content rules.</string>
+
+    <string name="mem_arch_fail_usage_limit_title">Usage Limit Reached</string>
+    <string name="mem_arch_fail_usage_limit_msg">The provider would not run the analysis because an account limit, spending limit, or usage cap was reached.</string>
+    <string name="mem_arch_fail_credits_title">Insufficient Credits</string>
+    <string name="mem_arch_fail_credits_msg">The provider could not run the analysis because the account does not have enough credits.</string>
+    <string name="mem_arch_fail_model_unavailable_title">Model Unavailable</string>
+    <string name="mem_arch_fail_model_unavailable_msg">The selected model is currently unavailable or could not be found. Choose another model or check the endpoint’s model list.</string>
+    <string name="mem_arch_fail_config_title">Invalid Configuration</string>
+    <string name="mem_arch_fail_config_msg">The selected model or endpoint is not configured correctly. Check the Memory Assistant settings, then try again.</string>
+    <string name="mem_arch_fail_unreadable_title">Response Could Not Be Read</string>
+    <string name="mem_arch_fail_unreadable_msg">The provider returned a response the app could not understand. No Lorebook suggestions were saved.</string>
+    <string name="mem_arch_fail_invalid_result_title">Invalid Analysis Result</string>
+    <string name="mem_arch_fail_invalid_result_msg">The model completed the request but did not return a usable Lorebook analysis result. No suggestions were saved.</string>
+    <string name="mem_arch_fail_interrupted_title">Analysis Interrupted</string>
+    <string name="mem_arch_fail_interrupted_msg">The analysis stopped before it completed and could not be resumed. Try again to restart the run.</string>
+    <string name="mem_arch_fail_cancelled_title">Analysis Cancelled</string>
+    <string name="mem_arch_fail_cancelled_msg">The Lorebook analysis was cancelled by the system before it completed. No suggestions were saved.</string>
+    <string name="mem_arch_fail_unavailable_title">Lorebook Analysis Unavailable</string>
+    <string name="mem_arch_fail_unavailable_msg">The selected model or endpoint cannot perform this type of analysis. Choose a different model or endpoint.</string>
+    <string name="mem_arch_fail_unknown_title">Unexpected Analysis Error</string>
+    <string name="mem_arch_fail_unknown_msg">The analysis could not be completed, and the app could not determine the specific cause. Try again or review the error details.</string>
+    <string name="mem_arch_function_archiving">Archiving</string>
+
+    <!-- Rate limit as a distinct full-failure state (owner ruling, Aug 1 2026):
+         a temporary throttle is kept separate from a usage/spending cap. -->
+    <string name="mem_arch_fail_rate_limit_title">Rate Limit Reached</string>
+    <string name="mem_arch_fail_rate_limit_msg">The provider is temporarily limiting requests. Wait a moment, then try again.</string>
+
+    <!-- Run stopped in-process by the system (owner-approved, Aug 1 2026). The
+         Android 15+ dataSync runtime limit uses the Time Limit variant; any
+         other system stop uses the generic Stopped Early. -->
+    <string name="mem_arch_stopped_early_title">Analysis Stopped Early</string>
+    <string name="mem_arch_stopped_early_msg">The analysis stopped before every conversation could be reviewed. Any Lorebook suggestions found before it stopped were saved to Pending.</string>
+    <string name="mem_arch_time_limit_title">Analysis Time Limit Reached</string>
+    <string name="mem_arch_time_limit_msg">The analysis reached its allowed running time before every conversation could be reviewed. Any Lorebook suggestions found before it stopped were saved to Pending.</string>
+
+    <!-- User cancellation is neutral, never an error (owner ruling). Title
+         reuses mem_arch_fail_cancelled_title ("Analysis Cancelled"); the count
+         is reported on the shared "Potential Lorebook Memories found" line. -->
+    <string name="mem_arch_cancel_saved_msg">The analysis was stopped. Any Lorebook suggestions found before cancellation were saved to Pending.</string>
+    <string name="mem_arch_cancel_none_msg">The analysis was stopped before it finished. No Lorebook suggestions were saved.</string>
+    <string name="mem_arch_btn_done">Done</string>
+
+    <!-- Partial-failure states (owner-approved, Aug 1 2026): some conversations
+         were analyzed and some failed. A specific title is used when every
+         failed conversation shares one cause; a mix uses Lorebook Analysis
+         Incomplete with a short breakdown. The saved count is reported on the
+         shared "Potential Lorebook Memories found" line. -->
+    <string name="mem_arch_part_incomplete_title">Lorebook Analysis Incomplete</string>
+    <string name="mem_arch_part_incomplete_msg">Some conversations were analyzed successfully, but the full run could not be completed.</string>
+    <string name="mem_arch_part_connection_title">Connection Failed During Analysis</string>
+    <string name="mem_arch_part_connection_msg">The app could not connect to the provider for some requests, or the connection ended before they finished. Any Lorebook suggestions found before those failures were saved to Pending.</string>
+    <string name="mem_arch_part_timeout_title">Some Requests Timed Out</string>
+    <string name="mem_arch_part_timeout_msg">The provider did not finish one or more analysis requests in time. Suggestions returned successfully by other requests were saved.</string>
+    <string name="mem_arch_part_rejected_title">Some Requests Were Rejected</string>
+    <string name="mem_arch_part_rejected_msg">The provider rejected one or more requests before the full analysis finished. Suggestions from requests that completed successfully were saved.</string>
+
+    <!-- Rejection sub-reasons, partial failure (owner-approved, Aug 3 2026):
+         shown instead of the generic Some Requests Were Rejected state when
+         every REJECTED conversation in the run shares the same detectable
+         subtype. -->
+    <string name="mem_arch_part_api_key_title">Some API Requests Had an Invalid Key</string>
+    <string name="mem_arch_part_api_key_msg">The provider rejected the API key for some requests. Check the API key saved for the selected endpoint.</string>
+    <string name="mem_arch_part_access_denied_title">Some Requests Were Denied Access</string>
+    <string name="mem_arch_part_access_denied_msg">The provider denied access for some requests. Check the selected model and the account’s access permissions.</string>
+    <string name="mem_arch_part_content_refused_title">Some Requests Were Refused for Content</string>
+    <string name="mem_arch_part_content_refused_msg">The provider refused some analysis requests because of its content rules.</string>
+
+    <string name="mem_arch_part_rate_limit_title">Rate Limit Interrupted Analysis</string>
+    <string name="mem_arch_part_rate_limit_msg">The provider temporarily stopped accepting requests because too many were sent within its allowed time window. Suggestions created before the limit was reached were saved.</string>
+    <string name="mem_arch_part_usage_limit_title">Usage Limit Reached During Analysis</string>
+    <string name="mem_arch_part_usage_limit_msg">The provider stopped the run because an account, spending, or usage limit was reached. Suggestions created before the limit was reached were saved.</string>
+    <string name="mem_arch_part_credits_title">Credits Ran Out During Analysis</string>
+    <string name="mem_arch_part_credits_msg">The provider stopped processing requests because the account ran out of credits. Suggestions created before the balance was exhausted were saved.</string>
+    <string name="mem_arch_part_model_title">Model Unavailable During Analysis</string>
+    <string name="mem_arch_part_model_msg">The provider reported that the selected model was unavailable before the analysis finished. Any Lorebook suggestions found before that were saved to Pending.</string>
+    <string name="mem_arch_part_unreadable_title">Some Responses Could Not Be Read</string>
+    <string name="mem_arch_part_unreadable_msg">The provider returned one or more responses the app could not understand. Suggestions from readable responses were saved.</string>
+    <string name="mem_arch_part_invalid_title">Some Analysis Results Could Not Be Used</string>
+    <string name="mem_arch_part_invalid_msg">One or more responses did not contain valid Lorebook suggestions. Valid suggestions from the rest of the run were saved.</string>
+    <string name="mem_arch_part_process_title">Some Conversations Could Not Be Processed</string>
+    <string name="mem_arch_part_process_msg">The app could not prepare or analyze one or more selected conversations. Suggestions from conversations processed successfully were saved.</string>
+    <string name="mem_arch_part_save_title">Some Suggestions Could Not Be Saved</string>
+    <string name="mem_arch_part_save_msg">The analysis produced additional Lorebook suggestions, but the app could not save all of them to Pending. Suggestions saved successfully are still available.</string>
+    <string name="mem_arch_part_interrupted_title">Analysis Was Interrupted</string>
+    <string name="mem_arch_part_interrupted_msg">The run stopped before every conversation was analyzed and could not resume from where it ended. Suggestions completed before the interruption were saved.</string>
+
+    <!-- Mixed-cause breakdown clauses (owner-approved, Aug 1 2026): each is a
+         grammatical counted clause with singular/plural agreement, joined into
+         e.g. "1 request timed out, 2 requests were rejected, and 1 result could
+         not be saved." -->
+    <plurals name="mem_arch_break_connection">
+        <item quantity="one">%1$d request could not connect</item>
+        <item quantity="other">%1$d requests could not connect</item>
+    </plurals>
+    <plurals name="mem_arch_break_timeout">
+        <item quantity="one">%1$d request timed out</item>
+        <item quantity="other">%1$d requests timed out</item>
+    </plurals>
+    <plurals name="mem_arch_break_rejected">
+        <item quantity="one">%1$d request was rejected</item>
+        <item quantity="other">%1$d requests were rejected</item>
+    </plurals>
+    <plurals name="mem_arch_break_rate_limit">
+        <item quantity="one">%1$d request was rate-limited</item>
+        <item quantity="other">%1$d requests were rate-limited</item>
+    </plurals>
+    <plurals name="mem_arch_break_usage_limit">
+        <item quantity="one">%1$d request hit a usage limit</item>
+        <item quantity="other">%1$d requests hit a usage limit</item>
+    </plurals>
+    <plurals name="mem_arch_break_credits">
+        <item quantity="one">%1$d request ran out of credits</item>
+        <item quantity="other">%1$d requests ran out of credits</item>
+    </plurals>
+    <plurals name="mem_arch_break_model">
+        <item quantity="one">%1$d request found the model unavailable</item>
+        <item quantity="other">%1$d requests found the model unavailable</item>
+    </plurals>
+    <plurals name="mem_arch_break_config">
+        <item quantity="one">%1$d request had a configuration problem</item>
+        <item quantity="other">%1$d requests had a configuration problem</item>
+    </plurals>
+    <plurals name="mem_arch_break_unreadable">
+        <item quantity="one">%1$d response could not be read</item>
+        <item quantity="other">%1$d responses could not be read</item>
+    </plurals>
+    <plurals name="mem_arch_break_invalid">
+        <item quantity="one">%1$d result could not be used</item>
+        <item quantity="other">%1$d results could not be used</item>
+    </plurals>
+    <plurals name="mem_arch_break_save">
+        <item quantity="one">%1$d result could not be saved</item>
+        <item quantity="other">%1$d results could not be saved</item>
+    </plurals>
+    <plurals name="mem_arch_break_unknown">
+        <item quantity="one">%1$d request could not be processed</item>
+        <item quantity="other">%1$d requests could not be processed</item>
+    </plurals>
+    <plurals name="mem_arch_break_provider_error">
+        <item quantity="one">%1$d request returned a server error</item>
+        <item quantity="other">%1$d requests returned a server error</item>
+    </plurals>
+    <plurals name="mem_arch_break_too_large">
+        <item quantity="one">%1$d conversation was too large</item>
+        <item quantity="other">%1$d conversations were too large</item>
+    </plurals>
+
+    <!-- Four additional failure states (owner-approved, Aug 1 2026): a 5xx
+         server error, a request over the input/context limit, and the
+         full-failure counterparts of the save and local-processing partials. -->
+    <string name="mem_arch_fail_provider_error_title">Provider Error</string>
+    <string name="mem_arch_fail_provider_error_msg">The provider encountered a server error and could not complete the analysis. Wait a moment, then try again.</string>
+    <string name="mem_arch_fail_too_large_title">Request Too Large</string>
+    <string name="mem_arch_fail_too_large_msg">The conversation exceeded the selected model or provider\'s input limit and could not be analyzed. Choose a model with a larger context window or reduce the amount of content, then try again.</string>
+    <string name="mem_arch_fail_save_title">Suggestions Could Not Be Saved</string>
+    <string name="mem_arch_fail_save_msg">The analysis produced Lorebook suggestions, but the app could not save them to Pending. Check the device\'s available storage, then try again.</string>
+    <string name="mem_arch_fail_process_title">Conversations Could Not Be Processed</string>
+    <string name="mem_arch_fail_process_msg">The app could not read or prepare the conversations for analysis. No conversations were sent to the provider.</string>
+    <string name="mem_arch_part_provider_error_title">Provider Error During Analysis</string>
+    <string name="mem_arch_part_provider_error_msg">The provider encountered errors before every conversation could be analyzed. Any Lorebook suggestions found before those errors were saved to Pending.</string>
+    <string name="mem_arch_part_too_large_title">Some Conversations Were Too Large</string>
+    <string name="mem_arch_part_too_large_msg">One or more conversations exceeded the selected model or provider\'s input limit. Other conversations were analyzed, and any Lorebook suggestions found were saved to Pending.</string>
+
+    <!-- Memory Analysis Type control (Step 1.7 — plan_one_page.md, owner
+         approved). Two-column settings row on the Memory Assistant screen,
+         matching the Memory Engine row. The subtitle is three paragraphs shown
+         with visible spacing between them. -->
+    <string name="memory_analysis_type_title">Memory Analysis Type</string>
+    <string name="memory_analysis_type_p1">Choose which memory system this analysis should create suggestions for.</string>
+    <string name="memory_analysis_type_p2">Associative Memories use an embedding model to surface memories connected to the ideas and topics being discussed.</string>
+    <string name="memory_analysis_type_p3">Lorebook Memories are activated by specific keywords and do not require an embedding model.</string>
+    <string name="memory_analysis_type_associative">Associative Memories</string>
+    <string name="memory_analysis_type_lorebook">Lorebook Memories</string>
+
+    <!-- Lorebook analysis result on the Memory Assistant (Step 1.7 — owner
+         approved). Shown when a Lorebook Memories run finds suggestions; View
+         opens the Lorebooks area on Pending. -->
+    <string name="memory_assistant_lore_found">Potential Lorebook Memories found: %1$d</string>
+    <string name="memory_assistant_view_lore_pending">View</string>
+
+    <!-- Lorebooks Pending review (Step 1.7 — owner approved). The split control
+         at the top of the Lorebooks screen while suggestions are pending. -->
+    <string name="lore_mode_lorebooks">Lorebooks</string>
+    <string name="lore_mode_pending">Pending</string>
+    <string name="lore_suggestion_triggers">Triggers: %1$s</string>
+    <string name="lore_suggestion_assign">Assign Lorebook</string>
+    <string name="lore_suggestion_create_new">Create new Lorebook…</string>
+    <string name="lore_suggestion_edit">Edit</string>
+    <string name="lore_suggestion_approve">Approve</string>
+    <string name="lore_suggestion_delete">Delete</string>
+    <string name="lore_suggestion_needs_book">Assign a Lorebook before approving.</string>
+    <string name="lore_suggestion_edit_title">Edit suggestion</string>
+    <string name="lore_suggestion_edit_content_hint">Lorebook entry text</string>
+    <string name="lore_suggestion_edit_triggers_hint">Trigger keywords, separated by commas</string>
+
+    <!-- Memory Browser reminder while no embedding model is installed (Step 1.7
+         — owner approved, plan_one_page.md). A dismissible per-visit reminder,
+         never a permanent banner. -->
+    <string name="lore_no_model_reminder">Associative Search can\'t be used in chats until an embedding model is installed.</string>
+    <string name="lore_no_model_reminder_ok">Okay</string>
+
+    <!-- Two-mode memory browser + pending actions (owner design, July 8 2026
+         evening — phase6_owner_answers_2026-07-08.md; owner wording). -->
+    <string name="mem_mode_memories">Memories</string>
+    <string name="mem_mode_separator"> | </string>
+    <string name="mem_mode_pending">Pending</string>
+    <string name="mem_pending_count_one">One Memory Pending</string>
+    <string name="mem_pending_count_many">%1$d Memories Pending</string>
+    <string name="mem_pending_accept">Accept</string>
+    <string name="mem_pending_delete">Delete</string>
+    <string name="mem_pending_edit">Edit</string>
+    <string name="mem_pending_add_card">Add to Card</string>
+    <string name="mem_add_card_title">Accept Memory and Link to Lore Card?</string>
+    <string name="mem_add_card_card_label">Lore Card</string>
+    <string name="mem_add_card_section_label">Section</string>
+    <string name="mem_dropdown_select">Select</string>
+    <string name="mem_approve_all_as_shown">Approve All As Shown</string>
+    <string name="mem_edit_link_card_label">Link to Lore Card:</string>
+    <!-- Owner wording (round-3 rulings, July 9 2026): a roleplay draft with
+         no world/campaign/character target — shown inline on the row and in
+         the editor; the draft cannot be added to a card until targeted. -->
+    <string name="mem_needs_roleplay_target">Needs roleplay target.</string>
+
+    <!-- Companion memory system (Phase 1: store, seed, backups) -->
+    <string name="tile_memory_title">Memory system</string>
+    <string name="tile_memory_desc">Long-term companion memory: status, starter seed, backups (experimental)</string>
+    <string name="memory_status_loading">Loading…</string>
+    <string name="memory_status_not_provisioned">The memory store hasn\'t been created yet. Load the starter template, import a backup, or create companions from your personas to set it up.</string>
+    <string name="memory_status_integrity_ok">Store integrity: OK</string>
+    <string name="memory_status_integrity_bad">Store integrity: FAILED — %1$s. Restore from a backup export rather than continuing on a corrupt store.</string>
+    <string name="memory_status_counts">Companions: %1$d · Memories: %2$d · Entities: %3$d · Modes: %4$d · Directives: %5$d</string>
+    <string name="memory_status_counts2">Worlds: %1$d · User personas: %2$d · Roleplay characters: %3$d · Proposals: %4$d</string>
+    <string name="memory_status_transcripts">Transcripts: %1$d (%2$d pending review)</string>
+    <string name="memory_status_chats_since_backup">Chats since last back-up: %1$d</string>
+    <string name="memory_status_pending_review">Pending memory review: %1$d</string>
+    <string name="memory_status_seed_yes">Seed: imported</string>
+    <string name="memory_status_seed_no">Seed: not imported yet</string>
+    <string name="memory_status_bootstrap_yes">Personas linked to companions: yes</string>
+    <string name="memory_status_bootstrap_no">Personas linked to companions: not yet</string>
+    <string name="memory_status_last_backup">Last automatic backup: %1$s</string>
+    <string name="memory_status_last_backup_never">Last automatic backup: never</string>
+    <string name="memory_not_provisioned_toast">The memory store hasn\'t been set up yet.</string>
+    <string name="memory_export_done">Backup exported.</string>
+    <string name="memory_operation_failed">Memory operation failed: %1$s</string>
+    <string name="memory_file_unreadable">The selected file couldn\'t be read.</string>
+    <string name="memory_integrity_failed">Memory store check failed — open Memory settings in Characters for details.</string>
+    <string name="memory_bootstrap_done">Created %1$d companion record(s) from your personas.</string>
+
+    <!-- Memory system Phase 2: transcript capture, review markers, kill switch -->
+    <string name="label_memory">Memory</string>
+    <string name="label_chat_memory_enabled">Use memory in this chat</string>
+    <string name="label_chat_lorebooks_enabled">Use Lorebooks in this chat</string>
+    <string name="label_chat_memory_excluded">Archive This Chat</string>
+    <string name="memory_marker_pending">Memory: waiting for review</string>
+    <string name="memory_marker_partial">Memory: partially archived</string>
+    <string name="memory_marker_processed">Memory: archived</string>
+    <string name="memory_marker_excluded">Memory: excluded</string>
+
+    <!-- Memory system Phase 3: librarian (embedding model + semantic search) -->
+    <string name="memory_section_librarian">Librarian (semantic memory)</string>
+    <string name="memory_librarian_hint">An on-device embedding model lets memories be found by meaning, not just exact words. Download one variant that fits your phone. This is optional — without it, memory still works by keyword.</string>
+    <string name="btn_rebuild_index">Rebuild memory index</string>
+    <string name="memory_index_none">No embedding model installed — search uses keywords only.</string>
+    <string name="memory_index_ok">Index up to date (%1$d memories embedded).</string>
+    <string name="memory_index_stale">Index needs rebuilding (model changed or new memories).</string>
+    <string name="memory_index_building">Embedding… %1$d / %2$d</string>
+    <string name="memory_index_done">Indexed %1$d memories.</string>
+    <string name="memory_index_failed">Couldn\'t build the index — the model may not have loaded. Search falls back to keywords.</string>
+    <string name="memory_model_download">Download</string>
+    <string name="memory_model_cancel">Cancel</string>
+    <string name="memory_model_delete">Remove</string>
+    <string name="memory_model_active">Active</string>
+    <string name="memory_model_progress_fmt">%1$d / %2$d MB</string>
+    <string name="memory_model_progress_placeholder">~%1$d MB · %2$s</string>
+    <string name="memory_model_downloaded">Downloaded model %1$s.</string>
+    <string name="memory_model_download_failed">Download failed: %1$s</string>
+    <string name="memory_debug_search_hint">Search your memories</string>
+    <string name="memory_debug_search_button">Search</string>
+    <string name="memory_debug_search_empty">No matches.</string>
+    <string name="memory_debug_search_result_fmt">%1$.2f\n%2$s</string>
+    <string name="memory_debug_semantic_header">— Semantic memory matches —</string>
+    <string name="memory_debug_all_header">— All records (keyword) —</string>
+    <string name="memory_debug_logging_title">Memory diagnostics logging</string>
+    <string name="memory_debug_logging_desc">Write what the memory system is doing to the Event log. Off by default; turn on only when investigating a memory problem.</string>
+
+    <!-- Performance diagnostics: two independent opt-in toggles, both off by
+         default, both writing to the dedicated Performance Log (kept separate
+         from the Voice Debug and Error logs so they stay readable). -->
+    <string name="whisper_perf_logging_title">Whisper performance logging</string>
+    <string name="whisper_perf_logging_desc">Write one line per on-device transcription to the Performance Log: how long the recording was, how long the model took to load, and how long it took to transcribe — plus a snapshot of memory use. Off by default; turn on to find out why Whisper is suddenly slow.</string>
+    <string name="tile_log_chat_failures_title">Log Chat Failures</string>
+    <string name="tile_log_chat_failures_desc">Save each failed reply\'s provider and the raw server error to the Provider Failure Log. This does not change what appears in chat — failures always show there. Off by default.</string>
+    <string name="tile_response_lifecycle_title">Response Lifecycle</string>
+    <string name="tile_response_lifecycle_desc">Records completion status, token usage, request limits, and how each AI response ended for troubleshooting.</string>
+    <string name="memory_usage_logging_title">Memory usage logging</string>
+    <string name="memory_usage_logging_desc">Write the app\'s memory use to the Performance Log about once a minute (and whenever the system asks the app to free memory). Off by default; leave it on across a long session to spot a memory leak — a steadily rising figure is the tell-tale sign.</string>
+
+    <!-- Memory system Phase 4: engine tier, per-chat scene picker, assembly debug.
+         (Engine picker title, "needs model" toast and endpoint infra strings are
+         reused by the reorged Memory Controls screen — see the reorg block below.) -->
+    <string name="memory_engine_picker_title">Choose memory engine</string>
+    <!-- Owner wording, July 9 2026 — shown inline (persistent) under the
+         Memory Engine control, never a toast. -->
+    <string name="memory_engine_needs_embedding">Install the embedding model in Advanced Memory Settings to enable Associative Search.</string>
+    <string name="memory_archivist_endpoint_picker_title">Choose an endpoint</string>
+    <string name="memory_archivist_endpoint_none_toast">No saved API endpoints yet — add one in API Endpoints first.</string>
+    <string name="memory_archivist_model_hint">e.g. gpt-4o-mini</string>
+    <string name="label_endpoint_none">None configured</string>
+    <string name="label_archivist_model_none">Not set</string>
+
+    <!-- Memory system Phase 4: per-chat scene selection in Quick Settings -->
+    <string name="label_memory_scene">Scene</string>
+    <string name="label_chat_world">World</string>
+    <string name="label_chat_playing_as">Playing as</string>
+    <string name="label_chat_appear_as">Appear as</string>
+    <string name="label_world_none">None</string>
+    <string name="label_roleplay_character_none">None</string>
+    <string name="label_user_persona_none">None</string>
+    <string name="memory_scene_world_picker_title">Choose a world</string>
+    <string name="memory_scene_playing_as_picker_title">Choose who you\'re playing</string>
+    <string name="memory_scene_appear_as_picker_title">Choose how you appear</string>
+    <string name="label_chat_project">Project</string>
+    <string name="label_project_none">None</string>
+    <string name="memory_scene_project_picker_title">Choose a project</string>
+    <string name="label_chat_campaign">Campaign</string>
+    <string name="label_campaign_none">None</string>
+    <string name="memory_scene_campaign_picker_title">Choose a campaign</string>
+
+    <!-- Model rules (owner_approved_rules §11 Revision 6): the
+         per-chat "Apply Model Rules" toggle label (owner-approved title case). -->
+    <string name="label_chat_model_rules">Apply Model Rules</string>
+    <!-- Prompt text: the header line of the model-rules prompt block. Part of
+         the byte-stable block 2 of the prompt-layer contract — changing it
+         invalidates every chat's cached prefix, so don't reword casually. -->
+    <string name="model_rules_injection_header">Model rules (user-written handling rules for this model):</string>
+
+    <!-- ===== AI System Settings + Model rules UI (§11 Revision 6) =====
+         "AI System Settings", "Model Specific Rules", the explanation line, the
+         two toggle labels and the mindfulness hint are owner-approved words —
+         do not reword. -->
+    <string name="title_ai_system_settings">AI System Settings</string>
+    <string name="tile_ai_system_settings_title">AI System Settings</string>
+    <string name="tile_ai_system_settings_desc">System prompt and model rules</string>
+    <string name="ai_system_settings_hint">Be mindful of longer rules as they take up more context space and are sent every turn, which may negatively affect smaller model performance. These count toward token usage, but caching may help with the cost.</string>
+    <string name="row_model_rules_title">Model Specific Rules</string>
+    <string name="row_model_rules_subtitle">Allows custom rules to be sent to exact models from specific saved API endpoints. Rules may be assigned to multiple AIs.</string>
+    <string name="label_auto_apply_model_rules_title">Automatically Apply Model Rules</string>
+    <string name="label_auto_apply_model_rules_desc">When on, model rules apply to any chat whose saved endpoint and exact model match. You can still turn them off for a single chat.</string>
+
+    <!-- Model rules browser -->
+    <string name="model_rules_btn_new">New rule</string>
+    <string name="model_rules_pending_title">Pending model rules</string>
+    <string name="model_rules_pending_banner">Pending model rules (%1$d) ›</string>
+    <string name="model_rules_filter_model">Model</string>
+    <string name="model_rules_no_models">(no models set)</string>
+    <string name="model_rules_size_header">≈ %2$d characters sent for %1$s</string>
+    <string name="model_rules_size_header_warn">≈ %2$d characters sent for %1$s — a lot; smaller models may struggle</string>
+    <string name="model_rules_delete_confirm_title">Delete rule?</string>
+    <string name="model_rules_delete_confirm_msg">Delete this rule?\n\n%1$s</string>
+
+    <!-- Model rule editor -->
+    <string name="model_rule_edit_title_new">New Rule</string>
+    <string name="model_rule_edit_title_edit">Edit Rule</string>
+    <string name="model_rule_edit_hint_text">Rule for the AI Model</string>
+    <string name="model_rule_edit_label_models">Applied Models</string>
+    <string name="model_rule_edit_models_hint">Appends this rule to the system prompt for the models selected below.</string>
+    <string name="model_rule_edit_add_model">Add Model</string>
+    <string name="model_rule_select_endpoint">Select API Endpoint</string>
+    <string name="model_rule_use_current_chat_model">Use Current Chat Model</string>
+    <string name="model_rule_use_current_chat_model_value">Use Current Chat Model — %1$s: %2$s</string>
+    <string name="model_rule_target_label">%1$s: %2$s</string>
+    <string name="model_rule_legacy_target_label">%1$s</string>
+    <string name="model_rule_missing_endpoint">Unavailable Endpoint</string>
+    <string name="model_rule_edit_model_required">Add at least one endpoint and model before activating this rule.</string>
+    <string name="model_rule_no_endpoints">Add an API endpoint before selecting a model.</string>
+    <string name="model_rule_edit_label_tags">Tags</string>
+    <string name="model_rule_edit_hint_tag_input">Add a tag</string>
+    <string name="model_rule_edit_required">Add the rule text first.</string>
+    <string name="model_rule_size_count">%1$d characters</string>
+    <string name="model_rule_size_warn">%1$d characters — long rules use more of the model\'s memory every turn</string>
+
+    <!-- Model rule tags -->
+    <string name="model_rule_tags_title">Tags</string>
+    <string name="model_rule_tag_rename">Rename tag</string>
+    <string name="model_rule_tag_delete_confirm_title">Delete tag?</string>
+    <string name="model_rule_tag_delete_confirm_msg">Delete the tag \"%1$s\"? The rules keep their text; they just lose this tag.</string>
+    <plurals name="model_rule_tag_rule_count">
+        <item quantity="one">%d rule</item>
+        <item quantity="other">%d rules</item>
+    </plurals>
+
+    <!-- User-triggered Model Cleanup. -->
+    <string name="model_cleanup_title">Clean Up Models</string>
+    <string name="model_cleanup_settings_subtitle">Checks for unavailable models associated with Favorites or Rules</string>
+    <string name="model_cleanup_explanation">This check looks at your saved Favorite Models and Model Rules to see whether their models are currently available from their saved API endpoints.\n\nA model marked unavailable was not available when this report was generated. This does not necessarily mean the model has been permanently removed.\n\nYou can delete unavailable items or leave them as they are. Items you keep will remain marked as unavailable until a future check finds the model available again. Availability can change, and a provider may not always return complete or reliable model information.</string>
+    <string name="model_cleanup_check">Check Available Models</string>
+    <string name="model_cleanup_check_failed">Couldn’t check saved models. Try again later.</string>
+    <string name="model_cleanup_unavailable">Unavailable</string>
+    <string name="model_cleanup_report_generated">Report generated: %1$s</string>
+    <string name="model_cleanup_no_report">No cleanup report has been generated yet.</string>
+    <string name="model_cleanup_endpoint_unchecked">Models associated with %1$s were not available to be checked as endpoint was not available. Try again later.</string>
+    <string name="model_cleanup_favorites_heading">Unavailable Model Favorites</string>
+    <string name="model_cleanup_rules_heading">Model Rules Using Unavailable Models</string>
+    <string name="model_cleanup_none">None</string>
+    <string name="model_cleanup_delete_all">Delete All</string>
+    <string name="model_cleanup_delete_favorites_confirm_title">Delete Unavailable Favorites?</string>
+    <string name="model_cleanup_delete_favorites_confirm_message">Delete all unavailable Favorites currently listed in this report?</string>
+    <string name="model_cleanup_delete_rules_confirm_title">Remove Unavailable Models from Model Rules?</string>
+    <string name="model_cleanup_delete_rules_confirm_message">Remove every unavailable model currently listed from the Model Rules that use it? A rule will be deleted only if it has no other model target.</string>
+    <string name="model_cleanup_unknown_endpoint">Unavailable Endpoint</string>
+    <plurals name="model_cleanup_removed_favorites">
+        <item quantity="one">Successfully removed %d unavailable favorite.</item>
+        <item quantity="other">Successfully removed %d unavailable favorites.</item>
+    </plurals>
+    <plurals name="model_cleanup_removed_rule_targets">
+        <item quantity="one">Successfully removed %d unavailable model from Model Rules.</item>
+        <item quantity="other">Successfully removed %d unavailable models from Model Rules.</item>
+    </plurals>
+
+    <!-- Memory system Phase 4: enforcer assembly debug view (shown above the lorebook debug log) -->
+    <string name="memory_debug_assembly_header">Memory assembly (full engine)</string>
+    <string name="lorebook_debug_records_header">Lore book injections</string>
+    <string name="memory_debug_companion_fmt">Companion: %1$s</string>
+    <string name="memory_debug_eligibility_fmt">Room: %1$s</string>
+    <string name="memory_debug_injected_header">Injected:</string>
+    <string name="memory_debug_cut_header">Cut:</string>
+    <string name="memory_debug_lore_notes_header">Lore notes:</string>
+    <string name="memory_debug_scene_fmt">Scene: %1$s</string>
+    <string name="memory_debug_notes_header">Notes:</string>
+    <string name="memory_degraded_notice">Memory unavailable this turn — continuing without it</string>
+    <string name="lorebook_debug_store_unavailable">Lore books were unavailable this turn (see the Event log)</string>
+    <string name="lorebook_debug_no_active_books">No active lore books to search — check the persona\'s linked books and the Quick Settings checklist</string>
+    <string name="lorebook_debug_searched_fmt">Searched %1$d active book(s)</string>
+
+    <!-- ============ Phase 5: memory manager UI ============ -->
+    <!-- Shared list scaffold -->
+    <string name="memory_row_actions">Actions</string>
+    <string name="memory_list_empty">Nothing here yet.</string>
+    <!-- Settings entry point -->
+    <string name="memory_section_manage">Browse &amp; edit</string>
+    <string name="btn_memory_browse">Open memory manager</string>
+    <string name="memory_manage_hint">View, add and edit everything the memory system stores.</string>
+    <!-- Memory browser -->
+    <string name="title_memories">Memories</string>
+    <string name="memory_search_hint">Search Memories</string>
+    <string name="memory_scope_global">Global</string>
+    <string name="memory_scope_companion">Companion</string>
+    <string name="memory_badge_archived">Archived</string>
+    <string name="memory_badge_superseded">Superseded</string>
+    <string name="memory_badge_protected">Protected</string>
+    <string name="memory_badge_always">Always</string>
+    <string name="memory_showing_archived">Showing archived memories too</string>
+    <string name="memory_hiding_archived">Hiding archived memories</string>
+    <string name="memory_saved">Memory saved</string>
+    <string name="memory_deleted">Memory deleted</string>
+    <string name="memory_change_edited">Edited by hand</string>
+    <string name="memory_change_status">Status changed by hand</string>
+    <string name="memory_change_protection">Protection changed by hand</string>
+
+    <!-- Full-screen memory editor (Stage 2.2) -->
+    <string name="mem_edit_title_new">New memory</string>
+    <string name="mem_edit_title_edit">Edit memory</string>
+    <string name="mem_edit_hint_title">Title</string>
+    <string name="mem_edit_hint_content">What to remember</string>
+    <string name="mem_edit_hint_tags">Tags (comma-separated)</string>
+    <string name="mem_edit_label_type">Type</string>
+    <string name="mem_edit_label_importance">Importance</string>
+    <string name="mem_edit_label_scope">Scope</string>
+    <!-- Owner rework (July 8–9 2026): the old "Which ones does this belong
+         to?" sentence is GONE; the picker label is "Associated <Scope>",
+         composed from the owner's approved scope labels below ("Associated
+         Companion" is the owner's exact wording for the companion case). -->
+    <string name="mem_edit_associated_fmt">Associated %1$s</string>
+    <string name="mem_edit_new_project">New project</string>
+    <string name="mem_edit_new_project_hint">Project name</string>
+    <string name="mem_edit_btn_save">Save</string>
+    <string name="mem_edit_required">Content is required.</string>
+    <string name="mem_edit_still_loading">Still loading — try again in a moment.</string>
+    <string name="mem_edit_op_failed">Couldn\'t save: %1$s</string>
+    <!-- Types (owner_approved_rules §5) -->
+    <string name="mem_type_none">No Type</string>
+    <string name="mem_type_none_hint">No category. A memory does not need a Type.</string>
+    <string name="mem_type_fact">Fact</string>
+    <string name="mem_type_preference">Preference</string>
+    <string name="mem_type_event">Event</string>
+    <string name="mem_type_status">Status</string>
+    <string name="mem_type_instruction">Instruction</string>
+    <string name="mem_type_lore">Lore</string>
+    <string name="mem_type_fact_hint">Stable information.</string>
+    <string name="mem_type_preference_hint">Likes, dislikes, style needs, response preferences.</string>
+    <string name="mem_type_event_hint">Something that happened.</string>
+    <string name="mem_type_status_hint">Something currently true but expected to change.</string>
+    <string name="mem_type_instruction_hint">Applies when its topic comes up — for always-on rules, write them on the card.</string>
+    <string name="mem_type_lore_hint">Fictional/world/roleplay information.</string>
+    <!-- Scope categories (owner_approved_rules §1/§2) -->
+    <string name="mem_scope_global">Global</string>
+    <string name="mem_scope_real_life">Real life</string>
+    <string name="mem_scope_companion">Companion</string>
+    <string name="mem_scope_project">Project</string>
+    <string name="mem_scope_world">World</string>
+    <string name="mem_scope_campaign">Campaign</string>
+    <string name="mem_scope_rp_character">RP character</string>
+    <!-- Importance (owner_approved_rules §8; canonical recovery plan §7) -->
+    <string name="mem_importance_0">0 · Neutral</string>
+    <string name="mem_importance_1">1 Low importance</string>
+    <string name="mem_importance_2">2 Minor</string>
+    <string name="mem_importance_3">3 Notable</string>
+    <string name="mem_importance_4">4 High</string>
+    <string name="mem_importance_5">5 Critical</string>
+
+    <!-- Browser filter/sort (Stage 2.3) -->
+    <string name="mem_filter_chip">%1$s: %2$s</string>
+    <string name="mem_filter_all">All</string>
+    <string name="mem_filter_sort">Sort</string>
+    <string name="mem_filter_sort_newest">Newest</string>
+    <string name="mem_filter_sort_oldest">Oldest</string>
+    <string name="mem_filter_status">Status</string>
+    <string name="mem_filter_source">Source</string>
+    <string name="mem_filter_tag">Tag</string>
+    <string name="mem_filter_reset">Reset</string>
+    <string name="mem_status_active">Active</string>
+    <string name="mem_status_draft">Draft</string>
+    <string name="mem_status_archived">Archived</string>
+    <string name="mem_status_superseded">Superseded</string>
+    <string name="mem_source_hand">Entered by hand</string>
+    <string name="mem_source_learned">Learned from chat</string>
+    <!-- Associative Memory Pending + Possible Match review (Step 1.5, owner
+         placement spec). Icon-only controls carry accessible labels; the
+         caution icon has NO visible label beside it (this string is only its
+         screen-reader description). -->
+    <string name="mem_info_action">Source and evidence</string>
+    <string name="mem_pending_caution_desc">Possible match found — review before saving</string>
+    <string name="mem_pending_checking">Checking for possible matches</string>
+    <string name="mem_pending_save">Approve suggestion</string>
+    <string name="mem_pending_discard">Discard suggestion</string>
+    <string name="mem_pending_review">Review</string>
+    <string name="mem_pending_retry">Retry</string>
+    <string name="mem_pending_check_failed">Couldn\'t check for possible matches</string>
+
+    <!-- Info control content. -->
+    <string name="mem_info_title">Source and evidence</string>
+    <string name="mem_info_source">Source: %1$s</string>
+    <string name="mem_info_none">No additional source information is recorded for this memory.</string>
+
+    <!-- Possible Match Review screen. -->
+    <string name="mem_review_title">Possible Match Review</string>
+    <string name="mem_review_intro">This suggestion may overlap memories you already have. Compare them below and choose what to keep. Nothing changes until you pick an option.</string>
+    <string name="mem_review_proposed_header">Proposed memory</string>
+    <string name="mem_review_existing_header">Existing possible matches</string>
+    <string name="mem_review_save_edit">Save &amp; Edit Old Memory</string>
+    <string name="mem_review_save_supersede">Save &amp; Supersede</string>
+    <string name="mem_review_save_replace">Save &amp; Replace</string>
+    <string name="mem_review_edit_save">Save Changes</string>
+    <string name="mem_review_select_hint">Select the memories this operation applies to.</string>
+    <string name="mem_review_match_select">Select this memory</string>
+    <string name="mem_review_stale">This suggestion or a selected memory changed. Nothing was applied — please review again.</string>
+    <string name="mem_review_gone">This suggestion is no longer pending. Nothing was applied.</string>
+    <string name="mem_review_no_matches">No possible matches remain for this suggestion.</string>
+
+    <!-- Memory Filters slide-out panel (owner-approved wording, July 8 2026).
+         Category labels reuse the existing "Sort/Scope/Type/Status/Source"
+         strings above; the Tags label is plural here. Options render with their
+         first letter capitalised, per the style guide. -->
+    <string name="title_memory_filters">Memory Filters</string>
+    <string name="mem_filter_tags">Tags</string>
+    <!-- Superseded Memories filter (owner ruling, Aug 3 2026). Hide is the
+         default: normal browsing without old versions. Include mixes active,
+         archived, and superseded together; Only browses just superseded. -->
+    <string name="mem_filter_superseded">Superseded Memories</string>
+    <string name="mem_filter_superseded_hide">Hide</string>
+    <string name="mem_filter_superseded_include">Include</string>
+    <string name="mem_filter_superseded_only">Only</string>
+    <string name="mem_filter_reset_full">Reset Filters</string>
+    <string name="mem_filter_open">Open Memory Filters</string>
+    <string name="mem_filter_close">Close Memory Filters</string>
+    <string name="mem_filter_remove">Remove filter</string>
+    <string name="mem_filter_option_all">All</string>
+    <string name="mem_filter_option_any">Any</string>
+    <string name="mem_filter_pending">Pending</string>
+    <string name="mem_row_icon">Memory type icon</string>
+    <string name="mem_row_edit">Edit memory</string>
+
+    <!-- The Stage-2.4 separate Pending screen was retired (owner ruling,
+         July 8 2026 evening): the browser's two-mode Memories | Pending view
+         replaced it; its strings left with it. -->
+    <string name="mem_edit_accept">Accept</string>
+
+    <!-- Reset memories (Stage 2.5) -->
+    <string name="mem_reset_title">Reset memories?</string>
+    <string name="mem_reset_message">This will delete all your memories. It cannot be undone. Are you sure?</string>
+    <string name="mem_reset_backup">Save a backup file first</string>
+    <string name="mem_reset_confirm">Reset</string>
+    <string name="mem_reset_done">Memory reset.</string>
+    <string name="mem_reset_done_backup">Memory reset. Backup saved: %1$s</string>
+    <string name="mem_reset_backup_failed">The backup file could not be written, so nothing was deleted. Your memories are untouched. You can try again, or run the reset without a backup by unchecking the backup option.</string>
+
+    <!-- ============================================================
+         Memory Settings reorganization (memory_settings_reorg_spec.md,
+         owner-sanctioned, July 9 2026). The old combined Memory Settings
+         screen is split into three: Memory Controls (§1), Memory Assistant
+         Advanced Settings (§2), Advanced Memory Settings (§3). All
+         user-facing wording below is verbatim from that spec. User-facing
+         name is "Memory Assistant" — never "Archivist".
+         ============================================================ -->
+    <!-- Screen titles (also the manifest activity labels) -->
+    <string name="title_memory_controls">Memory Controls</string>
+    <string name="title_memory_assistant_advanced">Memory Assistant Advanced Settings</string>
+    <string name="title_advanced_memory_settings">Advanced Memory Settings</string>
+
+    <!-- Memory Controls (spec §1) -->
+    <string name="memory_controls_intro">Choose how memory works in chats, roleplay, backups, and memory review.</string>
+    <string name="memory_controls_section_defaults">Memory Defaults</string>
+    <string name="memory_controls_use_in_new_chats">Use Memory in New Chats</string>
+    <string name="memory_controls_use_in_new_chats_hint">Turn memory on by default for new chats. You can still change this per chat.</string>
+    <string name="memory_controls_companion_roleplay">Allow Companion Memories in Roleplay</string>
+    <string name="memory_controls_companion_roleplay_hint">Let the active companion\'s approved memories be eligible during roleplay. Off keeps companion memories out of roleplay unless another rule allows them.</string>
+    <string name="memory_controls_chat_list_status">Show Memory Status on Chat List</string>
+    <string name="memory_controls_chat_list_status_hint">Show whether each chat is waiting for memory review, partially archived, archived, or excluded. This does not show backup status.</string>
+    <string name="memory_controls_row_assistant">Memory Assistant</string>
+    <string name="memory_controls_row_assistant_hint">Find possible memories in finished conversations, then review them in Pending before saving.</string>
+    <string name="memory_controls_max_suggestions">Maximum Suggestions Per Conversation</string>
+    <string name="memory_controls_max_suggestions_hint">Limit how many memory drafts Memory Assistant can create from each conversation.</string>
+    <string name="memory_assistant_conversation_amount">Conversation Amount Per Request</string>
+    <string name="memory_assistant_conversation_amount_hint">Controls how much conversation text is sent in each AI request. Smaller amounts work with more models and providers but require more requests.</string>
+    <string name="memory_assistant_conversation_amount_auto">Auto</string>
+    <string name="memory_assistant_conversation_amount_small">Small · About 4,000 Tokens</string>
+    <string name="memory_assistant_conversation_amount_standard">Standard · About 8,000 Tokens</string>
+    <string name="memory_assistant_conversation_amount_large">Large · About 16,000 Tokens</string>
+    <string name="memory_assistant_conversation_amount_custom">Custom</string>
+    <string name="memory_assistant_conversation_tokens">Conversation Tokens Per Request</string>
+    <string name="memory_controls_row_advanced_assistant">Advanced Memory Assistant Settings</string>
+    <string name="memory_controls_row_advanced_assistant_subtitle">Tune extraction temperature, importance, and prompt behavior.</string>
+    <string name="memory_controls_section_engine">Memory Engine</string>
+    <string name="memory_controls_row_engine">Memory Engine</string>
+    <string name="memory_controls_row_engine_hint">Choose how much memory support the app uses.</string>
+    <string name="memory_controls_engine_none">None</string>
+    <string name="memory_controls_engine_lorebooks">Lorebooks Only</string>
+    <string name="memory_controls_engine_associative">Associative Search Only</string>
+    <string name="memory_controls_engine_both">Both Memory Systems</string>
+    <string name="memory_controls_section_assistant_model">Memory Assistant Model</string>
+    <string name="memory_controls_row_assistant_endpoint">Memory Assistant Endpoint</string>
+    <string name="memory_controls_row_assistant_endpoint_hint">Choose which saved AI endpoint analyzes history and drafts memory items.</string>
+    <string name="memory_controls_row_assistant_model">Memory Assistant Model</string>
+    <string name="memory_controls_row_assistant_model_hint">Model name used by Memory Assistant.</string>
+    <string name="memory_assistant_edit_endpoint_desc">Edit selected endpoint</string>
+    <string name="memory_assistant_routing_title">Select Preferred Routing Type</string>
+    <string name="memory_assistant_routing_hint">Provider routing remains Automatic unless the selected model is a favorite with routing already set up. Preferred and Only use the provider settings saved with that favorite.</string>
+    <string name="memory_controls_section_backups">Backups</string>
+    <string name="memory_controls_auto_backup">Automatic Daily Backup</string>
+    <string name="memory_controls_auto_backup_hint">Save a rotating local backup once a day.</string>
+    <string name="memory_controls_import">Import Backup</string>
+    <string name="memory_controls_import_hint">Restore memories from an exported JSON backup.</string>
+    <string name="memory_controls_export">Export Backup</string>
+    <string name="memory_controls_export_hint">Save a JSON backup you can store or move to another device.</string>
+    <string name="memory_controls_last_backup">Last Backup: %1$s</string>
+    <string name="memory_controls_never">Never</string>
+    <string name="memory_controls_section_reset">Reset</string>
+    <string name="memory_controls_reset">Reset Memories</string>
+    <string name="memory_controls_reset_hint">Delete memory content. Offer to export a backup first.</string>
+
+    <!-- Database Health & Backups, Build Phase 2 (owner-approved wording, July 21 2026).
+         Title Case for section headings, buttons, toggle labels and short field
+         labels; sentence case for complete helper sentences and warnings. -->
+    <!-- 2. Database Health (on-screen order since July 24 2026 — Backup
+         Status now leads; see MemoryBackupRestoreActivity's class doc) -->
+    <string name="backup_db_health_section">Database Health</string>
+    <string name="backup_check_integrity">Check Database Integrity</string>
+    <string name="backup_check_integrity_hint">Checks the memory, lorebook, and user image databases for problems. Chats are not included.</string>
+    <string name="backup_db_name_memory">Memory Database</string>
+    <string name="backup_db_name_lorebook">Lorebook Database</string>
+    <string name="backup_db_name_user_image">User Image Database</string>
+    <string name="backup_check_result_ok">%1$s: No Problems Found</string>
+    <string name="backup_check_result_problem">%1$s: Problem Found</string>
+    <string name="backup_check_result_unavailable">%1$s: Could Not Be Checked</string>
+    <!-- 1. Backup Status -->
+    <string name="backup_status_section">Backup Status</string>
+    <string name="backup_type_memory">Memory</string>
+    <string name="backup_type_lorebooks">Lorebooks</string>
+    <string name="backup_type_chats">Chats</string>
+    <string name="backup_type_user_image">User Image Database</string>
+    <string name="backup_state_never">Never Backed Up</string>
+    <string name="backup_state_creating">Creating Backup…</string>
+    <string name="backup_state_backed_up">Backed Up %1$s</string>
+    <string name="backup_state_failed_last_good">Backup Failed. Last Good Backup: %1$s</string>
+    <string name="backup_state_failed_none">Backup Failed. No Successful Backup Yet.</string>
+    <string name="backup_state_nothing">Nothing to Back Up</string>
+    <!-- Portable recovery restore error model (owner-authored wording, July 22
+         2026 rulings 2 and 4 — verbatim; do not reword without asking).
+         Maps from PortablePackageFormat.RestoreError. -->
+    <string name="backup_err_mistyped_code">Invalid or mistyped Recovery Code.</string>
+    <string name="backup_err_wrong_key_or_header">This Recovery Code belongs to a different Recovery Key, or the backup header is damaged.</string>
+    <string name="backup_err_damaged">The backup is damaged or has been altered.</string>
+    <string name="backup_err_unsupported_protection">Unsupported or invalid backup protection settings.</string>
+    <!-- Manual Recovery Backup flow (owner-approved wording, July 22 2026 —
+         verbatim; do not reword without asking). Section 5/6 rulings. -->
+    <string name="recovery_create">Create Recovery Backup</string>
+    <string name="recovery_choice_protected_title">Protected Recovery</string>
+    <string name="recovery_choice_protected_desc">Encrypted. Restore using your Recovery Code, Recovery Key file, or password.</string>
+    <string name="recovery_choice_unencrypted_title">Recovery Without Encryption</string>
+    <string name="recovery_choice_unencrypted_desc">Not encrypted. Anyone with the file can read your chats and memories. No code or password is needed to restore it.</string>
+    <string name="recovery_code_safety">Anyone with your Recovery Code or Recovery Key file can open your protected backups. Store them somewhere safe and separate from the backup files.</string>
+    <string name="recovery_save_key_file">Save Recovery Key File</string>
+    <string name="recovery_copy_code">Copy Recovery Code</string>
+    <string name="recovery_add_password">Add Password (Optional)</string>
+    <string name="recovery_password_explain">A password gives you another way to restore your backups. Your Recovery Code and Recovery Key file will still work.</string>
+    <string name="recovery_confirm_prompt">Enter your Recovery Code to confirm you recorded it correctly.</string>
+    <string name="recovery_fail_generic">The backup could not be created.</string>
+    <string name="recovery_fail_keystore">Your recovery key is temporarily unavailable. No backup was created.</string>
+    <!-- Human-readable writer failures (owner-authored wording, July 22 2026
+         ruling 7 — verbatim; never show an enum or exception name). Mapped from
+         PortableRecoveryWriter.Reason. KEY_MATERIAL_UNAVAILABLE reuses
+         recovery_fail_keystore; unexpected exceptions use recovery_fail_generic. -->
+    <string name="recovery_fail_chats_unavailable">Your chats could not be read. No backup was created.</string>
+    <string name="recovery_fail_snapshot">One or more databases could not be backed up. No backup was created.</string>
+    <string name="recovery_fail_verify">The backup could not be verified. No backup was saved.</string>
+    <string name="recovery_fail_nothing">There is nothing to back up.</string>
+    <!-- Supporting UI chrome for the recovery flow (NOT part of the owner's
+         verbatim set — plain functional labels; flagged for owner review). -->
+    <string name="recovery_title">Recovery Backup</string>
+    <string name="recovery_your_code">Your Recovery Code</string>
+    <string name="recovery_continue">Continue</string>
+    <string name="recovery_confirm">Confirm</string>
+    <string name="recovery_password_label">Password</string>
+    <string name="recovery_password_confirm_label">Confirm password</string>
+    <string name="recovery_password_save">Add Password</string>
+    <string name="recovery_password_empty">Enter a password.</string>
+    <string name="recovery_password_mismatch">The passwords do not match.</string>
+    <string name="recovery_confirm_wrong">That code does not match. Check what you recorded and try again.</string>
+    <string name="recovery_creating">Creating backup…</string>
+    <string name="recovery_preparing">Preparing backup. You will choose where to save it when it is ready.</string>
+    <string name="recovery_saving">Saving backup…</string>
+    <!-- One optional plain-words detail line under recovery_fail_chats_unavailable,
+         chosen by which part of chat storage failed — diagnosis for the user in
+         human terms, never an enum or exception name. -->
+    <string name="recovery_fail_chats_detail_list">The list of chats could not be read.</string>
+    <string name="recovery_fail_chats_detail_history">The messages of one of your chats could not be read.</string>
+    <string name="recovery_fail_chats_detail_settings">The settings of one of your chats could not be read.</string>
+    <string name="recovery_saved_to">Saved to %1$s</string>
+    <string name="recovery_saved_file">File %1$s</string>
+    <string name="recovery_saved_generic">Recovery backup saved.</string>
+    <string name="recovery_code_copied">Recovery Code copied.</string>
+    <string name="recovery_key_saved">Recovery Key file saved.</string>
+    <!-- The user-visible backup filename BRAND (owner filename architecture,
+         July 22 2026). One centralized value; RecoveryFileNaming receives it,
+         never the app label. Currently the owner-approved stable fallback
+         "Backup" (owner ruling, July 22 2026: "Phosphor Shines" is NOT
+         approved branding and must never appear in a user-created filename).
+         When a final brand is chosen, change this one line. -->
+    <string name="backup_filename_brand" translatable="false">Backup</string>
+    <!-- 3. Recovery Backup (section heading corrected from "Create Backup" —
+         owner correction, July 22 2026) -->
+    <string name="backup_create_section">Recovery Backup</string>
+    <string name="backup_create_hint">Creates a recovery backup of your chats, memories, lorebooks, and user image data.</string>
+    <!-- Recovery Type dropdown (owner ruling, July 22 2026): the summary
+         lines reuse the exact recovery_choice_protected_title/_desc and
+         recovery_choice_unencrypted_title/_desc wording from the Recovery
+         Backup screen's choice panel via this "Title: Description" format,
+         so the two descriptions can never drift out of sync with the actual
+         choice. -->
+    <string name="recovery_type_summary_format">%1$s: %2$s</string>
+    <string name="recovery_type_label">Recovery Type</string>
+    <string name="backup_current_location">Current Backup Location: %1$s</string>
+    <string name="backup_location_none">No backup folder selected</string>
+    <string name="backup_change_location">Change Backup Location</string>
+    <string name="backup_create">Create Backup</string>
+    <!-- Friendly backup-folder display (owner correction, July 22 2026): a
+         location line may show a stored human-readable folder label, one of
+         these two phrases, or "No backup folder selected" — NEVER a raw URI,
+         tree document id, or provider authority string. -->
+    <string name="backup_location_selected_generic">Selected folder location</string>
+    <string name="backup_location_unavailable">Folder unavailable. Choose a new location.</string>
+    <!-- 4. Human-Readable Chat Backup (new section — owner directive, July 22
+         2026: separate from Recovery Backup and from Portable Data Copy). -->
+    <string name="backup_readable_section">Human-Readable Chat Backup</string>
+    <string name="backup_readable_desc">Saves your chats as ordinary files you can open anywhere, packed into one ZIP.</string>
+    <string name="backup_readable_scope_label">Backup Style</string>
+    <string name="backup_readable_scope_all">All Chats</string>
+    <string name="backup_readable_scope_incremental">New and Changed Chats Only</string>
+    <string name="backup_readable_format_label">Format</string>
+    <string name="backup_readable_format_text">Text</string>
+    <string name="backup_readable_format_json">JSON</string>
+    <string name="backup_readable_format_both">Text + JSON</string>
+    <string name="backup_readable_create">Create Readable Chat Backup</string>
+    <string name="backup_readable_preparing">Preparing backup. You will choose where to save it when it is ready.</string>
+    <string name="backup_readable_saving">Saving backup…</string>
+    <string name="backup_readable_none">No new or updated chats.</string>
+    <string name="backup_readable_cancelled">Backup cancelled. Nothing was saved.</string>
+    <string name="backup_readable_saved_to">Readable chat backup saved to %1$s</string>
+    <string name="backup_readable_saved_generic">Readable chat backup saved.</string>
+    <!-- Title Case label (owner correction, July 23 2026 — was sentence case,
+         inconsistent with every other "Label: value" status line on this
+         screen, e.g. backup_current_location). -->
+    <string name="backup_readable_last_success">Last Readable Chat Backup: %1$s</string>
+    <!-- Shown directly under backup_readable_last_success, same Title Case
+         "Label: value" formatting. The value is the FINAL verified
+         destination ZIP's exact size (never the staged/temporary file),
+         measured during the same hash-verification read that already
+         confirms the backup is intact — see MemoryBackupRestoreActivity
+         .onReadableSaveAsResult. %1$s is a formatted size (ByteSizeFormatter,
+         e.g. "4.8 MB") or backup_size_unavailable. -->
+    <string name="backup_readable_file_size">Chat Backup File Size: %1$s</string>
+    <string name="backup_readable_fail_chats">Your chats could not be read. No backup was created.</string>
+    <string name="backup_readable_fail_generic">The backup could not be created.</string>
+    <string name="backup_readable_fail_verify">The backup could not be verified. No backup was saved.</string>
+    <!-- 5. Portable Data Copy (section heading corrected from "Portable Copy";
+         description qualified — importing this file does NOT restore chats, so
+         it must not claim to be a complete device-migration mechanism). -->
+    <string name="backup_portable_section">Portable Data Copy</string>
+    <string name="backup_portable_desc">Export or import your memory data as a readable JSON file. Exports include a copy of your chats for safekeeping, but importing restores only memory data — it does not restore chats.</string>
+    <string name="backup_portable_export">Export Portable Copy</string>
+    <string name="backup_portable_import">Import Portable Copy</string>
+    <string name="backup_portable_warning">Portable copies may contain readable chats, memories, and other personal information. Store them somewhere private.</string>
+    <string name="backup_portable_export_done">Portable data copy saved.</string>
+    <string name="backup_portable_saved_to">Portable data copy saved to %1$s</string>
+    <string name="backup_portable_import_title">Import Portable Data Copy</string>
+    <!-- 6. Companion & Roleplay Backup (companion-roleplay-backup-plan.md;
+         all wording owner-approved verbatim, §8/§9). One backup category,
+         no per-item selection. Memories and lorebooks are deliberately NOT
+         in this backup; lorebook LINKS are carried by id (plus name, for
+         the restore report) only. -->
+    <string name="companion_backup_section">Companion &amp; Roleplay Backup</string>
+    <string name="companion_backup_desc">Back up or restore companions, personas, prompts, and related roleplay data.</string>
+    <string name="companion_backup_download">Download Backup</string>
+    <string name="companion_backup_upload">Upload Backup</string>
+    <string name="companion_backup_backing_up">Backing up…</string>
+    <string name="companion_backup_restoring">Restoring…</string>
+    <!-- §8 error dialogs: each names the cause the app actually knows. -->
+    <string name="companion_backup_err_wrong_file">This file is not a companion backup. Choose a file that was created with Download Backup. No changes were made.</string>
+    <string name="companion_backup_err_newer">This backup was created by a newer version of the app and can\'t be read by this one. Update the app, then try again. No changes were made.</string>
+    <string name="companion_backup_err_damaged">This backup file is damaged or incomplete and can\'t be read safely. No changes were made.</string>
+    <!-- Owner-provided exact wording (August 5, 2026), superseding the plan's
+         §8 blank-template pair below this comment. Five complete messages,
+         each covering one or more internal failure causes that call for the
+         same user action. Do not edit this wording; if a new failure cause
+         needs a message, ask — do not draft one. -->
+    <string name="companion_backup_err_needs_memory_repair">The operation could not be completed because the companion memory database needs to be repaired first. Please run the repair tool and try again.</string>
+    <string name="companion_backup_err_needs_lorebook_repair">The operation could not be completed because the lorebook database needs to be repaired first. Please run the repair tool and try again.</string>
+    <string name="companion_backup_err_restore_write_failed">The restore failed because this device storage could not be written to. Please free up space and try again.</string>
+    <string name="companion_backup_err_data_unreadable">The operation failed because the application data could not be read. Please retry or check the database health.</string>
+    <string name="companion_backup_err_save_location_failed">The backup could not be saved to the chosen location. Please select a different folder and try again.</string>
+    <!-- §9 replace confirmation. -->
+    <string name="companion_backup_confirm_title">Replace companion and roleplay data?</string>
+    <string name="companion_backup_confirm_body">This backup will replace your existing companions, personas, system prompts, activation prompts, and roleplay cards with the contents of the backup file. Memories, lorebooks, conversations, API settings, and other app settings will not be changed.</string>
+    <string name="companion_backup_confirm_replace">Replace</string>
+    <!-- §9 results. -->
+    <string name="companion_backup_success">Backup restored. Companions, personas, prompts, and roleplay cards are ready to use.</string>
+    <string name="companion_backup_saved_to">Backup saved to %1$s.</string>
+    <string name="companion_backup_report_title">Restore complete</string>
+    <string name="companion_backup_report_intro">Companions, personas, prompts, and roleplay cards were restored. These lorebook connections were removed because the lorebooks do not exist on this device:</string>
+    <string name="companion_backup_report_line">%1$s — %2$s</string>
+    <string name="companion_backup_report_footer">You can reconnect a lorebook in each companion\'s settings at any time.</string>
+    <!-- 7. Automatic Backups. The approved portable automatic system is NOT
+         built yet; this section says so instead of exposing the unfinished
+         legacy controls (owner correction, July 22 2026). -->
+    <string name="backup_auto_section">Automatic Backups</string>
+    <!-- Reworded (owner correction, July 22 2026): the toggle and frequency
+         dropdown below are now visible, so the old "the schedule controls
+         will appear here once automatic backups are finished" line was no
+         longer true. Still says plainly that nothing runs automatically yet
+         — only the writer that would actually run on a schedule is unbuilt. -->
+    <string name="backup_auto_not_ready">Automatic backups are not implemented yet. You can already choose how often they would run and where they\'ll be saved, but nothing will run automatically until this feature is finished.</string>
+    <!-- The Automatic Backups system now runs (owner ruling, July 23 2026).
+         Honest about deferral (Android may delay background work) and about the
+         two safety limits: nothing is ever deleted, and it only backs up —
+         never restores. -->
+    <string name="backup_auto_hint">Automatic backups run in the background on the schedule you choose, saving a verified backup to your chosen folder. Android may delay a run to save battery, so the timing is not exact. Automatic backups can restore this app installation. To recover after reinstalling the app or moving to another device, create a Recovery Backup.</string>
+    <!-- Title Case labels (owner correction, July 23 2026 — were sentence
+         case, inconsistent with every other "Label: value" status line on
+         this screen). File size sits between last-backup and next-due, same
+         formatting; the value is either a ByteSizeFormatter string (e.g.
+         "4.8 MB") or backup_size_unavailable — never an estimate. -->
+    <!-- SUCCESS-state label (a clean pass, no failure). After a FAILURE the
+         status uses backup_auto_status_last_successful instead, so the two
+         contexts read distinctly. -->
+    <string name="backup_auto_status_last">Last Automatic Backup: %1$s</string>
+    <!-- Same "Label: value" line, shown after a failure/paused state to keep
+         the previous good backup visible (owner ruling, July 23 2026). -->
+    <string name="backup_auto_status_last_successful">Last Successful Backup: %1$s</string>
+    <string name="backup_auto_status_file_size">File Size: %1$s</string>
+    <string name="backup_auto_status_next_due">Next Automatic Backup Due: %1$s</string>
+    <string name="backup_auto_status_never">No automatic backup has run yet.</string>
+    <!-- Shown after a failed pass whose destination is still reachable: the
+         schedule did not advance, so the set stays due and the WorkManager
+         job + app-open catch-up will try again. The EXACT next-retry time is
+         not reliably exposed by WorkManager, so this states the fact without
+         false precision (owner ruling, July 23 2026). -->
+    <string name="backup_auto_status_retrying">Retrying Automatically</string>
+    <!-- DESTINATION_PERMISSION / paused message (owner-approved wording,
+         July 23 2026): a lost SAF grant pauses automatic backups with NO
+         scheduled retry until the user repairs the destination. -->
+    <string name="backup_auto_status_paused">Automatic Backups Paused: Access to the selected folder was lost. Choose the folder again.</string>
+    <!-- Per-category automatic-backup failure messages (owner-approved
+         wording, July 23 2026). Each names a concise, actionable reason; the
+         raw exception is never shown to the user (only the local diagnostic
+         log records class + message for the UNEXPECTED case). -->
+    <string name="backup_auto_fail_write">Automatic Backup Failed: Couldn\'t write to the selected folder.</string>
+    <!-- Used ONLY when the exception specifically indicated insufficient
+         storage (BackupFailureClassifier.isInsufficientStorage), otherwise
+         backup_auto_fail_write is shown. -->
+    <string name="backup_auto_fail_storage">Automatic Backup Failed: Not enough storage space to save the backup.</string>
+    <string name="backup_auto_fail_source">Automatic Backup Failed: The backup could not be created from the app\'s data.</string>
+    <string name="backup_auto_fail_verify">Automatic Backup Failed: The completed backup did not pass verification.</string>
+    <string name="backup_auto_fail_unexpected">Automatic Backup Failed: An unexpected internal error occurred.</string>
+    <!-- Shown in place of the normal status lines while a pass is actively
+         running (the manual Retry trigger, or the screen resuming while a
+         scheduled/app-open pass happens to be in flight) — the real
+         indeterminate Material spinner sits next to this text (no text glyph).
+         Restored to the normal status once the pass finishes. Title Case to
+         match the sibling "Creating Backup…" status value. -->
+    <string name="backup_auto_status_creating">Creating Automatic Backup…</string>
+    <!-- Shared "we don\'t know" value for a file-size label (owner ruling,
+         July 23 2026): honest, never an estimate. Used as the %1$s value
+         inside backup_auto_status_file_size / backup_readable_file_size —
+         never a standalone sentence, so it stays a short Title Case value
+         like every other label\'s value, not a full sentence. -->
+    <string name="backup_size_unavailable">Unavailable</string>
+    <string name="backup_auto_location">Automatic Backup Location: %1$s</string>
+    <string name="backup_auto_change_location">Change Automatic Backup Location</string>
+    <string name="backup_auto_enable">Enable Automatic Backups</string>
+    <string name="backup_auto_enable_subtitle">Back up automatically on the schedule below.</string>
+    <string name="backup_auto_frequency_label">Backup Frequency</string>
+    <string name="backup_auto_frequency_daily">Every Day</string>
+    <string name="backup_auto_frequency_weekly">Every Week</string>
+    <string name="backup_auto_frequency_biweekly">Every Two Weeks</string>
+    <string name="backup_auto_frequency_monthly">Every Month</string>
+    <!-- Shared backup-screen failure notice (replaces the old toast that leaked
+         raw exception text): generic on screen, details only in local logs. -->
+    <string name="backup_operation_failed_title">Something went wrong</string>
+    <string name="backup_operation_failed_body">The operation could not be completed. Details were saved to the app\'s local logs.</string>
+    <!-- Memory Manager hub row subtitle -->
+    <string name="row_memory_backup_restore_subtitle">Back up and restore chats, memories, lorebooks, and user image data.</string>
+
+    <!-- ================================================================
+         Database Health Build Phase 3 — detection → dialog → repair/replace.
+         The A1/A2/A3/A5/A6/B8 wording below is OWNER-APPROVED VERBATIM
+         (memory_health_round5_phase1_design.md §15.12; casing rule: titles +
+         buttons Title Case, bodies sentence case; "Cancel", never "Not Now").
+         Strings marked DRAFT are Build Phase 4 gaps filled with tone-matched
+         professional wording per the owner's July 22 instruction ("make it
+         sound professional, I'll review after") — flag them for review, do
+         not treat them as approved.
+         ================================================================ -->
+    <!-- A1 — problem found, not auto-repairable (approved; user-image variant DRAFT) -->
+    <string name="health_problem_title">Database Problem Found!</string>
+    <string name="health_problem_body_memory">Your memory database is damaged and couldn\'t be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent memories to be lost.\n\nUntil then, memory will be unavailable to use or save to prevent further corruption.</string>
+    <string name="health_problem_body_lorebook">Your lorebooks database is damaged and couldn\'t be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent lorebook entries to be lost.\n\nUntil then, lorebooks will be unavailable to use or save to prevent further corruption.</string>
+    <!-- DRAFT (user-image variant of A1, patterned on the approved bodies) -->
+    <string name="health_problem_body_user_image">Your user image database is damaged and couldn\'t be repaired automatically. You can try a repair, or replace it with your latest good backup. This may cause recent user image records to be lost.\n\nUntil then, the user image database will be unavailable to use or save to prevent further corruption.</string>
     <!-- A1 — repaired automatically (approved) -->
     <string name="health_repaired_title">Database Repaired</string>
     <string name="health_repaired_body">A problem was found in your %1$s database and repaired automatically. Everything should be working normally.</string>
