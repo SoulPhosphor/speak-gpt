@@ -181,7 +181,7 @@ Appearance contains, in this order:
 8. AI name font — default selection
 9. AI name size — adjustable; current 18sp is the baseline/default reference
 
-Provide a visual name preview when implementing font selection so users can judge apparent size/style rather than guessing from a font name alone.
+Provide a visual name preview when implementing font selection so users can judge apparent size/style rather than guessing from a font name alone. The preview must include an editable **Preview text** field. Users can type their actual name, a companion name, or any other sample text, and every font preview updates to render that exact text. The preview text is only a picker aid; it does not rename the user or companion. Preserve the typed preview text while the user remains on the Appearance screen so side-by-side comparison stays stable.
 
 Companion editor:
 
@@ -229,9 +229,9 @@ Each slice must preserve streaming, Markwon, selection/edit/retry/speak/share/re
 
 ---
 
-### 4.13 Initial chat-name font set
+## 4.13 Initial chat-name font set
 
-The initial bundled chat-name font collection is deliberately **a curated set of visual choices, not a one-font-per-personality taxonomy**. Users choose by feel. The font picker should show each family rendered as an actual sample speaker name, and additional families may be added or replaced later without changing the message architecture.
+The initial bundled chat-name font collection is deliberately **a curated set of visual choices, not a one-font-per-personality taxonomy**. Users choose by feel. The font picker must show each family rendered using the current editable **Preview text** value from Section 4.10, not merely the family name. Additional families may be added or replaced later without changing the message architecture.
 
 Owner-approved starting families:
 
@@ -244,7 +244,7 @@ Owner-approved starting families:
 7. **Solitreo**
 8. **SN Pro**
 
-Do not rename these into personality categories in the UI. Present the actual family names and a live preview so users can judge the visual character themselves.
+Do not rename these into personality categories in the UI. Present the actual family names plus the live rendered preview so users can judge the visual character themselves.
 
 Implementation rules:
 
@@ -254,7 +254,20 @@ Implementation rules:
 - User and AI default font choices are independent in Appearance.
 - A companion may optionally override the AI default with any family in this same collection.
 - Size remains independently adjustable because these families have very different apparent heights and widths at the same `sp` value.
+- The editable Preview text must update all visible font samples live and must not alter the actual stored user/companion name.
 - Font availability is a presentation resource concern only; message body typography and markdown rendering remain untouched.
 - Keep licensing metadata/notices required by each bundled family when font resources are added.
 
 The collection is intentionally open-ended. Adding another approved family later should require adding the resource and registering it with the Chat Name Style/font picker, not redesigning preferences or message layouts.
+
+## 5. Control Center / Appearance entry
+
+| Control Center | `SettingsActivity.kt`, `activity_settings.xml`, `TileFragment` | Shared row/card restyle; add **Appearance** directly beneath **Images** with subtitle **“Customize the look of your chat.”** Appearance owns Phase 4 chat display/name-style controls now and receives palette controls later when Phase 2 resumes. |
+
+## 6. Relationship to palette work
+
+Phase 2 no longer creates the Appearance destination. Phase 2 adds palette/theme controls to the **existing Appearance screen created by Phase 4**.
+
+## 7. Phase 4 summary
+
+- **Phase 4 — Chat restyle:** implement the binding visual contract in Section 4: adaptable left/right message shell; optional portraits, names, and independent AI/user bubbles; current non-classic 16dp bubble geometry; 24dp message spacing; existing action icons/order with universal far-left `ⓘ`; anchored/selectable Message Details; dedicated Appearance screen and Control Center row; later-background compatibility; input-pill/composer restyle; stable current header treatment unless safety fixes require change. Single UI now — no `AssistantFragment` to mirror. **Must also resolve the standing intermittent top-bar/header-vanishing bug — see Section 7.4.** Drawer work may land later without redesigning message rows.
