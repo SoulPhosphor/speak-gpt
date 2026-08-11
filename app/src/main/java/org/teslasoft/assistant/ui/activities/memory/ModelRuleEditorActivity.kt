@@ -28,6 +28,7 @@ import android.widget.ImageButton
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.addCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
@@ -48,6 +49,7 @@ import org.teslasoft.assistant.preferences.models.ModelIdentity
 import org.teslasoft.assistant.preferences.models.ModelIdentityCodec
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.util.DiscardChangesDialog
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.ui.widgets.AppRemovableChip
 
@@ -86,7 +88,7 @@ class ModelRuleEditorActivity : FragmentActivity() {
     private var chipsTags: ChipGroup? = null
     private var fieldTagInput: AutoCompleteTextView? = null
     private var btnAddTag: MaterialButton? = null
-    private var btnSave: MaterialButton? = null
+    private var btnSave: ImageButton? = null
     private var btnAccept: MaterialButton? = null
 
     private var tagChips: ModelRuleTagChips? = null
@@ -96,6 +98,7 @@ class ModelRuleEditorActivity : FragmentActivity() {
     private var selectedEndpointId: String = ""
     private var selectedModelId: String = ""
     private var unavailableTargets: Set<ModelIdentity> = emptySet()
+    private var initialSnapshot: String = ""
 
     companion object {
         /** Soft warning threshold for one rule's length (§11 — a nudge, never a
@@ -136,7 +139,8 @@ class ModelRuleEditorActivity : FragmentActivity() {
         unavailableTargets = ModelCleanupReportStore.get(this).load().unavailable
         initializeEndpointSelection()
 
-        btnBack?.setOnClickListener { finish() }
+        onBackPressedDispatcher.addCallback(this) { attemptExit() }
+        btnBack?.setOnClickListener { attemptExit() }
         fieldModelEndpoint?.setOnClickListener { showEndpointDropdown() }
         btnChooseModel?.setOnClickListener { openPendingModelPicker() }
         btnAddModel?.setOnClickListener { addSelectedTarget() }
@@ -156,10 +160,17 @@ class ModelRuleEditorActivity : FragmentActivity() {
             if (!MemoryStore.isProvisioned(this)) {
                 // A fresh store hasn't been created yet; a new rule provisions it
                 // on save. Nothing to load for a new rule.
-                if (ruleId == null) { runOnUiThread { ready = true }; return@runOffThread }
+                if (ruleId == null) {
+                    runOnUiThread {
+                        ready = true
+                        initialSnapshot = snapshot()
+                    }
+                    return@runOffThread
+                }
                 runOnUiThread {
                     Toast.makeText(this, R.string.memory_not_provisioned_toast, Toast.LENGTH_SHORT).show()
                     ready = true
+                    initialSnapshot = snapshot()
                 }
                 return@runOffThread
             }
@@ -178,6 +189,7 @@ class ModelRuleEditorActivity : FragmentActivity() {
                     refreshSize()
                 }
                 ready = true
+                initialSnapshot = snapshot()
             }
         }
     }
@@ -337,6 +349,21 @@ class ModelRuleEditorActivity : FragmentActivity() {
 
     /* ------------------------------ save ------------------------------ */
 
+    private fun snapshot(): String = listOf(
+        fieldText?.text?.toString().orEmpty(),
+        ModelIdentityCodec.encode(targets),
+        tagChips?.selectedTagIds()?.sorted()?.joinToString("\u0002").orEmpty(),
+        fieldTagInput?.text?.toString().orEmpty()
+    ).joinToString("\u0001")
+
+    private fun attemptExit() {
+        if (ready && snapshot() != initialSnapshot) {
+            DiscardChangesDialog.show(this) { finish() }
+        } else {
+            finish()
+        }
+    }
+
     private fun save(activate: Boolean) {
         if (!ready) {
             Toast.makeText(this, R.string.mem_edit_still_loading, Toast.LENGTH_SHORT).show()
@@ -396,7 +423,10 @@ class ModelRuleEditorActivity : FragmentActivity() {
             store.upsertModelRule(record)
             store.setTagsForRule(id, tagIds)
             runOnUiThread {
-                Toast.makeText(this, R.string.memory_saved, Toast.LENGTH_SHORT).show()
+                btnSave?.backgroundTintList = ColorStateList.valueOf(
+                    ResourcesCompat.getColor(resources, R.color.light_green, theme)
+                )
+                Toast.makeText(this, R.string.message_saved, Toast.LENGTH_SHORT).show()
                 finish()
             }
         }
@@ -432,7 +462,9 @@ class ModelRuleEditorActivity : FragmentActivity() {
                 window.statusBarColor = ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme)
             }
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
-            btnBack?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            val barTint = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.amoled_accent_50, theme))
+            btnBack?.backgroundTintList = barTint
+            btnSave?.backgroundTintList = barTint
         } else {
             window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
             if (Build.VERSION.SDK_INT <= 34) {
@@ -440,7 +472,9 @@ class ModelRuleEditorActivity : FragmentActivity() {
                 window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
             }
             actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-            btnBack?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            val barTint = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+            btnBack?.backgroundTintList = barTint
+            btnSave?.backgroundTintList = barTint
         }
     }
 
