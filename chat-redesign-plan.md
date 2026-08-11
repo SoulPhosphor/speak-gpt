@@ -125,6 +125,20 @@ Add a universal **Message Details `ⓘ` icon as the far-left action** for both u
 
 The actions should read as quiet message controls rather than filled standalone buttons, but existing IDs, click behavior, visibility logic, and icons are load-bearing and must be preserved.
 
+#### 4.7.1 File attachments and content order
+
+File/document attachments are part of the same message unit but do not normally interrupt the identity/content area at the top of a text message.
+
+**Owner-approved ordering rule:**
+
+- When the message contains text, render the message text first, then **Message Actions**, then the attached file row/tray beneath the actions.
+- When the message contains no text and consists only of file attachment(s), the attachment content moves into the message's main content region **inside the bubble/reading surface**, below any enabled name/profile-image identity treatment and above Message Actions. Do not render an empty text area merely to preserve the normal ordering.
+- This rule applies equally to user and AI-side message shells where file attachments exist.
+- Attachment-only messages are valid messages. Do not invent visible user text such as “Look at this” merely to give the model a textual prompt.
+- The attachment presentation must remain within the message boundary for selection, spacing, and future decorative-background readability rules.
+
+The exact visual card/chip treatment for attached files may be refined during implementation, but filename/type affordances and existing attachment behavior must remain clear and usable.
+
 ### 4.8 Message Details popup
 
 `ⓘ` is the universal metadata disclosure control for both user and AI messages.
@@ -220,7 +234,7 @@ Implement in small slices. Suggested order:
 2. Build the shared/adaptable message shell while preserving all Section 9.2 IDs.
 3. Apply alignment, width, bubble geometry, and 24dp message spacing.
 4. Add optional portraits and names, including overlap/inset behavior and Chat Name Style.
-5. Move/normalize Message Actions into the message region; add `ⓘ` at far left while preserving existing action order and IDs.
+5. Move/normalize Message Actions into the message region; add `ⓘ` at far left while preserving existing action order and IDs; apply the file-attachment ordering rule in Section 4.7.1.
 6. Add anchored, selectable Message Details popup and optional persistent-details rendering.
 7. Restyle the composer/input only after message rendering is stable; do not touch voice/send state behavior.
 8. Close the Section 7.4 top-bar/inset/layout bugs and verify long-chat + rotation/config-change behavior.
@@ -270,4 +284,4 @@ Phase 2 no longer creates the Appearance destination. Phase 2 adds palette/theme
 
 ## 7. Phase 4 summary
 
-- **Phase 4 — Chat restyle:** implement the binding visual contract in Section 4: adaptable left/right message shell; optional portraits, names, and independent AI/user bubbles; current non-classic 16dp bubble geometry; 24dp message spacing; existing action icons/order with universal far-left `ⓘ`; anchored/selectable Message Details; dedicated Appearance screen and Control Center row; later-background compatibility; input-pill/composer restyle; stable current header treatment unless safety fixes require change. Single UI now — no `AssistantFragment` to mirror. **Must also resolve the standing intermittent top-bar/header-vanishing bug — see Section 7.4.** Drawer work may land later without redesigning message rows.
+- **Phase 4 — Chat restyle:** implement the binding visual contract in Section 4: adaptable left/right message shell; optional portraits, names, and independent AI/user bubbles; current non-classic 16dp bubble geometry; 24dp message spacing; existing action icons/order with universal far-left `ⓘ`; file attachments below Message Actions when text exists and in the main message content region when attachment-only; anchored/selectable Message Details; dedicated Appearance screen and Control Center row; later-background compatibility; input-pill/composer restyle; stable current header treatment unless safety fixes require change. Single UI now — no `AssistantFragment` to mirror. **Must also resolve the standing intermittent top-bar/header-vanishing bug — see Section 7.4.** Drawer work may land later without redesigning message rows.
