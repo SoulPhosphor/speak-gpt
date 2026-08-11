@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.ui.adapters.memory
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -24,6 +25,7 @@ import android.widget.BaseAdapter
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
+import com.google.android.material.color.MaterialColors
 import org.teslasoft.assistant.R
 
 /**
@@ -70,7 +72,9 @@ data class MemoryRow(
     /** Profile Images (phase 8): the identity's assigned image hash, or null.
      *  Only the profile-image row adapter (My Personas / Roleplay Characters)
      *  reads it; the default MemoryRowAdapter ignores it. */
-    val imageRef: String? = null
+    val imageRef: String? = null,
+    /** Use the Memory pending-card warning/error treatment for [iconRes]. */
+    val iconTintError: Boolean = false
 )
 
 class MemoryRowAdapter(
@@ -176,8 +180,20 @@ class MemoryRowAdapter(
         if (row.iconRes != null) {
             icon.visibility = View.VISIBLE
             icon.setImageResource(row.iconRes)
+            icon.contentDescription = context.getString(
+                if (row.iconTintError) R.string.model_cleanup_unavailable
+                else R.string.mem_row_icon
+            )
+            icon.imageTintList = ColorStateList.valueOf(
+                MaterialColors.getColor(
+                    icon,
+                    if (row.iconTintError) androidx.appcompat.R.attr.colorError
+                    else androidx.appcompat.R.attr.colorPrimary
+                )
+            )
         } else {
             icon.visibility = View.GONE
+            icon.imageTintList = null
         }
 
         if (row.tagsLine.isNullOrBlank()) {

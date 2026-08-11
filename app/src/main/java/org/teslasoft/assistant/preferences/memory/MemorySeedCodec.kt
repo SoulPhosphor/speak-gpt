@@ -365,7 +365,7 @@ object MemorySeedCodec {
             )
         }
 
-        // Model rules (Stage 4, rules §11 Revision 5) — user-authored, so
+        // Model rules (rules §11 Revision 6) — user-authored, so
         // backups carry the rules, their tag pool, and the links between them.
         val modelRules = each(root, "model_rules").map { r ->
             ModelRuleRecord(
@@ -375,7 +375,8 @@ object MemorySeedCodec {
                 status = r.str("status") ?: "active",
                 sourceModelString = r.str("source_model_string"),
                 createdAt = r.str("created_at") ?: "",
-                updatedAt = r.str("updated_at")
+                updatedAt = r.str("updated_at"),
+                modelTargetsJson = r.arrText("model_targets")
             )
         }
 
@@ -755,7 +756,7 @@ object MemorySeedCodec {
             })
         }
 
-        // Model rules (Stage 4, rules §11 Revision 5).
+        // Model rules (rules §11 Revision 6).
         if (data.modelRules.isNotEmpty()) {
             root.put("model_rules", JSONArray().apply {
                 data.modelRules.forEach { r ->
@@ -763,6 +764,7 @@ object MemorySeedCodec {
                         put("rule_id", r.ruleId)
                         put("text", r.text)
                         put("model_strings", jsonArrayOrEmpty(r.modelStringsJson))
+                        put("model_targets", jsonArrayOrEmpty(r.modelTargetsJson))
                         put("status", r.status)
                         putIfNotNull("source_model_string", r.sourceModelString)
                         put("created_at", r.createdAt)

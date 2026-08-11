@@ -41,7 +41,7 @@ import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.activities.memory.ModelRulesActivity
 
 /**
- * "AI System Settings" (Stage 4, owner_approved_rules §11 Revision 5): a
+ * "AI System Settings" (owner_approved_rules §11 Revision 6): a
  * plain chevron-row screen that groups the machine-level instructions the
  * app sends every turn — the chat's System prompt (moved here out of the
  * Characters identity hub) and Model rules. A top hint (owner-approved
@@ -65,6 +65,7 @@ class AiSystemSettingsActivity : FragmentActivity() {
     private var rowSystemPrompt: LinearLayout? = null
     private var textSystemPromptSubtitle: TextView? = null
     private var rowModelRules: LinearLayout? = null
+    private var rowModelCleanup: LinearLayout? = null
     private var switchAutoApplyModelRules: MaterialSwitch? = null
     private var rowSummarizerSettings: LinearLayout? = null
 
@@ -105,6 +106,7 @@ class AiSystemSettingsActivity : FragmentActivity() {
         rowSystemPrompt = findViewById(R.id.row_system_prompt)
         textSystemPromptSubtitle = findViewById(R.id.text_system_prompt_subtitle)
         rowModelRules = findViewById(R.id.row_model_rules)
+        rowModelCleanup = findViewById(R.id.row_model_cleanup)
         switchAutoApplyModelRules = findViewById(R.id.switch_auto_apply_model_rules)
         rowSummarizerSettings = findViewById(R.id.row_summarizer_settings)
     }
@@ -158,6 +160,10 @@ class AiSystemSettingsActivity : FragmentActivity() {
 
         rowModelRules?.setOnClickListener {
             startActivity(Intent(this, ModelRulesActivity::class.java).putExtra("chatId", chatId))
+        }
+
+        rowModelCleanup?.setOnClickListener {
+            startActivity(Intent(this, ModelCleanupActivity::class.java))
         }
 
         switchAutoApplyModelRules?.setOnCheckedChangeListener { _, checked ->

@@ -8243,7 +8243,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val modelRulesBlock: String? = try {
                 withContext(Dispatchers.IO) {
                     val rules = MemoryStore.getInstance(this@ChatActivity)
-                        .getActiveModelRulesForModel(selectedModel)
+                        .getActiveModelRulesForModel(
+                            preferences!!.getApiEndpointId(),
+                            selectedModel
+                        )
                     if (rules.isEmpty()) null
                     else rules.joinToString(
                         separator = "\n",
@@ -8503,8 +8506,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
         }
 
-        // Model rules (Stage 4, owner_approved_rules §11 Revision 5): every
-        // ACTIVE rule whose model string matches this chat's model renders as
+        // Model rules (owner_approved_rules §11 Revision 6): every ACTIVE rule
+        // whose endpoint/model identity matches this chat renders as
         // its OWN prompt-layer block after the stable prefix and before the
         // memory message (prompt-layer contract, block 2). Rules apply
         // automatically and are ON by default; the per-chat "Apply Model
@@ -8521,7 +8524,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val modelRulesBlock: String? = try {
                 withContext(Dispatchers.IO) {
                     val rules = MemoryStore.getInstance(this@ChatActivity)
-                        .getActiveModelRulesForModel(model)
+                        .getActiveModelRulesForModel(
+                            preferences!!.getApiEndpointId(),
+                            model
+                        )
                     if (rules.isEmpty()) null
                     else rules.joinToString(
                         separator = "\n",

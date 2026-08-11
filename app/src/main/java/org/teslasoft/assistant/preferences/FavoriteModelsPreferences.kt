@@ -20,6 +20,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.google.gson.Gson
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
+import org.teslasoft.assistant.preferences.models.ModelIdentity
 import androidx.core.content.edit
 
 class FavoriteModelsPreferences private constructor(private val sharedPreferences: SharedPreferences) {
@@ -155,5 +156,17 @@ class FavoriteModelsPreferences private constructor(private val sharedPreference
         val models = getFavoriteModels()
         val kept = ArrayList(models.filterNot { it["modelId"] == modelId && it["endpointId"] == endpointId })
         if (kept.size != models.size) setFavoriteModels(kept)
+    }
+
+    /** Remove a cleanup selection in one write while preserving every other favorite. */
+    fun removeFavoriteModels(targets: Set<ModelIdentity>): Int {
+        if (targets.isEmpty()) return 0
+        val models = getFavoriteModels()
+        val kept = ArrayList(models.filterNot { item ->
+            ModelIdentity(item["endpointId"].orEmpty(), item["modelId"].orEmpty()) in targets
+        })
+        val removed = models.size - kept.size
+        if (removed > 0) setFavoriteModels(kept)
+        return removed
     }
 }

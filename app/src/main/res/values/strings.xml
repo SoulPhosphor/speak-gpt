@@ -1514,7 +1514,7 @@
     <string name="label_campaign_none">None</string>
     <string name="memory_scene_campaign_picker_title">Choose a campaign</string>
 
-    <!-- Model rules (Stage 4, owner_approved_rules §11 Revision 5): the
+    <!-- Model rules (owner_approved_rules §11 Revision 6): the
          per-chat "Apply Model Rules" toggle label (owner-approved title case). -->
     <string name="label_chat_model_rules">Apply Model Rules</string>
     <!-- Prompt text: the header line of the model-rules prompt block. Part of
@@ -1522,7 +1522,7 @@
          invalidates every chat's cached prefix, so don't reword casually. -->
     <string name="model_rules_injection_header">Model rules (user-written handling rules for this model):</string>
 
-    <!-- ===== AI System Settings + Model rules UI (Stage 4, §11 Revision 5) =====
+    <!-- ===== AI System Settings + Model rules UI (§11 Revision 6) =====
          "AI System Settings", "Model Specific Rules", the explanation line, the
          two toggle labels and the mindfulness hint are owner-approved words —
          do not reword. -->
@@ -1531,9 +1531,9 @@
     <string name="tile_ai_system_settings_desc">System prompt and model rules</string>
     <string name="ai_system_settings_hint">Be mindful of longer rules as they take up more context space and are sent every turn, which may negatively affect smaller model performance. These count toward token usage, but caching may help with the cost.</string>
     <string name="row_model_rules_title">Model Specific Rules</string>
-    <string name="row_model_rules_subtitle">Allows custom rules to be sent to specific AI models based on their string ID, not provider. Rules may be assigned to multiple AIs.</string>
+    <string name="row_model_rules_subtitle">Allows custom rules to be sent to exact models from specific saved API endpoints. Rules may be assigned to multiple AIs.</string>
     <string name="label_auto_apply_model_rules_title">Automatically Apply Model Rules</string>
-    <string name="label_auto_apply_model_rules_desc">When on, model rules apply to any chat whose model matches. You can still turn them off for a single chat.</string>
+    <string name="label_auto_apply_model_rules_desc">When on, model rules apply to any chat whose saved endpoint and exact model match. You can still turn them off for a single chat.</string>
 
     <!-- Model rules browser -->
     <string name="model_rules_btn_new">New rule</string>
@@ -1547,14 +1547,20 @@
     <string name="model_rules_delete_confirm_msg">Delete this rule?\n\n%1$s</string>
 
     <!-- Model rule editor -->
-    <string name="model_rule_edit_title_new">New rule</string>
-    <string name="model_rule_edit_title_edit">Edit rule</string>
-    <string name="model_rule_edit_hint_text">Rule for the AI model</string>
-    <string name="model_rule_edit_label_models">Applies to models</string>
-    <string name="model_rule_edit_models_hint">Use a family name like \"glm-5\" to cover every snapshot, or a full model id for just one.</string>
-    <string name="model_rule_edit_add_model">Add model</string>
-    <string name="model_rule_edit_add_model_hint">Model id string</string>
-    <string name="model_rule_edit_add_model_msg">Enter a model id string. A family name like \"glm-5\" matches every snapshot; the provider prefix is ignored.</string>
+    <string name="model_rule_edit_title_new">New Rule</string>
+    <string name="model_rule_edit_title_edit">Edit Rule</string>
+    <string name="model_rule_edit_hint_text">Rule for the AI Model</string>
+    <string name="model_rule_edit_label_models">Applied Models</string>
+    <string name="model_rule_edit_models_hint">Appends this rule to the system prompt for the models selected below.</string>
+    <string name="model_rule_edit_add_model">Add Model</string>
+    <string name="model_rule_select_endpoint">Select API Endpoint</string>
+    <string name="model_rule_use_current_chat_model">Use Current Chat Model</string>
+    <string name="model_rule_use_current_chat_model_value">Use Current Chat Model — %1$s: %2$s</string>
+    <string name="model_rule_target_label">%1$s: %2$s</string>
+    <string name="model_rule_legacy_target_label">Legacy: %1$s</string>
+    <string name="model_rule_missing_endpoint">Unavailable Endpoint</string>
+    <string name="model_rule_edit_model_required">Add at least one endpoint and model before activating this rule.</string>
+    <string name="model_rule_no_endpoints">Add an API endpoint before selecting a model.</string>
     <string name="model_rule_edit_label_tags">Tags</string>
     <string name="model_rule_edit_hint_tag_input">Add a tag</string>
     <string name="model_rule_edit_required">Add the rule text first.</string>
@@ -1569,6 +1575,35 @@
     <plurals name="model_rule_tag_rule_count">
         <item quantity="one">%d rule</item>
         <item quantity="other">%d rules</item>
+    </plurals>
+
+    <!-- User-triggered Model Cleanup. -->
+    <string name="model_cleanup_title">Clean Up Models</string>
+    <string name="model_cleanup_settings_subtitle">Checks for unavailable models associated with Favorites or Rules</string>
+    <string name="model_cleanup_explanation">This check looks at your saved Favorite Models and Model Rules to see whether their models are currently available from their saved API endpoints.\n\nA model marked Unavailable was not available when this report was generated. This does not necessarily mean the model has been permanently removed.\n\nYou can delete unavailable items or leave them as they are. Items you keep will remain marked as unavailable until a future check finds the model available again. Availability can change, and a provider may not always return complete or reliable model information.</string>
+    <string name="model_cleanup_check">Check Available Models</string>
+    <string name="model_cleanup_check_failed">Couldn’t check saved models. Try again later.</string>
+    <string name="model_cleanup_unavailable">Unavailable</string>
+    <string name="model_cleanup_report_generated">Report generated: %1$s</string>
+    <string name="model_cleanup_no_report">No cleanup report has been generated yet.</string>
+    <string name="model_cleanup_endpoint_unchecked">Models associated with %1$s were not available to be checked as endpoint was not available. Try again later.</string>
+    <string name="model_cleanup_legacy_note">Legacy Model Rule targets cannot be checked until they are replaced with an API endpoint and exact model selection.</string>
+    <string name="model_cleanup_favorites_heading">Unavailable Model Favorites</string>
+    <string name="model_cleanup_rules_heading">Model Rules Using Unavailable Models</string>
+    <string name="model_cleanup_none">None</string>
+    <string name="model_cleanup_delete_all">Delete All</string>
+    <string name="model_cleanup_delete_favorites_confirm_title">Delete Unavailable Favorites?</string>
+    <string name="model_cleanup_delete_favorites_confirm_message">Delete all unavailable Favorites currently listed in this report?</string>
+    <string name="model_cleanup_delete_rules_confirm_title">Remove Unavailable Models from Model Rules?</string>
+    <string name="model_cleanup_delete_rules_confirm_message">Remove every unavailable model currently listed from the Model Rules that use it? A rule will be deleted only if it has no other exact or legacy model target.</string>
+    <string name="model_cleanup_unknown_endpoint">Unavailable Endpoint</string>
+    <plurals name="model_cleanup_removed_favorites">
+        <item quantity="one">Successfully removed %d unavailable favorite.</item>
+        <item quantity="other">Successfully removed %d unavailable favorites.</item>
+    </plurals>
+    <plurals name="model_cleanup_removed_rule_targets">
+        <item quantity="one">Successfully removed %d unavailable model from Model Rules.</item>
+        <item quantity="other">Successfully removed %d unavailable models from Model Rules.</item>
     </plurals>
 
     <!-- Memory system Phase 4: enforcer assembly debug view (shown above the lorebook debug log) -->

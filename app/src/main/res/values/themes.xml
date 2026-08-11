@@ -141,6 +141,20 @@
         <item name="android:layout_height">wrap_content</item>
     </style>
 
+    <!-- Shared removable token used when a form turns a selected value into
+         an individually removable chip. Model Rule targets and tags use the
+         same geometry; the target chip may additionally show ic_report when
+         its exact endpoint/model identity was unavailable in the last scan. -->
+    <style name="Widget.App.Chip.Removable" parent="Widget.Material3.Chip.Input">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="chipMinHeight">40dp</item>
+        <item name="chipStartPadding">8dp</item>
+        <item name="chipEndPadding">8dp</item>
+        <item name="textStartPadding">4dp</item>
+        <item name="textEndPadding">4dp</item>
+    </style>
+
     <!-- ===== Includes strip (document/image attachments) =====
          The row that sits above the message box for every attached item, and
          its pieces. A NEW row shape, deliberately not one of the five

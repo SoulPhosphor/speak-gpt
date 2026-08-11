@@ -24,41 +24,16 @@
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/action_bar"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurfaceContainerHigh"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        style="@style/Widget.App.ActionBar">
 
         <ImageButton
             android:id="@+id/btn_back"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="8dp"
-            android:background="@drawable/btn_accent_icon_large_100"
-            android:contentDescription="@string/go_back"
-            android:src="@drawable/ic_back"
-            android:tooltipText="@string/go_back"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:srcCompat="@drawable/ic_back" />
+            style="@style/Widget.App.ActionBar.BackButton" />
 
         <TextView
             android:id="@+id/activity_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/model_rule_edit_title_new"
-            android:textColor="@color/text_title"
-            android:textSize="20sp"
-            android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            style="@style/Widget.App.ActionBar.Title"
+            android:text="@string/model_rule_edit_title_new" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <ScrollView
@@ -76,111 +51,121 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingHorizontal="20dp">
+            android:paddingHorizontal="24dp">
 
-            <!-- The rule text is the focus of the screen: a large box on top. -->
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedDenseStyle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+            <TextView
+                style="@style/Widget.App.Field.Label"
                 android:layout_marginTop="24dp"
-                android:hint="@string/model_rule_edit_hint_text">
+                android:text="@string/model_rule_edit_hint_text" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/field_rule_text"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:inputType="textMultiLine|textCapSentences"
-                    android:minLines="4" />
-            </com.google.android.material.textfield.TextInputLayout>
+            <androidx.appcompat.widget.AppCompatEditText
+                android:id="@+id/field_rule_text"
+                style="@style/Widget.App.Field.Box"
+                android:gravity="top"
+                android:inputType="textMultiLine|textCapSentences"
+                android:minLines="4" />
 
-            <!-- Honest size readout (§11): live character count, right-aligned,
-                 turning to a soft warning when the rule gets long. -->
             <TextView
                 android:id="@+id/text_rule_size"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="end"
-                android:paddingTop="4dp"
-                android:textColor="@color/text_subtitle"
-                android:textSize="12sp" />
+                style="@style/Widget.App.Field.Hint"
+                android:gravity="end" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="20dp"
-                android:text="@string/model_rule_edit_label_models"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/model_rule_edit_label_models" />
 
             <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="4dp"
-                android:text="@string/model_rule_edit_models_hint"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp" />
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/model_rule_edit_models_hint" />
 
             <com.google.android.material.chip.ChipGroup
                 android:id="@+id/chips_models"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
+                android:layout_marginTop="8dp" />
+
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/model_rule_edit_add_model" />
+
+            <TextView
+                android:id="@+id/field_model_endpoint"
+                style="@style/Widget.App.Dropdown.CanonicalValue"
+                android:layout_width="match_parent"
+                android:layout_marginTop="12dp"
+                android:text="@string/model_rule_select_endpoint" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_choose_model"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/choose_provider_choose_model_title" />
+
+            <TextView
+                android:id="@+id/text_selected_model"
+                style="@style/Widget.App.Row.Title"
+                android:layout_marginTop="12dp"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_add_model"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/model_rule_edit_add_model"
-                app:icon="@drawable/ic_add" />
-
-            <TextView
+                style="@style/AppButton.Primary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingTop="20dp"
-                android:text="@string/model_rule_edit_label_tags"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                android:layout_marginTop="12dp"
+                android:text="@string/model_rule_edit_add_model" />
+
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/model_rule_edit_label_tags" />
 
             <com.google.android.material.chip.ChipGroup
                 android:id="@+id/chips_tags"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
+                android:layout_marginTop="8dp" />
 
-            <com.google.android.material.textfield.TextInputLayout
-                style="?attr/textInputOutlinedDenseStyle"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:hint="@string/model_rule_edit_hint_tag_input">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <AutoCompleteTextView
                     android:id="@+id/field_tag_input"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    style="@style/Widget.App.Field.Box"
+                    android:layout_width="0dp"
+                    android:layout_weight="3"
+                    android:gravity="center_vertical"
+                    android:hint="@string/model_rule_edit_hint_tag_input"
                     android:imeOptions="actionDone"
                     android:inputType="text"
                     android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_add_tag"
+                    style="@style/AppButton.Primary"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginTop="6dp"
+                    android:layout_weight="1"
+                    android:text="@string/btn_add" />
+            </LinearLayout>
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_rule_save"
+                style="@style/AppButton.Primary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
                 android:text="@string/mem_edit_btn_save" />
 
-            <!-- Shown only when editing a draft (§11 / Phase 6): accept = save +
-                 activate. Stays hidden until the Archivist files drafts. -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_rule_accept"
-                style="@style/Widget.Material3.Button.OutlinedButton"
+                style="@style/AppButton.Primary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"

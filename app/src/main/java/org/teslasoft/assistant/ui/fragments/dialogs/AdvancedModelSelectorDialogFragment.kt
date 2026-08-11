@@ -76,6 +76,8 @@ import kotlin.time.Duration.Companion.seconds
 class AdvancedModelSelectorDialogFragment : DialogFragment() {
     companion object {
         private const val ARG_START_WITH_ALL_MODELS = "startWithAllModels"
+        private const val ARG_RAW_MODEL_CATALOG = "rawModelCatalog"
+        private const val ARG_CURRENT_CHAT_MODEL = "currentChatModel"
 
         /** [endpointId], when non-blank, fetches models for that specific saved
          *  endpoint instead of the chat's own active endpoint (Preferences'
@@ -117,6 +119,21 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             newInstance(name, chatId, endpointId).apply {
                 requireArguments().putBoolean(ARG_START_WITH_ALL_MODELS, true)
             }
+
+        /**
+         * Model Rule entry point: keep the Favorites-first landing, but make
+         * View all/search use every exact id advertised by the endpoint rather
+         * than the chat picker's name-based exclusions.
+         */
+        fun newModelRuleTargetInstance(
+            chatId: String,
+            endpointId: String,
+            currentChatModel: String = ""
+        ): AdvancedModelSelectorDialogFragment =
+            newInstance(name = "", chatId = chatId, endpointId = endpointId).apply {
+                requireArguments().putBoolean(ARG_RAW_MODEL_CATALOG, true)
+                requireArguments().putString(ARG_CURRENT_CHAT_MODEL, currentChatModel)
+            }
     }
 
     private var modelList: ListView? = null
@@ -125,6 +142,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     private var fieldSearch: TextInputEditText? = null
     private var btnBack: ImageButton? = null
     private var btnViewAll: MaterialButton? = null
+    private var btnUseCurrentModel: MaterialButton? = null
 
     private var preferences: Preferences? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
@@ -148,6 +166,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     private var showingAll = false
     /** True when the caller's purpose is the provider-wide catalog itself. */
     private var startsWithAllModels = false
+    private var rawModelCatalog = false
+    private var currentChatModel = ""
     private var query = ""
 
     private var requestNetwork: RequestNetwork? = null
@@ -402,11 +422,14 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         fieldSearch = view.findViewById(R.id.field_search_text)
         btnBack = view.findViewById(R.id.btn_back)
         btnViewAll = view.findViewById(R.id.btn_view_all)
+        btnUseCurrentModel = view.findViewById(R.id.btn_use_current_model)
 
         val ctx = mContext ?: requireContext()
 
         imageMode = requireArguments().getBoolean("imageModels", false)
         startsWithAllModels = requireArguments().getBoolean(ARG_START_WITH_ALL_MODELS, false)
+        rawModelCatalog = requireArguments().getBoolean(ARG_RAW_MODEL_CATALOG, false)
+        currentChatModel = requireArguments().getString(ARG_CURRENT_CHAT_MODEL).orEmpty()
         selectorTitle?.text = getString(
             if (imageMode) R.string.label_select_image_model else R.string.label_select_ai_model
         )
@@ -421,6 +444,14 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         reloadFavorites()
 
         btnBack?.setOnClickListener { handleBack() }
+
+        btnUseCurrentModel?.apply {
+            visibility = if (currentChatModel.isBlank()) View.GONE else View.VISIBLE
+            setOnClickListener {
+                listener?.onModelSelected(currentChatModel)
+                dismiss()
+            }
+        }
 
         btnViewAll?.setOnClickListener {
             showingAll = true
@@ -495,7 +526,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
      *  filtering, and image mode keeps the raw capability-aware path. */
     private fun startCatalogFetch() {
         val endpoint = apiEndpointObject ?: return
-        if (imageMode || startsWithAllModels) {
+        if (imageMode || startsWithAllModels || rawModelCatalog) {
             startRawModelsRequest()
             return
         }

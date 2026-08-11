@@ -25,7 +25,6 @@ import android.view.WindowInsets
 import android.widget.AutoCompleteTextView
 import android.widget.EditText
 import android.widget.ImageButton
-import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -35,23 +34,29 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.elevation.SurfaceColors
-import com.google.android.material.textfield.TextInputEditText
 import org.json.JSONArray
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.memory.ModelRuleRecord
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.models.ModelCleanupReportStore
+import org.teslasoft.assistant.preferences.models.ModelIdentity
+import org.teslasoft.assistant.preferences.models.ModelIdentityCodec
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
+import org.teslasoft.assistant.ui.widgets.AppDropdown
+import org.teslasoft.assistant.ui.widgets.AppRemovableChip
 
 /**
- * The full-screen model-rule add/edit form (Stage 4, §11 Revision 5). The rule
- * TEXT is the focus (a large box on top); below it the model strings this rule
- * applies to (removable chips + an Add-model dialog that offers the chat's
- * current model) and the organizing tags (a separate-pool chip input). A live
+ * The full-screen model-rule add/edit form (§11 Revision 6). The rule
+ * TEXT is the focus (a large box on top); below it the exact endpoint/model
+ * targets this rule applies to (removable chips + the shared favorites-first
+ * model picker) and the organizing tags (a separate-pool chip input). A live
  * character count gives the honest size readout §11 asks for, warning softly
  * when the rule gets long but never blocking a save.
  *
@@ -72,19 +77,27 @@ class ModelRuleEditorActivity : FragmentActivity() {
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var titleView: TextView? = null
-    private var fieldText: TextInputEditText? = null
+    private var fieldText: EditText? = null
     private var textSize: TextView? = null
     private var chipsModels: ChipGroup? = null
+    private var fieldModelEndpoint: TextView? = null
+    private var btnChooseModel: MaterialButton? = null
+    private var textSelectedModel: TextView? = null
     private var btnAddModel: MaterialButton? = null
     private var chipsTags: ChipGroup? = null
     private var fieldTagInput: AutoCompleteTextView? = null
+    private var btnAddTag: MaterialButton? = null
     private var btnSave: MaterialButton? = null
     private var btnAccept: MaterialButton? = null
 
     private var tagChips: ModelRuleTagChips? = null
 
-    /** Model strings this rule applies to, in add order (deduped case-insensitively). */
-    private val models = ArrayList<String>()
+    /** New exact targets and conservatively preserved pre-Revision-6 strings. */
+    private val targets = ArrayList<ModelIdentity>()
+    private val legacyModels = ArrayList<String>()
+    private var selectedEndpointId: String = ""
+    private var selectedModelId: String = ""
+    private var unavailableTargets: Set<ModelIdentity> = emptySet()
 
     companion object {
         /** Soft warning threshold for one rule's length (§11 — a nudge, never a
@@ -107,9 +120,13 @@ class ModelRuleEditorActivity : FragmentActivity() {
         fieldText = findViewById(R.id.field_rule_text)
         textSize = findViewById(R.id.text_rule_size)
         chipsModels = findViewById(R.id.chips_models)
+        fieldModelEndpoint = findViewById(R.id.field_model_endpoint)
+        btnChooseModel = findViewById(R.id.btn_choose_model)
+        textSelectedModel = findViewById(R.id.text_selected_model)
         btnAddModel = findViewById(R.id.btn_add_model)
         chipsTags = findViewById(R.id.chips_tags)
         fieldTagInput = findViewById(R.id.field_tag_input)
+        btnAddTag = findViewById(R.id.btn_add_tag)
         btnSave = findViewById(R.id.btn_rule_save)
         btnAccept = findViewById(R.id.btn_rule_accept)
 
@@ -118,9 +135,14 @@ class ModelRuleEditorActivity : FragmentActivity() {
         applyTheme()
 
         tagChips = ModelRuleTagChips(this, chipsTags!!, fieldTagInput!!)
+        unavailableTargets = ModelCleanupReportStore.get(this).load().unavailable
+        initializeEndpointSelection()
 
         btnBack?.setOnClickListener { finish() }
-        btnAddModel?.setOnClickListener { showAddModelDialog() }
+        fieldModelEndpoint?.setOnClickListener { showEndpointDropdown() }
+        btnChooseModel?.setOnClickListener { openPendingModelPicker() }
+        btnAddModel?.setOnClickListener { addSelectedTarget() }
+        btnAddTag?.setOnClickListener { tagChips?.confirmText() }
         btnSave?.setOnClickListener { save(activate = false) }
         btnAccept?.setOnClickListener { save(activate = true) }
 
@@ -144,14 +166,18 @@ class ModelRuleEditorActivity : FragmentActivity() {
                 return@runOffThread
             }
             val store = MemoryStore.getInstance(this)
+            store.migrateUnambiguousLegacyModelTargets()
             val record = ruleId?.let { store.getModelRule(it) }
             val tags = ruleId?.let { store.getTagsForRule(it) } ?: emptyList()
             runOnUiThread {
                 existing = record
                 if (record != null) {
                     fieldText?.setText(record.text)
-                    models.clear()
-                    parseModelStrings(record.modelStringsJson).forEach { addModel(it) }
+                    targets.clear()
+                    targets.addAll(ModelIdentityCodec.decode(record.modelTargetsJson))
+                    legacyModels.clear()
+                    legacyModels.addAll(parseModelStrings(record.modelStringsJson))
+                    renderModelChips()
                     tagChips?.setInitial(tags)
                     if (record.status == "draft") btnAccept?.visibility = View.VISIBLE
                     refreshSize()
@@ -161,25 +187,48 @@ class ModelRuleEditorActivity : FragmentActivity() {
         }
     }
 
-    /* ------------------------------ model strings ------------------------------ */
+    /* ------------------------------ model targets ------------------------------ */
 
-    private fun addModel(modelString: String) {
-        val trimmed = modelString.trim()
-        if (trimmed.isEmpty()) return
-        if (models.any { it.equals(trimmed, ignoreCase = true) }) return
-        models.add(trimmed)
+    private fun addTarget(endpointId: String, modelId: String) {
+        val target = ModelIdentity(endpointId, modelId)
+        if (target.endpointId.isBlank() || target.modelId.isBlank()) return
+        if (target in targets) return
+        targets.add(target)
         renderModelChips()
     }
 
     private fun renderModelChips() {
         val group = chipsModels ?: return
         group.removeAllViews()
-        for (m in models) {
-            val chip = Chip(this).apply {
-                text = m
+        for (target in targets.toList()) {
+            val chip = AppRemovableChip.create(this, group).apply {
+                text = getString(
+                    R.string.model_rule_target_label,
+                    endpointLabel(target.endpointId),
+                    target.modelId
+                )
+                isCloseIconVisible = true
+                if (target in unavailableTargets) {
+                    setChipIconResource(R.drawable.ic_report)
+                    isChipIconVisible = true
+                    chipIconTint = ColorStateList.valueOf(
+                        MaterialColors.getColor(this, androidx.appcompat.R.attr.colorError)
+                    )
+                    contentDescription = "${getString(R.string.model_cleanup_unavailable)}. $text"
+                }
+                setOnCloseIconClickListener {
+                    targets.remove(target)
+                    renderModelChips()
+                }
+            }
+            group.addView(chip)
+        }
+        for (legacy in legacyModels.toList()) {
+            val chip = AppRemovableChip.create(this, group).apply {
+                text = getString(R.string.model_rule_legacy_target_label, legacy)
                 isCloseIconVisible = true
                 setOnCloseIconClickListener {
-                    models.remove(m)
+                    legacyModels.remove(legacy)
                     renderModelChips()
                 }
             }
@@ -187,28 +236,106 @@ class ModelRuleEditorActivity : FragmentActivity() {
         }
     }
 
-    private fun showAddModelDialog() {
-        val field = EditText(this).apply {
-            hint = getString(R.string.model_rule_edit_add_model_hint)
-            // Offer the chat's current model so a one-word rule for "this model"
-            // is one tap; the user can clear it and type a family string instead.
-            setText(preferences?.getModel().orEmpty())
-            setSelection(text.length)
-            setSingleLine(true)
+    private fun initializeEndpointSelection() {
+        val endpoints = endpointProfiles()
+        if (endpoints.isEmpty()) {
+            selectedEndpointId = ""
+            fieldModelEndpoint?.apply {
+                text = getString(R.string.model_rule_select_endpoint)
+                isEnabled = false
+            }
+            btnChooseModel?.isEnabled = false
+            btnAddModel?.isEnabled = false
+            return
         }
-        val pad = (20 * resources.displayMetrics.density).toInt()
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(pad, pad, pad, 0)
-            addView(field)
+        val currentEndpointId = preferences?.getApiEndpointId().orEmpty()
+        val initial = endpoints.firstOrNull { it.id == currentEndpointId } ?: endpoints.first()
+        selectedEndpointId = initial.id
+        fieldModelEndpoint?.apply {
+            text = endpointDisplayLabel(initial)
+            isEnabled = true
         }
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.model_rule_edit_add_model)
-            .setMessage(R.string.model_rule_edit_add_model_msg)
-            .setView(container)
-            .setPositiveButton(R.string.btn_add) { _, _ -> addModel(field.text.toString()) }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+        btnChooseModel?.isEnabled = true
+        btnAddModel?.isEnabled = true
+        renderPendingModel()
+    }
+
+    private fun showEndpointDropdown() {
+        val dropdown = fieldModelEndpoint ?: return
+        val endpoints = endpointProfiles()
+        if (endpoints.isEmpty()) {
+            Toast.makeText(this, R.string.model_rule_no_endpoints, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = endpoints.map(::endpointDisplayLabel)
+        val current = endpoints.indexOfFirst { it.id == selectedEndpointId }
+        AppDropdown.show(dropdown, labels, current) { position ->
+            val endpoint = endpoints[position]
+            if (endpoint.id != selectedEndpointId) {
+                selectedEndpointId = endpoint.id
+                selectedModelId = ""
+            }
+            dropdown.text = endpointDisplayLabel(endpoint)
+            renderPendingModel()
+        }
+    }
+
+    private fun openPendingModelPicker() {
+        val endpoint = endpointProfiles().firstOrNull { it.id == selectedEndpointId }
+        if (endpoint == null) {
+            Toast.makeText(this, R.string.model_rule_no_endpoints, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val dialog = AdvancedModelSelectorDialogFragment.newModelRuleTargetInstance(
+            chatId = chatId,
+            endpointId = endpoint.id,
+            currentChatModel = preferences?.getModel().orEmpty().takeIf {
+                preferences?.getApiEndpointId().orEmpty() == endpoint.id
+            }.orEmpty()
+        )
+        dialog.setModelSelectedListener { modelId ->
+            selectedModelId = modelId
+            renderPendingModel()
+        }
+        dialog.show(supportFragmentManager, "ModelRuleModelSelector")
+    }
+
+    private fun renderPendingModel() {
+        textSelectedModel?.apply {
+            text = selectedModelId
+            visibility = if (selectedModelId.isBlank()) View.GONE else View.VISIBLE
+        }
+    }
+
+    private fun addSelectedTarget() {
+        if (selectedEndpointId.isBlank() || selectedModelId.isBlank()) {
+            openPendingModelPicker()
+            return
+        }
+        addTarget(selectedEndpointId, selectedModelId)
+    }
+
+    private fun endpointProfiles(): List<ApiEndpointObject> =
+        ApiEndpointPreferences.getApiEndpointPreferences(this)
+            .getApiEndpointsList(this)
+            .filter { it.id.isNotBlank() && endpointDisplayLabel(it).isNotBlank() }
+            .distinctBy { it.id }
+            .sortedBy { endpointDisplayLabel(it).lowercase() }
+
+    private fun endpointDisplayLabel(endpoint: ApiEndpointObject): String = when {
+        endpoint.provider.isNotBlank() &&
+            !endpoint.provider.equals(endpoint.label, ignoreCase = true) ->
+            "${endpoint.provider} — ${endpoint.label}"
+        endpoint.label.isNotBlank() -> endpoint.label
+        else -> endpoint.provider
+    }
+
+    private fun endpointLabel(endpointId: String): String = try {
+        endpointProfiles().firstOrNull { it.id == endpointId }
+            ?.let(::endpointDisplayLabel)
+            ?: getString(R.string.model_rule_missing_endpoint)
+    } catch (_: Exception) {
+        getString(R.string.model_rule_missing_endpoint)
     }
 
     private fun parseModelStrings(json: String): List<String> = try {
@@ -216,9 +343,9 @@ class ModelRuleEditorActivity : FragmentActivity() {
         (0 until arr.length()).map { arr.getString(it) }
     } catch (_: Exception) { emptyList() }
 
-    private fun modelsToJson(): String {
+    private fun legacyModelsToJson(): String {
         val arr = JSONArray()
-        models.forEach { arr.put(it) }
+        legacyModels.forEach { arr.put(it) }
         return arr.toString()
     }
 
@@ -229,10 +356,10 @@ class ModelRuleEditorActivity : FragmentActivity() {
         val tv = textSize ?: return
         if (len >= SIZE_WARN_CHARS) {
             tv.text = getString(R.string.model_rule_size_warn, len)
-            tv.setTextColor(ResourcesCompat.getColor(resources, R.color.light_red, theme))
+            tv.setTextColor(MaterialColors.getColor(tv, androidx.appcompat.R.attr.colorError))
         } else {
             tv.text = getString(R.string.model_rule_size_count, len)
-            tv.setTextColor(ResourcesCompat.getColor(resources, R.color.text_subtitle, theme))
+            tv.setTextColor(MaterialColors.getColor(tv, R.attr.appSubtleTextColor))
         }
     }
 
@@ -243,35 +370,51 @@ class ModelRuleEditorActivity : FragmentActivity() {
             Toast.makeText(this, R.string.mem_edit_still_loading, Toast.LENGTH_SHORT).show()
             return
         }
-        // Flush a typed-but-unconfirmed tag so it isn't silently dropped.
-        tagChips?.confirmText()
 
+        // Flush a typed-but-unconfirmed tag before reading the selected ids.
+        // A newly typed tag is created off-thread, so saving continues only
+        // after that work has finished and its chip is part of the selection.
+        tagChips?.confirmText { saveAfterTagFlush(activate) }
+            ?: saveAfterTagFlush(activate)
+    }
+
+    private fun saveAfterTagFlush(activate: Boolean) {
         val text = fieldText?.text?.toString()?.trim().orEmpty()
         if (text.isEmpty()) {
             Toast.makeText(this, R.string.model_rule_edit_required, Toast.LENGTH_SHORT).show()
             return
         }
-        val modelsJson = modelsToJson()
+        val legacyModelsJson = legacyModelsToJson()
+        val targetsJson = ModelIdentityCodec.encode(targets)
         val tagIds = tagChips?.selectedTagIds() ?: emptyList()
 
         runOffThread {
             val store = MemoryStore.getInstance(this)
             val prior = existing ?: ruleId?.let { store.getModelRule(it) }
+            val willBeActive = prior == null || prior.status == "active" || activate
+            if (willBeActive && targets.isEmpty() && legacyModels.isEmpty()) {
+                runOnUiThread {
+                    Toast.makeText(this, R.string.model_rule_edit_model_required, Toast.LENGTH_SHORT).show()
+                }
+                return@runOffThread
+            }
             val id = prior?.ruleId ?: MemoryStore.newId("mr_")
             val record = if (prior == null) {
                 ModelRuleRecord(
                     ruleId = id,
                     text = text,
-                    modelStringsJson = modelsJson,
+                    modelStringsJson = legacyModelsJson,
                     status = "active",
                     sourceModelString = null,
                     createdAt = MemoryStore.nowIso(),
-                    updatedAt = null
+                    updatedAt = null,
+                    modelTargetsJson = targetsJson
                 )
             } else {
                 prior.copy(
                     text = text,
-                    modelStringsJson = modelsJson,
+                    modelStringsJson = legacyModelsJson,
+                    modelTargetsJson = targetsJson,
                     // Save keeps a draft a draft; Accept activates it.
                     status = if (activate) "active" else prior.status,
                     updatedAt = MemoryStore.nowIso()

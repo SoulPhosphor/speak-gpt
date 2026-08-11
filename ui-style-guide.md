@@ -370,6 +370,18 @@ Use for a short whole-number input that sits on the same line as its label.
 
 Set `android:ems` and `android:maxLength` on the individual field according to the digits it must accept.
 
+## Removable form chips
+
+`Widget.App.Chip.Removable`
+
+Use for a selected form value that appears as a chip and can be removed
+individually with its trailing X. Inflate `layout/view_app_removable_chip.xml`
+through `AppRemovableChip` so programmatically generated chips keep this shared
+geometry instead of copying padding and height in Kotlin.
+
+The chip may add a leading semantic status icon when the feature requires one.
+That status icon does not replace the trailing removal control.
+
 ## Screen sections
 
 ### Section title

@@ -352,14 +352,14 @@ data class RpTagRecord(
 )
 
 /* -------------------------------------------------------------------------
- * Model rules (Stage 4, owner_approved_rules §11, Revision 5): user-written
- * patches for a specific AI model's habits. The MODEL STRING is the primary
- * identity — there are no profiles/groups. Each rule carries its own list of
- * model strings it applies to (a family string like "glm-5" matches every
- * snapshot; endpoints/provider prefixes are irrelevant — the same model is
- * the same model from any provider). Tags organize rules for the human
+ * Model rules (owner_approved_rules §11, Revision 6): user-written patches
+ * for a specific AI model's habits. New targets use the stable endpoint id +
+ * exact model id returned by that endpoint. [modelStringsJson] remains only
+ * for conservatively preserved legacy fuzzy targets; the editor exposes them
+ * so the user can replace them instead of silently guessing. Tags organize
+ * rules for the human
  * (tap a tag → every rule that carries it), a separate pool that never
- * decides what injects — the model strings do that. Injection is automatic
+ * decides what injects — the endpoint/model targets do that. Injection is automatic
  * and ON by default; a global default + per-chat toggle gate it. A rule with
  * status='draft' is a Phase 6 Archivist suggestion awaiting review.
  * ------------------------------------------------------------------------- */
@@ -367,17 +367,25 @@ data class RpTagRecord(
 data class ModelRuleRecord(
     val ruleId: String,
     val text: String,
-    /** JSON array of model id strings this rule applies to. A rule matches a
-     *  chat when any string here matches the chat's model (case-insensitive
-     *  contains, provider prefix ignored — see ModelRuleMatcher). */
+    /** JSON array of pre-Revision-6 fuzzy model strings. New rules never add
+     *  values here; unresolved old values stay visible and editable. */
     val modelStringsJson: String,
     val status: String,                   // draft | active (drafts arrive with Phase 6 filing)
-    /** The model string of the chat a draft was filed from (Phase 6). Seeds
-     *  the model-strings list the user confirms on accept. Null for
-     *  hand-written rules. */
+    /** The model string of the chat a draft was filed from (Phase 6). It is a
+     *  review hint only; the user chooses an exact endpoint/model target on
+     *  accept. Null for hand-written rules. */
     val sourceModelString: String? = null,
     val createdAt: String,
-    val updatedAt: String? = null
+    val updatedAt: String? = null,
+    /** JSON array of exact endpoint/model identities (see ModelIdentityCodec). */
+    val modelTargetsJson: String = "[]"
+)
+
+/** Result of removing unavailable exact targets without breaking multi-model rules. */
+data class ModelRuleTargetRemoval(
+    val removedTargets: Int,
+    val updatedRules: Int,
+    val deletedRules: Int
 )
 
 /** A model-rule tag — a plain organizing label, no colors. Its own pool,
@@ -671,7 +679,7 @@ data class MemoryStoreData(
     val partyMembers: List<PartyMemberRecord> = emptyList(),
     val cardEntries: List<CardEntryRecord> = emptyList(),
     val rpTags: List<RpTagRecord> = emptyList(),
-    // Model rules (Stage 4, rules §11 Revision 5) — user-authored, so they
+    // Model rules (rules §11 Revision 6) — user-authored, so they
     // ride every backup like everything else the user typed in.
     val modelRules: List<ModelRuleRecord> = emptyList(),
     val modelRuleTags: List<ModelRuleTagRecord> = emptyList(),
