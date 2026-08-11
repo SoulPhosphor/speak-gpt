@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat Portrait Geometry Mockup</title>
+<style>
+:root{
+  --portrait:80px;
+  --overlap:24px;
+  --bubble-radius:16px;
+  --message-gap:24px;
+  --user-gutter:42px;
+  --page:#18181b;
+  --panel:#232329;
+  --bubble-ai:#2b2b33;
+  --bubble-user:#4a3f66;
+  --text:#f4f4f5;
+  --muted:#b8b8c2;
+  --line:#5d5d69;
+  --accent:#d6c7ff;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#101014;color:var(--text)}
+.app{min-height:100vh;display:grid;grid-template-columns:minmax(280px,360px) minmax(360px,1fr);gap:20px;padding:20px}
+.controls{background:var(--panel);border:1px solid #34343d;border-radius:18px;padding:18px;align-self:start;position:sticky;top:20px}
+h1{font-size:19px;margin:0 0 8px}.help{color:var(--muted);font-size:13px;line-height:1.45;margin-bottom:18px}
+.control{margin:16px 0}.control label{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin-bottom:8px}.control output{color:var(--accent);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%}input[type=text]{width:100%;border:1px solid #444450;background:#17171c;color:var(--text);border-radius:8px;padding:10px 12px;font-size:14px}
+.check{display:flex;gap:8px;align-items:center;font-size:14px;margin-top:10px}.presets{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+button{border:1px solid #474752;background:#1b1b21;color:var(--text);border-radius:8px;padding:9px 8px;cursor:pointer}button:hover{background:#292932}
+.readout{margin-top:18px;padding-top:14px;border-top:1px solid #393943;color:var(--muted);font-size:13px;line-height:1.5}.readout strong{color:var(--text)}
+.stage{display:flex;justify-content:center;align-items:flex-start;padding:8px 0 30px}.phone{width:min(100%,412px);min-height:780px;background:var(--page);border:1px solid #383842;border-radius:30px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.header{height:58px;border-bottom:1px solid #313139;display:flex;align-items:center;padding:0 16px;color:#e9e9ef;font-size:15px}.messages{padding:24px 14px 120px}.message-shell{position:relative;margin-bottom:var(--message-gap)}
+.message-shell.ai{padding-left:calc(var(--portrait) - var(--overlap))}.message-shell.user{padding-right:calc(var(--portrait) - var(--overlap));padding-left:var(--user-gutter)}
+.bubble{position:relative;border-radius:var(--bubble-radius);padding:16px 14px 10px;line-height:1.46;font-size:16px;min-height:72px}.ai .bubble{background:var(--bubble-ai)}.user .bubble{background:var(--bubble-user);margin-left:auto}
+.portrait{position:absolute;width:var(--portrait);height:var(--portrait);top:0;border-radius:18px;overflow:hidden;border:2px solid #777787;background:radial-gradient(circle at 42% 34%,#f0d0b6 0 12%,transparent 13%),radial-gradient(circle at 60% 34%,#f0d0b6 0 12%,transparent 13%),radial-gradient(circle at 50% 48%,#d8aa87 0 11%,transparent 12%),linear-gradient(145deg,#805fbb,#3b2d62);box-shadow:0 7px 18px rgba(0,0,0,.28);z-index:4}.ai .portrait{left:0}.user .portrait{right:0}
+.name{position:relative;z-index:5;display:inline-block;margin-top:-25px;margin-bottom:8px;padding:3px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bubble-ai);font-size:18px;font-weight:700}.user .name{display:block;width:max-content;margin-left:auto;background:var(--bubble-user)}
+.message-text{min-height:58px}.actions{display:flex;gap:11px;align-items:center;padding-top:9px;color:#d5d5dd;font-size:17px}.user .actions{justify-content:flex-end}.action{width:32px;height:32px;display:grid;place-items:center;border-radius:7px;color:#d8d8e0}
+.measure{position:absolute;pointer-events:none;color:#ffdfa0;font-size:11px;z-index:8}.measure.horizontal{height:1px;border-top:1px dashed #ffdfa0;top:calc(var(--portrait) + 8px)}.ai .measure.horizontal{left:0;width:calc(var(--portrait) - var(--overlap))}.user .measure.horizontal{right:0;width:calc(var(--portrait) - var(--overlap))}.measure.horizontal span{position:absolute;top:3px;white-space:nowrap}.ai .measure.horizontal span{left:2px}.user .measure.horizontal span{right:2px}
+.composer{position:absolute;bottom:18px;left:14px;right:14px;height:54px;border-radius:27px;background:#292930;border:1px solid #3d3d48}.phone-inner{position:relative;min-height:780px}
+@media(max-width:800px){.app{grid-template-columns:1fr;padding:12px}.controls{position:static}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="controls">
+    <h1>Portrait geometry playground</h1>
+    <div class="help">These numbers are intended as Android-design values: treat <b>1 CSS px ≈ 1 dp</b> for choosing the proportions. The final Android XML can use the same numbers as a first pass.</div>
+    <div class="control"><label>Portrait size <output id="portraitOut">80 dp</output></label><input id="portrait" type="range" min="56" max="112" value="80" step="2"></div>
+    <div class="control"><label>Portrait overlap <output id="overlapOut">24 dp</output></label><input id="overlap" type="range" min="8" max="44" value="24" step="2"></div>
+    <div class="control"><label>User left gutter <output id="gutterOut">42 dp</output></label><input id="gutter" type="range" min="24" max="72" value="42" step="2"></div>
+    <div class="control"><label for="previewName">Name preview</label><input id="previewName" type="text" value="Ash"></div>
+    <label class="check"><input id="showName" type="checkbox" checked> Show name badge</label>
+    <label class="check"><input id="showMeasure" type="checkbox" checked> Show geometry guide</label>
+    <div class="presets"><button data-size="72" data-overlap="20">72 / 20</button><button data-size="80" data-overlap="24">80 / 24</button><button data-size="88" data-overlap="28">88 / 28</button></div>
+    <div class="readout"><div><strong>Visible portrait:</strong> <span id="rSize">80 dp</span></div><div><strong>Bubble inset created by portrait:</strong> <span id="rInset">56 dp</span></div><div><strong>Overlap into bubble:</strong> <span id="rOverlap">24 dp</span></div><div style="margin-top:8px">My starting guess is <strong>80 / 24</strong>. The sliders are there specifically so we can prove me wrong without editing XML five times.</div></div>
+  </aside>
+  <main class="stage">
+    <div class="phone"><div class="phone-inner"><div class="header">☰ &nbsp;&nbsp;&nbsp; Conversation</div><div class="messages">
+      <div class="message-shell ai"><div class="portrait"></div><div class="measure horizontal"><span class="measureText">56 dp bubble clearance</span></div><div class="bubble"><div class="name nameText">Ash</div><div class="message-text">This is roughly how an assistant message could sit beside the larger portrait. The text begins after the portrait has cleared the top corner, then gets the wider bubble below.</div><div class="actions"><span class="action">ⓘ</span><span class="action">🔊</span><span class="action">↗</span><span class="action">⚑</span><span class="action">↻</span><span class="action">⧉</span><span class="action">✎</span></div></div></div>
+      <div class="message-shell user"><div class="portrait"></div><div class="measure horizontal"><span class="measureText">56 dp bubble clearance</span></div><div class="bubble"><div class="name nameText">Ash</div><div class="message-text">The user stays visibly right-aligned, with a permanent empty gutter on the left even when the message gets wide.</div><div class="actions"><span class="action">ⓘ</span><span class="action">🔊</span><span class="action">↗</span><span class="action">⚑</span><span class="action">↻</span><span class="action">⧉</span><span class="action">✎</span></div></div></div>
+      <div class="message-shell ai"><div class="portrait"></div><div class="bubble"><div class="name nameText">Ash</div><div class="message-text">A second message makes the 24 dp message-to-message spacing easier to judge.</div><div class="actions"><span class="action">ⓘ</span><span class="action">🔊</span><span class="action">↗</span><span class="action">⚑</span><span class="action">↻</span><span class="action">⧉</span><span class="action">✎</span></div></div></div>
+    </div><div class="composer"></div></div></div>
+  </main>
+</div>
+<script>
+const root=document.documentElement,portrait=document.getElementById('portrait'),overlap=document.getElementById('overlap'),gutter=document.getElementById('gutter'),nameInput=document.getElementById('previewName'),showName=document.getElementById('showName'),showMeasure=document.getElementById('showMeasure');
+function update(){const p=Number(portrait.value),o=Number(overlap.value),g=Number(gutter.value),inset=p-o;root.style.setProperty('--portrait',p+'px');root.style.setProperty('--overlap',o+'px');root.style.setProperty('--user-gutter',g+'px');document.getElementById('portraitOut').textContent=p+' dp';document.getElementById('overlapOut').textContent=o+' dp';document.getElementById('gutterOut').textContent=g+' dp';document.getElementById('rSize').textContent=p+' dp';document.getElementById('rInset').textContent=inset+' dp';document.getElementById('rOverlap').textContent=o+' dp';document.querySelectorAll('.measureText').forEach(el=>el.textContent=inset+' dp bubble clearance')}
+function updateName(){const txt=nameInput.value||'Name';document.querySelectorAll('.nameText').forEach(el=>el.textContent=txt)}
+function updateNameVisibility(){document.querySelectorAll('.name').forEach(el=>el.style.display=showName.checked?'':'none')}
+function updateMeasure(){document.querySelectorAll('.measure').forEach(el=>el.style.display=showMeasure.checked?'':'none')}
+[portrait,overlap,gutter].forEach(el=>el.addEventListener('input',update));nameInput.addEventListener('input',updateName);showName.addEventListener('change',updateNameVisibility);showMeasure.addEventListener('change',updateMeasure);document.querySelectorAll('button[data-size]').forEach(btn=>btn.addEventListener('click',()=>{portrait.value=btn.dataset.size;overlap.value=btn.dataset.overlap;update()}));update();updateName();updateNameVisibility();updateMeasure();
+</script>
+</body>
+</html>
