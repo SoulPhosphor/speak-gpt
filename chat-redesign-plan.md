@@ -229,48 +229,32 @@ Each slice must preserve streaming, Markwon, selection/edit/retry/speak/share/re
 
 ---
 
-## 4.13 Initial chat-name font set
+### 4.13 Initial chat-name font set
 
-The first bundled chat-name font set should be small enough to remain curated, but broad enough that companions can feel materially different. The owner approved the following **style categories** as the starting target:
+The initial bundled chat-name font collection is deliberately **a curated set of visual choices, not a one-font-per-personality taxonomy**. Users choose by feel. The font picker should show each family rendered as an actual sample speaker name, and additional families may be added or replaced later without changing the message architecture.
 
-- **Default / plain** — retain the current plain chat font as an option.
-- **Cute / girlie** — playful, soft, expressive.
-- **Handwritten** — casual handwriting rather than formal script.
-- **Gothic** — blackletter / dark historical display character.
-- **Futuristic** — technological / science-fiction display character.
-- **Fancy handwriting** — elegant script/calligraphy, distinct from casual handwritten.
-- **Rounded sans serif** — clean and readable without the squared-off feel of the default.
-- **Marker** — bold hand-drawn marker character.
+Owner-approved starting families:
 
-The exact families are deliberately swappable. The Appearance screen should present **font previews using a sample speaker name**, not only family names, because these are identity choices based primarily on visual feel.
+1. **Roboto** — retain the current plain/default option.
+2. **Kalnia**
+3. **Homemade Apple**
+4. **Crafty Girls**
+5. **Manufacturing Consent**
+6. **Special Elite**
+7. **Solitreo**
+8. **SN Pro**
 
-Working first-pass candidates to audition:
+Do not rename these into personality categories in the UI. Present the actual family names and a live preview so users can judge the visual character themselves.
 
-| Style | Candidate |
-|---|---|
-| Default / plain | Current Roboto/default chat face |
-| Cute / girlie | TBD after visual audition |
-| Handwritten | Caveat |
-| Gothic | UnifrakturCook or another readable blackletter candidate |
-| Futuristic | Orbitron |
-| Fancy handwriting | Great Vibes or another readable script candidate |
-| Rounded sans serif | Nunito |
-| Marker | Permanent Marker |
+Implementation rules:
 
-These names are candidates, not permanent product contracts. A font may be replaced later without redesigning the message component because all name typography flows through Chat Name Style.
+- Bundle only the face(s) actually needed for chat names rather than whole unused weight/style families.
+- Preserve the current/default Roboto option.
+- Route every family through the shared Chat Name Style abstraction; never hard-code a companion directly to a font resource.
+- User and AI default font choices are independent in Appearance.
+- A companion may optionally override the AI default with any family in this same collection.
+- Size remains independently adjustable because these families have very different apparent heights and widths at the same `sp` value.
+- Font availability is a presentation resource concern only; message body typography and markdown rendering remain untouched.
+- Keep licensing metadata/notices required by each bundled family when font resources are added.
 
-### Bundling rule
-
-For the initial implementation, prefer **bundled font resources** for chat-name styles rather than requiring a runtime font-provider lookup. Keep the footprint controlled by including only the face(s) actually needed for chat names, rather than every weight/style in a family. The default/current font remains available.
-
-## 5. Control Center / Appearance entry
-
-| Control Center | `SettingsActivity.kt`, `activity_settings.xml`, `TileFragment` | Shared row/card restyle; add **Appearance** directly beneath **Images** with subtitle **“Customize the look of your chat.”** Appearance owns Phase 4 chat display/name-style controls now and receives palette controls later when Phase 2 resumes. |
-
-## 6. Relationship to palette work
-
-Phase 2 no longer creates the Appearance destination. Phase 2 adds palette/theme controls to the **existing Appearance screen created by Phase 4**.
-
-## 7. Phase 4 summary
-
-- **Phase 4 — Chat restyle:** implement the binding visual contract in Section 4: adaptable left/right message shell; optional portraits, names, and independent AI/user bubbles; current non-classic 16dp bubble geometry; 24dp message spacing; existing action icons/order with universal far-left `ⓘ`; anchored/selectable Message Details; dedicated Appearance screen and Control Center row; later-background compatibility; input-pill/composer restyle; stable current header treatment unless safety fixes require change. Single UI now — no `AssistantFragment` to mirror. **Must also resolve the standing intermittent top-bar/header-vanishing bug — see Section 7.4.** Drawer work may land later without redesigning message rows.
+The collection is intentionally open-ended. Adding another approved family later should require adding the resource and registering it with the Chat Name Style/font picker, not redesigning preferences or message layouts.
