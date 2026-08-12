@@ -8890,12 +8890,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 progress?.visibility = View.GONE
                 messageInput?.requestFocus()
 
-                val m = ArrayList(msgs.filter { it.role != ChatRole.System })
+                // Preserve the normal leading System prefix byte-for-byte so providers
+                // can reuse any prompt cache already built for the conversation. The
+                // title-only instruction belongs at the boundary immediately before
+                // the first conversation turn. Appending it as a User message caused
+                // some models to title the naming instruction itself instead.
+                val m = ArrayList(msgs)
+                val conversationStart = m.indexOfFirst { it.role != ChatRole.System }
+                    .let { if (it >= 0) it else m.size }
 
                 m.add(
+                    conversationStart,
                     ChatMessage(
-                        role = ChatRole.User,
-                        content = "Create a short name for this chat according to the messages provided. Enter just short name and nothing else. Don't add word 'chat' or 'bot' to the name."
+                        role = ChatRole.System,
+                        content = "Create a concise 2-6 word title for the conversation that follows. " +
+                                "Return only the title text. Describe the conversation topic, not this naming instruction. " +
+                                "Do not explain or describe what the user wants. Do not prefix the title with " +
+                                "'Title', 'Name', 'Chat', or 'Bot'."
                     )
                 )
 
@@ -8907,7 +8918,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val titleModel = model.ifBlank { preferences?.getModel() ?: "gpt-4o" }
                 val chatCompletionRequest2 = ChatCompletionRequest(
                     model = ModelId(titleModel),
-                    maxTokens = 10,
+                    // Ten tokens was too small for a heterogeneous set of models:
+                    // some spend part of the completion budget before emitting title
+                    // text. The prompt still constrains the visible answer to 2-6 words.
+                    maxTokens = 128,
                     messages = m
                 )
 
@@ -8918,7 +8932,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // name. One catch-all used to swallow both — including a
                 // half-applied settings copy.
                 val newChatName: String? = try {
-                    ai!!.chatCompletion(chatCompletionRequest2).choices.firstOrNull()?.message?.content?.trim()
+                    val rawName = ai!!.chatCompletion(chatCompletionRequest2)
+                        .choices.firstOrNull()?.message?.content
+                    rawName
+                        ?.trim()
+                        ?.lineSequence()
+                        ?.firstOrNull { it.isNotBlank() }
+                        ?.trim()
+                        ?.replace(Regex("(?i)^(title|name)\\s*:\\s*"), "")
+                        ?.trim()
+                        ?.removeSurrounding("\"")
+                        ?.removeSurrounding("'")
+                        ?.removeSurrounding("`")
+                        ?.removeSurrounding("**")
+                        ?.trim()
+                        ?.take(80)
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
                 } catch (e: Exception) {
                     logVoiceEvent("auto-name request failed (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS); a later turn retries")
                     null
