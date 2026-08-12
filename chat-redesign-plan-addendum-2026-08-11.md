@@ -40,36 +40,104 @@ Moving a setting into Appearance is not permission to replace its stored prefere
 
 The universal far-left `ⓘ` Message Details action should use the same visual size and touch-target sizing as the other Message Actions icons. It is not a larger or emphasized control.
 
-## 4. Implementation-tuning variables
+## 4. Final owner-approved outer message geometry
 
-Do not stop implementation to ask the owner to invent dimensions that can only be judged visually.
+The geometry below supersedes the earlier approximate portrait, gutter, and message-spacing targets in `chat-redesign-plan.md` and the earlier first-pass values in this addendum.
 
-The following are implementation-tuning variables rather than unresolved owner design questions:
+The HTML tuner used a design reference of approximately **1 CSS px = 1 Android dp** for first-pass proportion work. These are intended as Android `dp` starting values, followed by normal device validation rather than percentage-of-screen values.
 
-- exact assistant/user maximum message widths;
-- exact user gutter beyond the already-approved visible-left-gutter rule;
-- portrait size within the approved large-portrait intent;
-- portrait overlap depth and frame treatment;
-- name-badge padding/radius/precise intersection depth;
+### 4.1 Mirroring rule
+
+- AI geometry anchors from the **left** speaker side.
+- User geometry anchors from the **right** speaker side.
+- Portrait and portrait-on name offsets mirror between speakers.
+- The **user-only left inset** is the deliberate asymmetry. It changes only the user's left message boundary; the user's right boundary remains anchored at the same speaker-side distance used by the AI on the left.
+- Changing the user left inset must never resize the screen/container or move the user's right anchor.
+
+### 4.2 Bubble placement
+
+- **Bubble distance from speaker-side edge: `27dp`.** Use the same value from the AI-left edge and the user-right edge.
+- **User bubble left inset only: `26dp`.** This narrows the user message from the left while leaving its right edge fixed.
+- Bubble / reading-surface radius remains **`16dp` uniform corners**.
+- Bubble internal text padding remains **`14dp` horizontal** and **`14dp` vertical** for this geometry pass. Do not alter those values while implementing the outer positioning contract.
+
+### 4.3 Portrait-on geometry
+
+When Profile Images is enabled:
+
+- Portrait size: **`76dp`**.
+- Portrait horizontal offset from the mirrored speaker-side baseline: **`-15dp`**.
+- Portrait vertical offset: **`-36dp`**.
+- AI and user portraits use the same size and mirrored offsets.
+- Portrait space collapses when Profile Images is disabled.
+
+### 4.4 Names with portraits enabled
+
+When Names and Profile Images are both enabled:
+
+- Name horizontal offset from the mirrored baseline: **`52dp`**.
+- Name vertical offset: **`-30dp`**.
+- Apply those values as mirrored speaker-side offsets, not absolute screen coordinates.
+- The name has **no filled/color background block** behind it.
+- The name is text/identity treatment, not a chip or filled badge.
+- The message border may be interrupted around the name as needed so a border line never runs through the name glyphs.
+
+### 4.5 Names with portraits disabled
+
+When Names is enabled but Profile Images is disabled, **do not reuse the portrait-on `52dp / -30dp` name offsets**. Use the bubble itself as the anchor:
+
+- AI name begins **`1dp` from the AI bubble's left edge**.
+- User name begins **`1dp` from the user bubble's right edge**, mirrored.
+- Vertically center the name on the bubble's **top border line**. This relationship defines the vertical position; no separate Y-coordinate is required.
+- The top border approaches the name, stops before the glyphs, and resumes after the name. **The line must never render behind or through the name text.**
+- Do not place a filled/color background behind the name.
+- If Names is disabled, omit the name treatment entirely.
+
+### 4.6 Conversation rhythm
+
+- **Distance between message units: `53dp`.**
+- This is the outer message-unit rhythm chosen with the portrait overlap visible; do not fall back to the older `24dp` working target.
+- Portrait/name overlap must not collapse this visible separation.
+
+### 4.7 Locked / not tuned by the geometry exercise
+
+The geometry exercise did not authorize unrelated visual changes:
+
+- Bubble internal horizontal padding: **`14dp`**.
+- Bubble internal vertical padding: **`14dp`**.
+- Bubble radius: **`16dp`**.
+- Message Actions spacing/order: preserve the existing behavior unless separately approved.
+- Message body font size: unchanged.
+- Composer: unchanged until its own implementation step.
+
+## 5. Remaining implementation-tuning variables
+
+The owner has now supplied the important outer message geometry. Do not reopen those measurements as abstract design questions unless device testing exposes a real problem.
+
+The following still remain implementation-level tuning rather than unresolved product decisions:
+
+- responsive constraint details needed to preserve the approved geometry on unusually narrow/wide screens;
+- portrait frame/border visual styling that does not change the locked `76dp` portrait geometry;
+- tiny border-clearance details around name glyphs, provided the border never runs behind the name;
 - small Message Details popup dimensions;
-- minor internal padding/spacing that does not change the established hierarchy.
+- other minor layout corrections required for large system font scale, insets, or rotation without changing the approved hierarchy.
 
-Choose sensible first-pass values that preserve the approved structure, then validate with screenshots/on-device testing. Owner input is required for conceptual changes, not for a 2dp adjustment that preserves the contract.
+Choose the smallest correction that preserves this contract and validate on the Pixel test device.
 
-## 5. Portrait geometry design aid
+## 6. Portrait geometry design aid
 
-`chat-portrait-geometry-mockup.html` is an interactive measuring board committed to the `chat-redesign` branch for tuning portrait size, overlap depth, and the user left gutter before values are transferred into Android XML.
+`chat-portrait-geometry-mockup.html` is an interactive measuring-board artifact on the `chat-redesign` branch. It was used to reason about the geometry but its original defaults are no longer authoritative.
 
 - Treat 1 CSS px as a conceptual 1dp starting value for proportion work, not as a production rendering rule.
-- Current first-pass preset: **80dp portrait / 24dp overlap**.
-- The mockup is a design aid only and is expected to receive visual tweaks.
-- Once proportions look right, transfer those measurements into XML and validate on the Pixel test device.
+- The binding final values are in Section 4 of this addendum.
+- If the mockup's defaults disagree with Section 4, **Section 4 wins**.
+- Transfer the approved relationships into Android XML/constraints and validate on the Pixel test device.
 
-## 6. Immediate implementation-order correction
+## 7. Immediate implementation-order correction
 
 Before the adaptable message-shell work begins:
 
 1. Create Appearance with the already-approved controls.
 2. Move Hide Model Names and the existing hardware-keyboard behavior into Appearance without resetting stored values.
 3. Remove the obsolete legacy tiles listed above while leaving Auto-save Chats untouched and preserving AMOLED wiring.
-4. Continue with the message-shell implementation order already defined in `chat-redesign-plan.md`.
+4. Continue with the adaptable message shell using the final geometry in Section 4 rather than the earlier working targets.
