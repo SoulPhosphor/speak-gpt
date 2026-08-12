@@ -1,0 +1,131 @@
+name: One-shot auto-title repair
+
+on:
+  push:
+    branches:
+      - chatgpt/fix-auto-chat-titles
+
+permissions:
+  contents: write
+
+jobs:
+  patch-auto-title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/fix-auto-chat-titles
+
+      - name: Apply auto-title repair
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
+          text = path.read_text(encoding="utf-8")
+
+          old_prompt = r'''                val m = ArrayList(msgs.filter { it.role != ChatRole.System })
+
+                m.add(
+                    ChatMessage(
+                        role = ChatRole.User,
+                        content = "Create a short name for this chat according to the messages provided. Enter just short name and nothing else. Don't add word 'chat' or 'bot' to the name."
+                    )
+                )
+'''
+          new_prompt = r'''                // Preserve the normal leading System prefix byte-for-byte so providers
+                // can reuse any prompt cache already built for the conversation. The
+                // title-only instruction belongs at the boundary immediately before
+                // the first conversation turn. Appending it as a User message caused
+                // some models to title the naming instruction itself instead.
+                val m = ArrayList(msgs)
+                val conversationStart = m.indexOfFirst { it.role != ChatRole.System }
+                    .let { if (it >= 0) it else m.size }
+
+                m.add(
+                    conversationStart,
+                    ChatMessage(
+                        role = ChatRole.System,
+                        content = "Create a concise 2-6 word title for the conversation that follows. " +
+                                "Return only the title text. Describe the conversation topic, not this naming instruction. " +
+                                "Do not explain or describe what the user wants. Do not prefix the title with " +
+                                "'Title', 'Name', 'Chat', or 'Bot'."
+                    )
+                )
+'''
+          if text.count(old_prompt) != 1:
+              raise SystemExit(f"expected exactly one old auto-title prompt block, found {text.count(old_prompt)}")
+          text = text.replace(old_prompt, new_prompt, 1)
+
+          old_request = r'''                val chatCompletionRequest2 = ChatCompletionRequest(
+                    model = ModelId(titleModel),
+                    maxTokens = 10,
+                    messages = m
+                )
+'''
+          new_request = r'''                val chatCompletionRequest2 = ChatCompletionRequest(
+                    model = ModelId(titleModel),
+                    // Ten tokens was too small for a heterogeneous set of models:
+                    // some spend part of the completion budget before emitting title
+                    // text. The prompt still constrains the visible answer to 2-6 words.
+                    maxTokens = 128,
+                    messages = m
+                )
+'''
+          if text.count(old_request) != 1:
+              raise SystemExit(f"expected exactly one old auto-title request block, found {text.count(old_request)}")
+          text = text.replace(old_request, new_request, 1)
+
+          old_response = r'''                val newChatName: String? = try {
+                    ai!!.chatCompletion(chatCompletionRequest2).choices.firstOrNull()?.message?.content?.trim()
+                } catch (e: Exception) {
+                    logVoiceEvent("auto-name request failed (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS); a later turn retries")
+                    null
+                }
+'''
+          new_response = r'''                val newChatName: String? = try {
+                    val rawName = ai!!.chatCompletion(chatCompletionRequest2)
+                        .choices.firstOrNull()?.message?.content
+                    rawName
+                        ?.trim()
+                        ?.lineSequence()
+                        ?.firstOrNull { it.isNotBlank() }
+                        ?.trim()
+                        ?.replace(Regex("(?i)^(title|name)\\s*:\\s*"), "")
+                        ?.trim()
+                        ?.removeSurrounding("\"")
+                        ?.removeSurrounding("'")
+                        ?.removeSurrounding("`")
+                        ?.removeSurrounding("**")
+                        ?.trim()
+                        ?.take(80)
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                } catch (e: Exception) {
+                    logVoiceEvent("auto-name request failed (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS); a later turn retries")
+                    null
+                }
+'''
+          if text.count(old_response) != 1:
+              raise SystemExit(f"expected exactly one old auto-title response block, found {text.count(old_response)}")
+          text = text.replace(old_response, new_response, 1)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Verify patch and compile unit-test sources
+        shell: bash
+        run: |
+          git diff --check
+          ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Commit repair and remove one-shot workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -- .github/workflows/chatgpt-auto-title-patch.yml
+          git add -- app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt
+          git commit -m "Fix chat auto-title requests"
+          git push origin HEAD:chatgpt/fix-auto-chat-titles
