@@ -84,10 +84,12 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         val autoLoadLastLoreBooks = getString(id + "_autoload_last_lorebooks", "false") == "true"
         val lastUsedLoreBookIds = getString(id + "_last_used_lorebook_ids", "")
         val avatarRef = getString(id + "_avatar_ref", "")
+        val chatNameFontId = getString(id + "_chat_name_font_id", "")
+        val chatNameSizeSp = getString(id + "_chat_name_size_sp", "0").toIntOrNull() ?: 0
         return PersonaObject(
             label, prompt, activationPromptId,
             coreLoreBookId, additionalLoreBookIds, autoLoadLastLoreBooks, lastUsedLoreBookIds,
-            avatarRef, id
+            avatarRef, id, chatNameFontId, chatNameSizeSp
         )
     }
 
@@ -125,6 +127,8 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         putString(id + "_autoload_last_lorebooks", if (persona.autoLoadLastLoreBooks) "true" else "false")
         putString(id + "_last_used_lorebook_ids", persona.lastUsedLoreBookIds)
         putString(id + "_avatar_ref", persona.avatarRef)
+        putString(id + "_chat_name_font_id", persona.chatNameFontId)
+        putString(id + "_chat_name_size_sp", persona.chatNameSizeSp.toString())
     }
 
     /**
@@ -206,6 +210,8 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         preferences.edit { remove(id + "_autoload_last_lorebooks") }
         preferences.edit { remove(id + "_last_used_lorebook_ids") }
         preferences.edit { remove(id + "_avatar_ref") }
+        preferences.edit { remove(id + "_chat_name_font_id") }
+        preferences.edit { remove(id + "_chat_name_size_sp") }
     }
 
     fun getPersonasList(): ArrayList<PersonaObject> {

@@ -620,8 +620,6 @@ class ChatListAdapter(
         private fun updateCard(selector: MaterialCardView, icon: ImageView, pin: ImageView, tintColor: Int, iconColor: Int, chatMessage: HashMap<String, String>, isSelected: Boolean) {
             if (isSelected) {
                 selector.backgroundTintList = ColorStateList.valueOf(mContext.requireActivity().getColor(R.color.accent_300) + 0x99000000.toInt()) // Kotlin programming language bug (actually integer can handle values from -0x80000000 to 0x7FFFFFFF)
-            } else if (Preferences.getPreferences(mContext.requireActivity(), "").getMonochromeBackgroundForChatList()) {
-                selector.backgroundTintList = ColorStateList.valueOf(mContext.requireActivity().getColor(R.color.accent_100) + 0x66000000)
             } else {
                 selector.backgroundTintList = ColorStateList.valueOf(mContext.requireActivity().getColor(tintColor) - 0x11000000)
             }

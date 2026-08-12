@@ -84,6 +84,8 @@ object CompanionBackupCodec {
             o.put("autoload_last_lorebooks", p.autoLoadLastLoreBooks)
             o.put("last_used_lorebook_ids", JSONArray(p.lastUsedLoreBookIds))
             o.put("avatar_ref", p.avatarRef)
+            o.put("chat_name_font_id", p.chatNameFontId)
+            o.put("chat_name_size_sp", p.chatNameSizeSp)
             profiles.put(o)
         }
         root.put(KEY_COMPANION_PROFILES, profiles)
@@ -201,7 +203,9 @@ object CompanionBackupCodec {
                     additionalLoreBookNames = names,
                     autoLoadLastLoreBooks = o.optBoolean("autoload_last_lorebooks", false),
                     lastUsedLoreBookIds = stringList(o.getJSONArray("last_used_lorebook_ids")),
-                    avatarRef = o.optString("avatar_ref", "")
+                    avatarRef = o.optString("avatar_ref", ""),
+                    chatNameFontId = o.optString("chat_name_font_id", ""),
+                    chatNameSizeSp = o.optInt("chat_name_size_sp", 0)
                 )
             )
         }

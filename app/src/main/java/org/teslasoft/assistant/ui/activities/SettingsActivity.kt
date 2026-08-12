@@ -59,15 +59,11 @@ class SettingsActivity : FragmentActivity() {
     private var rowProfileImageProperties: LinearLayout? = null
     private var rowVoiceSettings: LinearLayout? = null
     private var rowImages: LinearLayout? = null
-    private var tileChatLayout: TileFragment? = null
-    private var tileDesktopMode: TileFragment? = null
+    private var rowAppearance: LinearLayout? = null
     private var rowAboutApp: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
-    private var tileAmoledMode: TileFragment? = null
     private var tileChatsAutoSave: TileFragment? = null
     private var rowAlertDebugMenu: LinearLayout? = null
-    private var tileHideModelNames: TileFragment? = null
-    private var tileMonochromeBackgroundForChatList: TileFragment? = null
     // private var threadLoading: LinearLayout? = null
     private var root: ScrollView? = null
     private var btnBack: ImageButton? = null
@@ -97,7 +93,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.constraintLayout8, true)
         transition.excludeTarget(R.id.tile_images, true)
         transition.excludeTarget(R.id.tile_voice_settings, true)
-        transition.excludeTarget(R.id.constraintLayout12, true)
         transition.excludeTarget(R.id.constraintLayout13, true)
         transition.excludeTarget(R.id.constraintLayout14, true)
         transition.excludeTarget(R.id.constraintLayout16, true)
@@ -116,15 +111,11 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_silent_mode, true)
         transition.excludeTarget(R.id.tile_always_speak, true)
         transition.excludeTarget(R.id.tile_auto_language_detection, true)
-        transition.excludeTarget(R.id.tile_chat_layout, true)
-        transition.excludeTarget(R.id.tile_desktop_mode, true)
+        transition.excludeTarget(R.id.tile_appearance, true)
         transition.excludeTarget(R.id.tile_about_app, true)
         transition.excludeTarget(R.id.tile_documentation, true)
-        transition.excludeTarget(R.id.tile_amoled_mode, true)
         transition.excludeTarget(R.id.tile_chats_autosave, true)
         transition.excludeTarget(R.id.tile_alert_debug_menu, true)
-        transition.excludeTarget(R.id.tile_hide_model_names, true)
-        transition.excludeTarget(R.id.tile_monochrome_background_for_chat_list, true)
 
         val transition2 = TransitionInflater.from(this).inflateTransition(android.R.transition.move).apply {
             interpolator = FastOutLinearInInterpolator()
@@ -136,7 +127,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.constraintLayout8, true)
         transition2.excludeTarget(R.id.tile_images, true)
         transition2.excludeTarget(R.id.tile_voice_settings, true)
-        transition2.excludeTarget(R.id.constraintLayout12, true)
         transition2.excludeTarget(R.id.constraintLayout13, true)
         transition2.excludeTarget(R.id.constraintLayout14, true)
         transition2.excludeTarget(R.id.constraintLayout16, true)
@@ -153,15 +143,11 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_silent_mode, true)
         transition2.excludeTarget(R.id.tile_always_speak, true)
         transition2.excludeTarget(R.id.tile_auto_language_detection, true)
-        transition2.excludeTarget(R.id.tile_chat_layout, true)
-        transition2.excludeTarget(R.id.tile_desktop_mode, true)
+        transition2.excludeTarget(R.id.tile_appearance, true)
         transition2.excludeTarget(R.id.tile_about_app, true)
         transition2.excludeTarget(R.id.tile_documentation, true)
-        transition2.excludeTarget(R.id.tile_amoled_mode, true)
         transition2.excludeTarget(R.id.tile_chats_autosave, true)
         transition2.excludeTarget(R.id.tile_alert_debug_menu, true)
-        transition2.excludeTarget(R.id.tile_hide_model_names, true)
-        transition2.excludeTarget(R.id.tile_monochrome_background_for_chat_list, true)
 
         // Set the transition as the shared element enter transition
         window.sharedElementEnterTransition = transition
@@ -202,7 +188,6 @@ class SettingsActivity : FragmentActivity() {
         reloadAmoled()
 
         val t1 = Thread {
-            createFragments4()
             createFragments5()
         }
 
@@ -240,52 +225,6 @@ class SettingsActivity : FragmentActivity() {
         }.start()
     }
 
-    private fun createFragments4() {
-        val t4 = Thread {
-            tileChatLayout = TileFragment.newInstance(
-                preferences?.getLayout() == "classic",
-                true,
-                getString(R.string.tile_classic_layout_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_chat,
-                false,
-                chatId,
-                getString(R.string.tile_classic_layout_desc)
-            )
-
-            tileDesktopMode = TileFragment.newInstance(
-                preferences?.getDesktopMode() == true,
-                true,
-                getString(R.string.tile_desktop_mode_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_desktop,
-                false,
-                chatId,
-                getString(R.string.tile_desktop_mode_desc)
-            )
-
-            tileMonochromeBackgroundForChatList = TileFragment.newInstance(
-                preferences?.getMonochromeBackgroundForChatList() == true,
-                true,
-                "Monochrome background for chat list",
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_experiment,
-                false,
-                chatId,
-                "This feature allows you to enable monochrome background for chat list."
-            )
-        }
-
-        t4.start()
-        t4.join()
-    }
-
     private fun createFragments5() {
         val t5 = Thread {
             tileDocumentation = TileFragment.newInstance(
@@ -301,31 +240,6 @@ class SettingsActivity : FragmentActivity() {
                 functionDesc = getString(R.string.tile_documentation_desc)
             )
 
-            tileAmoledMode = TileFragment.newInstance(
-                preferences?.getAmoledPitchBlack() == true && isDarkThemeEnabled(),
-                true,
-                getString(R.string.tile_amoled_mode_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_experiment,
-                !isDarkThemeEnabled(),
-                chatId,
-                getString(R.string.tile_amoled_mode_desc)
-            )
-
-            tileHideModelNames = TileFragment.newInstance(
-                preferences?.getHideModelNames() == true,
-                true,
-                "Hide model names",
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_visibility_off,
-                false,
-                chatId,
-                "This feature allows you to hide model names in the chat list to make it more minimalist and less distractive."
-            )
         }
 
         t5.start()
@@ -354,13 +268,8 @@ class SettingsActivity : FragmentActivity() {
 
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction()
-            .replace(R.id.tile_chat_layout, tileChatLayout!!)
-            .replace(R.id.tile_desktop_mode, tileDesktopMode!!)
-            .replace(R.id.tile_amoled_mode, tileAmoledMode!!)
             .replace(R.id.tile_chats_autosave, tileChatsAutoSave!!)
             .replace(R.id.tile_documentation, tileDocumentation!!)
-            .replace(R.id.tile_hide_model_names, tileHideModelNames!!)
-            .replace(R.id.tile_monochrome_background_for_chat_list, tileMonochromeBackgroundForChatList!!)
 
         return operation
     }
@@ -377,6 +286,7 @@ class SettingsActivity : FragmentActivity() {
         rowProfileImageProperties = findViewById(R.id.tile_profile_image_properties)
         rowVoiceSettings = findViewById(R.id.tile_voice_settings)
         rowImages = findViewById(R.id.tile_images)
+        rowAppearance = findViewById(R.id.tile_appearance)
         rowAboutApp = findViewById(R.id.tile_about_app)
         rowAlertDebugMenu = findViewById(R.id.tile_alert_debug_menu)
 
@@ -411,6 +321,10 @@ class SettingsActivity : FragmentActivity() {
             startActivity(Intent(this, ImageGenerationSettingsActivity::class.java))
         }
 
+        rowAppearance?.setOnClickListener {
+            startActivity(Intent(this, AppearanceActivity::class.java))
+        }
+
         rowAboutApp?.setOnClickListener {
             startActivity(Intent(this, AboutActivity::class.java).putExtra("chatId", chatId))
         }
@@ -419,53 +333,11 @@ class SettingsActivity : FragmentActivity() {
             startActivity(Intent(this, AlertDebugMenuActivity::class.java).putExtra("chatId", chatId))
         }
 
-        tileChatLayout?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setLayout("classic")
-            } else {
-                preferences?.setLayout("bubbles")
-            }
-        }}
-
-        tileDesktopMode?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setDesktopMode(true)
-            } else {
-                preferences?.setDesktopMode(false)
-            }
-        }}
-
-        tileAmoledMode?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setAmoledPitchBlack(true)
-            } else {
-                preferences?.setAmoledPitchBlack(false)
-            }
-
-            restartActivity()
-        }}
-
         tileChatsAutoSave?.setOnCheckedChangeListener { isChecked -> run {
             if (isChecked) {
                 preferences?.setChatsAutosave(true)
             } else {
                 preferences?.setChatsAutosave(false)
-            }
-        }}
-
-        tileHideModelNames?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setHideModelNames(true)
-            } else {
-                preferences?.setHideModelNames(false)
-            }
-        }}
-
-        tileMonochromeBackgroundForChatList?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setMonochromeBackgroundForChatList(true)
-            } else {
-                preferences?.setMonochromeBackgroundForChatList(false)
             }
         }}
 

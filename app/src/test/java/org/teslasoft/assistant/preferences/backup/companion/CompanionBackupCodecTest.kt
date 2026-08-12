@@ -44,7 +44,9 @@ class CompanionBackupCodecTest {
                 additionalLoreBookNames = mapOf("lb-a" to "Book A", "lb-b" to "Book B"),
                 autoLoadLastLoreBooks = true,
                 lastUsedLoreBookIds = listOf("lb-a"),
-                avatarRef = "a".repeat(64)
+                avatarRef = "a".repeat(64),
+                chatNameFontId = "solitreo",
+                chatNameSizeSp = 22
             ),
             CompanionProfileEntry(
                 id = "p-2",

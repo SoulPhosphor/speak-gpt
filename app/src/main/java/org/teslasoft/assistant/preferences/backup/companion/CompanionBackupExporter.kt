@@ -114,7 +114,9 @@ object CompanionBackupExporter {
                 additionalLoreBookNames = additionalKept.associateWith { lorebookNames.getValue(it) },
                 autoLoadLastLoreBooks = p.autoLoadLastLoreBooks,
                 lastUsedLoreBookIds = p.lastUsedLoreBookIdList(),
-                avatarRef = p.avatarRef
+                avatarRef = p.avatarRef,
+                chatNameFontId = p.chatNameFontId,
+                chatNameSizeSp = p.chatNameSizeSp
             )
         }
 

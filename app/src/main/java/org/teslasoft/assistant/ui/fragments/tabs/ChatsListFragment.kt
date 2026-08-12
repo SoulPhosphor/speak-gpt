@@ -118,7 +118,6 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         "debug_mode" to false,
         "amoled_pitch_black" to false,
         "hide_model_names" to false,
-        "monochrome_background_for_chat_list" to false,
         "show_memory_status_on_chat_list" to true
     )
 
@@ -652,7 +651,6 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         appearanceFlags["debug_mode"] = preferences!!.getDebugMode()
         appearanceFlags["amoled_pitch_black"] = preferences!!.getAmoledPitchBlack()
         appearanceFlags["hide_model_names"] = preferences!!.getHideModelNames()
-        appearanceFlags["monochrome_background_for_chat_list"] = preferences!!.getMonochromeBackgroundForChatList()
         appearanceFlags["show_memory_status_on_chat_list"] = preferences!!.getShowMemoryStatusOnChatList()
 
         // R8 went fuck himself...
@@ -753,8 +751,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
         val adapterRebuildRequired =
             appearanceFlags["debug_mode"] != preferences!!.getDebugMode() ||
             appearanceFlags["amoled_pitch_black"] != preferences!!.getAmoledPitchBlack() ||
-            appearanceFlags["hide_model_names"] != preferences!!.getHideModelNames() ||
-            appearanceFlags["monochrome_background_for_chat_list"] != preferences!!.getMonochromeBackgroundForChatList()
+            appearanceFlags["hide_model_names"] != preferences!!.getHideModelNames()
 
         if (!suppressInitialRefresh) {
             when {

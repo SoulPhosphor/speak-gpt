@@ -92,8 +92,7 @@ class MainActivity : FragmentActivity() {
     private val appearanceFlags: HashMap<String, Boolean> = hashMapOf(
         "debug_mode" to false,
         "amoled_pitch_black" to false,
-        "hide_model_names" to false,
-        "monochrome_background_for_chat_list" to false
+        "hide_model_names" to false
     )
 
     private enum class StartupDestination {
@@ -132,7 +131,6 @@ class MainActivity : FragmentActivity() {
         appearanceFlags["debug_mode"] = preferences!!.getDebugMode()
         appearanceFlags["amoled_pitch_black"] = preferences!!.getAmoledPitchBlack()
         appearanceFlags["hide_model_names"] = preferences!!.getHideModelNames()
-        appearanceFlags["monochrome_background_for_chat_list"] = preferences!!.getMonochromeBackgroundForChatList()
 
         navigationBar = findViewById(R.id.navigation_bar)
 
@@ -374,8 +372,7 @@ class MainActivity : FragmentActivity() {
             if (
                 appearanceFlags["debug_mode"] != preferences!!.getDebugMode() ||
                 appearanceFlags["amoled_pitch_black"] != preferences!!.getAmoledPitchBlack() ||
-                appearanceFlags["hide_model_names"] != preferences!!.getHideModelNames() ||
-                appearanceFlags["monochrome_background_for_chat_list"] != preferences!!.getMonochromeBackgroundForChatList()) {
+                appearanceFlags["hide_model_names"] != preferences!!.getHideModelNames()) {
                 restartActivity()
             }
 

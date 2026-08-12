@@ -3128,4 +3128,38 @@
     <!-- Model-facing label for the injected summary (decision 14; approved
          July 29 2026). Sent as its own system message, never shown in chat. -->
     <string name="summarizer_injection_header">Summary of the earlier conversation so far:</string>
+
+    <!-- Chat redesign: Appearance destination and companion name-style override. -->
+    <string name="appearance_title">Appearance</string>
+    <string name="appearance_subtitle">Customize the look of your chat.</string>
+    <string name="appearance_section_message_display">Message Display</string>
+    <string name="appearance_profile_images">Profile Images</string>
+    <string name="appearance_profile_images_hint">Show speaker profile images in chat.</string>
+    <string name="appearance_names">Names</string>
+    <string name="appearance_names_hint">Show user and AI names with their messages.</string>
+    <string name="appearance_ai_bubble">AI Bubble</string>
+    <string name="appearance_ai_bubble_hint">Show the AI message bubble decoration.</string>
+    <string name="appearance_user_bubble">User Bubble</string>
+    <string name="appearance_user_bubble_hint">Show the user message bubble decoration.</string>
+    <string name="appearance_model_names">Model Names</string>
+    <string name="appearance_model_names_hint">Show the model that produced each message.</string>
+    <string name="appearance_token_usage">Token Usage</string>
+    <string name="appearance_token_usage_hint">Show provider-reported token usage for each message.</string>
+    <string name="appearance_hardware_keyboard_shortcuts">Hardware Keyboard Shortcuts</string>
+    <string name="appearance_hardware_keyboard_shortcuts_hint">Press Enter to send and Shift+Enter for a new line.</string>
+    <string name="appearance_section_name_style">Name Style</string>
+    <string name="appearance_user_name_font">User Name Font</string>
+    <string name="appearance_user_name_size">User Name Size</string>
+    <string name="appearance_ai_name_font">AI Name Font</string>
+    <string name="appearance_ai_name_size">AI Name Size</string>
+    <string name="appearance_preview_text">Preview Text</string>
+    <string name="appearance_preview_text_hint">Change the sample used below. This does not rename anyone.</string>
+    <string name="appearance_preview_default">Sample Name</string>
+    <string name="appearance_font_previews">Font Previews</string>
+    <string name="appearance_size_sp">%1$d sp</string>
+    <string name="appearance_use_default">Use Appearance Default</string>
+    <string name="companion_chat_name_style">Chat Name Style</string>
+    <string name="companion_chat_name_style_hint">Optionally override the AI name style for this companion.</string>
+    <string name="companion_chat_name_font">AI Name Font</string>
+    <string name="companion_chat_name_size">AI Name Size</string>
 </resources>

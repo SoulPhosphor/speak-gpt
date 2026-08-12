@@ -286,6 +286,13 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.AppearanceActivity"
+            android:exported="false"
+            android:label="@string/appearance_title"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.VoiceAdvancedSettingsActivity"
             android:exported="false"
             android:label="@string/title_voice_advanced"

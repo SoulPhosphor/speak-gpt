@@ -63,7 +63,10 @@ data class CompanionProfileEntry(
     /** Last-used additional-lorebook bookkeeping ids (invisible bookkeeping). */
     val lastUsedLoreBookIds: List<String>,
     /** Profile Images hash, or "" for no picture. */
-    val avatarRef: String
+    val avatarRef: String,
+    /** Optional chat-name overrides; empty/zero inherit Appearance defaults. */
+    val chatNameFontId: String = "",
+    val chatNameSizeSp: Int = 0
 )
 
 data class ActivationPromptEntry(

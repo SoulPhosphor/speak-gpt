@@ -47,7 +47,11 @@ class PersonaObject(
      * store's companion record). Empty only for a brand-new, not-yet-saved
      * object; [PersonaPreferences.setPersona] assigns one on first save. Existing
      * companions keep their original hashed id (the preference key). */
-    var id: String = ""
+    var id: String = "",
+    /* Optional chat-name typography overrides. Empty/zero means inherit the
+     * Appearance AI-name default; the two values may be overridden separately. */
+    var chatNameFontId: String = "",
+    var chatNameSizeSp: Int = 0
 ) {
     /** Parsed view of [additionalLoreBookIds]. */
     fun additionalLoreBookIdList(): ArrayList<String> = splitIds(additionalLoreBookIds)

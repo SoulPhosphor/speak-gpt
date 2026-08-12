@@ -104,6 +104,18 @@ class PersonaStableIdTest {
         assertEquals("changed", store.getPersona(id).prompt)
     }
 
+    @Test fun chatNameStyleOverridesRoundTrip() {
+        val p = sample("Aria").apply {
+            chatNameFontId = "solitreo"
+            chatNameSizeSp = 22
+        }
+        store.setPersona(p)
+
+        val loaded = store.getPersona(p.id)
+        assertEquals("solitreo", loaded.chatNameFontId)
+        assertEquals(22, loaded.chatNameSizeSp)
+    }
+
     @Test fun renamingCreatesNoSecondRecordOrSecondCompanion() {
         val p = sample("Aria")
         store.setPersona(p)

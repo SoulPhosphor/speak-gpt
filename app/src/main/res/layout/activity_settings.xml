@@ -326,81 +326,36 @@
                     android:contentDescription="@string/tile_voice_settings_title" />
             </LinearLayout>
 
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:id="@+id/constraintLayout12"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginEnd="8dp"
+            <LinearLayout
+                android:id="@+id/tile_appearance"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:paddingHorizontal="20dp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/tile_images">
 
-                <LinearLayout
-                    android:id="@+id/linearLayout9"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_marginEnd="12dp"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal"
-                    android:weightSum="2"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent">
+                <ImageView
+                    style="@style/Widget.App.Row.Icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_chat"
+                    android:tint="?attr/colorPrimary" />
 
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_chat_layout"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1" />
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_hide_model_names"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/appearance_title" />
 
-                    </androidx.constraintlayout.widget.ConstraintLayout>
-
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/appearance_subtitle" />
                 </LinearLayout>
 
-                <LinearLayout
-                    android:id="@+id/linearLayout99"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_marginTop="8dp"
-                    android:layout_marginEnd="12dp"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal"
-                    android:weightSum="2"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/linearLayout9">
-
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_monochrome_background_for_chat_list"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1" />
-
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_empty_11"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1">
-
-                    </androidx.constraintlayout.widget.ConstraintLayout>
-
-                </LinearLayout>
-
-            </androidx.constraintlayout.widget.ConstraintLayout>
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/appearance_title" />
+            </LinearLayout>
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/constraintLayout13"
@@ -411,12 +366,10 @@
                 android:layout_marginEnd="8dp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/constraintLayout12">
+                app:layout_constraintTop_toBottomOf="@+id/tile_appearance">
 
-                <!-- The Function calling tile and its row are removed with
-                     the whole feature (image-generation-rebuild-plan.md §15). -->
                 <LinearLayout
-                    android:id="@+id/linearLayout11"
+                    android:id="@+id/linearLayout119"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp"
@@ -427,52 +380,6 @@
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent">
-
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_desktop_mode"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1" />
-
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/linearLayout112"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_marginTop="8dp"
-                    android:layout_marginEnd="12dp"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal"
-                    android:weightSum="2"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/linearLayout11">
-
-                    <androidx.constraintlayout.widget.ConstraintLayout
-                        android:id="@+id/tile_amoled_mode"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginHorizontal="4dp"
-                        android:layout_weight="1" />
-
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/linearLayout119"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="12dp"
-                    android:layout_marginTop="8dp"
-                    android:layout_marginEnd="12dp"
-                    android:baselineAligned="false"
-                    android:orientation="horizontal"
-                    android:weightSum="2"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/linearLayout112">
 
                     <androidx.constraintlayout.widget.ConstraintLayout
                         android:id="@+id/tile_chats_autosave"

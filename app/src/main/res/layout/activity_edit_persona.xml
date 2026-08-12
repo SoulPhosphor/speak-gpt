@@ -144,6 +144,72 @@
                 app:layout_constraintTop_toBottomOf="@+id/field_label" />
 
             <TextView
+                android:id="@+id/label_chat_name_style"
+                style="@style/Widget.App.Section.Title"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/companion_chat_name_style"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/text_field_label_error" />
+
+            <TextView
+                android:id="@+id/hint_chat_name_style"
+                style="@style/Widget.App.Section.Hint"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/companion_chat_name_style_hint"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/label_chat_name_style" />
+
+            <TextView
+                android:id="@+id/label_chat_name_font"
+                style="@style/Widget.App.Field.Label"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/companion_chat_name_font"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/hint_chat_name_style" />
+
+            <TextView
+                android:id="@+id/field_chat_name_font"
+                style="@style/Widget.App.Dropdown.CanonicalValue"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/label_chat_name_font" />
+
+            <TextView
+                android:id="@+id/label_chat_name_size"
+                style="@style/Widget.App.Field.Label"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/companion_chat_name_size"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/field_chat_name_font" />
+
+            <TextView
+                android:id="@+id/field_chat_name_size"
+                style="@style/Widget.App.Dropdown.CanonicalValue"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/label_chat_name_size" />
+
+            <TextView
                 android:id="@+id/label_field_prompt"
                 style="@style/Widget.App.Field.Label"
                 android:layout_width="0dp"
@@ -153,7 +219,7 @@
                 android:text="@string/persona_prompt_hint"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/text_field_label_error" />
+                app:layout_constraintTop_toBottomOf="@+id/field_chat_name_size" />
 
             <TextView
                 android:id="@+id/hint_field_prompt"

@@ -498,22 +498,77 @@ class Preferences private constructor(private var preferences: SharedPreferences
         }
     }
 
-    /**
-     * Retrieves the monochrome background for chat list status from the shared preferences.
-     *
-     * @return The monochrome background for chat list status, true if enabled or false otherwise.
-     */
-    fun getMonochromeBackgroundForChatList() : Boolean {
-        return getGlobalBoolean("monochrome_background_for_chat_list", false)
+    /** Appearance controls for the adaptable chat message shell. */
+    fun getShowChatProfileImages(): Boolean =
+        getGlobalBoolean("chat_show_profile_images", true)
+
+    fun setShowChatProfileImages(state: Boolean) {
+        putGlobalBoolean("chat_show_profile_images", state, true)
+    }
+
+    fun getShowChatNames(): Boolean = getGlobalBoolean("chat_show_names", true)
+
+    fun setShowChatNames(state: Boolean) {
+        putGlobalBoolean("chat_show_names", state, true)
+    }
+
+    fun getShowAiBubble(): Boolean = getGlobalBoolean("chat_show_ai_bubble", true)
+
+    fun setShowAiBubble(state: Boolean) {
+        putGlobalBoolean("chat_show_ai_bubble", state, true)
+    }
+
+    fun getShowUserBubble(): Boolean = getGlobalBoolean("chat_show_user_bubble", true)
+
+    fun setShowUserBubble(state: Boolean) {
+        putGlobalBoolean("chat_show_user_bubble", state, true)
     }
 
     /**
-     * Enable/disable monochrome background for chat list.
-     *
-     * @param state mode.
+     * Positive UI for the existing negative preference. Keeping one source of
+     * truth preserves every stored value without a destructive key rewrite.
      */
-    fun setMonochromeBackgroundForChatList(state: Boolean) {
-        putGlobalBoolean("monochrome_background_for_chat_list", state)
+    fun getShowModelNames(): Boolean = !getHideModelNames()
+
+    fun setShowModelNames(state: Boolean) {
+        setHideModelNames(!state)
+    }
+
+    fun getShowTokenUsage(): Boolean = getGlobalBoolean("chat_show_token_usage", false)
+
+    fun setShowTokenUsage(state: Boolean) {
+        putGlobalBoolean("chat_show_token_usage", state)
+    }
+
+    /** Renamed presentation of Desktop Mode; the stored key and behavior stay intact. */
+    fun getHardwareKeyboardShortcuts(): Boolean = getDesktopMode()
+
+    fun setHardwareKeyboardShortcuts(state: Boolean) {
+        setDesktopMode(state)
+    }
+
+    fun getUserChatNameFont(): String = getGlobalString("chat_user_name_font", "roboto")
+
+    fun setUserChatNameFont(fontId: String) {
+        putGlobalString("chat_user_name_font", fontId, "roboto")
+    }
+
+    fun getUserChatNameSizeSp(): Int = getGlobalInt("chat_user_name_size_sp", 18)
+
+    fun setUserChatNameSizeSp(sizeSp: Int) {
+        putGlobalInt("chat_user_name_size_sp", sizeSp, 18)
+    }
+
+    fun getAiChatNameFont(): String = getGlobalString("chat_ai_name_font", "roboto")
+
+    fun setAiChatNameFont(fontId: String) {
+        putGlobalString("chat_ai_name_font", fontId, "roboto")
+    }
+
+    fun getAiChatNameSizeSp(): Int = getGlobalInt("chat_ai_name_size_sp", 18)
+
+    fun setAiChatNameSizeSp(sizeSp: Int) {
+        putGlobalInt("chat_ai_name_size_sp", sizeSp, 18)
     }
 
     /**

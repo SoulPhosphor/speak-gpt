@@ -81,6 +81,8 @@ object CompanionRestorePlanner {
                 if (p.autoLoadLastLoreBooks) "true" else "false"
             personas[p.id + "_last_used_lorebook_ids"] = keptLastUsed.joinToString(",")
             personas[p.id + "_avatar_ref"] = p.avatarRef
+            personas[p.id + "_chat_name_font_id"] = p.chatNameFontId
+            personas[p.id + "_chat_name_size_sp"] = p.chatNameSizeSp.toString()
         }
 
         val activation = LinkedHashMap<String, Any?>()

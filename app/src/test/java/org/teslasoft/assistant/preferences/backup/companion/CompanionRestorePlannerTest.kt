@@ -144,7 +144,9 @@ class CompanionRestorePlannerTest {
         assertEquals("ap-p-1", personas["p-1_activation_prompt_id"])
         assertEquals("true", personas["p-1_autoload_last_lorebooks"])
         assertEquals("hash-p-1", personas["p-1_avatar_ref"])
-        assertEquals(8, personas.keys.count { it.startsWith("p-1_") })
+        assertEquals("", personas["p-1_chat_name_font_id"])
+        assertEquals("0", personas["p-1_chat_name_size_sp"])
+        assertEquals(10, personas.keys.count { it.startsWith("p-1_") })
     }
 
     @Test
