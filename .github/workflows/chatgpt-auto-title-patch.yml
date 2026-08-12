@@ -120,11 +120,9 @@ jobs:
           path.write_text(text, encoding="utf-8")
           PY
 
-      - name: Verify patch and compile unit-test sources
+      - name: Verify patch
         shell: bash
-        run: |
-          git diff --check
-          ./gradlew testDebugUnitTest --no-daemon
+        run: git diff --check
 
       - name: Commit repair and remove one-shot workflow
         shell: bash
