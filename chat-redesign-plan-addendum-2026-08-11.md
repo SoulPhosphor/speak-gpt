@@ -6,7 +6,7 @@ Licensed under the Apache License, Version 2.0.
 
 # Chat Redesign Plan Addendum — August 11, 2026
 
-This addendum is part of the Phase 4 chat-redesign plan and records owner rulings made after the latest `chat-redesign-plan.md` commit. Where this addendum conflicts with older plan wording, this addendum wins until the main plan is reconciled.
+This addendum is part of the Phase 4 chat-redesign plan and records the final outer-message geometry and legacy-settings cleanup rulings made on August 11. The main `chat-redesign-plan.md` has now been reconciled with the later August 12 metadata, image-content, and composer rulings. For any later conflict outside the locked geometry in Section 4 of this addendum, the newer dated ruling in `chat-redesign-plan.md` wins.
 
 ## 1. Legacy Control Center cleanup
 
@@ -14,27 +14,24 @@ The old six-tile chat/settings block is being retired deliberately.
 
 - **Classic / Non-Classic:** remove the UI and retire the concept entirely. Do not migrate it into a replacement mode or continue honoring the old layout preference as a user-facing design selector.
 - **Desktop Mode:** remove the old tile and expose the same underlying behavior in Appearance as **Hardware Keyboard Shortcuts**.
-- **Hide Model Names:** remove the old tile and expose the same setting in Appearance as **Hide Model Names**.
+- **Hide Model Names:** remove the old negatively worded tile. The new Appearance control is the positive **Model names** On / Off toggle defined in `chat-redesign-plan.md`. Preserve the user's existing behavior by mapping the old hide value to the inverse visible-state value; do not silently reset it.
 - **Monochrome:** remove the setting and its obsolete chat-list-only presentation behavior. Do not carry it into Appearance.
 - **AMOLED:** remove the standalone Control Center button/tile, but do **not** blindly remove the existing AMOLED implementation or wiring. Preserve the capability so it can later be incorporated properly into Themes.
 - **Auto-save Chats:** explicitly **out of scope** for this redesign/settings cleanup. It has its own wiring and will be handled in a separate careful sweep. Do not remove, rewrite, or migrate it as part of Phase 4.
 
-## 2. Appearance additions
+## 2. Appearance additions and preference preservation
 
-Add these controls to the Appearance destination in addition to the already-approved chat display/name-style controls:
+Add **Hardware Keyboard Shortcuts** — On / Off to the Appearance destination in addition to the controls defined in the main chat plan.
 
-- **Hide Model Names** — On / Off
-- **Hardware Keyboard Shortcuts** — On / Off
-
-Those exact Title Case labels are binding.
+The former Hide Model Names setting is not exposed under that old negative label. Its replacement is the main plan's positive **Model names** toggle. The main plan also adds the independent **Token usage** toggle, which defaults Off.
 
 ### Preference-preservation rule
 
 Moving a setting into Appearance is not permission to replace its stored preference key or reset the user's value.
 
-- Preserve the existing stored value/behavior for Hide Model Names.
+- Preserve the existing Hide Model Names behavior when moving to the positive **Model names** UI. If the old stored value is `hideModelNames = true`, the new visible-state control must initially read Model names = Off; if false, it reads On. A future preference-key cleanup may migrate this explicitly, but must preserve the effective value.
 - Preserve the existing Desktop Mode preference/value when it is relabeled as Hardware Keyboard Shortcuts.
-- If a technical migration becomes necessary, carry the old value forward rather than silently reverting to a default.
+- If another technical migration becomes necessary, carry the old value forward rather than silently reverting to a default.
 
 ## 3. Message Details icon sizing
 
@@ -42,7 +39,7 @@ The universal far-left `ⓘ` Message Details action should use the same visual s
 
 ## 4. Final owner-approved outer message geometry
 
-The geometry below supersedes the earlier approximate portrait, gutter, and message-spacing targets in `chat-redesign-plan.md` and the earlier first-pass values in this addendum.
+The geometry below supersedes the earlier approximate portrait, gutter, and message-spacing targets in older versions of `chat-redesign-plan.md`. The main plan is being reconciled to these same values rather than carrying a second set of working numbers.
 
 The HTML tuner used a design reference of approximately **1 CSS px = 1 Android dp** for first-pass proportion work. These are intended as Android `dp` starting values, followed by normal device validation rather than percentage-of-screen values.
 
@@ -108,7 +105,7 @@ The geometry exercise did not authorize unrelated visual changes:
 - Bubble radius: **`16dp`**.
 - Message Actions spacing/order: preserve the existing behavior unless separately approved.
 - Message body font size: unchanged.
-- Composer: unchanged until its own implementation step.
+- Composer geometry was not tuned by this portrait/bubble exercise. The later owner-approved composer behavior in `chat-redesign-plan.md` Section 4.14 is now authoritative: the field starts between the side controls and grows upward as text wraps while those controls stay bottom-anchored.
 
 ## 5. Remaining implementation-tuning variables
 
@@ -137,7 +134,8 @@ Choose the smallest correction that preserves this contract and validate on the 
 
 Before the adaptable message-shell work begins:
 
-1. Create Appearance with the already-approved controls.
-2. Move Hide Model Names and the existing hardware-keyboard behavior into Appearance without resetting stored values.
+1. Create Appearance with the already-approved controls from `chat-redesign-plan.md`.
+2. Move the old Hide Model Names behavior into the positive **Model names** control and move the existing hardware-keyboard behavior into **Hardware Keyboard Shortcuts**, without resetting stored values.
 3. Remove the obsolete legacy tiles listed above while leaving Auto-save Chats untouched and preserving AMOLED wiring.
-4. Continue with the adaptable message shell using the final geometry in Section 4 rather than the earlier working targets.
+4. Continue with the adaptable message shell using the final geometry in Section 4 rather than older working targets.
+5. Follow the newer main-plan rules for compact model/token metadata, provider-neutral image content, and the upward-growing composer.
