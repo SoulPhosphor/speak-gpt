@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chat Geometry Tuner v2</title>
+<style>
+:root{
+  /* OUTER GEOMETRY */
+  --bubble-side:27px;
+  --user-left-gutter:27px;
+  --portrait-size:90px;
+  --portrait-x:-7px;
+  --portrait-y:-36px;
+  --name-x:60px;
+  --name-y:-27px;
+  --message-gap:56px;
+
+  /* LOCKED FOR THIS PASS */
+  --bubble-pad-x:14px;
+  --bubble-pad-y:14px;
+  --bubble-radius:16px;
+
+  --page:#18181b;
+  --panel:#24242b;
+  --bubble-ai:#2d2d35;
+  --bubble-user:#5a4a74;
+  --text:#f4f4f5;
+  --muted:#b8b8c2;
+  --guide:#f0c86e;
+  --gutter:#ee9a9a;
+  --border:#555562;
+}
+*{box-sizing:border-box}
+html,body{
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
+}
+body{
+  margin:0;
+  background:#101014;
+  color:var(--text);
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+.app{
+  width:100%;
+  max-width:100vw;
+  min-height:100vh;
+  display:grid;
+  grid-template-columns:minmax(290px,370px) minmax(360px,1fr);
+  gap:20px;
+  padding:18px;
+}
+.controls{
+  background:var(--panel);
+  border:1px solid #363640;
+  border-radius:18px;
+  padding:18px;
+  align-self:start;
+  position:sticky;
+  top:18px;
+}
+h1{font-size:19px;margin:0 0 8px}
+.intro{font-size:13px;line-height:1.45;color:var(--muted);margin-bottom:16px}
+.section{
+  border-top:1px solid #3a3a44;
+  margin-top:16px;
+  padding-top:14px;
+}
+.section h2{
+  font-size:13px;
+  margin:0 0 10px;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  color:#d6d6de;
+}
+.control{margin:12px 0}
+.control label{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  font-size:13px;
+  margin-bottom:7px;
+}
+output{color:#d8c8ff;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%}
+.button-row{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:12px;
+}
+button{
+  border:1px solid #4b4b57;
+  background:#1a1a20;
+  color:#f4f4f5;
+  border-radius:8px;
+  padding:9px 12px;
+  font-size:13px;
+  cursor:pointer;
+}
+button.active{
+  background:#373142;
+  border-color:#76668f;
+}
+button.primary{
+  background:#393045;
+  border-color:#80709a;
+}
+.note{
+  margin-top:14px;
+  padding:10px 11px;
+  border:1px solid #41414c;
+  border-radius:10px;
+  background:#1a1a20;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.45;
+}
+.locked{color:#ffd690}
+.stage{
+  min-width:0;
+  width:100%;
+  max-width:100%;
+  display:flex;
+  justify-content:center;
+  align-items:flex-start;
+  padding-top:4px;
+}
+.phone{
+  width:100%;
+  max-width:412px;
+  min-width:0;
+  min-height:820px;
+  border:1px solid #383842;
+  border-radius:30px;
+  overflow:hidden;
+  background:var(--page);
+  box-shadow:0 20px 60px rgba(0,0,0,.34);
+}
+.header{
+  height:58px;
+  border-bottom:1px solid #303038;
+  display:flex;
+  align-items:center;
+  padding:0 16px;
+  color:#e7e7ec;
+  font-size:15px;
+}
+.messages{padding:24px 0 110px}
+.message{
+  position:relative;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  margin-bottom:var(--message-gap);
+  min-height:128px;
+}
+.message.ai,
+.message.user{
+  padding:0;
+}
+.message.ai .bubble{
+  width:calc(100% - (2 * var(--bubble-side)));
+  margin-left:var(--bubble-side);
+  margin-right:var(--bubble-side);
+}
+.message.user .bubble{
+  width:calc(100% - (2 * var(--bubble-side)) - var(--user-left-gutter));
+  margin-left:calc(var(--bubble-side) + var(--user-left-gutter));
+  margin-right:var(--bubble-side);
+}
+.bubble{
+  position:relative;
+  border-radius:var(--bubble-radius);
+  padding:var(--bubble-pad-y) var(--bubble-pad-x) 10px;
+  line-height:1.46;
+  font-size:16px;
+  min-height:105px;
+}
+.ai .bubble{background:var(--bubble-ai)}
+.user .bubble{background:var(--bubble-user)}
+.portrait{
+  position:absolute;
+  top:var(--portrait-y);
+  width:var(--portrait-size);
+  height:var(--portrait-size);
+  border-radius:18px;
+  border:2px solid #777787;
+  z-index:5;
+  background:
+    radial-gradient(circle at 50% 42%,rgba(255,255,255,.12),transparent 30%),
+    linear-gradient(145deg,#805fbb,#3b2d62);
+  box-shadow:0 7px 18px rgba(0,0,0,.26);
+}
+.ai .portrait{left:calc(var(--bubble-side) + var(--portrait-x))}
+.user .portrait{right:calc(var(--bubble-side) + var(--portrait-x))}
+.name{
+  position:relative;
+  z-index:6;
+  display:inline-block;
+  padding:3px 9px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  font-size:18px;
+  font-weight:700;
+  background:var(--bubble-ai);
+}
+.ai .name{transform:translate(var(--name-x),var(--name-y))}
+.user .name{
+  display:block;
+  width:max-content;
+  margin-left:auto;
+  background:var(--bubble-user);
+  transform:translate(calc(-1 * var(--name-x)),var(--name-y));
+}
+.text{margin-top:10px}
+.actions{
+  display:flex;
+  gap:10px;
+  margin-top:8px;
+  font-size:17px;
+}
+.user .actions{justify-content:flex-end}
+.action{
+  width:32px;
+  height:32px;
+  display:grid;
+  place-items:center;
+}
+.guide{
+  position:absolute;
+  pointer-events:none;
+  z-index:10;
+  font-size:10px;
+  color:var(--guide);
+}
+.side-guide{
+  top:0;
+  bottom:0;
+  border-left:1px dashed var(--guide);
+}
+.ai .side-guide{left:var(--bubble-side)}
+.user .side-guide{
+  right:var(--bubble-side);
+  border-left:0;
+  border-right:1px dashed var(--guide);
+}
+.side-guide span{
+  position:absolute;
+  top:4px;
+  white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;
+}
+.ai .side-guide span{left:4px}
+.user .side-guide span{right:4px}
+.gutter-guide{
+  left:var(--bubble-side);
+  width:var(--user-left-gutter);
+  top:0;
+  bottom:0;
+  border-right:1px dashed var(--gutter);
+  background:rgba(240,100,100,.04);
+}
+.gutter-guide span{
+  position:absolute;
+  top:4px;
+  left:4px;
+  color:#f2aaaa;
+  white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;
+}
+.mirror-label{
+  position:absolute;
+  top:-18px;
+  font-size:10px;
+  color:#aaaab5;
+}
+.ai .mirror-label{left:var(--bubble-side)}
+.user .mirror-label{right:var(--bubble-side)}
+.output-section{
+  max-width:780px;
+  margin:0 auto 28px;
+  padding:0 18px;
+}
+.output-card{
+  background:#202027;
+  border:1px solid #3e3e48;
+  border-radius:16px;
+  padding:16px;
+}
+.output-card h2{
+  font-size:15px;
+  margin:0 0 8px;
+}
+.output-card p{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.45;
+}
+textarea{
+  width:100%;
+  min-height:280px;
+  resize:vertical;
+  border:1px solid #484854;
+  background:#131318;
+  color:#f4f4f5;
+  border-radius:10px;
+  padding:12px;
+  font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+.hidden{display:none !important}
+@media(max-width:820px){
+  .app{
+    width:100vw;
+    max-width:100vw;
+    grid-template-columns:minmax(0,1fr);
+    padding:10px;
+    overflow-x:hidden;
+  }
+  .controls,.stage{min-width:0;max-width:100%}
+  .controls{position:static}
+  .phone{width:100%;max-width:412px}
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+<aside class="controls">
+  <h1>Chat outer-geometry tuner</h1>
+  <div class="intro">
+    AI and user geometry mirror automatically. The only deliberate asymmetry is the user's extra left gutter.
+    Starting values are the ones from your screenshot.
+  </div>
+
+  <div class="section">
+    <h2>Bubble placement</h2>
+    <div class="control">
+      <label>Bubble distance from speaker-side edge <output id="bubbleSideOut">27 dp</output></label>
+      <input id="bubbleSide" type="range" min="0" max="60" value="27" step="1">
+    </div>
+    <div class="control">
+      <label>User bubble left inset only <output id="gutterOut">27 dp</output></label>
+      <input id="gutter" type="range" min="0" max="120" value="27" step="1">
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Portrait, mirrored</h2>
+    <div class="control">
+      <label>Portrait size <output id="portraitSizeOut">90 dp</output></label>
+      <input id="portraitSize" type="range" min="40" max="140" value="90" step="2">
+    </div>
+    <div class="control">
+      <label>Portrait left/right <output id="portraitXOut">-7 dp</output></label>
+      <input id="portraitX" type="range" min="-80" max="120" value="-7" step="1">
+    </div>
+    <div class="control">
+      <label>Portrait up/down <output id="portraitYOut">-36 dp</output></label>
+      <input id="portraitY" type="range" min="-100" max="100" value="-36" step="1">
+    </div>
+    <div class="button-row">
+      <button id="portraitToggle" class="active" type="button">Portrait: On</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Name, mirrored</h2>
+    <div class="control">
+      <label>Name left/right <output id="nameXOut">60 dp</output></label>
+      <input id="nameX" type="range" min="-160" max="180" value="60" step="1">
+    </div>
+    <div class="control">
+      <label>Name up/down <output id="nameYOut">-27 dp</output></label>
+      <input id="nameY" type="range" min="-100" max="100" value="-27" step="1">
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Conversation rhythm</h2>
+    <div class="control">
+      <label>Distance between messages <output id="messageGapOut">56 dp</output></label>
+      <input id="messageGap" type="range" min="0" max="100" value="56" step="1">
+    </div>
+    <div class="button-row">
+      <button id="guideToggle" class="active" type="button">Guides: On</button>
+      <button id="generate" class="primary" type="button">Generate Numbers</button>
+    </div>
+  </div>
+
+  <div class="note">
+    <span class="locked">Locked on purpose:</span> text padding inside the bubble, action spacing,
+    font size, bubble radius, and composer. Those are separate decisions and do not move while you tune this geometry.
+  </div>
+</aside>
+
+<main class="stage">
+<div class="phone">
+  <div class="header">☰ &nbsp;&nbsp; Conversation</div>
+  <div class="messages">
+
+    <div class="message ai">
+      <div class="mirror-label guidePart">AI speaker side</div>
+      <div class="guide side-guide guidePart"><span class="sideText">27 dp</span></div>
+      <div class="portrait"></div>
+      <div class="bubble">
+        <div class="name">Ash</div>
+        <div class="text">
+          This assistant message uses the same speaker-side bubble distance, portrait size,
+          portrait offset, and name offset that the user message mirrors on the opposite side.
+        </div>
+        <div class="actions">
+          <span class="action">ⓘ</span><span class="action">🔊</span><span class="action">↗</span>
+          <span class="action">⚑</span><span class="action">↻</span><span class="action">⧉</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="message user">
+      <div class="mirror-label guidePart">User speaker side</div>
+      <div class="guide side-guide guidePart"><span class="sideText">27 dp</span></div>
+      <div class="guide gutter-guide guidePart"><span class="gutterText">27 dp user-only gutter</span></div>
+      <div class="portrait"></div>
+      <div class="bubble">
+        <div class="name">You</div>
+        <div class="text">
+          This is mirrored from the assistant side. The only deliberate asymmetry is the extra
+          left-hand gutter that keeps user messages visually right-aligned.
+        </div>
+        <div class="actions">
+          <span class="action">ⓘ</span><span class="action">🔊</span><span class="action">↗</span>
+          <span class="action">⚑</span><span class="action">↻</span><span class="action">⧉</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="message ai">
+      <div class="mirror-label guidePart">AI speaker side</div>
+      <div class="guide side-guide guidePart"><span class="sideText">27 dp</span></div>
+      <div class="portrait"></div>
+      <div class="bubble">
+        <div class="name">Ash</div>
+        <div class="text">
+          The third message exists so the message-gap control has something real to measure against.
+        </div>
+        <div class="actions">
+          <span class="action">ⓘ</span><span class="action">🔊</span><span class="action">↗</span>
+          <span class="action">⚑</span><span class="action">↻</span><span class="action">⧉</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</main>
+</div>
+
+<div class="output-section">
+  <div class="output-card">
+    <h2>Geometry numbers</h2>
+    <p>
+      Press <b>Generate Numbers</b>. The text stays here so you can select/copy it manually even if clipboard permissions fail.
+    </p>
+    <textarea id="numbers" readonly placeholder="Your geometry numbers will appear here."></textarea>
+  </div>
+</div>
+
+<script>
+const root = document.documentElement;
+
+const cfg = {
+  bubbleSide: ["--bubble-side","bubbleSideOut"],
+  gutter: ["--user-left-gutter","gutterOut"],
+  portraitSize: ["--portrait-size","portraitSizeOut"],
+  portraitX: ["--portrait-x","portraitXOut"],
+  portraitY: ["--portrait-y","portraitYOut"],
+  nameX: ["--name-x","nameXOut"],
+  nameY: ["--name-y","nameYOut"],
+  messageGap: ["--message-gap","messageGapOut"]
+};
+
+function value(id){ return Number(document.getElementById(id).value); }
+
+function updateOne(id){
+  const el = document.getElementById(id);
+  const [cssVar,outId] = cfg[id];
+  root.style.setProperty(cssVar, el.value + "px");
+  document.getElementById(outId).textContent = el.value + " dp";
+
+  if(id === "bubbleSide"){
+    document.querySelectorAll(".sideText").forEach(x => x.textContent = el.value + " dp");
+  }
+  if(id === "gutter"){
+    document.querySelectorAll(".gutterText").forEach(x => x.textContent = el.value + " dp user-only gutter");
+  }
+}
+
+Object.keys(cfg).forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener("input", () => updateOne(id));
+  updateOne(id);
+});
+
+let portraitOn = true;
+const portraitToggle = document.getElementById("portraitToggle");
+portraitToggle.addEventListener("click", () => {
+  portraitOn = !portraitOn;
+  document.querySelectorAll(".portrait").forEach(x => x.classList.toggle("hidden", !portraitOn));
+  portraitToggle.textContent = portraitOn ? "Portrait: On" : "Portrait: Off";
+  portraitToggle.classList.toggle("active", portraitOn);
+});
+
+let guidesOn = true;
+const guideToggle = document.getElementById("guideToggle");
+guideToggle.addEventListener("click", () => {
+  guidesOn = !guidesOn;
+  document.querySelectorAll(".guidePart").forEach(x => x.classList.toggle("hidden", !guidesOn));
+  guideToggle.textContent = guidesOn ? "Guides: On" : "Guides: Off";
+  guideToggle.classList.toggle("active", guidesOn);
+});
+
+function generateNumbers(){
+  const text = `CHAT OUTER GEOMETRY
+Design reference: 1 mockup CSS px is being treated as approximately 1 Android dp for first-pass layout values.
+
+MIRRORING RULE
+AI geometry anchors from the left speaker side.
+User geometry anchors from the right speaker side.
+Portrait and name offsets mirror between speakers.
+The user-only left inset is the intentional asymmetry. It moves only the user's bubble left edge; the right edge remains anchored.
+
+BUBBLE PLACEMENT
+Bubble distance from speaker-side edge: ${value("bubbleSide")} dp
+User bubble left inset only: ${value("gutter")} dp
+
+PORTRAIT
+Portrait enabled in preview: ${portraitOn ? "Yes" : "No"}
+Portrait size: ${value("portraitSize")} dp
+Portrait horizontal offset from mirrored speaker-side baseline: ${value("portraitX")} dp
+Portrait vertical offset: ${value("portraitY")} dp
+
+NAME
+Name horizontal offset from mirrored baseline: ${value("nameX")} dp
+Name vertical offset: ${value("nameY")} dp
+
+CONVERSATION RHYTHM
+Distance between message units: ${value("messageGap")} dp
+
+LOCKED / NOT TUNED HERE
+Bubble internal horizontal padding: 14 dp
+Bubble internal vertical padding: 14 dp
+Bubble radius: 16 dp
+Action spacing: unchanged
+Message font size: unchanged
+Composer: unchanged
+
+INTERPRETATION
+Positive/negative portrait and name X values are applied as mirrored speaker-side offsets, not absolute screen coordinates.
+The same bubble-side value is used on AI-left and user-right.
+The user left inset changes only the user's bubble left boundary. The user's right boundary remains fixed at the same speaker-side distance as the AI's left boundary.`;
+
+  const box = document.getElementById("numbers");
+  box.value = text;
+  box.focus();
+  box.select();
+  box.setSelectionRange(0, 0);
+  box.scrollIntoView({behavior:"smooth",block:"center"});
+}
+
+document.getElementById("generate").addEventListener("click", generateNumbers);
+</script>
+</body>
+</html>
