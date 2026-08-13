@@ -274,6 +274,7 @@
     <string name="label_sorry_action_failed">Üzgünüm, işlem başarısız oldu</string>
     <string name="label_copy">Metin panoya kopyalandı</string>
     <string name="model_error_empty">Hata, model adı sağlanmadı</string>
+    <string name="language_error_empty">Lütfen dil seçin</string>
     <string name="image_resolution_error_empty">Lütfen görüntü çözünürlüğünü seçin</string>
     <string name="tile_account_title">Hesap OpenAI</string>
     <string name="tile_account_subtitle">OpenAI hesabını yönet</string>

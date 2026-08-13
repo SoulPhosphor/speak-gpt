@@ -273,6 +273,7 @@
     <string name="label_sorry_action_failed">На жаль, дія не вдалася</string>
     <string name="label_copy">Текст скопійовано до буфера обміну</string>
     <string name="model_error_empty">Помилка, назва моделі не зазначена</string>
+    <string name="language_error_empty">Будь ласка, виберіть мову</string>
     <string name="image_resolution_error_empty">Будь ласка, виберіть роздільну здатність зображення</string>
     <string name="tile_account_title">Акаунт OpenAI</string>
     <string name="tile_account_subtitle">Керування акаунтом OpenAI</string>

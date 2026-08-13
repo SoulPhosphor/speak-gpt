@@ -95,6 +95,13 @@ class VoiceSettingsActivity : FragmentActivity() {
             language = name
             valueVoiceLanguage?.text = Locale.forLanguageTag(name).displayLanguage
         }
+
+        override fun onFormError(name: String) {
+            Toast.makeText(this@VoiceSettingsActivity, getString(R.string.language_error_empty), Toast.LENGTH_SHORT).show()
+            val languageSelectorDialogFragment: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(name, chatId)
+            languageSelectorDialogFragment.setStateChangedListener(this)
+            languageSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "LanguageSelectorDialog")
+        }
     }
 
     private var voiceSelectorListener: VoiceSelectorDialogFragment.OnVoiceSelectedListener =

@@ -354,17 +354,20 @@
     </style>
 
     <!-- Selector row (owner request, Aug 13 2026): a labeled row that shows
-         the current value of a setting and opens a full-screen picker when
-         tapped - the "AI Model" row in Quick Settings is the original,
-         unstyled example. No chevron (unlike Widget.App.Row.*): the current
-         value itself, right-aligned, is the affordance. Distinct from the
-         Dropdown family, which opens an anchored inline menu instead of a
-         full-screen picker. The background is the tonal pill
-         (@drawable/btn_accent_tonal, tinted colorSecondaryContainer); a
-         screen that groups a Selector row under/above other card content may
-         override android:background with a differently-cornered drawable
-         (e.g. @drawable/btn_accent_top) - that is placement only, matching
-         how the canonical dropdown allows container differences. -->
+         the current value of a setting and opens a picker when tapped. The
+         "AI Model" row in Quick Settings (unstyled before this) and the
+         Voice Language row (Voice & Speech) both use this now, unchanged in
+         appearance either way. No chevron (unlike Widget.App.Row.*): the
+         current value itself, right-aligned, is the affordance. Distinct
+         from the Dropdown family, which opens an anchored inline menu
+         instead of a separate picker screen/dialog. The background is the
+         tonal pill (@drawable/btn_accent_tonal, tinted
+         colorSecondaryContainer); a screen that groups a Selector row
+         under/above other card content may override android:background
+         with a differently-cornered drawable (Quick Settings keeps
+         @drawable/btn_accent_top, rounded only on top, so the row still
+         reads as the top of that settings card) - that is placement only,
+         matching how the canonical dropdown allows container differences. -->
     <style name="Widget.App.Row.Selector" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -403,18 +406,19 @@
         <item name="android:textColor">?attr/appTextColor</item>
     </style>
 
-    <!-- Full-screen pick-one-item list row (owner request, Aug 13 2026):
-         the "checked tile" row used by every full-screen single-select list
-         opened from a Widget.App.Row.Selector (or, later, from a non-full-
-         screen picker needing the same look). This is the style family the
-         Select AI Model screen's row layout (view_model.xml) and the old
-         Select Language dialog's RadioButton rows both improvised locally,
-         with the selected state's color hard-tinted at runtime instead of
-         resolving a theme attribute - the exact gap that breaks once a real
-         theme/palette exists. This style only carries the shared geometry;
-         the two selection states are applied at runtime (background +
-         text appearance, see TextAppearance.App.PickList.* below), since a
-         list adapter decides per-row which state applies:
+    <!-- Pick-one-item list row (owner request, Aug 13 2026): the "checked
+         tile" row used by a single-select list opened from a
+         Widget.App.Row.Selector (or, later, from any other picker needing
+         the same look) - currently the Select Language dialog's
+         RadioButton rows. Geometry/typography unchanged from that dialog's
+         previous local values (56dp row, 8dp horizontal padding, 16sp).
+         The Select AI Model screen's row layout (view_model.xml) still
+         improvises its own local version of this same pattern and has not
+         been migrated onto this style - see ui-style-adoption.md.
+         This style only carries the shared geometry; the two selection
+         states are applied at runtime (background + text appearance, see
+         TextAppearance.App.PickList.* below) by whatever code owns the
+         individual rows:
            - unselected: android:background = @drawable/btn_accent_tonal_selector_v3,
              text appearance = TextAppearance.App.PickList.Unselected
            - selected: android:background = @drawable/btn_accent_tonal_selector_v4,
@@ -427,8 +431,8 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">56dp</item>
         <item name="android:gravity">center_vertical</item>
-        <item name="android:paddingStart">16dp</item>
-        <item name="android:paddingEnd">16dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
         <item name="android:singleLine">true</item>
         <item name="android:ellipsize">end</item>
         <item name="android:textSize">16sp</item>

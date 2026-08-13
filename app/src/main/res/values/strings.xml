@@ -537,6 +537,7 @@
     <string name="copy_code_block">Copy code block</string>
     <string name="label_code_copied">Code copied to clipboard</string>
     <string name="model_error_empty">Error, no model name is provided</string>
+    <string name="language_error_empty">Please select language</string>
     <string name="image_resolution_error_empty">Please select image resolution</string>
     <string name="tile_account_title">OpenAI Account</string>
     <string name="tile_account_subtitle">Manage OpenAI account</string>

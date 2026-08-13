@@ -16,47 +16,28 @@
 
 package org.teslasoft.assistant.ui.fragments.dialogs
 
-import android.os.Build
+import android.app.Dialog
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
-import android.view.WindowInsets
-import android.widget.ImageButton
-import android.widget.ListView
+import android.widget.RadioButton
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.DialogFragment
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.ui.adapters.LanguageListAdapter
 
 /**
- * Full-screen Voice Language picker (owner redesign, Aug 13 2026). Replaces
- * the old pop-up dialog with the same full-screen treatment as Select AI
- * Model: a header with a back button, and a single-select list where
- * tapping a row selects it and closes the screen immediately (no separate
- * Save/Cancel step). The list itself uses the shared
- * Widget.App.PickList.Row family (see themes.xml) so both pickers stay
- * visually and structurally consistent as more of the app gets themed.
+ * Same pop-up dialog this has always been (owner ruling, Aug 13 2026: keep
+ * the look/interaction unchanged). The only change is how the "checked
+ * tile" row highlight is applied: the selected/unselected background and
+ * text color now come from Widget.App.PickList.Row and its two
+ * TextAppearance states (see themes.xml) instead of a runtime color tint
+ * hard-coded to @color/accent_900 / @color/window_background / @color/
+ * neutral_200 - the fix needed so this dialog follows the active theme
+ * once real palettes exist.
  */
 class LanguageSelectorDialogFragment : DialogFragment() {
     companion object {
-        /** Ordered (code, display label) pairs — unchanged from the previous
-         *  pop-up's fixed 13-language list. */
-        private val LANGUAGES = listOf(
-            "en" to "English",
-            "fr" to "French (Français)",
-            "de" to "German (Deutsch)",
-            "it" to "Italian (Italiano)",
-            "ja" to "Japanese (日本)",
-            "ko" to "Korean (한국인)",
-            "zh_CN" to "Chinese (Simplified) (中文(简体))",
-            "zh_TW" to "Chinese (Traditional) (中文(繁体))",
-            "es" to "Spanish (Español)",
-            "uk" to "Ukrainian (Українська)",
-            "ru" to "Russian (Русский)",
-            "pl" to "Polish (Polski)",
-            "tr" to "Turkish (Türk)"
-        )
-
         fun newInstance(name: String, chatId: String) : LanguageSelectorDialogFragment {
             val languageSelectorDialogFragment = LanguageSelectorDialogFragment()
 
@@ -70,70 +51,78 @@ class LanguageSelectorDialogFragment : DialogFragment() {
         }
     }
 
+    private var builder: AlertDialog.Builder? = null
+
     private var listener: StateChangesListener? = null
 
-    private var btnBack: ImageButton? = null
-    private var languageList: ListView? = null
+    private var language = "en"
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        // A match-parent view inside the default DialogFragment theme is still
-        // a floating window with dialog insets. Use the app's normal screen
-        // theme so the shared action bar and content genuinely fill the
-        // screen (same approach as AdvancedModelSelectorDialogFragment).
-        setStyle(STYLE_NORMAL, R.style.UI_Material)
+    private var radios: Map<String, RadioButton?> = emptyMap()
+
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        builder = MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
+
+        val view: View = this.layoutInflater.inflate(R.layout.fragment_select_language, null)
+
+        radios = mapOf(
+            "en" to view.findViewById(R.id.lngEn),
+            "fr" to view.findViewById(R.id.lngFr),
+            "de" to view.findViewById(R.id.lngDe),
+            "it" to view.findViewById(R.id.lngIt),
+            "ja" to view.findViewById(R.id.lngJp),
+            "ko" to view.findViewById(R.id.lngKp),
+            "zh_CN" to view.findViewById(R.id.lngCnS),
+            "zh_TW" to view.findViewById(R.id.lngCnT),
+            "es" to view.findViewById(R.id.lngEs),
+            "uk" to view.findViewById(R.id.lngUk),
+            "ru" to view.findViewById(R.id.lngRu),
+            "pl" to view.findViewById(R.id.lngPl),
+            "tr" to view.findViewById(R.id.lngTr)
+        )
+
+        builder!!.setView(view)
+            .setCancelable(false)
+            .setPositiveButton(R.string.btn_save) { _, _ -> validateForm() }
+            .setNegativeButton(R.string.btn_cancel) { _, _ ->  }
+
+        language = requireArguments().getString("name").toString()
+
+        radios.forEach { (code, radio) ->
+            radio?.isChecked = language == code
+            radio?.setOnClickListener {
+                language = code
+                applySelection()
+            }
+        }
+
+        applySelection()
+
+        return builder!!.create()
     }
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
-        return inflater.inflate(R.layout.fragment_select_language, container, false)
-    }
-
-    override fun onStart() {
-        super.onStart()
-        dialog?.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-        applySystemBarInsets()
-    }
-
-    /** Match the app's full-screen activity treatment on Android 15+. */
-    private fun applySystemBarInsets() {
-        if (Build.VERSION.SDK_INT < 35) return
-        val window = dialog?.window ?: return
-        val root = view ?: return
-        window.decorView.post {
-            val insets = window.decorView.rootWindowInsets ?: return@post
-            root.findViewById<View>(R.id.action_bar)?.setPadding(
-                0,
-                insets.getInsets(WindowInsets.Type.statusBars()).top,
-                0,
-                0
-            )
-            root.setPadding(
-                root.paddingLeft,
-                root.paddingTop,
-                root.paddingRight,
-                insets.getInsets(WindowInsets.Type.navigationBars()).bottom
-            )
+    /** Repaints every row's checked-tile background/text for the current
+     *  [language] - the same visual states the old per-row tint produced,
+     *  now theme-attribute-driven (see Widget.App.PickList.Row). */
+    private fun applySelection() {
+        val ctx = requireActivity()
+        radios.values.forEach { radio ->
+            radio ?: return@forEach
+            if (radio.id == radios[language]?.id) {
+                radio.background = ContextCompat.getDrawable(ctx, R.drawable.btn_accent_tonal_selector_v4)
+                radio.setTextAppearance(R.style.TextAppearance_App_PickList_Selected)
+            } else {
+                radio.background = ContextCompat.getDrawable(ctx, R.drawable.btn_accent_tonal_selector_v3)
+                radio.setTextAppearance(R.style.TextAppearance_App_PickList_Unselected)
+            }
         }
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        val currentLanguage = requireArguments().getString("name").toString()
-
-        btnBack = view.findViewById(R.id.btn_back)
-        languageList = view.findViewById(R.id.language_list)
-
-        btnBack?.setOnClickListener { dismiss() }
-
-        val adapter = LanguageListAdapter(requireContext(), LANGUAGES, currentLanguage)
-        adapter.setOnItemClickListener(object : LanguageListAdapter.OnItemClickListener {
-            override fun onItemClick(code: String) {
-                listener?.onSelected(code)
-                dismiss()
-            }
-        })
-        languageList?.adapter = adapter
+    private fun validateForm() {
+        if (language != "") {
+            listener!!.onSelected(language)
+        } else {
+            listener!!.onFormError(language)
+        }
     }
 
     fun setStateChangedListener(listener: StateChangesListener) {
@@ -142,5 +131,6 @@ class LanguageSelectorDialogFragment : DialogFragment() {
 
     interface StateChangesListener {
         fun onSelected(name: String)
+        fun onFormError(name: String)
     }
 }

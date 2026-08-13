@@ -283,7 +283,7 @@ A toggle row has no chevron. The row container is not the tap target; the switch
 
 A toggle may exist on only one screen. Its use of shared row and switch styling does not require adding the toggle to other screens.
 
-## Selector rows and full-screen pick lists
+## Selector rows and pick-list rows
 
 ### Selector row
 
@@ -293,15 +293,15 @@ A toggle may exist on only one screen. Its use of shared row and switch styling 
 
 `Widget.App.Row.Selector.Value`
 
-Use for a row that shows the current value of a setting and opens a full-screen picker when tapped. The label sits at the start (bold, `colorPrimary`); the current value sits at the end, ellipsizing with a marquee. There is no chevron — the value itself is the affordance.
+Use for a row that shows the current value of a setting and opens a picker (a dialog or another screen) when tapped. The label sits at the start (bold, `colorPrimary`); the current value sits at the end, ellipsizing with a marquee. There is no chevron — the value itself is the affordance.
 
-Distinct from the Dropdown family, which opens an anchored inline menu in place rather than navigating to a full screen.
+Distinct from the Dropdown family, which opens an anchored inline menu in place rather than a separate picker.
 
-The container's default background is the tonal pill (`@drawable/btn_accent_tonal`, tinted `colorSecondaryContainer`). A screen that groups a Selector row directly under or above other card content may override `android:background` with a differently-cornered drawable (for example `@drawable/btn_accent_top`, used by the Quick Settings AI Model row so it reads as the rounded top of that settings card). That is a placement difference only; label/value typography and color must still come from this family.
+The container's default background is the tonal pill (`@drawable/btn_accent_tonal`, tinted `colorSecondaryContainer`). A screen that groups a Selector row directly under or above other card content may override `android:background` with a differently-cornered drawable — Quick Settings keeps `@drawable/btn_accent_top` (rounded only on top) so its AI Model row still reads as the top of that settings card. That is a placement difference only; label/value typography and color must still come from this family, and must render identically to before a screen adopts it.
 
-Current examples: the AI Model row in Quick Settings, and the Voice Language row on the Voice & Speech screen — both open a full-screen picker built with the Pick List row family below.
+Current examples: the AI Model row in Quick Settings, and the Voice Language row on the Voice & Speech screen. Adopting this style must never change what opens when the row is tapped, or the shape/corners of an existing background — only the label/value typography and color resolution.
 
-### Full-screen pick-list row
+### Pick-list row
 
 `Widget.App.PickList.Row`
 
@@ -309,16 +309,16 @@ Current examples: the AI Model row in Quick Settings, and the Voice Language row
 
 `TextAppearance.App.PickList.Selected`
 
-Use for each row of a full-screen single-select list opened from a Selector row (or, in the future, from a non-full-screen picker that needs the same "checked tile" look). `Widget.App.PickList.Row` carries only the shared geometry (height, padding, single line, typography size); the two selection states are applied per-row by the adapter, since only the adapter knows which item is currently selected:
+Use for each row of a single-select list where the current selection is shown as a "checked tile" (a filled pill on the selected row, an outline-less tonal pill on the rest) — currently the Select Language dialog's list of languages. `Widget.App.PickList.Row` carries only the shared geometry (height, padding, single line, typography size); the two selection states are applied per-row by whatever code owns the rows (an adapter, or direct view lookups), since only that code knows which item is currently selected:
 
 - unselected: `android:background = @drawable/btn_accent_tonal_selector_v3`, text appearance `TextAppearance.App.PickList.Unselected`;
 - selected: `android:background = @drawable/btn_accent_tonal_selector_v4`, text appearance `TextAppearance.App.PickList.Selected`.
 
 Apply the text appearance with `view.setTextAppearance(...)` rather than resolving `?attr/colorOnPrimary` (or any other Material color-role attribute) directly from `com.google.android.material.R.attr` in Kotlin — that lookup path has a known CI resolution failure in this project (see `ProfileImageGalleryAdapter.kt` / `MemoryScreenActivity.kt`). Resolving the same attribute through an XML text appearance instead avoids it entirely.
 
-Neither background drawable needs a runtime tint: both already resolve their fill from a theme attribute (`colorSurfaceContainerHigh` / `colorPrimary`). Tinting them again in Kotlin with a hard-coded color is the mistake this family exists to prevent — it is what made the Select AI Model list and the old Select Language pop-up render a fixed color instead of following the active theme/palette.
+Neither background drawable needs a runtime tint: both already resolve their fill from a theme attribute (`colorSurfaceContainerHigh` / `colorPrimary`). Tinting them again in Kotlin with a hard-coded color is the mistake this family exists to prevent — it is what made the Select Language pop-up (and, separately, the still-unconverted Select AI Model list) render a fixed color instead of following the active theme/palette.
 
-Current example: the Voice Language full-screen picker (`LanguageListAdapter`/`view_language_pick_item.xml`). The Select AI Model list (`view_model.xml`) still uses its own pre-existing local version of this pattern and has not yet been migrated onto this shared family — see `ui-style-adoption.md`.
+This style does not change a picker's presentation (dialog vs. full screen, search box, button layout) — only how each row's checked/unchecked state resolves its color. The Select AI Model list (`view_model.xml`) still uses its own pre-existing local version of this same pattern and has not been migrated onto this shared family — see `ui-style-adoption.md`.
 
 ## Screen headers
 

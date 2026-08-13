@@ -273,6 +273,7 @@
     <string name="label_sorry_action_failed">Entschuldigung, Aktion fehlgeschlagen</string>
     <string name="label_copy">Text in die Zwischenablage kopiert</string>
     <string name="model_error_empty">Fehler, kein Modellname angegeben</string>
+    <string name="language_error_empty">Bitte Sprache auswählen</string>
     <string name="image_resolution_error_empty">Bitte Bildauflösung auswählen</string>
     <string name="tile_account_title">Konto OpenAI</string>
     <string name="tile_account_subtitle">OpenAI-Konto verwalten</string>

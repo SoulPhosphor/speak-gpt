@@ -277,6 +277,7 @@
     <string name="label_sorry_action_failed">Lo sentimos, la acción ha fallado</string>
     <string name="label_copy">Texto copiado al portapapeles</string>
     <string name="model_error_empty">Error, no se ha proporcionado el nombre del modelo</string>
+    <string name="language_error_empty">Por favor selecciona un idioma</string>
     <string name="image_resolution_error_empty">Por favor selecciona una resolución de imagen</string>
     <string name="tile_account_title">Cuenta OpenAI</string>
     <string name="tile_account_subtitle">Gestionar cuenta OpenAI</string>

@@ -271,6 +271,7 @@
     <string name="label_sorry_action_failed">Przepraszamy, działanie nie powiodło się</string>
     <string name="label_copy">Tekst skopiowany do schowka</string>
     <string name="model_error_empty">Błąd, brak podanej nazwy modelu</string>
+    <string name="language_error_empty">Proszę wybrać język</string>
     <string name="image_resolution_error_empty">Proszę wybrać rozdzielczość obrazu</string>
     <string name="tile_account_title">Konto OpenAI</string>
     <string name="tile_account_subtitle">Zarządzaj kontem OpenAI</string>

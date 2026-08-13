@@ -19,35 +19,120 @@
 <androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <androidx.constraintlayout.widget.ConstraintLayout
-        android:id="@+id/action_bar"
-        style="@style/Widget.App.ActionBar">
-
-        <ImageButton
-            android:id="@+id/btn_back"
-            style="@style/Widget.App.ActionBar.BackButton" />
-
-        <TextView
-            android:id="@+id/selector_title"
-            style="@style/Widget.App.ActionBar.Title"
-            android:text="@string/title_select_language" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
-
-    <ListView
-        android:id="@+id/language_list"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginTop="12dp"
-        android:clipToPadding="false"
-        android:divider="@null"
-        android:listSelector="@android:color/transparent"
-        android:paddingBottom="24dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+    <TextView
+        android:id="@+id/dialog_l_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="@string/title_select_language"
+        android:textColor="@color/text_title"
+        android:textSize="24sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/action_bar" />
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/dialog_l_title">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" >
+
+            <RadioGroup
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:paddingBottom="84dp">
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngEn"
+                    android:text=" English" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngFr"
+                    android:text=" French (Français)" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngDe"
+                    android:text=" German (Deutsch)" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngIt"
+                    android:text=" Italian (Italiano)" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngJp"
+                    android:text=" Japanese (日本)" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngKp"
+                    android:text=" Korean (한국인)" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngCnS"
+                    android:text=" Chinese (Simplified) (中文(简体))" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngCnT"
+                    android:text=" Chinese (Traditional) (中文(繁体))" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngEs"
+                    android:text=" Spanish (Español)" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngUk"
+                    android:text=" Ukrainian (Українська)" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngRu"
+                    android:text=" Russian (Русский)" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngPl"
+                    android:text=" Polish (Polski)" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngTr"
+                    android:text=" Turkish (Türk)" />
+
+            </RadioGroup>
+        </LinearLayout>
+    </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

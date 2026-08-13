@@ -273,6 +273,7 @@
     <string name="label_sorry_action_failed">متأسفیم، عملیات ناموفق بود</string>
     <string name="label_copy">متن به بریده‌دان رونویسی شد</string>
     <string name="model_error_empty">خطا، هیچ نامی برای مدل ارائه نشده است</string>
+    <string name="language_error_empty">لطفاً زبان را انتخاب کنید</string>
     <string name="image_resolution_error_empty">لطفاً وضوح تصویر را انتخاب کنید</string>
     <string name="tile_account_title">حساب OpenAI</string>
     <string name="tile_account_subtitle">مدیریت حساب OpenAI</string>

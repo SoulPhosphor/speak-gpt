@@ -270,6 +270,7 @@
     <string name="label_sorry_action_failed">Ľutujeme, akcia zlyhala</string>
     <string name="label_copy">Text bol skopírovaný do schránky</string>
     <string name="model_error_empty">Chyba, nie je zadaný názov modelu</string>
+    <string name="language_error_empty">Prosím, vyberte jazyk</string>
     <string name="image_resolution_error_empty">Prosím, vyberte rozlíšenie obrázku</string>
     <string name="tile_account_title">Účet OpenAI</string>
     <string name="tile_account_subtitle">Správa účtu OpenAI</string>

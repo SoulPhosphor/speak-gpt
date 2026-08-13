@@ -274,6 +274,7 @@
     <string name="label_sorry_action_failed">Spiacente, azione non riuscita</string>
     <string name="label_copy">Testo copiato negli appunti</string>
     <string name="model_error_empty">Errore, nessun nome del modello fornito</string>
+    <string name="language_error_empty">Seleziona la lingua</string>
     <string name="image_resolution_error_empty">Seleziona la risoluzione dell\'immagine</string>
     <string name="tile_account_title">OpenAI Account</string>
     <string name="tile_account_subtitle">Gestisci account OpenAI</string>
