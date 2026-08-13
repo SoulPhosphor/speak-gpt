@@ -47,6 +47,11 @@ class Preferences private constructor(private var preferences: SharedPreferences
         const val LOG_DEFAULT_MAX_ENTRIES = 50
         const val LOG_DEFAULT_MAX_DAYS = 7
 
+        private const val LAST_SUCCESS_ENDPOINT_ID = "last_success_endpoint_id"
+        private const val LAST_SUCCESS_MODEL = "last_success_model"
+        private const val LAST_SUCCESS_ROUTING = "last_success_routing"
+        private const val LAST_SUCCESS_PERSONA_ID = "last_success_persona_id"
+
         /** Clamp a max-entries value to [1, LOG_MAX_ENTRIES_LIMIT]. Pure, unit-tested. */
         fun coerceLogMaxEntries(value: Int): Int = value.coerceIn(1, LOG_MAX_ENTRIES_LIMIT)
 
@@ -1407,7 +1412,7 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * companion, never a selection from an unopened or unsuccessful chat.
      */
     fun getLastSuccessfulPersonaId() : String {
-        return getGlobalString("last_success_persona_id", "")
+        return getGlobalString(LAST_SUCCESS_PERSONA_ID, "")
     }
 
     /**
@@ -1452,15 +1457,15 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * FavoriteModelObject.ROUTING_AUTOMATIC).
      */
     fun getLastSuccessfulEndpointId() : String {
-        return getGlobalString("last_success_endpoint_id", "")
+        return getGlobalString(LAST_SUCCESS_ENDPOINT_ID, "")
     }
 
     fun getLastSuccessfulModel() : String {
-        return getGlobalString("last_success_model", "")
+        return getGlobalString(LAST_SUCCESS_MODEL, "")
     }
 
     fun getLastSuccessfulRouting() : String {
-        return getGlobalString("last_success_routing", "automatic")
+        return getGlobalString(LAST_SUCCESS_ROUTING, "automatic")
     }
 
     fun setLastSuccessfulConfig(
@@ -1471,10 +1476,10 @@ class Preferences private constructor(private var preferences: SharedPreferences
     ): Boolean {
         if (endpointId.isBlank() || model.isBlank() || personaId.isBlank()) return false
         return gp.edit()
-            .putString("last_success_endpoint_id", endpointId)
-            .putString("last_success_model", model)
-            .putString("last_success_routing", routing)
-            .putString("last_success_persona_id", personaId)
+            .putString(LAST_SUCCESS_ENDPOINT_ID, endpointId)
+            .putString(LAST_SUCCESS_MODEL, model)
+            .putString(LAST_SUCCESS_ROUTING, routing)
+            .putString(LAST_SUCCESS_PERSONA_ID, personaId)
             .commit()
     }
 
