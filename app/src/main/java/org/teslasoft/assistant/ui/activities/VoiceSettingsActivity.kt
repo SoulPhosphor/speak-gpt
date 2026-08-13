@@ -27,6 +27,7 @@ import android.view.Gravity
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.RadioButton
+import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import androidx.activity.SystemBarStyle
@@ -67,7 +68,8 @@ class VoiceSettingsActivity : FragmentActivity() {
 
     private var tileTTS: TileFragment? = null
     private var tileVoice: TileFragment? = null
-    private var tileVoiceLanguage: TileFragment? = null
+    private var rowVoiceLanguage: ConstraintLayout? = null
+    private var valueVoiceLanguage: TextView? = null
     private var tileSTT: TileFragment? = null
     private var tileHandsFreeTiming: TileFragment? = null
     private var tileVadMethod: TileFragment? = null
@@ -91,14 +93,7 @@ class VoiceSettingsActivity : FragmentActivity() {
         override fun onSelected(name: String) {
             preferences?.setLanguage(name)
             language = name
-            tileVoiceLanguage?.updateSubtitle(Locale.forLanguageTag(name).displayLanguage)
-        }
-
-        override fun onFormError(name: String) {
-            Toast.makeText(this@VoiceSettingsActivity, getString(R.string.language_error_empty), Toast.LENGTH_SHORT).show()
-            val languageSelectorDialogFragment: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(name, chatId)
-            languageSelectorDialogFragment.setStateChangedListener(this)
-            languageSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "LanguageSelectorDialog")
+            valueVoiceLanguage?.text = Locale.forLanguageTag(name).displayLanguage
         }
     }
 
@@ -193,19 +188,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             functionDesc = getString(R.string.tile_tts_voice_desc)
         )
 
-        tileVoiceLanguage = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.tile_voice_lang_title),
-            disabledText = null,
-            enabledDesc = Locale.forLanguageTag(preferences?.getLanguage()!!).displayLanguage,
-            disabledDesc = null,
-            icon = R.drawable.ic_language,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.tile_voice_lang_desc)
-        )
-
         tileSTT = TileFragment.newInstance(
             checked = false,
             checkable = false,
@@ -255,7 +237,6 @@ class VoiceSettingsActivity : FragmentActivity() {
         supportFragmentManager.beginTransaction()
             .replace(R.id.tile_tts, tileTTS!!)
             .replace(R.id.tile_voice, tileVoice!!)
-            .replace(R.id.tile_voice_language, tileVoiceLanguage!!)
             .replace(R.id.tile_stt, tileSTT!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
@@ -281,7 +262,10 @@ class VoiceSettingsActivity : FragmentActivity() {
             voiceSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "VoiceSelectorDialogFragment")
         }
 
-        tileVoiceLanguage?.setOnTileClickListener {
+        rowVoiceLanguage = findViewById(R.id.row_voice_language)
+        valueVoiceLanguage = findViewById(R.id.value_voice_language)
+        valueVoiceLanguage?.text = Locale.forLanguageTag(language).displayLanguage
+        rowVoiceLanguage?.setOnClickListener {
             val languageSelectorDialogFragment: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(language, chatId)
             languageSelectorDialogFragment.setStateChangedListener(languageChangedListener)
             languageSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "LanguageSelectorDialog")

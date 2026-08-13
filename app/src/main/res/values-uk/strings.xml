@@ -273,7 +273,6 @@
     <string name="label_sorry_action_failed">На жаль, дія не вдалася</string>
     <string name="label_copy">Текст скопійовано до буфера обміну</string>
     <string name="model_error_empty">Помилка, назва моделі не зазначена</string>
-    <string name="language_error_empty">Будь ласка, виберіть мову</string>
     <string name="image_resolution_error_empty">Будь ласка, виберіть роздільну здатність зображення</string>
     <string name="tile_account_title">Акаунт OpenAI</string>
     <string name="tile_account_subtitle">Керування акаунтом OpenAI</string>
@@ -284,7 +283,6 @@
     <string name="tile_tts_voice_title">TTS голос</string>
     <string name="tile_tts_voice_desc">Ця функція дозволяє вибрати ваш TTS голос.</string>
     <string name="tile_voice_lang_title">Мова голосу</string>
-    <string name="tile_voice_lang_desc">Ця функція дозволяє вибрати мову вашого TTS голосу.</string>
     <string name="tile_image_resolution_title">Роздільна здатність зображення</string>
     <string name="tile_openai_tts">Використовувати OpenAI TTS</string>
     <string name="tile_google_tts">Використовується Google TTS</string>

@@ -274,7 +274,6 @@
     <string name="label_sorry_action_failed">Üzgünüm, işlem başarısız oldu</string>
     <string name="label_copy">Metin panoya kopyalandı</string>
     <string name="model_error_empty">Hata, model adı sağlanmadı</string>
-    <string name="language_error_empty">Lütfen dil seçin</string>
     <string name="image_resolution_error_empty">Lütfen görüntü çözünürlüğünü seçin</string>
     <string name="tile_account_title">Hesap OpenAI</string>
     <string name="tile_account_subtitle">OpenAI hesabını yönet</string>
@@ -285,7 +284,6 @@
     <string name="tile_tts_voice_title">TTS Sesi</string>
     <string name="tile_tts_voice_desc">Bu özellik, TTS sesinizi ayarlamanıza olanak tanır.</string>
     <string name="tile_voice_lang_title">Ses dili</string>
-    <string name="tile_voice_lang_desc">Bu özellik, TTS ses dilinizi ayarlamanıza olanak tanır.</string>
     <string name="tile_image_resolution_title">Görüntü çözünürlüğü</string>
     <string name="tile_openai_tts">OpenAI TTS kullan</string>
     <string name="tile_google_tts">Google TTS kullanılıyor</string>

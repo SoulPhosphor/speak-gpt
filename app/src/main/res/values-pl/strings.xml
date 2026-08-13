@@ -271,7 +271,6 @@
     <string name="label_sorry_action_failed">Przepraszamy, działanie nie powiodło się</string>
     <string name="label_copy">Tekst skopiowany do schowka</string>
     <string name="model_error_empty">Błąd, brak podanej nazwy modelu</string>
-    <string name="language_error_empty">Proszę wybrać język</string>
     <string name="image_resolution_error_empty">Proszę wybrać rozdzielczość obrazu</string>
     <string name="tile_account_title">Konto OpenAI</string>
     <string name="tile_account_subtitle">Zarządzaj kontem OpenAI</string>
@@ -282,7 +281,6 @@
     <string name="tile_tts_voice_title">Głos TTS</string>
     <string name="tile_tts_voice_desc">Ta funkcja pozwala ustawić swój głos TTS.</string>
     <string name="tile_voice_lang_title">Język głosu</string>
-    <string name="tile_voice_lang_desc">Ta funkcja pozwala ustawić język swojego głosu TTS.</string>
     <string name="tile_image_resolution_title">Rozdzielczość obrazu</string>
     <string name="tile_openai_tts">Użyj TTS OpenAI</string>
     <string name="tile_google_tts">Używany jest TTS Google</string>
