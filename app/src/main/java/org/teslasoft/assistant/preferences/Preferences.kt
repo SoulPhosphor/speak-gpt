@@ -1394,62 +1394,51 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * The persona last applied in any chat (global, not per-chat). A brand-new
-     * chat seeds its per-chat persona from this once, so a fresh chat continues
-     * with the persona you were last using instead of resetting to none.
-     *
-     * @return Persona ID, or an empty String when the last selection was none.
-     * */
+     * The last non-empty companion used in any chat (global, not per-chat).
+     * A brand-new chat seeds its per-chat companion from this value once.
+     * Empty values never replace a real companion: after the app has a
+     * companion, an uninitialized chat cannot turn the remembered choice into
+     * "No Companion".
+     */
     fun getLastUsedPersonaId() : String {
         return getGlobalString("last_used_persona_id", "")
     }
 
     /**
-     * Record the persona just applied so future new chats default to it.
-     *
-     * @param id Persona ID, or an empty String for none.
-     * */
-    fun setLastUsedPersonaId(id: String) {
-        putGlobalString("last_used_persona_id", id)
+     * Record a real companion as the global default for future new chats.
+     * This is committed synchronously because it is a single user selection
+     * that must survive immediately leaving or closing the app.
+     */
+    fun setLastUsedPersonaId(id: String): Boolean {
+        if (id.isBlank()) return false
+        if (getLastUsedPersonaId() == id) return true
+        return try {
+            gp.edit().putString("last_used_persona_id", id).commit()
+        } catch (_: Exception) {
+            false
+        }
     }
 
-    /**
-     * True once ANY persona choice — including an explicit "none" — has ever
-     * been recorded from Quick Settings. Lets new-chat seeding tell apart
-     * "the user never picked a companion" (seed the first one in the list,
-     * owner ruling July 10 2026) from "the user explicitly picked none"
-     * (respect the none).
-     * */
     fun hasLastUsedPersonaChoice(): Boolean {
-        return gp.contains("last_used_persona_id")
+        return getLastUsedPersonaId().isNotBlank()
     }
 
     /**
      * The activation prompt last applied in any chat (global, not per-chat),
-     * seeded into new chats the same way as [getLastUsedPersonaId].
-     *
-     * @return Activation prompt ID, or an empty String when the last selection
-     *         was none (or none was ever set).
-     * */
+     * seeded into new chats alongside the companion.
+     */
     fun getLastUsedActivationPromptId() : String {
         return getGlobalString("last_used_activation_prompt_id", "")
     }
 
-    /**
-     * Record the activation prompt just applied so future new chats default to
-     * it.
-     *
-     * @param id Activation prompt ID, or an empty String for none.
-     * */
     fun setLastUsedActivationPromptId(id: String) {
         putGlobalString("last_used_activation_prompt_id", id)
     }
 
     /**
-     * One-shot guard (per chat) so a new chat seeds its persona/activation from
-     * the last-used global defaults exactly once. After that the chat's own
-     * selection always wins — including an explicit "none" the user picks later.
-     * */
+     * One-shot guard (per chat) so a new chat seeds its companion/activation
+     * from the last-used global defaults exactly once.
+     */
     fun isPersonaActivationSeeded() : Boolean {
         return getBoolean("persona_activation_seeded", false)
     }
@@ -1458,45 +1447,125 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putBoolean("persona_activation_seeded", seeded)
     }
 
+    /** Persist a new chat's inherited companion and its one-shot guard in the
+     *  same write, so the guard can never survive without the companion ID. */
+    fun commitNewChatCompanionSeed(personaId: String): Boolean {
+        if (personaId.isBlank()) return false
+        return try {
+            preferences.edit()
+                .putString("persona_id", personaId)
+                .putBoolean("persona_activation_seeded", true)
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     /**
-     * The provider (API endpoint), model, and routing that the LAST conversation
-     * to receive a successful reply used. A brand-new chat restores these once so
-     * it opens on the setup that last worked, instead of a hardcoded default.
-     * Recorded only on a successful reply, so a config that only ever errored
-     * never propagates. Global, like the last-used companion. Routing defaults to
-     * "automatic" (mirrors FavoriteModelObject.ROUTING_AUTOMATIC) — the value a
-     * non-favorite model reads back as.
+     * The provider, model, and routing from the last chat actually used.
+     * The persisted key names retain "last_success" for upgrade compatibility,
+     * but a successful reply is no longer required before a selection becomes
+     * the next new chat's default.
      */
-    fun getLastSuccessfulEndpointId() : String {
+    fun getLastUsedEndpointId() : String {
         return getGlobalString("last_success_endpoint_id", "")
     }
 
-    fun getLastSuccessfulModel() : String {
+    fun getLastUsedModel() : String {
         return getGlobalString("last_success_model", "")
     }
 
-    fun getLastSuccessfulRouting() : String {
+    fun getLastUsedRouting() : String {
         return getGlobalString("last_success_routing", "automatic")
     }
 
-    fun setLastSuccessfulConfig(endpointId: String, model: String, routing: String) {
-        putGlobalString("last_success_endpoint_id", endpointId)
-        putGlobalString("last_success_model", model)
-        putGlobalString("last_success_routing", routing)
+    /**
+     * Save one complete last-used snapshot atomically and synchronously.
+     * A partial endpoint/model/routing combination can therefore never be
+     * observed after process teardown. A blank companion is ignored so an
+     * uninitialized chat cannot erase the last real one.
+     */
+    fun setLastUsedChatConfig(
+        endpointId: String,
+        model: String,
+        routing: String,
+        personaId: String = ""
+    ): Boolean {
+        if (endpointId.isBlank() || model.isBlank()) return false
+        val savedRouting = when (routing) {
+            "preferred", "only" -> routing
+            else -> "automatic"
+        }
+        val savedPersona = personaId.takeIf { it.isNotBlank() }
+        if (
+            getLastUsedEndpointId() == endpointId &&
+            getLastUsedModel() == model &&
+            getLastUsedRouting() == savedRouting &&
+            (savedPersona == null || getLastUsedPersonaId() == savedPersona)
+        ) {
+            return true
+        }
+
+        return try {
+            val editor = gp.edit()
+                .putString("last_success_endpoint_id", endpointId)
+                .putString("last_success_model", model)
+                .putString("last_success_routing", savedRouting)
+            if (savedPersona != null) {
+                editor.putString("last_used_persona_id", savedPersona)
+            }
+            editor.commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * New chat IDs can reuse a deleted chat's preferences filename. Remove only
+     * the one-shot inheritance state before opening the new chat so stale
+     * provider/companion values can never suppress fresh last-used seeding.
+     */
+    fun prepareNewChatInheritance(): Boolean {
+        return try {
+            preferences.edit()
+                .remove("persona_id")
+                .remove("persona_activation_seeded")
+                .remove("provider_seeded")
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**
      * One-shot per chat: a brand-new chat restores its provider/model from the
-     * last successful config exactly once. After that the chat's own choice
-     * always wins, so re-opening an untouched empty chat never overwrites a
-     * selection the user just made in the Summoning Circle.
+     * last-used config exactly once. After that the chat's own choice wins.
      */
     fun isProviderSeeded() : Boolean {
         return getBoolean("provider_seeded", false)
     }
 
-    fun setProviderSeeded(seeded: Boolean) {
-        putBoolean("provider_seeded", seeded)
+    fun setProviderSeeded(seeded: Boolean): Boolean {
+        if (isProviderSeeded() == seeded) return true
+        return try {
+            preferences.edit().putBoolean("provider_seeded", seeded).commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Persist a restored endpoint/model and its one-shot guard atomically. */
+    fun commitNewChatProviderSeed(endpointId: String, model: String): Boolean {
+        if (endpointId.isBlank() || model.isBlank()) return false
+        return try {
+            preferences.edit()
+                .putString("api_endpoint_id", endpointId)
+                .putString("model", model)
+                .putBoolean("provider_seeded", true)
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**

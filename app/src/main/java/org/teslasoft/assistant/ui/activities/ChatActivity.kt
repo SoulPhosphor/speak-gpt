@@ -450,7 +450,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // unknown cancellation. A cancelled coroutine alone never proves the user
     // caused it. Reset at the start of every generation.
     private var userRequestedStop = false
-    // For a brand-new chat: the decision about restoring the last successful
+    // For a brand-new chat: the decision about restoring the last used
     // provider/model/routing, resolved during initSettings and acted on once the
     // chat UI exists (a dialog + Summoning Circle, or the API Endpoints screen).
     private var providerRestoreOutcome: NewChatProviderRestore.Outcome? = null
@@ -1211,6 +1211,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
             logitBiasPreferences = LogitBiasPreferences(this, preferences?.getLogitBiasesConfigId()!!)
             apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
+            // Returning from provider/model settings makes this chat the active
+            // source for the next new chat immediately.
+            recordLastUsedConfig()
         }
 
         // Diagnostics may have been toggled in Settings while we were away.
@@ -2346,7 +2349,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @Suppress("unchecked")
     private fun initSettings(historyResult: ChatPreferences.ChatHistoryResult) {
         // Brand-new chat: adopt the provider/model/routing the last conversation
-        // successfully used, before the endpoint/key below are read. Updates
+        // last used, before the endpoint/key below are read. Updates
         // apiEndpointObject when it restores; otherwise records what the UI must
         // do once it exists (a dialog, or the API Endpoints screen).
         maybeRestoreProviderForNewChat(historyResult)
@@ -4981,7 +4984,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /**
      * Brand-new chat only: adopt the provider/model/routing that the last
-     * conversation successfully used (owner spec, Aug 8 2026). Runs at most once
+     * conversation used most recently (owner spec, Aug 8 2026). Runs at most once
      * per chat and never touches a chat that already has messages, so a later
      * choice always wins. When the saved local setup is gone it records an
      * outcome for [handleProviderRestoreOutcome]; it never claims the model is
@@ -4990,11 +4993,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun maybeRestoreProviderForNewChat(historyResult: ChatPreferences.ChatHistoryResult) {
         if (!historyResult.messages.isNullOrEmpty()) return
         if (preferences?.isProviderSeeded() == true) return
-        preferences?.setProviderSeeded(true)
 
-        val endpointId = preferences?.getLastSuccessfulEndpointId().orEmpty()
-        val lastModel = preferences?.getLastSuccessfulModel().orEmpty()
-        val routing = preferences?.getLastSuccessfulRouting() ?: FavoriteModelObject.ROUTING_AUTOMATIC
+        val endpointId = preferences?.getLastUsedEndpointId().orEmpty()
+        val lastModel = preferences?.getLastUsedModel().orEmpty()
+        val routing = preferences?.getLastUsedRouting() ?: FavoriteModelObject.ROUTING_AUTOMATIC
 
         // A deleted provider profile reads back with a blank host; a favorite is
         // present only while its (model, endpoint) star exists.
@@ -5005,15 +5007,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         when (NewChatProviderRestore.decide(endpointId, lastModel, routing, endpointExists, favoriteExists)) {
             NewChatProviderRestore.Outcome.RESTORE -> {
-                preferences?.setApiEndpointId(endpointId)
-                preferences?.setModel(lastModel)
+                // Endpoint, model, and the one-shot guard land together.
+                preferences?.commitNewChatProviderSeed(endpointId, lastModel)
                 apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, endpointId)
             }
-            // Surfaced once the UI exists (initSettings tail).
-            NewChatProviderRestore.Outcome.MISSING_CONFIG ->
+            // Surfaced once the UI exists (initSettings tail). The guard is
+            // still committed now so reopening this empty chat does not repeat
+            // or overwrite a choice made in the recovery screen.
+            NewChatProviderRestore.Outcome.MISSING_CONFIG -> {
+                preferences?.setProviderSeeded(true)
                 providerRestoreOutcome = NewChatProviderRestore.Outcome.MISSING_CONFIG
-            NewChatProviderRestore.Outcome.NO_CONFIG ->
+            }
+            NewChatProviderRestore.Outcome.NO_CONFIG -> {
+                preferences?.setProviderSeeded(true)
                 providerRestoreOutcome = NewChatProviderRestore.Outcome.NO_CONFIG
+            }
         }
     }
 
@@ -5331,10 +5339,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * conversations are never retroactively changed.
      */
     private fun seedPersonaAndActivationDefaults() {
-        if (preferences?.isPersonaActivationSeeded() == true) return
+        val personaPrefs = PersonaPreferences.getPersonaPreferences(this)
+        val currentPersonaId = preferences?.getPersonaId().orEmpty()
+        val currentPersonaIsValid = currentPersonaId.isNotEmpty() &&
+            personaPrefs.getPersona(currentPersonaId).label.isNotEmpty()
+        if (preferences?.isPersonaActivationSeeded() == true && currentPersonaIsValid) return
 
-        if (preferences?.getPersonaId().isNullOrEmpty()) {
-            val personaPrefs = PersonaPreferences.getPersonaPreferences(this)
+        // A stale one-shot guard with no valid companion is repaired instead of
+        // preserving "No Companion" forever on an untouched empty chat.
+        var selectedPersonaId = currentPersonaId.takeIf { currentPersonaIsValid }.orEmpty()
+        if (selectedPersonaId.isEmpty()) {
             val personasList = personaPrefs.getPersonasList()
 
             if (personasList.isEmpty()) {
@@ -5347,18 +5361,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
 
             val lastPersona = preferences?.getLastUsedPersonaId().orEmpty()
-            if (lastPersona.isNotEmpty() && personaPrefs.getPersona(lastPersona).label.isNotEmpty()) {
-                // Rule 1: continue with the companion you last used.
-                preferences?.setPersonaId(lastPersona)
-            } else {
-                // Rule 2: first-ever use, or the last-used companion was since
-                // deleted — open with the companion at the top of the list. Use
-                // its stable id, never a hash of its (mutable) label.
-                preferences?.setPersonaId(personasList.first().id)
-            }
+            selectedPersonaId =
+                if (lastPersona.isNotEmpty() && personaPrefs.getPersona(lastPersona).label.isNotEmpty()) {
+                    // Rule 1: continue with the companion you last used.
+                    lastPersona
+                } else {
+                    // Rule 2: first-ever use, or the last-used companion was
+                    // deleted — use the stable id at the top of the list.
+                    personasList.first().id
+                }
         }
 
-        preferences?.setPersonaActivationSeeded(true)
+        // The companion and its one-shot guard are one synchronous write. A
+        // process teardown can no longer leave "seeded" with an empty persona.
+        preferences?.commitNewChatCompanionSeed(selectedPersonaId)
 
         // initUI performs the first avatar paint before initAI reaches this
         // new-chat seeding step. Re-resolve after assigning the Companion;
@@ -5437,9 +5453,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     * Setup SpeakGPT with activation prompt.
     * */
     private fun setup() {
-        if (messages.isEmpty()) {
+        val isNewChat = messages.isEmpty()
+        if (isNewChat) {
             seedPersonaAndActivationDefaults()
             seedLoreBooksForNewChat()
+        }
+
+        // Opening an existing chat, or finishing a new chat's inheritance,
+        // makes its complete model/endpoint/routing/companion snapshot the
+        // source for the next new chat.
+        recordLastUsedConfig()
+
+        if (isNewChat) {
             val prompt: String = preferences!!.getPrompt()
 
             if (prompt.toString() != "" && prompt.toString() != "null" && prompt != "") {
@@ -7136,24 +7161,28 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             last.remove(MessageCompletionState.KEY_STATE_DETAIL)
-            // This config just produced a successful reply — remember it so a
-            // future brand-new chat opens on the setup that last worked.
-            recordLastSuccessfulConfig()
+            // Keep the last-used snapshot current after a completed reply as a
+            // fallback for any path that changed settings during generation.
+            recordLastUsedConfig()
         }
     }
 
-    /** Remember the provider + model + routing that just produced a successful
-     *  reply, so a brand-new chat can restore it (see
-     *  [maybeRestoreProviderForNewChat]). Routing follows the favorite for the
-     *  (model, endpoint) pair, or Automatic when there is none. */
-    private fun recordLastSuccessfulConfig() {
-        val endpointId = apiEndpointObject?.id?.takeIf { it.isNotBlank() }
-            ?: preferences?.getApiEndpointId().orEmpty()
-        val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
+    /** Remember the complete settings of the chat currently in use. The
+     *  current preferences value wins over the cached model so a model returned
+     *  from provider settings is captured before this activity is recreated. */
+    private fun recordLastUsedConfig() {
+        val endpointId = preferences?.getApiEndpointId().orEmpty()
+        val usedModel = preferences?.getModel().orEmpty().ifBlank { model }
         if (endpointId.isBlank() || usedModel.isBlank()) return
-        val routing = favoriteForActiveEndpoint(usedModel)?.routingType
+        val routing = FavoriteModelsPreferences.getPreferences(this)
+            .getFavorite(usedModel, endpointId)?.routingType
             ?: FavoriteModelObject.ROUTING_AUTOMATIC
-        preferences?.setLastSuccessfulConfig(endpointId, usedModel, routing)
+        preferences?.setLastUsedChatConfig(
+            endpointId,
+            usedModel,
+            routing,
+            preferences?.getPersonaId().orEmpty()
+        )
     }
 
     /** Stamp a terminal state onto the last assistant message ONLY if it is
