@@ -299,7 +299,6 @@
     <string name="tile_system_message_title">Wiadomość systemowa</string>
     <string name="tile_system_message_desc">Ta funkcja pozwala ustawić wiadomość systemową, która zostanie wysłana jako wiadomość systemowa.</string>
     <string name="tile_ale_title">Automatyczne wykrywanie języka</string>
-    <string name="tile_ale_desc">Ta funkcja umożliwia włączenie automatycznego wykrywania języka mowy.</string>
     <string name="tile_classic_layout_title">Klasyczny układ czatu</string>
     <string name="tile_classic_layout_desc">Klasyczny układ to układ czatu jak na oficjalnej stronie ChatGPT.</string>
     <string name="tile_sh_title">Komendy /Slash</string>

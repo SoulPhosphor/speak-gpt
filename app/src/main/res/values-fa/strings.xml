@@ -301,7 +301,6 @@
     <string name="tile_system_message_title">پیام سیستمی</string>
     <string name="tile_system_message_desc">این ویژگی به شما امکان تنظیم پیام سیستمی را می‌دهد که به‌عنوان پیام سیستمی ارسال خواهد شد.</string>
     <string name="tile_ale_title">تشخیص خودکار زبان</string>
-    <string name="tile_ale_desc">این ویژگی به شما امکان فعال کردن تشخیص خودکار زبان گفتار را می‌دهد.</string>
     <string name="tile_classic_layout_title">طرح‌بندی گفتگوی کلاسیک</string>
     <string name="tile_classic_layout_desc">طرح‌بندی کلاسیک یک طرح‌بندی گفتگو مانند وبگاه رسمی ChatGPT است.</string>
     <string name="tile_sh_title">دستورهای خط‌مورب</string>

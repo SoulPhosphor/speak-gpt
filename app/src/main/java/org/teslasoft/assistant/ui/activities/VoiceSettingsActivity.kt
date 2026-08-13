@@ -69,13 +69,13 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var tileVoice: TileFragment? = null
     private var tileVoiceLanguage: TileFragment? = null
     private var tileSTT: TileFragment? = null
-    private var tileLangDetect: TileFragment? = null
     private var tileHandsFreeTiming: TileFragment? = null
     private var tileVadMethod: TileFragment? = null
     private var rowVoiceAdvanced: LinearLayout? = null
     private var rowVoiceDebugging: LinearLayout? = null
     private var switchAlwaysSpeak: MaterialSwitch? = null
     private var switchAutoSend: MaterialSwitch? = null
+    private var switchAutoLangDetect: MaterialSwitch? = null
     private var switchReadFormatting: MaterialSwitch? = null
 
     private var btnBack: ImageButton? = null
@@ -219,19 +219,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             functionDesc = getString(R.string.tile_voice_input_desc)
         )
 
-        tileLangDetect = TileFragment.newInstance(
-            preferences?.getAutoLangDetect() == true,
-            true,
-            getString(R.string.tile_ale_title),
-            null,
-            getString(R.string.on),
-            getString(R.string.off),
-            R.drawable.ic_language,
-            false,
-            chatId,
-            getString(R.string.tile_ale_desc)
-        )
-
         tileHandsFreeTiming = TileFragment.newInstance(
             checked = false,
             checkable = false,
@@ -270,7 +257,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             .replace(R.id.tile_voice, tileVoice!!)
             .replace(R.id.tile_voice_language, tileVoiceLanguage!!)
             .replace(R.id.tile_stt, tileSTT!!)
-            .replace(R.id.tile_auto_language_detection, tileLangDetect!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
             .commitNow()
@@ -317,12 +303,10 @@ class VoiceSettingsActivity : FragmentActivity() {
             showVoiceInputEnginePicker()
         }
 
-        tileLangDetect?.setOnCheckedChangeListener { isChecked ->
-            if (isChecked) {
-                preferences?.setAutoLangDetect(true)
-            } else {
-                preferences?.setAutoLangDetect(false)
-            }
+        switchAutoLangDetect = findViewById(R.id.switch_auto_lang_detect)
+        switchAutoLangDetect?.isChecked = preferences?.getAutoLangDetect() == true
+        switchAutoLangDetect?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setAutoLangDetect(checked)
         }
 
         tileHandsFreeTiming?.setOnTileClickListener {

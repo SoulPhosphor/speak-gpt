@@ -760,8 +760,7 @@
     <string name="system_prompt_needs_title">Please enter a title.</string>
     <string name="system_prompt_delete_title">Delete System Prompt?</string>
     <string name="system_prompt_delete_message">This system prompt will be permanently removed.</string>
-    <string name="tile_ale_title">Automatic language detection</string>
-    <string name="tile_ale_desc">This feature allows you to enable automatic language detection of speech.</string>
+    <string name="tile_ale_title">Automatic Language Detection</string>
     <string name="tile_classic_layout_title">Classic chat layout</string>
     <string name="tile_classic_layout_desc">Classic layout is a chat layout like on the official ChatGPT website.</string>
     <string name="tile_sh_title">Slash commands</string>

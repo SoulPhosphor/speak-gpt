@@ -302,7 +302,6 @@
     <string name="tile_system_message_title">Sistem mesajı</string>
     <string name="tile_system_message_desc">Bu özellik, sistem mesajı olarak gönderilecek sistem mesajını ayarlamanıza olanak tanır.</string>
     <string name="tile_ale_title">Otomatik dil algılama</string>
-    <string name="tile_ale_desc">Bu özellik, konuşmanın otomatik dil algılamasını etkinleştirmenize olanak tanır.</string>
     <string name="tile_classic_layout_title">Klasik sohbet düzeni</string>
     <string name="tile_classic_layout_desc">Klasik düzen, resmi ChatGPT web sitesindeki gibi bir sohbet düzenidir.</string>
     <string name="tile_sh_title">Slash komutları</string>

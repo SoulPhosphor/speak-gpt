@@ -302,7 +302,6 @@
     <string name="tile_system_message_title">Системное сообщение</string>
     <string name="tile_system_message_desc">Эта функция позволяет установить системное сообщение, которое будет отправлено как системное сообщение.</string>
     <string name="tile_ale_title">Автоматическое определение языка</string>
-    <string name="tile_ale_desc">Эта функция позволяет включить автоматическое определение языка речи.</string>
     <string name="tile_classic_layout_title">Классическая компоновка чата</string>
     <string name="tile_classic_layout_desc">Классическая компоновка - это компоновка чата, как на официальном сайте ChatGPT.</string>
     <string name="tile_sh_title">Команды с /slash</string>

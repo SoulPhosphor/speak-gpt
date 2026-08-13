@@ -301,7 +301,6 @@
     <string name="tile_system_message_title">Systemnachricht</string>
     <string name="tile_system_message_desc">Diese Funktion ermöglicht es Ihnen, die Systemnachricht festzulegen, die als Systemnachricht gesendet wird.</string>
     <string name="tile_ale_title">Automatische Spracherkennung</string>
-    <string name="tile_ale_desc">Diese Funktion ermöglicht es Ihnen, die automatische Spracherkennung von Sprache zu aktivieren.</string>
     <string name="tile_classic_layout_title">Klassisches Chat-Layout</string>
     <string name="tile_classic_layout_desc">Das klassische Layout ist ein Chat-Layout wie auf der offiziellen ChatGPT-Website.</string>
     <string name="tile_sh_title">Slash-Befehle</string>

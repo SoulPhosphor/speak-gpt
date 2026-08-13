@@ -151,7 +151,7 @@
                 android:layout_marginEnd="12dp"
                 android:baselineAligned="false"
                 android:orientation="horizontal"
-                android:weightSum="2">
+                android:weightSum="1">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/tile_stt"
@@ -159,13 +159,22 @@
                     android:layout_height="match_parent"
                     android:layout_marginHorizontal="4dp"
                     android:layout_weight="1" />
+            </LinearLayout>
 
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_auto_language_detection"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
+            <LinearLayout
+                style="@style/Widget.App.Row.Toggle"
+                android:paddingHorizontal="20dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_ale_title" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_auto_lang_detect"
+                    style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
             <LinearLayout

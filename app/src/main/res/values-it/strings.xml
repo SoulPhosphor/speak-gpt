@@ -302,7 +302,6 @@
     <string name="tile_system_message_title">Messaggio di sistema</string>
     <string name="tile_system_message_desc">Questa funzione ti permette di impostare il messaggio di sistema che sarà inviato come messaggio di sistema.</string>
     <string name="tile_ale_title">Rilevamento automatico della lingua</string>
-    <string name="tile_ale_desc">Questa funzione ti permette di abilitare il rilevamento automatico della lingua del discorso.</string>
     <string name="tile_classic_layout_title">Layout chat classico</string>
     <string name="tile_classic_layout_desc">Il layout classico è un layout di chat come sul sito ufficiale di ChatGPT.</string>
     <string name="tile_sh_title">Comandi Slash</string>
