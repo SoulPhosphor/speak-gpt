@@ -116,27 +116,19 @@
             </LinearLayout>
 
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginEnd="12dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal"
-                android:weightSum="2">
+                style="@style/Widget.App.Row.Toggle"
+                android:paddingHorizontal="20dp">
 
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_always_speak"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/always_speak_responses" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_always_speak"
+                    style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
             <LinearLayout

@@ -991,6 +991,7 @@
     <string name="tile_voice_settings_subtitle">Settings related to transcription and text to speech.</string>
     <string name="tile_voice_settings_desc">Everything related to speech in one place: text-to-speech voice and engine, speech-to-text (dictation) engine, hands-free mode, voice-activity detection, and audio feedback. Tap to open.</string>
     <string name="voice_section_tts">Text-to-speech</string>
+    <string name="always_speak_responses">Always Speak Responses</string>
     <string name="read_formatting_language_toggle">Read Formatting Language</string>
     <string name="voice_section_stt">Speech-to-text (dictation)</string>
     <string name="voice_section_handsfree">Hands-free &amp; voice activity</string>

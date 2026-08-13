@@ -378,7 +378,12 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * @param mode mode.
      */
     fun setNotSilence(mode: Boolean) {
-        putBoolean("always_speak_mode", mode)
+        if (getBoolean("always_speak_mode", false) != mode) {
+            // This control is commonly changed immediately before the app is
+            // closed. Commit synchronously so process teardown cannot discard
+            // the user's final choice and restore the previous value at launch.
+            preferences.edit().putBoolean("always_speak_mode", mode).commit()
+        }
     }
 
     /**
