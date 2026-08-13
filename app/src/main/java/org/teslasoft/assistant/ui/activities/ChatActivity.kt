@@ -443,7 +443,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var isRecording = false
     private var keyboardMode = false
     private var isTTSInitialized = false
-    private var silenceMode = false
     private var autoLangDetect = false
     private var cancelState = false
     // True only when the CURRENT generation was cancelled by a deliberate user
@@ -2365,7 +2364,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
             finishActivity()
         } else {
-            silenceMode = preferences!!.getSilence()
             autoLangDetect = preferences!!.getAutoLangDetect()
             messages = historyResult.messages
 
@@ -9074,11 +9072,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Hands-free is a spoken conversation: it must read the reply back (that
         // completion is also what re-arms the mic) regardless of the Always-speak
         // setting — turning Always-speak off must never break hands-free (owner
-        // requirement). Silent mode still wins (the two are mutually exclusive in
-        // settings, so this only matters defensively). Ordinary turns are
-        // unchanged: st (a voice turn) or Always-speak drive the readback.
-        val willReadAloud = (st && !silenceMode) || preferences!!.getNotSilence() ||
-                (handsFree && !silenceMode)
+        // requirement). Ordinary turns are unchanged: st (a voice turn) or
+        // Always-speak drive the readback.
+        val willReadAloud = st || preferences!!.getNotSilence() || handsFree
 
         // Stamp this readback: if the user stops while we're still inside an
         // async hop below (ML Kit language detection), the stale stamp keeps

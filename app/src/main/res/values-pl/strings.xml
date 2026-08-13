@@ -290,8 +290,6 @@
     <string name="tile_whisper_stt">Użyj Whisper</string>
     <string name="tile_google_stt">Używane jest STT Google</string>
     <string name="tile_stt_desc">Ta funkcja pozwala ustawić silnik STT. Whisper jest płatny.</string>
-    <string name="tile_silent_mode_title">Tryb cichy</string>
-    <string name="tile_silent_mode_desc">Ta funkcja pozwala na ustawienie, aby aplikacja nigdy nie wymawiała odpowiedzi.</string>
     <string name="tile_always_speak_title">Zawsze mów</string>
     <string name="tile_always_speak_desc">Ta funkcja pozwala na ustawienie, aby aplikacja zawsze wymawiała odpowiedzi.</string>
     <string name="tile_text_model_title">Model generowania tekstu</string>

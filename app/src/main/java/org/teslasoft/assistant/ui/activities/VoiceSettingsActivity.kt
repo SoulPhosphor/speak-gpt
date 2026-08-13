@@ -68,7 +68,6 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var tileTTS: TileFragment? = null
     private var tileVoice: TileFragment? = null
     private var tileVoiceLanguage: TileFragment? = null
-    private var tileSilentMode: TileFragment? = null
     private var tileSTT: TileFragment? = null
     private var tileLangDetect: TileFragment? = null
     private var tileHandsFreeTiming: TileFragment? = null
@@ -207,19 +206,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             functionDesc = getString(R.string.tile_voice_lang_desc)
         )
 
-        tileSilentMode = TileFragment.newInstance(
-            preferences?.getSilence() == true,
-            true,
-            getString(R.string.tile_silent_mode_title),
-            null,
-            getString(R.string.on),
-            getString(R.string.off),
-            R.drawable.ic_mute,
-            preferences?.getNotSilence() == true,
-            chatId,
-            getString(R.string.tile_silent_mode_desc)
-        )
-
         tileSTT = TileFragment.newInstance(
             checked = false,
             checkable = false,
@@ -283,7 +269,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             .replace(R.id.tile_tts, tileTTS!!)
             .replace(R.id.tile_voice, tileVoice!!)
             .replace(R.id.tile_voice_language, tileVoiceLanguage!!)
-            .replace(R.id.tile_silent_mode, tileSilentMode!!)
             .replace(R.id.tile_stt, tileSTT!!)
             .replace(R.id.tile_auto_language_detection, tileLangDetect!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
@@ -318,30 +303,8 @@ class VoiceSettingsActivity : FragmentActivity() {
 
         switchAlwaysSpeak = findViewById(R.id.switch_always_speak)
         switchAlwaysSpeak?.isChecked = preferences?.getNotSilence() == true
-        switchAlwaysSpeak?.isEnabled = preferences?.getSilence() != true
-
-        tileSilentMode?.setOnCheckedChangeListener { isChecked ->
-            if (isChecked) {
-                preferences?.setSilence(true)
-                preferences?.setNotSilence(false)
-                switchAlwaysSpeak?.isChecked = false
-                switchAlwaysSpeak?.isEnabled = false
-            } else {
-                preferences?.setSilence(false)
-                switchAlwaysSpeak?.isEnabled = true
-            }
-        }
-
         switchAlwaysSpeak?.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                preferences?.setNotSilence(true)
-                preferences?.setSilence(false)
-                tileSilentMode?.setChecked(false)
-                tileSilentMode?.setEnabled(false)
-            } else {
-                preferences?.setNotSilence(false)
-                tileSilentMode?.setEnabled(true)
-            }
+            preferences?.setNotSilence(isChecked)
         }
 
         switchAutoSend = findViewById(R.id.switch_auto_send)

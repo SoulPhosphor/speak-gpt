@@ -292,8 +292,6 @@
     <string name="tile_whisper_stt">Використовувати Whisper</string>
     <string name="tile_google_stt">Використовується Google STT</string>
     <string name="tile_stt_desc">Ця функція дозволяє вибрати STT двигун. Whisper є платним.</string>
-    <string name="tile_silent_mode_title">Тихий режим</string>
-    <string name="tile_silent_mode_desc">Ця функція дозволяє встановити, що додаток ніколи не озвучує відповіді.</string>
     <string name="tile_always_speak_title">Завжди говорити</string>
     <string name="tile_always_speak_desc">Ця функція дозволяє встановити, що додаток завжди озвучує відповіді.</string>
     <string name="tile_text_model_title">Модель генерації тексту</string>

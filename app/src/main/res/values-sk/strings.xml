@@ -289,8 +289,6 @@
     <string name="tile_whisper_stt">Použiť Whisper</string>
     <string name="tile_google_stt">Používa sa STT od Google</string>
     <string name="tile_stt_desc">Táto funkcia umožňuje nastaviť motor STT. Whisper je platený.</string>
-    <string name="tile_silent_mode_title">Tichý režim</string>
-    <string name="tile_silent_mode_desc">Táto funkcia umožňuje nechať aplikáciu nikdy nevyslovovať odpovede.</string>
     <string name="tile_always_speak_title">Vždy hovoriť</string>
     <string name="tile_always_speak_desc">Táto funkcia umožňuje nechať aplikáciu vždy vyslovovať odpovede.</string>
     <string name="tile_text_model_title">Model generovania textu</string>

@@ -293,8 +293,6 @@
     <string name="tile_whisper_stt">Использовать Whisper</string>
     <string name="tile_google_stt">Используется Google STT</string>
     <string name="tile_stt_desc">Эта функция позволяет установить движок STT. Whisper платный.</string>
-    <string name="tile_silent_mode_title">Тихий режим</string>
-    <string name="tile_silent_mode_desc">Эта функция позволяет не давать приложению произносить ответы вслух.</string>
     <string name="tile_always_speak_title">Всегда говорить</string>
     <string name="tile_always_speak_desc">Эта функция позволяет заставить приложение всегда произносить ответы вслух.</string>
     <string name="tile_text_model_title">Модель генерации текста</string>

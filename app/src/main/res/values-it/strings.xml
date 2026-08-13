@@ -293,8 +293,6 @@
     <string name="tile_whisper_stt">Usa Whisper</string>
     <string name="tile_google_stt">Viene usato Google STT</string>
     <string name="tile_stt_desc">Questa funzione ti permette di impostare il motore STT. Whisper è a pagamento.</string>
-    <string name="tile_silent_mode_title">Modalità silenziosa</string>
-    <string name="tile_silent_mode_desc">Questa funzione permette all\'app di non pronunciare mai le risposte.</string>
     <string name="tile_always_speak_title">Parla sempre</string>
     <string name="tile_always_speak_desc">Questa funzione permette all\'app di pronunciare sempre le risposte.</string>
     <string name="tile_text_model_title">Modello di generazione del testo</string>

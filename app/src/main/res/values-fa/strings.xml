@@ -292,8 +292,6 @@
     <string name="tile_whisper_stt">استفاده از Whisper</string>
     <string name="tile_google_stt">STT گوگل استفاده شده است</string>
     <string name="tile_stt_desc">این ویژگی به شما امکان تنظیم موتور STT را می‌دهد. Whisper پولی است.</string>
-    <string name="tile_silent_mode_title">حالت بی‌صدا</string>
-    <string name="tile_silent_mode_desc">این ویژگی به شما امکان می‌دهد که این برنامه هرگز پاسخ‌ها را تلفظ نکند.</string>
     <string name="tile_always_speak_title">همیشه صحبت کن</string>
     <string name="tile_always_speak_desc">این ویژگی به شما امکان می‌دهد که این برنامه همیشه پاسخ‌ها را تلفظ کند.</string>
     <string name="tile_text_model_title">مدل تولید متن</string>

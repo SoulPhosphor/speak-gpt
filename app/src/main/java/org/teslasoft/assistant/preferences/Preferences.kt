@@ -349,24 +349,6 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * Retrieves the silence mode status from the shared preferences.
-     *
-     * @return The silence mode status, true if enabled or false otherwise.
-     */
-    fun getSilence() : Boolean {
-        return getBoolean("silence_mode", false)
-    }
-
-    /**
-     * Sets silence mode.
-     *
-     * @param mode mode.
-     */
-    fun setSilence(mode: Boolean) {
-        putBoolean("silence_mode", mode)
-    }
-
-    /**
      * Retrieves the always speak mode status from the shared preferences.
      *
      * @return The always speak mode status, true if enabled or false otherwise.

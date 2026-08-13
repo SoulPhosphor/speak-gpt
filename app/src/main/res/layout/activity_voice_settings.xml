@@ -86,17 +86,10 @@
                 android:layout_marginEnd="12dp"
                 android:baselineAligned="false"
                 android:orientation="horizontal"
-                android:weightSum="2">
+                android:weightSum="1">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/tile_voice_language"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_silent_mode"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_marginHorizontal="4dp"
