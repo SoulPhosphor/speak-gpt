@@ -376,13 +376,21 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * Sets always speak mode.
      *
      * @param mode mode.
+     * @param commitImmediately true for a direct user toggle; false when copying
+     * settings into a new chat, where blocking startup on disk is unnecessary.
      */
-    fun setNotSilence(mode: Boolean) {
+    fun setNotSilence(mode: Boolean, commitImmediately: Boolean = true) {
         if (getBoolean("always_speak_mode", false) != mode) {
-            // This control is commonly changed immediately before the app is
-            // closed. Commit synchronously so process teardown cannot discard
-            // the user's final choice and restore the previous value at launch.
-            preferences.edit().putBoolean("always_speak_mode", mode).commit()
+            val editor = preferences.edit().putBoolean("always_speak_mode", mode)
+            if (commitImmediately) {
+                // A direct toggle is commonly changed immediately before the app
+                // closes, so make that final user choice durable before returning.
+                editor.commit()
+            } else {
+                // New-chat initialization needs the value in process memory now,
+                // while its disk write can safely finish in the background.
+                editor.apply()
+            }
         }
     }
 
@@ -1394,39 +1402,17 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * The persona last applied in any chat (global, not per-chat). A brand-new
-     * chat seeds its per-chat persona from this once, so a fresh chat continues
-     * with the persona you were last using instead of resetting to none.
-     *
-     * @return Persona ID, or an empty String when the last selection was none.
-     * */
-    fun getLastUsedPersonaId() : String {
-        return getGlobalString("last_used_persona_id", "")
-    }
-
-    /**
-     * Record the persona just applied so future new chats default to it.
-     *
-     * @param id Persona ID, or an empty String for none.
-     * */
-    fun setLastUsedPersonaId(id: String) {
-        putGlobalString("last_used_persona_id", id)
-    }
-
-    /**
-     * True once ANY persona choice — including an explicit "none" — has ever
-     * been recorded from Quick Settings. Lets new-chat seeding tell apart
-     * "the user never picked a companion" (seed the first one in the list,
-     * owner ruling July 10 2026) from "the user explicitly picked none"
-     * (respect the none).
-     * */
-    fun hasLastUsedPersonaChoice(): Boolean {
-        return gp.contains("last_used_persona_id")
+     * The companion from the most recent chat whose assistant response
+     * completed successfully. A new chat may inherit only this qualified
+     * companion, never a selection from an unopened or unsuccessful chat.
+     */
+    fun getLastSuccessfulPersonaId() : String {
+        return getGlobalString("last_success_persona_id", "")
     }
 
     /**
      * The activation prompt last applied in any chat (global, not per-chat),
-     * seeded into new chats the same way as [getLastUsedPersonaId].
+     * seeded into new chats independently of the successful-chat snapshot.
      *
      * @return Activation prompt ID, or an empty String when the last selection
      *         was none (or none was ever set).
@@ -1446,9 +1432,9 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * One-shot guard (per chat) so a new chat seeds its persona/activation from
-     * the last-used global defaults exactly once. After that the chat's own
-     * selection always wins — including an explicit "none" the user picks later.
+     * One-shot guard (per chat) so a new chat seeds its companion from the last
+     * successful chat and its activation prompt from the existing global default
+     * exactly once. After that the chat's own selections always win.
      * */
     fun isPersonaActivationSeeded() : Boolean {
         return getBoolean("persona_activation_seeded", false)
@@ -1459,13 +1445,11 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * The provider (API endpoint), model, and routing that the LAST conversation
-     * to receive a successful reply used. A brand-new chat restores these once so
-     * it opens on the setup that last worked, instead of a hardcoded default.
-     * Recorded only on a successful reply, so a config that only ever errored
-     * never propagates. Global, like the last-used companion. Routing defaults to
-     * "automatic" (mirrors FavoriteModelObject.ROUTING_AUTOMATIC) — the value a
-     * non-favorite model reads back as.
+     * The provider (API endpoint), model, routing, and companion that the LAST
+     * conversation to receive a successful reply used. A brand-new chat restores
+     * this snapshot once, so a chat that was merely opened or failed can never
+     * become the source. Routing defaults to "automatic" (mirrors
+     * FavoriteModelObject.ROUTING_AUTOMATIC).
      */
     fun getLastSuccessfulEndpointId() : String {
         return getGlobalString("last_success_endpoint_id", "")
@@ -1479,10 +1463,19 @@ class Preferences private constructor(private var preferences: SharedPreferences
         return getGlobalString("last_success_routing", "automatic")
     }
 
-    fun setLastSuccessfulConfig(endpointId: String, model: String, routing: String) {
-        putGlobalString("last_success_endpoint_id", endpointId)
-        putGlobalString("last_success_model", model)
-        putGlobalString("last_success_routing", routing)
+    fun setLastSuccessfulConfig(
+        endpointId: String,
+        model: String,
+        routing: String,
+        personaId: String
+    ): Boolean {
+        if (endpointId.isBlank() || model.isBlank() || personaId.isBlank()) return false
+        return gp.edit()
+            .putString("last_success_endpoint_id", endpointId)
+            .putString("last_success_model", model)
+            .putString("last_success_routing", routing)
+            .putString("last_success_persona_id", personaId)
+            .commit()
     }
 
     /**
@@ -1497,6 +1490,20 @@ class Preferences private constructor(private var preferences: SharedPreferences
 
     fun setProviderSeeded(seeded: Boolean) {
         putBoolean("provider_seeded", seeded)
+    }
+
+    /**
+     * A deleted chat can leave its hashed settings file behind. Clear only the
+     * model/companion inheritance values for the exact new chat ID so its startup
+     * cannot be suppressed by stale one-shot guards. apply() updates process
+     * memory before returning and writes to disk in the background.
+     */
+    fun resetNewChatInheritance() {
+        preferences.edit()
+            .remove("persona_id")
+            .remove("persona_activation_seeded")
+            .remove("provider_seeded")
+            .apply()
     }
 
     /**

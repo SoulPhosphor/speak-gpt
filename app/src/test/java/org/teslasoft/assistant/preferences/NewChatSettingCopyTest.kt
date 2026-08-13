@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
@@ -92,6 +93,17 @@ class NewChatSettingCopyTest {
             expected,
             copied
         )
+    }
+
+    @Test
+    fun inheritanceIsInitializedBeforeTheNewChatOpens() {
+        val source = addChatDialogSource()
+        val reset = source.indexOf("newPreferences.resetNewChatInheritance()")
+        val lastSettingsWrite = source.indexOf("newPreferences.setAssistantName")
+        val open = source.indexOf("listener?.onAdd")
+
+        assertTrue("New-chat inheritance must be reset before opening the chat", reset >= 0 && reset < open)
+        assertTrue("All new-chat settings must be in memory before opening the chat", lastSettingsWrite >= 0 && lastSettingsWrite < open)
     }
 
     /** The known gap the rebuild's app-wide settings make moot (plan 4.7):

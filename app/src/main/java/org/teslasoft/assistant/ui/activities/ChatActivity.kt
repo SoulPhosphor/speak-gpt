@@ -2033,14 +2033,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     // Opened from [promptCreateFirstCompanion] when a new chat has no companion
     // to open with because none exist yet. On a companion being created the
-    // list returns it; adopt it as this chat's companion AND as the last-used
-    // default, and mark seeding done so it isn't re-run.
+    // list returns it; adopt it for this chat and mark seeding done. It becomes
+    // the default for later chats only after an assistant response succeeds.
     private val createFirstCompanionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             val personaId = result.data?.getStringExtra("personaId")
             if (!personaId.isNullOrEmpty()) {
                 preferences?.setPersonaId(personaId)
-                preferences?.setLastUsedPersonaId(personaId)
                 preferences?.setPersonaActivationSeeded(true)
                 // onResume painted before this result assigned the new
                 // Companion, so resolve its picture now instead of leaving
@@ -5314,21 +5313,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /**
-     * Decide which companion a brand-new chat opens with. Owner rules
-     * (July 11 2026 — these SUPERSEDE the July 10 wording; there is no other
-     * acceptable behavior):
-     *   1. Default to the companion you last used.
-     *   2. The ONLY exception is first-ever use — no last-used companion yet
-     *      (or the last-used one was since deleted): open with whichever
-     *      companion is at the top of the list.
-     *   3. If no companion exists at all, a chat can't begin: prompt the owner
-     *      to create one and take them straight to the creation screen.
-     * "Last used" is recorded whenever a companion is chosen through ANY
-     * selection surface (Quick Settings and the Companions list both write it),
-     * so it always reflects the companion actually in use. One-shot per chat
-     * (the persona_activation_seeded flag) and only for an empty chat (called
-     * from [setup] inside its messages.isEmpty() guard), so existing
-     * conversations are never retroactively changed.
+     * Decide which companion a brand-new chat opens with:
+     *   1. Default to the companion from the most recent chat that received a
+     *      successful assistant response.
+     *   2. If no successful companion has been recorded yet, or it was deleted,
+     *      use the companion at the top of the list.
+     *   3. If no companion exists at all, prompt the owner to create one and
+     *      open the creation screen.
+     * One-shot per chat (the persona_activation_seeded flag) and only for an
+     * empty chat, so existing conversations are never retroactively changed.
      */
     private fun seedPersonaAndActivationDefaults() {
         if (preferences?.isPersonaActivationSeeded() == true) return
@@ -5346,7 +5339,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 return
             }
 
-            val lastPersona = preferences?.getLastUsedPersonaId().orEmpty()
+            val lastPersona = preferences?.getLastSuccessfulPersonaId().orEmpty()
             if (lastPersona.isNotEmpty() && personaPrefs.getPersona(lastPersona).label.isNotEmpty()) {
                 // Rule 1: continue with the companion you last used.
                 preferences?.setPersonaId(lastPersona)
@@ -7136,24 +7129,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             last.remove(MessageCompletionState.KEY_STATE_DETAIL)
-            // This config just produced a successful reply — remember it so a
-            // future brand-new chat opens on the setup that last worked.
+            // This chat just produced a successful reply, so its complete
+            // model-and-companion snapshot may qualify for the next new chat.
             recordLastSuccessfulConfig()
         }
     }
 
-    /** Remember the provider + model + routing that just produced a successful
-     *  reply, so a brand-new chat can restore it (see
-     *  [maybeRestoreProviderForNewChat]). Routing follows the favorite for the
-     *  (model, endpoint) pair, or Automatic when there is none. */
+    /** Remember the provider, model, routing, and companion that just produced
+     *  a successful reply. All values must come from this same chat; an empty or
+     *  deleted companion leaves the prior complete snapshot unchanged. */
     private fun recordLastSuccessfulConfig() {
         val endpointId = apiEndpointObject?.id?.takeIf { it.isNotBlank() }
             ?: preferences?.getApiEndpointId().orEmpty()
         val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
-        if (endpointId.isBlank() || usedModel.isBlank()) return
+        val personaId = preferences?.getPersonaId().orEmpty()
+        val personaExists = personaId.isNotBlank() &&
+            PersonaPreferences.getPersonaPreferences(this).getPersona(personaId).label.isNotBlank()
+        if (endpointId.isBlank() || usedModel.isBlank() || !personaExists) return
         val routing = favoriteForActiveEndpoint(usedModel)?.routingType
             ?: FavoriteModelObject.ROUTING_AUTOMATIC
-        preferences?.setLastSuccessfulConfig(endpointId, usedModel, routing)
+        preferences?.setLastSuccessfulConfig(endpointId, usedModel, routing, personaId)
     }
 
     /** Stamp a terminal state onto the last assistant message ONLY if it is
