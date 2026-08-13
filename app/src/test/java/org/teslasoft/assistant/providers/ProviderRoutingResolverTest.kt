@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.providers
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -71,7 +72,8 @@ class ProviderRoutingResolverTest {
     fun onlyWithProviderAttachesRestriction() {
         val r = ProviderRoutingResolver.resolve(true, favorite(FavoriteModelObject.ROUTING_ONLY, selected = "deepinfra"))
         assertNotNull(r.providerJson)
-        assertEquals("deepinfra", r.providerJson!!.getAsJsonArray("order")[0].asString)
+        assertEquals("deepinfra", r.providerJson!!.getAsJsonArray("only")[0].asString)
+        assertFalse(r.providerJson!!.has("order"))
         assertEquals(false, r.providerJson!!.get("allow_fallbacks").asBoolean)
         assertEquals(RoutingBlock.NONE, r.block)
     }
