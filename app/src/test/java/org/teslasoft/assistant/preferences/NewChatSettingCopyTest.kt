@@ -67,7 +67,6 @@ class NewChatSettingCopyTest {
             // feature (image-generation-rebuild-plan.md §15) — a deliberate
             // migration-era change, not drift.
             "ImagineCommand",
-            "Layout",
             "LogitBiasesConfigId",
             "MaxTokens",
             "Model",
