@@ -97,7 +97,7 @@ Do not guess its status from appearance or old documentation.
 | Personas List | `activity_persona_list.xml` | Shared | Header shared | Partial | List item layout unconverted; same FAB note. |
 | Local Whisper Models | `activity_local_whisper_models.xml` | Shared | Header shared | Partial | Body rows and download controls not audited. |
 | Local Whisper Storage | `activity_local_whisper_manage.xml` | Shared | Header shared | Partial | Body not audited. |
-| Voice Settings | `activity_voice_settings.xml` | Shared | Header plus several shared rows | Partial | Remaining body components not audited; a few local attributes remain. |
+| Voice Settings | `activity_voice_settings.xml` | Shared | Header plus shared navigation and toggle rows, including Always Speak Responses | Partial | Remaining body components not audited; a few local attributes remain. |
 | Advanced Voice Settings | `activity_voice_advanced.xml` | Shared | Header shared | Partial | Deliberately plain row structure is kept by design; ~48 local text attributes remain — convert gently without changing the row structure or removing any control. |
 | Control Center | `activity_settings.xml` | Shared | Extensive shared row adoption (largest shared-style user in the app) | Partial | A handful of local hardcoded attributes remain; full component audit pending. |
 | Audio Debugging | `activity_audio_debugging.xml` | Shared | Header shared | Partial | Body largely local. Debug-only screen, low priority. |

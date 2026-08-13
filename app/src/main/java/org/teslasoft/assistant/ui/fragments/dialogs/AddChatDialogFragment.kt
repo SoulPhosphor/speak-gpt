@@ -261,7 +261,6 @@ class AddChatDialogFragment : DialogFragment() {
             }
 
             chatPreferences?.addChat(requireActivity(), chatName)
-            listener?.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
 
             // Copy settings from default
             val preferences: Preferences = Preferences.getPreferences(requireActivity(), "")
@@ -301,6 +300,7 @@ class AddChatDialogFragment : DialogFragment() {
             val newPreferences: Preferences = Preferences.getPreferences(requireActivity(), Hash.hash(chatName))
 
             newPreferences.setPreferences(Hash.hash(chatName), requireActivity())
+            newPreferences.resetNewChatInheritance()
             newPreferences.setResolution(resolution)
             newPreferences.setAudioModel(speech)
             newPreferences.setModel(model)
@@ -311,7 +311,7 @@ class AddChatDialogFragment : DialogFragment() {
             newPreferences.setLayout(layout)
             newPreferences.setSilence(silent)
             newPreferences.setSystemMessage(systemMessage)
-            newPreferences.setNotSilence(alwaysSpeak)
+            newPreferences.setNotSilence(alwaysSpeak, commitImmediately = false)
             newPreferences.setAutoLangDetect(autoLanguageDetect)
             newPreferences.setImagineCommand(slashCommands)
             newPreferences.setTtsEngine(ttsEngine)
@@ -327,6 +327,10 @@ class AddChatDialogFragment : DialogFragment() {
             newPreferences.setAvatarType(avatarType!!)
             newPreferences.setAvatarId(avatarId!!)
             newPreferences.setAssistantName(assistantName!!)
+
+            // SharedPreferences.apply() has already updated process memory; this
+            // opens immediately without waiting for disk and cannot race startup.
+            listener?.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
         } else {
             listener?.onDuplicate(arguments?.getInt("position")!!)
         }

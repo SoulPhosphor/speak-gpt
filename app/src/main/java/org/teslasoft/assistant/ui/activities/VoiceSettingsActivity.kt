@@ -58,10 +58,10 @@ import org.teslasoft.assistant.theme.ThemeManager
  * Speech-to-text, Hands-free & voice activity, and Audio feedback so each knob
  * sits next to the ones it interacts with (e.g. hands-free + auto-send + VAD).
  *
- * Tiles are reused from the rest of the app (TileFragment), so the look matches
- * Settings exactly; the deeper, per-method options (WebRTC sensitivity, the
- * hands-free timers, the engine picker) open from their tile as dialogs — the
- * "cog goes deeper" pattern the user asked for.
+ * Shared tiles and settings rows are reused from the rest of the app. Deeper,
+ * per-method options (WebRTC sensitivity, the hands-free timers, the engine
+ * picker) open from their tile as dialogs — the "cog goes deeper" pattern the
+ * user asked for.
  */
 class VoiceSettingsActivity : FragmentActivity() {
 
@@ -69,7 +69,6 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var tileVoice: TileFragment? = null
     private var tileVoiceLanguage: TileFragment? = null
     private var tileSilentMode: TileFragment? = null
-    private var tileAlwaysSpeak: TileFragment? = null
     private var tileSTT: TileFragment? = null
     private var tileLangDetect: TileFragment? = null
     private var tileAutoSend: TileFragment? = null
@@ -77,6 +76,7 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var tileVadMethod: TileFragment? = null
     private var rowVoiceAdvanced: LinearLayout? = null
     private var rowVoiceDebugging: LinearLayout? = null
+    private var switchAlwaysSpeak: MaterialSwitch? = null
     private var switchReadFormatting: MaterialSwitch? = null
 
     private var btnBack: ImageButton? = null
@@ -220,19 +220,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             getString(R.string.tile_silent_mode_desc)
         )
 
-        tileAlwaysSpeak = TileFragment.newInstance(
-            preferences?.getNotSilence() == true,
-            true,
-            getString(R.string.tile_always_speak_title),
-            null,
-            getString(R.string.on),
-            getString(R.string.off),
-            R.drawable.ic_volume_up,
-            preferences?.getSilence() == true,
-            chatId,
-            getString(R.string.tile_always_speak_desc)
-        )
-
         tileSTT = TileFragment.newInstance(
             checked = false,
             checkable = false,
@@ -310,7 +297,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             .replace(R.id.tile_voice, tileVoice!!)
             .replace(R.id.tile_voice_language, tileVoiceLanguage!!)
             .replace(R.id.tile_silent_mode, tileSilentMode!!)
-            .replace(R.id.tile_always_speak, tileAlwaysSpeak!!)
             .replace(R.id.tile_stt, tileSTT!!)
             .replace(R.id.tile_auto_language_detection, tileLangDetect!!)
             .replace(R.id.tile_autosend, tileAutoSend!!)
@@ -344,19 +330,23 @@ class VoiceSettingsActivity : FragmentActivity() {
             languageSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "LanguageSelectorDialog")
         }
 
+        switchAlwaysSpeak = findViewById(R.id.switch_always_speak)
+        switchAlwaysSpeak?.isChecked = preferences?.getNotSilence() == true
+        switchAlwaysSpeak?.isEnabled = preferences?.getSilence() != true
+
         tileSilentMode?.setOnCheckedChangeListener { isChecked ->
             if (isChecked) {
                 preferences?.setSilence(true)
                 preferences?.setNotSilence(false)
-                tileAlwaysSpeak?.setChecked(false)
-                tileAlwaysSpeak?.setEnabled(false)
+                switchAlwaysSpeak?.isChecked = false
+                switchAlwaysSpeak?.isEnabled = false
             } else {
                 preferences?.setSilence(false)
-                tileAlwaysSpeak?.setEnabled(true)
+                switchAlwaysSpeak?.isEnabled = true
             }
         }
 
-        tileAlwaysSpeak?.setOnCheckedChangeListener { isChecked ->
+        switchAlwaysSpeak?.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 preferences?.setNotSilence(true)
                 preferences?.setSilence(false)

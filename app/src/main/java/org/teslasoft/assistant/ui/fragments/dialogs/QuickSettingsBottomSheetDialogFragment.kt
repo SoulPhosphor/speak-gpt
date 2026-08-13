@@ -315,10 +315,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
             if (personaId != null) {
                 preferences?.setPersonaId(personaId)
-                // Remember this as the global default so the next new chat opens
-                // with it instead of resetting to none. Recorded even when it's
-                // "none" (empty), so the latest choice always wins.
-                preferences?.setLastUsedPersonaId(personaId)
                 updatePersonaLabel(personaId)
                 renderLoreBookList()
                 shouldForceUpdate = true
@@ -511,7 +507,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         showTileDropdown(anchor, labels) { position ->
             val id = personas[position].id
             preferences?.setPersonaId(id)
-            preferences?.setLastUsedPersonaId(id)
             updatePersonaLabel(id)
             renderLoreBookList()
             shouldForceUpdate = true
