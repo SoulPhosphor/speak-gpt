@@ -2,8 +2,8 @@
 
 This plan is scoped to **modifying the existing SpeakGPT Android app** (this
 repo), not building a new app from scratch. It supersedes the
-Capacitor-based ideas in `voice-chat-build-guide(1).md` and
-`corrected-prompt-block.md`, which describe a separate project and are
+Capacitor-based ideas in `legacy/voice-chat-build-guide(1).md` and
+`legacy/corrected-prompt-block.md`, which describe a separate project and are
 kept only as reference.
 
 Branch: `claude/whisper-versions-research-5dVb3` (planning + CI prep).

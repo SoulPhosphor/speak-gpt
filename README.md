@@ -2,7 +2,7 @@
 
 <img src="https://assistant.teslasoft.org/SPEAKGPT_BANNER_ANDROID.png" style="width: 100%;"/>
 
-SpeakGPT is an advanced and highly intuitive open-source AI assistant that utilizes the powerful large language models (LLM) to provide you with unparalleled performance and functionality. Officially it supports GPT models, LLAMA, MIXTRAL, GEMMA, Gemini (regular and pro) Vision, DALL-E and other models.
+SpeakGPT is an advanced and highly intuitive open-source AI assistant that utilizes powerful large language models (LLMs) to provide flexible chat, vision, and provider-neutral image generation across compatible services.
 
 > [!NOTE]
 > 

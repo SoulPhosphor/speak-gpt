@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.ui.adapters.chat
 
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -26,6 +27,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
@@ -60,12 +62,18 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.DataSource
+import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
+import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.RequestOptions
+import com.bumptech.glide.request.target.Target
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
@@ -76,6 +84,9 @@ import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
 import io.noties.markwon.html.HtmlPlugin
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.includes.ChatInclude
@@ -85,6 +96,7 @@ import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
 import org.teslasoft.assistant.util.LegacyAvatarResolver
@@ -92,10 +104,8 @@ import org.teslasoft.assistant.util.ProfileImageBinder
 import org.teslasoft.assistant.util.StaticAvatarParser
 import java.io.BufferedReader
 import java.io.File
-import java.io.FileInputStream
 import java.io.InputStreamReader
 import java.util.Base64
-import java.util.Collections
 import java.util.Locale
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
@@ -106,7 +116,7 @@ import org.teslasoft.assistant.util.ShareUtil.Companion.sharePlainText
 
 class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, private val selectorProjection: ArrayList<HashMap<String, Any>>, private val context: FragmentActivity, private val preferences: Preferences, private val isAssistant: Boolean, private var chatId: String) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), EditMessageDialogFragment.StateChangesListener {
 
-    private var dalleImageStringList = ArrayList<String>(Collections.nCopies(itemCount + 1, ""))
+    private val generatedImageDataUrls = HashMap<String, String>()
     private var listener: OnUpdateListener? = null
     private var bulkActionMode = false
 
@@ -257,6 +267,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         return ViewHolder(view, context)
     }
 
+    override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+        if (holder is ImageProgressViewHolder) holder.stopAnimation()
+        super.onViewRecycled(holder)
+    }
+
     /** The §5 inline confirmation card: names the companion, keeps the
      *  prompt collapsed behind View Prompt so an intended surprise is not
      *  spoiled, and reports Create/Cancel back to the host. */
@@ -284,10 +299,27 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     /** The §5 Creating Image row: the in-chat status for a running
      *  generation with its required visible Cancel action. */
     inner class ImageProgressViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val title: TextView = itemView.findViewById(R.id.progress_title)
         private val btnCancel: MaterialButton = itemView.findViewById(R.id.btn_progress_cancel)
+        private var dotsAnimator: ValueAnimator? = null
 
         fun bind() {
+            stopAnimation()
+            dotsAnimator = ValueAnimator.ofInt(0, 3).apply {
+                duration = 1200L
+                repeatCount = ValueAnimator.INFINITE
+                addUpdateListener { animator ->
+                    val dots = ".".repeat(animator.animatedValue as Int)
+                    title.text = context.getString(R.string.image_gen_creating_title) + dots
+                }
+                start()
+            }
             btnCancel.setOnClickListener { listener?.onImageProgressCancel() }
+        }
+
+        fun stopAnimation() {
+            dotsAnimator?.cancel()
+            dotsAnimator = null
         }
     }
 
@@ -388,7 +420,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val message: TextView = itemView.findViewById(R.id.message)
         private val username: TextView = itemView.findViewById(R.id.username)
         private val bubbleBg: ConstraintLayout? = itemView.findViewById(R.id.bubble_bg)
-        private val dalleImage: ImageView = itemView.findViewById(R.id.dalle_image)
+        private val imageFrame: View = itemView.findViewById(R.id.image_frame)
+        private val generatedImage: ImageView = itemView.findViewById(R.id.generated_image)
+        private val generatedImageLoading: View = itemView.findViewById(R.id.generated_image_loading)
+        private val generatedImageError: TextView = itemView.findViewById(R.id.generated_image_error)
+        private val btnImagePrompt: MaterialButton = itemView.findViewById(R.id.btn_image_prompt)
+        private val btnImageDownload: ImageButton = itemView.findViewById(R.id.btn_image_download)
+        private var boundGeneratedImagePath: String? = null
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btn_edit)
         private val btnRetry: ImageButton = itemView.findViewById(R.id.btn_retry)
@@ -411,6 +449,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
+
+            val isGeneratedImage = chatMessage["message"].toString().startsWith("~file:")
+            btnEdit.visibility = if (isGeneratedImage) View.GONE else View.VISIBLE
+            if (isGeneratedImage) btnShare.isEnabled = false
 
             updateIncludeSummary(chatMessage, position)
             updateUI(chatMessage)
@@ -481,12 +523,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 Toast.makeText(context, context.getString(R.string.label_copy), Toast.LENGTH_SHORT).show()
             }
 
-            if (chatMessage["message"].toString().contains("~file:")) {
+            if (isGeneratedImage) {
                 if (chatMessage["isBot"] == true) {
                     message.visibility = View.GONE
                 }
-                processDalleFile(chatMessage, position)
+                processGeneratedImageFile(chatMessage)
             } else {
+                boundGeneratedImagePath = null
+                Glide.with(context).clear(generatedImage)
                 (debugContext as FragmentActivity).runOnUiThread {
                     applyMarkdown(chatMessage)
                 }
@@ -497,15 +541,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     }
                 }, 100)
 
-                // User-attached images now belong to the Includes system
-                // (renderer + summary row), never inline as a big preview in
-                // the message bubble. The dalleImage slot is reserved for
-                // DALL-E replies via the ~file: branch above.
-                dalleImage.visibility = View.GONE
+                // User-attached images belong to the Includes system, never
+                // this provider-neutral generated-image content slot.
+                imageFrame.visibility = View.GONE
+                generatedImage.visibility = View.GONE
+                generatedImageLoading.visibility = View.GONE
+                generatedImageError.visibility = View.GONE
+                btnImagePrompt.visibility = View.GONE
+                btnImageDownload.visibility = View.GONE
 
                 btnShare.setOnClickListener {
                     sharePlainText(context, chatMessage["message"].toString())
                 }
+                btnShare.isEnabled = true
 
                 message.visibility = View.VISIBLE
             }
@@ -844,8 +892,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun updateSpeakButton(chatMessage: HashMap<String, Any>, position: Int) {
-            // Re-read only makes sense for assistant text replies. DALL-E
-            // outputs land as `~file:` markers and are not speakable.
+            // Re-read only makes sense for assistant text replies. Generated
+            // images use `~file:` compatibility markers and are not speakable.
             val msg = chatMessage["message"].toString()
             val speakable = chatMessage["isBot"] == true &&
                     !msg.contains("~file:")
@@ -1262,13 +1310,23 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             return sb.toString()
         }
 
-        /** Loads a DALL-E-generated image bubble from its `~file:<hash>` slot
+        /** Loads a provider-neutral generated-image bubble from its
+         *  `~file:<hash>` compatibility slot
          *  in the shared images cache. User-attached images no longer flow
          *  through this path — they render as Includes summary rows under
          *  the user's own message. */
-        @SuppressLint("SetTextI18n")
-        private fun processDalleFile(chatMessage: HashMap<String, Any>, position: Int) {
-            val path = chatMessage["message"].toString().replace("~file:", "")
+        private fun processGeneratedImageFile(chatMessage: HashMap<String, Any>) {
+            val path = chatMessage["message"].toString().removePrefix("~file:")
+
+            imageFrame.visibility = View.VISIBLE
+            generatedImage.visibility = View.INVISIBLE
+            generatedImageLoading.visibility = View.VISIBLE
+            generatedImageError.visibility = View.GONE
+            btnImagePrompt.visibility = View.VISIBLE
+            btnImageDownload.visibility = View.GONE
+            generatedImage.setOnClickListener(null)
+            generatedImage.setOnLongClickListener(null)
+            btnImagePrompt.setOnClickListener { showGeneratedImagePrompt(chatMessage) }
 
             try {
                 // Rebuilt generated images store their REAL detected type
@@ -1281,47 +1339,93 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     .firstOrNull { it.second.exists() }
                 val mimeType = stored?.first?.mimeType ?: "image/png"
                 val fullPath = stored?.second?.absolutePath ?: "$imagesDir/$path.png"
+                boundGeneratedImagePath = fullPath
 
-                while (dalleImageStringList.size < itemCount + 1) {
-                    dalleImageStringList.add("")
-                }
-
-                if (dalleImageStringList[position] == "") {
-                    context.contentResolver?.openFileDescriptor(
-                        Uri.fromFile(File(fullPath)), "r"
-                    )?.use { file ->
-                        FileInputStream(file.fileDescriptor).use { stream ->
-                            val c: ByteArray = stream.readBytes()
-                            dalleImageStringList[position] =
-                                "data:$mimeType;base64," + Base64.getEncoder().encodeToString(c)
-                            loadImage(dalleImageStringList[position])
-                            updateImageClickListener(dalleImageStringList[position])
+                val cached = generatedImageDataUrls[fullPath]
+                if (cached == null) {
+                    // A generated image may be tens of megabytes. Encode off
+                    // the UI thread so the Loading Image state can actually
+                    // animate instead of the row appearing frozen.
+                    context.lifecycleScope.launch(Dispatchers.IO) {
+                        val dataUrl = try {
+                            val bytes = File(fullPath).readBytes()
+                            "data:$mimeType;base64," +
+                                Base64.getEncoder().encodeToString(bytes)
+                        } catch (_: Exception) {
+                            null
+                        }
+                        withContext(Dispatchers.Main) {
+                            if (boundGeneratedImagePath != fullPath) return@withContext
+                            if (dataUrl == null) {
+                                showGeneratedImageLoadFailure()
+                                return@withContext
+                            }
+                            generatedImageDataUrls[fullPath] = dataUrl
+                            loadImage(dataUrl)
+                            updateImageActions(dataUrl, mimeType)
                         }
                     }
                 } else {
-                    loadImage(dalleImageStringList[position])
-                    updateImageClickListener(dalleImageStringList[position])
+                    loadImage(cached)
+                    updateImageActions(cached, mimeType)
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                dalleImage.visibility = View.GONE
-                message.visibility = View.VISIBLE
-                btnCopy.visibility = View.VISIBLE
-                message.text = "${message.text}\n<IMAGE NOT FOUND: $path.png>\nStacktrace: ${e.stackTraceToString()}"
+            } catch (_: Exception) {
+                showGeneratedImageLoadFailure()
             }
         }
 
         private fun loadImage(url: String) {
             val requestOptions = RequestOptions().transform(CenterCrop(), RoundedCorners(convertDpToPixel(context).toInt()))
-            Glide.with(context).load(url.toUri()).apply(requestOptions).into(dalleImage)
+            Glide.with(context)
+                .load(url.toUri())
+                .apply(requestOptions)
+                .listener(object : RequestListener<Drawable> {
+                    override fun onLoadFailed(
+                        e: GlideException?,
+                        model: Any?,
+                        target: Target<Drawable>,
+                        isFirstResource: Boolean
+                    ): Boolean {
+                        if (!isCurrentGeneratedImage(url)) return true
+                        showGeneratedImageLoadFailure()
+                        return false
+                    }
+
+                    override fun onResourceReady(
+                        resource: Drawable,
+                        model: Any,
+                        target: Target<Drawable>,
+                        dataSource: DataSource,
+                        isFirstResource: Boolean
+                    ): Boolean {
+                        if (!isCurrentGeneratedImage(url)) return true
+                        generatedImageLoading.visibility = View.GONE
+                        generatedImageError.visibility = View.GONE
+                        generatedImage.visibility = View.VISIBLE
+                        btnImageDownload.visibility = View.VISIBLE
+                        return false
+                    }
+                })
+                .into(generatedImage)
 
             btnShare.setOnClickListener {
-                shareBase64Image(context, url, "png")
+                val imageType = url.substringAfter("data:image/").substringBefore(";")
+                shareBase64Image(context, url, imageType)
             }
+            btnShare.isEnabled = true
         }
 
-        private fun updateImageClickListener(url: String) {
-            dalleImage.setOnClickListener {
+        private fun isCurrentGeneratedImage(url: String): Boolean {
+            val path = boundGeneratedImagePath ?: return false
+            return generatedImageDataUrls[path] == url
+        }
+
+        private fun updateImageActions(url: String, mimeType: String) {
+            btnImageDownload.setOnClickListener {
+                if (!bulkActionMode) listener?.onGeneratedImageSaveClick(url, mimeType)
+            }
+
+            generatedImage.setOnClickListener {
                 if (bulkActionMode) {
                     switchBulkActionState(bindingAdapterPosition)
                 } else {
@@ -1335,10 +1439,34 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 }
             }
 
-            dalleImage.setOnLongClickListener {
+            generatedImage.setOnLongClickListener {
                 switchBulkActionState(bindingAdapterPosition)
                 return@setOnLongClickListener true
             }
+        }
+
+        private fun showGeneratedImageLoadFailure() {
+            generatedImageLoading.visibility = View.GONE
+            generatedImage.visibility = View.INVISIBLE
+            generatedImageError.visibility = View.VISIBLE
+            btnImageDownload.visibility = View.GONE
+        }
+
+        private fun showGeneratedImagePrompt(chatMessage: HashMap<String, Any>) {
+            val prompt = GeneratedImageMetadata
+                .fromJson(chatMessage[GeneratedImageMetadata.KEY]?.toString())
+                ?.prompt
+                ?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.image_gen_prompt_unavailable)
+            val view = LayoutInflater.from(context)
+                .inflate(R.layout.dialog_generated_image_prompt, null, false)
+            view.findViewById<TextView>(R.id.prompt_dialog_text).text = prompt
+            val dialog = MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)
+                .setView(view)
+                .create()
+            view.findViewById<ImageButton>(R.id.btn_prompt_close)
+                .setOnClickListener { dialog.dismiss() }
+            dialog.show()
         }
 
         private fun openEditDialog(chatMessage: HashMap<String, Any>, position: Int) {
@@ -1449,5 +1577,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /** The Creating Image row's Cancel tap (plan §5 progress
          *  experience). */
         fun onImageProgressCancel()
+
+        /** The downward-arrow action below a generated image. The host owns
+         *  the document launcher so Android can return the selected save URI. */
+        fun onGeneratedImageSaveClick(dataUrl: String, mimeType: String)
     }
 }

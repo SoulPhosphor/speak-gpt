@@ -68,7 +68,7 @@ class ImageProviderSelectionTest {
             endpoint("https://example.com/v1/", model = "gpt-image-1")
         )
         val b = ImageProviderAdapters.forEndpoint(
-            endpoint("https://example.com/v1/", model = "dall-e-3")
+            endpoint("https://example.com/v1/", model = "provider-image-model")
         )
         val c = ImageProviderAdapters.forEndpoint(
             endpoint("https://example.com/v1/", model = "totally/unknown-model")

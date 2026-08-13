@@ -8,17 +8,17 @@ Licensed under the Apache License, Version 2.0.
 
 > **Status: rebuilt architecture implemented; static audit completed August 12, 2026; runtime generation not yet re-verified by the owner.**
 >
-> `image-generation-rebuild-plan.md` is the historical rebuild/design record. This file records the current post-rebuild state and should be used when deciding whether old DALL-E/OpenAI-specific code is still active architecture or only cleanup/migration debt.
+> `image-generation-rebuild-plan.md` is the historical rebuild/design record. This file records the current post-rebuild state and should be used when deciding whether old provider-specific code is still active architecture or only cleanup/migration debt.
 
 ## 1. What the static audit verified
 
-The current image-generation request path is substantially separated from the old DALL-E/model-name routing:
+The current image-generation request path is separated from the old provider/model-name routing:
 
 - `ImageProviderAdapter` is a provider-neutral request/response contract.
 - `ImageGeneratorCoordinator` reads the independently saved image-generator endpoint and image-generator model rather than borrowing the current chat endpoint/model.
 - `ImageProviderAdapters.forEndpoint(...)` chooses the adapter from the saved endpoint/host, not from the image model name.
 - OpenRouter has a dedicated `OpenRouterImageAdapter` that requests image output through the OpenRouter chat protocol.
-- Other configured endpoints currently use `OpenAiImageAdapter`, which is an **OpenAI-compatible Image API protocol adapter** using `/images/generations`. It forwards the selected model ID rather than restricting generation to a DALL-E/GPT-image name allow-list.
+- Other configured endpoints currently use `OpenAiImageAdapter`, which is an **OpenAI-compatible Image API protocol adapter** using `/images/generations`. It forwards the selected model ID rather than restricting generation to a named model-family allow-list.
 - The image model picker does not prune unfamiliar image model IDs merely because their names do not match a hard-coded OpenAI family.
 - Both `/imagine` and model-requested image generation enter the rebuilt global image-generator path.
 
@@ -32,38 +32,32 @@ Provider-neutral selection does not mean every possible provider protocol works 
 
 That is an adapter-capability boundary, not model-name hardwiring.
 
-## 2. Cleanup that is still genuinely incomplete
+## 2. Provider-neutral presentation cleanup
 
-The owner's concern was valid: old DALL-E naming was **not completely removed** from the active presentation layer.
+The old provider-specific presentation names were removed together in the generated-image capability polish:
 
-Known active cleanup debt includes:
-
-- generated-image view ID `dalle_image` in all three message layouts;
-- `dalleImageStringList` in `ChatAdapter`;
-- `processDalleFile(...)` in `ChatAdapter`;
-- DALL-E-specific comments around generated-image rendering;
-- an apparently dead `"dalle"` branch in the old OpenAI-missing helper in `ChatActivity`;
-- legacy DALL-E compatibility strings that should be reference-checked and removed if unused.
-
-These names do not appear to choose the generator/provider anymore, but they should not be propagated into the Phase 4 shared message shell.
+- the view ID is `generated_image` in all three message layouts;
+- the adapter uses provider-neutral generated-image field and helper names;
+- the dead provider-specific branch and unused presentation strings are gone.
 
 ### Coordinated rename rule
 
-`dalle_image` is currently a load-bearing view ID because the adapter expects it in each message layout. Do not delete or rename one XML occurrence in isolation.
+`generated_image` is load-bearing because the adapter expects it in each message layout. Future changes must remain coordinated across all three layouts and the adapter.
 
-During the shared-message-shell work:
+The same capability slice also established these user-facing contracts:
 
-1. rename the generated-image view to a provider-neutral ID across all three message layouts;
-2. rename the corresponding adapter field/list/helper names and comments in the same slice;
-3. update every source reference atomically;
-4. update the master UI-plan message-ID contract in that same change;
-5. compile/test before treating the old DALL-E presentation name as removed.
+- generated images expose a read-only Prompt dialog and a downward-arrow save action;
+- generated-image messages do not expose the ordinary text Edit action;
+- the Creating Image label animates and the returned row keeps a Loading Image state until decode/render completes;
+- image jobs use their own data-sync foreground keep-alive for app switching and screen-off;
+- model continuation is released only after the image terminal message is published;
+- failures keep the app explanation separate from the provider's sanitized error detail, matching ordinary failed chat replies.
 
 ## 3. Legacy values that should NOT be deleted yet
 
-Some old image preferences still contain DALL-E-era defaults/names, including the legacy image-model and resolution readers. `ImageGenerationMigration` still uses those values as one-time migration inputs.
+Some old image preferences still contain legacy image-model and resolution readers. `ImageGenerationMigration` still uses those values as one-time migration inputs.
 
-Those are intentional migration compatibility, not current provider routing. Keep them until the migration's documented stable-release deletion gate has been satisfied. Removing them merely to eliminate the word “DALL-E” could break upgrade behavior.
+Those are intentional migration compatibility, not current provider routing. Keep them until the migration's documented stable-release deletion gate has been satisfied.
 
 ## 4. Runtime verification still required
 
@@ -78,7 +72,7 @@ Before declaring the rebuild fully verified, run a smoke test that covers:
 5. Switch the chat model without changing the saved image generator and confirm the image generator does not silently follow the chat model.
 6. If practical, switch the configured image endpoint/model and verify the new generator is used without changing conversation routing.
 
-Any failure from that test should be treated as a runtime bug to diagnose, not as evidence that the old DALL-E naming in the presentation layer is the intended architecture.
+Any failure from that test should be treated as a runtime bug to diagnose, not as evidence that old provider-specific naming in the presentation layer is intended architecture.
 
 ## 5. Relationship to Phase 4 chat redesign
 
@@ -90,4 +84,4 @@ Any failure from that test should be treated as a runtime bug to diagnose, not a
 - image-only messages are valid;
 - document/file attachments follow their separate attachment ordering rule.
 
-The coordinated provider-neutral generated-image ID/name cleanup is scheduled with the shared-message-shell work so the new chat architecture does not fossilize the legacy DALL-E presentation terminology.
+The provider-neutral generated-image ID/name cleanup is complete and should be preserved by the shared-message-shell work.

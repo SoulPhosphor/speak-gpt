@@ -99,6 +99,7 @@ import androidx.core.util.Pair
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.interpolator.view.animation.FastOutLinearInInterpolator
 import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -238,10 +239,12 @@ import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
 import org.teslasoft.assistant.imagegen.ImageGenerationRequest
 import org.teslasoft.assistant.imagegen.imageFailureMessageRes
+import org.teslasoft.assistant.imagegen.imageFailureProviderDetailBlock
 import org.teslasoft.assistant.imagegen.ImageProviderAdapters
 import org.teslasoft.assistant.imagegen.ImagineCommand
 import org.teslasoft.assistant.imagegen.StreamedToolCallAssembler
 import org.teslasoft.assistant.imagegen.ToolCapability
+import org.teslasoft.assistant.imagegen.ToolCapabilityScope
 import org.teslasoft.assistant.imagegen.ToolCapabilityStore
 import org.teslasoft.assistant.imagegen.ToolSupportClassifier
 import org.teslasoft.assistant.imagegen.failureActionFor
@@ -441,7 +444,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var isRecording = false
     private var keyboardMode = false
     private var isTTSInitialized = false
-    private var silenceMode = false
     private var autoLangDetect = false
     private var cancelState = false
     // True only when the CURRENT generation was cancelled by a deliberate user
@@ -509,9 +511,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val request: ChatCompletionRequest,
         val payload: FrozenChatPayload
     )
-
-    // Init DALL-e
-    private var resolution = "512x152"
 
     // Auto-naming attempts this screen instance. Used to be a one-shot
     // "messageCounter == 0" gate: a single transient failure (network blip,
@@ -2033,14 +2032,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     // Opened from [promptCreateFirstCompanion] when a new chat has no companion
     // to open with because none exist yet. On a companion being created the
-    // list returns it; adopt it as this chat's companion AND as the last-used
-    // default, and mark seeding done so it isn't re-run.
+    // list returns it; adopt it for this chat and mark seeding done. It becomes
+    // the default for later chats only after an assistant response succeeds.
     private val createFirstCompanionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) {
             val personaId = result.data?.getStringExtra("personaId")
             if (!personaId.isNullOrEmpty()) {
                 preferences?.setPersonaId(personaId)
-                preferences?.setLastUsedPersonaId(personaId)
                 preferences?.setPersonaActivationSeeded(true)
                 // onResume painted before this result assigned the new
                 // Companion, so resolve its picture now instead of leaving
@@ -2362,13 +2360,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         endSeparator = preferences!!.getEndSeparator()
         prefix = preferences!!.getPrefix()
 
-        loadResolution()
 
         if (key == null) {
             startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
             finishActivity()
         } else {
-            silenceMode = preferences!!.getSilence()
             autoLangDetect = preferences!!.getAutoLangDetect()
             messages = historyResult.messages
 
@@ -4177,6 +4173,51 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    override fun onGeneratedImageSaveClick(dataUrl: String, mimeType: String) {
+        lifecycleScope.launch {
+            val prepared = withContext(Dispatchers.IO) {
+                try {
+                    val encoded = dataUrl.substringAfter(";base64,", "")
+                    if (encoded.isBlank()) return@withContext null
+                    val normalizedMime =
+                        mimeType.takeIf { it.startsWith("image/") } ?: "image/png"
+                    val extension = when (normalizedMime.substringAfter('/')) {
+                        "jpeg" -> "jpg"
+                        "webp" -> "webp"
+                        else -> "png"
+                    }
+                    Triple(
+                        Base64.decode(encoded, Base64.DEFAULT),
+                        normalizedMime,
+                        extension
+                    )
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (prepared == null) {
+                Toast.makeText(
+                    this@ChatActivity,
+                    R.string.image_gen_save_failed,
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            fileContents = prepared.first
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = prepared.second
+                putExtra(Intent.EXTRA_TITLE, "generated-image.${prepared.third}")
+                putExtra(
+                    DocumentsContract.EXTRA_INITIAL_URI,
+                    (Environment.getExternalStorageDirectory().path +
+                        "/Pictures/SpeakGPT/generated-image.${prepared.third}").toUri()
+                )
+            }
+            fileSaveIntentLauncher.launch(intent)
+        }
+    }
+
     private fun writeToFile(uri: Uri) {
         try {
             contentResolver.openFileDescriptor(uri, "w")?.use {
@@ -5314,21 +5355,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /**
-     * Decide which companion a brand-new chat opens with. Owner rules
-     * (July 11 2026 — these SUPERSEDE the July 10 wording; there is no other
-     * acceptable behavior):
-     *   1. Default to the companion you last used.
-     *   2. The ONLY exception is first-ever use — no last-used companion yet
-     *      (or the last-used one was since deleted): open with whichever
-     *      companion is at the top of the list.
-     *   3. If no companion exists at all, a chat can't begin: prompt the owner
-     *      to create one and take them straight to the creation screen.
-     * "Last used" is recorded whenever a companion is chosen through ANY
-     * selection surface (Quick Settings and the Companions list both write it),
-     * so it always reflects the companion actually in use. One-shot per chat
-     * (the persona_activation_seeded flag) and only for an empty chat (called
-     * from [setup] inside its messages.isEmpty() guard), so existing
-     * conversations are never retroactively changed.
+     * Decide which companion a brand-new chat opens with:
+     *   1. Default to the companion from the most recent chat that received a
+     *      successful assistant response.
+     *   2. If no successful companion has been recorded yet, or it was deleted,
+     *      use the companion at the top of the list.
+     *   3. If no companion exists at all, prompt the owner to create one and
+     *      open the creation screen.
+     * One-shot per chat (the persona_activation_seeded flag) and only for an
+     * empty chat, so existing conversations are never retroactively changed.
      */
     private fun seedPersonaAndActivationDefaults() {
         if (preferences?.isPersonaActivationSeeded() == true) return
@@ -5346,7 +5381,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 return
             }
 
-            val lastPersona = preferences?.getLastUsedPersonaId().orEmpty()
+            val lastPersona = preferences?.getLastSuccessfulPersonaId().orEmpty()
             if (lastPersona.isNotEmpty() && personaPrefs.getPersona(lastPersona).label.isNotEmpty()) {
                 // Rule 1: continue with the companion you last used.
                 preferences?.setPersonaId(lastPersona)
@@ -5481,11 +5516,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         model = preferences!!.getModel()
         endSeparator = preferences!!.getEndSeparator()
         prefix = preferences!!.getPrefix()
-    }
-
-    // Init image resolutions
-    private fun loadResolution() {
-        resolution = preferences!!.getResolution()
     }
 
     /** SYSTEM INITIALIZATION END **/
@@ -5810,12 +5840,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             is ImageGenerationJobRegistry.Terminal.Failed -> {
                 if (fromImagine) {
-                    presentImageGenerationFailure(job.request, terminal.cause, terminal.metadata)
+                    presentImageGenerationFailure(job.request, terminal)
                 } else {
-                    // §13: the cause message appears in chat; the tool flow
-                    // returns its own concise tool error to the model.
-                    putMessage(getString(imageFailureMessageRes(terminal.cause)), true)
-                    attachGeneratedImageRecord(terminal.metadata)
+                    // The image cause and the provider's own sanitized detail
+                    // use the same failed-message formula as ordinary replies.
+                    appendImageGenerationFailure(terminal)
                     saveSettings()
                 }
             }
@@ -5887,19 +5916,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  cause-specific message in chat, plus the action matching the cause —
      *  Edit Prompt for a refused prompt, Change Settings for unsupported
      *  options and configuration or authentication failures, Retry only
-     *  for failures that may succeed unchanged. Sanitized details stay in
-     *  the log surfaces, never in chat. */
+     *  for failures that may succeed unchanged. The provider's sanitized
+     *  message is also preserved beneath the app explanation, matching the
+     *  ordinary failed-reply format. */
     private fun presentImageGenerationFailure(
         request: ImageGenerationRequest,
-        errorCause: ImageErrorCause,
-        metadata: GeneratedImageMetadata? = null
+        failure: ImageGenerationJobRegistry.Terminal.Failed
     ) {
         playErrorSignal()
         stopHandsFreeOnError()
 
-        val causeText = getString(imageFailureMessageRes(errorCause))
-        putMessage(causeText, true)
-        if (metadata != null) attachGeneratedImageRecord(metadata)
+        val causeText = getString(imageFailureMessageRes(failure.cause))
+        appendImageGenerationFailure(failure)
         saveSettings()
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
@@ -5909,7 +5937,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(causeText)
             .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-        when (failureActionFor(errorCause)) {
+        when (failureActionFor(failure.cause)) {
             ImageFailureAction.EDIT_PROMPT -> {
                 builder.setPositiveButton(R.string.image_gen_action_edit_prompt) { _, _ ->
                     // The exact prompt that was sent to the generator, back
@@ -5935,6 +5963,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         builder.show()
     }
 
+    /** App explanation in the message body; the provider's own sanitized
+     *  response in the separate failed-message detail field. This is the
+     *  established chat error formula, and keeping the fields separate also
+     *  prevents either string from entering later model context as AI prose. */
+    private fun appendImageGenerationFailure(
+        failure: ImageGenerationJobRegistry.Terminal.Failed
+    ) {
+        putMessage(getString(imageFailureMessageRes(failure.cause)), true)
+        attachGeneratedImageRecord(failure.metadata)
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] == true) {
+            last[MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
+            last[MessageCompletionState.KEY_STATE_DETAIL] = failure.cause.name
+            last[MessageCompletionState.KEY_ERROR_TEXT] =
+                imageFailureProviderDetailBlock(this, failure)
+            adapter?.notifyItemChanged(messages.lastIndex)
+        }
+    }
+
     /* --------------- Model-initiated image creation (§6/§7/§8) --------------- */
 
     /** Whether the most recent regular request carried the create_image
@@ -5944,13 +5991,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** §8: UNKNOWN tries the tool, SUPPORTED keeps sending it, UNSUPPORTED
      *  withholds it until the endpoint editor's reset forgets the record. */
+    private fun chatToolCapabilityScopeKey(selectedModel: String): String {
+        val endpoint = apiEndpointObject
+        val favorite = favoriteForActiveEndpoint(selectedModel)
+        return ToolCapabilityScope.key(
+            selectedModel,
+            openRouterRouting = endpoint?.isOpenRouterRouting() == true,
+            routingType = favorite?.routingType ?: FavoriteModelObject.ROUTING_AUTOMATIC,
+            selectedProvider = favorite?.selectedProvider.orEmpty(),
+            allowFallbacks = favorite?.allowFallbacks != false,
+            providerOrder = favorite?.providerOrder ?: emptyList(),
+            ignoredProviders = favorite?.ignoredProviders ?: emptyList()
+        )
+    }
+
     private fun chatModelMayReceiveImageTool(selectedModel: String): Boolean {
         return try {
             val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
             if (chatEndpointId.isEmpty()) return true
             val chatEndpoint =
                 apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId) ?: return true
-            ToolCapabilityStore.get(chatEndpoint.toolCapabilityByModel, selectedModel) !=
+            ToolCapabilityStore.get(
+                chatEndpoint.toolCapabilityByModel,
+                chatToolCapabilityScopeKey(selectedModel)
+            ) !=
                 ToolCapability.UNSUPPORTED
         } catch (_: Exception) {
             true
@@ -5960,14 +6024,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Persist a learned tool capability for this chat's exact
      *  endpoint/model pair — same persistence shape as vision capability.
      *  Learning must never break a turn. */
-    private fun recordChatToolCapability(capability: ToolCapability) {
+    private fun recordChatToolCapability(selectedModel: String, capability: ToolCapability) {
         try {
             val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
-            if (chatEndpointId.isEmpty() || model.isBlank()) return
+            if (chatEndpointId.isEmpty() || selectedModel.isBlank()) return
             val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
             val endpoint = prefs.getApiEndpoint(this, chatEndpointId)
             val updated =
-                ToolCapabilityStore.set(endpoint.toolCapabilityByModel, model, capability)
+                ToolCapabilityStore.set(
+                    endpoint.toolCapabilityByModel,
+                    chatToolCapabilityScopeKey(selectedModel),
+                    capability
+                )
             if (updated != endpoint.toolCapabilityByModel) {
                 endpoint.toolCapabilityByModel = updated
                 prefs.setApiEndpoint(this, endpoint)
@@ -5986,12 +6054,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (chatEndpointId.isEmpty()) ToolCapability.UNKNOWN
             else ToolCapabilityStore.get(
                 apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId)?.toolCapabilityByModel,
-                model
+                chatToolCapabilityScopeKey(model)
             )
         } catch (_: Exception) {
             ToolCapability.UNKNOWN
         }
-        recordChatToolCapability(ToolCapability.UNSUPPORTED)
+        recordChatToolCapability(model, ToolCapability.UNSUPPORTED)
         runOnUiThread {
             if (messages.isNotEmpty() && messages.last()["isBot"] == true &&
                 messages.last()["message"].toString().isEmpty()
@@ -7136,24 +7204,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             last.remove(MessageCompletionState.KEY_STATE_DETAIL)
-            // This config just produced a successful reply — remember it so a
-            // future brand-new chat opens on the setup that last worked.
+            // This chat just produced a successful reply, so its complete
+            // model-and-companion snapshot may qualify for the next new chat.
             recordLastSuccessfulConfig()
         }
     }
 
-    /** Remember the provider + model + routing that just produced a successful
-     *  reply, so a brand-new chat can restore it (see
-     *  [maybeRestoreProviderForNewChat]). Routing follows the favorite for the
-     *  (model, endpoint) pair, or Automatic when there is none. */
+    /** Remember the provider, model, routing, and companion that just produced
+     *  a successful reply. All values must come from this same chat; an empty or
+     *  deleted companion leaves the prior complete snapshot unchanged. */
     private fun recordLastSuccessfulConfig() {
         val endpointId = apiEndpointObject?.id?.takeIf { it.isNotBlank() }
             ?: preferences?.getApiEndpointId().orEmpty()
         val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
-        if (endpointId.isBlank() || usedModel.isBlank()) return
+        val personaId = preferences?.getPersonaId().orEmpty()
+        val personaExists = personaId.isNotBlank() &&
+            PersonaPreferences.getPersonaPreferences(this).getPersona(personaId).label.isNotBlank()
+        if (endpointId.isBlank() || usedModel.isBlank() || !personaExists) return
         val routing = favoriteForActiveEndpoint(usedModel)?.routingType
             ?: FavoriteModelObject.ROUTING_AUTOMATIC
-        preferences?.setLastSuccessfulConfig(endpointId, usedModel, routing)
+        preferences?.setLastSuccessfulConfig(endpointId, usedModel, routing, personaId)
     }
 
     /** Stamp a terminal state onto the last assistant message ONLY if it is
@@ -8830,7 +8900,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // endpoint ACCEPTED tools for this model — whether or not the model
         // chose to use them. Refusal to call the tool never marks anything.
         if (chatCompletionRequest.tools != null) {
-            recordChatToolCapability(ToolCapability.SUPPORTED)
+            recordChatToolCapability(model, ToolCapability.SUPPORTED)
         }
 
         // §7: an actual tool call is the ONLY thing that triggers a second
@@ -9024,11 +9094,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Hands-free is a spoken conversation: it must read the reply back (that
         // completion is also what re-arms the mic) regardless of the Always-speak
         // setting — turning Always-speak off must never break hands-free (owner
-        // requirement). Silent mode still wins (the two are mutually exclusive in
-        // settings, so this only matters defensively). Ordinary turns are
-        // unchanged: st (a voice turn) or Always-speak drive the readback.
-        val willReadAloud = (st && !silenceMode) || preferences!!.getNotSilence() ||
-                (handsFree && !silenceMode)
+        // requirement). Ordinary turns are unchanged: st (a voice turn) or
+        // Always-speak drive the readback.
+        val willReadAloud = st || preferences!!.getNotSilence() || handsFree
 
         // Stamp this readback: if the user stops while we're still inside an
         // async hop below (ML Kit language detection), the stale stamp keeps
@@ -9069,12 +9137,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // short-timeout watchdog when playback actually starts, which
             // bumps the token and invalidates this one.
             beginHandsFreeReadbackWatch(startTimeoutMs = HANDS_FREE_HARD_FALLBACK_MS)
-        } else if (handsFree) {
-            // Silence mode (or this turn isn't spoken): there's no readback to
-            // wait on, so continue straight to the next listening turn instead
-            // of stranding the mic waiting for a callback that never comes.
-            handsFreeReadbackExpected = true
-            onHandsFreeReadbackFinished()
         }
 
         if (willReadAloud) {
@@ -9441,7 +9503,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         restoreUIState()
 
         val message = when(feature) {
-            "dalle" -> "Image generation"
             "tts" -> "OpenAI text-to-speech"
             "whisper" -> "Whisper speech recognition"
             else -> "this OpenAI"
@@ -9522,9 +9583,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun onCancelOpenAIAction(feature: String) {
-        // The legacy "dalle" feature branch is gone with the old image
-        // pipeline (image-generation-rebuild-plan.md §15); image requests
-        // now run through the generator coordinator and never pass here.
+        // No cleanup is required for the remaining speech-only branches.
     }
 
     private fun onOpenAIAction(feature: String, prompt: String) {
@@ -9695,3 +9754,4 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         supportFinishAfterTransition()
     }
 }
+

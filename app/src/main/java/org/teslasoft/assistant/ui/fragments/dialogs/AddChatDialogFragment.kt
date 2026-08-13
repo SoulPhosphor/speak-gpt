@@ -261,7 +261,6 @@ class AddChatDialogFragment : DialogFragment() {
             }
 
             chatPreferences?.addChat(requireActivity(), chatName)
-            listener?.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
 
             // Copy settings from default
             val preferences: Preferences = Preferences.getPreferences(requireActivity(), "")
@@ -271,13 +270,11 @@ class AddChatDialogFragment : DialogFragment() {
             val speech = preferences.getAudioModel()
             val activationPrompt = preferences.getPrompt()
             val layout = preferences.getLayout()
-            val silent = preferences.getSilence()
             val systemMessage = preferences.getSystemMessage()
             val alwaysSpeak = preferences.getNotSilence()
             val autoLanguageDetect = preferences.getAutoLangDetect()
             val slashCommands = preferences.getImagineCommand()
             val ttsEngine = preferences.getTtsEngine()
-            val dalleVersion = preferences.getDalleVersion()
             val opeAIVoice: String = preferences.getOpenAIVoice()
             val voice: String = preferences.getVoice()
             val apiEndpointId = if (requireArguments().getString("endpointId") != "") requireArguments().getString("endpointId") else preferences.getApiEndpointId()
@@ -301,6 +298,7 @@ class AddChatDialogFragment : DialogFragment() {
             val newPreferences: Preferences = Preferences.getPreferences(requireActivity(), Hash.hash(chatName))
 
             newPreferences.setPreferences(Hash.hash(chatName), requireActivity())
+            newPreferences.resetNewChatInheritance()
             newPreferences.setResolution(resolution)
             newPreferences.setAudioModel(speech)
             newPreferences.setModel(model)
@@ -309,13 +307,11 @@ class AddChatDialogFragment : DialogFragment() {
             newPreferences.setEndSeparator(endSeparator)
             newPreferences.setPrompt(activationPrompt)
             newPreferences.setLayout(layout)
-            newPreferences.setSilence(silent)
             newPreferences.setSystemMessage(systemMessage)
-            newPreferences.setNotSilence(alwaysSpeak)
+            newPreferences.setNotSilence(alwaysSpeak, commitImmediately = false)
             newPreferences.setAutoLangDetect(autoLanguageDetect)
             newPreferences.setImagineCommand(slashCommands)
             newPreferences.setTtsEngine(ttsEngine)
-            newPreferences.setDalleVersion(dalleVersion)
             newPreferences.setOpenAIVoice(opeAIVoice)
             newPreferences.setVoice(voice)
             newPreferences.setApiEndpointId(apiEndpointId!!)
@@ -327,6 +323,10 @@ class AddChatDialogFragment : DialogFragment() {
             newPreferences.setAvatarType(avatarType!!)
             newPreferences.setAvatarId(avatarId!!)
             newPreferences.setAssistantName(assistantName!!)
+
+            // SharedPreferences.apply() has already updated process memory; this
+            // opens immediately without waiting for disk and cannot race startup.
+            listener?.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
         } else {
             listener?.onDuplicate(arguments?.getInt("position")!!)
         }

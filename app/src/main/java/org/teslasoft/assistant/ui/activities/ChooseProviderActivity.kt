@@ -43,11 +43,16 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.radiobutton.MaterialRadioButton
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.imagegen.ToolCapability
+import org.teslasoft.assistant.imagegen.ToolCapabilityScope
+import org.teslasoft.assistant.imagegen.ToolCapabilityStore
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.providers.ProviderEndpointInfo
+import org.teslasoft.assistant.providers.ProviderDiscoveryResolver
 import org.teslasoft.assistant.providers.ProviderEndpointsParser
 import org.teslasoft.assistant.providers.ProviderFilterState
 import org.teslasoft.assistant.theme.ThemeManager
@@ -92,6 +97,7 @@ class ChooseProviderActivity : FragmentActivity() {
         const val EXTRA_ALLOW_FALLBACKS = "allowFallbacks"
         const val EXTRA_PROVIDER_ORDER = "providerOrder"
         const val EXTRA_IGNORED_PROVIDERS = "ignoredProviders"
+        const val EXTRA_ROUTE_TOOL_CAPABILITY = "routeToolCapability"
 
         /** When true the screen writes the chosen routing straight to the
          *  favorites store on Save (used when opened from the Favorite AI
@@ -196,47 +202,10 @@ class ChooseProviderActivity : FragmentActivity() {
     private val displayNames: MutableMap<String, String> = mutableMapOf()
 
     private var requestNetwork: RequestNetwork? = null
+    private var modelDetailsRequestNetwork: RequestNetwork? = null
     private var zdrRequestNetwork: RequestNetwork? = null
-
-    private val fetchListener = object : RequestNetwork.RequestListener {
-        override fun onResponse(tag: String, message: String) {
-            val parsed = ProviderEndpointsParser.parse(message)
-            if (parsed == null) {
-                showProviderError(message)
-                return
-            }
-            providerEndpoints = parsed.endpoints
-            // A saved provider may be marked Unavailable ONLY on a complete,
-            // authoritative list. A partial/paginated/truncated/empty result
-            // leaves availability unknown: no labels, no warning, every saved
-            // selection preserved untouched.
-            availableSlugs = if (parsed.authoritative) {
-                parsed.endpoints.map { it.slug.lowercase() }.toSet()
-            } else {
-                null
-            }
-            // Names of currently served providers; saved-but-absent providers
-            // keep whatever name was stored (their slug when none is known).
-            parsed.endpoints.forEach { displayNames[it.slug] = it.providerName }
-            renderChart()
-            updateOrderBox()
-            startZdrFetch()
-        }
-
-        override fun onErrorResponse(tag: String, message: String) {
-            showProviderError(message)
-        }
-    }
-
-    /** ZDR list arrives after the chart; failure just leaves the column "?". */
-    private val zdrFetchListener = object : RequestNetwork.RequestListener {
-        override fun onResponse(tag: String, message: String) {
-            zdrMatches = ProviderEndpointsParser.parseZdrMatches(message, selectedModel)
-            if (providerEndpoints != null) renderChart()
-        }
-
-        override fun onErrorResponse(tag: String, message: String) { /* stays unknown */ }
-    }
+    /** Monotonic guard: a response for an older model/refresh is ignored. */
+    private var providerFetchGeneration: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -272,14 +241,13 @@ class ChooseProviderActivity : FragmentActivity() {
         // keeps that mode or adopts the new model's own is decided per entry
         // point by keepRoutingOnModelChange (see onModelChanged).
         seedProviderStateFromFavorite(adoptFavoriteRoutingType = false)
-        if (selectedModel.isNotBlank()) startProviderFetch()
     }
 
     override fun onResume() {
         super.onResume()
-        // The Filters panel auto-applies by editing ProviderFilterState in
-        // place; re-render on return so the chart reflects it.
-        if (providerEndpoints != null) renderChart()
+        // OpenRouter's inventory and per-provider capabilities can change at
+        // any time. Refresh on the first visit and every return to this page.
+        if (selectedModel.isNotBlank()) startProviderFetch()
     }
 
     private fun bindViews() {
@@ -560,34 +528,128 @@ class ChooseProviderActivity : FragmentActivity() {
     private fun startProviderFetch() {
         if (host.isBlank() || selectedModel.isBlank()) return
 
+        val generation = ++providerFetchGeneration
+        val modelAtStart = selectedModel
+        providerEndpoints = null
+        availableSlugs = null
+        zdrMatches = null
+
         btnProviderFilters?.visibility = View.GONE
         textProviderWarning?.visibility = View.GONE
         chartScroll?.visibility = View.GONE
         textProviderStatus?.text = getString(R.string.provider_status_loading)
         textProviderStatus?.visibility = View.VISIBLE
 
-        // The profile's Provider Discovery Path (Advanced Options), with the
-        // model id substituted in.
         val base = host.trimEnd('/')
-        val path = discoveryPath.replace("{model}", selectedModel)
-        val url = base + path
+        val fallbackUrl = base + discoveryPath.replace("{model}", modelAtStart)
 
+        // Respect explicitly customized discovery paths. With the standard
+        // OpenRouter path, first resolve the model's current canonical details
+        // link so aliases/new revisions do not produce a stale 404.
+        if (discoveryPath != ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH) {
+            startEndpointFetch(fallbackUrl, generation, modelAtStart)
+            return
+        }
+
+        modelDetailsRequestNetwork = RequestNetwork(this)
+        modelDetailsRequestNetwork?.setHeaders(authHeaders())
+        modelDetailsRequestNetwork?.startRequestNetwork(
+            "GET",
+            ProviderDiscoveryResolver.modelLookupUrl(base, modelAtStart),
+            "model-$generation",
+            object : RequestNetwork.RequestListener {
+                override fun onResponse(tag: String, message: String) {
+                    if (!isCurrentFetch(generation, modelAtStart)) return
+                    val resolvedUrl = ProviderDiscoveryResolver.detailsUrl(base, message)
+                    startEndpointFetch(
+                        resolvedUrl ?: fallbackUrl,
+                        generation,
+                        modelAtStart,
+                        retryUrl = fallbackUrl.takeIf { resolvedUrl != null && resolvedUrl != fallbackUrl }
+                    )
+                }
+
+                override fun onErrorResponse(tag: String, message: String) {
+                    if (!isCurrentFetch(generation, modelAtStart)) return
+                    // The lookup is alias hardening, not a new point of
+                    // failure. Canonical ids still use the existing path.
+                    startEndpointFetch(fallbackUrl, generation, modelAtStart)
+                }
+            }
+        )
+    }
+
+    private fun startEndpointFetch(
+        url: String,
+        generation: Int,
+        modelAtStart: String,
+        retryUrl: String? = null
+    ) {
         requestNetwork = RequestNetwork(this)
         requestNetwork?.setHeaders(authHeaders())
-        requestNetwork?.startRequestNetwork("GET", url, "A", fetchListener)
+        requestNetwork?.startRequestNetwork(
+            "GET", url, "endpoints-$generation",
+            object : RequestNetwork.RequestListener {
+                override fun onResponse(tag: String, message: String) {
+                    if (!isCurrentFetch(generation, modelAtStart)) return
+                    val parsed = ProviderEndpointsParser.parse(message)
+                    if (parsed == null) {
+                        if (retryUrl != null) {
+                            startEndpointFetch(retryUrl, generation, modelAtStart)
+                        } else {
+                            showProviderError(message)
+                        }
+                        return
+                    }
+                    providerEndpoints = parsed.endpoints
+                    // Only a complete response is authoritative enough to
+                    // invalidate a saved provider.
+                    availableSlugs = if (parsed.authoritative) {
+                        parsed.endpoints.map { it.slug.lowercase() }.toSet()
+                    } else {
+                        null
+                    }
+                    parsed.endpoints.forEach { displayNames[it.slug] = it.providerName }
+                    renderChart()
+                    updateOrderBox()
+                    startZdrFetch(generation, modelAtStart)
+                }
+
+                override fun onErrorResponse(tag: String, message: String) {
+                    if (!isCurrentFetch(generation, modelAtStart)) return
+                    if (retryUrl != null) {
+                        startEndpointFetch(retryUrl, generation, modelAtStart)
+                    } else {
+                        showProviderError(message)
+                    }
+                }
+            }
+        )
     }
 
     /** Fetch the Zero Data Retention endpoint list; its records are matched
      *  against the model's providers to fill the ZDR column (owner correction,
      *  Aug 2 2026 — ZDR is not part of the model-endpoints response). */
-    private fun startZdrFetch() {
-        if (host.isBlank() || zdrMatches != null) return
+    private fun startZdrFetch(generation: Int, modelAtStart: String) {
+        if (host.isBlank() || zdrMatches != null || !isCurrentFetch(generation, modelAtStart)) return
         zdrRequestNetwork = RequestNetwork(this)
         zdrRequestNetwork?.setHeaders(authHeaders())
         zdrRequestNetwork?.startRequestNetwork(
-            "GET", host.trimEnd('/') + "/endpoints/zdr", "A", zdrFetchListener
+            "GET", host.trimEnd('/') + "/endpoints/zdr", "zdr-$generation",
+            object : RequestNetwork.RequestListener {
+                override fun onResponse(tag: String, message: String) {
+                    if (!isCurrentFetch(generation, modelAtStart)) return
+                    zdrMatches = ProviderEndpointsParser.parseZdrMatches(message, modelAtStart)
+                    if (providerEndpoints != null) renderChart()
+                }
+
+                override fun onErrorResponse(tag: String, message: String) { /* stays unknown */ }
+            }
         )
     }
+
+    private fun isCurrentFetch(generation: Int, modelAtStart: String): Boolean =
+        generation == providerFetchGeneration && modelAtStart == selectedModel && !isFinishing
 
     private fun authHeaders(): HashMap<String, Any> {
         val authHeaders = HashMap<String, Any>()
@@ -740,7 +802,7 @@ class ChooseProviderActivity : FragmentActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = dp(16) }
         }
-        if (hasLeadColumn()) row.addView(buildLeadControl(slug))
+        if (hasLeadColumn()) row.addView(buildLeadControl(slug, available = false))
 
         val name = displayNames[slug] ?: slug
         val nameCell = TextView(this, null, 0, R.style.Widget_App_Chart_Cell)
@@ -781,12 +843,13 @@ class ChooseProviderActivity : FragmentActivity() {
 
     /** Only mode: radio (single choice). Preferred mode: checkbox that appends
      *  to / removes from the ordered list. */
-    private fun buildLeadControl(slug: String): View {
+    private fun buildLeadControl(slug: String, available: Boolean = true): View {
         val params = LinearLayout.LayoutParams(dp(LEAD_CONTROL_WIDTH_DP), LinearLayout.LayoutParams.WRAP_CONTENT)
         return if (selectedRoutingType == FavoriteModelObject.ROUTING_ONLY) {
             MaterialRadioButton(this).apply {
                 layoutParams = params
                 isChecked = slug == selectedProvider
+                isEnabled = available
                 setOnClickListener {
                     selectedProvider = slug
                     renderChart()
@@ -796,6 +859,9 @@ class ChooseProviderActivity : FragmentActivity() {
             MaterialCheckBox(this).apply {
                 layoutParams = params
                 isChecked = slug in orderList
+                // An unavailable saved item may still be removed, but cannot
+                // be newly selected from a stale row.
+                isEnabled = available || isChecked
                 setOnClickListener {
                     if (slug in orderList) orderList.remove(slug) else orderList.add(slug)
                     updateOrderBox()
@@ -903,7 +969,7 @@ class ChooseProviderActivity : FragmentActivity() {
      */
     private fun saveAndFinish() {
         if (selectedRoutingType == FavoriteModelObject.ROUTING_ONLY &&
-            (selectedProvider.isBlank() || isUnavailable(selectedProvider))
+            (selectedProvider.isBlank() || availableSlugs == null || isUnavailable(selectedProvider))
         ) {
             showNoticeDialog(getString(R.string.provider_only_mode_error))
             return
@@ -942,6 +1008,7 @@ class ChooseProviderActivity : FragmentActivity() {
                         ArrayList(orderList), ArrayList(ignored)
                     )
                 )
+                persistSelectedRouteToolCapability(selectedRouteToolCapability())
             }
             // Return the model saved here so the caller (the Summoning Circle)
             // can switch the chat to it — the routing rode along on the favorite
@@ -958,8 +1025,51 @@ class ChooseProviderActivity : FragmentActivity() {
         data.putExtra(EXTRA_ALLOW_FALLBACKS, switchAllowFallbacks?.isChecked != false)
         data.putStringArrayListExtra(EXTRA_PROVIDER_ORDER, ArrayList(orderList))
         data.putStringArrayListExtra(EXTRA_IGNORED_PROVIDERS, ArrayList(ignored))
+        data.putExtra(EXTRA_ROUTE_TOOL_CAPABILITY, selectedRouteToolCapability().key)
         setResult(RESULT_OK, data)
         finish()
+    }
+
+    /**
+     * The chart's Tools column is endpoint-specific. For an exact Only route,
+     * carry that fresh fact into chat capability storage immediately so an
+     * ordinary message is not rejected merely because create_image was added.
+     * Automatic/Preferred remain runtime-learned because more than one
+     * endpoint can serve the request.
+     */
+    private fun selectedRouteToolCapability(): ToolCapability {
+        if (selectedRoutingType != FavoriteModelObject.ROUTING_ONLY) {
+            return ToolCapability.UNKNOWN
+        }
+        return when (providerEndpoints
+            ?.firstOrNull { it.slug.equals(selectedProvider, ignoreCase = true) }
+            ?.supportsTools
+        ) {
+            true -> ToolCapability.SUPPORTED
+            false -> ToolCapability.UNSUPPORTED
+            null -> ToolCapability.UNKNOWN
+        }
+    }
+
+    private fun persistSelectedRouteToolCapability(capability: ToolCapability) {
+        if (capability == ToolCapability.UNKNOWN || endpointId.isBlank() || selectedModel.isBlank()) return
+        try {
+            val endpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
+            val endpoint = endpointPreferences.getApiEndpoint(this, endpointId)
+            val scopeKey = ToolCapabilityScope.key(
+                selectedModel,
+                openRouterRouting = true,
+                routingType = selectedRoutingType,
+                selectedProvider = selectedProvider,
+                allowFallbacks = switchAllowFallbacks?.isChecked != false,
+                providerOrder = orderList,
+                ignoredProviders = ignored.toList()
+            )
+            endpoint.toolCapabilityByModel = ToolCapabilityStore.set(
+                endpoint.toolCapabilityByModel, scopeKey, capability
+            )
+            endpointPreferences.setApiEndpoint(this, endpoint)
+        } catch (_: Exception) { /* capability seeding must never block Save */ }
     }
 
     private fun cancelAndFinish() {

@@ -153,11 +153,18 @@ class ModelCleanupActivity : FragmentActivity() {
                     val labels = LinkedHashMap(previous.endpointLabels)
                     endpoints.values.forEach { labels[it.id] = endpointDisplayLabel(it) }
 
+                    val targetsByEndpoint = references.allTargets.groupBy { it.endpointId }
                     val checks = coroutineScope {
-                        references.allTargets.map { it.endpointId }.distinct().map { endpointId ->
+                        targetsByEndpoint.keys.map { endpointId ->
                             async {
                                 endpointId to (endpoints[endpointId]?.let {
-                                    ModelCatalogAvailabilityClient.check(it)
+                                    ModelCatalogAvailabilityClient.check(
+                                        it,
+                                        targetsByEndpoint[endpointId]
+                                            .orEmpty()
+                                            .map { target -> target.modelId }
+                                            .toSet()
+                                    )
                                 } ?: EndpointCatalogCheck.Unchecked)
                             }
                         }.awaitAll().toMap()

@@ -24,8 +24,7 @@ import com.google.gson.JsonParser
  * Turns a [RoutingDecision] into OpenRouter's request-body `provider` object,
  * and augments an already-serialized Chat Completions JSON body with it.
  *
- * OpenRouter has no literal "only" key: "Only" is expressed as a single-entry
- * `order` with `allow_fallbacks:false`. "Preferred" is an `order` with
+ * "Only" is expressed with OpenRouter's literal `only` field. "Preferred" is an `order` with
  * `allow_fallbacks` as chosen. Excluded providers become `ignore`. Automatic
  * with no exclusions produces nothing (no `provider` object at all).
  *
@@ -49,7 +48,7 @@ object ProviderRoutingSerializer {
         val obj = JsonObject()
         when {
             decision.only != null -> {
-                obj.add("order", jsonArrayOf(listOf(decision.only)))
+                obj.add("only", jsonArrayOf(listOf(decision.only)))
                 obj.addProperty("allow_fallbacks", false)
             }
             decision.order.isNotEmpty() -> {

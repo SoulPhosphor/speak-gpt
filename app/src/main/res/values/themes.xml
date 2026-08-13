@@ -353,6 +353,119 @@
         <item name="android:layout_marginStart">12dp</item>
     </style>
 
+    <!-- Selector row (owner request, Aug 13 2026): a labeled row that shows
+         the current value of a setting and opens a picker when tapped. The
+         "AI Model" row in Quick Settings (unstyled before this) and the
+         Voice Language row (Voice & Speech) both use this now, unchanged in
+         appearance either way. No chevron (unlike Widget.App.Row.*): the
+         current value itself, right-aligned, is the affordance. Distinct
+         from the Dropdown family, which opens an anchored inline menu
+         instead of a separate picker screen/dialog. The background is the
+         tonal pill (@drawable/btn_accent_tonal, tinted
+         colorSecondaryContainer); a screen that groups a Selector row
+         under/above other card content may override android:background
+         with a differently-cornered drawable (Quick Settings keeps
+         @drawable/btn_accent_top, rounded only on top, so the row still
+         reads as the top of that settings card) - that is placement only,
+         matching how the canonical dropdown allows container differences. -->
+    <style name="Widget.App.Row.Selector" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">@drawable/btn_accent_tonal</item>
+        <item name="android:backgroundTint">?attr/colorSecondaryContainer</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:paddingTop">14dp</item>
+        <item name="android:paddingBottom">14dp</item>
+    </style>
+
+    <!-- Same selector-row geometry and typography as AI Model, with a
+         distinct theme-resolved background for Voice Language. -->
+    <style name="Widget.App.Row.Selector.VoiceLanguage" parent="Widget.App.Row.Selector">
+        <item name="android:backgroundTint">?attr/colorSurfaceContainerHigh</item>
+    </style>
+
+    <!-- Left-aligned label for Widget.App.Row.Selector. -->
+    <style name="Widget.App.Row.Selector.Label" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">16dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Right-aligned current value for Widget.App.Row.Selector. -->
+    <style name="Widget.App.Row.Selector.Value" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">16dp</item>
+        <item name="android:layout_marginEnd">16dp</item>
+        <item name="android:ellipsize">marquee</item>
+        <item name="android:focusable">true</item>
+        <item name="android:focusableInTouchMode">true</item>
+        <item name="android:freezesText">true</item>
+        <item name="android:gravity">end</item>
+        <item name="android:marqueeRepeatLimit">marquee_forever</item>
+        <item name="android:scrollHorizontally">true</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+    </style>
+
+    <!-- Pick-one-item list row (owner request, Aug 13 2026): the "checked
+         tile" row used by a single-select list opened from a
+         Widget.App.Row.Selector (or, later, from any other picker needing
+         the same look) - currently the Select Language dialog's
+         RadioButton rows. Geometry/typography unchanged from that dialog's
+         previous local values (56dp row, 8dp horizontal padding, 16sp). It
+         deliberately does not force single-line or ellipsized text.
+         The Select AI Model screen's row layout (view_model.xml) still
+         improvises its own local version of this same pattern and has not
+         been migrated onto this style - see ui-style-adoption.md.
+         This style only carries the shared geometry; the two selection
+         states are applied at runtime (background + text appearance, see
+         TextAppearance.App.PickList.* below) by whatever code owns the
+         individual rows:
+           - unselected: android:background = @drawable/btn_accent_tonal_selector_v3,
+             text appearance = TextAppearance.App.PickList.Unselected
+           - selected: android:background = @drawable/btn_accent_tonal_selector_v4,
+             text appearance = TextAppearance.App.PickList.Selected
+         Neither drawable needs a runtime tint - both already resolve their
+         fill from a theme attribute (colorSurfaceContainerHigh / colorPrimary
+         respectively); tinting them again in Kotlin is what caused the old
+         hard-coded-color bug this style exists to fix. -->
+    <!-- Custom pick-list dialog title: existing geometry, theme-routed color. -->
+    <style name="Widget.App.PickList.Title" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">24dp</item>
+        <item name="android:textColor">?attr/appTitleTextColor</item>
+        <item name="android:textSize">24sp</item>
+    </style>
+
+    <style name="Widget.App.PickList.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">56dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <!-- Unselected-state text for Widget.App.PickList.Row: same row-title
+         color every other shared row uses. -->
+    <style name="TextAppearance.App.PickList.Unselected" parent="">
+        <item name="android:textColor">?attr/appRowTitleColor</item>
+    </style>
+
+    <!-- Selected-state text for Widget.App.PickList.Row: resolved through an
+         XML text appearance, not a Kotlin attribute lookup, so it never hits
+         the colorOnPrimary CI resolution risk recorded elsewhere in this
+         project (see ProfileImageGalleryAdapter.kt / MemoryScreenActivity.kt). -->
+    <style name="TextAppearance.App.PickList.Selected" parent="">
+        <item name="android:textColor">?attr/colorOnPrimary</item>
+    </style>
+
     <!-- Screen header (owner ruling, July 19 2026): the solid-color bar with
          a back chevron and a centered title at the top of a full-screen
          activity (seen today on Characters, AI System Settings, and

@@ -41,6 +41,7 @@
         <TextView
             android:id="@+id/progress_title"
             style="@style/Widget.App.Row.Title"
+            android:accessibilityLiveRegion="polite"
             android:text="@string/image_gen_creating_title" />
 
         <com.google.android.material.button.MaterialButton

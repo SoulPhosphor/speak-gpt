@@ -28,8 +28,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
+import org.teslasoft.assistant.preferences.MessageCompletionState
+import org.teslasoft.assistant.service.ImageGenerationForegroundService
 import org.teslasoft.assistant.util.GeneratedImageStorage
 import org.teslasoft.assistant.util.Hash
 import java.io.File
@@ -49,6 +52,51 @@ fun imageFailureMessageRes(cause: ImageErrorCause): Int = when (cause) {
     ImageErrorCause.UNSUPPORTED_OPTION -> R.string.image_gen_error_unsupported_option
     ImageErrorCause.PROVIDER_ERROR -> R.string.image_gen_error_provider
     ImageErrorCause.CANCELLED -> R.string.image_gen_error_cancelled
+}
+
+/** The same provider-detail formula used by failed text replies: the app's
+ * cause-specific explanation remains the message body, while this block
+ * reveals the provider's own sanitized error and request identity beneath it. */
+fun imageFailureProviderDetailBlock(
+    context: Context,
+    failure: ImageGenerationJobRegistry.Terminal.Failed
+): String {
+    val diagnostics = failure.diagnostics
+    val noProviderResponse = failure.cause == ImageErrorCause.ENDPOINT_UNREACHABLE ||
+        failure.cause == ImageErrorCause.TIMED_OUT
+    val detail = if (noProviderResponse) {
+        context.getString(R.string.provider_error_no_response)
+    } else {
+        val providerMessage = failure.providerDetail?.trim()?.ifBlank { null }
+        when {
+            diagnostics?.httpStatus != null && providerMessage != null ->
+                "${diagnostics.httpStatus} $providerMessage"
+            providerMessage != null -> providerMessage
+            diagnostics?.httpStatus != null -> diagnostics.httpStatus.toString()
+            else -> context.getString(R.string.provider_error_none)
+        }
+    }
+    val notReported = context.getString(R.string.provider_value_not_reported)
+    val endpointFallback = try {
+        ApiEndpointPreferences.getApiEndpointPreferences(context)
+            .getApiEndpoint(context, failure.metadata.endpointId)
+            .let { endpoint -> endpoint.label.ifBlank { endpoint.host } }
+    } catch (_: Exception) {
+        ""
+    }
+    val apiProvider = diagnostics?.endpointLabel?.trim()?.ifBlank { null }
+        ?: endpointFallback.trim().ifBlank { null }
+        ?: notReported
+    val modelService = failure.reportedProvider?.trim()?.ifBlank { null } ?: notReported
+    val model = failure.metadata.modelId.trim().ifBlank { notReported }
+    return context.getString(R.string.provider_error_line, detail) +
+        "\n" + context.getString(R.string.provider_api_provider_line, apiProvider) +
+        "\n" + context.getString(R.string.provider_model_service_line, modelService) +
+        "\n" + context.getString(R.string.provider_model_line, model) +
+        "\n" + context.getString(
+            R.string.provider_function_line,
+            context.getString(R.string.provider_function_image_generation)
+        )
 }
 
 /**
@@ -86,7 +134,10 @@ object ImageGenerationJobRegistry {
 
         class Failed(
             val cause: ImageErrorCause,
-            override val metadata: GeneratedImageMetadata
+            override val metadata: GeneratedImageMetadata,
+            val providerDetail: String? = null,
+            val reportedProvider: String? = null,
+            val diagnostics: ImageRequestDiagnostics? = null
         ) : Terminal()
 
         class Cancelled(override val metadata: GeneratedImageMetadata) : Terminal()
@@ -167,25 +218,33 @@ object ImageGenerationJobRegistry {
         val record = ActiveJob(chatId, request, origin, CompletableDeferred())
         // LAZY so the record is registered before the first suspension can run.
         val job = scope.launch(start = CoroutineStart.LAZY) {
+            // Direct /imagine requests do not pass through ChatActivity's
+            // text-generation funnel, so the image registry owns its own
+            // screen-off/app-switch keep-alive. The existing service is
+            // reference-counted, making this safe for tool generations that
+            // overlap a regular model turn.
+            val keepAliveStarted = ImageGenerationForegroundService.begin(app, chatId)
             val terminal = try {
-                runGeneration(app, request)
-            } catch (_: CancellationException) {
-                Terminal.Cancelled(
-                    metadataFor(request, GeneratedImageMetadata.STATUS_CANCELLED)
-                )
-            } catch (_: Exception) {
-                // Same catch-all classification the coordinator applies to
-                // an unexpected exception. Without this, a local failure
-                // (e.g. writing the image file) would end the coroutine
-                // with NO terminal state — a stuck Creating Image row.
-                Terminal.Failed(
-                    ImageErrorCause.PROVIDER_ERROR,
-                    metadataFor(
-                        request,
-                        GeneratedImageMetadata.STATUS_FAILED,
-                        failureCode = ImageErrorCause.PROVIDER_ERROR.name
+                try {
+                    runGeneration(app, request)
+                } catch (_: CancellationException) {
+                    Terminal.Cancelled(
+                        metadataFor(request, GeneratedImageMetadata.STATUS_CANCELLED)
                     )
-                )
+                } catch (_: Exception) {
+                    // Without this catch, a local file-write/decode failure
+                    // could leave the Creating Image row stuck forever.
+                    Terminal.Failed(
+                        ImageErrorCause.PROVIDER_ERROR,
+                        metadataFor(
+                            request,
+                            GeneratedImageMetadata.STATUS_FAILED,
+                            failureCode = ImageErrorCause.PROVIDER_ERROR.name
+                        )
+                    )
+                }
+            } finally {
+                if (keepAliveStarted) ImageGenerationForegroundService.end(app)
             }
             // NonCancellable: the terminal state must be delivered even when
             // the ending IS a cancellation.
@@ -246,7 +305,10 @@ object ImageGenerationJobRegistry {
                     request,
                     GeneratedImageMetadata.STATUS_FAILED,
                     failureCode = outcome.errorCause.name
-                )
+                ),
+                providerDetail = outcome.sanitizedDetail,
+                reportedProvider = outcome.reportedProvider,
+                diagnostics = outcome.diagnostics
             )
         }
     }
@@ -279,12 +341,23 @@ object ImageGenerationJobRegistry {
 
     private suspend fun finish(app: Context, record: ActiveJob, terminal: Terminal) {
         jobs.remove(record.chatId)
-        record.terminal.complete(terminal)
         val listener = listeners[record.chatId]
-        if (listener != null) {
-            listener.onImageJobFinished(record, terminal)
-        } else {
-            persistTerminalWithoutScreen(app, record, terminal)
+        try {
+            if (listener != null) {
+                try {
+                    listener.onImageJobFinished(record, terminal)
+                } catch (_: Exception) {
+                    persistTerminalWithoutScreen(app, record, terminal)
+                }
+            } else {
+                persistTerminalWithoutScreen(app, record, terminal)
+            }
+        } finally {
+            // Release a model tool continuation only after the image/failure
+            // has been inserted into the visible chat or durable history.
+            // Completing first caused the assistant follow-up to appear while
+            // the image row was still missing.
+            record.terminal.complete(terminal)
         }
     }
 
@@ -315,6 +388,12 @@ object ImageGenerationJobRegistry {
                 // §12: the structured record travels with the message; the
                 // `~file:` text above is only the rendering projection.
                 map[GeneratedImageMetadata.KEY] = terminal.metadata.toJson()
+                if (terminal is Terminal.Failed) {
+                    map[MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
+                    map[MessageCompletionState.KEY_STATE_DETAIL] = terminal.cause.name
+                    map[MessageCompletionState.KEY_ERROR_TEXT] =
+                        imageFailureProviderDetailBlock(app, terminal)
+                }
                 history.add(map)
                 chatPreferences.saveChatHistory(app, record.chatId, history)
                 if (terminal is Terminal.Complete) {

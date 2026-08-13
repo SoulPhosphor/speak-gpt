@@ -20,7 +20,7 @@ This file is the **single authoritative product and design specification** for t
 
 Chat is load-bearing. This redesign changes presentation while preserving working chat behavior unless this plan explicitly says otherwise.
 
-Preserve existing streaming, markdown rendering, message selection, edit, retry, speak, share, report, copy, attachments, generated images, auto-naming, keyboard/IME behavior, voice state, message actions, and other established chat behavior. Preserve load-bearing IDs/listeners unless this plan explicitly requires a coordinated rename.
+Preserve existing streaming, markdown rendering, message selection, edit, retry, speak, share, copy, attachments, generated images, auto-naming, keyboard/IME behavior, voice state, message actions, and other established chat behavior. Preserve load-bearing IDs/listeners unless this plan explicitly requires a coordinated rename.
 
 ### 1.1 One chat engine, one current presentation shell
 

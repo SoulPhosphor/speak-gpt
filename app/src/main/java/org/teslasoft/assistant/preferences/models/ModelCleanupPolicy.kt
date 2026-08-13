@@ -16,9 +16,14 @@
 
 package org.teslasoft.assistant.preferences.models
 
-/** One endpoint's conclusive catalog result, or an inconclusive check. */
+/** One endpoint's catalog result, or a wholly inconclusive check. */
 sealed class EndpointCatalogCheck {
-    data class Checked(val modelIds: Set<String>) : EndpointCatalogCheck()
+    data class Checked(
+        val modelIds: Set<String>,
+        /** Individual saved ids whose availability could not be established.
+         *  Used for OpenRouter alias lookups after a conclusive catalog. */
+        val indeterminateModelIds: Set<String> = emptySet()
+    ) : EndpointCatalogCheck()
     data object Unchecked : EndpointCatalogCheck()
 }
 
@@ -62,7 +67,17 @@ object ModelCleanupPolicy {
         currentTargets.groupBy { it.endpointId }.forEach { (endpointId, targets) ->
             when (val check = checks[endpointId] ?: EndpointCatalogCheck.Unchecked) {
                 is EndpointCatalogCheck.Checked -> targets.forEach { target ->
-                    if (target.modelId !in check.modelIds) unavailable.add(target)
+                    when {
+                        target.modelId in check.modelIds -> Unit
+                        target.modelId in check.indeterminateModelIds -> {
+                            // A failed alias lookup is not proof that the model
+                            // disappeared. Preserve an old warning, but never
+                            // create a new destructive cleanup candidate.
+                            unchecked.add(endpointId)
+                            if (target in previous.unavailable) unavailable.add(target)
+                        }
+                        else -> unavailable.add(target)
+                    }
                 }
                 EndpointCatalogCheck.Unchecked -> {
                     unchecked.add(endpointId)

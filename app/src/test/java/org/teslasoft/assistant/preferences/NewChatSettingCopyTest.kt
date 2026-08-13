@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
@@ -60,7 +61,6 @@ class NewChatSettingCopyTest {
             "AutoLangDetect",
             "AvatarId",
             "AvatarType",
-            "DalleVersion",
             "EndSeparator",
             "FrequencyPenalty",
             // FunctionCalling was removed from the copy list with the whole
@@ -77,7 +77,6 @@ class NewChatSettingCopyTest {
             "PresencePenalty",
             "Prompt",
             "Resolution",
-            "Silence",
             "SystemMessage",
             "Temperature",
             "TopP",
@@ -94,8 +93,19 @@ class NewChatSettingCopyTest {
         )
     }
 
+    @Test
+    fun inheritanceIsInitializedBeforeTheNewChatOpens() {
+        val source = addChatDialogSource()
+        val reset = source.indexOf("newPreferences.resetNewChatInheritance()")
+        val lastSettingsWrite = source.indexOf("newPreferences.setAssistantName")
+        val open = source.indexOf("listener?.onAdd")
+
+        assertTrue("New-chat inheritance must be reset before opening the chat", reset >= 0 && reset < open)
+        assertTrue("All new-chat settings must be in memory before opening the chat", lastSettingsWrite >= 0 && lastSettingsWrite < open)
+    }
+
     /** The known gap the rebuild's app-wide settings make moot (plan 4.7):
-     *  today a new chat copies resolution and the legacy DALL-E settings but
+     *  today a new chat copies the legacy resolution setting but
      *  never the selected image model. */
     @Test
     fun imageModelIsNotCopiedToNewChats() {
