@@ -917,7 +917,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 if (amoled) {
                     ResourcesCompat.getColor(context.resources, R.color.white, null)
                 } else {
-                    resolveThemeColor(if (isBot) R.attr.colorPrimary else R.attr.colorSurface)
+                    resolveThemeColor(
+                        if (isBot) {
+                            com.google.android.material.R.attr.colorPrimary
+                        } else {
+                            com.google.android.material.R.attr.colorSurface
+                        }
+                    )
                 }
             )
         }
