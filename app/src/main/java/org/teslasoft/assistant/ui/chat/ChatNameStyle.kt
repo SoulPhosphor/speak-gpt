@@ -37,7 +37,8 @@ object ChatNameStyle {
 
     data class Resolved(
         val fontId: String,
-        val sizeSp: Int
+        val sizeSp: Int,
+        val bold: Boolean
     )
 
     val fonts: List<FontOption> = listOf(
@@ -67,7 +68,8 @@ object ChatNameStyle {
 
     fun user(preferences: Preferences): Resolved = Resolved(
         fontId = fontIdOrDefault(preferences.getUserChatNameFont()),
-        sizeSp = preferences.getUserChatNameSizeSp().coerceIn(12, 32)
+        sizeSp = preferences.getUserChatNameSizeSp().coerceIn(12, 32),
+        bold = preferences.getBoldUserChatName()
     )
 
     fun ai(preferences: Preferences, companion: PersonaObject? = null): Resolved {
@@ -80,12 +82,16 @@ object ChatNameStyle {
                 fontIdOrDefault(companion?.chatNameFontId)
             },
             sizeSp = companion?.chatNameSizeSp?.takeIf { it > 0 }?.coerceIn(12, 32)
-                ?: inheritedSize
+                ?: inheritedSize,
+            bold = preferences.getBoldAiChatName()
         )
     }
 
     fun apply(textView: TextView, context: Context, style: Resolved) {
-        textView.typeface = Typeface.create(typeface(context, style.fontId), Typeface.BOLD)
+        textView.typeface = Typeface.create(
+            typeface(context, style.fontId),
+            if (style.bold) Typeface.BOLD else Typeface.NORMAL
+        )
         textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, style.sizeSp.toFloat())
     }
 }

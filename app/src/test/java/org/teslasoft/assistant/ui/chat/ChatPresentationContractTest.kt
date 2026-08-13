@@ -61,12 +61,29 @@ class ChatPresentationContractTest {
         val adapter = source(
             "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
         )
+        val preferences = source(
+            "src/main/java/org/teslasoft/assistant/preferences/Preferences.kt"
+        )
+        val nameStyle = source(
+            "src/main/java/org/teslasoft/assistant/ui/chat/ChatNameStyle.kt"
+        )
+        val appearance = source(
+            "src/main/res/layout/activity_appearance.xml"
+        )
         assertTrue(adapter.contains("getShowChatProfileImages()"))
         assertTrue(adapter.contains("getShowChatNames()"))
         assertTrue(adapter.contains("getShowAiBubble()"))
         assertTrue(adapter.contains("getShowUserBubble()"))
         assertTrue(adapter.contains("ChatNameStyle.apply("))
         assertTrue(adapter.contains("setCompanionPresentation("))
+        assertTrue(preferences.contains("getGlobalBoolean(\"chat_bold_user_name\", false)"))
+        assertTrue(preferences.contains("getGlobalBoolean(\"chat_bold_ai_name\", false)"))
+        assertTrue(nameStyle.contains("if (style.bold) Typeface.BOLD else Typeface.NORMAL"))
+        assertTrue(appearance.contains("@+id/switch_bold_user_name"))
+        assertTrue(appearance.contains("@+id/switch_bold_companion_name"))
+        for (path in messageLayouts) {
+            assertFalse(path, source(path).contains("android:textStyle=\"bold\""))
+        }
     }
 
     @Test

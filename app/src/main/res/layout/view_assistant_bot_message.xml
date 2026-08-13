@@ -251,7 +251,6 @@
         android:text="@string/chat_role_assistant"
         android:textColor="?attr/colorPrimary"
         android:textSize="18sp"
-        android:textStyle="bold"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 

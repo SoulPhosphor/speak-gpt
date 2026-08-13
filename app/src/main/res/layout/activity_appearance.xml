@@ -129,6 +129,26 @@
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/appearance_section_name_style" />
 
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_bold_user_name" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_bold_user_name_hint" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_bold_user_name"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_bold_companion_name" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_bold_companion_name_hint" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_bold_companion_name"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
             <LinearLayout
                 style="@style/Widget.App.Row.WithSubtitle"
                 android:background="@null"

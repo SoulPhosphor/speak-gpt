@@ -140,6 +140,8 @@ Create one shared **Chat Name Style** abstraction that owns:
 
 Appearance owns independent User and AI defaults. A companion may optionally override the AI default font and/or size; otherwise it inherits the Appearance AI default. Do not add per-message typography overrides.
 
+Names use normal weight by default. Appearance provides independent **Bold User name** and **Bold Companion name** toggles, both default Off. Each toggle applies only to its own side. Do not force bold in message layouts or individual font registrations.
+
 Initial bundled name families:
 
 1. Roboto
@@ -297,11 +299,13 @@ Appearance controls, in order:
 5. Model names — On / Off
 6. Token usage — On / Off; default Off
 7. Hardware Keyboard Shortcuts — On / Off
-8. User name font
-9. User name size
-10. AI name font
-11. AI name size
-12. editable Preview text for font samples
+8. Bold User name — On / Off; default Off
+9. Bold Companion name — On / Off; default Off
+10. User name font
+11. User name size
+12. AI name font
+13. AI name size
+14. editable Preview text for font samples
 
 Companion editor:
 

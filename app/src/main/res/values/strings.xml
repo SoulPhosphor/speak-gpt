@@ -3143,6 +3143,10 @@
     <string name="appearance_hardware_keyboard_shortcuts">Hardware Keyboard Shortcuts</string>
     <string name="appearance_hardware_keyboard_shortcuts_hint">Press Enter to send and Shift+Enter for a new line.</string>
     <string name="appearance_section_name_style">Name Style</string>
+    <string name="appearance_bold_user_name">Bold User Name</string>
+    <string name="appearance_bold_user_name_hint">Use bold text for the user name.</string>
+    <string name="appearance_bold_companion_name">Bold Companion Name</string>
+    <string name="appearance_bold_companion_name_hint">Use bold text for companion names.</string>
     <string name="appearance_user_name_font">User Name Font</string>
     <string name="appearance_user_name_size">User Name Size</string>
     <string name="appearance_ai_name_font">AI Name Font</string>

@@ -8,7 +8,6 @@
 package org.teslasoft.assistant.ui.activities
 
 import android.content.res.ColorStateList
-import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -110,6 +109,12 @@ class AppearanceActivity : FragmentActivity() {
         ) {
             preferences.setHardwareKeyboardShortcuts(it)
         }
+        bindSwitch(R.id.switch_bold_user_name, preferences.getBoldUserChatName()) {
+            preferences.setBoldUserChatName(it)
+        }
+        bindSwitch(R.id.switch_bold_companion_name, preferences.getBoldAiChatName()) {
+            preferences.setBoldAiChatName(it)
+        }
 
         refreshNameStyleValues()
         userFont?.setOnClickListener { showFontPicker(it as TextView, true) }
@@ -201,7 +206,7 @@ class AppearanceActivity : FragmentActivity() {
             })
             row.addView(TextView(this, null, 0, R.style.Widget_App_Row_Title).apply {
                 text = sample
-                typeface = Typeface.create(ChatNameStyle.typeface(this@AppearanceActivity, font.id), Typeface.BOLD)
+                typeface = ChatNameStyle.typeface(this@AppearanceActivity, font.id)
                 textSize = ChatNameStyle.DEFAULT_SIZE_SP.toFloat()
             })
             container.addView(row)

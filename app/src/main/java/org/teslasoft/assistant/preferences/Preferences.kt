@@ -510,6 +510,18 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalBoolean("chat_show_names", state, true)
     }
 
+    fun getBoldUserChatName(): Boolean = getGlobalBoolean("chat_bold_user_name", false)
+
+    fun setBoldUserChatName(state: Boolean) {
+        putGlobalBoolean("chat_bold_user_name", state)
+    }
+
+    fun getBoldAiChatName(): Boolean = getGlobalBoolean("chat_bold_ai_name", false)
+
+    fun setBoldAiChatName(state: Boolean) {
+        putGlobalBoolean("chat_bold_ai_name", state)
+    }
+
     fun getShowAiBubble(): Boolean = getGlobalBoolean("chat_show_ai_bubble", true)
 
     fun setShowAiBubble(state: Boolean) {
