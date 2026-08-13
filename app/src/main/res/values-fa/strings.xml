@@ -47,8 +47,6 @@
     <string name="setting_advanced">تنظیمات پیشرفته</string>
     <string name="setting_act_prompt">پیام فعال‌سازی</string>
     <string name="setting_layout">طرح‌بندی گفتگو</string>
-    <string name="layout_classic">کلاسیک</string>
-    <string name="layout_bubbles">حبابی</string>
     <string name="setting_silent">حالت بی‌صدا</string>
     <string name="setting_silent_desc">پاسخ‌های ربات را تلفظ نکنید</string>
     <string name="setting_about_desc">برای مشاهده اطلاعات برنامه و توسعه‌دهنده ضربه بزنید</string>
@@ -300,8 +298,6 @@
     <string name="tile_system_message_title">پیام سیستمی</string>
     <string name="tile_system_message_desc">این ویژگی به شما امکان تنظیم پیام سیستمی را می‌دهد که به‌عنوان پیام سیستمی ارسال خواهد شد.</string>
     <string name="tile_ale_title">تشخیص خودکار زبان</string>
-    <string name="tile_classic_layout_title">طرح‌بندی گفتگوی کلاسیک</string>
-    <string name="tile_classic_layout_desc">طرح‌بندی کلاسیک یک طرح‌بندی گفتگو مانند وبگاه رسمی ChatGPT است.</string>
     <string name="tile_sh_title">دستورهای خط‌مورب</string>
     <string name="tile_sh_desc">این ویژگی به شما امکان فعال کردن دستورهای خط‌مورب را می‌دهد. لطفاً توجه کنید که این ویژگی آزمایشی و ناپایدار است. مثال: /imagine a cat.</string>
     <string name="tile_desktop_mode_title">حالت دسکتاپ</string>

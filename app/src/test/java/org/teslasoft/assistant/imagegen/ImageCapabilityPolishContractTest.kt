@@ -12,8 +12,9 @@ import org.junit.Test
 import java.io.File
 
 /** Structural guards for the generated-image capability polish. These
- * contracts span three message layouts, the adapter, and the process-level
- * job owner, so a later one-file cleanup must not silently split them again. */
+ * contracts span both sides of the current message presentation, the adapter,
+ * and the process-level job owner, so a later one-file cleanup must not
+ * silently split them again. */
 class ImageCapabilityPolishContractTest {
 
     private fun source(relative: String): String {
@@ -23,7 +24,6 @@ class ImageCapabilityPolishContractTest {
     }
 
     private val layouts = listOf(
-        "src/main/res/layout/view_message.xml",
         "src/main/res/layout/view_assistant_bot_message.xml",
         "src/main/res/layout/view_assistant_user_message.xml"
     )

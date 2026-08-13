@@ -17,7 +17,6 @@
 package org.teslasoft.assistant.ui.fragments.dialogs
 
 import android.app.Dialog
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -37,7 +36,6 @@ import org.teslasoft.assistant.R
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity.RESULT_OK
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
-import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
@@ -45,12 +43,10 @@ import java.io.IOException
 
 class ReportAIContentBottomSheet : BottomSheetDialogFragment() {
     companion object {
-        fun newInstance(message: String, chatId: String, reportFromChat: Boolean, playgroundUserMessage: String = ""): ReportAIContentBottomSheet {
+        fun newInstance(message: String, playgroundUserMessage: String): ReportAIContentBottomSheet {
             val fragment = ReportAIContentBottomSheet()
             val args = Bundle()
             args.putString("message", message)
-            args.putString("chatId", chatId)
-            args.putBoolean("reportFromChat", reportFromChat)
             args.putString("playgroundUserMessage", playgroundUserMessage)
             fragment.arguments = args
             return fragment
@@ -127,7 +123,6 @@ class ReportAIContentBottomSheet : BottomSheetDialogFragment() {
 
     private fun validateForm() {
         val message: String? = arguments?.getString("message")
-        val chatId: String? = arguments?.getString("chatId")
         val contactEmail = if (optionOpenAI?.isChecked == true) "trustandsafety@openai.com" else ""
         val context = requireContext()
 
@@ -141,14 +136,14 @@ class ReportAIContentBottomSheet : BottomSheetDialogFragment() {
             return
         }
 
-        val preferences = Preferences.getPreferences(context, chatId.toString())
+        val preferences = Preferences.getPreferences(context, "")
         val apiEndpointPreferences: ApiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(context)
         val apiEndpointHost = apiEndpointPreferences.getApiEndpoint(context, preferences.getApiEndpointId()).host
         val model = preferences.getModel()
         val reportedContent = if (optionMessage?.isChecked == true) {
             "\nMessage: \n$message"
         } else {
-            "\nChat: \n${chatConversationToText(context, chatId.toString())}"
+            "\nChat: \n${playgroundConversationToText()}"
         }
         val composedReport = trimLineByLine("""
             Reported Content: $reportedContent
@@ -231,34 +226,15 @@ class ReportAIContentBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    private fun chatConversationToText(context: Context, chatId: String) : String {
-        val reportFromChat = arguments?.getBoolean("reportFromChat") ?: false
-        if (reportFromChat) {
-            val messagesSelectionProjection =
-                ChatPreferences.getChatPreferences().getChatById(context, chatId)
-            val stringBuilder = StringBuilder()
-
-            for (m in messagesSelectionProjection) {
-                if (m["isBot"] == true) {
-                    stringBuilder.append("[Bot] >\n")
-                } else {
-                    stringBuilder.append("[User] >\n")
-                }
-                stringBuilder.append(m["message"])
-                stringBuilder.append("\n")
-            }
-
-            return stringBuilder.toString()
-        } else {
-            val stringBuilder = StringBuilder()
-            stringBuilder.append("[User] >\n")
-            stringBuilder.append(arguments?.getString("playgroundUserMessage"))
-            stringBuilder.append("\n")
-            stringBuilder.append("[Bot] >\n")
-            stringBuilder.append(arguments?.getString("message"))
-            stringBuilder.append("\n")
-            return stringBuilder.toString()
-        }
+    private fun playgroundConversationToText(): String {
+        val stringBuilder = StringBuilder()
+        stringBuilder.append("[User] >\n")
+        stringBuilder.append(arguments?.getString("playgroundUserMessage"))
+        stringBuilder.append("\n")
+        stringBuilder.append("[Bot] >\n")
+        stringBuilder.append(arguments?.getString("message"))
+        stringBuilder.append("\n")
+        return stringBuilder.toString()
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {

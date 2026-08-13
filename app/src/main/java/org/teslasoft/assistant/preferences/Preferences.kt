@@ -810,24 +810,6 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * Retrieves the layout mode from the shared preferences.
-     *
-     * @return The layout mode or "classic" if not found.
-     */
-    fun getLayout() : String {
-        return getString("layout", "classic")
-    }
-
-    /**
-     * Sets the layout mode in the shared preferences.
-     *
-     * @param layout The layout mode to be stored.
-     */
-    fun setLayout(layout: String) {
-        putString("layout", layout)
-    }
-
-    /**
      * Retrieves the voice model.
      *
      * @return voice model.

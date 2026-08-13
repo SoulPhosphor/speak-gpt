@@ -48,8 +48,6 @@
     <string name="setting_advanced">Pokročilé nastavenia</string>
     <string name="setting_act_prompt">Aktivačné výzvy</string>
     <string name="setting_layout">Rozloženie chatu</string>
-    <string name="layout_classic">Klasické</string>
-    <string name="layout_bubbles">Bubliny</string>
     <string name="setting_silent">Tichý režim</string>
     <string name="setting_silent_desc">Nečítať odpovede bota nahlas</string>
     <string name="setting_about_desc">Kliknite pre zobrazenie informácií o aplikácii a vývojárovi</string>
@@ -297,8 +295,6 @@
     <string name="tile_system_message_title">Systémová správa</string>
     <string name="tile_system_message_desc">Táto funkcia umožňuje nastaviť systémovú správu, ktorá bude odoslaná ako systémová správa.</string>
     <string name="tile_ale_title">Automatická detekcia jazyka</string>
-    <string name="tile_classic_layout_title">Klasické rozloženie chatu</string>
-    <string name="tile_classic_layout_desc">Klasické rozloženie je rozloženie chatu ako na oficiálnej webovej stránke ChatGPT.</string>
     <string name="tile_sh_title">Príkazy so znakom /</string>
     <string name="tile_sh_desc">Táto funkcia umožňuje povoliť príkazy so znakom /. Upozorňujeme, že táto funkcia je experimentálna a nestabilná. Príklad: /imagine mačka.</string>
     <string name="tile_desktop_mode_title">Režim pre desktop</string>

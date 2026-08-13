@@ -213,7 +213,10 @@ class PlaygroundFragment : Fragment() {
             if (editTextOut?.text?.toString()?.trim() == "") {
                 Toast.makeText(context, "Nothing to report", Toast.LENGTH_SHORT).show()
             } else {
-                val reportAIContentBottomSheet = ReportAIContentBottomSheet.newInstance(editTextOut?.text?.toString() ?: "", "", false, editTextIn?.text?.toString() ?: "")
+                val reportAIContentBottomSheet = ReportAIContentBottomSheet.newInstance(
+                    editTextOut?.text?.toString() ?: "",
+                    editTextIn?.text?.toString() ?: ""
+                )
                 reportAIContentBottomSheet.show(parentFragmentManager, "ReportAIContentBottomSheet")
             }
         }

@@ -48,8 +48,6 @@
     <string name="setting_advanced">Zaawansowane ustawienia</string>
     <string name="setting_act_prompt">Monit aktywacyjny</string>
     <string name="setting_layout">Układ czatu</string>
-    <string name="layout_classic">Klasyczny</string>
-    <string name="layout_bubbles">Bąbelki</string>
     <string name="setting_silent">Tryb cichy</string>
     <string name="setting_silent_desc">Nie wymawiaj odpowiedzi bota</string>
     <string name="setting_about_desc">Kliknij, aby zobaczyć informacje o aplikacji i deweloperze</string>
@@ -298,8 +296,6 @@
     <string name="tile_system_message_title">Wiadomość systemowa</string>
     <string name="tile_system_message_desc">Ta funkcja pozwala ustawić wiadomość systemową, która zostanie wysłana jako wiadomość systemowa.</string>
     <string name="tile_ale_title">Automatyczne wykrywanie języka</string>
-    <string name="tile_classic_layout_title">Klasyczny układ czatu</string>
-    <string name="tile_classic_layout_desc">Klasyczny układ to układ czatu jak na oficjalnej stronie ChatGPT.</string>
     <string name="tile_sh_title">Komendy /Slash</string>
     <string name="tile_sh_desc">Ta funkcja pozwala na włączenie komend Slash. Należy zauważyć, że ta funkcja jest eksperymentalna i niestabilna. Przykład: /imagine a cat.</string>
     <string name="tile_desktop_mode_title">Tryb pulpitu</string>

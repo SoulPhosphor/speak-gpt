@@ -48,6 +48,7 @@ import android.text.style.ImageSpan
 import android.text.style.LineHeightSpan
 import android.text.style.TtsSpan
 import android.util.DisplayMetrics
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -98,6 +99,7 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
+import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
 import org.teslasoft.assistant.util.LegacyAvatarResolver
 import org.teslasoft.assistant.util.ProfileImageBinder
@@ -110,11 +112,10 @@ import java.util.Locale
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import androidx.core.content.edit
-import org.teslasoft.assistant.ui.fragments.dialogs.ReportAIContentBottomSheet
 import org.teslasoft.assistant.util.ShareUtil.Companion.shareBase64Image
 import org.teslasoft.assistant.util.ShareUtil.Companion.sharePlainText
 
-class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, private val selectorProjection: ArrayList<HashMap<String, Any>>, private val context: FragmentActivity, private val preferences: Preferences, private val isAssistant: Boolean, private var chatId: String) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), EditMessageDialogFragment.StateChangesListener {
+class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, private val selectorProjection: ArrayList<HashMap<String, Any>>, private val context: FragmentActivity, private val preferences: Preferences, private var chatId: String) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), EditMessageDialogFragment.StateChangesListener {
 
     private val generatedImageDataUrls = HashMap<String, String>()
     private var listener: OnUpdateListener? = null
@@ -127,6 +128,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     // [companionImageShape] is the current Default Shape to render it with.
     private var companionImageFile: File? = null
     private var companionImageShape: String = "flower"
+    private var companionNameStyle: ChatNameStyle.Resolved? = null
 
     // The chat's current companion name, used only as the display fallback for
     // assistant messages that carry no stamped [KEY_COMPANION_NAME] of their own.
@@ -139,22 +141,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var userImageFile: File? = null
     private var userImageShape: String = "flower"
 
-    /** Called by ChatActivity with the already-resolved assistant picture (or
-     *  null) plus the current Default Shape. Rebinds visible rows so the
-     *  assistant avatar reflects the new state. */
-    fun setCompanionAvatar(file: File?, shape: String) {
+    /** Supplies the already-resolved assistant presentation in one update.
+     *  Storage and identity resolution stay in ChatActivity; rows only render. */
+    fun setCompanionPresentation(
+        file: File?,
+        shape: String,
+        label: String?,
+        nameStyle: ChatNameStyle.Resolved
+    ) {
         companionImageFile = file
         companionImageShape = shape
-        notifyDataSetChanged()
-    }
-
-    /** Called by ChatActivity with the chat's current companion name. Used
-     *  only as the fallback label for assistant messages that predate the
-     *  per-message stamp (see [KEY_COMPANION_NAME]); stamped messages keep
-     *  their own locked name. Rebinds visible rows so a companion switch is
-     *  reflected on those unstamped rows. */
-    fun setCompanionLabel(label: String?) {
         companionLabel = label
+        companionNameStyle = nameStyle
         notifyDataSetChanged()
     }
 
@@ -177,8 +175,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     companion object {
         private const val TYPE_USER = 0
         private const val TYPE_BOT = 1
-        private const val TYPE_CLASSIC = 2
-        private const val TYPE_IMAGE_CONFIRMATION = 3
+        private const val TYPE_IMAGE_CONFIRMATION = 2
         private const val MENU_INCLUDE_REMOVE = 101
         private const val MENU_INCLUDE_CONDENSE = 102
         private const val MENU_INCLUDE_EDIT = 103
@@ -205,7 +202,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // generation. Same transience rules as the confirmation card —
         // filtered from persistence, blank message text keeps it out of
         // the model projection.
-        private const val TYPE_IMAGE_PROGRESS = 4
+        private const val TYPE_IMAGE_PROGRESS = 3
         const val KEY_IMAGE_PROGRESS = "imageProgressCard"
     }
 
@@ -228,14 +225,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         if (dataArray[position][KEY_IMAGE_PROGRESS] == true) {
             return TYPE_IMAGE_PROGRESS
         }
-        return if (preferences.getLayout() == "bubbles" || isAssistant) {
-            if (dataArray[position]["isBot"] == true) {
-                TYPE_BOT
-            } else {
-                TYPE_USER
-            }
+        return if (dataArray[position]["isBot"] == true) {
+            TYPE_BOT
         } else {
-            TYPE_CLASSIC
+            TYPE_USER
         }
     }
 
@@ -261,7 +254,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         val layoutId = when (viewType) {
             TYPE_BOT -> R.layout.view_assistant_bot_message
             TYPE_USER -> R.layout.view_assistant_user_message
-            else -> R.layout.view_message
+            else -> error("Unsupported chat message view type: $viewType")
         }
         val view = LayoutInflater.from(parent.context).inflate(layoutId, parent, false)
         return ViewHolder(view, context)
@@ -419,7 +412,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val iconInitialBackground = icon.background
         private val message: TextView = itemView.findViewById(R.id.message)
         private val username: TextView = itemView.findViewById(R.id.username)
-        private val bubbleBg: ConstraintLayout? = itemView.findViewById(R.id.bubble_bg)
+        private val bubbleBg: ConstraintLayout = itemView.findViewById(R.id.bubble_bg)
         private val imageFrame: View = itemView.findViewById(R.id.image_frame)
         private val generatedImage: ImageView = itemView.findViewById(R.id.generated_image)
         private val generatedImageLoading: View = itemView.findViewById(R.id.generated_image_loading)
@@ -430,12 +423,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btn_edit)
         private val btnRetry: ImageButton = itemView.findViewById(R.id.btn_retry)
-        private val btnReport: ImageButton = itemView.findViewById(R.id.btn_report)
         private val btnShare: ImageButton = itemView.findViewById(R.id.btn_share)
         private val btnSpeak: ImageButton = itemView.findViewById(R.id.btn_speak)
-        // Present only on the assistant/classic layouts (the user bubble has no
-        // completion marker); nullable so the shared ViewHolder is safe on every
-        // layout it inflates.
+        // Present only on the assistant layout (the user row has no completion
+        // marker); nullable so the shared binder remains safe on both sides.
         private val statusMarker: TextView? = itemView.findViewById(R.id.status_marker)
         // The "Includes" record of what this message carried. Absent from the
         // assistant bubble (attachments are user-side only), so nullable.
@@ -455,9 +446,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (isGeneratedImage) btnShare.isEnabled = false
 
             updateIncludeSummary(chatMessage, position)
-            updateUI(chatMessage)
+            updatePresentation(chatMessage)
             updateRetryButton(chatMessage, position)
-            updateReportButton(chatMessage)
             updateShareButton(chatMessage)
             updateSpeakButton(chatMessage, position)
             updateStatusMarker(chatMessage)
@@ -465,7 +455,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (selectorProjection[position]["selected"].toString() == "true") {
                 ui.setBackgroundColor(getSurface3Color(context))
             } else {
-                updateUI(chatMessage)
+                updatePresentation(chatMessage)
             }
 
             ui.setOnLongClickListener {
@@ -477,11 +467,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 if (bulkActionMode) {
                     switchBulkActionState(position)
                 }
-            }
-
-            btnReport.setOnClickListener {
-                val reportBottomSheet = ReportAIContentBottomSheet.newInstance(chatMessage["message"].toString(), chatId, true)
-                reportBottomSheet.show(context.supportFragmentManager, "ReportAIContentBottomSheet")
             }
 
             // Deliberately no long-click listener on the message text itself:
@@ -871,16 +856,130 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
-        private fun updateUI(chatMessage: HashMap<String, Any>) {
-            if (preferences.getLayout() == "bubbles" || isAssistant) {
-                updateBubbleLayout(chatMessage)
+        /**
+         * Binds the one current message presentation. The four Appearance
+         * controls alter decoration and identity placement without selecting a
+         * different renderer or touching message behavior.
+         */
+        private fun updatePresentation(chatMessage: HashMap<String, Any>) {
+            val isBot = chatMessage["isBot"] == true
+            val showPortrait = preferences.getShowChatProfileImages()
+            val showName = preferences.getShowChatNames()
+            val showBubble = if (isBot) {
+                preferences.getShowAiBubble()
             } else {
-                updateClassicLayout(chatMessage)
+                preferences.getShowUserBubble()
             }
+
+            ui.setBackgroundColor(0x00000000)
+
+            username.text = if (isBot) {
+                resolveAssistantLabel(chatMessage)
+            } else {
+                context.getString(R.string.chat_role_user)
+            }
+            ChatNameStyle.apply(
+                username,
+                context,
+                if (isBot) {
+                    companionNameStyle ?: ChatNameStyle.ai(preferences)
+                } else {
+                    ChatNameStyle.user(preferences)
+                }
+            )
+            username.visibility = if (showName) View.VISIBLE else View.GONE
+
+            icon.visibility = if (showPortrait) View.VISIBLE else View.GONE
+            if (showPortrait) {
+                if (isBot) displayAvatar() else displayUserAvatar()
+            }
+
+            updateIdentityGeometry(isBot, showPortrait, showName)
+            updateBubbleDecoration(isBot, showBubble)
         }
 
-        private fun updateReportButton(chatMessage: HashMap<String, Any>) {
-            btnReport.visibility = View.GONE
+        private fun updateBubbleDecoration(isBot: Boolean, showBubble: Boolean) {
+            if (!showBubble) {
+                bubbleBg.background = null
+                message.setTextColor(resolveThemeColor(R.attr.appTextColor))
+                return
+            }
+
+            val amoled = isDarkThemeEnabled() && preferences.getAmoledPitchBlack()
+            val background = when {
+                isBot && amoled -> R.drawable.bubble_out_dark
+                isBot -> R.drawable.bubble_in
+                amoled -> R.drawable.bubble_in_dark
+                else -> R.drawable.bubble_out
+            }
+            bubbleBg.setBackgroundResource(background)
+            message.setTextColor(
+                if (amoled) {
+                    ResourcesCompat.getColor(context.resources, R.color.white, null)
+                } else {
+                    resolveThemeColor(if (isBot) R.attr.colorPrimary else R.attr.colorSurface)
+                }
+            )
+        }
+
+        /**
+         * Portrait-on placement uses the approved fixed offsets. Without a
+         * portrait, the name's measured line height places its center on the
+         * bubble's top edge, so every configured sp size remains centered.
+         */
+        private fun updateIdentityGeometry(
+            isBot: Boolean,
+            showPortrait: Boolean,
+            showName: Boolean
+        ) {
+            val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
+            bubbleParams.topMargin = when {
+                showPortrait -> dimensionPixelSize(R.dimen.chat_portrait_vertical_offset)
+                showName -> username.lineHeight / 2
+                else -> 0
+            }
+            bubbleBg.layoutParams = bubbleParams
+            val contentPadding = dimensionPixelSize(R.dimen.chat_message_content_padding)
+            bubbleBg.setPadding(
+                contentPadding,
+                contentPadding + if (showPortrait) {
+                    dimensionPixelSize(R.dimen.chat_portrait_text_clearance)
+                } else 0,
+                contentPadding,
+                contentPadding
+            )
+            message.setPadding(0, 0, 0, 0)
+
+            val nameParams = username.layoutParams as ConstraintLayout.LayoutParams
+            nameParams.startToStart = ConstraintLayout.LayoutParams.UNSET
+            nameParams.endToEnd = ConstraintLayout.LayoutParams.UNSET
+            nameParams.topToTop = ConstraintLayout.LayoutParams.PARENT_ID
+            nameParams.setMarginStart(0)
+            nameParams.setMarginEnd(0)
+
+            if (showPortrait) {
+                val edge = dimensionPixelSize(R.dimen.chat_name_portrait_edge_inset)
+                nameParams.topMargin = dimensionPixelSize(R.dimen.chat_name_portrait_top)
+                if (isBot) {
+                    nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+                    nameParams.setMarginStart(edge)
+                } else {
+                    nameParams.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+                    nameParams.setMarginEnd(edge)
+                }
+            } else {
+                val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
+                    dimensionPixelSize(R.dimen.chat_name_bubble_edge_offset)
+                nameParams.topMargin = 0
+                if (isBot) {
+                    nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+                    nameParams.setMarginStart(edge)
+                } else {
+                    nameParams.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+                    nameParams.setMarginEnd(edge)
+                }
+            }
+            username.layoutParams = nameParams
         }
 
         private fun updateShareButton(chatMessage: HashMap<String, Any>) {
@@ -917,36 +1016,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
-        private fun updateBubbleLayout(chatMessage: HashMap<String, Any>) {
-            ui.setBackgroundColor(0x00000000)
-            if (chatMessage["isBot"] == true) {
-                displayAvatar()
+        private fun dimensionPixelSize(resource: Int): Int =
+            context.resources.getDimensionPixelSize(resource)
 
-                if (isDarkThemeEnabled() && preferences.getAmoledPitchBlack()) {
-                    bubbleBg?.setBackgroundResource(R.drawable.bubble_out_dark)
-                    message.setTextColor(ResourcesCompat.getColor(context.resources, R.color.white, null))
-                }
-            } else {
-                displayUserAvatar()
-
-                if (isDarkThemeEnabled() && preferences.getAmoledPitchBlack()) {
-                    bubbleBg?.setBackgroundResource(R.drawable.bubble_in_dark)
-                    message.setTextColor(ResourcesCompat.getColor(context.resources, R.color.white, null))
-                }
+        private fun resolveThemeColor(attribute: Int): Int {
+            val value = TypedValue()
+            if (!context.theme.resolveAttribute(attribute, value, true)) {
+                return ResourcesCompat.getColor(context.resources, R.color.text, context.theme)
             }
-        }
-
-        private fun updateClassicLayout(chatMessage: HashMap<String, Any>) {
-            if (chatMessage["isBot"] == true) {
-                displayAvatar()
-
-                username.text = resolveAssistantLabel(chatMessage)
-                ui.setBackgroundColor(getSurfaceColor(context))
+            return if (value.resourceId != 0) {
+                ResourcesCompat.getColor(context.resources, value.resourceId, context.theme)
             } else {
-                displayUserAvatar()
-                username.text = context.getString(R.string.chat_role_user)
-                btnCopy.visibility = View.VISIBLE
-                ui.setBackgroundColor(getSurface2Color(context))
+                value.data
             }
         }
 
@@ -1078,7 +1159,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun switchBulkActionState(position: Int) {
-            updateUI(dataArray[position])
+            updatePresentation(dataArray[position])
             if (selectorProjection[position]["selected"].toString() == "true") {
                 selectorProjection[position]["selected"] = "false"
                 if (checkSelectionIsEmpty()) bulkActionMode = false
@@ -1483,26 +1564,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
     private fun convertDpToPixel(context: Context): Float {
         return 16f * context.resources.displayMetrics.densityDpi.toFloat() / DisplayMetrics.DENSITY_DEFAULT
-    }
-
-    private fun getSurfaceColor(context: Context): Int {
-        return if (isDarkThemeEnabled() && preferences.getAmoledPitchBlack()) {
-            ResourcesCompat.getColor(context.resources, R.color.amoled_accent_50, null)
-        } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                SurfaceColors.SURFACE_2.getColor(context)
-            } else {
-                context.getColor(R.color.accent_100)
-            }
-        }
-    }
-
-    private fun getSurface2Color(context: Context): Int {
-        return if (isDarkThemeEnabled() && preferences.getAmoledPitchBlack()) {
-            ResourcesCompat.getColor(context.resources, R.color.amoled_window_background, null)
-        } else {
-            SurfaceColors.SURFACE_1.getColor(context)
-        }
     }
 
     private fun getSurface3Color(context: Context): Int {

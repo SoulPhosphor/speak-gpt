@@ -469,7 +469,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/health_banner"
-            tools:listitem="@layout/view_message" />
+            tools:listitem="@layout/view_assistant_bot_message" />
 
 <!-- Pending Includes strip: one row per unsent document, directly above the
              message box. Sent attachments leave this surface and appear in

@@ -47,8 +47,6 @@
     <string name="setting_advanced">Impostazioni avanzate</string>
     <string name="setting_act_prompt">Prompt di attivazione</string>
     <string name="setting_layout">Layout della chat</string>
-    <string name="layout_classic">Classico</string>
-    <string name="layout_bubbles">Bolle</string>
     <string name="setting_silent">Modalità silenziosa</string>
     <string name="setting_silent_desc">Non pronunciare le risposte del bot</string>
     <string name="setting_about_desc">Tocca per vedere le informazioni sull\'app e lo sviluppatore</string>
@@ -301,8 +299,6 @@
     <string name="tile_system_message_title">Messaggio di sistema</string>
     <string name="tile_system_message_desc">Questa funzione ti permette di impostare il messaggio di sistema che sarà inviato come messaggio di sistema.</string>
     <string name="tile_ale_title">Rilevamento automatico della lingua</string>
-    <string name="tile_classic_layout_title">Layout chat classico</string>
-    <string name="tile_classic_layout_desc">Il layout classico è un layout di chat come sul sito ufficiale di ChatGPT.</string>
     <string name="tile_sh_title">Comandi Slash</string>
     <string name="tile_sh_desc">Questa funzione ti permette di abilitare i comandi slash. Si prega di notare che questa funzione è sperimentale e instabile. Esempio: /imagine un gatto.</string>
     <string name="tile_desktop_mode_title">Modalità desktop</string>

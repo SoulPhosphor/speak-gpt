@@ -218,6 +218,7 @@ import org.teslasoft.assistant.service.GenerationForegroundService
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
+import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.QuickSettingsBottomSheetDialogFragment
 import org.teslasoft.assistant.ui.onboarding.WelcomeActivity
@@ -1283,28 +1284,33 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // bug. The token drops a stale resolve that finishes after a newer one.
         val token = companionAvatarRefresh.newRequest()
         if (adapter == null) return
-        val personaId = preferences?.getPersonaId().orEmpty()
+        val chatPreferences = preferences ?: return
+        val personaId = chatPreferences.getPersonaId()
         val shape = GlobalPreferences.getPreferences(this).getProfileImageShape()
         CoroutineScope(Dispatchers.Main).launch {
-            // kotlin.Pair explicitly: this file imports androidx.core.util.Pair
-            // (for scene transitions), so a bare `Pair` would bind to that.
-            val resolved: kotlin.Pair<File?, String> = withContext(Dispatchers.IO) {
+            val resolved: Triple<File?, String, ChatNameStyle.Resolved> = withContext(Dispatchers.IO) {
                 try {
                     val persona = if (personaId.isEmpty()) null
                         else PersonaPreferences.getPersonaPreferences(this@ChatActivity).getPersona(personaId)
                     val file = ProfileImageResolver.resolveAiImageFile(this@ChatActivity, persona?.avatarRef ?: "")
-                    file to (persona?.label ?: "")
+                    Triple(
+                        file,
+                        persona?.label ?: "",
+                        ChatNameStyle.ai(chatPreferences, persona)
+                    )
                 } catch (_: Exception) {
-                    null to ""
+                    Triple(null, "", ChatNameStyle.ai(chatPreferences))
                 }
             }
             if (isFinishing || isDestroyed) return@launch
             // Drop this result if a newer refresh has since been requested.
             if (!companionAvatarRefresh.isCurrent(token)) return@launch
-            adapter?.setCompanionAvatar(resolved.first, shape)
-            // The chat's current companion name, used to label assistant
-            // messages that carry no stamped name of their own.
-            adapter?.setCompanionLabel(resolved.second)
+            adapter?.setCompanionPresentation(
+                resolved.first,
+                shape,
+                resolved.second,
+                resolved.third
+            )
         }
     }
 
@@ -2430,7 +2436,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             calculateCost()
 
-            adapter = ChatAdapter(messages, messagesSelectionProjection,this, preferences!!, false, chatId)
+            adapter = ChatAdapter(messages, messagesSelectionProjection, this, preferences!!, chatId)
             adapter?.setOnUpdateListener(this)
 
             initUI()
@@ -9754,4 +9760,3 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         supportFinishAfterTransition()
     }
 }
-

@@ -21,13 +21,14 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/ui"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content">
+    android:layout_height="wrap_content"
+    android:paddingBottom="@dimen/chat_message_unit_spacing">
 
     <LinearLayout
-        android:layout_width="match_parent"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="36dp"
-        android:layout_marginEnd="12dp"
+        android:layout_marginStart="@dimen/chat_message_user_left_inset"
+        android:layout_marginEnd="@dimen/chat_message_speaker_inset"
         android:gravity="end"
         android:orientation="horizontal"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -39,24 +40,12 @@
             android:id="@+id/bubble_bg"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="@dimen/chat_portrait_vertical_offset"
             android:layout_marginBottom="0dp"
             android:background="@drawable/bubble_out"
             android:gravity="end"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/username"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:paddingBottom="4dp"
-                android:text="@string/user"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:visibility="gone"
-                app:layout_constraintEnd_toStartOf="@+id/include_bookmarks"
-                app:layout_constraintTop_toTopOf="parent" />
+            android:orientation="vertical"
+            android:padding="@dimen/chat_message_content_padding">
 
             <LinearLayout
                 android:id="@+id/include_bookmarks"
@@ -65,9 +54,8 @@
                 android:layout_marginStart="4dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                app:layout_constraintBottom_toBottomOf="@+id/username"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="@+id/username">
+                app:layout_constraintTop_toTopOf="parent">
 
                 <ImageView
                     android:id="@+id/condensed_bookmark"
@@ -91,16 +79,6 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-            <ImageView
-                android:id="@+id/icon"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:contentDescription="@null"
-                android:visibility="gone"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
-                app:srcCompat="@drawable/ic_launcher_foreground" />
-
 <!-- Record of what was attached to this message (document-includes-plan.md).
                  Sits directly under the user label, above the message text. While
                  nothing is attached it is GONE and collapses to a zero-height point
@@ -114,14 +92,13 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/username" />
+                app:layout_constraintTop_toBottomOf="@+id/include_bookmarks" />
 
             <TextView
                 android:id="@+id/message"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:paddingHorizontal="12dp"
                 android:textColor="?attr/colorSurface"
                 android:textSize="16sp"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -232,22 +209,6 @@
                     app:srcCompat="@drawable/ic_volume_up" />
 
                 <ImageButton
-                    android:id="@+id/btn_report"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:layout_marginLeft="8dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/btn_accent_tonal"
-                    android:contentDescription="Report abuse"
-                    android:descendantFocusability="blocksDescendants"
-                    android:src="@drawable/ic_report"
-                    android:tooltipText="Report abuse"
-                    android:visibility="gone"
-                    app:layout_constraintEnd_toStartOf="@+id/btn_retry"
-                    app:layout_constraintTop_toTopOf="@+id/username"
-                    app:srcCompat="@drawable/ic_report" />
-
-                <ImageButton
                     android:id="@+id/btn_share"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
@@ -299,4 +260,29 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
+
+    <ImageView
+        android:id="@+id/icon"
+        android:layout_width="@dimen/chat_portrait_size"
+        android:layout_height="@dimen/chat_portrait_size"
+        android:layout_marginEnd="@dimen/chat_portrait_edge_inset"
+        android:background="@drawable/btn_accent_tonal"
+        android:contentDescription="@null"
+        android:padding="6dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:srcCompat="@drawable/ic_user" />
+
+    <TextView
+        android:id="@+id/username"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/chat_name_portrait_top"
+        android:layout_marginEnd="@dimen/chat_name_portrait_edge_inset"
+        android:text="@string/chat_role_user"
+        android:textColor="?attr/colorPrimary"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

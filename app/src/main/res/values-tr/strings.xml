@@ -48,8 +48,6 @@
     <string name="setting_advanced">Gelişmiş ayarlar</string>
     <string name="setting_act_prompt">Aktivasyon istemi</string>
     <string name="setting_layout">Sohbet düzeni</string>
-    <string name="layout_classic">Klasik</string>
-    <string name="layout_bubbles">Baloncuklar</string>
     <string name="setting_silent">Sessiz mod</string>
     <string name="setting_silent_desc">Bot yanıtlarını telaffuz etmeyin</string>
     <string name="setting_about_desc">Uygulama ve geliştirici bilgilerini görmek için dokunun</string>
@@ -301,8 +299,6 @@
     <string name="tile_system_message_title">Sistem mesajı</string>
     <string name="tile_system_message_desc">Bu özellik, sistem mesajı olarak gönderilecek sistem mesajını ayarlamanıza olanak tanır.</string>
     <string name="tile_ale_title">Otomatik dil algılama</string>
-    <string name="tile_classic_layout_title">Klasik sohbet düzeni</string>
-    <string name="tile_classic_layout_desc">Klasik düzen, resmi ChatGPT web sitesindeki gibi bir sohbet düzenidir.</string>
     <string name="tile_sh_title">Slash komutları</string>
     <string name="tile_sh_desc">Bu özellik, slash komutlarını etkinleştirmenize olanak tanır. Lütfen bu özelliğin deneysel ve kararsız olduğunu unutmayın. Örnek: /imagine bir kedi.</string>
     <string name="tile_desktop_mode_title">Masaüstü modu</string>

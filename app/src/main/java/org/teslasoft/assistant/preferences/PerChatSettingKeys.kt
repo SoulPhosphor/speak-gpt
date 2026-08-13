@@ -72,7 +72,6 @@ object PerChatSettingKeys {
         "assistant_name",
         "avatar_type",
         "avatar_id",
-        "layout",
         "persona_id",
         "activation_prompt_id",
         "persona_activation_seeded",

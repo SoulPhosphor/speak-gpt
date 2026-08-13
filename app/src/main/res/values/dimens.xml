@@ -27,4 +27,21 @@
 
     <!-- Widget.App.Row.ProfileImage's leading preview size (profile-images-plan.md). -->
     <dimen name="row_profile_image_size">48dp</dimen>
+
+    <!-- Current adaptable chat presentation geometry (chat-redesign-plan.md §2). -->
+    <dimen name="chat_message_speaker_inset">27dp</dimen>
+    <dimen name="chat_message_user_left_inset">26dp</dimen>
+    <dimen name="chat_message_content_padding">14dp</dimen>
+    <dimen name="chat_message_unit_spacing">53dp</dimen>
+    <dimen name="chat_portrait_size">76dp</dimen>
+    <!-- 27dp speaker baseline minus the approved 15dp outward offset. -->
+    <dimen name="chat_portrait_edge_inset">12dp</dimen>
+    <dimen name="chat_portrait_vertical_offset">36dp</dimen>
+    <!-- Portrait bottom (76dp) minus bubble top (36dp): clears early content. -->
+    <dimen name="chat_portrait_text_clearance">40dp</dimen>
+    <!-- 27dp speaker baseline plus the approved 52dp name offset. -->
+    <dimen name="chat_name_portrait_edge_inset">79dp</dimen>
+    <!-- Bubble top at 36dp minus the approved 30dp upward name offset. -->
+    <dimen name="chat_name_portrait_top">6dp</dimen>
+    <dimen name="chat_name_bubble_edge_offset">1dp</dimen>
 </resources>
