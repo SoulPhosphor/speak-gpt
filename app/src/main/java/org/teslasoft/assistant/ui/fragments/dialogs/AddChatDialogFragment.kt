@@ -261,6 +261,7 @@ class AddChatDialogFragment : DialogFragment() {
             }
 
             chatPreferences?.addChat(requireActivity(), chatName)
+            listener?.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
 
             // Copy settings from default
             val preferences: Preferences = Preferences.getPreferences(requireActivity(), "")
@@ -300,11 +301,6 @@ class AddChatDialogFragment : DialogFragment() {
             val newPreferences: Preferences = Preferences.getPreferences(requireActivity(), Hash.hash(chatName))
 
             newPreferences.setPreferences(Hash.hash(chatName), requireActivity())
-            // A deleted chat can leave this encrypted settings filename behind.
-            // Reset only the one-shot inheritance state before writing the new
-            // chat so stale seeded flags cannot produce No Companion or an old
-            // model. The synchronous commit finishes before the chat is opened.
-            newPreferences.prepareNewChatInheritance()
             newPreferences.setResolution(resolution)
             newPreferences.setAudioModel(speech)
             newPreferences.setModel(model)
@@ -331,11 +327,6 @@ class AddChatDialogFragment : DialogFragment() {
             newPreferences.setAvatarType(avatarType!!)
             newPreferences.setAvatarId(avatarId!!)
             newPreferences.setAssistantName(assistantName!!)
-
-            // Open only after every setting above has been placed in the new
-            // chat's preferences. The old order launched ChatActivity first,
-            // letting startup race these writes and read defaults or stale data.
-            listener?.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
         } else {
             listener?.onDuplicate(arguments?.getInt("position")!!)
         }

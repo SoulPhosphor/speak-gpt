@@ -285,7 +285,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 // model on this endpoint, so re-evaluate it when the endpoint
                 // changes.
                 refreshProviderModeTile()
-                recordLastUsedChatConfig()
             }
         }
     }
@@ -307,7 +306,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updateListener?.onUpdate()
         shouldForceUpdate = true
         refreshProviderModeDisplay()
-        recordLastUsedChatConfig()
     }
 
     private var personaActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -326,23 +324,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 shouldForceUpdate = true
             }
         }
-    }
-
-    /** Persist the currently selected provider/model/routing as one complete
-     *  last-used snapshot. Called at the selection point so closing the app
-     *  immediately after a choice cannot restore an older favorite later. */
-    private fun recordLastUsedChatConfig() {
-        val endpointId = preferences?.getApiEndpointId().orEmpty()
-        val model = preferences?.getModel().orEmpty()
-        if (endpointId.isBlank() || model.isBlank()) return
-        val routing = favoriteModelsPreferences?.getRoutingType(model, endpointId)
-            ?: FavoriteModelObject.ROUTING_AUTOMATIC
-        preferences?.setLastUsedChatConfig(
-            endpointId,
-            model,
-            routing,
-            preferences?.getPersonaId().orEmpty()
-        )
     }
 
     private fun updatePersonaLabel(personaId: String) {
@@ -610,7 +591,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textModel?.text = model
         // The Provider Mode dropdown reflects the active model's routing.
         refreshProviderModeDisplay()
-        recordLastUsedChatConfig()
     }
 
     private var modelSelectedListenerV2: AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener = AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener { model, endpointId ->
@@ -622,7 +602,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textModel?.text = model
         // Model and endpoint may both have changed; re-evaluate the tile.
         refreshProviderModeTile()
-        recordLastUsedChatConfig()
     }
 
     /* ------------------------------ Provider Mode (OpenRouter) ------------------------------ */
@@ -702,7 +681,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updateListener?.onUpdate()
         shouldForceUpdate = true
         refreshProviderModeDisplay()
-        recordLastUsedChatConfig()
     }
 
     /** Preferred/Only picked but not set up yet: confirm before leaving Quick

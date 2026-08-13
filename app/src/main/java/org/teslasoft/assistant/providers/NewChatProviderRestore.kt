@@ -19,7 +19,7 @@ package org.teslasoft.assistant.providers
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 
 /**
- * Decides what a brand-new chat should do with the last-used
+ * Decides what a brand-new chat should do with the last successfully-used
  * provider/model/routing (owner spec, Aug 8 2026). Pure and framework-free so
  * the decision is unit-tested on the JVM; the caller supplies the facts it has
  * already looked up locally (no network).
@@ -34,7 +34,7 @@ import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 object NewChatProviderRestore {
 
     enum class Outcome {
-        /** Nothing was ever recorded (no prior chat selection recorded) — send the user
+        /** Nothing was ever recorded (no successful reply yet) — send the user
          *  to the API Endpoints screen to set a provider/model up. Never a
          *  hardcoded default model. */
         NO_CONFIG,
@@ -50,8 +50,8 @@ object NewChatProviderRestore {
     }
 
     /**
-     * @param endpointId     recorded last-used endpoint id
-     * @param model          recorded last-used model
+     * @param endpointId     recorded last-successful endpoint id
+     * @param model          recorded last-successful model
      * @param routing        recorded routing (FavoriteModelObject.ROUTING_*)
      * @param endpointExists whether that endpoint profile still exists locally
      * @param favoriteExists whether a favorite for (model, endpoint) still exists
