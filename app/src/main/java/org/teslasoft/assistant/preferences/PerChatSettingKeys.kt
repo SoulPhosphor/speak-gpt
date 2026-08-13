@@ -61,7 +61,6 @@ object PerChatSettingKeys {
 
         // Voice & speech
         "audio",
-        "silence_mode",
         "always_speak_mode",
         "autoLangDetect",
         "voice",

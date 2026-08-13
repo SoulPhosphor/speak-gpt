@@ -281,11 +281,9 @@
     <string name="tile_api_endpoint_title">نشانی API</string>
     <string name="tile_api_endpoint_desc">این ویژگی به شما امکان تنظیم نشانی API را می‌دهد.</string>
     <string name="tile_autosend_title">ارسال خودکار</string>
-    <string name="tile_autosend_desc">این ویژگی به شما امکان فعال یا غیرفعال کردن ارسال خودکار پیام‌ها را می‌دهد. وقتی ارسال خودکار فعال باشد، این برنامه پیام‌ها را پس از پایان گوش دادن بدون فشار دادن دکمه «ارسال» به‌صورت خودکار ارسال می‌کند.</string>
     <string name="tile_tts_voice_title">صدای TTS</string>
     <string name="tile_tts_voice_desc">این ویژگی به شما امکان تنظیم صدای TTS را می‌دهد.</string>
     <string name="tile_voice_lang_title">زبان صوتی</string>
-    <string name="tile_voice_lang_desc">این ویژگی به شما امکان تنظیم زبان صدای TTS را می‌دهد.</string>
     <string name="tile_image_resolution_title">وضوح تصویر</string>
     <string name="tile_openai_tts">استفاده از TTS OpenAI</string>
     <string name="tile_google_tts">TTS گوگل استفاده شده است</string>
@@ -293,8 +291,6 @@
     <string name="tile_whisper_stt">استفاده از Whisper</string>
     <string name="tile_google_stt">STT گوگل استفاده شده است</string>
     <string name="tile_stt_desc">این ویژگی به شما امکان تنظیم موتور STT را می‌دهد. Whisper پولی است.</string>
-    <string name="tile_silent_mode_title">حالت بی‌صدا</string>
-    <string name="tile_silent_mode_desc">این ویژگی به شما امکان می‌دهد که این برنامه هرگز پاسخ‌ها را تلفظ نکند.</string>
     <string name="tile_always_speak_title">همیشه صحبت کن</string>
     <string name="tile_always_speak_desc">این ویژگی به شما امکان می‌دهد که این برنامه همیشه پاسخ‌ها را تلفظ کند.</string>
     <string name="tile_text_model_title">مدل تولید متن</string>
@@ -304,7 +300,6 @@
     <string name="tile_system_message_title">پیام سیستمی</string>
     <string name="tile_system_message_desc">این ویژگی به شما امکان تنظیم پیام سیستمی را می‌دهد که به‌عنوان پیام سیستمی ارسال خواهد شد.</string>
     <string name="tile_ale_title">تشخیص خودکار زبان</string>
-    <string name="tile_ale_desc">این ویژگی به شما امکان فعال کردن تشخیص خودکار زبان گفتار را می‌دهد.</string>
     <string name="tile_classic_layout_title">طرح‌بندی گفتگوی کلاسیک</string>
     <string name="tile_classic_layout_desc">طرح‌بندی کلاسیک یک طرح‌بندی گفتگو مانند وبگاه رسمی ChatGPT است.</string>
     <string name="tile_sh_title">دستورهای خط‌مورب</string>

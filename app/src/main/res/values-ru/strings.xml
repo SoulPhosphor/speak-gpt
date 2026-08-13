@@ -282,11 +282,9 @@
     <string name="tile_api_endpoint_title">API endpoint</string>
     <string name="tile_api_endpoint_desc">Эта функция позволяет установить ваш API endpoint.</string>
     <string name="tile_autosend_title">Автоотправка</string>
-    <string name="tile_autosend_desc">Эта функция позволяет включить или отключить функцию автоотправки сообщений. Когда автоотправка включена, приложение будет автоматически отправлять сообщения без нажатия кнопки \'Отправить\' после завершения прослушивания.</string>
     <string name="tile_tts_voice_title">Голос TTS</string>
     <string name="tile_tts_voice_desc">Эта функция позволяет установить ваш TTS голос.</string>
     <string name="tile_voice_lang_title">Язык голоса</string>
-    <string name="tile_voice_lang_desc">Эта функция позволяет установить язык вашего TTS голоса.</string>
     <string name="tile_image_resolution_title">Разрешение изображения</string>
     <string name="tile_openai_tts">Использовать OpenAI TTS</string>
     <string name="tile_google_tts">Используется Google TTS</string>
@@ -294,8 +292,6 @@
     <string name="tile_whisper_stt">Использовать Whisper</string>
     <string name="tile_google_stt">Используется Google STT</string>
     <string name="tile_stt_desc">Эта функция позволяет установить движок STT. Whisper платный.</string>
-    <string name="tile_silent_mode_title">Тихий режим</string>
-    <string name="tile_silent_mode_desc">Эта функция позволяет не давать приложению произносить ответы вслух.</string>
     <string name="tile_always_speak_title">Всегда говорить</string>
     <string name="tile_always_speak_desc">Эта функция позволяет заставить приложение всегда произносить ответы вслух.</string>
     <string name="tile_text_model_title">Модель генерации текста</string>
@@ -305,7 +301,6 @@
     <string name="tile_system_message_title">Системное сообщение</string>
     <string name="tile_system_message_desc">Эта функция позволяет установить системное сообщение, которое будет отправлено как системное сообщение.</string>
     <string name="tile_ale_title">Автоматическое определение языка</string>
-    <string name="tile_ale_desc">Эта функция позволяет включить автоматическое определение языка речи.</string>
     <string name="tile_classic_layout_title">Классическая компоновка чата</string>
     <string name="tile_classic_layout_desc">Классическая компоновка - это компоновка чата, как на официальном сайте ChatGPT.</string>
     <string name="tile_sh_title">Команды с /slash</string>

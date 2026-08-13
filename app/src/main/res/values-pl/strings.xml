@@ -279,11 +279,9 @@
     <string name="tile_api_endpoint_title">Punkt końcowy API</string>
     <string name="tile_api_endpoint_desc">Ta funkcja pozwala ustawić swój punkt końcowy API.</string>
     <string name="tile_autosend_title">Automatyczne wysyłanie</string>
-    <string name="tile_autosend_desc">Ta funkcja umożliwia włączenie lub wyłączenie automatycznego wysyłania wiadomości. Gdy automatyczne wysyłanie jest włączone, aplikacja automatycznie wysyła wiadomości bez naciskania przycisku \'Wyślij\' po zakończeniu słuchania.</string>
     <string name="tile_tts_voice_title">Głos TTS</string>
     <string name="tile_tts_voice_desc">Ta funkcja pozwala ustawić swój głos TTS.</string>
     <string name="tile_voice_lang_title">Język głosu</string>
-    <string name="tile_voice_lang_desc">Ta funkcja pozwala ustawić język swojego głosu TTS.</string>
     <string name="tile_image_resolution_title">Rozdzielczość obrazu</string>
     <string name="tile_openai_tts">Użyj TTS OpenAI</string>
     <string name="tile_google_tts">Używany jest TTS Google</string>
@@ -291,8 +289,6 @@
     <string name="tile_whisper_stt">Użyj Whisper</string>
     <string name="tile_google_stt">Używane jest STT Google</string>
     <string name="tile_stt_desc">Ta funkcja pozwala ustawić silnik STT. Whisper jest płatny.</string>
-    <string name="tile_silent_mode_title">Tryb cichy</string>
-    <string name="tile_silent_mode_desc">Ta funkcja pozwala na ustawienie, aby aplikacja nigdy nie wymawiała odpowiedzi.</string>
     <string name="tile_always_speak_title">Zawsze mów</string>
     <string name="tile_always_speak_desc">Ta funkcja pozwala na ustawienie, aby aplikacja zawsze wymawiała odpowiedzi.</string>
     <string name="tile_text_model_title">Model generowania tekstu</string>
@@ -302,7 +298,6 @@
     <string name="tile_system_message_title">Wiadomość systemowa</string>
     <string name="tile_system_message_desc">Ta funkcja pozwala ustawić wiadomość systemową, która zostanie wysłana jako wiadomość systemowa.</string>
     <string name="tile_ale_title">Automatyczne wykrywanie języka</string>
-    <string name="tile_ale_desc">Ta funkcja umożliwia włączenie automatycznego wykrywania języka mowy.</string>
     <string name="tile_classic_layout_title">Klasyczny układ czatu</string>
     <string name="tile_classic_layout_desc">Klasyczny układ to układ czatu jak na oficjalnej stronie ChatGPT.</string>
     <string name="tile_sh_title">Komendy /Slash</string>

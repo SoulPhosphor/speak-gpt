@@ -27,6 +27,7 @@ import android.view.Gravity
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.RadioButton
+import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
 import androidx.activity.SystemBarStyle
@@ -67,16 +68,16 @@ class VoiceSettingsActivity : FragmentActivity() {
 
     private var tileTTS: TileFragment? = null
     private var tileVoice: TileFragment? = null
-    private var tileVoiceLanguage: TileFragment? = null
-    private var tileSilentMode: TileFragment? = null
+    private var rowVoiceLanguage: ConstraintLayout? = null
+    private var valueVoiceLanguage: TextView? = null
     private var tileSTT: TileFragment? = null
-    private var tileLangDetect: TileFragment? = null
-    private var tileAutoSend: TileFragment? = null
     private var tileHandsFreeTiming: TileFragment? = null
     private var tileVadMethod: TileFragment? = null
     private var rowVoiceAdvanced: LinearLayout? = null
     private var rowVoiceDebugging: LinearLayout? = null
     private var switchAlwaysSpeak: MaterialSwitch? = null
+    private var switchAutoSend: MaterialSwitch? = null
+    private var switchAutoLangDetect: MaterialSwitch? = null
     private var switchReadFormatting: MaterialSwitch? = null
 
     private var btnBack: ImageButton? = null
@@ -92,7 +93,7 @@ class VoiceSettingsActivity : FragmentActivity() {
         override fun onSelected(name: String) {
             preferences?.setLanguage(name)
             language = name
-            tileVoiceLanguage?.updateSubtitle(Locale.forLanguageTag(name).displayLanguage)
+            valueVoiceLanguage?.text = Locale.forLanguageTag(name).displayLanguage
         }
 
         override fun onFormError(name: String) {
@@ -194,32 +195,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             functionDesc = getString(R.string.tile_tts_voice_desc)
         )
 
-        tileVoiceLanguage = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.tile_voice_lang_title),
-            disabledText = null,
-            enabledDesc = Locale.forLanguageTag(preferences?.getLanguage()!!).displayLanguage,
-            disabledDesc = null,
-            icon = R.drawable.ic_language,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.tile_voice_lang_desc)
-        )
-
-        tileSilentMode = TileFragment.newInstance(
-            preferences?.getSilence() == true,
-            true,
-            getString(R.string.tile_silent_mode_title),
-            null,
-            getString(R.string.on),
-            getString(R.string.off),
-            R.drawable.ic_mute,
-            preferences?.getNotSilence() == true,
-            chatId,
-            getString(R.string.tile_silent_mode_desc)
-        )
-
         tileSTT = TileFragment.newInstance(
             checked = false,
             checkable = false,
@@ -231,32 +206,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             disabled = false,
             chatId = chatId,
             functionDesc = getString(R.string.tile_voice_input_desc)
-        )
-
-        tileLangDetect = TileFragment.newInstance(
-            preferences?.getAutoLangDetect() == true,
-            true,
-            getString(R.string.tile_ale_title),
-            null,
-            getString(R.string.on),
-            getString(R.string.off),
-            R.drawable.ic_language,
-            false,
-            chatId,
-            getString(R.string.tile_ale_desc)
-        )
-
-        tileAutoSend = TileFragment.newInstance(
-            preferences?.autoSend()!!,
-            true,
-            getString(R.string.tile_autosend_title),
-            null,
-            getString(R.string.on),
-            getString(R.string.off),
-            R.drawable.ic_send,
-            false,
-            chatId,
-            getString(R.string.tile_autosend_desc)
         )
 
         tileHandsFreeTiming = TileFragment.newInstance(
@@ -295,11 +244,7 @@ class VoiceSettingsActivity : FragmentActivity() {
         supportFragmentManager.beginTransaction()
             .replace(R.id.tile_tts, tileTTS!!)
             .replace(R.id.tile_voice, tileVoice!!)
-            .replace(R.id.tile_voice_language, tileVoiceLanguage!!)
-            .replace(R.id.tile_silent_mode, tileSilentMode!!)
             .replace(R.id.tile_stt, tileSTT!!)
-            .replace(R.id.tile_auto_language_detection, tileLangDetect!!)
-            .replace(R.id.tile_autosend, tileAutoSend!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
             .commitNow()
@@ -324,7 +269,10 @@ class VoiceSettingsActivity : FragmentActivity() {
             voiceSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "VoiceSelectorDialogFragment")
         }
 
-        tileVoiceLanguage?.setOnTileClickListener {
+        rowVoiceLanguage = findViewById(R.id.row_voice_language)
+        valueVoiceLanguage = findViewById(R.id.value_voice_language)
+        valueVoiceLanguage?.text = Locale.forLanguageTag(language).displayLanguage
+        rowVoiceLanguage?.setOnClickListener {
             val languageSelectorDialogFragment: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(language, chatId)
             languageSelectorDialogFragment.setStateChangedListener(languageChangedListener)
             languageSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "LanguageSelectorDialog")
@@ -332,50 +280,24 @@ class VoiceSettingsActivity : FragmentActivity() {
 
         switchAlwaysSpeak = findViewById(R.id.switch_always_speak)
         switchAlwaysSpeak?.isChecked = preferences?.getNotSilence() == true
-        switchAlwaysSpeak?.isEnabled = preferences?.getSilence() != true
-
-        tileSilentMode?.setOnCheckedChangeListener { isChecked ->
-            if (isChecked) {
-                preferences?.setSilence(true)
-                preferences?.setNotSilence(false)
-                switchAlwaysSpeak?.isChecked = false
-                switchAlwaysSpeak?.isEnabled = false
-            } else {
-                preferences?.setSilence(false)
-                switchAlwaysSpeak?.isEnabled = true
-            }
+        switchAlwaysSpeak?.setOnCheckedChangeListener { _, isChecked ->
+            preferences?.setNotSilence(isChecked)
         }
 
-        switchAlwaysSpeak?.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                preferences?.setNotSilence(true)
-                preferences?.setSilence(false)
-                tileSilentMode?.setChecked(false)
-                tileSilentMode?.setEnabled(false)
-            } else {
-                preferences?.setNotSilence(false)
-                tileSilentMode?.setEnabled(true)
-            }
+        switchAutoSend = findViewById(R.id.switch_auto_send)
+        switchAutoSend?.isChecked = preferences?.autoSend() == true
+        switchAutoSend?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setAutoSend(checked)
         }
 
         tileSTT?.setOnTileClickListener {
             showVoiceInputEnginePicker()
         }
 
-        tileLangDetect?.setOnCheckedChangeListener { isChecked ->
-            if (isChecked) {
-                preferences?.setAutoLangDetect(true)
-            } else {
-                preferences?.setAutoLangDetect(false)
-            }
-        }
-
-        tileAutoSend?.setOnCheckedChangeListener { isChecked ->
-            if (isChecked) {
-                preferences?.setAutoSend(true)
-            } else {
-                preferences?.setAutoSend(false)
-            }
+        switchAutoLangDetect = findViewById(R.id.switch_auto_lang_detect)
+        switchAutoLangDetect?.isChecked = preferences?.getAutoLangDetect() == true
+        switchAutoLangDetect?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setAutoLangDetect(checked)
         }
 
         tileHandsFreeTiming?.setOnTileClickListener {

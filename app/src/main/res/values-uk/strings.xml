@@ -281,11 +281,9 @@
     <string name="tile_api_endpoint_title">API endpoint</string>
     <string name="tile_api_endpoint_desc">Ця функція дозволяє встановити ваш API endpoint.</string>
     <string name="tile_autosend_title">Автовідправлення</string>
-    <string name="tile_autosend_desc">Ця функція дозволяє включити або відключити автоматичне надсилання повідомлень. Коли автовідправлення включено, додаток автоматично надсилає повідомлення без натискання кнопки \'Надіслати\' після завершення прослуховування.</string>
     <string name="tile_tts_voice_title">TTS голос</string>
     <string name="tile_tts_voice_desc">Ця функція дозволяє вибрати ваш TTS голос.</string>
     <string name="tile_voice_lang_title">Мова голосу</string>
-    <string name="tile_voice_lang_desc">Ця функція дозволяє вибрати мову вашого TTS голосу.</string>
     <string name="tile_image_resolution_title">Роздільна здатність зображення</string>
     <string name="tile_openai_tts">Використовувати OpenAI TTS</string>
     <string name="tile_google_tts">Використовується Google TTS</string>
@@ -293,8 +291,6 @@
     <string name="tile_whisper_stt">Використовувати Whisper</string>
     <string name="tile_google_stt">Використовується Google STT</string>
     <string name="tile_stt_desc">Ця функція дозволяє вибрати STT двигун. Whisper є платним.</string>
-    <string name="tile_silent_mode_title">Тихий режим</string>
-    <string name="tile_silent_mode_desc">Ця функція дозволяє встановити, що додаток ніколи не озвучує відповіді.</string>
     <string name="tile_always_speak_title">Завжди говорити</string>
     <string name="tile_always_speak_desc">Ця функція дозволяє встановити, що додаток завжди озвучує відповіді.</string>
     <string name="tile_text_model_title">Модель генерації тексту</string>
@@ -304,7 +300,6 @@
     <string name="tile_system_message_title">Системне повідомлення</string>
     <string name="tile_system_message_desc">Ця функція дозволяє встановити системне повідомлення, яке буде надіслано як системне повідомлення.</string>
     <string name="tile_ale_title">Автоматичне виявлення мови</string>
-    <string name="tile_ale_desc">Ця функція дозволяє включити автоматичне виявлення мови мовлення.</string>
     <string name="tile_classic_layout_title">Класичний чат-макет</string>
     <string name="tile_classic_layout_desc">Класичний макет — це макет чату, як на офіційному вебсайті ChatGPT.</string>
     <string name="tile_sh_title">Команди /slash</string>

@@ -281,11 +281,9 @@
     <string name="tile_api_endpoint_title">API-Endpunkt</string>
     <string name="tile_api_endpoint_desc">Diese Funktion ermöglicht es Ihnen, Ihren API-Endpunkt festzulegen.</string>
     <string name="tile_autosend_title">Automatisches Senden</string>
-    <string name="tile_autosend_desc">Diese Funktion ermöglicht es Ihnen, das automatische Senden von Nachrichten zu aktivieren oder zu deaktivieren. Wenn das automatische Senden aktiviert ist, sendet die App automatisch Nachrichten, sobald das Zuhören beendet ist, ohne dass die \'Senden\'-Taste gedrückt werden muss.</string>
     <string name="tile_tts_voice_title">TTS-Stimme</string>
     <string name="tile_tts_voice_desc">Diese Funktion ermöglicht es Ihnen, Ihre TTS-Stimme festzulegen.</string>
     <string name="tile_voice_lang_title">Sprache der Stimme</string>
-    <string name="tile_voice_lang_desc">Diese Funktion ermöglicht es Ihnen, die Sprache Ihrer TTS-Stimme festzulegen.</string>
     <string name="tile_image_resolution_title">Bildauflösung</string>
     <string name="tile_openai_tts">Verwende OpenAI TTS</string>
     <string name="tile_google_tts">Google TTS wird verwendet</string>
@@ -293,8 +291,6 @@
     <string name="tile_whisper_stt">Verwende Whisper</string>
     <string name="tile_google_stt">Google STT wird verwendet</string>
     <string name="tile_stt_desc">Diese Funktion ermöglicht es Ihnen, den STT-Motor festzulegen. Whisper ist kostenpflichtig.</string>
-    <string name="tile_silent_mode_title">Stiller Modus</string>
-    <string name="tile_silent_mode_desc">Diese Funktion ermöglicht es Ihnen, die App so einzustellen, dass Antworten nie ausgesprochen werden.</string>
     <string name="tile_always_speak_title">Immer sprechen</string>
     <string name="tile_always_speak_desc">Diese Funktion ermöglicht es Ihnen, die App so einzustellen, dass Antworten immer ausgesprochen werden.</string>
     <string name="tile_text_model_title">Textgenerierungsmodell</string>
@@ -304,7 +300,6 @@
     <string name="tile_system_message_title">Systemnachricht</string>
     <string name="tile_system_message_desc">Diese Funktion ermöglicht es Ihnen, die Systemnachricht festzulegen, die als Systemnachricht gesendet wird.</string>
     <string name="tile_ale_title">Automatische Spracherkennung</string>
-    <string name="tile_ale_desc">Diese Funktion ermöglicht es Ihnen, die automatische Spracherkennung von Sprache zu aktivieren.</string>
     <string name="tile_classic_layout_title">Klassisches Chat-Layout</string>
     <string name="tile_classic_layout_desc">Das klassische Layout ist ein Chat-Layout wie auf der offiziellen ChatGPT-Website.</string>
     <string name="tile_sh_title">Slash-Befehle</string>

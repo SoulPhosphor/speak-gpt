@@ -282,11 +282,9 @@
     <string name="tile_api_endpoint_title">API uç noktası</string>
     <string name="tile_api_endpoint_desc">Bu özellik, API uç noktanızı ayarlamanıza olanak tanır.</string>
     <string name="tile_autosend_title">Otomatik gönder</string>
-    <string name="tile_autosend_desc">Bu özellik, mesajların otomatik gönderimini etkinleştirmenize veya devre dışı bırakmanıza olanak tanır. Otomatik gönderi etkinleştirildiğinde, uygulama dinleme bittiğinde \'Gönder\' düğmesine basmadan mesajları otomatik olarak gönderecektir.</string>
     <string name="tile_tts_voice_title">TTS Sesi</string>
     <string name="tile_tts_voice_desc">Bu özellik, TTS sesinizi ayarlamanıza olanak tanır.</string>
     <string name="tile_voice_lang_title">Ses dili</string>
-    <string name="tile_voice_lang_desc">Bu özellik, TTS ses dilinizi ayarlamanıza olanak tanır.</string>
     <string name="tile_image_resolution_title">Görüntü çözünürlüğü</string>
     <string name="tile_openai_tts">OpenAI TTS kullan</string>
     <string name="tile_google_tts">Google TTS kullanılıyor</string>
@@ -294,8 +292,6 @@
     <string name="tile_whisper_stt">Whisper kullan</string>
     <string name="tile_google_stt">Google STT kullanılıyor</string>
     <string name="tile_stt_desc">Bu özellik, STT motorunu ayarlamanıza olanak tanır. Whisper ücretlidir.</string>
-    <string name="tile_silent_mode_title">Sessiz mod</string>
-    <string name="tile_silent_mode_desc">Bu özellik, uygulamanın yanıtları asla telaffuz etmemesini sağlar.</string>
     <string name="tile_always_speak_title">Her zaman konuş</string>
     <string name="tile_always_speak_desc">Bu özellik, uygulamanın yanıtları her zaman telaffuz etmesini sağlar.</string>
     <string name="tile_text_model_title">Metin oluşturma modeli</string>
@@ -305,7 +301,6 @@
     <string name="tile_system_message_title">Sistem mesajı</string>
     <string name="tile_system_message_desc">Bu özellik, sistem mesajı olarak gönderilecek sistem mesajını ayarlamanıza olanak tanır.</string>
     <string name="tile_ale_title">Otomatik dil algılama</string>
-    <string name="tile_ale_desc">Bu özellik, konuşmanın otomatik dil algılamasını etkinleştirmenize olanak tanır.</string>
     <string name="tile_classic_layout_title">Klasik sohbet düzeni</string>
     <string name="tile_classic_layout_desc">Klasik düzen, resmi ChatGPT web sitesindeki gibi bir sohbet düzenidir.</string>
     <string name="tile_sh_title">Slash komutları</string>

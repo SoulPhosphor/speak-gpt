@@ -54,18 +54,6 @@
             android:orientation="vertical"
             android:paddingBottom="24dp">
 
-            <!-- Text-to-speech -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:gravity="center"
-                android:paddingVertical="12dp"
-                android:text="@string/voice_section_tts"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -90,30 +78,29 @@
                     android:layout_weight="1" />
             </LinearLayout>
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/row_voice_language"
+                style="@style/Widget.App.Row.Selector.VoiceLanguage"
                 android:layout_marginStart="12dp"
                 android:layout_marginTop="8dp"
-                android:layout_marginEnd="12dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal"
-                android:weightSum="2">
+                android:layout_marginEnd="12dp">
 
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_voice_language"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
+                <TextView
+                    android:id="@+id/label_voice_language"
+                    style="@style/Widget.App.Row.Selector.Label"
+                    android:text="@string/tile_voice_lang_title"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
 
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_silent_mode"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
-            </LinearLayout>
+                <TextView
+                    android:id="@+id/value_voice_language"
+                    style="@style/Widget.App.Row.Selector.Value"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toEndOf="@+id/label_voice_language"
+                    app:layout_constraintTop_toTopOf="parent" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
             <LinearLayout
                 style="@style/Widget.App.Row.Toggle"
@@ -139,6 +126,22 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_autosend_title" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_auto_send"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <LinearLayout
+                style="@style/Widget.App.Row.Toggle"
+                android:paddingHorizontal="20dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
                         android:text="@string/read_formatting_language_toggle" />
                 </LinearLayout>
 
@@ -147,57 +150,6 @@
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
-            <!-- Speech-to-text -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center"
-                android:paddingVertical="12dp"
-                android:text="@string/voice_section_stt"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_marginEnd="12dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal"
-                android:weightSum="2">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_stt"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_auto_language_detection"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
-            </LinearLayout>
-
-            <!-- Hands-free & voice activity -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center"
-                android:paddingVertical="12dp"
-                android:text="@string/voice_section_handsfree"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-<!-- Hands-free is engaged from the conversation button in the chat input bar
-                 now, not a settings toggle, so the on/off tile was removed. Auto-send
-                 takes this row on its own. -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -208,11 +160,27 @@
                 android:weightSum="1">
 
                 <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_autosend"
+                    android:id="@+id/tile_stt"
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_marginHorizontal="4dp"
                     android:layout_weight="1" />
+            </LinearLayout>
+
+            <LinearLayout
+                style="@style/Widget.App.Row.Toggle"
+                android:paddingHorizontal="20dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_ale_title" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_auto_lang_detect"
+                    style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
             <LinearLayout
@@ -239,18 +207,6 @@
                     android:layout_marginHorizontal="4dp"
                     android:layout_weight="1" />
             </LinearLayout>
-
-            <!-- Debug logging -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center"
-                android:paddingVertical="12dp"
-                android:text="@string/voice_section_debug"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
 
             <LinearLayout
                 android:id="@+id/tile_voice_advanced"
