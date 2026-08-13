@@ -878,7 +878,7 @@ own `btn_voice_advanced` terminal icon jumps back to
 ALL THREE message item layouts (`view_message.xml`,
 `view_assistant_user_message.xml`, `view_assistant_bot_message.xml`) must
 each contain: `ui` (ConstraintLayout), `icon` (ImageView), `message`
-(TextView), `username` (TextView), `dalle_image` (ImageView), `btn_copy`,
+(TextView), `username` (TextView), `generated_image` (ImageView), `btn_copy`,
 `btn_edit`, `btn_retry`, `btn_report`, `btn_share`, `btn_speak`
 (ImageButtons). Only `bubble_bg` (ConstraintLayout) is nullable/optional.
 The adapter does **no null checks** on the rest — a missing id crashes on

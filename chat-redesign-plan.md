@@ -10,7 +10,7 @@ Licensed under the Apache License, Version 2.0.
 >
 > **August 11, 2026 geometry ruling:** The final outer message geometry measured in `chat-redesign-plan-addendum-2026-08-11.md` is incorporated below: `27dp` mirrored speaker-side bubble distance, `26dp` user-only left inset, `76dp` portraits with approved offsets, `53dp` message-unit rhythm, `14dp` bubble padding, and `16dp` uniform corners. Those values replace older approximate `36dp`, `80dp`, and `24dp` working targets.
 >
-> **August 12, 2026 owner ruling — per-message metadata, visual media, and composer behavior:** Persistent metadata is split into independent **Model names** and **Token usage** toggles rather than an "Always show Message Details" mode. Enabled compact metadata belongs directly beneath the speaker name/identity line. The universal `ⓘ` remains the full on-demand metadata view. Generated/attached images are provider-neutral message content and must not be modeled as DALL-E-specific UI. The composer begins in the horizontal space between its action buttons and grows upward as text wraps, preserving the current clean button anchoring and behavior.
+> **August 12, 2026 owner ruling — per-message metadata, visual media, and composer behavior:** Persistent metadata is split into independent **Model names** and **Token usage** toggles rather than an "Always show Message Details" mode. Enabled compact metadata belongs directly beneath the speaker name/identity line. The universal `ⓘ` remains the full on-demand metadata view. Generated/attached images are provider-neutral message content and must not be modeled as provider-specific UI. The composer begins in the horizontal space between its action buttons and grows upward as text wraps, preserving the current clean button anchoring and behavior.
 
 ## 1. Chat name typography
 
@@ -179,7 +179,7 @@ The exact visual card/chip treatment for attached files may be refined during im
 
 #### 4.7.2 Images / generated visual media and provider-neutral naming
 
-Images are visual message content, not document/file-tray content and not a DALL-E-specific special case.
+Images are visual message content, not document/file-tray content and not a provider-specific special case.
 
 **Content order:**
 
@@ -188,11 +188,11 @@ Images are visual message content, not document/file-tray content and not a DALL
 - Images stay in the main message content region and do **not** move beneath Message Actions with document/file attachments.
 - The same ordering applies regardless of which supported image service produced the image.
 
-The message UI contract must use provider-neutral terminology. A static audit on August 12 found that the rebuilt request pipeline is generic at the coordinator/adapter layer, but the active chat presentation still contains legacy DALL-E names including `dalle_image`, `dalleImageStringList`, `processDalleFile`, and DALL-E-specific comments. These are cleanup debt, not the desired architecture.
+The message UI contract uses provider-neutral terminology. The generated-image capability polish completed the coordinated active-presentation rename to `generated_image` and provider-neutral adapter names; preserve that contract in the shared message shell.
 
 Because the current adapter requires the generated-image view ID in every message layout, do **not** casually delete or rename it in XML by itself. During the shared-message-shell work, perform one coordinated rename to a generic generated-image/message-image identifier across all three message layouts and every adapter reference, then update the master UI-plan message-ID contract in the same change. Until that coordinated migration lands, the old ID remains technically load-bearing even though its name is obsolete.
 
-Legacy DALL-E strings and the dead `"dalle"` branch in the old OpenAI-missing helper should also be removed once references are verified. Legacy image-model/resolution preference readers that are used only by the one-time image-generation migration are intentionally different: keep those until the migration's stable-release deletion gate is satisfied rather than deleting migration data prematurely.
+The unused provider-specific strings and dead image branch in the old OpenAI-missing helper have been removed. Legacy image-model/resolution preference readers used by the one-time image-generation migration are intentionally different: keep those until the migration's stable-release deletion gate is satisfied rather than deleting migration data prematurely.
 
 ### 4.8 Message Details popup
 
@@ -293,7 +293,7 @@ Implement in small slices. Suggested order:
 
 1. Introduce Appearance destination + preferences without changing chat behavior. Preserve the effective old Hide Model Names state in the positive Model names control and preserve Desktop Mode under Hardware Keyboard Shortcuts. Do not invent unresolved fresh-install defaults.
 2. Retire the obsolete Classic/non-classic, old Hide Model Names, Desktop Mode label, and Monochrome tiles as specified in the addendum, while leaving Auto-save Chats untouched and preserving AMOLED wiring for future Themes integration.
-3. Build the shared/adaptable message shell while preserving existing behavior contracts; perform the coordinated provider-neutral generated-image ID/name cleanup described in Section 4.7.2 rather than propagating DALL-E naming into the new shell.
+3. Build the shared/adaptable message shell while preserving existing behavior contracts and the completed provider-neutral generated-image ID/name cleanup described in Section 4.7.2.
 4. Apply the locked `27dp` / `26dp` outer alignment, `16dp` corners, `14dp` internal padding, and `53dp` message rhythm.
 5. Add optional `76dp` portraits and names using the approved mirrored offsets/border-clearance rules and Chat Name Style.
 6. Add per-message model/token stamping needed by the compact metadata and Message Details contract, without changing model routing.
@@ -350,7 +350,7 @@ The Phase 4 composer keeps the current interaction geometry that is already work
 
 ### 4.15 Image-generation cleanup audit boundary
 
-A static audit on August 12, 2026 confirms that the rebuilt generation request architecture is substantially separated from old DALL-E/model-name routing:
+A static audit on August 12, 2026 confirms that the rebuilt generation request architecture is separated from old provider/model-name routing:
 
 - the app has a provider-neutral `ImageProviderAdapter` contract and `ImageGeneratorCoordinator`;
 - the selected generator endpoint/model are independent from the current conversation endpoint/model;

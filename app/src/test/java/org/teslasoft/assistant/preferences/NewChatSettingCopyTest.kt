@@ -61,7 +61,6 @@ class NewChatSettingCopyTest {
             "AutoLangDetect",
             "AvatarId",
             "AvatarType",
-            "DalleVersion",
             "EndSeparator",
             "FrequencyPenalty",
             // FunctionCalling was removed from the copy list with the whole
@@ -107,7 +106,7 @@ class NewChatSettingCopyTest {
     }
 
     /** The known gap the rebuild's app-wide settings make moot (plan 4.7):
-     *  today a new chat copies resolution and the legacy DALL-E settings but
+     *  today a new chat copies the legacy resolution setting but
      *  never the selected image model. */
     @Test
     fun imageModelIsNotCopiedToNewChats() {

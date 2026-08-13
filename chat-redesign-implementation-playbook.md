@@ -212,7 +212,7 @@ If the current message persistence schema cannot store the required metadata, ma
 
 ## Goal
 
-Integrate existing file/image behavior into the shared shell without reinventing working content semantics, while removing the remaining DALL-E-specific **presentation** naming in one coordinated safe slice.
+Integrate existing file/image behavior into the shared shell without reinventing working content semantics, while preserving the completed provider-neutral **presentation** naming.
 
 ## Implement
 
@@ -235,7 +235,7 @@ Do not route ordinary image content into the document/file tray.
 
 ### Coordinated legacy-name cleanup
 
-Static audit already identified presentation-layer cleanup debt including `dalle_image`, `dalleImageStringList`, `processDalleFile`, DALL-E-specific comments, and an apparently dead old `"dalle"` branch.
+The generated-image capability polish already completed the coordinated provider-neutral presentation cleanup. Preserve `generated_image` and the provider-neutral adapter names during shell extraction.
 
 Before renaming/removing:
 
@@ -243,7 +243,7 @@ Before renaming/removing:
 2. distinguish active presentation names from intentionally retained migration compatibility;
 3. rename the generated-image view ID and all adapter/layout references atomically to a provider-neutral name;
 4. rename corresponding adapter lists/helpers/comments in the same slice;
-5. remove dead DALL-E/OpenAI presentation branches/strings only when reference checks prove them unused;
+5. preserve the removal of dead provider-specific presentation branches and strings;
 6. **do not delete legacy image preference readers still required by `ImageGenerationMigration` until its documented deletion gate is satisfied.**
 
 ## Runtime note
@@ -254,7 +254,7 @@ The owner has not yet performed the separate end-to-end image-generation smoke t
 
 - Existing file attachment interactions still work.
 - Existing generated/attached image rendering hooks still compile and behave as before.
-- No active message-presentation identifier remains DALL-E-specific after the coordinated rename.
+- No active message-presentation identifier becomes provider-specific after the coordinated rename.
 - Migration compatibility is preserved.
 
 **Checkpoint commit:** `phase4: integrate attachments and neutralize generated image presentation`

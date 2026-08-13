@@ -90,11 +90,11 @@ class FunctionCallingRemovalTest {
     @Test
     fun theLegacyImageClientsAreGone() {
         // §16 step 14 also removes the duplicate image clients: the
-        // model-name-gated GPT-Image/DALL-E pair and the OpenAI-only
+        // model-name-gated image-model pair and the OpenAI-only
         // wording that rode along with them.
         val chat = source(chatActivity)
         assertFalse(chat.contains("generateImageR"))
         assertFalse(chat.contains("ImageGenerateParams"))
-        assertFalse(chat.contains("DALL-E image generation is disabled"))
+        assertFalse(chat.contains("image generation is disabled", ignoreCase = true))
     }
 }

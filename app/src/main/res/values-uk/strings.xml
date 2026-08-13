@@ -237,7 +237,6 @@
     <string name="label_tap_to_edit">Торкніться, щоб редагувати</string>
     <string name="label_tap_to_set">Торкніться, щоб встановити</string>
     <string name="label_select_resolution">Вибрати роздільну здатність</string>
-    <string name="image_resolution_note">Зверніть увагу, що DALL-E 3 підтримує лише зображення 1024x1024. Якщо ви виберете іншу роздільну здатність із DALL-E 3, ви отримаєте помилку.</string>
     <string name="label_search_models">Пошук моделей</string>
     <string name="btn_get_api_key">Отримати ключ API</string>
     <string name="btn_use_globally">Використовувати глобально</string>
@@ -287,11 +286,7 @@
     <string name="tile_tts_voice_desc">Ця функція дозволяє вибрати ваш TTS голос.</string>
     <string name="tile_voice_lang_title">Мова голосу</string>
     <string name="tile_voice_lang_desc">Ця функція дозволяє вибрати мову вашого TTS голосу.</string>
-    <string name="tile_dalle_3">Використовувати DALL-e 3</string>
-    <string name="tile_dalle_2">Використовується DALL-e 2</string>
-    <string name="tile_dalle_desc">Ця функція дозволяє встановити модель генерації зображень.</string>
     <string name="tile_image_resolution_title">Роздільна здатність зображення</string>
-    <string name="tile_image_resolution_desc">Ця функція дозволяє встановити роздільну здатність зображення. Будь ласка, зверніть увагу, що DALL-e 3 підтримує тільки 1024x1024.</string>
     <string name="tile_openai_tts">Використовувати OpenAI TTS</string>
     <string name="tile_google_tts">Використовується Google TTS</string>
     <string name="tile_tts_desc">Ця функція дозволяє вибрати TTS двигун. OpenAI TTS є платним.</string>

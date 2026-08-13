@@ -237,7 +237,6 @@
     <string name="label_tap_to_edit">برای ویرایش ضربه بزنید</string>
     <string name="label_tap_to_set">برای تنظیم ضربه بزنید</string>
     <string name="label_select_resolution">انتخاب وضوح</string>
-    <string name="image_resolution_note">لطفاً توجه کنید که DALL-E 3 فقط از تصاویر 1024x1024 پشتیبانی می‌کند. اگر وضوح دیگری با DALL-E 3 انتخاب کنید، خطا دریافت خواهید کرد.</string>
     <string name="label_search_models">جستجوی مدل‌ها</string>
     <string name="btn_get_api_key">دریافت کلید API</string>
     <string name="btn_use_globally">استفاده عمومی</string>
@@ -287,11 +286,7 @@
     <string name="tile_tts_voice_desc">این ویژگی به شما امکان تنظیم صدای TTS را می‌دهد.</string>
     <string name="tile_voice_lang_title">زبان صوتی</string>
     <string name="tile_voice_lang_desc">این ویژگی به شما امکان تنظیم زبان صدای TTS را می‌دهد.</string>
-    <string name="tile_dalle_3">استفاده از DALL-e 3</string>
-    <string name="tile_dalle_2">DALL-e 2 استفاده شده است</string>
-    <string name="tile_dalle_desc">این ویژگی به شما امکان تنظیم مدل تولید تصویر را می‌دهد.</string>
     <string name="tile_image_resolution_title">وضوح تصویر</string>
-    <string name="tile_image_resolution_desc">این ویژگی به شما امکان تنظیم وضوح تصویر را می‌دهد. لطفاً توجه کنید که DALL-e 3 فقط از 1024x1024 پشتیبانی می‌کند.</string>
     <string name="tile_openai_tts">استفاده از TTS OpenAI</string>
     <string name="tile_google_tts">TTS گوگل استفاده شده است</string>
     <string name="tile_tts_desc">این ویژگی به شما امکان تنظیم موتور TTS را می‌دهد. TTS OpenAI پولی است.</string>

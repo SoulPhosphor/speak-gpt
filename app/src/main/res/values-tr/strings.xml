@@ -238,7 +238,6 @@
     <string name="label_tap_to_edit">Düzenlemek için dokunun</string>
     <string name="label_tap_to_set">Ayarlamak için dokunun</string>
     <string name="label_select_resolution">Çözünürlük seçin</string>
-    <string name="image_resolution_note">Lütfen DALL-E 3\'ün yalnızca 1024x1024 görüntüleri desteklediğini unutmayın. DALL-E 3 ile başka bir çözünürlük seçerseniz hata alırsınız.</string>
     <string name="label_search_models">Modelleri ara</string>
     <string name="btn_get_api_key">API anahtarı al</string>
     <string name="btn_use_globally">Genel olarak kullan</string>
@@ -288,11 +287,7 @@
     <string name="tile_tts_voice_desc">Bu özellik, TTS sesinizi ayarlamanıza olanak tanır.</string>
     <string name="tile_voice_lang_title">Ses dili</string>
     <string name="tile_voice_lang_desc">Bu özellik, TTS ses dilinizi ayarlamanıza olanak tanır.</string>
-    <string name="tile_dalle_3">DALL-e 3 kullan</string>
-    <string name="tile_dalle_2">DALL-e 2 kullanılıyor</string>
-    <string name="tile_dalle_desc">Bu özellik, görüntü oluşturma modelini ayarlamanıza olanak tanır.</string>
     <string name="tile_image_resolution_title">Görüntü çözünürlüğü</string>
-    <string name="tile_image_resolution_desc">Bu özellik, görüntü çözünürlüğünü ayarlamanıza olanak tanır. Lütfen DALL-e 3\'ün yalnızca 1024x1024\'ü desteklediğini unutmayın.</string>
     <string name="tile_openai_tts">OpenAI TTS kullan</string>
     <string name="tile_google_tts">Google TTS kullanılıyor</string>
     <string name="tile_tts_desc">Bu özellik, TTS motorunu ayarlamanıza olanak tanır. OpenAI TTS ücretlidir.</string>

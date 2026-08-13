@@ -99,6 +99,7 @@ import androidx.core.util.Pair
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.interpolator.view.animation.FastOutLinearInInterpolator
 import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -238,6 +239,7 @@ import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
 import org.teslasoft.assistant.imagegen.ImageGenerationRequest
 import org.teslasoft.assistant.imagegen.imageFailureMessageRes
+import org.teslasoft.assistant.imagegen.imageFailureProviderDetailBlock
 import org.teslasoft.assistant.imagegen.ImageProviderAdapters
 import org.teslasoft.assistant.imagegen.ImagineCommand
 import org.teslasoft.assistant.imagegen.StreamedToolCallAssembler
@@ -509,9 +511,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val request: ChatCompletionRequest,
         val payload: FrozenChatPayload
     )
-
-    // Init DALL-e
-    private var resolution = "512x152"
 
     // Auto-naming attempts this screen instance. Used to be a one-shot
     // "messageCounter == 0" gate: a single transient failure (network blip,
@@ -2361,7 +2360,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         endSeparator = preferences!!.getEndSeparator()
         prefix = preferences!!.getPrefix()
 
-        loadResolution()
 
         if (key == null) {
             startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
@@ -4176,6 +4174,51 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    override fun onGeneratedImageSaveClick(dataUrl: String, mimeType: String) {
+        lifecycleScope.launch {
+            val prepared = withContext(Dispatchers.IO) {
+                try {
+                    val encoded = dataUrl.substringAfter(";base64,", "")
+                    if (encoded.isBlank()) return@withContext null
+                    val normalizedMime =
+                        mimeType.takeIf { it.startsWith("image/") } ?: "image/png"
+                    val extension = when (normalizedMime.substringAfter('/')) {
+                        "jpeg" -> "jpg"
+                        "webp" -> "webp"
+                        else -> "png"
+                    }
+                    Triple(
+                        Base64.decode(encoded, Base64.DEFAULT),
+                        normalizedMime,
+                        extension
+                    )
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (prepared == null) {
+                Toast.makeText(
+                    this@ChatActivity,
+                    R.string.image_gen_save_failed,
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            fileContents = prepared.first
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = prepared.second
+                putExtra(Intent.EXTRA_TITLE, "generated-image.${prepared.third}")
+                putExtra(
+                    DocumentsContract.EXTRA_INITIAL_URI,
+                    (Environment.getExternalStorageDirectory().path +
+                        "/Pictures/SpeakGPT/generated-image.${prepared.third}").toUri()
+                )
+            }
+            fileSaveIntentLauncher.launch(intent)
+        }
+    }
+
     private fun writeToFile(uri: Uri) {
         try {
             contentResolver.openFileDescriptor(uri, "w")?.use {
@@ -5476,11 +5519,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         prefix = preferences!!.getPrefix()
     }
 
-    // Init image resolutions
-    private fun loadResolution() {
-        resolution = preferences!!.getResolution()
-    }
-
     /** SYSTEM INITIALIZATION END **/
 
     private fun saveSettings(
@@ -5803,12 +5841,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             is ImageGenerationJobRegistry.Terminal.Failed -> {
                 if (fromImagine) {
-                    presentImageGenerationFailure(job.request, terminal.cause, terminal.metadata)
+                    presentImageGenerationFailure(job.request, terminal)
                 } else {
-                    // §13: the cause message appears in chat; the tool flow
-                    // returns its own concise tool error to the model.
-                    putMessage(getString(imageFailureMessageRes(terminal.cause)), true)
-                    attachGeneratedImageRecord(terminal.metadata)
+                    // The image cause and the provider's own sanitized detail
+                    // use the same failed-message formula as ordinary replies.
+                    appendImageGenerationFailure(terminal)
                     saveSettings()
                 }
             }
@@ -5880,19 +5917,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  cause-specific message in chat, plus the action matching the cause —
      *  Edit Prompt for a refused prompt, Change Settings for unsupported
      *  options and configuration or authentication failures, Retry only
-     *  for failures that may succeed unchanged. Sanitized details stay in
-     *  the log surfaces, never in chat. */
+     *  for failures that may succeed unchanged. The provider's sanitized
+     *  message is also preserved beneath the app explanation, matching the
+     *  ordinary failed-reply format. */
     private fun presentImageGenerationFailure(
         request: ImageGenerationRequest,
-        errorCause: ImageErrorCause,
-        metadata: GeneratedImageMetadata? = null
+        failure: ImageGenerationJobRegistry.Terminal.Failed
     ) {
         playErrorSignal()
         stopHandsFreeOnError()
 
-        val causeText = getString(imageFailureMessageRes(errorCause))
-        putMessage(causeText, true)
-        if (metadata != null) attachGeneratedImageRecord(metadata)
+        val causeText = getString(imageFailureMessageRes(failure.cause))
+        appendImageGenerationFailure(failure)
         saveSettings()
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
@@ -5902,7 +5938,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(causeText)
             .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-        when (failureActionFor(errorCause)) {
+        when (failureActionFor(failure.cause)) {
             ImageFailureAction.EDIT_PROMPT -> {
                 builder.setPositiveButton(R.string.image_gen_action_edit_prompt) { _, _ ->
                     // The exact prompt that was sent to the generator, back
@@ -5926,6 +5962,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ImageFailureAction.NONE -> { /* cancellation shows no action */ }
         }
         builder.show()
+    }
+
+    /** App explanation in the message body; the provider's own sanitized
+     *  response in the separate failed-message detail field. This is the
+     *  established chat error formula, and keeping the fields separate also
+     *  prevents either string from entering later model context as AI prose. */
+    private fun appendImageGenerationFailure(
+        failure: ImageGenerationJobRegistry.Terminal.Failed
+    ) {
+        putMessage(getString(imageFailureMessageRes(failure.cause)), true)
+        attachGeneratedImageRecord(failure.metadata)
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] == true) {
+            last[MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
+            last[MessageCompletionState.KEY_STATE_DETAIL] = failure.cause.name
+            last[MessageCompletionState.KEY_ERROR_TEXT] =
+                imageFailureProviderDetailBlock(this, failure)
+            adapter?.notifyItemChanged(messages.lastIndex)
+        }
     }
 
     /* --------------- Model-initiated image creation (§6/§7/§8) --------------- */
@@ -9436,7 +9491,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         restoreUIState()
 
         val message = when(feature) {
-            "dalle" -> "Image generation"
             "tts" -> "OpenAI text-to-speech"
             "whisper" -> "Whisper speech recognition"
             else -> "this OpenAI"
@@ -9517,9 +9571,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun onCancelOpenAIAction(feature: String) {
-        // The legacy "dalle" feature branch is gone with the old image
-        // pipeline (image-generation-rebuild-plan.md §15); image requests
-        // now run through the generator coordinator and never pass here.
+        // No cleanup is required for the remaining speech-only branches.
     }
 
     private fun onOpenAIAction(feature: String, prompt: String) {

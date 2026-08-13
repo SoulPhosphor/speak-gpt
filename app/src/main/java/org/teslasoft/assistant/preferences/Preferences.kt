@@ -315,8 +315,6 @@ class Preferences private constructor(private var preferences: SharedPreferences
     /**
      * Retrieves the image model name from the shared preferences.
      *
-     * Dalle 2 and 3 are shutdown on May 12, 2026
-     *
      * @return The imageModel value or "gpt-image-1" if not found.
      */
     fun getImageModel() : String {
@@ -858,24 +856,6 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * */
     fun setChatsAutosave(state: Boolean) {
         putGlobalBoolean("chats_autosave", state)
-    }
-
-    /**
-     * Get dalle version (2 or 3, 3 is default)
-     *
-     * @return dalle version
-     * */
-    fun getDalleVersion() : String {
-        return getString("dalle_version", "3")
-    }
-
-    /**
-     * Set dalle version (2 or 3, 2 is default)
-     *
-     * @param version dalle version
-     * */
-    fun setDalleVersion(version: String) {
-        putString("dalle_version", version)
     }
 
     /**
@@ -2234,7 +2214,7 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * like the Summarizer settings: one configuration for the whole app.
      * ImageGenerationMigration seeds these once from the default settings
      * profile; the legacy per-chat copies (imageModel, resolution,
-     * dalle_version, imagine_command, function_calling) stop being read
+     * imagine_command, function_calling) stop being read
      * as the rebuild rewires each path, and are removed only after
      * migration tests plus a stable release (§14).
      * ------------------------------------------------------------------ */

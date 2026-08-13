@@ -236,7 +236,6 @@
     <string name="label_tap_to_edit">Kliknij, aby edytować</string>
     <string name="label_tap_to_set">Kliknij, aby ustawić</string>
     <string name="label_select_resolution">Wybierz rozdzielczość</string>
-    <string name="image_resolution_note">Zwróć uwagę, że DALL-E 3 obsługuje tylko obrazy 1024x1024. Jeśli wybierzesz inną rozdzielczość z DALL-E 3, otrzymasz błąd.</string>
     <string name="label_search_models">Szukaj modeli</string>
     <string name="btn_get_api_key">Uzyskaj klucz API</string>
     <string name="btn_use_globally">Użyj globalnie</string>
@@ -285,11 +284,7 @@
     <string name="tile_tts_voice_desc">Ta funkcja pozwala ustawić swój głos TTS.</string>
     <string name="tile_voice_lang_title">Język głosu</string>
     <string name="tile_voice_lang_desc">Ta funkcja pozwala ustawić język swojego głosu TTS.</string>
-    <string name="tile_dalle_3">Użyj DALL-e 3</string>
-    <string name="tile_dalle_2">Używane jest DALL-e 2</string>
-    <string name="tile_dalle_desc">Ta funkcja pozwala ustawić model generowania obrazów.</string>
     <string name="tile_image_resolution_title">Rozdzielczość obrazu</string>
-    <string name="tile_image_resolution_desc">Ta funkcja pozwala ustawić rozdzielczość obrazu. Należy pamiętać, że DALL-e 3 obsługuje tylko 1024x1024.</string>
     <string name="tile_openai_tts">Użyj TTS OpenAI</string>
     <string name="tile_google_tts">Używany jest TTS Google</string>
     <string name="tile_tts_desc">Ta funkcja pozwala ustawić silnik TTS. TTS OpenAI jest płatny.</string>

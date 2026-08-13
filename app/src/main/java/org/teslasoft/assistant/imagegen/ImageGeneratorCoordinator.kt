@@ -28,6 +28,7 @@ import okhttp3.Request
 import okhttp3.Response
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.util.ProviderErrorInfo
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -68,6 +69,7 @@ object ImageGeneratorCoordinator {
         class Failure(
             val errorCause: ImageErrorCause,
             val sanitizedDetail: String?,
+            val reportedProvider: String?,
             val diagnostics: ImageRequestDiagnostics
         ) : Outcome()
     }
@@ -84,6 +86,7 @@ object ImageGeneratorCoordinator {
         var endpointLabel = ""
         var httpStatus: Int? = null
         var providerRequestId: String? = null
+        var reportedProvider: String? = null
         var generationMs: Long? = null
         var downloadMs: Long? = null
         var apiKeyForSanitizing: String? = null
@@ -130,9 +133,12 @@ object ImageGeneratorCoordinator {
                         )
                     val bodyText = String(bodyBytes)
                     if (!response.isSuccessful) {
+                        val providerError = ProviderErrorInfo.parse(bodyText)
+                        reportedProvider = providerError.providerName
+                        val providerMessage = providerError.message ?: bodyText
                         throw ImageGenerationException(
                             adapter.classifyHttpError(response.code, bodyText),
-                            ImageErrorSanitizer.sanitize(bodyText, endpoint.apiKey)
+                            ImageErrorSanitizer.sanitize(providerMessage, endpoint.apiKey)
                         )
                     }
                     adapter.parseResponse(bodyText)
@@ -173,17 +179,21 @@ object ImageGeneratorCoordinator {
         } catch (e: CancellationException) {
             throw e
         } catch (e: ImageGenerationException) {
-            return Outcome.Failure(e.errorCause, e.sanitizedDetail, diagnostics())
+            return Outcome.Failure(
+                e.errorCause, e.sanitizedDetail, reportedProvider, diagnostics()
+            )
         } catch (e: IOException) {
             return Outcome.Failure(
                 classifyNetworkException(e),
                 ImageErrorSanitizer.sanitize(e.message, apiKeyForSanitizing),
+                reportedProvider,
                 diagnostics()
             )
         } catch (e: Exception) {
             return Outcome.Failure(
                 ImageErrorCause.PROVIDER_ERROR,
                 ImageErrorSanitizer.sanitize(e.message, apiKeyForSanitizing),
+                reportedProvider,
                 diagnostics()
             )
         }

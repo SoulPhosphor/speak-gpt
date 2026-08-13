@@ -160,18 +160,89 @@
         app:layout_constraintTop_toBottomOf="@+id/message">
 
         <ImageView
-            android:id="@+id/dalle_image"
+            android:id="@+id/generated_image"
             android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_marginBottom="24dp"
             android:contentDescription="@null"
             android:descendantFocusability="blocksDescendants"
-            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintBottom_toTopOf="@+id/generated_image_actions"
             app:layout_constraintDimensionRatio="H,1:1"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:srcCompat="@drawable/assistant" />
+
+        <LinearLayout
+            android:id="@+id/generated_image_loading"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@+id/generated_image"
+            app:layout_constraintEnd_toEndOf="@+id/generated_image"
+            app:layout_constraintStart_toStartOf="@+id/generated_image"
+            app:layout_constraintTop_toTopOf="@+id/generated_image">
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:indeterminate="true" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/image_gen_loading_result"
+                android:textColor="?attr/appTextColor" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/generated_image_error"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/image_gen_load_failed"
+            android:textColor="?attr/appTextColor"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@+id/generated_image"
+            app:layout_constraintEnd_toEndOf="@+id/generated_image"
+            app:layout_constraintStart_toStartOf="@+id/generated_image"
+            app:layout_constraintTop_toTopOf="@+id/generated_image" />
+
+        <LinearLayout
+            android:id="@+id/generated_image_actions"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingTop="8dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/generated_image">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_image_prompt"
+                style="@style/AppButton.Primary.Inline"
+                android:text="@string/image_gen_prompt_action"
+                android:visibility="gone" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <ImageButton
+                android:id="@+id/btn_image_download"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/image_gen_save_action"
+                android:src="@drawable/ic_download"
+                android:tooltipText="@string/image_gen_save_action"
+                android:visibility="gone" />
+        </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Completion marker for a reply that did not finish streaming (Round 3).
