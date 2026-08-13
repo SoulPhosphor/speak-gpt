@@ -919,7 +919,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 } else {
                     resolveThemeColor(
                         if (isBot) {
-                            com.google.android.material.R.attr.colorPrimary
+                            androidx.appcompat.R.attr.colorPrimary
                         } else {
                             com.google.android.material.R.attr.colorSurface
                         }
