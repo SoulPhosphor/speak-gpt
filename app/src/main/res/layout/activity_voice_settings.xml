@@ -80,7 +80,7 @@
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/row_voice_language"
-                style="@style/Widget.App.Row.Selector"
+                style="@style/Widget.App.Row.Selector.VoiceLanguage"
                 android:layout_marginStart="12dp"
                 android:layout_marginTop="8dp"
                 android:layout_marginEnd="12dp">

@@ -379,6 +379,12 @@
         <item name="android:paddingBottom">14dp</item>
     </style>
 
+    <!-- Same selector-row geometry and typography as AI Model, with a
+         distinct theme-resolved background for Voice Language. -->
+    <style name="Widget.App.Row.Selector.VoiceLanguage" parent="Widget.App.Row.Selector">
+        <item name="android:backgroundTint">?attr/colorSurfaceContainerHigh</item>
+    </style>
+
     <!-- Left-aligned label for Widget.App.Row.Selector. -->
     <style name="Widget.App.Row.Selector.Label" parent="">
         <item name="android:layout_width">wrap_content</item>
@@ -411,7 +417,8 @@
          Widget.App.Row.Selector (or, later, from any other picker needing
          the same look) - currently the Select Language dialog's
          RadioButton rows. Geometry/typography unchanged from that dialog's
-         previous local values (56dp row, 8dp horizontal padding, 16sp).
+         previous local values (56dp row, 8dp horizontal padding, 16sp). It
+         deliberately does not force single-line or ellipsized text.
          The Select AI Model screen's row layout (view_model.xml) still
          improvises its own local version of this same pattern and has not
          been migrated onto this style - see ui-style-adoption.md.
@@ -427,20 +434,27 @@
          fill from a theme attribute (colorSurfaceContainerHigh / colorPrimary
          respectively); tinting them again in Kotlin is what caused the old
          hard-coded-color bug this style exists to fix. -->
+    <!-- Custom pick-list dialog title: existing geometry, theme-routed color. -->
+    <style name="Widget.App.PickList.Title" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">24dp</item>
+        <item name="android:textColor">?attr/appTitleTextColor</item>
+        <item name="android:textSize">24sp</item>
+    </style>
+
     <style name="Widget.App.PickList.Row" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">56dp</item>
         <item name="android:gravity">center_vertical</item>
         <item name="android:paddingStart">8dp</item>
         <item name="android:paddingEnd">8dp</item>
-        <item name="android:singleLine">true</item>
-        <item name="android:ellipsize">end</item>
         <item name="android:textSize">16sp</item>
     </style>
 
     <!-- Unselected-state text for Widget.App.PickList.Row: same row-title
          color every other shared row uses. -->
-    <style name="TextAppearance.App.PickList.Unselected" parent="TextAppearance.Material3.BodyLarge">
+    <style name="TextAppearance.App.PickList.Unselected" parent="">
         <item name="android:textColor">?attr/appRowTitleColor</item>
     </style>
 
@@ -448,7 +462,7 @@
          XML text appearance, not a Kotlin attribute lookup, so it never hits
          the colorOnPrimary CI resolution risk recorded elsewhere in this
          project (see ProfileImageGalleryAdapter.kt / MemoryScreenActivity.kt). -->
-    <style name="TextAppearance.App.PickList.Selected" parent="TextAppearance.Material3.BodyLarge">
+    <style name="TextAppearance.App.PickList.Selected" parent="">
         <item name="android:textColor">?attr/colorOnPrimary</item>
     </style>
 
