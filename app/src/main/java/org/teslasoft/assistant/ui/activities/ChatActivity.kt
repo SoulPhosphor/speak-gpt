@@ -9115,12 +9115,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // short-timeout watchdog when playback actually starts, which
             // bumps the token and invalidates this one.
             beginHandsFreeReadbackWatch(startTimeoutMs = HANDS_FREE_HARD_FALLBACK_MS)
-        } else if (handsFree) {
-            // Silence mode (or this turn isn't spoken): there's no readback to
-            // wait on, so continue straight to the next listening turn instead
-            // of stranding the mic waiting for a callback that never comes.
-            handsFreeReadbackExpected = true
-            onHandsFreeReadbackFinished()
         }
 
         if (willReadAloud) {
