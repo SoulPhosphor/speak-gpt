@@ -282,7 +282,6 @@
     <string name="tile_api_endpoint_title">Endpoint API</string>
     <string name="tile_api_endpoint_desc">Questa funzione ti permette di impostare il tuo endpoint API.</string>
     <string name="tile_autosend_title">Invio automatico</string>
-    <string name="tile_autosend_desc">Questa funzione ti permette di abilitare o disabilitare l\'invio automatico dei messaggi. Quando l\'invio automatico è abilitato, l\'app invierà automaticamente i messaggi senza premere il pulsante \'Invia\' una volta terminato l\'ascolto.</string>
     <string name="tile_tts_voice_title">Voce TTS</string>
     <string name="tile_tts_voice_desc">Questa funzione ti permette di impostare la tua voce TTS.</string>
     <string name="tile_voice_lang_title">Lingua della voce</string>

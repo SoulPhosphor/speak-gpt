@@ -279,7 +279,6 @@
     <string name="tile_api_endpoint_title">Punkt końcowy API</string>
     <string name="tile_api_endpoint_desc">Ta funkcja pozwala ustawić swój punkt końcowy API.</string>
     <string name="tile_autosend_title">Automatyczne wysyłanie</string>
-    <string name="tile_autosend_desc">Ta funkcja umożliwia włączenie lub wyłączenie automatycznego wysyłania wiadomości. Gdy automatyczne wysyłanie jest włączone, aplikacja automatycznie wysyła wiadomości bez naciskania przycisku \'Wyślij\' po zakończeniu słuchania.</string>
     <string name="tile_tts_voice_title">Głos TTS</string>
     <string name="tile_tts_voice_desc">Ta funkcja pozwala ustawić swój głos TTS.</string>
     <string name="tile_voice_lang_title">Język głosu</string>

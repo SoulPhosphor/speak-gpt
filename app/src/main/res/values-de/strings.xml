@@ -281,7 +281,6 @@
     <string name="tile_api_endpoint_title">API-Endpunkt</string>
     <string name="tile_api_endpoint_desc">Diese Funktion ermöglicht es Ihnen, Ihren API-Endpunkt festzulegen.</string>
     <string name="tile_autosend_title">Automatisches Senden</string>
-    <string name="tile_autosend_desc">Diese Funktion ermöglicht es Ihnen, das automatische Senden von Nachrichten zu aktivieren oder zu deaktivieren. Wenn das automatische Senden aktiviert ist, sendet die App automatisch Nachrichten, sobald das Zuhören beendet ist, ohne dass die \'Senden\'-Taste gedrückt werden muss.</string>
     <string name="tile_tts_voice_title">TTS-Stimme</string>
     <string name="tile_tts_voice_desc">Diese Funktion ermöglicht es Ihnen, Ihre TTS-Stimme festzulegen.</string>
     <string name="tile_voice_lang_title">Sprache der Stimme</string>

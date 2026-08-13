@@ -278,7 +278,6 @@
     <string name="tile_api_endpoint_title">API koncový bod</string>
     <string name="tile_api_endpoint_desc">Táto funkcia umožňuje nastaviť váš API koncový bod.</string>
     <string name="tile_autosend_title">Automatické odosielanie</string>
-    <string name="tile_autosend_desc">Táto funkcia umožňuje povoliť alebo zakázať automatické odosielanie správ. Keď je automatické odosielanie zapnuté, aplikácia automaticky odošle správy bez stlačenia tlačidla \'Odoslať\' po dokončení počúvania.</string>
     <string name="tile_tts_voice_title">Hlas TTS</string>
     <string name="tile_tts_voice_desc">Táto funkcia umožňuje nastaviť váš hlas TTS.</string>
     <string name="tile_voice_lang_title">Jazyk hlasu</string>

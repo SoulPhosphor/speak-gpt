@@ -282,7 +282,6 @@
     <string name="tile_api_endpoint_title">API endpoint</string>
     <string name="tile_api_endpoint_desc">Эта функция позволяет установить ваш API endpoint.</string>
     <string name="tile_autosend_title">Автоотправка</string>
-    <string name="tile_autosend_desc">Эта функция позволяет включить или отключить функцию автоотправки сообщений. Когда автоотправка включена, приложение будет автоматически отправлять сообщения без нажатия кнопки \'Отправить\' после завершения прослушивания.</string>
     <string name="tile_tts_voice_title">Голос TTS</string>
     <string name="tile_tts_voice_desc">Эта функция позволяет установить ваш TTS голос.</string>
     <string name="tile_voice_lang_title">Язык голоса</string>

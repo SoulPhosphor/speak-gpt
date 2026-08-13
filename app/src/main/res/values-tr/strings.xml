@@ -282,7 +282,6 @@
     <string name="tile_api_endpoint_title">API uç noktası</string>
     <string name="tile_api_endpoint_desc">Bu özellik, API uç noktanızı ayarlamanıza olanak tanır.</string>
     <string name="tile_autosend_title">Otomatik gönder</string>
-    <string name="tile_autosend_desc">Bu özellik, mesajların otomatik gönderimini etkinleştirmenize veya devre dışı bırakmanıza olanak tanır. Otomatik gönderi etkinleştirildiğinde, uygulama dinleme bittiğinde \'Gönder\' düğmesine basmadan mesajları otomatik olarak gönderecektir.</string>
     <string name="tile_tts_voice_title">TTS Sesi</string>
     <string name="tile_tts_voice_desc">Bu özellik, TTS sesinizi ayarlamanıza olanak tanır.</string>
     <string name="tile_voice_lang_title">Ses dili</string>

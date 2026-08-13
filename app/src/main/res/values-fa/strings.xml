@@ -281,7 +281,6 @@
     <string name="tile_api_endpoint_title">نشانی API</string>
     <string name="tile_api_endpoint_desc">این ویژگی به شما امکان تنظیم نشانی API را می‌دهد.</string>
     <string name="tile_autosend_title">ارسال خودکار</string>
-    <string name="tile_autosend_desc">این ویژگی به شما امکان فعال یا غیرفعال کردن ارسال خودکار پیام‌ها را می‌دهد. وقتی ارسال خودکار فعال باشد، این برنامه پیام‌ها را پس از پایان گوش دادن بدون فشار دادن دکمه «ارسال» به‌صورت خودکار ارسال می‌کند.</string>
     <string name="tile_tts_voice_title">صدای TTS</string>
     <string name="tile_tts_voice_desc">این ویژگی به شما امکان تنظیم صدای TTS را می‌دهد.</string>
     <string name="tile_voice_lang_title">زبان صوتی</string>
