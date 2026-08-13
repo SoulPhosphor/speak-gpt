@@ -71,12 +71,12 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var tileSilentMode: TileFragment? = null
     private var tileSTT: TileFragment? = null
     private var tileLangDetect: TileFragment? = null
-    private var tileAutoSend: TileFragment? = null
     private var tileHandsFreeTiming: TileFragment? = null
     private var tileVadMethod: TileFragment? = null
     private var rowVoiceAdvanced: LinearLayout? = null
     private var rowVoiceDebugging: LinearLayout? = null
     private var switchAlwaysSpeak: MaterialSwitch? = null
+    private var switchAutoSend: MaterialSwitch? = null
     private var switchReadFormatting: MaterialSwitch? = null
 
     private var btnBack: ImageButton? = null
@@ -246,19 +246,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             getString(R.string.tile_ale_desc)
         )
 
-        tileAutoSend = TileFragment.newInstance(
-            preferences?.autoSend()!!,
-            true,
-            getString(R.string.tile_autosend_title),
-            null,
-            getString(R.string.on),
-            getString(R.string.off),
-            R.drawable.ic_send,
-            false,
-            chatId,
-            getString(R.string.tile_autosend_desc)
-        )
-
         tileHandsFreeTiming = TileFragment.newInstance(
             checked = false,
             checkable = false,
@@ -299,7 +286,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             .replace(R.id.tile_silent_mode, tileSilentMode!!)
             .replace(R.id.tile_stt, tileSTT!!)
             .replace(R.id.tile_auto_language_detection, tileLangDetect!!)
-            .replace(R.id.tile_autosend, tileAutoSend!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
             .commitNow()
@@ -358,6 +344,12 @@ class VoiceSettingsActivity : FragmentActivity() {
             }
         }
 
+        switchAutoSend = findViewById(R.id.switch_auto_send)
+        switchAutoSend?.isChecked = preferences?.autoSend() == true
+        switchAutoSend?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setAutoSend(checked)
+        }
+
         tileSTT?.setOnTileClickListener {
             showVoiceInputEnginePicker()
         }
@@ -367,14 +359,6 @@ class VoiceSettingsActivity : FragmentActivity() {
                 preferences?.setAutoLangDetect(true)
             } else {
                 preferences?.setAutoLangDetect(false)
-            }
-        }
-
-        tileAutoSend?.setOnCheckedChangeListener { isChecked ->
-            if (isChecked) {
-                preferences?.setAutoSend(true)
-            } else {
-                preferences?.setAutoSend(false)
             }
         }
 

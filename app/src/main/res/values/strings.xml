@@ -571,8 +571,7 @@
     <string name="btn_edit_activation_prompt">Edit activation prompt</string>
     <string name="tile_api_endpoint_title">API endpoint</string>
     <string name="tile_api_endpoint_desc">This feature allows you to set your API endpoint.</string>
-    <string name="tile_autosend_title">Auto send</string>
-    <string name="tile_autosend_desc">This feature allows you to enable or disable messages auto send. When auto send is enabled, the app will automatically send messages without pressing \'Send\' button once listening is finished.</string>
+    <string name="tile_autosend_title">Auto Send</string>
     <string name="tile_tts_voice_title">TTS Voice</string>
     <string name="tile_tts_voice_desc">This feature allows you to set your TTS voice.</string>
     <string name="tile_voice_lang_title">Voice language</string>
@@ -997,15 +996,11 @@
     <string name="tile_voice_settings_title">Voice &amp; Speech</string>
     <string name="tile_voice_settings_subtitle">Settings related to transcription and text to speech.</string>
     <string name="tile_voice_settings_desc">Everything related to speech in one place: text-to-speech voice and engine, speech-to-text (dictation) engine, hands-free mode, voice-activity detection, and audio feedback. Tap to open.</string>
-    <string name="voice_section_tts">Text-to-speech</string>
     <string name="always_speak_responses">Always Speak Responses</string>
     <string name="read_formatting_language_toggle">Read Formatting Language</string>
-    <string name="voice_section_stt">Speech-to-text (dictation)</string>
-    <string name="voice_section_handsfree">Hands-free &amp; voice activity</string>
     <string name="voice_section_feedback">Audio feedback</string>
     <string name="tile_transcription_sound_title">Transcription tone</string>
     <string name="tile_transcription_sound_desc">Play a short, pleasant ascending tone once your speech has been transcribed, so you know dictation finished and a reply is on the way without watching the screen. Uses the alarm volume, so it stays audible even when the phone is on silent.</string>
-    <string name="voice_section_debug">Advanced &amp; debugging</string>
     <string name="tile_vad_log_energy_title">Energy VAD logging</string>
     <string name="tile_vad_log_energy_desc">Record voice diagnostics: every hands-free decision (mic opened/closed and why, readback, failures) goes to the Event log in Settings, plus detailed Energy VAD state (RMS, noise floor, timing) to logcat. Turn off when not debugging.</string>
     <string name="tile_vad_log_webrtc_title">WebRTC VAD logging</string>
