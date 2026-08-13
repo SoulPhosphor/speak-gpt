@@ -244,6 +244,7 @@ import org.teslasoft.assistant.imagegen.ImageProviderAdapters
 import org.teslasoft.assistant.imagegen.ImagineCommand
 import org.teslasoft.assistant.imagegen.StreamedToolCallAssembler
 import org.teslasoft.assistant.imagegen.ToolCapability
+import org.teslasoft.assistant.imagegen.ToolCapabilityScope
 import org.teslasoft.assistant.imagegen.ToolCapabilityStore
 import org.teslasoft.assistant.imagegen.ToolSupportClassifier
 import org.teslasoft.assistant.imagegen.failureActionFor
@@ -5992,13 +5993,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** §8: UNKNOWN tries the tool, SUPPORTED keeps sending it, UNSUPPORTED
      *  withholds it until the endpoint editor's reset forgets the record. */
+    private fun chatToolCapabilityScopeKey(selectedModel: String): String {
+        val endpoint = apiEndpointObject
+        val favorite = favoriteForActiveEndpoint(selectedModel)
+        return ToolCapabilityScope.key(
+            selectedModel,
+            openRouterRouting = endpoint?.isOpenRouterRouting() == true,
+            routingType = favorite?.routingType ?: FavoriteModelObject.ROUTING_AUTOMATIC,
+            selectedProvider = favorite?.selectedProvider.orEmpty(),
+            allowFallbacks = favorite?.allowFallbacks != false,
+            providerOrder = favorite?.providerOrder ?: emptyList(),
+            ignoredProviders = favorite?.ignoredProviders ?: emptyList()
+        )
+    }
+
     private fun chatModelMayReceiveImageTool(selectedModel: String): Boolean {
         return try {
             val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
             if (chatEndpointId.isEmpty()) return true
             val chatEndpoint =
                 apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId) ?: return true
-            ToolCapabilityStore.get(chatEndpoint.toolCapabilityByModel, selectedModel) !=
+            ToolCapabilityStore.get(
+                chatEndpoint.toolCapabilityByModel,
+                chatToolCapabilityScopeKey(selectedModel)
+            ) !=
                 ToolCapability.UNSUPPORTED
         } catch (_: Exception) {
             true
@@ -6008,14 +6026,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Persist a learned tool capability for this chat's exact
      *  endpoint/model pair — same persistence shape as vision capability.
      *  Learning must never break a turn. */
-    private fun recordChatToolCapability(capability: ToolCapability) {
+    private fun recordChatToolCapability(selectedModel: String, capability: ToolCapability) {
         try {
             val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
-            if (chatEndpointId.isEmpty() || model.isBlank()) return
+            if (chatEndpointId.isEmpty() || selectedModel.isBlank()) return
             val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
             val endpoint = prefs.getApiEndpoint(this, chatEndpointId)
             val updated =
-                ToolCapabilityStore.set(endpoint.toolCapabilityByModel, model, capability)
+                ToolCapabilityStore.set(
+                    endpoint.toolCapabilityByModel,
+                    chatToolCapabilityScopeKey(selectedModel),
+                    capability
+                )
             if (updated != endpoint.toolCapabilityByModel) {
                 endpoint.toolCapabilityByModel = updated
                 prefs.setApiEndpoint(this, endpoint)
@@ -6034,12 +6056,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (chatEndpointId.isEmpty()) ToolCapability.UNKNOWN
             else ToolCapabilityStore.get(
                 apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId)?.toolCapabilityByModel,
-                model
+                chatToolCapabilityScopeKey(model)
             )
         } catch (_: Exception) {
             ToolCapability.UNKNOWN
         }
-        recordChatToolCapability(ToolCapability.UNSUPPORTED)
+        recordChatToolCapability(model, ToolCapability.UNSUPPORTED)
         runOnUiThread {
             if (messages.isNotEmpty() && messages.last()["isBot"] == true &&
                 messages.last()["message"].toString().isEmpty()
@@ -8880,7 +8902,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // endpoint ACCEPTED tools for this model — whether or not the model
         // chose to use them. Refusal to call the tool never marks anything.
         if (chatCompletionRequest.tools != null) {
-            recordChatToolCapability(ToolCapability.SUPPORTED)
+            recordChatToolCapability(model, ToolCapability.SUPPORTED)
         }
 
         // §7: an actual tool call is the ONLY thing that triggers a second

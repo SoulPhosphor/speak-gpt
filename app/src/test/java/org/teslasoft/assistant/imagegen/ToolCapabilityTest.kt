@@ -18,8 +18,10 @@ package org.teslasoft.assistant.imagegen
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 
 /**
  * §8 of image-generation-rebuild-plan.md: tool capability is tracked per
@@ -63,6 +65,74 @@ class ToolCapabilityTest {
         json = ToolCapabilityStore.set(json, "alpha", ToolCapability.UNSUPPORTED)
         val entries = ToolCapabilityStore.entries(json)
         assertEquals(listOf("alpha", "zeta"), entries.map { it.first })
+    }
+
+    // --- OpenRouter routing scope ---
+
+    @Test
+    fun directEndpointsKeepTheHistoricalModelOnlyKey() {
+        assertEquals(
+            "deepseek/deepseek-v3.1",
+            ToolCapabilityScope.key("deepseek/deepseek-v3.1", openRouterRouting = false)
+        )
+    }
+
+    @Test
+    fun onlyProvidersAndAutomaticDoNotShareCapabilityLearning() {
+        val automatic = ToolCapabilityScope.key(
+            "deepseek/deepseek-v3.1", openRouterRouting = true
+        )
+        val deepSeekOnly = ToolCapabilityScope.key(
+            "deepseek/deepseek-v3.1",
+            openRouterRouting = true,
+            routingType = FavoriteModelObject.ROUTING_ONLY,
+            selectedProvider = "DeepSeek"
+        )
+        val deepInfraOnly = ToolCapabilityScope.key(
+            "deepseek/deepseek-v3.1",
+            openRouterRouting = true,
+            routingType = FavoriteModelObject.ROUTING_ONLY,
+            selectedProvider = "DeepInfra"
+        )
+
+        assertNotEquals(automatic, deepSeekOnly)
+        assertNotEquals(deepSeekOnly, deepInfraOnly)
+
+        val json = ToolCapabilityStore.set("", deepSeekOnly, ToolCapability.UNSUPPORTED)
+        assertEquals(ToolCapability.UNSUPPORTED, ToolCapabilityStore.get(json, deepSeekOnly))
+        assertEquals(ToolCapability.UNKNOWN, ToolCapabilityStore.get(json, automatic))
+        assertEquals(ToolCapability.UNKNOWN, ToolCapabilityStore.get(json, deepInfraOnly))
+    }
+
+    @Test
+    fun preferredScopeIncludesOrderFallbackAndIgnoreConfiguration() {
+        val first = ToolCapabilityScope.key(
+            "model",
+            openRouterRouting = true,
+            routingType = FavoriteModelObject.ROUTING_PREFERRED,
+            allowFallbacks = false,
+            providerOrder = listOf("DeepInfra", "Together"),
+            ignoredProviders = listOf("OpenAI", "Fireworks")
+        )
+        val reordered = ToolCapabilityScope.key(
+            "model",
+            openRouterRouting = true,
+            routingType = FavoriteModelObject.ROUTING_PREFERRED,
+            allowFallbacks = false,
+            providerOrder = listOf("Together", "DeepInfra"),
+            ignoredProviders = listOf("fireworks", "openai")
+        )
+        val ignoredOrderOnly = ToolCapabilityScope.key(
+            "model",
+            openRouterRouting = true,
+            routingType = FavoriteModelObject.ROUTING_PREFERRED,
+            allowFallbacks = false,
+            providerOrder = listOf("DeepInfra", "Together"),
+            ignoredProviders = listOf("fireworks", "openai")
+        )
+
+        assertNotEquals(first, reordered)
+        assertEquals(first, ignoredOrderOnly)
     }
 
     // --- the §29 strictness guard ---

@@ -18,9 +18,10 @@ package org.teslasoft.assistant.imagegen
 
 import org.json.JSONException
 import org.json.JSONObject
+import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 
 /**
- * Whether a specific conversation model at a specific endpoint accepts
+ * Whether a specific conversation model at a specific endpoint/route accepts
  * tool-bearing requests (image-generation-rebuild-plan.md §8). The same
  * three-state pattern as image-input capability, but a SEPARATE
  * capability: no list of allowed models exists anywhere.
@@ -43,7 +44,7 @@ enum class ToolCapability(val key: String) {
 }
 
 /**
- * Pure model-id → tool capability map, encoded as a compact JSON object —
+ * Pure capability-key → tool capability map, encoded as a compact JSON object —
  * the same shape as ImageCapabilityStore. Only SUPPORTED and UNSUPPORTED
  * entries persist; setting UNKNOWN removes the entry, which is also what
  * the §8 reset action does so a provider upgrade is never permanent.
@@ -94,6 +95,49 @@ object ToolCapabilityStore {
             null
         }
     }
+}
+
+/**
+ * Builds the persistence key for tool support. Direct API endpoints keep the
+ * historical model-only key. OpenRouter profiles include the saved routing
+ * configuration because tool compatibility is endpoint-specific: learning
+ * that one Only provider cannot accept tools must not disable tools for
+ * Automatic or for another provider serving the same model.
+ */
+object ToolCapabilityScope {
+
+    fun key(
+        modelId: String,
+        openRouterRouting: Boolean,
+        routingType: String = FavoriteModelObject.ROUTING_AUTOMATIC,
+        selectedProvider: String = "",
+        allowFallbacks: Boolean = true,
+        providerOrder: List<String> = emptyList(),
+        ignoredProviders: List<String> = emptyList()
+    ): String {
+        if (!openRouterRouting) return modelId
+
+        val normalizedMode = when (routingType) {
+            FavoriteModelObject.ROUTING_ONLY -> FavoriteModelObject.ROUTING_ONLY
+            FavoriteModelObject.ROUTING_PREFERRED -> FavoriteModelObject.ROUTING_PREFERRED
+            else -> FavoriteModelObject.ROUTING_AUTOMATIC
+        }
+        val route = when (normalizedMode) {
+            FavoriteModelObject.ROUTING_ONLY ->
+                "only:${part(selectedProvider.lowercase())}"
+            FavoriteModelObject.ROUTING_PREFERRED ->
+                "preferred:${if (allowFallbacks) 1 else 0}:" +
+                    providerOrder.joinToString(separator = "") { part(it.lowercase()) } + ":" +
+                    ignoredProviders.map { it.lowercase() }.sorted()
+                        .joinToString(separator = "") { part(it) }
+            else ->
+                "automatic:" + ignoredProviders.map { it.lowercase() }.sorted()
+                    .joinToString(separator = "") { part(it) }
+        }
+        return "route-v2:${part(modelId)}:$route"
+    }
+
+    private fun part(value: String): String = "${value.length}:$value"
 }
 
 /**

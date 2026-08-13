@@ -42,6 +42,9 @@ import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.imagegen.ToolCapability
+import org.teslasoft.assistant.imagegen.ToolCapabilityScope
+import org.teslasoft.assistant.imagegen.ToolCapabilityStore
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -121,6 +124,24 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             pendingAllowFallbacks = data.getBooleanExtra(ChooseProviderActivity.EXTRA_ALLOW_FALLBACKS, true)
             pendingProviderOrder = data.getStringArrayListExtra(ChooseProviderActivity.EXTRA_PROVIDER_ORDER) ?: emptyList()
             pendingIgnoredProviders = data.getStringArrayListExtra(ChooseProviderActivity.EXTRA_IGNORED_PROVIDERS) ?: emptyList()
+            val routeToolCapability = ToolCapability.fromKey(
+                data.getStringExtra(ChooseProviderActivity.EXTRA_ROUTE_TOOL_CAPABILITY)
+            )
+            if (model.isNotBlank() && routeToolCapability != ToolCapability.UNKNOWN) {
+                val scopeKey = ToolCapabilityScope.key(
+                    model,
+                    openRouterRouting = true,
+                    routingType = pendingRoutingType,
+                    selectedProvider = pendingSelectedProvider,
+                    allowFallbacks = pendingAllowFallbacks,
+                    providerOrder = pendingProviderOrder,
+                    ignoredProviders = pendingIgnoredProviders
+                )
+                currentToolCapabilityJson = ToolCapabilityStore.set(
+                    currentToolCapabilityJson, scopeKey, routeToolCapability
+                )
+                refreshToolCapabilityReset()
+            }
             chooseProviderVisited = true
             if (model != selectedModel) fieldContextWindow?.setText("")
             selectedModel = model

@@ -83,6 +83,69 @@ class ModelCleanupPolicyTest {
     }
 
     @Test
+    fun acceptedOpenRouterAliasIsNotMarkedUnavailable() {
+        val oldAlias = ModelIdentity("openrouter", "deepseek/deepseek-chat-v3.1")
+        val report = ModelCleanupPolicy.update(
+            previous = ModelCleanupReport(),
+            currentTargets = setOf(oldAlias),
+            // The client adds the original saved id after OpenRouter's targeted
+            // lookup resolves it to the current canonical model.
+            checks = mapOf(
+                "openrouter" to EndpointCatalogCheck.Checked(
+                    setOf("deepseek/deepseek-v3.1", oldAlias.modelId)
+                )
+            ),
+            endpointLabels = emptyMap(),
+            generatedAtMillis = 10L
+        )
+
+        assertTrue(report.unavailable.isEmpty())
+    }
+
+    @Test
+    fun inconclusiveAliasLookupCannotCreateADeletionCandidate() {
+        val oldAlias = ModelIdentity("openrouter", "deepseek/deepseek-chat-v3.1")
+        val report = ModelCleanupPolicy.update(
+            previous = ModelCleanupReport(),
+            currentTargets = setOf(oldAlias),
+            checks = mapOf(
+                "openrouter" to EndpointCatalogCheck.Checked(
+                    modelIds = setOf("deepseek/deepseek-v3.1"),
+                    indeterminateModelIds = setOf(oldAlias.modelId)
+                )
+            ),
+            endpointLabels = emptyMap(),
+            generatedAtMillis = 10L
+        )
+
+        assertTrue(report.unavailable.isEmpty())
+        assertEquals(setOf("openrouter"), report.uncheckedEndpointIds)
+    }
+
+    @Test
+    fun inconclusiveAliasRecheckPreservesAnExistingWarning() {
+        val oldAlias = ModelIdentity("openrouter", "deepseek/deepseek-chat-v3.1")
+        val report = ModelCleanupPolicy.update(
+            previous = ModelCleanupReport(
+                generatedAtMillis = 1L,
+                unavailable = setOf(oldAlias)
+            ),
+            currentTargets = setOf(oldAlias),
+            checks = mapOf(
+                "openrouter" to EndpointCatalogCheck.Checked(
+                    modelIds = setOf("deepseek/deepseek-v3.1"),
+                    indeterminateModelIds = setOf(oldAlias.modelId)
+                )
+            ),
+            endpointLabels = emptyMap(),
+            generatedAtMillis = 10L
+        )
+
+        assertEquals(setOf(oldAlias), report.unavailable)
+        assertEquals(setOf("openrouter"), report.uncheckedEndpointIds)
+    }
+
+    @Test
     fun localPruneRemovesDeletedReferencesWithoutNetworkCheck() {
         val report = ModelCleanupReport(
             generatedAtMillis = 1L,

@@ -77,12 +77,13 @@ class ProviderRoutingSerializerTest {
     }
 
     @Test
-    fun onlySerializesSingleOrderWithFallbacksDisabled() {
+    fun onlySerializesLiteralOnlyWithFallbacksDisabled() {
         val decision = RoutingDecision(RoutingBlock.NONE, only = "deepinfra")
         val obj = ProviderRoutingSerializer.providerObject(decision)!!
-        val order = obj.getAsJsonArray("order")
-        assertEquals(1, order.size())
-        assertEquals("deepinfra", order[0].asString)
+        val only = obj.getAsJsonArray("only")
+        assertEquals(1, only.size())
+        assertEquals("deepinfra", only[0].asString)
+        assertFalse(obj.has("order"))
         assertFalse(obj.get("allow_fallbacks").asBoolean)
         // Only mode never sends an ignore list.
         assertFalse(obj.has("ignore"))
@@ -104,7 +105,7 @@ class ProviderRoutingSerializerTest {
         // Model and messages are untouched — model selection stays independent.
         assertEquals("openai/gpt-4o", root.get("model").asString)
         assertTrue(root.has("messages"))
-        assertEquals("deepinfra", root.getAsJsonObject("provider").getAsJsonArray("order")[0].asString)
+        assertEquals("deepinfra", root.getAsJsonObject("provider").getAsJsonArray("only")[0].asString)
     }
 
     @Test
