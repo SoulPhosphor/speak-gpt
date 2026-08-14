@@ -89,12 +89,18 @@ class ChatPresentationContractTest {
     @Test
     fun layoutsUseApprovedGeometryResourcesAndKeepExistingActions() {
         val dimens = source("src/main/res/values/dimens.xml")
-        assertTrue(dimens.contains("name=\"chat_message_speaker_inset\">27dp"))
-        assertTrue(dimens.contains("name=\"chat_message_user_left_inset\">26dp"))
+        assertTrue(dimens.contains("name=\"chat_message_speaker_inset\">25dp"))
+        assertTrue(dimens.contains("name=\"chat_message_ai_right_inset\">28dp"))
+        assertTrue(dimens.contains("name=\"chat_message_user_left_inset\">49dp"))
         assertTrue(dimens.contains("name=\"chat_message_content_padding\">14dp"))
-        assertTrue(dimens.contains("name=\"chat_message_unit_spacing\">53dp"))
-        assertTrue(dimens.contains("name=\"chat_portrait_size\">76dp"))
-        assertTrue(dimens.contains("name=\"chat_portrait_text_clearance\">40dp"))
+        assertTrue(dimens.contains("name=\"chat_message_unit_spacing\">22dp"))
+        assertTrue(dimens.contains("name=\"chat_portrait_size\">96dp"))
+        assertTrue(dimens.contains("name=\"chat_portrait_edge_inset\">17dp"))
+        assertTrue(dimens.contains("name=\"chat_portrait_top_offset\">10dp"))
+        assertTrue(dimens.contains("name=\"chat_name_portrait_edge_inset\">127dp"))
+        assertTrue(dimens.contains("name=\"chat_name_portrait_top\">10dp"))
+        assertTrue(dimens.contains("name=\"chat_name_body_gap\">9dp"))
+        assertTrue(dimens.contains("name=\"chat_portrait_text_clearance\">0dp"))
 
         for (path in messageLayouts) {
             val xml = source(path)
@@ -102,6 +108,7 @@ class ChatPresentationContractTest {
             assertTrue(path, xml.contains("@dimen/chat_message_content_padding"))
             assertTrue(path, xml.contains("@dimen/chat_message_unit_spacing"))
             assertTrue(path, xml.contains("@dimen/chat_portrait_size"))
+            assertTrue(path, xml.contains("PortraitAwareMessageTextView"))
 
             val actions = listOf("btn_speak", "btn_share", "btn_retry", "btn_copy", "btn_edit")
             val positions = actions.map { xml.indexOf("@+id/$it") }
