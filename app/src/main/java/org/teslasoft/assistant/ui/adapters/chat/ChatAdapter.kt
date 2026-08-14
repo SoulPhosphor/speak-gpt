@@ -49,6 +49,7 @@ import android.text.style.LineHeightSpan
 import android.text.style.TtsSpan
 import android.util.DisplayMetrics
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -424,6 +425,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val generatedImageError: TextView = itemView.findViewById(R.id.generated_image_error)
         private val btnImagePrompt: MaterialButton = itemView.findViewById(R.id.btn_image_prompt)
         private val btnImageDownload: ImageButton = itemView.findViewById(R.id.btn_image_download)
+        // Generated-image Share/Copy live on the image action row (owner ask,
+        // Aug 14 2026); they delegate to the action-bar buttons so behavior is
+        // identical. Present on both message layouts.
+        private val btnImageShare: ImageButton = itemView.findViewById(R.id.btn_image_share)
+        private val btnImageCopy: ImageButton = itemView.findViewById(R.id.btn_image_copy)
+        // The horizontal container holding the bubble; centered for generated
+        // images so the picture sits centered on screen under the portrait.
+        private val messageRow: LinearLayout? = itemView.findViewById(R.id.linearLayout3)
         private var boundGeneratedImagePath: String? = null
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btn_edit)
@@ -512,11 +521,23 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 clipboard.setPrimaryClip(clip)
                 Toast.makeText(context, context.getString(R.string.label_copy), Toast.LENGTH_SHORT).show()
             }
+            // Copy defaults to visible on the action bar; the image branch hides
+            // it there because a generated image shows Copy on its own row.
+            btnCopy.visibility = View.VISIBLE
+            // The image-row Share/Copy forward to the action-bar buttons so the
+            // share and clipboard behavior is defined in exactly one place.
+            btnImageShare.setOnClickListener { btnShare.callOnClick() }
+            btnImageCopy.setOnClickListener { btnCopy.callOnClick() }
 
             if (isGeneratedImage) {
                 if (chatMessage["isBot"] == true) {
                     message.visibility = View.GONE
                 }
+                // Share and Copy move onto the image's own action row, so hide
+                // the action-bar copies. Share visibility for a bot message was
+                // already set VISIBLE by updateShareButton above.
+                btnShare.visibility = View.GONE
+                btnCopy.visibility = View.GONE
                 processGeneratedImageFile(chatMessage)
             } else {
                 boundGeneratedImagePath = null
@@ -539,6 +560,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 generatedImageError.visibility = View.GONE
                 btnImagePrompt.visibility = View.GONE
                 btnImageDownload.visibility = View.GONE
+                btnImageShare.visibility = View.GONE
+                btnImageCopy.visibility = View.GONE
 
                 btnShare.setOnClickListener {
                     sharePlainText(context, chatMessage["message"].toString())
@@ -868,6 +891,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          */
         private fun updatePresentation(chatMessage: HashMap<String, Any>) {
             val isBot = chatMessage["isBot"] == true
+            val isImage = chatMessage["message"].toString().startsWith("~file:")
             val showPortrait = preferences.getShowChatProfileImages()
             val showName = preferences.getShowChatNames()
             val showBubble = if (isBot) {
@@ -899,7 +923,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 if (isBot) displayAvatar() else displayUserAvatar()
             }
 
-            updateIdentityGeometry(isBot, showPortrait, showName, showBubble)
+            updateIdentityGeometry(isBot, showPortrait, showName, showBubble, isImage)
             updateBubbleDecoration(isBot, showBubble)
         }
 
@@ -949,15 +973,33 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             isBot: Boolean,
             showPortrait: Boolean,
             showName: Boolean,
-            showBubble: Boolean
+            showBubble: Boolean,
+            isImage: Boolean
         ) {
+            // A generated image with a portrait drops fully below the portrait
+            // and centers on screen instead of tucking under the overlapping
+            // corner (owner ask, Aug 14 2026). The push equals the portrait's
+            // own reach below the bubble top: size + its negative top offset.
+            val imageBelowPortrait = isImage && showPortrait
             val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
             bubbleParams.topMargin = when {
+                imageBelowPortrait -> dimensionPixelSize(R.dimen.chat_portrait_size) +
+                    dimensionPixelSize(R.dimen.chat_portrait_top_offset)
                 showPortrait -> dimensionPixelSize(R.dimen.chat_portrait_vertical_offset)
                 showName -> username.lineHeight / 2
                 else -> 0
             }
             bubbleBg.layoutParams = bubbleParams
+
+            // Center the bubble in the row for a generated image shown under a
+            // portrait; otherwise keep it hugging the speaker's side (start for
+            // AI, end for user). A no-portrait image keeps its side alignment —
+            // the owner's ask was scoped to the portrait case.
+            messageRow?.gravity = when {
+                imageBelowPortrait -> Gravity.CENTER_HORIZONTAL
+                isBot -> Gravity.START
+                else -> Gravity.END
+            }
             val contentPadding = dimensionPixelSize(R.dimen.chat_message_content_padding)
             bubbleBg.setPadding(
                 contentPadding,
@@ -1460,6 +1502,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             generatedImageError.visibility = View.GONE
             btnImagePrompt.visibility = View.VISIBLE
             btnImageDownload.visibility = View.GONE
+            btnImageShare.visibility = View.GONE
+            btnImageCopy.visibility = View.GONE
             generatedImage.setOnClickListener(null)
             generatedImage.setOnLongClickListener(null)
             btnImagePrompt.setOnClickListener { showGeneratedImagePrompt(chatMessage) }
@@ -1539,6 +1583,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                         generatedImageError.visibility = View.GONE
                         generatedImage.visibility = View.VISIBLE
                         btnImageDownload.visibility = View.VISIBLE
+                        btnImageShare.visibility = View.VISIBLE
+                        btnImageCopy.visibility = View.VISIBLE
                         return false
                     }
                 })
@@ -1586,6 +1632,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             generatedImage.visibility = View.INVISIBLE
             generatedImageError.visibility = View.VISIBLE
             btnImageDownload.visibility = View.GONE
+            btnImageShare.visibility = View.GONE
+            btnImageCopy.visibility = View.GONE
         }
 
         private fun showGeneratedImagePrompt(chatMessage: HashMap<String, Any>) {

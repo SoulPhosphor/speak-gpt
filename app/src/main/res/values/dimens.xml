@@ -64,11 +64,11 @@
          Aug 14 2026) — see chat_name_bubble_top_margin/edge_inset below for
          the separate bubble-ON values. -->
     <dimen name="chat_name_bubble_edge_offset">1dp</dimen>
-    <!-- No-portrait, bubble-ON name placement (owner ask, Aug 14 2026: the
-         name rode too high on the bubble's top border and sat too close to
-         the screen edge). Moves the name further inside the bubble and
-         further from the edge than the bubble-off values above; the
-         bubble-off presentation keeps its original numbers. -->
-    <dimen name="chat_name_bubble_top_margin">6dp</dimen>
-    <dimen name="chat_name_bubble_edge_inset">10dp</dimen>
+    <!-- No-portrait, bubble-ON name placement (owner ask, Aug 14 2026). The
+         vertical position was already fine, so it keeps the bubble-off top
+         margin (0dp); only the horizontal inset changes — the name sits 2dp
+         inside the bubble's edge instead of 1dp. The bubble-off presentation
+         keeps its original numbers. -->
+    <dimen name="chat_name_bubble_top_margin">0dp</dimen>
+    <dimen name="chat_name_bubble_edge_inset">2dp</dimen>
 </resources>

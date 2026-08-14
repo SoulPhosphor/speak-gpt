@@ -136,6 +136,31 @@
                         android:src="@drawable/ic_download"
                         android:tooltipText="@string/image_gen_save_action"
                         android:visibility="gone" />
+
+                    <!-- For a generated image the Share and Copy actions sit on
+                         this same row as Prompt and Download, instead of on the
+                         separate action bar below (owner ask, Aug 14 2026). The
+                         action-bar Share/Copy are hidden for images; these
+                         delegate to them so the behavior is identical. -->
+                    <ImageButton
+                        android:id="@+id/btn_image_share"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Share message"
+                        android:src="@drawable/ic_share"
+                        android:tooltipText="Share message"
+                        android:visibility="gone" />
+
+                    <ImageButton
+                        android:id="@+id/btn_image_copy"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/btn_copy"
+                        android:src="@drawable/ic_copy"
+                        android:tooltipText="@string/btn_copy"
+                        android:visibility="gone" />
                 </LinearLayout>
             </LinearLayout>
 
