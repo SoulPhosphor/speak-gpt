@@ -876,20 +876,6 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
-     * Get Chats autosave
-     * */
-    fun getChatsAutosave() : Boolean {
-        return getGlobalBoolean("chats_autosave", false)
-    }
-
-    /**
-     * Set Chats autosave
-     * */
-    fun setChatsAutosave(state: Boolean) {
-        putGlobalBoolean("chats_autosave", state)
-    }
-
-    /**
      * Set temperature. Min value 0, max 2
      *
      * @param temperature temperature

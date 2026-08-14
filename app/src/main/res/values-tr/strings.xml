@@ -316,8 +316,6 @@
     <string name="tile_crash_log_desc">Bu özellik, çökme günlüğünü görüntülemenize olanak tanır.</string>
     <string name="tile_events_log_title">Olay günlüğü</string>
     <string name="tile_events_log_desc">Bu özellik, olay günlüğünü görüntülemenize olanak tanır. Bu günlüğü toplamaz, hassas bilgiler içerebilir. Bir hata bildirmek istiyorsanız bu günlüğü kullanın.</string>
-    <string name="tile_autosave_title">Sohbetleri otomatik kaydet</string>
-    <string name="tile_autosave_desc">Bu özellik, asistan penceresinde sohbetleri otomatik kaydetmeyi etkinleştirmenize olanak tanır. Sohbetleri otomatik kaydetme etkinleştirildiğinde, uygulama tüm sohbetleri cihaz depolamasına kaydedecektir.</string>
     <string name="tile_show_chat_errors_title">Sohbet hatalarını göster</string>
     <string name="tile_show_chat_errors_desc">Bu özellik, sohbet hatalarını etkinleştirmenize olanak tanır. Sohbet hataları etkinleştirildiğinde, SpeakGPT oluşan hataları sohbette gösterecektir.</string>
     <string name="on">Açık</string>

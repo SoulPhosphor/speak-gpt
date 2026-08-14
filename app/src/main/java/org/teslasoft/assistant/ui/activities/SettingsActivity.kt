@@ -62,7 +62,6 @@ class SettingsActivity : FragmentActivity() {
     private var rowAppearance: LinearLayout? = null
     private var rowAboutApp: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
-    private var tileChatsAutoSave: TileFragment? = null
     private var rowAlertDebugMenu: LinearLayout? = null
     // private var threadLoading: LinearLayout? = null
     private var root: ScrollView? = null
@@ -93,7 +92,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.constraintLayout8, true)
         transition.excludeTarget(R.id.tile_images, true)
         transition.excludeTarget(R.id.tile_voice_settings, true)
-        transition.excludeTarget(R.id.constraintLayout13, true)
         transition.excludeTarget(R.id.constraintLayout14, true)
         transition.excludeTarget(R.id.constraintLayout16, true)
         transition.excludeTarget(R.id.activity_new_settings_title, true)
@@ -113,7 +111,6 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_appearance, true)
         transition.excludeTarget(R.id.tile_about_app, true)
         transition.excludeTarget(R.id.tile_documentation, true)
-        transition.excludeTarget(R.id.tile_chats_autosave, true)
         transition.excludeTarget(R.id.tile_alert_debug_menu, true)
 
         val transition2 = TransitionInflater.from(this).inflateTransition(android.R.transition.move).apply {
@@ -126,7 +123,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.constraintLayout8, true)
         transition2.excludeTarget(R.id.tile_images, true)
         transition2.excludeTarget(R.id.tile_voice_settings, true)
-        transition2.excludeTarget(R.id.constraintLayout13, true)
         transition2.excludeTarget(R.id.constraintLayout14, true)
         transition2.excludeTarget(R.id.constraintLayout16, true)
         transition2.excludeTarget(R.id.tile_characters, true)
@@ -144,7 +140,6 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_appearance, true)
         transition2.excludeTarget(R.id.tile_about_app, true)
         transition2.excludeTarget(R.id.tile_documentation, true)
-        transition2.excludeTarget(R.id.tile_chats_autosave, true)
         transition2.excludeTarget(R.id.tile_alert_debug_menu, true)
 
         // Set the transition as the shared element enter transition
@@ -189,17 +184,10 @@ class SettingsActivity : FragmentActivity() {
             createFragments5()
         }
 
-        val t2 = Thread {
-            createFragments7()
-        }
-
         t1.start()
-        t2.start()
-
         t1.join()
 
         Thread {
-            t2.join()
             val fragmentTransaction = placeFragments()
 
             runOnUiThread {
@@ -244,29 +232,8 @@ class SettingsActivity : FragmentActivity() {
         t5.join()
     }
 
-    private fun createFragments7() {
-        val t7 = Thread {
-            tileChatsAutoSave = TileFragment.newInstance(
-                preferences?.getChatsAutosave() == true,
-                true,
-                getString(R.string.tile_autosave_title),
-                null,
-                getString(R.string.on),
-                getString(R.string.off),
-                R.drawable.ic_experiment,
-                false,
-                chatId,
-                getString(R.string.tile_autosave_desc)
-            )
-        }
-
-        t7.start()
-        t7.join()
-    }
-
     private fun placeFragments() : FragmentTransaction {
         val operation = supportFragmentManager.beginTransaction()
-            .replace(R.id.tile_chats_autosave, tileChatsAutoSave!!)
             .replace(R.id.tile_documentation, tileDocumentation!!)
 
         return operation
@@ -330,14 +297,6 @@ class SettingsActivity : FragmentActivity() {
         rowAlertDebugMenu?.setOnClickListener {
             startActivity(Intent(this, AlertDebugMenuActivity::class.java).putExtra("chatId", chatId))
         }
-
-        tileChatsAutoSave?.setOnCheckedChangeListener { isChecked -> run {
-            if (isChecked) {
-                preferences?.setChatsAutosave(true)
-            } else {
-                preferences?.setChatsAutosave(false)
-            }
-        }}
 
         tileDocumentation?.setOnTileClickListener {
             startActivity(Intent(this, DocumentationActivity::class.java).putExtra("chatId", chatId))

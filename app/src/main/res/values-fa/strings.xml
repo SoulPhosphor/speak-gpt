@@ -315,8 +315,6 @@
     <string name="tile_crash_log_desc">این ویژگی به شما امکان مشاهده گزارش خرابی را می‌دهد.</string>
     <string name="tile_events_log_title">گزارش رویداد</string>
     <string name="tile_events_log_desc">این ویژگی به شما امکان مشاهده گزارش رویداد را می‌دهد. ما این گزارش را جمع‌آوری نمی‌کنیم زیرا ممکن است حاوی اطلاعات حساس باشد. اگر می‌خواهید اشکالی را گزارش کنید، از این گزارش استفاده کنید.</string>
-    <string name="tile_autosave_title">ذخیره خودکار گفتگوها</string>
-    <string name="tile_autosave_desc">این ویژگی به شما امکان فعال کردن ذخیره خودکار گفتگوها در پنجره دستیار را می‌دهد. وقتی ذخیره خودکار گفتگوها فعال باشد، این برنامه تمام گفتگوها را در حافظه دستگاه ذخیره می‌کند.</string>
     <string name="tile_show_chat_errors_title">نمایش خطاهای گفتگو</string>
     <string name="tile_show_chat_errors_desc">این ویژگی به شما امکان فعال کردن خطاهای گفتگو را می‌دهد. وقتی خطاهای گفتگو فعال باشد، SpeakGPT خطاهایی که رخ داده‌اند را در گفتگو نمایش می‌دهد.</string>
     <string name="on">روشن</string>

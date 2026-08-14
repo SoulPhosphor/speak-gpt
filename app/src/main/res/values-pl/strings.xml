@@ -313,8 +313,6 @@
     <string name="tile_crash_log_desc">Ta funkcja pozwala wyświetlić dziennik awarii.</string>
     <string name="tile_events_log_title">Dziennik zdarzeń</string>
     <string name="tile_events_log_desc">Ta funkcja pozwala wyświetlić dziennik zdarzeń. Nie zbieramy tego dziennika, ponieważ może zawierać informacje poufne. Użyj tego dziennika, jeśli chcesz zgłosić błąd.</string>
-    <string name="tile_autosave_title">Automatyczne zapisywanie rozmów</string>
-    <string name="tile_autosave_desc">Ta funkcja pozwala włączyć automatyczne zapisywanie rozmów w oknie asystenta. Gdy automatyczne zapisywanie rozmów jest włączone, aplikacja będzie zapisywała wszystkie rozmowy w pamięci urządzenia.</string>
     <string name="tile_show_chat_errors_title">Pokaż błędy na czacie</string>
     <string name="tile_show_chat_errors_desc">Ta funkcja pozwala na włączenie błędów czatu. Gdy błędy czatu są włączone, SpeakGPT pokaże błędy w czacie, jeśli wystąpią.</string>
     <string name="on">Włączone</string>

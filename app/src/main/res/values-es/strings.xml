@@ -319,8 +319,6 @@
     <string name="tile_crash_log_desc">Esta función te permite ver el registro de errores.</string>
     <string name="tile_events_log_title">Registro de eventos</string>
     <string name="tile_events_log_desc">Esta función te permite ver el registro de eventos. No recopilamos este registro ya que puede contener información sensible. Usa este registro si deseas reportar un error.</string>
-    <string name="tile_autosave_title">Auto-guardar chats</string>
-    <string name="tile_autosave_desc">Esta función te permite habilitar el auto-guardado de chats en la ventana del asistente. Cuando el auto-guardado de chats está habilitado, la aplicación guardará todos los chats en el almacenamiento del dispositivo.</string>
     <string name="tile_show_chat_errors_title">Mostrar errores de chat</string>
     <string name="tile_show_chat_errors_desc">Esta función te permite habilitar errores de chat. Cuando los errores de chat están habilitados, SpeakGPT mostrará errores en el chat si ocurren.</string>
     <string name="on">Encendido</string>

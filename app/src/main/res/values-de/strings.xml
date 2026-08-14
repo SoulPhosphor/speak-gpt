@@ -315,8 +315,6 @@
     <string name="tile_crash_log_desc">Diese Funktion ermöglicht Ihnen das Ansehen des Absturzprotokolls.</string>
     <string name="tile_events_log_title">Ereignisprotokoll</string>
     <string name="tile_events_log_desc">Diese Funktion ermöglicht Ihnen das Ansehen des Ereignisprotokolls. Wir erfassen dieses Protokoll nicht, da es sensible Informationen enthalten kann. Verwenden Sie dieses Protokoll, wenn Sie einen Fehler melden möchten.</string>
-    <string name="tile_autosave_title">Automatisches Speichern von Chats</string>
-    <string name="tile_autosave_desc">Diese Funktion ermöglicht Ihnen das automatische Speichern von Chats im Assistentenfenster. Wenn das automatische Speichern von Chats aktiviert ist, speichert die App alle Chats auf dem Gerätespeicher.</string>
     <string name="tile_show_chat_errors_title">Chat-Fehler anzeigen</string>
     <string name="tile_show_chat_errors_desc">Diese Funktion ermöglicht es Ihnen, Chat-Fehler zu aktivieren. Wenn Chat-Fehler aktiviert sind, zeigt SpeakGPT Fehler im Chat an, wenn sie auftreten.</string>
     <string name="on">Ein</string>

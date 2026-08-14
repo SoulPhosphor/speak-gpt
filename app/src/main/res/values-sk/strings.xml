@@ -312,8 +312,6 @@
     <string name="tile_crash_log_desc">Táto funkcia umožňuje zobraziť log pádu.</string>
     <string name="tile_events_log_title">Log udalostí</string>
     <string name="tile_events_log_desc">Táto funkcia umožňuje zobraziť log udalostí. Tento log nezbierame, pretože môže obsahovať citlivé informácie. Použite tento log, ak chcete nahlásiť chybu.</string>
-    <string name="tile_autosave_title">Automatické ukladanie chatov</string>
-    <string name="tile_autosave_desc">Táto funkcia umožňuje povoliť automatické ukladanie chatov v okne asistenta. Keď je povolené automatické ukladanie chatov, aplikácia uloží všetky chaty do úložiska zariadenia.</string>
     <string name="tile_show_chat_errors_title">Zobraziť chyby v chate</string>
     <string name="tile_show_chat_errors_desc">Táto funkcia umožňuje povoliť chyby v chate. Keď sú chyby v chate povolené, SpeakGPT zobrazí chyby v chate, ak nastanú.</string>
     <string name="on">Zapnuté</string>
