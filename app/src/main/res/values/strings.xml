@@ -299,8 +299,7 @@
     <string name="prompt_copy_replace_btn_ok">Okay</string>
     <string name="prompt_copy_from_header">Copy text from:</string>
     <string name="prompt_rename_title">Rename Prompt</string>
-    <string name="prompt_tab_counter">%1$d of %2$d</string>
-    <string name="prompt_empty_marker">(empty)</string>
+<string name="prompt_empty_marker">(empty)</string>
     <string name="hint_prompt_write">Write your companion prompt here…</string>
     <string name="label_error_persona_empty">Please enter a Companion name</string>
     <string name="label_persona_none">No Companion</string>

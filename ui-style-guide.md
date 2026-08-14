@@ -429,7 +429,7 @@ Used on the Edit Companion screen for the multiple-prompt variant feature. Each 
 
 `Widget.App.PromptTab`
 
-Outlined rectangle (1dp `colorOutline` stroke, 4dp corners, transparent fill). 36dp tall, 14dp horizontal padding, 14sp text. Wraps its label width up to 160dp, then ellipsizes. Uses `bg_prompt_tab` drawable — the same outlined-box pattern as `bg_field_box`.
+Outlined rectangle (1dp `colorOutline` stroke, 4dp corners, transparent fill). 36dp tall, 14dp horizontal padding, 14sp text, 160dp max width, then ellipsizes. Uses `bg_prompt_tab` drawable — the same outlined-box pattern as `bg_field_box`. The default prompt's tab label is prefixed with a green dot (`light_green`).
 
 ### Active prompt tab
 
@@ -445,19 +445,15 @@ Fixed 36x36dp square, centered "+" label. Outlined box matching the inactive tab
 
 ### Prompt tab row
 
-A `ChipGroup` with `singleLine="false"` and `chipSpacingHorizontal/Vertical="6dp"`. The tabs are plain `TextView` views styled in code — they are not Material `Chip` widgets. The `ChipGroup` provides only the wrapping-row layout.
+A `ChipGroup` with `singleLine="false"` and `chipSpacingHorizontal/Vertical="6dp"`. The tabs are plain `TextView` views styled entirely by their `setTextAppearance` style — they are not Material `Chip` widgets. The `ChipGroup` provides only the wrapping-row layout. Do not duplicate style properties (dimensions, padding, gravity, maxLines, ellipsize, maxWidth) in Kotlin; the styles own those values.
 
 ### Prompt editor frame
 
 A `ConstraintLayout` containing:
 
-1. **Tab name** — a `TextView` showing the active variant's name, left-aligned.
+1. **Tab name** — a `TextView` showing the active variant's name, left-aligned. The default prompt's name is prefixed with a green dot (`light_green`).
 2. **Three-dot menu** — an `ImageButton` (36x36dp, `ic_more_vert`) anchored to the trailing edge, opening a `PopupMenu` with: Make Default, Rename, Copy From…, Duplicate, Clear, Delete.
-3. **Text field** — the `field_prompt` `TextInputEditText`, `minLines="8"` with `scrollbars="vertical"`, transparent background, bordered by `bg_prompt_editor` (same outlined-box pattern as `bg_field_box`).
-
-### Prompt tab counter
-
-A `TextView` showing the active tab's 1-based position and total count (e.g. "3 of 5"), placed above the tab row.
+3. **Text field** — the `field_prompt` `TextInputEditText`, `minLines="8"` and `maxLines="8"` with `scrollbars="vertical"`, transparent background, bordered by `bg_prompt_editor` (same outlined-box pattern as `bg_field_box`). The bounded height makes the field scroll internally when content overflows.
 
 ## Screen sections
 

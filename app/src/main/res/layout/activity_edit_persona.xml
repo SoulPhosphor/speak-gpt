@@ -232,21 +232,6 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/label_field_prompt" />
 
-            <!-- Prompt tab counter (e.g. "3 of 5") -->
-            <TextView
-                android:id="@+id/prompt_tab_counter"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:layout_marginTop="2dp"
-                android:textColor="?attr/appSubtleTextColor"
-                android:textSize="13sp"
-                android:gravity="end"
-                app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/hint_field_prompt" />
-
             <!-- Wrapping tab row for prompt variants + add button.
                  Uses a ChipGroup for built-in wrapping without a new dependency;
                  chips are styled as prompt tabs in code, not Material chips. -->
@@ -263,7 +248,7 @@
                 app:singleSelection="false"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/prompt_tab_counter" />
+                app:layout_constraintTop_toBottomOf="@+id/hint_field_prompt" />
 
             <!-- Prompt editor frame: tab name + three-dot menu + text field -->
             <androidx.constraintlayout.widget.ConstraintLayout

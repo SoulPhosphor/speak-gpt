@@ -158,7 +158,6 @@ class EditPersonaActivity : FragmentActivity() {
     private var btnSave: ImageButton? = null
     private var btnDelete: ImageButton? = null
     private var promptTabRow: com.google.android.material.chip.ChipGroup? = null
-    private var promptTabCounter: TextView? = null
     private var promptTabName: TextView? = null
     private var btnPromptMenu: ImageButton? = null
 
@@ -243,7 +242,6 @@ class EditPersonaActivity : FragmentActivity() {
         btnSave = findViewById(R.id.btn_save)
         btnDelete = findViewById(R.id.btn_delete)
         promptTabRow = findViewById(R.id.prompt_tab_row)
-        promptTabCounter = findViewById(R.id.prompt_tab_counter)
         promptTabName = findViewById(R.id.prompt_tab_name)
         btnPromptMenu = findViewById(R.id.btn_prompt_menu)
 
@@ -593,9 +591,18 @@ class EditPersonaActivity : FragmentActivity() {
         if (activeTabIndex in promptVariants.indices) {
             val variant = promptVariants[activeTabIndex]
             fieldPrompt?.setText(variant.text)
-            promptTabName?.text = variant.name
-            val idx = activeTabIndex + 1
-            promptTabCounter?.text = getString(R.string.prompt_tab_counter, idx, promptVariants.size)
+            if (variant.isDefault) {
+                val dot = android.text.SpannableString("●  ${variant.name}")
+                dot.setSpan(
+                    android.text.style.ForegroundColorSpan(
+                        ResourcesCompat.getColor(resources, R.color.light_green, theme)
+                    ),
+                    0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                promptTabName?.text = dot
+            } else {
+                promptTabName?.text = variant.name
+            }
         }
     }
 
@@ -616,28 +623,24 @@ class EditPersonaActivity : FragmentActivity() {
             val tab = TextView(this)
             if (i == activeTabIndex) {
                 tab.setTextAppearance(R.style.Widget_App_PromptTab_Active)
-                tab.setBackgroundResource(R.drawable.bg_prompt_tab_active)
             } else {
                 tab.setTextAppearance(R.style.Widget_App_PromptTab)
-                tab.setBackgroundResource(R.drawable.bg_prompt_tab)
             }
-            val lp = com.google.android.material.chip.ChipGroup.LayoutParams(
-                com.google.android.material.chip.ChipGroup.LayoutParams.WRAP_CONTENT,
-                dpToPx(36)
-            )
-            tab.layoutParams = lp
-            tab.gravity = Gravity.CENTER
-            tab.setPadding(dpToPx(14), 0, dpToPx(14), 0)
-            tab.maxLines = 1
-            tab.ellipsize = android.text.TextUtils.TruncateAt.END
-            tab.maxWidth = dpToPx(160)
 
-            val tabLabel = if (variant.isDefault) {
-                "● ${variant.name}"
+            if (variant.isDefault) {
+                val dot = android.text.SpannableString("●  ${variant.name}")
+                if (i != activeTabIndex) {
+                    dot.setSpan(
+                        android.text.style.ForegroundColorSpan(
+                            ResourcesCompat.getColor(resources, R.color.light_green, theme)
+                        ),
+                        0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
+                tab.text = dot
             } else {
-                variant.name
+                tab.text = variant.name
             }
-            tab.text = tabLabel
 
             tab.setOnClickListener { switchToTab(i) }
             container.addView(tab)
@@ -645,16 +648,9 @@ class EditPersonaActivity : FragmentActivity() {
 
         val addBtn = TextView(this)
         addBtn.setTextAppearance(R.style.Widget_App_PromptTab_Add)
-        addBtn.setBackgroundResource(R.drawable.bg_prompt_tab)
-        val lp = com.google.android.material.chip.ChipGroup.LayoutParams(dpToPx(36), dpToPx(36))
-        addBtn.layoutParams = lp
-        addBtn.gravity = Gravity.CENTER
         addBtn.text = "+"
         addBtn.setOnClickListener { addPromptTab() }
         container.addView(addBtn)
-
-        val idx = activeTabIndex + 1
-        promptTabCounter?.text = getString(R.string.prompt_tab_counter, idx, promptVariants.size)
     }
 
     private fun addPromptTab() {
