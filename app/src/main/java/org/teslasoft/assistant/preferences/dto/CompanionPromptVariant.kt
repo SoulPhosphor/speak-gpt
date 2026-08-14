@@ -63,8 +63,13 @@ data class CompanionPromptVariant(
             }
         }
 
-        fun migrateFromSinglePrompt(prompt: String): List<CompanionPromptVariant> {
-            return listOf(CompanionPromptVariant(name = "Prompt 1", text = prompt, isDefault = true))
+        fun migrateFromSinglePrompt(prompt: String, personaId: String = ""): List<CompanionPromptVariant> {
+            val id = if (personaId.isNotBlank()) {
+                UUID.nameUUIDFromBytes("${personaId}_prompt_1".toByteArray()).toString()
+            } else {
+                UUID.randomUUID().toString()
+            }
+            return listOf(CompanionPromptVariant(id = id, name = "Prompt 1", text = prompt, isDefault = true))
         }
 
         fun defaultPrompt(variants: List<CompanionPromptVariant>): String {

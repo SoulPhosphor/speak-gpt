@@ -83,9 +83,9 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         val variants = if (variantsJson.isNotBlank()) {
             ArrayList(CompanionPromptVariant.fromJson(variantsJson))
         } else if (legacyPrompt.isNotBlank()) {
-            ArrayList(CompanionPromptVariant.migrateFromSinglePrompt(legacyPrompt))
+            ArrayList(CompanionPromptVariant.migrateFromSinglePrompt(legacyPrompt, id))
         } else {
-            ArrayList(CompanionPromptVariant.migrateFromSinglePrompt(""))
+            ArrayList(CompanionPromptVariant.migrateFromSinglePrompt("", id))
         }
         val prompt = CompanionPromptVariant.defaultPrompt(variants)
         val activationPromptId = getString(id + "_activation_prompt_id", "")

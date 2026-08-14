@@ -118,11 +118,12 @@ class EditPersonaActivity : FragmentActivity() {
         }
 
         fun readResultPersona(data: Intent): PersonaObject {
+            val personaId = data.getStringExtra(EXTRA_ID) ?: ""
             val variantsJson = data.getStringExtra(EXTRA_PROMPT_VARIANTS) ?: ""
             val variants = if (variantsJson.isNotBlank()) {
                 ArrayList(CompanionPromptVariant.fromJson(variantsJson))
             } else {
-                ArrayList(CompanionPromptVariant.migrateFromSinglePrompt(data.getStringExtra(EXTRA_PROMPT) ?: ""))
+                ArrayList(CompanionPromptVariant.migrateFromSinglePrompt(data.getStringExtra(EXTRA_PROMPT) ?: "", personaId))
             }
             return PersonaObject(
                 label = data.getStringExtra(EXTRA_LABEL) ?: "",
@@ -267,7 +268,7 @@ class EditPersonaActivity : FragmentActivity() {
                 ArrayList(CompanionPromptVariant.fromJson(variantsJson))
             } else {
                 val legacyPrompt = intent.getStringExtra(EXTRA_PROMPT) ?: ""
-                ArrayList(CompanionPromptVariant.migrateFromSinglePrompt(legacyPrompt))
+                ArrayList(CompanionPromptVariant.migrateFromSinglePrompt(legacyPrompt, personaId))
             }
             activeTabIndex = promptVariants.indexOfFirst { it.isDefault }.coerceAtLeast(0)
         }
