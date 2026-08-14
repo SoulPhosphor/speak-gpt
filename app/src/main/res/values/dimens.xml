@@ -28,20 +28,30 @@
     <!-- Widget.App.Row.ProfileImage's leading preview size (profile-images-plan.md). -->
     <dimen name="row_profile_image_size">48dp</dimen>
 
-    <!-- Current adaptable chat presentation geometry (chat-redesign-plan.md §2). -->
-    <dimen name="chat_message_speaker_inset">27dp</dimen>
-    <dimen name="chat_message_user_left_inset">26dp</dimen>
+    <!-- Current adaptable chat presentation geometry. These values match the
+         owner-approved visual target tuned on Aug 13 2026. -->
+    <dimen name="chat_message_speaker_inset">25dp</dimen>
+    <dimen name="chat_message_ai_right_inset">28dp</dimen>
+    <dimen name="chat_message_user_left_inset">49dp</dimen>
     <dimen name="chat_message_content_padding">14dp</dimen>
-    <dimen name="chat_message_unit_spacing">53dp</dimen>
-    <dimen name="chat_portrait_size">76dp</dimen>
-    <!-- 27dp speaker baseline minus the approved 15dp outward offset. -->
-    <dimen name="chat_portrait_edge_inset">12dp</dimen>
-    <dimen name="chat_portrait_vertical_offset">36dp</dimen>
-    <!-- Portrait bottom (76dp) minus bubble top (36dp): clears early content. -->
-    <dimen name="chat_portrait_text_clearance">40dp</dimen>
-    <!-- 27dp speaker baseline plus the approved 52dp name offset. -->
-    <dimen name="chat_name_portrait_edge_inset">79dp</dimen>
-    <!-- Bubble top at 36dp minus the approved 30dp upward name offset. -->
-    <dimen name="chat_name_portrait_top">6dp</dimen>
+    <dimen name="chat_message_unit_spacing">22dp</dimen>
+
+    <dimen name="chat_portrait_size">96dp</dimen>
+    <!-- Bubble-side edge 25dp plus the tuned -8dp outward portrait offset. -->
+    <dimen name="chat_portrait_edge_inset">17dp</dimen>
+    <!-- Portrait top is 10dp inside the bubble's top edge. -->
+    <dimen name="chat_portrait_top_offset">10dp</dimen>
+    <!-- No whole-block top clearance: PortraitAwareMessageTextView handles the
+         early-line inset so later lines reclaim the full reading width. -->
+    <dimen name="chat_portrait_vertical_offset">0dp</dimen>
+    <dimen name="chat_portrait_text_clearance">0dp</dimen>
+    <dimen name="chat_portrait_text_gap">7dp</dimen>
+
+    <!-- Name begins/ends 102dp inward from the tuned 25dp bubble edge. -->
+    <dimen name="chat_name_portrait_edge_inset">127dp</dimen>
+    <dimen name="chat_name_portrait_top">10dp</dimen>
+    <!-- Body starts 9dp below the measured name bottom: the tuned spacing plus
+         the final requested 2dp of extra breathing room. -->
+    <dimen name="chat_name_body_gap">9dp</dimen>
     <dimen name="chat_name_bubble_edge_offset">1dp</dimen>
 </resources>
