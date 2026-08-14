@@ -29,6 +29,9 @@ object ChatNameStyle {
     const val DEFAULT_FONT_ID = "roboto"
     const val DEFAULT_SIZE_SP = 21
 
+    private const val USER_SIZE_KEY = "chat_user_name_size_sp"
+    private const val AI_SIZE_KEY = "chat_ai_name_size_sp"
+
     data class FontOption(
         val id: String,
         val displayName: String,
@@ -94,6 +97,26 @@ object ChatNameStyle {
             typeface(context, style.fontId),
             if (style.bold) Typeface.BOLD else Typeface.NORMAL
         )
-        textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, style.sizeSp.toFloat())
+
+        // Preferences historically returned 18sp when the size key had never
+        // been written. Keep explicit user choices untouched, but render the
+        // new 21sp tuned default for an untouched Appearance setting.
+        val sizeKey = when (textView.tag?.toString()) {
+            "user_chat_name" -> USER_SIZE_KEY
+            "ai_chat_name" -> AI_SIZE_KEY
+            else -> null
+        }
+        val global = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val effectiveSize = if (
+            sizeKey != null &&
+            style.sizeSp == 18 &&
+            !global.contains(sizeKey)
+        ) {
+            DEFAULT_SIZE_SP
+        } else {
+            style.sizeSp
+        }
+
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, effectiveSize.toFloat())
     }
 }
