@@ -43,8 +43,9 @@
     <dimen name="chat_portrait_size">96dp</dimen>
     <!-- Bubble-side edge 25dp plus the tuned -8dp outward portrait offset. -->
     <dimen name="chat_portrait_edge_inset">17dp</dimen>
-    <!-- Portrait top is 10dp inside the bubble's top edge. -->
-    <dimen name="chat_portrait_top_offset">10dp</dimen>
+    <!-- Portrait overlaps 20dp above the bubble; the 22dp leading space
+         keeps the portrait inside the message item's bounds. -->
+    <dimen name="chat_portrait_top_offset">-20dp</dimen>
     <!-- No whole-block top clearance: PortraitAwareMessageTextView handles the
          early-line inset so later lines reclaim the full reading width. -->
     <dimen name="chat_portrait_vertical_offset">0dp</dimen>
