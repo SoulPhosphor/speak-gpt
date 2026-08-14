@@ -79,12 +79,12 @@
                     android:visibility="gone" />
             </LinearLayout>
 
-<!-- Record of what was attached to this message (document-includes-plan.md).
+            <!-- Record of what was attached to this message (document-includes-plan.md).
                  Sits directly under the user label, above the message text. While
                  nothing is attached it is GONE and collapses to a zero-height point
                  at the top of the bubble, so the message text keeps exactly its old
                  position. -->
-<!-- No android:id here on purpose: an id on an <include> REPLACES the
+            <!-- No android:id here on purpose: an id on an <include> REPLACES the
                  included layout's root id, so the root keeps its own
                  @id/include_summary that ChatAdapter looks up. -->
             <include
@@ -94,11 +94,11 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/include_bookmarks" />
 
-            <TextView
+            <org.teslasoft.assistant.ui.chat.PortraitAwareMessageTextView
                 android:id="@+id/message"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:tag="user"
                 android:textColor="?attr/colorSurface"
                 android:textSize="16sp"
                 app:layout_constraintEnd_toEndOf="parent"
@@ -200,7 +200,7 @@
                     android:layout_height="32dp"
                     android:layout_marginLeft="8dp"
                     android:layout_weight="1"
-                    android:background="@drawable/btn_accent_tonal"
+                    android:background="@color/transparent"
                     android:contentDescription="@string/btn_msg_speak"
                     android:descendantFocusability="blocksDescendants"
                     android:src="@drawable/ic_volume_up"
@@ -214,7 +214,7 @@
                     android:layout_height="32dp"
                     android:layout_marginStart="8dp"
                     android:layout_weight="1"
-                    android:background="@drawable/btn_accent_tonal"
+                    android:background="@color/transparent"
                     android:contentDescription="Share message"
                     android:descendantFocusability="blocksDescendants"
                     android:src="@drawable/ic_share"
@@ -227,7 +227,7 @@
                     android:layout_width="32dp"
                     android:layout_height="32dp"
                     android:layout_marginStart="8dp"
-                    android:background="@drawable/btn_accent_tonal"
+                    android:background="@color/transparent"
                     android:contentDescription="@string/btn_msg_retry"
                     android:descendantFocusability="blocksDescendants"
                     android:src="@drawable/ic_retry"
@@ -240,7 +240,7 @@
                     android:layout_height="32dp"
                     android:layout_marginStart="8dp"
                     android:layout_marginEnd="8dp"
-                    android:background="@drawable/btn_accent_tonal"
+                    android:background="@color/transparent"
                     android:contentDescription="@string/btn_copy"
                     android:descendantFocusability="blocksDescendants"
                     android:tooltipText="@string/btn_copy"
@@ -250,7 +250,7 @@
                     android:id="@+id/btn_edit"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:background="@drawable/btn_accent_tonal"
+                    android:background="@color/transparent"
                     android:contentDescription="@string/btn_msg_edit"
                     android:descendantFocusability="blocksDescendants"
                     android:src="@drawable/ic_edit"
@@ -265,6 +265,7 @@
         android:id="@+id/icon"
         android:layout_width="@dimen/chat_portrait_size"
         android:layout_height="@dimen/chat_portrait_size"
+        android:layout_marginTop="@dimen/chat_portrait_top_offset"
         android:layout_marginEnd="@dimen/chat_portrait_edge_inset"
         android:background="@drawable/btn_accent_tonal"
         android:contentDescription="@null"
@@ -281,7 +282,7 @@
         android:layout_marginEnd="@dimen/chat_name_portrait_edge_inset"
         android:text="@string/chat_role_user"
         android:textColor="?attr/colorPrimary"
-        android:textSize="18sp"
+        android:textSize="21sp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

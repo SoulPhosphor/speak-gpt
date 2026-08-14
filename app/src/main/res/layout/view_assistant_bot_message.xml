@@ -29,6 +29,7 @@
         android:layout_width="@dimen/chat_portrait_size"
         android:layout_height="@dimen/chat_portrait_size"
         android:layout_marginStart="@dimen/chat_portrait_edge_inset"
+        android:layout_marginTop="@dimen/chat_portrait_top_offset"
         android:background="@drawable/btn_accent_tonal"
         android:clickable="false"
         android:contentDescription="@null"
@@ -42,6 +43,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/chat_message_speaker_inset"
+        android:layout_marginEnd="@dimen/chat_message_ai_right_inset"
         android:orientation="horizontal"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -57,11 +59,12 @@
             android:background="@drawable/bubble_in"
             android:padding="@dimen/chat_message_content_padding">
 
-            <TextView
+            <org.teslasoft.assistant.ui.chat.PortraitAwareMessageTextView
                 android:id="@+id/message"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="50dp"
+                android:tag="ai"
                 android:textColor="?attr/colorPrimary"
                 android:textIsSelectable="true"
                 android:textSize="16sp"
@@ -148,10 +151,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <!-- Completion marker for a reply that did not finish streaming
-                 (Round 3). GONE for a normal/finished reply; when GONE the
-                 button row below resolves to image_frame's bottom, so layout
-                 is unchanged. -->
             <TextView
                 android:id="@+id/status_marker"
                 android:layout_width="wrap_content"
@@ -250,7 +249,7 @@
         android:layout_marginTop="@dimen/chat_name_portrait_top"
         android:text="@string/chat_role_assistant"
         android:textColor="?attr/colorPrimary"
-        android:textSize="18sp"
+        android:textSize="21sp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 

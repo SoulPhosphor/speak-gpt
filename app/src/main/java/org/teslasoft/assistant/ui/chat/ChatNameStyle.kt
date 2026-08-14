@@ -12,6 +12,7 @@ import android.graphics.Typeface
 import android.util.TypedValue
 import android.widget.TextView
 import androidx.annotation.FontRes
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
@@ -27,7 +28,10 @@ import org.teslasoft.assistant.preferences.dto.PersonaObject
 object ChatNameStyle {
 
     const val DEFAULT_FONT_ID = "roboto"
-    const val DEFAULT_SIZE_SP = 18
+    const val DEFAULT_SIZE_SP = 21
+
+    private const val USER_SIZE_KEY = "chat_user_name_size_sp"
+    private const val AI_SIZE_KEY = "chat_ai_name_size_sp"
 
     data class FontOption(
         val id: String,
@@ -52,7 +56,9 @@ object ChatNameStyle {
         FontOption("sn_pro", "SN Pro", R.font.sn_pro)
     )
 
-    val sizeOptionsSp: List<Int> = (12..32 step 2).toList()
+    // One-sp increments keep the tuned 21sp target selectable while preserving
+    // the existing supported 12-32sp range.
+    val sizeOptionsSp: List<Int> = (12..32).toList()
 
     fun fontIdOrDefault(fontId: String?): String =
         fonts.firstOrNull { it.id == fontId }?.id ?: DEFAULT_FONT_ID
@@ -92,6 +98,32 @@ object ChatNameStyle {
             typeface(context, style.fontId),
             if (style.bold) Typeface.BOLD else Typeface.NORMAL
         )
-        textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, style.sizeSp.toFloat())
+
+        // Preferences historically returned 18sp when the size key had never
+        // been written. Keep explicit user choices untouched, but render the
+        // new 21sp tuned default for an untouched Appearance setting. At this
+        // point the XML still carries the mirrored start/end constraint, so it
+        // identifies the side without adding another presentation flag.
+        val params = textView.layoutParams as? ConstraintLayout.LayoutParams
+        val sizeKey = when {
+            params != null &&
+                params.endToEnd != ConstraintLayout.LayoutParams.UNSET &&
+                params.startToStart == ConstraintLayout.LayoutParams.UNSET -> USER_SIZE_KEY
+            params != null &&
+                params.startToStart != ConstraintLayout.LayoutParams.UNSET -> AI_SIZE_KEY
+            else -> null
+        }
+        val global = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val effectiveSize = if (
+            sizeKey != null &&
+            style.sizeSp == 18 &&
+            !global.contains(sizeKey)
+        ) {
+            DEFAULT_SIZE_SP
+        } else {
+            style.sizeSp
+        }
+
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, effectiveSize.toFloat())
     }
 }
