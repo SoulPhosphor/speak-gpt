@@ -22,6 +22,7 @@
     android:id="@+id/ui"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:paddingTop="@dimen/chat_message_leading_spacing"
     android:paddingBottom="@dimen/chat_message_unit_spacing">
 
     <LinearLayout
@@ -261,6 +262,20 @@
         </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 
+    <TextView
+        android:id="@+id/username"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/chat_name_portrait_top"
+        android:layout_marginEnd="@dimen/chat_name_portrait_edge_inset"
+        android:text="@string/chat_role_user"
+        android:textColor="?attr/colorSurface"
+        android:textSize="21sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Declared last so the 96dp portrait stays above the overlapping bubble,
+         matching the tuner's portrait z-index. -->
     <ImageView
         android:id="@+id/icon"
         android:layout_width="@dimen/chat_portrait_size"
@@ -273,16 +288,4 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:srcCompat="@drawable/ic_user" />
-
-    <TextView
-        android:id="@+id/username"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/chat_name_portrait_top"
-        android:layout_marginEnd="@dimen/chat_name_portrait_edge_inset"
-        android:text="@string/chat_role_user"
-        android:textColor="?attr/colorPrimary"
-        android:textSize="21sp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

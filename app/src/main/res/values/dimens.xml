@@ -34,6 +34,10 @@
     <dimen name="chat_message_ai_right_inset">28dp</dimen>
     <dimen name="chat_message_user_left_inset">49dp</dimen>
     <dimen name="chat_message_content_padding">14dp</dimen>
+    <!-- The tuner gives every message 22dp of leading space and exposes the
+         trailing 22dp as its message-gap control. Keeping them separate
+         preserves the tuner's vertical rhythm instead of halving it. -->
+    <dimen name="chat_message_leading_spacing">22dp</dimen>
     <dimen name="chat_message_unit_spacing">22dp</dimen>
 
     <dimen name="chat_portrait_size">96dp</dimen>

@@ -407,9 +407,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val ui: ConstraintLayout = itemView.findViewById(R.id.ui)
         private val icon: ImageView = itemView.findViewById(R.id.icon)
         // The icon's original XML backing (e.g. the assistant bubble's tonal
-        // circle). A Companion photo fills the slot and drops it; every other
-        // path restores it, so a recycled row can't keep a nulled background.
+        // circle). Photos and the error badge fill the slot and drop it; glyph
+        // paths restore it so recycling cannot keep a nulled background.
         private val iconInitialBackground = icon.background
+        private val iconInitialPaddingLeft = icon.paddingLeft
+        private val iconInitialPaddingTop = icon.paddingTop
+        private val iconInitialPaddingRight = icon.paddingRight
+        private val iconInitialPaddingBottom = icon.paddingBottom
+        private val iconInitialScaleType = icon.scaleType
         private val message: TextView = itemView.findViewById(R.id.message)
         private val username: TextView = itemView.findViewById(R.id.username)
         private val bubbleBg: ConstraintLayout = itemView.findViewById(R.id.bubble_bg)
@@ -901,7 +906,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private fun updateBubbleDecoration(isBot: Boolean, showBubble: Boolean) {
             if (!showBubble) {
                 bubbleBg.background = null
-                message.setTextColor(resolveThemeColor(R.attr.appTextColor))
+                val foreground = resolveThemeColor(R.attr.appTextColor)
+                message.setTextColor(foreground)
+                username.setTextColor(foreground)
                 return
             }
 
@@ -913,19 +920,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 else -> R.drawable.bubble_out
             }
             bubbleBg.setBackgroundResource(background)
-            message.setTextColor(
-                if (amoled) {
-                    ResourcesCompat.getColor(context.resources, R.color.white, null)
-                } else {
-                    resolveThemeColor(
-                        if (isBot) {
-                            androidx.appcompat.R.attr.colorPrimary
-                        } else {
-                            com.google.android.material.R.attr.colorSurface
-                        }
-                    )
-                }
-            )
+            val foreground = if (amoled) {
+                ResourcesCompat.getColor(context.resources, R.color.white, null)
+            } else {
+                resolveThemeColor(
+                    if (isBot) {
+                        androidx.appcompat.R.attr.colorPrimary
+                    } else {
+                        com.google.android.material.R.attr.colorSurface
+                    }
+                )
+            }
+            message.setTextColor(foreground)
+            username.setTextColor(foreground)
         }
 
         /**
@@ -1055,10 +1062,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  resolver -> built-in glyph. When a Companion picture is present it
          *  is bound through [ProfileImageBinder] (which fully resets the view,
          *  so a recycled row can't keep another chat's picture or tint) and
-         *  fills the slot without the glyph's tonal backing. Otherwise the
-         *  existing legacy/built-in rendering runs unchanged, with the icon's
-         *  original XML background explicitly restored so recycling from a
-         *  photo row never leaves it blank. */
+         *  fills the slot without the glyph's tonal backing. Legacy photos use
+         *  the same full slot; built-in glyphs restore the original XML
+         *  padding and background after row recycling. */
         private fun displayAvatar() {
             // While this chat has only failed replies (no completed reply yet),
             // the assistant avatar is the red error badge instead of the
@@ -1070,6 +1076,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
             val file = companionImageFile
             if (file != null && file.exists()) {
+                useFullPortraitSlot()
                 ProfileImageBinder.bind(context, icon, file, companionImageShape) {
                     // Only reachable if the file vanished between resolve and load.
                     icon.background = iconInitialBackground
@@ -1087,6 +1094,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  tint are cleared and the view fully reset to avoid recycled-row
          *  bleed, matching the Companion-photo binder's discipline. */
         private fun displayErrorAvatar() {
+            useFullPortraitSlot()
             icon.background = null
             icon.imageTintList = null
             icon.clearColorFilter()
@@ -1097,12 +1105,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
         private fun displayLegacyOrBuiltinAvatar() {
             if (preferences.getAvatarType() == "builtin") {
+                restorePortraitGlyphSlot()
+                icon.background = iconInitialBackground
                 icon.setImageResource(StaticAvatarParser.parse(preferences.getAvatarId()))
                 DrawableCompat.setTint(icon.getDrawable()!!, ContextCompat.getColor(context, R.color.accent_900))
             } else {
                 val legacyAvatarFile = LegacyAvatarResolver.resolve(context.getExternalFilesDir("images"), preferences.getAvatarId())
 
                 if (legacyAvatarFile != null) {
+                    useFullPortraitSlot()
+                    icon.background = null
+                    icon.imageTintList = null
+                    icon.scaleType = ImageView.ScaleType.CENTER_CROP
                     readAndDisplay(Uri.fromFile(legacyAvatarFile))
                 }
             }
@@ -1116,17 +1130,39 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private fun displayUserAvatar() {
             val file = userImageFile
             if (file != null && file.exists()) {
+                useFullPortraitSlot()
                 ProfileImageBinder.bind(context, icon, file, userImageShape) {
                     // Only reachable if the file vanished between resolve and load.
+                    restorePortraitGlyphSlot()
                     icon.background = iconInitialBackground
                     icon.imageTintList = null
                     icon.setImageResource(R.drawable.ic_user)
                 }
             } else {
+                restorePortraitGlyphSlot()
                 icon.background = iconInitialBackground
                 icon.imageTintList = null
                 icon.setImageResource(R.drawable.ic_user)
             }
+        }
+
+        /** Photos consume the complete tuned 96dp slot. The XML's 6dp padding
+         *  belongs only to fallback glyphs; applying it to photos shrinks them
+         *  to 84dp and visually cancels most of the tuned -8dp edge offset. */
+        private fun useFullPortraitSlot() {
+            icon.setPadding(0, 0, 0, 0)
+        }
+
+        /** Restore the XML presentation before displaying a glyph in a row
+         *  recycled from a full-bleed photo or error avatar. */
+        private fun restorePortraitGlyphSlot() {
+            icon.setPadding(
+                iconInitialPaddingLeft,
+                iconInitialPaddingTop,
+                iconInitialPaddingRight,
+                iconInitialPaddingBottom
+            )
+            icon.scaleType = iconInitialScaleType
         }
 
         private fun readAndDisplay(uri: Uri) {

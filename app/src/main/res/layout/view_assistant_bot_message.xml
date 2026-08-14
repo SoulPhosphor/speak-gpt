@@ -22,21 +22,8 @@
     android:id="@+id/ui"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:paddingTop="@dimen/chat_message_leading_spacing"
     android:paddingBottom="@dimen/chat_message_unit_spacing">
-
-    <ImageView
-        android:id="@+id/icon"
-        android:layout_width="@dimen/chat_portrait_size"
-        android:layout_height="@dimen/chat_portrait_size"
-        android:layout_marginStart="@dimen/chat_portrait_edge_inset"
-        android:layout_marginTop="@dimen/chat_portrait_top_offset"
-        android:background="@drawable/btn_accent_tonal"
-        android:clickable="false"
-        android:contentDescription="@null"
-        android:padding="6dp"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:srcCompat="@drawable/ic_launcher_foreground" />
 
     <LinearLayout
         android:id="@+id/linearLayout3"
@@ -252,5 +239,21 @@
         android:textSize="21sp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Declared last so the 96dp portrait stays above the overlapping bubble,
+         matching the tuner's portrait z-index. -->
+    <ImageView
+        android:id="@+id/icon"
+        android:layout_width="@dimen/chat_portrait_size"
+        android:layout_height="@dimen/chat_portrait_size"
+        android:layout_marginStart="@dimen/chat_portrait_edge_inset"
+        android:layout_marginTop="@dimen/chat_portrait_top_offset"
+        android:background="@drawable/btn_accent_tonal"
+        android:clickable="false"
+        android:contentDescription="@null"
+        android:padding="6dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:srcCompat="@drawable/ic_launcher_foreground" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
