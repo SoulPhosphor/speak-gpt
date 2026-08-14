@@ -146,10 +146,29 @@ class PortraitAwareMessageTextView @JvmOverloads constructor(
 
         val nameVisible = name?.visibility == View.VISIBLE
         val desired = if (nameVisible) {
-            val nameTop = dimen(R.dimen.chat_name_portrait_top)
             val gap = dimen(R.dimen.chat_name_body_gap)
             val bubblePadding = dimen(R.dimen.chat_message_content_padding)
-            max(0, nameTop + (name?.lineHeight ?: 0) + gap - bubblePadding)
+            val bubble = findRowView<View>(R.id.bubble_bg)
+            val portraitVisible = findRowView<ImageView>(R.id.icon)?.visibility == View.VISIBLE
+            val bubblePainted = bubble?.background != null
+            val nameBottomInBubble = if (portraitVisible || bubblePainted) {
+                // Read the name's and bubble's REAL current top margins —
+                // already applied by ChatAdapter.updateIdentityGeometry for
+                // this bind — instead of assuming the portrait layout's fixed
+                // offsets. Without this the no-portrait, bubble-on state (the
+                // name centered on the bubble's top border, not sitting
+                // chat_name_portrait_top below a portrait-aligned bubble) left
+                // a large dead band between the name and the first line.
+                val nameTop = (name?.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin ?: 0
+                val bubbleTop = (bubble?.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin ?: 0
+                max(0, nameTop + (name?.lineHeight ?: 0) - bubbleTop)
+            } else {
+                // No-portrait, bubble-off presentation is out of scope for
+                // this pass; keep its existing (portrait-anchor)
+                // approximation unchanged.
+                dimen(R.dimen.chat_name_portrait_top) + (name?.lineHeight ?: 0)
+            }
+            max(0, nameBottomInBubble + gap - bubblePadding)
         } else {
             baseTopMargin ?: 0
         }

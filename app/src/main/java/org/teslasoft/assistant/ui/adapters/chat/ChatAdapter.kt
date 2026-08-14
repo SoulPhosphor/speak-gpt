@@ -899,7 +899,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 if (isBot) displayAvatar() else displayUserAvatar()
             }
 
-            updateIdentityGeometry(isBot, showPortrait, showName)
+            updateIdentityGeometry(isBot, showPortrait, showName, showBubble)
             updateBubbleDecoration(isBot, showBubble)
         }
 
@@ -938,12 +938,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /**
          * Portrait-on placement uses the approved fixed offsets. Without a
          * portrait, the name's measured line height places its center on the
-         * bubble's top edge, so every configured sp size remains centered.
+         * bubble's top edge when no bubble is painted, so every configured sp
+         * size remains centered. When a bubble IS painted the name instead
+         * uses the separate chat_name_bubble_top_margin/edge_inset values
+         * (owner ask, Aug 14 2026: the shared border-center placement rode
+         * too high and sat too close to the screen edge). The bubble-off
+         * presentation keeps its original numbers untouched.
          */
         private fun updateIdentityGeometry(
             isBot: Boolean,
             showPortrait: Boolean,
-            showName: Boolean
+            showName: Boolean,
+            showBubble: Boolean
         ) {
             val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
             bubbleParams.topMargin = when {
@@ -981,9 +987,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     nameParams.setMarginEnd(edge)
                 }
             } else {
-                val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
+                val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) + if (showBubble) {
+                    dimensionPixelSize(R.dimen.chat_name_bubble_edge_inset)
+                } else {
                     dimensionPixelSize(R.dimen.chat_name_bubble_edge_offset)
-                nameParams.topMargin = 0
+                }
+                nameParams.topMargin = if (showBubble) {
+                    dimensionPixelSize(R.dimen.chat_name_bubble_top_margin)
+                } else {
+                    0
+                }
                 if (isBot) {
                     nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
                     nameParams.setMarginStart(edge)

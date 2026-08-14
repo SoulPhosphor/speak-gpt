@@ -50,7 +50,9 @@
          early-line inset so later lines reclaim the full reading width. -->
     <dimen name="chat_portrait_vertical_offset">0dp</dimen>
     <dimen name="chat_portrait_text_clearance">0dp</dimen>
-    <dimen name="chat_portrait_text_gap">7dp</dimen>
+    <!-- Horizontal breathing room between the portrait and the text it
+         clears (owner ask, Aug 14 2026: the first pass hugged too tight). -->
+    <dimen name="chat_portrait_text_gap">9dp</dimen>
 
     <!-- Name begins/ends 102dp inward from the tuned 25dp bubble edge. -->
     <dimen name="chat_name_portrait_edge_inset">127dp</dimen>
@@ -58,5 +60,15 @@
     <!-- Body starts 9dp below the measured name bottom: the tuned spacing plus
          the final requested 2dp of extra breathing room. -->
     <dimen name="chat_name_body_gap">9dp</dimen>
+    <!-- No-portrait, bubble-OFF name placement only. Untouched (owner ask,
+         Aug 14 2026) — see chat_name_bubble_top_margin/edge_inset below for
+         the separate bubble-ON values. -->
     <dimen name="chat_name_bubble_edge_offset">1dp</dimen>
+    <!-- No-portrait, bubble-ON name placement (owner ask, Aug 14 2026: the
+         name rode too high on the bubble's top border and sat too close to
+         the screen edge). Moves the name further inside the bubble and
+         further from the edge than the bubble-off values above; the
+         bubble-off presentation keeps its original numbers. -->
+    <dimen name="chat_name_bubble_top_margin">6dp</dimen>
+    <dimen name="chat_name_bubble_edge_inset">10dp</dimen>
 </resources>
