@@ -976,27 +976,35 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             showBubble: Boolean,
             isImage: Boolean
         ) {
-            // A generated image with a portrait drops fully below the portrait
-            // and centers on screen instead of tucking under the overlapping
-            // corner (owner ask, Aug 14 2026). The push equals the portrait's
-            // own reach below the bubble top: size + its negative top offset.
+            // A generated image drops fully below the identity and centers on
+            // screen instead of tucking under it (owner ask, Aug 14 2026). Under
+            // a portrait the push is the portrait's reach below the bubble top
+            // (size + its negative top offset); under just a name it is the
+            // name's own bottom (its top inset + one line). A no-portrait,
+            // no-name image keeps its side alignment.
             val imageBelowPortrait = isImage && showPortrait
+            val noPortraitNameTop = if (showBubble) {
+                dimensionPixelSize(R.dimen.chat_name_bubble_top_margin)
+            } else {
+                0
+            }
+            val imageBelowName = isImage && !showPortrait && showName
             val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
             bubbleParams.topMargin = when {
                 imageBelowPortrait -> dimensionPixelSize(R.dimen.chat_portrait_size) +
                     dimensionPixelSize(R.dimen.chat_portrait_top_offset)
+                imageBelowName -> noPortraitNameTop + username.lineHeight
                 showPortrait -> dimensionPixelSize(R.dimen.chat_portrait_vertical_offset)
                 showName -> username.lineHeight / 2
                 else -> 0
             }
             bubbleBg.layoutParams = bubbleParams
 
-            // Center the bubble in the row for a generated image shown under a
-            // portrait; otherwise keep it hugging the speaker's side (start for
-            // AI, end for user). A no-portrait image keeps its side alignment —
-            // the owner's ask was scoped to the portrait case.
+            // Center the bubble in the row for a generated image shown under an
+            // identity (portrait or name); otherwise keep it hugging the
+            // speaker's side (start for AI, end for user).
             messageRow?.gravity = when {
-                imageBelowPortrait -> Gravity.CENTER_HORIZONTAL
+                imageBelowPortrait || imageBelowName -> Gravity.CENTER_HORIZONTAL
                 isBot -> Gravity.START
                 else -> Gravity.END
             }
