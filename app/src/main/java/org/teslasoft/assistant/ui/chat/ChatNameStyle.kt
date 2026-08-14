@@ -106,9 +106,11 @@ object ChatNameStyle {
         // identifies the side without adding another presentation flag.
         val params = textView.layoutParams as? ConstraintLayout.LayoutParams
         val sizeKey = when {
-            params?.endToEnd != ConstraintLayout.LayoutParams.UNSET &&
+            params != null &&
+                params.endToEnd != ConstraintLayout.LayoutParams.UNSET &&
                 params.startToStart == ConstraintLayout.LayoutParams.UNSET -> USER_SIZE_KEY
-            params?.startToStart != ConstraintLayout.LayoutParams.UNSET -> AI_SIZE_KEY
+            params != null &&
+                params.startToStart != ConstraintLayout.LayoutParams.UNSET -> AI_SIZE_KEY
             else -> null
         }
         val global = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
