@@ -27,7 +27,7 @@ import org.teslasoft.assistant.preferences.dto.PersonaObject
 object ChatNameStyle {
 
     const val DEFAULT_FONT_ID = "roboto"
-    const val DEFAULT_SIZE_SP = 18
+    const val DEFAULT_SIZE_SP = 21
 
     data class FontOption(
         val id: String,
@@ -52,7 +52,9 @@ object ChatNameStyle {
         FontOption("sn_pro", "SN Pro", R.font.sn_pro)
     )
 
-    val sizeOptionsSp: List<Int> = (12..32 step 2).toList()
+    // One-sp increments keep the tuned 21sp target selectable while preserving
+    // the existing supported 12-32sp range.
+    val sizeOptionsSp: List<Int> = (12..32).toList()
 
     fun fontIdOrDefault(fontId: String?): String =
         fonts.firstOrNull { it.id == fontId }?.id ?: DEFAULT_FONT_ID
