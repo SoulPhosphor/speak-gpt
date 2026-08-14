@@ -21,6 +21,7 @@ import io.ktor.utils.io.close
 import io.ktor.utils.io.writeStringUtf8
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -66,6 +67,31 @@ class ReportedProviderParserTest {
         assertNull(ReportedProviderParser.fromResponseLine("data: {broken"))
     }
 
+    @Test fun readsModelResponseIdAndStructuredUsageWithoutFlatteningIt() {
+        val metadata = ReportedProviderParser.metadataFromResponseLine(
+            "data: {\"id\":\"gen-9\",\"model\":\"actual/model\",\"provider\":\"Provider A\"," +
+                "\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":4," +
+                "\"total_tokens\":14,\"cost\":0.002},\"provider_cost\":0.003,\"choices\":[]}"
+        )!!
+        assertEquals("gen-9", metadata.responseId)
+        assertEquals("actual/model", metadata.modelId)
+        assertEquals("Provider A", metadata.provider)
+        assertEquals(10L, metadata.inputTokens)
+        assertEquals(4L, metadata.outputTokens)
+        assertEquals(14L, metadata.totalTokens)
+        assertEquals(10, JSONObject(metadata.usageJson!!).getInt("prompt_tokens"))
+        assertEquals(0.003, JSONObject(metadata.costJson!!).getDouble("provider_cost"), 0.0)
+    }
+
+    @Test fun nonIntegerTokenExtensionsArePreservedButNeverInventedAsCounts() {
+        val metadata = ReportedProviderParser.metadataFromResponseLine(
+            "data: {\"usage\":{\"input_tokens\":\"unknown\",\"output_tokens\":4.5},\"choices\":[]}"
+        )!!
+        assertNull(metadata.inputTokens)
+        assertNull(metadata.outputTokens)
+        assertEquals("unknown", JSONObject(metadata.usageJson!!).getString("input_tokens"))
+    }
+
     // The observed copy of a generation stream must be read through to its
     // end even after the provider is found: stopping early stalls Ktor's
     // channel splitter and freezes the live reply the copy was split from.
@@ -104,6 +130,31 @@ class ReportedProviderParserTest {
         val providers = mutableListOf<String>()
         ReportedProviderParser.consumeObservedStream(channel) { providers.add(it) }
         assertTrue(providers.isEmpty())
+        assertTrue(channel.isClosedForRead)
+    }
+
+    @Test fun metadataStreamKeepsLateUsageAfterIdentityWasAlreadyFound() = runBlocking {
+        val channel = ByteChannel(autoFlush = true)
+        launch {
+            channel.writeStringUtf8(
+                "data: {\"id\":\"gen-1\",\"model\":\"model-a\",\"provider\":\"Provider A\",\"choices\":[]}\n"
+            )
+            repeat(20) {
+                channel.writeStringUtf8(
+                    "data: {\"id\":\"gen-1\",\"model\":\"model-a\",\"choices\":[{\"delta\":{\"content\":\"x\"}}]}\n"
+                )
+            }
+            channel.writeStringUtf8(
+                "data: {\"id\":\"gen-1\",\"model\":\"model-a\",\"usage\":{\"input_tokens\":12,\"output_tokens\":8,\"total_tokens\":20},\"choices\":[]}\n"
+            )
+            channel.close()
+        }
+        val results = mutableListOf<ReportedProviderParser.ResponseMetadata>()
+        ReportedProviderParser.consumeObservedMetadataStream(channel) { results.add(it) }
+        assertEquals("Provider A", results.first().provider)
+        assertEquals(12L, results.last().inputTokens)
+        assertEquals(8L, results.last().outputTokens)
+        assertEquals(20L, results.last().totalTokens)
         assertTrue(channel.isClosedForRead)
     }
 }

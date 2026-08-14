@@ -58,6 +58,13 @@
             android:padding="@dimen/chat_message_content_padding">
 
             <TextView
+                android:id="@+id/message_metadata"
+                style="@style/Widget.App.Chat.Metadata"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
                 android:id="@+id/message"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -66,7 +73,7 @@
                 android:textIsSelectable="true"
                 android:textSize="16sp"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent" />
+                app:layout_constraintTop_toBottomOf="@+id/message_metadata" />
 
             <LinearLayout
                 android:id="@+id/image_frame"
@@ -177,6 +184,19 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/status_marker">
+
+                <ImageButton
+                    android:id="@+id/btn_message_details"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1"
+                    android:background="@color/transparent"
+                    android:contentDescription="@string/message_details"
+                    android:descendantFocusability="blocksDescendants"
+                    android:src="@drawable/ic_info"
+                    android:tooltipText="@string/message_details"
+                    app:srcCompat="@drawable/ic_info" />
 
                 <ImageButton
                     android:id="@+id/btn_speak"

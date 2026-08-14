@@ -74,6 +74,9 @@ class ChatPresentationContractTest {
         assertTrue(adapter.contains("getShowChatNames()"))
         assertTrue(adapter.contains("getShowAiBubble()"))
         assertTrue(adapter.contains("getShowUserBubble()"))
+        assertTrue(adapter.contains("preferences.getShowModelNames()"))
+        assertTrue(adapter.contains("preferences.getShowTokenUsage()"))
+        assertTrue(adapter.contains("MessageMetadata.fromMessage(chatMessage)"))
         assertTrue(adapter.contains("ChatNameStyle.apply("))
         assertTrue(adapter.contains("setCompanionPresentation("))
         assertTrue(preferences.contains("getGlobalBoolean(\"chat_bold_user_name\", false)"))
@@ -107,6 +110,10 @@ class ChatPresentationContractTest {
             val positions = actions.map { xml.indexOf("@+id/$it") }
             assertTrue("$path is missing an existing action", positions.all { it >= 0 })
             assertTrue("$path changed the existing action order", positions == positions.sorted())
+            val details = xml.indexOf("@+id/btn_message_details")
+            assertTrue("$path is missing Message Details", details >= 0)
+            assertTrue("$path did not put Message Details first", details < positions.first())
+            assertTrue("$path is missing compact metadata", xml.contains("@+id/message_metadata"))
         }
     }
 }

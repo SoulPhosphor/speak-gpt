@@ -230,6 +230,26 @@
         <item name="android:scaleType">centerInside</item>
     </style>
 
+    <!-- Chat-only subordinate attribution. Both message layouts use this one
+         style so model/token typography cannot drift between speakers. -->
+    <style name="Widget.App.Chat.Metadata" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">6dp</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <!-- Selectable body of the anchored Message Details popup. -->
+    <style name="Widget.App.Chat.MessageDetails" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:padding">16dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:lineSpacingExtra">2dp</item>
+    </style>
+
     <!-- Persistent size notice under a row (never a toast, per house rule).
          Same size/colour as the shared field hint. -->
     <style name="Widget.App.Include.Notice" parent="">

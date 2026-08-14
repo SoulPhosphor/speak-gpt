@@ -47,6 +47,14 @@
             android:orientation="vertical"
             android:padding="@dimen/chat_message_content_padding">
 
+            <TextView
+                android:id="@+id/message_metadata"
+                style="@style/Widget.App.Chat.Metadata"
+                android:gravity="end"
+                android:visibility="gone"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
             <LinearLayout
                 android:id="@+id/include_bookmarks"
                 android:layout_width="wrap_content"
@@ -55,7 +63,7 @@
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 app:layout_constraintEnd_toEndOf="parent"
-                app:layout_constraintTop_toTopOf="parent">
+                app:layout_constraintTop_toBottomOf="@+id/message_metadata">
 
                 <ImageView
                     android:id="@+id/condensed_bookmark"
@@ -193,6 +201,19 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/image_frame">
+
+                <ImageButton
+                    android:id="@+id/btn_message_details"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/btn_accent_tonal"
+                    android:contentDescription="@string/message_details"
+                    android:descendantFocusability="blocksDescendants"
+                    android:src="@drawable/ic_info"
+                    android:tooltipText="@string/message_details"
+                    app:srcCompat="@drawable/ic_info" />
 
                 <ImageButton
                     android:id="@+id/btn_speak"

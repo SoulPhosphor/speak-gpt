@@ -171,6 +171,8 @@ import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
+import org.teslasoft.assistant.preferences.MessageMetadata
+import org.teslasoft.assistant.preferences.MessageMetadataCapture
 import org.teslasoft.assistant.preferences.ResponseLifecycle
 import org.teslasoft.assistant.preferences.ResponseLifecycleRecorder
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
@@ -323,10 +325,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
          *  to say what the file IS, without paying to send it all again. */
         private const val ARTIFACT_EXCERPT_CHARS = 2000
 
-        /** Pins a split raw response to the lifecycle recorder for that exact request. */
-        private val responseLifecycleRecorderAttribute =
-            AttributeKey<ResponseLifecycleRecorder>("ResponseLifecycleRecorder")
+        /** Pins a split raw response to the exact visible message/request. */
+        private val responseObservationAttribute =
+            AttributeKey<ResponseObservation>("ResponseObservation")
 
+    }
+
+    private class ResponseObservation(
+        private val metadataCapture: MessageMetadataCapture,
+        private val lifecycleRecorder: ResponseLifecycleRecorder?
+    ) {
+        fun begin() {
+            metadataCapture.beginObservation()
+            lifecycleRecorder?.beginProviderObservation()
+        }
+
+        fun note(metadata: ReportedProviderParser.ResponseMetadata) {
+            metadataCapture.noteObserved(metadata)
+            lifecycleRecorder?.noteActualModelProvider(metadata.provider)
+        }
+
+        fun finish() {
+            metadataCapture.finishObservation()
+            lifecycleRecorder?.finishProviderObservation()
+        }
     }
 
     // Init UI
@@ -1205,6 +1227,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         preloadAmoled()
         reloadAmoled()
+        // Appearance is a global presentation surface. Rebind the one current
+        // message shell when returning so Model Names and Token Usage (and the
+        // existing portrait/name/bubble controls) take effect immediately.
+        adapter?.notifyDataSetChanged()
 
         if (chatStartupComplete && chatId != "") {
             preferences = Preferences.getPreferences(this, chatId)
@@ -5260,10 +5286,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 host = OpenAIHost(composeChatHost(apiEndpointObject?.host, apiEndpointObject?.chatEndpoint)),
                 proxy = null,
                 retry = RetryStrategy(maxRetries = 0),
-                // Capture failed-response detail and, while Response Lifecycle
-                // logging is active, tap a split COPY of successful generation
-                // streams for official router metadata or an API-reported
-                // top-level provider. Ktor's
+                // Capture failed-response detail and tap a split COPY of each
+                // visible generation stream for response-reported model,
+                // provider and structured usage metadata. Ktor's
                 // ResponseObserver preserves streaming: the OpenAI-compatible
                 // client receives the original channel unchanged and unbuffered.
                 httpClientConfig = {
@@ -5272,17 +5297,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             if (!call.response.status.isSuccess()) {
                                 true
                             } else {
-                                // Observe successful generation streams only
-                                // while lifecycle logging owns a recorder. The
-                                // observer receives a split copy, so the normal
-                                // typed stream is neither buffered nor consumed.
-                                val recorder = currentLifecycle
-                                if (recorder == null) {
+                                // The capture is created only for a visible
+                                // assistant message. Auxiliary requests never
+                                // enter message history through this observer.
+                                val metadataCapture = currentMessageMetadataCapture
+                                if (metadataCapture == null) {
                                     false
                                 } else {
-                                    recorder.beginProviderObservation()
-                                    if (!call.attributes.contains(responseLifecycleRecorderAttribute)) {
-                                        call.attributes.put(responseLifecycleRecorderAttribute, recorder)
+                                    val observation = ResponseObservation(
+                                        metadataCapture,
+                                        currentLifecycle
+                                    )
+                                    observation.begin()
+                                    if (!call.attributes.contains(responseObservationAttribute)) {
+                                        call.attributes.put(responseObservationAttribute, observation)
                                     }
                                     true
                                 }
@@ -5292,8 +5320,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             try {
                                 if (!response.status.isSuccess()) {
                                     capturedProviderErrorBody = response.bodyAsText()
-                                } else if (response.call.attributes.contains(responseLifecycleRecorderAttribute)) {
-                                    val recorder = response.call.attributes[responseLifecycleRecorderAttribute]
+                                } else if (response.call.attributes.contains(responseObservationAttribute)) {
+                                    val observation = response.call.attributes[responseObservationAttribute]
                                     try {
                                         // Receive the observer's split copy ONCE (a second
                                         // bodyAsChannel() throws and cancels the origin,
@@ -5302,13 +5330,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                         // and freezes the visible reply after ~4 KB; see
                                         // consumeObservedStream.
                                         val observedChannel = response.bodyAsChannel()
-                                        ReportedProviderParser.consumeObservedStream(observedChannel) { reported ->
-                                            // Response-derived only. Never substitute the
-                                            // configured or requested provider here.
-                                            recorder.noteActualModelProvider(reported)
+                                        ReportedProviderParser.consumeObservedMetadataStream(observedChannel) { reported ->
+                                            // Response-derived only. Missing values remain
+                                            // absent; configured identity is stored separately.
+                                            observation.note(reported)
                                         }
                                     } finally {
-                                        recorder.finishProviderObservation()
+                                        observation.finish()
                                     }
                                 }
                             } catch (_: Exception) { /* best effort; never disturb the failure path */ }
@@ -6421,6 +6449,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @Volatile
     private var currentLifecycle: ResponseLifecycleRecorder? = null
 
+    /** Always-on, lightweight attribution for the current visible reply. */
+    @Volatile
+    private var currentMessageMetadataCapture: MessageMetadataCapture? = null
+
     /** The provider-routing send hook's ACTUAL result for the in-flight
      *  request, written on the send thread and read when the lifecycle entry is
      *  finalized. Reset to null when each streamed request begins, so a hook
@@ -6447,6 +6479,33 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 ResponseLifecycle.Termination.STREAM_CLOSED, "superseded by a new request"
             )
         }
+        // Logging can be off while durable message attribution is still on.
+        // Close any prior capture before pinning this request to the current
+        // assistant bubble (a no-tools retry may reuse that same bubble).
+        if (currentMessageMetadataCapture != null) finalizeMessageMetadata(awaitObservation = false)
+
+        val messageIndex = messages.indexOfLast { it["isBot"] == true }
+        if (messageIndex >= 0) {
+            val existing = MessageMetadata.fromMessage(messages[messageIndex])
+            val base = MessageMetadata.createdNow(existing?.createdAt ?: System.currentTimeMillis())
+            val endpoint = apiEndpointObject
+            currentMessageMetadataCapture = MessageMetadataCapture(
+                messageIndex = messageIndex,
+                initial = base,
+                requestedModelId = model,
+                endpointId = endpoint?.id,
+                endpointLabel = endpoint?.label,
+                endpointSource = endpoint?.let { selected ->
+                    selected.host.takeIf { it.isNotBlank() }?.let { host ->
+                        composeChatHost(host, selected.chatEndpoint)
+                    }
+                },
+                configuredProvider = endpoint?.provider
+            )
+            messages[messageIndex][MessageMetadata.KEY] =
+                currentMessageMetadataCapture!!.snapshot().toJson()
+        }
+
         // Reset for THIS request (after any superseded entry above is written
         // with its own result), so the send hook's actual outcome is recorded
         // fresh and a hook that never runs never reports a stale attachment.
@@ -6475,6 +6534,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         finishReason: String?, id: String?, contentLength: Int,
         promptTokens: Int?, completionTokens: Int?, totalTokens: Int?
     ) {
+        currentMessageMetadataCapture?.noteTypedChunk(
+            id,
+            promptTokens,
+            completionTokens,
+            totalTokens
+        )
         val r = currentLifecycle ?: return
         if (r.finalized) return
         r.noteChunk(finishReason, id, contentLength, promptTokens, completionTokens, totalTokens)
@@ -6484,6 +6549,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  throwing): the outcome is decided only from the finish reason actually
      *  seen — text having arrived is never treated as completion. */
     private suspend fun finalizeLifecycleSuccess() {
+        finalizeMessageMetadata(awaitObservation = true)
         val r = currentLifecycle ?: return
         if (r.finalized) return
         val n = ResponseLifecycle.classifyNormalCompletion(r.lastFinishReason, r.receivedCharacters)
@@ -6496,6 +6562,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
         streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
     ) {
+        finalizeMessageMetadata(awaitObservation = false)
         val r = currentLifecycle ?: return
         if (r.finalized) return
         writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
@@ -6527,6 +6594,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         ) + providerRoutingLogLine(r.model)
         currentLifecycle = null
         org.teslasoft.assistant.preferences.Logger.logResponseLifecycleAsync(this, body)
+    }
+
+    /** Persist the response facts onto the exact message that owns them. */
+    private suspend fun finalizeMessageMetadata(awaitObservation: Boolean) {
+        val capture = currentMessageMetadataCapture ?: return
+        if (awaitObservation) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                capture.awaitObservation(250L)
+            }
+        }
+        val index = capture.messageIndex
+        if (index in messages.indices && messages[index]["isBot"] == true) {
+            messages[index][MessageMetadata.KEY] = capture.snapshot().toJson()
+        }
+        currentMessageMetadataCapture = null
     }
 
     private fun startRecognition(freshTurn: Boolean = true) {
@@ -7170,6 +7252,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         map["message"] = message
         map["isBot"] = isBot
+        // New messages receive only a creation time here. Assistant model,
+        // endpoint and usage fields are added by the exact response request;
+        // putting current-chat settings here would mislabel image/error rows.
+        map[MessageMetadata.KEY] = MessageMetadata.createdNow().toJson()
 
         // Lock this assistant reply's label to the companion active right now,
         // so a later companion switch never rewrites past labels.
@@ -7679,6 +7765,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // no successful SSE stream began. Preserve it as actual only because
             // it came from the response body parsed above.
             currentLifecycle?.noteActualModelProvider(providerInfo.providerName)
+            currentMessageMetadataCapture?.noteObserved(
+                ReportedProviderParser.ResponseMetadata(provider = providerInfo.providerName)
+            )
             // Expanded provider detail (owner ruling, Aug 1 2026): the connection
             // profile's name, the upstream model service the server reported (or
             // "Not Reported" for a direct provider that names none), the model,

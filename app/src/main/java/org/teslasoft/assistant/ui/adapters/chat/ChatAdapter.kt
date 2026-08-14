@@ -27,6 +27,9 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.Paint
 import android.graphics.PorterDuff
@@ -46,16 +49,19 @@ import android.text.style.AlignmentSpan
 import android.text.style.ClickableSpan
 import android.text.style.ImageSpan
 import android.text.style.LineHeightSpan
+import android.text.style.StyleSpan
 import android.text.style.TtsSpan
 import android.util.DisplayMetrics
 import android.util.TypedValue
 import android.view.LayoutInflater
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.PopupWindow
 import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -89,6 +95,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.NumberFormat
+import java.text.DateFormat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
@@ -96,6 +103,7 @@ import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.MessageCompletionState
+import org.teslasoft.assistant.preferences.MessageMetadata
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
@@ -108,6 +116,7 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.util.Base64
+import java.util.Date
 import java.util.Locale
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
@@ -412,6 +421,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val iconInitialBackground = icon.background
         private val message: TextView = itemView.findViewById(R.id.message)
         private val username: TextView = itemView.findViewById(R.id.username)
+        private val metadata: TextView = itemView.findViewById(R.id.message_metadata)
         private val bubbleBg: ConstraintLayout = itemView.findViewById(R.id.bubble_bg)
         private val imageFrame: View = itemView.findViewById(R.id.image_frame)
         private val generatedImage: ImageView = itemView.findViewById(R.id.generated_image)
@@ -420,6 +430,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val btnImagePrompt: MaterialButton = itemView.findViewById(R.id.btn_image_prompt)
         private val btnImageDownload: ImageButton = itemView.findViewById(R.id.btn_image_download)
         private var boundGeneratedImagePath: String? = null
+        private val btnMessageDetails: ImageButton = itemView.findViewById(R.id.btn_message_details)
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btn_edit)
         private val btnRetry: ImageButton = itemView.findViewById(R.id.btn_retry)
@@ -484,6 +495,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 if (!bulkActionMode) {
                     openEditDialog(chatMessage, position)
                 }
+            }
+
+            btnMessageDetails.setOnClickListener { anchor ->
+                if (!bulkActionMode) showMessageDetails(anchor, chatMessage)
             }
 
             btnCopy.setImageResource(R.drawable.ic_copy)
@@ -888,6 +903,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 }
             )
             username.visibility = if (showName) View.VISIBLE else View.GONE
+            updateCompactMetadata(chatMessage)
 
             icon.visibility = if (showPortrait) View.VISIBLE else View.GONE
             if (showPortrait) {
@@ -902,6 +918,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (!showBubble) {
                 bubbleBg.background = null
                 message.setTextColor(resolveThemeColor(R.attr.appTextColor))
+                metadata.setTextColor(resolveThemeColor(R.attr.appSubtleTextColor))
                 return
             }
 
@@ -924,6 +941,177 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                             com.google.android.material.R.attr.colorSurface
                         }
                     )
+                }
+            )
+            metadata.setTextColor(message.currentTextColor)
+        }
+
+        /** Optional compact attribution; unavailable provider values stay absent. */
+        private fun updateCompactMetadata(chatMessage: HashMap<String, Any>) {
+            if (chatMessage["isBot"] != true) {
+                metadata.visibility = View.GONE
+                metadata.text = ""
+                return
+            }
+            val record = MessageMetadata.fromMessage(chatMessage)
+            val generated = GeneratedImageMetadata.fromJson(
+                chatMessage[GeneratedImageMetadata.KEY]?.toString()
+            )
+            val parts = ArrayList<String>(2)
+            if (preferences.getShowModelNames()) {
+                (record?.displayModelId() ?: generated?.modelId?.trim()?.ifBlank { null })
+                    ?.let(parts::add)
+            }
+            if (preferences.getShowTokenUsage() && record?.hasTokenUsage() == true) {
+                formatCompactTokens(record)?.let(parts::add)
+            }
+            metadata.text = parts.joinToString(" · ")
+            metadata.visibility = if (parts.isEmpty()) View.GONE else View.VISIBLE
+        }
+
+        private fun formatCompactTokens(record: MessageMetadata): String? {
+            val format = NumberFormat.getIntegerInstance()
+            val input = record.inputTokens?.let { format.format(it) }
+            val output = record.outputTokens?.let { format.format(it) }
+            val total = record.totalTokens?.let { format.format(it) }
+            return when {
+                input != null && output != null ->
+                    context.getString(R.string.message_metadata_tokens_both, input, output)
+                input != null -> context.getString(R.string.message_metadata_tokens_input, input)
+                output != null -> context.getString(R.string.message_metadata_tokens_output, output)
+                total != null -> context.getString(R.string.message_metadata_tokens_total, total)
+                else -> null
+            }
+        }
+
+        /** Small anchored, selectable and internally scrollable details popup. */
+        private fun showMessageDetails(anchor: View, chatMessage: HashMap<String, Any>) {
+            val record = MessageMetadata.fromMessage(chatMessage)
+            val generated = GeneratedImageMetadata.fromJson(
+                chatMessage[GeneratedImageMetadata.KEY]?.toString()
+            )
+            val details = SpannableStringBuilder()
+
+            fun add(labelRes: Int, value: String?) {
+                val clean = value?.trim()?.ifBlank { null } ?: return
+                if (details.isNotEmpty()) details.append('\n')
+                val start = details.length
+                details.append(context.getString(labelRes)).append(':')
+                details.setSpan(
+                    StyleSpan(Typeface.BOLD),
+                    start,
+                    details.length,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                details.append(' ').append(clean)
+            }
+
+            val isBot = chatMessage["isBot"] == true
+            add(
+                R.string.message_details_sender,
+                if (isBot) resolveAssistantLabel(chatMessage)
+                else context.getString(R.string.chat_role_user)
+            )
+
+            val createdAt = record?.createdAt ?: generated?.createdAt?.takeIf { it > 0L }
+            createdAt?.let { timestamp ->
+                val date = Date(timestamp)
+                add(
+                    R.string.message_details_date,
+                    DateFormat.getDateInstance(DateFormat.MEDIUM).format(date)
+                )
+                add(
+                    R.string.message_details_time,
+                    DateFormat.getTimeInstance(DateFormat.SHORT).format(date)
+                )
+            }
+
+            if (isBot) {
+                add(
+                    R.string.message_details_model,
+                    record?.displayModelId() ?: generated?.modelId
+                )
+                add(R.string.message_details_provider, record?.displayProvider())
+                add(
+                    R.string.message_details_endpoint,
+                    record?.endpointLabel ?: generated?.endpointId ?: record?.endpointId
+                )
+                add(R.string.message_details_source, record?.endpointSource)
+                val number = NumberFormat.getIntegerInstance()
+                add(
+                    R.string.message_details_input_tokens,
+                    record?.inputTokens?.let { number.format(it) }
+                )
+                add(
+                    R.string.message_details_output_tokens,
+                    record?.outputTokens?.let { number.format(it) }
+                )
+                add(
+                    R.string.message_details_total_tokens,
+                    record?.totalTokens?.let { number.format(it) }
+                )
+                add(R.string.message_details_response_id, record?.responseId)
+                add(R.string.message_details_status, messageStatus(chatMessage, generated))
+            }
+
+            val content = LayoutInflater.from(context)
+                .inflate(R.layout.popup_message_details, null, false)
+            content.findViewById<TextView>(R.id.message_details_text).text = details
+
+            val screenWidth = context.resources.displayMetrics.widthPixels
+            val screenHeight = context.resources.displayMetrics.heightPixels
+            val margin = dimensionPixelSize(R.dimen.message_details_screen_margin)
+            val popupWidth = minOf(
+                dimensionPixelSize(R.dimen.message_details_width),
+                screenWidth - margin * 2
+            )
+            val maxHeight = minOf(
+                dimensionPixelSize(R.dimen.message_details_max_height),
+                (screenHeight * 0.55f).toInt()
+            )
+            content.measure(
+                View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(maxHeight, View.MeasureSpec.AT_MOST)
+            )
+            val popupHeight = content.measuredHeight.coerceAtMost(maxHeight)
+            val popup = PopupWindow(content, popupWidth, popupHeight, true).apply {
+                setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+                isOutsideTouchable = true
+                elevation = dimensionPixelSize(R.dimen.message_details_elevation).toFloat()
+                inputMethodMode = PopupWindow.INPUT_METHOD_NOT_NEEDED
+            }
+            val location = IntArray(2)
+            anchor.getLocationOnScreen(location)
+            val maxX = (screenWidth - popupWidth - margin).coerceAtLeast(margin)
+            val x = location[0].coerceIn(margin, maxX)
+            val above = location[1] - popupHeight
+            val y = if (above >= margin) above else location[1] + anchor.height
+            popup.showAtLocation(anchor.rootView, Gravity.TOP or Gravity.START, x, y)
+        }
+
+        private fun messageStatus(
+            chatMessage: HashMap<String, Any>,
+            generated: GeneratedImageMetadata?
+        ): String {
+            if (generated != null) {
+                return context.getString(
+                    when (generated.status) {
+                        GeneratedImageMetadata.STATUS_GENERATING -> R.string.message_details_status_generating
+                        GeneratedImageMetadata.STATUS_COMPLETE -> R.string.message_details_status_complete
+                        GeneratedImageMetadata.STATUS_FAILED -> R.string.message_details_status_failed
+                        GeneratedImageMetadata.STATUS_CANCELLED -> R.string.message_details_status_cancelled
+                        else -> R.string.message_details_status_incomplete
+                    }
+                )
+            }
+            return context.getString(
+                when (chatMessage[MessageCompletionState.KEY_STATE]?.toString()) {
+                    MessageCompletionState.STREAMING -> R.string.message_details_status_generating
+                    MessageCompletionState.STOPPED -> R.string.message_details_status_stopped
+                    MessageCompletionState.FAILED -> R.string.message_details_status_failed
+                    MessageCompletionState.INTERRUPTED -> R.string.message_details_status_interrupted
+                    null, "", MessageCompletionState.DONE -> R.string.message_details_status_complete
+                    else -> R.string.message_details_status_incomplete
                 }
             )
         }
