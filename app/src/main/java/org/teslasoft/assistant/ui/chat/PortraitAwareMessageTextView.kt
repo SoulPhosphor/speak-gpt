@@ -99,7 +99,7 @@ class PortraitAwareMessageTextView @JvmOverloads constructor(
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        updateTopMargin(findRowView(R.id.username))
+        updateTopMargin(findRowView<TextView>(R.id.username))
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     }
 
@@ -151,9 +151,11 @@ class PortraitAwareMessageTextView @JvmOverloads constructor(
     private fun dimen(id: Int): Int = resources.getDimensionPixelSize(id)
 
     private inline fun <reified T : View> findRowView(id: Int): T? {
-        var root: View = this
-        while (root.parent is View) root = root.parent as View
-        return root.findViewById(id)
+        var row: View? = this
+        while (row != null && row.id != R.id.ui) {
+            row = row.parent as? View
+        }
+        return row?.findViewById(id)
     }
 
     private class PortraitClearanceSpan(
