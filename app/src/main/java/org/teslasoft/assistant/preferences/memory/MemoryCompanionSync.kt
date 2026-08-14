@@ -42,6 +42,18 @@ import org.teslasoft.assistant.preferences.dto.PersonaObject
 object MemoryCompanionSync {
 
     /**
+     * Test seam: the narrow store + persona surface that [resolveCompanion]
+     * needs, so the self-healing logic can be exercised without an Android
+     * Context or a real SQLCipher database.
+     */
+    internal interface Deps {
+        fun findByAppCharacterId(personaId: String): CompanionRecord?
+        fun getPersona(personaId: String): PersonaObject?
+        fun insertCompanion(record: CompanionRecord)
+        fun updateMirror(companionId: String, appCharacterId: String, label: String, mirrorText: String)
+    }
+
+    /**
      * The bootstrap migration from app_adaptation_notes: create an ACTIVE
      * companion record for every existing app persona that doesn't have one
      * (user-created entries are canon — unlike Archivist drafts they need no
@@ -75,23 +87,58 @@ object MemoryCompanionSync {
      * pre-existing chat unattributed as "companion=none"). Returns null only
      * when the store isn't provisioned or the persona id is stale (a dangling
      * per-chat persona_id must not manufacture a ghost companion).
+     *
+     * When an existing companion is found, the mirror is checked against the
+     * current app persona's default prompt. If they differ (a previous
+     * save-time sync was missed or the default prompt changed since), the
+     * mirror is refreshed through the same update path that [onPersonaSaved]
+     * uses, and the returned record reflects the refreshed values. An
+     * already-current mirror causes no write. Name reconciliation is
+     * preserved: a stale companion name is updated alongside the mirror.
      */
     fun ensureCompanionForPersona(context: Context, personaId: String): CompanionRecord? {
         return try {
             if (personaId.isBlank() || !MemoryStore.isProvisioned(context)) return null
             val store = MemoryStore.getInstance(context)
-            store.findCompanionByAppCharacterId(personaId)?.let { return it }
-            val persona = PersonaPreferences.getPersonaPreferences(context).getPersona(personaId)
-            if (persona.label.isBlank()) return null
-            val record = newCompanion(personaId, persona)
-            store.insertCompanion(record)
-            MemoryLog.log(context, "MemorySync", "info",
-                "Companion auto-created for persona \"${persona.label}\"")
-            record
+            val deps = object : Deps {
+                override fun findByAppCharacterId(id: String) = store.findCompanionByAppCharacterId(id)
+                override fun getPersona(id: String): PersonaObject? {
+                    val p = PersonaPreferences.getPersonaPreferences(context).getPersona(id)
+                    return if (p.label.isBlank()) null else p
+                }
+                override fun insertCompanion(record: CompanionRecord) = store.insertCompanion(record)
+                override fun updateMirror(companionId: String, appCharacterId: String, label: String, mirrorText: String) =
+                    store.updateCompanionForPersona(companionId, appCharacterId, label, mirrorText)
+            }
+            resolveCompanion(deps, personaId)
         } catch (e: Exception) {
             MemoryLog.log(context, "MemorySync", "error", "ensureCompanion failed: ${e.message}")
             null
         }
+    }
+
+    internal fun resolveCompanion(deps: Deps, personaId: String): CompanionRecord? {
+        val existing = deps.findByAppCharacterId(personaId)
+        val persona = deps.getPersona(personaId)
+
+        if (existing != null) {
+            val mirrorStale = existing.mirrorText != persona?.prompt
+            val nameStale = persona != null && persona.label.isNotBlank() && persona.label != existing.currentName
+            if (!mirrorStale && !nameStale) return existing
+            if (persona != null) {
+                deps.updateMirror(existing.companionId, personaId, persona.label, persona.prompt)
+                return existing.copy(
+                    currentName = if (nameStale) persona.label else existing.currentName,
+                    mirrorText = persona.prompt
+                )
+            }
+            return existing
+        }
+
+        if (persona == null) return null
+        val record = newCompanion(personaId, persona)
+        deps.insertCompanion(record)
+        return record
     }
 
     /**
