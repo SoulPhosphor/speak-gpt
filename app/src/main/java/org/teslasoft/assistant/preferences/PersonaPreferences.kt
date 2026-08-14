@@ -131,10 +131,15 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         val id = StableId.resolve(persona.id, "p-")
         persona.id = id
         putString(id + "_label", persona.label)
-        putString(id + "_prompt", persona.prompt)
         if (persona.promptVariants.isNotEmpty()) {
+            val defaultVariant = persona.promptVariants.firstOrNull { it.isDefault }
+                ?: persona.promptVariants.firstOrNull()
+            if (defaultVariant != null && defaultVariant.text != persona.prompt) {
+                defaultVariant.text = persona.prompt
+            }
             putString(id + "_prompt_variants", CompanionPromptVariant.toJson(persona.promptVariants))
         }
+        putString(id + "_prompt", persona.prompt)
         putString(id + "_activation_prompt_id", persona.activationPromptId)
         putString(id + "_core_lorebook_id", persona.coreLoreBookId)
         putString(id + "_additional_lorebook_ids", persona.additionalLoreBookIds)
