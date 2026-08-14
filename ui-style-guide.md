@@ -421,6 +421,44 @@ geometry instead of copying padding and height in Kotlin.
 The chip may add a leading semantic status icon when the feature requires one.
 That status icon does not replace the trailing removal control.
 
+## Prompt tabs
+
+Used on the Edit Companion screen for the multiple-prompt variant feature. Each companion can have several named prompt variants displayed as wrapping tabs above the prompt editor.
+
+### Inactive prompt tab
+
+`Widget.App.PromptTab`
+
+Outlined rectangle (1dp `colorOutline` stroke, 4dp corners, transparent fill). 36dp tall, 14dp horizontal padding, 14sp text. Wraps its label width up to 160dp, then ellipsizes. Uses `bg_prompt_tab` drawable — the same outlined-box pattern as `bg_field_box`.
+
+### Active prompt tab
+
+`Widget.App.PromptTab.Active`
+
+Filled rectangle (`colorPrimary` background, `colorOnPrimary` text, 4dp corners). Uses `bg_prompt_tab_active` drawable. Inherits all other properties from the inactive tab.
+
+### Add-tab button
+
+`Widget.App.PromptTab.Add`
+
+Fixed 36x36dp square, centered "+" label. Outlined box matching the inactive tab. Always placed at the end of the wrapping row.
+
+### Prompt tab row
+
+A `ChipGroup` with `singleLine="false"` and `chipSpacingHorizontal/Vertical="6dp"`. The tabs are plain `TextView` views styled in code — they are not Material `Chip` widgets. The `ChipGroup` provides only the wrapping-row layout.
+
+### Prompt editor frame
+
+A `ConstraintLayout` containing:
+
+1. **Tab name** — a `TextView` showing the active variant's name, left-aligned.
+2. **Three-dot menu** — an `ImageButton` (36x36dp, `ic_more_vert`) anchored to the trailing edge, opening a `PopupMenu` with: Make Default, Rename, Copy From…, Duplicate, Clear, Delete.
+3. **Text field** — the `field_prompt` `TextInputEditText`, `minLines="8"` with `scrollbars="vertical"`, transparent background, bordered by `bg_prompt_editor` (same outlined-box pattern as `bg_field_box`).
+
+### Prompt tab counter
+
+A `TextView` showing the active tab's 1-based position and total count (e.g. "3 of 5"), placed above the tab row.
+
 ## Screen sections
 
 ### Section title

@@ -19,8 +19,14 @@ package org.teslasoft.assistant.preferences.dto
 class PersonaObject(
     /* Editable display name shown as the card label. NOT the identity — see [id]. */
     var label: String,
-    /* The persona prompt. Prepended before the always-on system message. */
+    /* The default persona prompt text. Prepended before the always-on system message.
+     * When multiple prompt variants exist, this returns the default variant's text.
+     * Setting this updates the default variant (or the single legacy prompt). */
     var prompt: String = "",
+    /* All prompt variants for this companion. Empty list means a legacy single-prompt
+     * companion (use [prompt] directly). Populated from the _prompt_variants
+     * SharedPreferences key; missing key falls back to a single variant from [prompt]. */
+    var promptVariants: ArrayList<CompanionPromptVariant> = arrayListOf(),
     /* Hashed id of the associated activation prompt, or "" for None (always available). */
     var activationPromptId: String = "",
     /* Lorebook always active while this persona is used, or "" for none. */

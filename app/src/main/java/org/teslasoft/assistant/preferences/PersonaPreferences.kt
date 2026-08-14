@@ -19,6 +19,7 @@ package org.teslasoft.assistant.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import org.teslasoft.assistant.preferences.dto.CompanionPromptVariant
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
 import org.teslasoft.assistant.util.StableId
@@ -77,7 +78,16 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
 
     fun getPersona(id: String): PersonaObject {
         val label = getString(id + "_label", "")
-        val prompt = getString(id + "_prompt", "")
+        val legacyPrompt = getString(id + "_prompt", "")
+        val variantsJson = getString(id + "_prompt_variants", "")
+        val variants = if (variantsJson.isNotBlank()) {
+            ArrayList(CompanionPromptVariant.fromJson(variantsJson))
+        } else if (legacyPrompt.isNotBlank()) {
+            ArrayList(CompanionPromptVariant.migrateFromSinglePrompt(legacyPrompt))
+        } else {
+            ArrayList(CompanionPromptVariant.migrateFromSinglePrompt(""))
+        }
+        val prompt = CompanionPromptVariant.defaultPrompt(variants)
         val activationPromptId = getString(id + "_activation_prompt_id", "")
         val coreLoreBookId = getString(id + "_core_lorebook_id", "")
         val additionalLoreBookIds = getString(id + "_additional_lorebook_ids", "")
@@ -87,9 +97,10 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         val chatNameFontId = getString(id + "_chat_name_font_id", "")
         val chatNameSizeSp = getString(id + "_chat_name_size_sp", "0").toIntOrNull() ?: 0
         return PersonaObject(
-            label, prompt, activationPromptId,
-            coreLoreBookId, additionalLoreBookIds, autoLoadLastLoreBooks, lastUsedLoreBookIds,
-            avatarRef, id, chatNameFontId, chatNameSizeSp
+            label, prompt, promptVariants = variants, activationPromptId = activationPromptId,
+            coreLoreBookId = coreLoreBookId, additionalLoreBookIds = additionalLoreBookIds,
+            autoLoadLastLoreBooks = autoLoadLastLoreBooks, lastUsedLoreBookIds = lastUsedLoreBookIds,
+            avatarRef = avatarRef, id = id, chatNameFontId = chatNameFontId, chatNameSizeSp = chatNameSizeSp
         )
     }
 
@@ -121,6 +132,9 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         persona.id = id
         putString(id + "_label", persona.label)
         putString(id + "_prompt", persona.prompt)
+        if (persona.promptVariants.isNotEmpty()) {
+            putString(id + "_prompt_variants", CompanionPromptVariant.toJson(persona.promptVariants))
+        }
         putString(id + "_activation_prompt_id", persona.activationPromptId)
         putString(id + "_core_lorebook_id", persona.coreLoreBookId)
         putString(id + "_additional_lorebook_ids", persona.additionalLoreBookIds)
@@ -204,6 +218,7 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
     private fun removePersonaKeys(id: String) {
         preferences.edit { remove(id + "_label") }
         preferences.edit { remove(id + "_prompt") }
+        preferences.edit { remove(id + "_prompt_variants") }
         preferences.edit { remove(id + "_activation_prompt_id") }
         preferences.edit { remove(id + "_core_lorebook_id") }
         preferences.edit { remove(id + "_additional_lorebook_ids") }

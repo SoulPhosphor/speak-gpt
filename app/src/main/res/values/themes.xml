@@ -1114,6 +1114,42 @@
         <item name="android:activityCloseExitAnimation">@anim/mtrl_activity_close_exit</item>
     </style>
 
+    <!-- ===== Companion prompt tabs (multiple-prompt feature, Aug 2026) =====
+         The tabbed prompt area on the Edit Companion screen. Each tab is a
+         tappable label for one prompt variant; the active tab is filled with
+         colorPrimary, inactive tabs show an outlined box matching Field.Box.
+         The add-tab button (+) sits at the end of the wrapping row. The
+         editor frame wraps the prompt name, three-dot menu, and text field. -->
+    <style name="Widget.App.PromptTab" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="android:background">@drawable/bg_prompt_tab</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingHorizontal">14dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="Widget.App.PromptTab.Active" parent="Widget.App.PromptTab">
+        <item name="android:background">@drawable/bg_prompt_tab_active</item>
+        <item name="android:textColor">?attr/colorOnPrimary</item>
+    </style>
+
+    <style name="Widget.App.PromptTab.Add" parent="">
+        <item name="android:layout_width">36dp</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="android:background">@drawable/bg_prompt_tab</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
     <!-- Every dialog's title is centered (owner ruling, July 21 2026 -
          corrects the July 20 ruling below, which only centered a
          single-question dialog's title via a per-call runtime gravity
