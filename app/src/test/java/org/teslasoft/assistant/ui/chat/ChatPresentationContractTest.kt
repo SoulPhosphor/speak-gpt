@@ -93,6 +93,7 @@ class ChatPresentationContractTest {
         assertTrue(dimens.contains("name=\"chat_message_ai_right_inset\">28dp"))
         assertTrue(dimens.contains("name=\"chat_message_user_left_inset\">49dp"))
         assertTrue(dimens.contains("name=\"chat_message_content_padding\">14dp"))
+        assertTrue(dimens.contains("name=\"chat_message_leading_spacing\">22dp"))
         assertTrue(dimens.contains("name=\"chat_message_unit_spacing\">22dp"))
         assertTrue(dimens.contains("name=\"chat_portrait_size\">96dp"))
         assertTrue(dimens.contains("name=\"chat_portrait_edge_inset\">17dp"))
@@ -106,6 +107,7 @@ class ChatPresentationContractTest {
             val xml = source(path)
             assertTrue(path, xml.contains("@dimen/chat_message_speaker_inset"))
             assertTrue(path, xml.contains("@dimen/chat_message_content_padding"))
+            assertTrue(path, xml.contains("android:paddingTop=\"@dimen/chat_message_leading_spacing\""))
             assertTrue(path, xml.contains("@dimen/chat_message_unit_spacing"))
             assertTrue(path, xml.contains("@dimen/chat_portrait_size"))
             assertTrue(path, xml.contains("PortraitAwareMessageTextView"))
@@ -115,5 +117,35 @@ class ChatPresentationContractTest {
             assertTrue("$path is missing an existing action", positions.all { it >= 0 })
             assertTrue("$path changed the existing action order", positions == positions.sorted())
         }
+    }
+
+    @Test
+    fun portraitsAndNamesKeepTheTunersLayeringAndForegrounds() {
+        for (path in messageLayouts) {
+            val xml = source(path)
+            val bubble = xml.indexOf("android:id=\"@+id/bubble_bg\"")
+            val name = xml.indexOf("android:id=\"@+id/username\"")
+            val portrait = xml.indexOf("android:id=\"@+id/icon\"")
+            assertTrue("$path is missing a presentation layer", listOf(bubble, name, portrait).all { it >= 0 })
+            assertTrue("$path must draw bubble, then name, then portrait", bubble < name && name < portrait)
+        }
+
+        val userLayout = source("src/main/res/layout/view_assistant_user_message.xml")
+        val userNameStart = userLayout.indexOf("android:id=\"@+id/username\"")
+        val userNameEnd = userLayout.indexOf("/>", userNameStart)
+        assertTrue(
+            "The user name must contrast with the primary-colored user bubble",
+            userLayout.substring(userNameStart, userNameEnd).contains("android:textColor=\"?attr/colorSurface\"")
+        )
+
+        val adapter = source(
+            "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
+        )
+        assertTrue(adapter.split("username.setTextColor(foreground)").size - 1 >= 2)
+        assertTrue(adapter.contains("private fun useFullPortraitSlot()"))
+        assertTrue(adapter.contains("icon.setPadding(0, 0, 0, 0)"))
+        assertTrue(adapter.contains("private fun restorePortraitGlyphSlot()"))
+        assertTrue(Regex("useFullPortraitSlot\\(\\)").findAll(adapter).count() >= 5)
+        assertTrue(Regex("restorePortraitGlyphSlot\\(\\)").findAll(adapter).count() >= 4)
     }
 }
