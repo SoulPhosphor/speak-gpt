@@ -276,6 +276,16 @@ class EditPersonaActivity : FragmentActivity() {
         renderPromptTabs()
         loadActivePrompt()
 
+        fieldPrompt?.setOnTouchListener { v, event ->
+            if (v.hasFocus()) {
+                v.parent.requestDisallowInterceptTouchEvent(true)
+                if (event.action == android.view.MotionEvent.ACTION_UP) {
+                    v.parent.requestDisallowInterceptTouchEvent(false)
+                }
+            }
+            false
+        }
+
         btnPromptMenu?.setOnClickListener { showPromptMenu(it) }
 
         selectedActivationPromptId = intent.getStringExtra(EXTRA_ACTIVATION_ID) ?: ""
@@ -650,7 +660,7 @@ class EditPersonaActivity : FragmentActivity() {
     private fun addPromptTab() {
         saveActivePromptToVariants()
         val name = CompanionPromptVariant.nextPromptName(promptVariants)
-        promptVariants.add(CompanionPromptVariant(name, "", false))
+        promptVariants.add(CompanionPromptVariant(name = name, text = "", isDefault = false))
         activeTabIndex = promptVariants.size - 1
         loadActivePrompt()
         renderPromptTabs()
@@ -785,7 +795,7 @@ class EditPersonaActivity : FragmentActivity() {
         saveActivePromptToVariants()
         val current = promptVariants[activeTabIndex]
         val newName = CompanionPromptVariant.nextPromptName(promptVariants)
-        promptVariants.add(CompanionPromptVariant(newName, current.text, false))
+        promptVariants.add(CompanionPromptVariant(name = newName, text = current.text, isDefault = false))
         activeTabIndex = promptVariants.size - 1
         loadActivePrompt()
         renderPromptTabs()

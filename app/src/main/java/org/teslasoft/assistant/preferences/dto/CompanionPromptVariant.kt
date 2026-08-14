@@ -18,8 +18,10 @@ package org.teslasoft.assistant.preferences.dto
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 data class CompanionPromptVariant(
+    val id: String = UUID.randomUUID().toString(),
     var name: String,
     var text: String,
     var isDefault: Boolean
@@ -29,6 +31,7 @@ data class CompanionPromptVariant(
             val arr = JSONArray()
             for (v in variants) {
                 val obj = JSONObject()
+                obj.put("id", v.id)
                 obj.put("name", v.name)
                 obj.put("text", v.text)
                 obj.put("isDefault", v.isDefault)
@@ -44,8 +47,10 @@ data class CompanionPromptVariant(
                 val list = mutableListOf<CompanionPromptVariant>()
                 for (i in 0 until arr.length()) {
                     val obj = arr.getJSONObject(i)
+                    val id = obj.optString("id", "").ifBlank { UUID.randomUUID().toString() }
                     list.add(
                         CompanionPromptVariant(
+                            id = id,
                             name = obj.optString("name", ""),
                             text = obj.optString("text", ""),
                             isDefault = obj.optBoolean("isDefault", false)
@@ -59,7 +64,7 @@ data class CompanionPromptVariant(
         }
 
         fun migrateFromSinglePrompt(prompt: String): List<CompanionPromptVariant> {
-            return listOf(CompanionPromptVariant("Prompt 1", prompt, true))
+            return listOf(CompanionPromptVariant(name = "Prompt 1", text = prompt, isDefault = true))
         }
 
         fun defaultPrompt(variants: List<CompanionPromptVariant>): String {
