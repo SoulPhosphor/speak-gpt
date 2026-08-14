@@ -12,6 +12,7 @@ import android.graphics.Typeface
 import android.util.TypedValue
 import android.widget.TextView
 import androidx.annotation.FontRes
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
@@ -100,10 +101,14 @@ object ChatNameStyle {
 
         // Preferences historically returned 18sp when the size key had never
         // been written. Keep explicit user choices untouched, but render the
-        // new 21sp tuned default for an untouched Appearance setting.
-        val sizeKey = when (textView.tag?.toString()) {
-            "user_chat_name" -> USER_SIZE_KEY
-            "ai_chat_name" -> AI_SIZE_KEY
+        // new 21sp tuned default for an untouched Appearance setting. At this
+        // point the XML still carries the mirrored start/end constraint, so it
+        // identifies the side without adding another presentation flag.
+        val params = textView.layoutParams as? ConstraintLayout.LayoutParams
+        val sizeKey = when {
+            params?.endToEnd != ConstraintLayout.LayoutParams.UNSET &&
+                params.startToStart == ConstraintLayout.LayoutParams.UNSET -> USER_SIZE_KEY
+            params?.startToStart != ConstraintLayout.LayoutParams.UNSET -> AI_SIZE_KEY
             else -> null
         }
         val global = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
