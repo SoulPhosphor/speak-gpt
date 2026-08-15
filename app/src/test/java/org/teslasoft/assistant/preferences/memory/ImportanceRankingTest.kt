@@ -17,68 +17,107 @@
 package org.teslasoft.assistant.preferences.memory
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
 
-/**
- * The one shared importance-access path (canonical recovery plan Phase 2, item
- * 3), proven on the JVM. Covers the two required behaviors:
- *
- *  5. Importance Off contributes EXACTLY ZERO to ranking without changing the
- *     stored ratings.
- *  6. Importance On reuses the preserved stored values.
- *
- * The gate is pure ([ImportanceRanking.effectiveImportanceWeight]); it is
- * exercised directly and then through [Librarian.rank] to show it changes only
- * the score contribution, never a memory's stored importance.
- */
+/** JVM coverage for the user-owned signed importance contract. */
 class ImportanceRankingTest {
 
-    private val storedImportanceWeight = 0.3
-
-    @Test
-    fun offZeroesTheWeight_onKeepsIt() {
-        // Test 5 / 6 at the shared-path level.
-        assertEquals(0.0, ImportanceRanking.effectiveImportanceWeight(storedImportanceWeight, false), 0.0)
-        assertEquals(storedImportanceWeight, ImportanceRanking.effectiveImportanceWeight(storedImportanceWeight, true), 0.0)
-    }
-
-    private fun mem(id: String, importance: Int) = RetrievableMemory(
-        memoryId = id, scope = "global", content = id, embeddingText = null,
-        importance = importance, createdAt = "2026-07-01T00:00:00Z", worldId = null,
+    private fun mem(id: String, importance: Int, content: String = id) = RetrievableMemory(
+        memoryId = id,
+        scope = "global",
+        content = content,
+        embeddingText = null,
+        importance = importance,
+        createdAt = "2026-07-01T00:00:00Z",
+        worldId = null,
         updatedAt = null
     )
 
     @Test
-    fun importanceOff_twoMemoriesIdenticalExceptImportanceScoreEqually() {
-        // Two candidates identical but for importance, same vector/recency/boost.
+    fun signedScaleIsCenteredOnNeutral_andPlusThreeDoesNotGetExtraScore() {
+        assertEquals(-1.0, ImportanceRanking.normalizedRankingValue(-2), 1e-9)
+        assertEquals(-0.5, ImportanceRanking.normalizedRankingValue(-1), 1e-9)
+        assertEquals(0.0, ImportanceRanking.normalizedRankingValue(0), 1e-9)
+        assertEquals(0.5, ImportanceRanking.normalizedRankingValue(1), 1e-9)
+        assertEquals(1.0, ImportanceRanking.normalizedRankingValue(2), 1e-9)
+        assertEquals(1.0, ImportanceRanking.normalizedRankingValue(3), 1e-9)
+    }
+
+    @Test
+    fun absentImportanceIsNeutral() {
+        assertEquals(0, ImportanceRanking.sanitizeImportance(null))
+    }
+
+    @Test
+    fun offZeroesRanking_andDisablesPlusThreeMandatoryInclusion() {
+        val configuredWeight = 0.3
+        assertEquals(0.0, ImportanceRanking.effectiveImportanceWeight(configuredWeight, false), 0.0)
+        assertFalse(ImportanceRanking.isAlwaysIncluded(3, false))
+
         val vec = floatArrayOf(1f, 0f, 0f)
-        val low = mem("low", importance = 0)
-        val high = mem("high", importance = 5)
         val candidates = listOf(
-            Librarian.Candidate(low, vec, recency = 0.5, boost = 0.0),
-            Librarian.Candidate(high, vec, recency = 0.5, boost = 0.0)
+            Librarian.Candidate(mem("normal", 0), vec, recency = 0.5),
+            Librarian.Candidate(mem("plus-three", 3), vec, recency = 0.5)
         )
+        val offWeights = Librarian.Weights(
+            similarity = 1.0,
+            importance = ImportanceRanking.effectiveImportanceWeight(configuredWeight, false),
+            recency = 0.0,
+            useImportanceRatings = false
+        )
+        val ranked = Librarian.rank(vec, candidates, offWeights, topK = 1)
+        assertEquals(listOf("normal"), ranked.map { it.memory.memoryId })
+    }
 
-        // Off: importance weight is exactly zero, so the two score identically —
-        // importance made no difference at all.
-        val offWeights = Librarian.Weights(0.6, ImportanceRanking.effectiveImportanceWeight(storedImportanceWeight, false), 0.1)
-        val off = Librarian.rank(vec, candidates, offWeights, topK = 2)
-        val offLow = off.first { it.memory.memoryId == "low" }.score
-        val offHigh = off.first { it.memory.memoryId == "high" }.score
-        assertEquals("importance Off must contribute exactly zero", offLow, offHigh, 1e-6f)
+    @Test
+    fun signedImportanceReordersOtherwiseEqualEligibleMemories() {
+        val vec = floatArrayOf(1f, 0f, 0f)
+        val candidates = listOf(
+            Librarian.Candidate(mem("demoted", -2), vec, recency = 0.5),
+            Librarian.Candidate(mem("promoted", 2), vec, recency = 0.5)
+        )
+        val weights = Librarian.Weights(0.6, 0.3, 0.1, useImportanceRatings = true)
+        val ranked = Librarian.rank(vec, candidates, weights, topK = 2)
+        assertEquals("promoted", ranked.first().memory.memoryId)
+    }
 
-        // On: the stored ratings take effect again (no rewrite needed), so the
-        // higher-importance memory now outscores the lower one.
-        val onWeights = Librarian.Weights(0.6, ImportanceRanking.effectiveImportanceWeight(storedImportanceWeight, true), 0.1)
-        val on = Librarian.rank(vec, candidates, onWeights, topK = 2)
-        val onLow = on.first { it.memory.memoryId == "low" }.score
-        val onHigh = on.first { it.memory.memoryId == "high" }.score
-        assertTrue("importance On must reuse the stored ratings", onHigh > onLow)
+    @Test
+    fun plusThreeBypassesSemanticCountCapAfterEligibility() {
+        val vec = floatArrayOf(1f, 0f, 0f)
+        val candidates = listOf(
+            Librarian.Candidate(mem("normal", 0), vec, recency = 0.5),
+            Librarian.Candidate(mem("must-include", 3), vec, recency = 0.5)
+        )
+        val weights = Librarian.Weights(1.0, 0.0, 0.0, useImportanceRatings = true)
+        val ranked = Librarian.rank(vec, candidates, weights, topK = 1)
+        assertEquals(listOf("normal", "must-include"), ranked.map { it.memory.memoryId })
+        assertTrue(ImportanceRanking.isAlwaysIncluded(3, true))
+    }
 
-        // The stored ratings themselves were never touched by ranking.
-        assertEquals(0, low.importance)
-        assertEquals(5, high.importance)
+    @Test
+    fun plusThreeCannotBypassSemanticRelevanceFloor() {
+        val query = floatArrayOf(1f, 0f)
+        val candidates = listOf(
+            Librarian.Candidate(mem("relevant", 0), floatArrayOf(1f, 0f), recency = 0.5),
+            Librarian.Candidate(mem("irrelevant-plus-three", 3), floatArrayOf(0f, 1f), recency = 0.5)
+        )
+        val weights = Librarian.Weights(1.0, 0.0, 0.0, useImportanceRatings = true)
+        val ranked = Librarian.rank(query, candidates, weights, topK = 1, minSimilarity = 0.3f)
+        assertEquals(listOf("relevant"), ranked.map { it.memory.memoryId })
+    }
+
+    @Test
+    fun plusThreeBypassesLexicalCountCapButNotTokenEligibility() {
+        val candidates = listOf(
+            Librarian.LexicalCandidate(mem("normal", 0, "garden plans"), emptyList(), recency = 0.5),
+            Librarian.LexicalCandidate(mem("must-include", 3, "garden notes"), emptyList(), recency = 0.5),
+            Librarian.LexicalCandidate(mem("unrelated", 3, "tax paperwork"), emptyList(), recency = 0.5)
+        )
+        val weights = Librarian.Weights(1.0, 0.0, 0.0, useImportanceRatings = true)
+        val ranked = Librarian.rankLexical("garden", candidates, weights, topK = 1)
+        assertEquals(listOf("normal", "must-include"), ranked.map { it.memory.memoryId })
     }
 }
