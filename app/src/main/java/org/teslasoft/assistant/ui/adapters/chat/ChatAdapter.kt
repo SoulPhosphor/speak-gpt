@@ -49,6 +49,7 @@ import android.text.style.LineHeightSpan
 import android.text.style.TtsSpan
 import android.util.DisplayMetrics
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -429,6 +430,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // identical. Present on both message layouts.
         private val btnImageShare: ImageButton = itemView.findViewById(R.id.btn_image_share)
         private val btnImageCopy: ImageButton = itemView.findViewById(R.id.btn_image_copy)
+        // The row container holding the bubble; centered for a generated image so
+        // the picture (and the in-bubble name with it) sits centered on screen.
+        private val messageRow: LinearLayout? = itemView.findViewById(R.id.linearLayout3)
+        // Speaker name drawn INSIDE the bubble, used only when a centered image
+        // bubble would otherwise strand the row-level name. Present on the bot
+        // layout only (generated images are assistant-side), hence nullable.
+        private val bubbleName: TextView? = itemView.findViewById(R.id.bubble_name)
         private var boundGeneratedImagePath: String? = null
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btn_edit)
@@ -898,21 +906,36 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             ui.setBackgroundColor(0x00000000)
 
-            username.text = if (isBot) {
+            val nameText = if (isBot) {
                 resolveAssistantLabel(chatMessage)
             } else {
                 context.getString(R.string.chat_role_user)
             }
-            ChatNameStyle.apply(
-                username,
-                context,
-                if (isBot) {
-                    companionNameStyle ?: ChatNameStyle.ai(preferences)
+            val nameStyle = if (isBot) {
+                companionNameStyle ?: ChatNameStyle.ai(preferences)
+            } else {
+                ChatNameStyle.user(preferences)
+            }
+
+            // A centered image bubble would leave the row-level name stranded to
+            // the side, so for that one case the name is drawn inside the bubble
+            // (bubbleName) and the row name is hidden. Every other case keeps the
+            // row name, which already lines up with the speaker-side bubble.
+            val nameInBubble = isImage && showName && showBubble && !showPortrait
+
+            username.text = nameText
+            ChatNameStyle.apply(username, context, nameStyle)
+            username.visibility = if (showName && !nameInBubble) View.VISIBLE else View.GONE
+
+            bubbleName?.let {
+                if (nameInBubble) {
+                    it.text = nameText
+                    ChatNameStyle.apply(it, context, nameStyle)
+                    it.visibility = View.VISIBLE
                 } else {
-                    ChatNameStyle.user(preferences)
+                    it.visibility = View.GONE
                 }
-            )
-            username.visibility = if (showName) View.VISIBLE else View.GONE
+            }
 
             icon.visibility = if (showPortrait) View.VISIBLE else View.GONE
             if (showPortrait) {
@@ -929,6 +952,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 val foreground = resolveThemeColor(R.attr.appTextColor)
                 message.setTextColor(foreground)
                 username.setTextColor(foreground)
+                bubbleName?.setTextColor(foreground)
+                tintActionIcons(foreground)
                 return
             }
 
@@ -953,19 +978,38 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
             message.setTextColor(foreground)
             username.setTextColor(foreground)
+            bubbleName?.setTextColor(foreground)
+            tintActionIcons(foreground)
         }
 
         /**
-         * Places the portrait, speaker name, and bubble. A generated image is
-         * NOT given a special centered/detached bubble (that stranded the name
-         * outside it); it uses the same speaker-side bubble as text, with the
-         * image dropped below the identity so the portrait never overlaps it.
+         * The message-action glyphs are authored tinted colorPrimary — the same
+         * color as the USER bubble — so on a user message they were invisible
+         * against their own bubble. Recolor them to the bubble's foreground so
+         * they contrast on both the AI and user bubbles. btnSpeak is left to
+         * updateSpeakButton, which owns its speaking-state color.
+         */
+        private fun tintActionIcons(foreground: Int) {
+            btnShare.setColorFilter(foreground)
+            btnRetry.setColorFilter(foreground)
+            btnCopy.setColorFilter(foreground)
+            btnEdit.setColorFilter(foreground)
+        }
+
+        /**
+         * Places the portrait, speaker name, and bubble.
          *
-         * With a portrait the name sits beside it at the approved offsets. With
-         * no portrait but a painted bubble, the name sits INSIDE the bubble,
-         * aligned with the message content (owner ask, Aug 15 2026: it must not
-         * ride the bubble's top border or hug the edge). The no-bubble
-         * presentation keeps its original placement untouched.
+         * A generated image bubble is centered on screen (owner ask, Aug 15
+         * 2026). To keep the name with that centered bubble it is drawn inside
+         * the bubble (bubbleName, wired in updatePresentation) rather than at the
+         * row level; under a portrait the bubble also drops below the portrait's
+         * full reach so the picture never overlaps it, and the row-level name
+         * stays beside the portrait.
+         *
+         * For text, the bubble hugs the speaker side. With a portrait the name
+         * sits beside it; with just a painted bubble the row name aligns with the
+         * message content (not the bubble's border). The no-bubble presentation
+         * keeps its original placement untouched.
          */
         private fun updateIdentityGeometry(
             isBot: Boolean,
@@ -976,8 +1020,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         ) {
             val contentPadding = dimensionPixelSize(R.dimen.chat_message_content_padding)
 
+            // A generated image bubble is centered on screen. Under a portrait it
+            // also drops below the portrait's full reach so it never overlaps.
+            val centerImage = isImage && showBubble
             val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
             bubbleParams.topMargin = when {
+                isImage && showPortrait -> dimensionPixelSize(R.dimen.chat_portrait_size) +
+                    dimensionPixelSize(R.dimen.chat_portrait_top_offset)
                 showPortrait -> dimensionPixelSize(R.dimen.chat_portrait_vertical_offset)
                 // Name inside the bubble: the bubble starts at the top with no
                 // half-line straddle, so the name no longer pokes above it.
@@ -987,6 +1036,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 else -> 0
             }
             bubbleBg.layoutParams = bubbleParams
+
+            messageRow?.gravity = when {
+                centerImage -> Gravity.CENTER_HORIZONTAL
+                isBot -> Gravity.START
+                else -> Gravity.END
+            }
 
             bubbleBg.setPadding(
                 contentPadding,
@@ -1042,28 +1097,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
             username.layoutParams = nameParams
 
-            // A generated image cannot wrap around the identity the way text
-            // does, so it starts below whichever identity is shown — the
-            // portrait's full height, or the name's line — while the bubble
-            // keeps its normal speaker-side shape. Non-image rows keep the
-            // frame flush (it is GONE for them anyway).
+            // The image frame's vertical position now comes from the bubble
+            // itself (pushed below the portrait) and the in-bubble name above it
+            // via the constraint chain, so the frame needs no extra margin.
             val imageParams = imageFrame.layoutParams as ViewGroup.MarginLayoutParams
-            imageParams.topMargin = if (isImage) {
-                val portraitClear = if (showPortrait) {
-                    dimensionPixelSize(R.dimen.chat_portrait_size) +
-                        dimensionPixelSize(R.dimen.chat_portrait_top_offset) - contentPadding
-                } else 0
-                val nameClear = if (showName) {
-                    username.lineHeight + dimensionPixelSize(R.dimen.chat_name_body_gap)
-                } else 0
-                maxOf(0, portraitClear, nameClear)
-            } else {
-                0
+            if (imageParams.topMargin != 0) {
+                imageParams.topMargin = 0
+                imageFrame.layoutParams = imageParams
             }
-            imageFrame.layoutParams = imageParams
 
             // The (GONE) message anchors the image frame; clear any stale
-            // text-clearance margin so it does not push the image down twice.
+            // text-clearance margin left from a recycled text row.
             if (isImage) {
                 val msgParams = message.layoutParams as ViewGroup.MarginLayoutParams
                 if (msgParams.topMargin != 0) {
