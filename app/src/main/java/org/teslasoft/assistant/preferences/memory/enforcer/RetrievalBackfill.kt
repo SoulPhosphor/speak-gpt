@@ -33,32 +33,34 @@ object RetrievalBackfill {
      * policy top-K (a fixed cap equal to the maximum top-K would leave no
      * room to backfill). The margin bounds the expensive per-candidate work —
      * the lore near-duplicate check may embed each examined candidate — so
-     * the worst case per turn is top-K + 64 embeds, which is already
-     * generous for an on-device model. This is an internal work bound, not a
-     * retrieval limit: it changes what is retrieved only in the extreme case
-     * where more than this many ranked-relevant candidates in a row are all
-     * removed by cooldown or lore overlap, and reaching it is recorded in
-     * the assembly notes so that case is never silent.
+     * the worst case per turn is top-K + 64 ORDINARY candidates. Explicit +3
+     * memories sit outside that ordinary work/count budget so they cannot
+     * consume the slots they are supposed to be added on top of.
+     *
+     * This remains an internal work bound, not a relevance gate. Reaching it
+     * is recorded in assembly notes so the extreme backfill case is visible.
      */
     const val SCAN_MARGIN = 64
 
-    /** The documented scan cap for one turn's candidate walk. */
+    /** The documented ordinary-candidate scan cap for one turn's walk. */
     fun scanCap(topK: Int): Int = topK + SCAN_MARGIN
 
     data class Selection<T>(
         val kept: List<T>,
+        /** Total candidates actually passed to [survives], mandatory included. */
         val examined: Int,
-        /** True when the cap stopped the walk while slots were still open and
-         *  unexamined candidates remained. */
+        /** True when the ordinary scan cap blocked one or more ordinary
+         * candidates while ordinary slots were still open. */
         val scanCapReached: Boolean
     )
 
     /** Walk [candidates] best-first. Ordinary survivors fill [topK]; a
-     *  candidate marked by [isMandatory] is still examined and kept after the
-     *  normal count is full. Mandatory candidates may also be examined beyond
-     *  [scanCap], because the scan cap is a work bound for ordinary backfill,
-     *  not a way to silently drop an explicit +3 rating. [survives] still owns
-     *  cooldown, lore-overlap, and character-budget filtering. */
+     * candidate marked by [isMandatory] is still examined and kept after the
+     * normal count is full. Mandatory candidates do not consume [scanCap],
+     * because +3 is explicitly additive to the normal memory-count budget.
+     * [survives] still owns cooldown, lore-overlap, and character-budget
+     * filtering, so mandatory means count-cap override, not relevance/filter
+     * bypass. */
     fun <T> select(
         candidates: List<T>,
         topK: Int,
@@ -69,16 +71,24 @@ object RetrievalBackfill {
         val normalLimit = topK.coerceAtLeast(0)
         val kept = ArrayList<T>(minOf(normalLimit, candidates.size))
         var examined = 0
+        var ordinaryExamined = 0
         var capBlockedOrdinary = false
         for (c in candidates) {
             val mandatory = isMandatory(c)
-            if (!mandatory && kept.size >= normalLimit) continue
-            if (!mandatory && examined >= scanCap) {
+            if (!mandatory && kept.count { !isMandatory(it) } >= normalLimit) continue
+            if (!mandatory && ordinaryExamined >= scanCap) {
                 capBlockedOrdinary = true
                 continue
             }
             examined++
-            if (survives(c) && (mandatory || kept.size < normalLimit)) kept.add(c)
+            if (!mandatory) ordinaryExamined++
+            if (survives(c)) {
+                if (mandatory) {
+                    kept.add(c)
+                } else if (kept.count { !isMandatory(it) } < normalLimit) {
+                    kept.add(c)
+                }
+            }
         }
         return Selection(kept, examined, capBlockedOrdinary)
     }
