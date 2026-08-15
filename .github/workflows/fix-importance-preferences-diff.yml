@@ -17,18 +17,17 @@ jobs:
         with:
           ref: feature/signed-importance-ratings
           fetch-depth: 0
-      - name: Restore original bytes and apply two intended changes
+      - name: Restore main bytes and apply only the two intended changes
         shell: bash
         run: |
-          git checkout origin/main -- app/src/main/java/org/teslasoft/assistant/preferences/Preferences.kt
+          git show origin/main:app/src/main/java/org/teslasoft/assistant/preferences/Preferences.kt > /tmp/Preferences.kt
+          mv /tmp/Preferences.kt app/src/main/java/org/teslasoft/assistant/preferences/Preferences.kt
           python3 -c 'from pathlib import Path; p=Path("app/src/main/java/org/teslasoft/assistant/preferences/Preferences.kt"); b=p.read_bytes(); old1=b"return getGlobalBoolean(\"use_importance_ratings\", false)"; new1=b"return getGlobalBoolean(\"use_importance_ratings\", true)"; old2=b"putGlobalBoolean(\"use_importance_ratings\", enabled, false)"; new2=b"putGlobalBoolean(\"use_importance_ratings\", enabled, true)"; assert b.count(old1)==1; assert b.count(old2)==1; p.write_bytes(b.replace(old1,new1).replace(old2,new2))'
-      - name: Commit repair and remove workflow
+      - name: Commit preference repair
         shell: bash
         run: |
-          rm .github/workflows/fix-importance-preferences-diff.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
+          git add app/src/main/java/org/teslasoft/assistant/preferences/Preferences.kt
           git commit -m "chore: keep importance preference diff surgical"
           git push origin HEAD:feature/signed-importance-ratings
