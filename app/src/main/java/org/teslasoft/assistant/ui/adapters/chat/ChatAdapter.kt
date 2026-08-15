@@ -49,7 +49,6 @@ import android.text.style.LineHeightSpan
 import android.text.style.TtsSpan
 import android.util.DisplayMetrics
 import android.util.TypedValue
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -430,9 +429,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // identical. Present on both message layouts.
         private val btnImageShare: ImageButton = itemView.findViewById(R.id.btn_image_share)
         private val btnImageCopy: ImageButton = itemView.findViewById(R.id.btn_image_copy)
-        // The horizontal container holding the bubble; centered for generated
-        // images so the picture sits centered on screen under the portrait.
-        private val messageRow: LinearLayout? = itemView.findViewById(R.id.linearLayout3)
         private var boundGeneratedImagePath: String? = null
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btn_edit)
@@ -960,14 +956,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         /**
-         * Portrait-on placement uses the approved fixed offsets. Without a
-         * portrait, the name's measured line height places its center on the
-         * bubble's top edge when no bubble is painted, so every configured sp
-         * size remains centered. When a bubble IS painted the name instead
-         * uses the separate chat_name_bubble_top_margin/edge_inset values
-         * (owner ask, Aug 14 2026: the shared border-center placement rode
-         * too high and sat too close to the screen edge). The bubble-off
-         * presentation keeps its original numbers untouched.
+         * Places the portrait, speaker name, and bubble. A generated image is
+         * NOT given a special centered/detached bubble (that stranded the name
+         * outside it); it uses the same speaker-side bubble as text, with the
+         * image dropped below the identity so the portrait never overlaps it.
+         *
+         * With a portrait the name sits beside it at the approved offsets. With
+         * no portrait but a painted bubble, the name sits INSIDE the bubble,
+         * aligned with the message content (owner ask, Aug 15 2026: it must not
+         * ride the bubble's top border or hug the edge). The no-bubble
+         * presentation keeps its original placement untouched.
          */
         private fun updateIdentityGeometry(
             isBot: Boolean,
@@ -976,39 +974,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             showBubble: Boolean,
             isImage: Boolean
         ) {
-            // A generated image drops fully below the identity and centers on
-            // screen instead of tucking under it (owner ask, Aug 14 2026). Under
-            // a portrait the push is the portrait's reach below the bubble top
-            // (size + its negative top offset); under just a name it is the
-            // name's own bottom (its top inset + one line). A no-portrait,
-            // no-name image keeps its side alignment.
-            val imageBelowPortrait = isImage && showPortrait
-            val noPortraitNameTop = if (showBubble) {
-                dimensionPixelSize(R.dimen.chat_name_bubble_top_margin)
-            } else {
-                0
-            }
-            val imageBelowName = isImage && !showPortrait && showName
+            val contentPadding = dimensionPixelSize(R.dimen.chat_message_content_padding)
+
             val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
             bubbleParams.topMargin = when {
-                imageBelowPortrait -> dimensionPixelSize(R.dimen.chat_portrait_size) +
-                    dimensionPixelSize(R.dimen.chat_portrait_top_offset)
-                imageBelowName -> noPortraitNameTop + username.lineHeight
                 showPortrait -> dimensionPixelSize(R.dimen.chat_portrait_vertical_offset)
+                // Name inside the bubble: the bubble starts at the top with no
+                // half-line straddle, so the name no longer pokes above it.
+                showName && showBubble -> 0
+                // No-bubble name keeps its original centered-on-the-line placement.
                 showName -> username.lineHeight / 2
                 else -> 0
             }
             bubbleBg.layoutParams = bubbleParams
 
-            // Center the bubble in the row for a generated image shown under an
-            // identity (portrait or name); otherwise keep it hugging the
-            // speaker's side (start for AI, end for user).
-            messageRow?.gravity = when {
-                imageBelowPortrait || imageBelowName -> Gravity.CENTER_HORIZONTAL
-                isBot -> Gravity.START
-                else -> Gravity.END
-            }
-            val contentPadding = dimensionPixelSize(R.dimen.chat_message_content_padding)
             bubbleBg.setPadding(
                 contentPadding,
                 contentPadding + if (showPortrait) {
@@ -1036,17 +1015,23 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     nameParams.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
                     nameParams.setMarginEnd(edge)
                 }
+            } else if (showBubble) {
+                // Align the name with the bubble's content (one content-padding
+                // in from the bubble edge and down from its top), so it reads as
+                // a label above the message instead of sitting on the border.
+                val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) + contentPadding
+                nameParams.topMargin = contentPadding
+                if (isBot) {
+                    nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+                    nameParams.setMarginStart(edge)
+                } else {
+                    nameParams.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+                    nameParams.setMarginEnd(edge)
+                }
             } else {
-                val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) + if (showBubble) {
-                    dimensionPixelSize(R.dimen.chat_name_bubble_edge_inset)
-                } else {
+                val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
                     dimensionPixelSize(R.dimen.chat_name_bubble_edge_offset)
-                }
-                nameParams.topMargin = if (showBubble) {
-                    dimensionPixelSize(R.dimen.chat_name_bubble_top_margin)
-                } else {
-                    0
-                }
+                nameParams.topMargin = 0
                 if (isBot) {
                     nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
                     nameParams.setMarginStart(edge)
@@ -1056,6 +1041,36 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 }
             }
             username.layoutParams = nameParams
+
+            // A generated image cannot wrap around the identity the way text
+            // does, so it starts below whichever identity is shown — the
+            // portrait's full height, or the name's line — while the bubble
+            // keeps its normal speaker-side shape. Non-image rows keep the
+            // frame flush (it is GONE for them anyway).
+            val imageParams = imageFrame.layoutParams as ViewGroup.MarginLayoutParams
+            imageParams.topMargin = if (isImage) {
+                val portraitClear = if (showPortrait) {
+                    dimensionPixelSize(R.dimen.chat_portrait_size) +
+                        dimensionPixelSize(R.dimen.chat_portrait_top_offset) - contentPadding
+                } else 0
+                val nameClear = if (showName) {
+                    username.lineHeight + dimensionPixelSize(R.dimen.chat_name_body_gap)
+                } else 0
+                maxOf(0, portraitClear, nameClear)
+            } else {
+                0
+            }
+            imageFrame.layoutParams = imageParams
+
+            // The (GONE) message anchors the image frame; clear any stale
+            // text-clearance margin so it does not push the image down twice.
+            if (isImage) {
+                val msgParams = message.layoutParams as ViewGroup.MarginLayoutParams
+                if (msgParams.topMargin != 0) {
+                    msgParams.topMargin = 0
+                    message.layoutParams = msgParams
+                }
+            }
         }
 
         private fun updateShareButton(chatMessage: HashMap<String, Any>) {
