@@ -69,6 +69,16 @@ class ImportanceRankingTest {
     }
 
     @Test
+    fun mandatoryCandidatesExtendPastTopKWithoutDuplicatingTheHead() {
+        val ranked = listOf("normal", "must-a", "must-b")
+        val selected = ImportanceRanking.includeMandatory(ranked, topK = 1) { it.startsWith("must-") }
+        assertEquals(listOf("normal", "must-a", "must-b"), selected)
+
+        val alreadyInHead = ImportanceRanking.includeMandatory(ranked, topK = 2) { it == "must-a" }
+        assertEquals(listOf("normal", "must-a"), alreadyInHead)
+    }
+
+    @Test
     fun importanceOff_twoMemoriesIdenticalExceptImportanceScoreEqually() {
         // Two candidates identical but for importance, same vector/recency/boost.
         val vec = floatArrayOf(1f, 0f, 0f)
