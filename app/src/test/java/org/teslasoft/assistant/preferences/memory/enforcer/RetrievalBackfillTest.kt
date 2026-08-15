@@ -97,6 +97,28 @@ class RetrievalBackfillTest {
     }
 
     @Test
+    fun mandatoryCandidateAlreadyInsideTopKUsesThatSlot() {
+        val candidates = listOf("must", "normal")
+        val selection = RetrievalBackfill.select(
+            candidates,
+            topK = 1,
+            isMandatory = { it == "must" }
+        ) { true }
+        assertEquals(listOf("must"), selection.kept)
+    }
+
+    @Test
+    fun allMissingMandatoryCandidatesOverflowTheFilledTopK() {
+        val candidates = listOf("normal", "must-a", "must-b")
+        val selection = RetrievalBackfill.select(
+            candidates,
+            topK = 1,
+            isMandatory = { it.startsWith("must-") }
+        ) { true }
+        assertEquals(listOf("normal", "must-a", "must-b"), selection.kept)
+    }
+
+    @Test
     fun mandatoryCandidateIsExaminedBeyondOrdinaryScanCap() {
         val candidates = listOf("drop", "skip", "must")
         val selection = RetrievalBackfill.select(
@@ -107,20 +129,5 @@ class RetrievalBackfillTest {
         ) { it != "drop" }
         assertEquals(listOf("must"), selection.kept)
         assertTrue(selection.scanCapReached)
-    }
-
-    @Test
-    fun mandatoryCandidatesDoNotConsumeNormalCountOrScanBudget() {
-        val candidates = listOf("must-a", "must-b", "normal-a", "normal-b")
-        val selection = RetrievalBackfill.select(
-            candidates,
-            topK = 2,
-            scanCap = 2,
-            isMandatory = { it.startsWith("must-") }
-        ) { true }
-
-        assertEquals(listOf("must-a", "must-b", "normal-a", "normal-b"), selection.kept)
-        assertEquals(4, selection.examined)
-        assertFalse(selection.scanCapReached)
     }
 }
