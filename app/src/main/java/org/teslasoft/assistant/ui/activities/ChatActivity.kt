@@ -8469,6 +8469,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
+        // Summary injection (decision 14): before the retained history, since
+        // it stands in for earlier turns that were folded away and belongs in
+        // chronological position ahead of them.
+        if (summaryInjection != null) {
+            msgs.add(ChatMessage(role = ChatRole.System, content = summaryInjection))
+        }
+
+        // Conversation history, all active attachments embedded in their user
+        // turns, and the current input have already been frozen in this list.
+        // Image bytes are loaded from disk and base64-encoded here (IO thread)
+        // so they are never held in memory between turns. Resolved as one
+        // ordered list, then split so memory/lore land right before only the
+        // newest message: the retained history above them stays a stable,
+        // cacheable prefix turn to turn instead of trailing content that's
+        // regenerated every turn (owner ruling, Aug 15 2026 — memory and lore
+        // used to sit ahead of the whole history and broke prefix caching for
+        // it on every single turn).
+        val resolvedHistory = resolveImagePartsForSend(requestMessages, requestIncludes)
+        msgs.addAll(resolvedHistory.dropLast(1))
+
         if (memoryAssembly != null) {
             msgs.add(ChatMessage(role = ChatRole.System, content = memoryAssembly))
         }
@@ -8481,17 +8501,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             msgs.add(ChatMessage(role = ChatRole.System, content = loreText.toString()))
         }
 
-        // Summary injection (decision 14): after everything else that's
-        // injected, as the very last item before the oldest full message.
-        if (summaryInjection != null) {
-            msgs.add(ChatMessage(role = ChatRole.System, content = summaryInjection))
-        }
-
-        // Conversation history, all active attachments embedded in their user
-        // turns, and the current input have already been frozen in this list.
-        // Image bytes are loaded from disk and base64-encoded here (IO thread)
-        // so they are never held in memory between turns.
-        msgs.addAll(resolveImagePartsForSend(requestMessages, requestIncludes))
+        resolvedHistory.lastOrNull()?.let { msgs.add(it) }
 
         val usesRestrictedSampling = selectedModel.contains("gpt-5") ||
             selectedModel.contains("o1") || selectedModel.contains("o3")
@@ -8789,6 +8799,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
+        // Summarizer transmission on the legacy in-line path (retry/voice):
+        // same summary injection (decision 14) and bookmark trim (decision
+        // 15) as the frozen path. Both values are read back-to-back so a
+        // fold-in commit can't split the summary/bookmark pair.
+        val legacySummaryInjection = summarizerInjectionText()
+        val legacySummarizerTrim = summarizerTrimmedHistory()
+        if (legacySummaryInjection != null) {
+            msgs.add(ChatMessage(role = ChatRole.System, content = legacySummaryInjection))
+        }
+
+        // Resolved as one ordered list, then split so memory/lore land right
+        // before only the newest message: the retained history above them
+        // stays a stable, cacheable prefix turn to turn instead of trailing
+        // content that's regenerated every turn (owner ruling, Aug 15 2026 —
+        // same fix as the frozen path above).
+        val legacyResolvedHistory = resolveImagePartsForSend(
+            legacySummarizerTrim?.first ?: chatMessages,
+            legacySummarizerTrim?.second ?: chatMessageIncludes
+        )
+        msgs.addAll(legacyResolvedHistory.dropLast(1))
+
         if (memoryAssembly != null) {
             msgs.add(
                 ChatMessage(
@@ -8815,21 +8846,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
         }
 
-        // Summarizer transmission on the legacy in-line path (retry/voice):
-        // same summary injection (decision 14) and bookmark trim (decision
-        // 15) as the frozen path. Both values are read back-to-back so a
-        // fold-in commit can't split the summary/bookmark pair.
-        val legacySummaryInjection = summarizerInjectionText()
-        val legacySummarizerTrim = summarizerTrimmedHistory()
-        if (legacySummaryInjection != null) {
-            msgs.add(ChatMessage(role = ChatRole.System, content = legacySummaryInjection))
-        }
-        msgs.addAll(
-            resolveImagePartsForSend(
-                legacySummarizerTrim?.first ?: chatMessages,
-                legacySummarizerTrim?.second ?: chatMessageIncludes
-            )
-        )
+        legacyResolvedHistory.lastOrNull()?.let { msgs.add(it) }
 
         // §7: the same tool-availability decision as the frozen typed-send
         // builder — neither regular path may silently omit the image tool.
