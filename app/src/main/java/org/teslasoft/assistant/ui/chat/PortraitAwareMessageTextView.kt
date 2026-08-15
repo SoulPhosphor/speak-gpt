@@ -48,6 +48,15 @@ class PortraitAwareMessageTextView @JvmOverloads constructor(
     private var applyingGeometry = false
     private var baseTopMargin: Int? = null
 
+    private companion object {
+        // Unicode bidi isolates used to keep left-to-right user text ordered
+        // correctly inside the right-to-left paragraph that positions the
+        // portrait clearance margin. LRI opens a left-to-right isolate; PDI
+        // closes it.
+        private const val LEFT_TO_RIGHT_ISOLATE = "\u2066"
+        private const val POP_DIRECTIONAL_ISOLATE = "\u2069"
+    }
+
     override fun setText(text: CharSequence?, type: BufferType?) {
         if (applyingGeometry) {
             super.setText(text, type)
@@ -70,25 +79,53 @@ class PortraitAwareMessageTextView @JvmOverloads constructor(
             val isUser = tag?.toString() == "user"
             if (isUser) {
                 // LeadingMarginSpan follows paragraph direction. Force the
-                // paragraph's leading edge to the right while keeping normal
-                // English copy visually left-aligned in the available space.
+                // paragraph's leading edge to the right (mirroring the AI side)
+                // while keeping normal English copy visually left-aligned in
+                // the available space.
                 textDirection = View.TEXT_DIRECTION_RTL
                 gravity = Gravity.LEFT or Gravity.TOP
             } else {
                 textDirection = View.TEXT_DIRECTION_FIRST_STRONG
             }
 
-            val builder = SpannableStringBuilder(source)
+            // The user side's right-to-left base direction (set above) exists
+            // ONLY to place the portrait clearance on the correct (right) side,
+            // mirroring the AI side. Isolate each of the user's own paragraphs
+            // as left-to-right so that base direction never reorders their
+            // punctuation: without this a trailing period was pulled to the
+            // visual start of a line, showing "root." as ".root". A paragraph
+            // break ends a bidi isolate, so every paragraph is wrapped, not just
+            // the first. The isolate characters are display-only — copy, edit,
+            // share, and speak all read the stored message, not this view's text.
+            val builder = if (isUser) {
+                val isolated = source.toString().split('\n').joinToString("\n") { line ->
+                    if (line.isEmpty()) line
+                    else LEFT_TO_RIGHT_ISOLATE + line + POP_DIRECTIONAL_ISOLATE
+                }
+                SpannableStringBuilder(isolated)
+            } else {
+                SpannableStringBuilder(source)
+            }
             builder.getSpans(0, builder.length, PortraitClearanceSpan::class.java)
                 .forEach(builder::removeSpan)
 
             val margin = portraitClearanceWidthPx()
             val lineCount = portraitClearanceLineCount(name)
             if (margin > 0 && lineCount > 0) {
+                // Inset only the opening lines that actually sit beside the
+                // portrait, and only within the first paragraph. A
+                // LeadingMarginSpan2's first-line count restarts at every
+                // paragraph break, so a span covering the whole message
+                // re-indents the top of every paragraph and wastes space down
+                // the reply. Scoping it to the first paragraph keeps the
+                // stagger at the portrait and returns all later text to the
+                // full reading width.
+                val firstParagraphEnd =
+                    builder.indexOf('\n').let { if (it < 0) builder.length else it + 1 }
                 builder.setSpan(
                     PortraitClearanceSpan(margin, lineCount),
                     0,
-                    builder.length,
+                    firstParagraphEnd,
                     Spanned.SPAN_PARAGRAPH
                 )
             }
@@ -109,10 +146,29 @@ class PortraitAwareMessageTextView @JvmOverloads constructor(
 
         val nameVisible = name?.visibility == View.VISIBLE
         val desired = if (nameVisible) {
-            val nameTop = dimen(R.dimen.chat_name_portrait_top)
             val gap = dimen(R.dimen.chat_name_body_gap)
             val bubblePadding = dimen(R.dimen.chat_message_content_padding)
-            max(0, nameTop + (name?.lineHeight ?: 0) + gap - bubblePadding)
+            val bubble = findRowView<View>(R.id.bubble_bg)
+            val portraitVisible = findRowView<ImageView>(R.id.icon)?.visibility == View.VISIBLE
+            val bubblePainted = bubble?.background != null
+            val nameBottomInBubble = if (portraitVisible || bubblePainted) {
+                // Read the name's and bubble's REAL current top margins —
+                // already applied by ChatAdapter.updateIdentityGeometry for
+                // this bind — instead of assuming the portrait layout's fixed
+                // offsets. Without this the no-portrait, bubble-on state (the
+                // name centered on the bubble's top border, not sitting
+                // chat_name_portrait_top below a portrait-aligned bubble) left
+                // a large dead band between the name and the first line.
+                val nameTop = (name?.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin ?: 0
+                val bubbleTop = (bubble?.layoutParams as? ViewGroup.MarginLayoutParams)?.topMargin ?: 0
+                max(0, nameTop + (name?.lineHeight ?: 0) - bubbleTop)
+            } else {
+                // No-portrait, bubble-off presentation is out of scope for
+                // this pass; keep its existing (portrait-anchor)
+                // approximation unchanged.
+                dimen(R.dimen.chat_name_portrait_top) + (name?.lineHeight ?: 0)
+            }
+            max(0, nameBottomInBubble + gap - bubblePadding)
         } else {
             baseTopMargin ?: 0
         }

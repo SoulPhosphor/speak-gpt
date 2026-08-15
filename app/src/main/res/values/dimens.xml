@@ -34,18 +34,25 @@
     <dimen name="chat_message_ai_right_inset">28dp</dimen>
     <dimen name="chat_message_user_left_inset">49dp</dimen>
     <dimen name="chat_message_content_padding">14dp</dimen>
+    <!-- The tuner gives every message 22dp of leading space and exposes the
+         trailing 22dp as its message-gap control. Keeping them separate
+         preserves the tuner's vertical rhythm instead of halving it. -->
+    <dimen name="chat_message_leading_spacing">22dp</dimen>
     <dimen name="chat_message_unit_spacing">22dp</dimen>
 
     <dimen name="chat_portrait_size">96dp</dimen>
     <!-- Bubble-side edge 25dp plus the tuned -8dp outward portrait offset. -->
     <dimen name="chat_portrait_edge_inset">17dp</dimen>
-    <!-- Portrait top is 10dp inside the bubble's top edge. -->
-    <dimen name="chat_portrait_top_offset">10dp</dimen>
+    <!-- Portrait overlaps 20dp above the bubble; the 22dp leading space
+         keeps the portrait inside the message item's bounds. -->
+    <dimen name="chat_portrait_top_offset">-20dp</dimen>
     <!-- No whole-block top clearance: PortraitAwareMessageTextView handles the
          early-line inset so later lines reclaim the full reading width. -->
     <dimen name="chat_portrait_vertical_offset">0dp</dimen>
     <dimen name="chat_portrait_text_clearance">0dp</dimen>
-    <dimen name="chat_portrait_text_gap">7dp</dimen>
+    <!-- Horizontal breathing room between the portrait and the text it
+         clears (owner ask, Aug 14 2026: the first pass hugged too tight). -->
+    <dimen name="chat_portrait_text_gap">9dp</dimen>
 
     <!-- Name begins/ends 102dp inward from the tuned 25dp bubble edge. -->
     <dimen name="chat_name_portrait_edge_inset">127dp</dimen>
@@ -53,5 +60,8 @@
     <!-- Body starts 9dp below the measured name bottom: the tuned spacing plus
          the final requested 2dp of extra breathing room. -->
     <dimen name="chat_name_body_gap">9dp</dimen>
+    <!-- No-portrait, bubble-OFF name placement only. Untouched (owner ask,
+         Aug 14 2026). With a painted bubble the name instead aligns with the
+         message content (one content-padding in), computed in ChatAdapter. -->
     <dimen name="chat_name_bubble_edge_offset">1dp</dimen>
 </resources>

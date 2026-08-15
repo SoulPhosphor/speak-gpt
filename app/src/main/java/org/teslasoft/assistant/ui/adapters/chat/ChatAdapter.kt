@@ -49,6 +49,7 @@ import android.text.style.LineHeightSpan
 import android.text.style.TtsSpan
 import android.util.DisplayMetrics
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -407,9 +408,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val ui: ConstraintLayout = itemView.findViewById(R.id.ui)
         private val icon: ImageView = itemView.findViewById(R.id.icon)
         // The icon's original XML backing (e.g. the assistant bubble's tonal
-        // circle). A Companion photo fills the slot and drops it; every other
-        // path restores it, so a recycled row can't keep a nulled background.
+        // circle). Photos and the error badge fill the slot and drop it; glyph
+        // paths restore it so recycling cannot keep a nulled background.
         private val iconInitialBackground = icon.background
+        private val iconInitialPaddingLeft = icon.paddingLeft
+        private val iconInitialPaddingTop = icon.paddingTop
+        private val iconInitialPaddingRight = icon.paddingRight
+        private val iconInitialPaddingBottom = icon.paddingBottom
+        private val iconInitialScaleType = icon.scaleType
         private val message: TextView = itemView.findViewById(R.id.message)
         private val username: TextView = itemView.findViewById(R.id.username)
         private val bubbleBg: ConstraintLayout = itemView.findViewById(R.id.bubble_bg)
@@ -419,6 +425,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val generatedImageError: TextView = itemView.findViewById(R.id.generated_image_error)
         private val btnImagePrompt: MaterialButton = itemView.findViewById(R.id.btn_image_prompt)
         private val btnImageDownload: ImageButton = itemView.findViewById(R.id.btn_image_download)
+        // Generated-image Share/Copy live on the image action row (owner ask,
+        // Aug 14 2026); they delegate to the action-bar buttons so behavior is
+        // identical. Present on both message layouts.
+        private val btnImageShare: ImageButton = itemView.findViewById(R.id.btn_image_share)
+        private val btnImageCopy: ImageButton = itemView.findViewById(R.id.btn_image_copy)
+        // The row container holding the bubble; centered for a generated image so
+        // the picture (and the in-bubble name with it) sits centered on screen.
+        private val messageRow: LinearLayout? = itemView.findViewById(R.id.linearLayout3)
+        // Speaker name drawn INSIDE the bubble, used only when a centered image
+        // bubble would otherwise strand the row-level name. Present on the bot
+        // layout only (generated images are assistant-side), hence nullable.
+        private val bubbleName: TextView? = itemView.findViewById(R.id.bubble_name)
         private var boundGeneratedImagePath: String? = null
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btn_edit)
@@ -507,11 +525,23 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 clipboard.setPrimaryClip(clip)
                 Toast.makeText(context, context.getString(R.string.label_copy), Toast.LENGTH_SHORT).show()
             }
+            // Copy defaults to visible on the action bar; the image branch hides
+            // it there because a generated image shows Copy on its own row.
+            btnCopy.visibility = View.VISIBLE
+            // The image-row Share/Copy forward to the action-bar buttons so the
+            // share and clipboard behavior is defined in exactly one place.
+            btnImageShare.setOnClickListener { btnShare.callOnClick() }
+            btnImageCopy.setOnClickListener { btnCopy.callOnClick() }
 
             if (isGeneratedImage) {
                 if (chatMessage["isBot"] == true) {
                     message.visibility = View.GONE
                 }
+                // Share and Copy move onto the image's own action row, so hide
+                // the action-bar copies. Share visibility for a bot message was
+                // already set VISIBLE by updateShareButton above.
+                btnShare.visibility = View.GONE
+                btnCopy.visibility = View.GONE
                 processGeneratedImageFile(chatMessage)
             } else {
                 boundGeneratedImagePath = null
@@ -534,6 +564,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 generatedImageError.visibility = View.GONE
                 btnImagePrompt.visibility = View.GONE
                 btnImageDownload.visibility = View.GONE
+                btnImageShare.visibility = View.GONE
+                btnImageCopy.visibility = View.GONE
 
                 btnShare.setOnClickListener {
                     sharePlainText(context, chatMessage["message"].toString())
@@ -863,6 +895,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          */
         private fun updatePresentation(chatMessage: HashMap<String, Any>) {
             val isBot = chatMessage["isBot"] == true
+            val isImage = chatMessage["message"].toString().startsWith("~file:")
             val showPortrait = preferences.getShowChatProfileImages()
             val showName = preferences.getShowChatNames()
             val showBubble = if (isBot) {
@@ -873,35 +906,54 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             ui.setBackgroundColor(0x00000000)
 
-            username.text = if (isBot) {
+            val nameText = if (isBot) {
                 resolveAssistantLabel(chatMessage)
             } else {
                 context.getString(R.string.chat_role_user)
             }
-            ChatNameStyle.apply(
-                username,
-                context,
-                if (isBot) {
-                    companionNameStyle ?: ChatNameStyle.ai(preferences)
+            val nameStyle = if (isBot) {
+                companionNameStyle ?: ChatNameStyle.ai(preferences)
+            } else {
+                ChatNameStyle.user(preferences)
+            }
+
+            // A centered image bubble would leave the row-level name stranded to
+            // the side, so for that one case the name is drawn inside the bubble
+            // (bubbleName) and the row name is hidden. Every other case keeps the
+            // row name, which already lines up with the speaker-side bubble.
+            val nameInBubble = isImage && showName && showBubble && !showPortrait
+
+            username.text = nameText
+            ChatNameStyle.apply(username, context, nameStyle)
+            username.visibility = if (showName && !nameInBubble) View.VISIBLE else View.GONE
+
+            bubbleName?.let {
+                if (nameInBubble) {
+                    it.text = nameText
+                    ChatNameStyle.apply(it, context, nameStyle)
+                    it.visibility = View.VISIBLE
                 } else {
-                    ChatNameStyle.user(preferences)
+                    it.visibility = View.GONE
                 }
-            )
-            username.visibility = if (showName) View.VISIBLE else View.GONE
+            }
 
             icon.visibility = if (showPortrait) View.VISIBLE else View.GONE
             if (showPortrait) {
                 if (isBot) displayAvatar() else displayUserAvatar()
             }
 
-            updateIdentityGeometry(isBot, showPortrait, showName)
+            updateIdentityGeometry(isBot, showPortrait, showName, showBubble, isImage)
             updateBubbleDecoration(isBot, showBubble)
         }
 
         private fun updateBubbleDecoration(isBot: Boolean, showBubble: Boolean) {
             if (!showBubble) {
                 bubbleBg.background = null
-                message.setTextColor(resolveThemeColor(R.attr.appTextColor))
+                val foreground = resolveThemeColor(R.attr.appTextColor)
+                message.setTextColor(foreground)
+                username.setTextColor(foreground)
+                bubbleName?.setTextColor(foreground)
+                tintActionIcons(foreground)
                 return
             }
 
@@ -913,39 +965,84 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 else -> R.drawable.bubble_out
             }
             bubbleBg.setBackgroundResource(background)
-            message.setTextColor(
-                if (amoled) {
-                    ResourcesCompat.getColor(context.resources, R.color.white, null)
-                } else {
-                    resolveThemeColor(
-                        if (isBot) {
-                            androidx.appcompat.R.attr.colorPrimary
-                        } else {
-                            com.google.android.material.R.attr.colorSurface
-                        }
-                    )
-                }
-            )
+            val foreground = if (amoled) {
+                ResourcesCompat.getColor(context.resources, R.color.white, null)
+            } else {
+                resolveThemeColor(
+                    if (isBot) {
+                        androidx.appcompat.R.attr.colorPrimary
+                    } else {
+                        com.google.android.material.R.attr.colorSurface
+                    }
+                )
+            }
+            message.setTextColor(foreground)
+            username.setTextColor(foreground)
+            bubbleName?.setTextColor(foreground)
+            tintActionIcons(foreground)
         }
 
         /**
-         * Portrait-on placement uses the approved fixed offsets. Without a
-         * portrait, the name's measured line height places its center on the
-         * bubble's top edge, so every configured sp size remains centered.
+         * The message-action glyphs are authored tinted colorPrimary — the same
+         * color as the USER bubble — so on a user message they were invisible
+         * against their own bubble. Recolor them to the bubble's foreground so
+         * they contrast on both the AI and user bubbles. btnSpeak is left to
+         * updateSpeakButton, which owns its speaking-state color.
+         */
+        private fun tintActionIcons(foreground: Int) {
+            btnShare.setColorFilter(foreground)
+            btnRetry.setColorFilter(foreground)
+            btnCopy.setColorFilter(foreground)
+            btnEdit.setColorFilter(foreground)
+        }
+
+        /**
+         * Places the portrait, speaker name, and bubble.
+         *
+         * A generated image bubble is centered on screen (owner ask, Aug 15
+         * 2026). To keep the name with that centered bubble it is drawn inside
+         * the bubble (bubbleName, wired in updatePresentation) rather than at the
+         * row level; under a portrait the bubble also drops below the portrait's
+         * full reach so the picture never overlaps it, and the row-level name
+         * stays beside the portrait.
+         *
+         * For text, the bubble hugs the speaker side. With a portrait the name
+         * sits beside it; with just a painted bubble the row name aligns with the
+         * message content (not the bubble's border). The no-bubble presentation
+         * keeps its original placement untouched.
          */
         private fun updateIdentityGeometry(
             isBot: Boolean,
             showPortrait: Boolean,
-            showName: Boolean
+            showName: Boolean,
+            showBubble: Boolean,
+            isImage: Boolean
         ) {
+            val contentPadding = dimensionPixelSize(R.dimen.chat_message_content_padding)
+
+            // A generated image bubble is centered on screen. Under a portrait it
+            // also drops below the portrait's full reach so it never overlaps.
+            val centerImage = isImage && showBubble
             val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
             bubbleParams.topMargin = when {
+                isImage && showPortrait -> dimensionPixelSize(R.dimen.chat_portrait_size) +
+                    dimensionPixelSize(R.dimen.chat_portrait_top_offset)
                 showPortrait -> dimensionPixelSize(R.dimen.chat_portrait_vertical_offset)
+                // Name inside the bubble: the bubble starts at the top with no
+                // half-line straddle, so the name no longer pokes above it.
+                showName && showBubble -> 0
+                // No-bubble name keeps its original centered-on-the-line placement.
                 showName -> username.lineHeight / 2
                 else -> 0
             }
             bubbleBg.layoutParams = bubbleParams
-            val contentPadding = dimensionPixelSize(R.dimen.chat_message_content_padding)
+
+            messageRow?.gravity = when {
+                centerImage -> Gravity.CENTER_HORIZONTAL
+                isBot -> Gravity.START
+                else -> Gravity.END
+            }
+
             bubbleBg.setPadding(
                 contentPadding,
                 contentPadding + if (showPortrait) {
@@ -973,6 +1070,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     nameParams.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
                     nameParams.setMarginEnd(edge)
                 }
+            } else if (showBubble) {
+                // Align the name with the bubble's content (one content-padding
+                // in from the bubble edge and down from its top), so it reads as
+                // a label above the message instead of sitting on the border.
+                val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) + contentPadding
+                nameParams.topMargin = contentPadding
+                if (isBot) {
+                    nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+                    nameParams.setMarginStart(edge)
+                } else {
+                    nameParams.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+                    nameParams.setMarginEnd(edge)
+                }
             } else {
                 val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
                     dimensionPixelSize(R.dimen.chat_name_bubble_edge_offset)
@@ -986,6 +1096,25 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 }
             }
             username.layoutParams = nameParams
+
+            // The image frame's vertical position now comes from the bubble
+            // itself (pushed below the portrait) and the in-bubble name above it
+            // via the constraint chain, so the frame needs no extra margin.
+            val imageParams = imageFrame.layoutParams as ViewGroup.MarginLayoutParams
+            if (imageParams.topMargin != 0) {
+                imageParams.topMargin = 0
+                imageFrame.layoutParams = imageParams
+            }
+
+            // The (GONE) message anchors the image frame; clear any stale
+            // text-clearance margin left from a recycled text row.
+            if (isImage) {
+                val msgParams = message.layoutParams as ViewGroup.MarginLayoutParams
+                if (msgParams.topMargin != 0) {
+                    msgParams.topMargin = 0
+                    message.layoutParams = msgParams
+                }
+            }
         }
 
         private fun updateShareButton(chatMessage: HashMap<String, Any>) {
@@ -1055,10 +1184,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  resolver -> built-in glyph. When a Companion picture is present it
          *  is bound through [ProfileImageBinder] (which fully resets the view,
          *  so a recycled row can't keep another chat's picture or tint) and
-         *  fills the slot without the glyph's tonal backing. Otherwise the
-         *  existing legacy/built-in rendering runs unchanged, with the icon's
-         *  original XML background explicitly restored so recycling from a
-         *  photo row never leaves it blank. */
+         *  fills the slot without the glyph's tonal backing. Legacy photos use
+         *  the same full slot; built-in glyphs restore the original XML
+         *  padding and background after row recycling. */
         private fun displayAvatar() {
             // While this chat has only failed replies (no completed reply yet),
             // the assistant avatar is the red error badge instead of the
@@ -1070,6 +1198,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
             val file = companionImageFile
             if (file != null && file.exists()) {
+                useFullPortraitSlot()
                 ProfileImageBinder.bind(context, icon, file, companionImageShape) {
                     // Only reachable if the file vanished between resolve and load.
                     icon.background = iconInitialBackground
@@ -1087,6 +1216,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  tint are cleared and the view fully reset to avoid recycled-row
          *  bleed, matching the Companion-photo binder's discipline. */
         private fun displayErrorAvatar() {
+            useFullPortraitSlot()
             icon.background = null
             icon.imageTintList = null
             icon.clearColorFilter()
@@ -1097,12 +1227,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
         private fun displayLegacyOrBuiltinAvatar() {
             if (preferences.getAvatarType() == "builtin") {
+                restorePortraitGlyphSlot()
+                icon.background = iconInitialBackground
                 icon.setImageResource(StaticAvatarParser.parse(preferences.getAvatarId()))
                 DrawableCompat.setTint(icon.getDrawable()!!, ContextCompat.getColor(context, R.color.accent_900))
             } else {
                 val legacyAvatarFile = LegacyAvatarResolver.resolve(context.getExternalFilesDir("images"), preferences.getAvatarId())
 
                 if (legacyAvatarFile != null) {
+                    useFullPortraitSlot()
+                    icon.background = null
+                    icon.imageTintList = null
+                    icon.scaleType = ImageView.ScaleType.CENTER_CROP
                     readAndDisplay(Uri.fromFile(legacyAvatarFile))
                 }
             }
@@ -1116,17 +1252,39 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private fun displayUserAvatar() {
             val file = userImageFile
             if (file != null && file.exists()) {
+                useFullPortraitSlot()
                 ProfileImageBinder.bind(context, icon, file, userImageShape) {
                     // Only reachable if the file vanished between resolve and load.
+                    restorePortraitGlyphSlot()
                     icon.background = iconInitialBackground
                     icon.imageTintList = null
                     icon.setImageResource(R.drawable.ic_user)
                 }
             } else {
+                restorePortraitGlyphSlot()
                 icon.background = iconInitialBackground
                 icon.imageTintList = null
                 icon.setImageResource(R.drawable.ic_user)
             }
+        }
+
+        /** Photos consume the complete tuned 96dp slot. The XML's 6dp padding
+         *  belongs only to fallback glyphs; applying it to photos shrinks them
+         *  to 84dp and visually cancels most of the tuned -8dp edge offset. */
+        private fun useFullPortraitSlot() {
+            icon.setPadding(0, 0, 0, 0)
+        }
+
+        /** Restore the XML presentation before displaying a glyph in a row
+         *  recycled from a full-bleed photo or error avatar. */
+        private fun restorePortraitGlyphSlot() {
+            icon.setPadding(
+                iconInitialPaddingLeft,
+                iconInitialPaddingTop,
+                iconInitialPaddingRight,
+                iconInitialPaddingBottom
+            )
+            icon.scaleType = iconInitialScaleType
         }
 
         private fun readAndDisplay(uri: Uri) {
@@ -1411,6 +1569,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             generatedImageError.visibility = View.GONE
             btnImagePrompt.visibility = View.VISIBLE
             btnImageDownload.visibility = View.GONE
+            btnImageShare.visibility = View.GONE
+            btnImageCopy.visibility = View.GONE
             generatedImage.setOnClickListener(null)
             generatedImage.setOnLongClickListener(null)
             btnImagePrompt.setOnClickListener { showGeneratedImagePrompt(chatMessage) }
@@ -1490,6 +1650,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                         generatedImageError.visibility = View.GONE
                         generatedImage.visibility = View.VISIBLE
                         btnImageDownload.visibility = View.VISIBLE
+                        btnImageShare.visibility = View.VISIBLE
+                        btnImageCopy.visibility = View.VISIBLE
                         return false
                     }
                 })
@@ -1537,6 +1699,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             generatedImage.visibility = View.INVISIBLE
             generatedImageError.visibility = View.VISIBLE
             btnImageDownload.visibility = View.GONE
+            btnImageShare.visibility = View.GONE
+            btnImageCopy.visibility = View.GONE
         }
 
         private fun showGeneratedImagePrompt(chatMessage: HashMap<String, Any>) {
