@@ -62,6 +62,13 @@ class ImportanceRankingTest {
     }
 
     @Test
+    fun outOfRangeStoredValuesClampToTheSignedScale() {
+        assertEquals(-2.0, ImportanceRanking.normalizeStoredImportance(-99.0), 0.0)
+        assertEquals(3.0, ImportanceRanking.normalizeStoredImportance(99.0), 0.0)
+        assertEquals(0.0, ImportanceRanking.normalizeStoredImportance(0.0), 0.0)
+    }
+
+    @Test
     fun plusThreeIsMandatoryOnlyWhenImportanceIsEnabled() {
         assertTrue(ImportanceRanking.isMandatory(3.0, true))
         assertFalse(ImportanceRanking.isMandatory(3.0, false))
