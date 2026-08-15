@@ -536,7 +536,7 @@ class Librarian private constructor(private val appContext: Context) {
         // can never make an ineligible memory eligible.
         val useImportance = try {
             Preferences.getPreferences(appContext, "").getUseImportanceRatings()
-        } catch (_: Exception) { false }
+        } catch (_: Exception) { true }
         val importanceWeight = ImportanceRanking.effectiveImportanceWeight(bounded.value[1], useImportance)
         return Weights(bounded.value[0], importanceWeight, bounded.value[2])
     }
@@ -547,7 +547,7 @@ class Librarian private constructor(private val appContext: Context) {
     private fun reconciliationWeights(): Weights {
         val useImportance = try {
             Preferences.getPreferences(appContext, "").getUseImportanceRatings()
-        } catch (_: Exception) { false }
+        } catch (_: Exception) { true }
         return reconciliationWeights(useImportance)
     }
 

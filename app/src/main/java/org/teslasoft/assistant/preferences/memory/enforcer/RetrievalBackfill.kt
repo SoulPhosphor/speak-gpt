@@ -53,24 +53,33 @@ object RetrievalBackfill {
         val scanCapReached: Boolean
     )
 
-    /** Walk [candidates] best-first, keeping survivors of [survives], until
-     *  [topK] are kept, the list is exhausted, or [scanCap] candidates were
-     *  examined. [survives] records its own removal reason at the call site. */
+    /** Walk [candidates] best-first. Ordinary survivors fill [topK]; a
+     *  candidate marked by [isMandatory] is still examined and kept after the
+     *  normal count is full. Mandatory candidates may also be examined beyond
+     *  [scanCap], because the scan cap is a work bound for ordinary backfill,
+     *  not a way to silently drop an explicit +3 rating. [survives] still owns
+     *  cooldown, lore-overlap, and character-budget filtering. */
     fun <T> select(
         candidates: List<T>,
         topK: Int,
         scanCap: Int = scanCap(topK),
+        isMandatory: (T) -> Boolean = { false },
         survives: (T) -> Boolean
     ): Selection<T> {
-        if (topK <= 0) return Selection(emptyList(), 0, false)
-        val kept = ArrayList<T>(minOf(topK, candidates.size))
+        val normalLimit = topK.coerceAtLeast(0)
+        val kept = ArrayList<T>(minOf(normalLimit, candidates.size))
         var examined = 0
+        var capBlockedOrdinary = false
         for (c in candidates) {
-            if (kept.size >= topK) break
-            if (examined >= scanCap) return Selection(kept, examined, true)
+            val mandatory = isMandatory(c)
+            if (!mandatory && kept.size >= normalLimit) continue
+            if (!mandatory && examined >= scanCap) {
+                capBlockedOrdinary = true
+                continue
+            }
             examined++
-            if (survives(c)) kept.add(c)
+            if (survives(c) && (mandatory || kept.size < normalLimit)) kept.add(c)
         }
-        return Selection(kept, examined, false)
+        return Selection(kept, examined, capBlockedOrdinary)
     }
 }

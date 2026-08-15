@@ -78,10 +78,34 @@ class RetrievalBackfillTest {
     }
 
     @Test
-    fun nonPositiveTopKExaminesNothing() {
+    fun nonPositiveTopKExaminesNothingWithoutMandatoryCandidates() {
         var calls = 0
         val selection = RetrievalBackfill.select(listOf("a", "b"), topK = 0) { calls++; true }
         assertTrue(selection.kept.isEmpty())
         assertEquals(0, calls)
+    }
+
+    @Test
+    fun mandatoryCandidateSurvivesBeyondNormalTopK() {
+        val candidates = listOf("normal", "also-normal", "must")
+        val selection = RetrievalBackfill.select(
+            candidates,
+            topK = 1,
+            isMandatory = { it == "must" }
+        ) { true }
+        assertEquals(listOf("normal", "must"), selection.kept)
+    }
+
+    @Test
+    fun mandatoryCandidateIsExaminedBeyondOrdinaryScanCap() {
+        val candidates = listOf("drop", "skip", "must")
+        val selection = RetrievalBackfill.select(
+            candidates,
+            topK = 1,
+            scanCap = 1,
+            isMandatory = { it == "must" }
+        ) { it != "drop" }
+        assertEquals(listOf("must"), selection.kept)
+        assertTrue(selection.scanCapReached)
     }
 }

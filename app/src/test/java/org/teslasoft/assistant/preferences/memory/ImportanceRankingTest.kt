@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.preferences.memory
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.memory.librarian.Librarian
@@ -51,11 +52,28 @@ class ImportanceRankingTest {
     )
 
     @Test
+    fun signedScaleIsSymmetricAndPlusThreeUsesPlusTwoScore() {
+        assertEquals(-1.0, ImportanceRanking.normalizedRankingImportance(-2.0), 0.0)
+        assertEquals(-0.5, ImportanceRanking.normalizedRankingImportance(-1.0), 0.0)
+        assertEquals(0.0, ImportanceRanking.normalizedRankingImportance(0.0), 0.0)
+        assertEquals(0.5, ImportanceRanking.normalizedRankingImportance(1.0), 0.0)
+        assertEquals(1.0, ImportanceRanking.normalizedRankingImportance(2.0), 0.0)
+        assertEquals(1.0, ImportanceRanking.normalizedRankingImportance(3.0), 0.0)
+    }
+
+    @Test
+    fun plusThreeIsMandatoryOnlyWhenImportanceIsEnabled() {
+        assertTrue(ImportanceRanking.isMandatory(3.0, true))
+        assertFalse(ImportanceRanking.isMandatory(3.0, false))
+        assertFalse(ImportanceRanking.isMandatory(2.0, true))
+    }
+
+    @Test
     fun importanceOff_twoMemoriesIdenticalExceptImportanceScoreEqually() {
         // Two candidates identical but for importance, same vector/recency/boost.
         val vec = floatArrayOf(1f, 0f, 0f)
         val low = mem("low", importance = 0)
-        val high = mem("high", importance = 5)
+        val high = mem("high", importance = 2)
         val candidates = listOf(
             Librarian.Candidate(low, vec, recency = 0.5, boost = 0.0),
             Librarian.Candidate(high, vec, recency = 0.5, boost = 0.0)
@@ -79,6 +97,6 @@ class ImportanceRankingTest {
 
         // The stored ratings themselves were never touched by ranking.
         assertEquals(0, low.importance)
-        assertEquals(5, high.importance)
+        assertEquals(2, high.importance)
     }
 }

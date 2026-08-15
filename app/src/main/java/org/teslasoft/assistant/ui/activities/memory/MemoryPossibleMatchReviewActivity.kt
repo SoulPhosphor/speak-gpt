@@ -35,6 +35,7 @@ import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import org.json.JSONArray
 import org.teslasoft.assistant.R
@@ -207,6 +208,16 @@ class MemoryPossibleMatchReviewActivity : FragmentActivity() {
             else { visibility = View.VISIBLE; text = formatTags(tags) }
         }
         card.findViewById<TextView>(R.id.review_content).text = record.content
+        card.findViewById<MaterialButton>(R.id.review_importance).apply {
+            if (preferences?.getUseImportanceRatings() ?: true) {
+                visibility = View.VISIBLE
+                text = getString(R.string.mem_importance_value_fmt, importanceLabel(record.importance))
+                setOnClickListener { showImportancePicker(record) }
+            } else {
+                visibility = View.GONE
+                setOnClickListener(null)
+            }
+        }
         card.findViewById<ImageButton>(R.id.review_info).setOnClickListener {
             MemoryInfoDialog.show(this, record)
         }
@@ -226,6 +237,40 @@ class MemoryPossibleMatchReviewActivity : FragmentActivity() {
             card.findViewById(R.id.review_edit_content)
         )
     }
+
+    private fun showImportancePicker(record: MemoryRecord) {
+        val values = listOf(-2, -1, 0, 1, 2, 3)
+        val labels = values.map { importanceLabel(it) }.toTypedArray()
+        val selected = values.indexOf(record.importance.coerceIn(-2, 3)).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_edit_label_importance)
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
+                val picked = values[which]
+                dialog.dismiss()
+                runOffThread {
+                    val store = MemoryStore.getInstance(this)
+                    val live = store.getMemory(record.memoryId) ?: return@runOffThread
+                    store.updateMemory(
+                        live.copy(importance = picked),
+                        getString(R.string.memory_change_edited)
+                    )
+                    runOnUiThread { load() }
+                }
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun importanceLabel(value: Int): String = getString(
+        when (value.coerceIn(-2, 3)) {
+            -2 -> R.string.mem_importance_minus_2
+            -1 -> R.string.mem_importance_minus_1
+            0 -> R.string.mem_importance_0
+            1 -> R.string.mem_importance_1
+            2 -> R.string.mem_importance_2
+            else -> R.string.mem_importance_3
+        }
+    )
 
     /* ------------------------------ selection ------------------------------ */
 

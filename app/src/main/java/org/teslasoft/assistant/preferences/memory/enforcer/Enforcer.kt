@@ -28,6 +28,7 @@ import org.teslasoft.assistant.preferences.memory.CardEntryRecord
 import org.teslasoft.assistant.preferences.memory.CardType
 import org.teslasoft.assistant.preferences.memory.CompanionRecord
 import org.teslasoft.assistant.preferences.memory.MemoryCompanionSync
+import org.teslasoft.assistant.preferences.memory.ImportanceRanking
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.PartyMemberRecord
@@ -181,6 +182,7 @@ class Enforcer private constructor(private val appContext: Context) {
 
         val librarian = Librarian.getInstance(appContext)
         val prefs = Preferences.getPreferences(appContext, input.chatId)
+        val useImportanceRatings = prefs.getUseImportanceRatings()
 
         // §3 (rev 3): companion memories in roleplay need an explicit door —
         // the narrator/GM match (the selected campaign's GM companion IS the
@@ -412,7 +414,14 @@ class Enforcer private constructor(private val appContext: Context) {
             notes.add("no character budget remains for memories after lore and card entries")
             RetrievalBackfill.Selection(emptyList<AssembledMemory>(), 0, false)
         } else {
-            RetrievalBackfill.select(pool, policy.topK, scanCap) { mem ->
+            RetrievalBackfill.select(
+                pool,
+                policy.topK,
+                scanCap,
+                isMandatory = {
+                    ImportanceRanking.isMandatory(it.importance.toDouble(), useImportanceRatings)
+                }
+            ) { mem ->
                 val last = lastTurns[mem.memoryId]
                 if (turnNow != null && last != null && turnNow - last < COOLDOWN_TURNS) {
                     cooled.add(mem to (turnNow - last))
@@ -720,6 +729,7 @@ class Enforcer private constructor(private val appContext: Context) {
             neverAssume = neverAssume,
             score = score,
             similarity = similarity,
+            importance = m.importance ?: 0,
             typeId = m.typeId
         )
     }

@@ -69,6 +69,10 @@ data class MemoryRow(
      *  the FULL content for this card (not the one-line preview). The per-draft
      *  match state is fetched lazily from the host via [OnRowListener]. */
     val pendingCard: Boolean = false,
+    /** Stored importance for the inline Pending control. */
+    val importance: Int = 0,
+    /** Master-toggle presentation gate; hiding never mutates [importance]. */
+    val showImportance: Boolean = false,
     /** Profile Images (phase 8): the identity's assigned image hash, or null.
      *  Only the profile-image row adapter (My Personas / Roleplay Characters)
      *  reads it; the default MemoryRowAdapter ignores it. */
@@ -119,6 +123,9 @@ class MemoryRowAdapter(
 
         /** Retry tapped after a comparison failure. */
         fun onRetry(row: MemoryRow) {}
+
+        /** Importance control tapped on an associative Pending card. */
+        fun onImportance(row: MemoryRow) {}
     }
 
     companion object {
@@ -294,6 +301,16 @@ class MemoryRowAdapter(
             if (row.subtitle.isNullOrBlank()) visibility = View.GONE
             else { visibility = View.VISIBLE; text = row.subtitle }
         }
+        view.findViewById<TextView>(R.id.pending_importance).apply {
+            if (!row.showImportance) {
+                visibility = View.GONE
+                setOnClickListener(null)
+            } else {
+                visibility = View.VISIBLE
+                text = context.getString(R.string.mem_importance_value_fmt, importanceLabel(row.importance))
+                setOnClickListener { listener?.onImportance(row) }
+            }
+        }
 
         val caution = view.findViewById<ImageView>(R.id.pending_caution)
         val loading = view.findViewById<View>(R.id.pending_loading)
@@ -333,4 +350,15 @@ class MemoryRowAdapter(
         }
         return view
     }
+
+    private fun importanceLabel(value: Int): String = context.getString(
+        when (value.coerceIn(-2, 3)) {
+            -2 -> R.string.mem_importance_minus_2
+            -1 -> R.string.mem_importance_minus_1
+            0 -> R.string.mem_importance_0
+            1 -> R.string.mem_importance_1
+            2 -> R.string.mem_importance_2
+            else -> R.string.mem_importance_3
+        }
+    )
 }

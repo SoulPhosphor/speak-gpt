@@ -245,7 +245,7 @@ class MemoryEditorActivity : FragmentActivity() {
                     // different Type in the picker.
                     currentTypeId = record.typeId
                     // Preserve the stored importance unchanged; range is 0..5 (§7).
-                    currentImportance = record.importance.coerceIn(0, 5)
+                    currentImportance = record.importance.coerceIn(-2, 3)
                     currentScope = record.scope.takeIf { it in SCOPE_KEYS } ?: "global"
                     selectedTargets.clear()
                     targetsForScope(currentScope, record).forEach { id ->
@@ -392,13 +392,13 @@ class MemoryEditorActivity : FragmentActivity() {
     /* ------------------------------ importance ------------------------------ */
 
     private fun importanceLabel(i: Int): String = getString(
-        when (i) {
+        when (i.coerceIn(-2, 3)) {
+            -2 -> R.string.mem_importance_minus_2
+            -1 -> R.string.mem_importance_minus_1
             0 -> R.string.mem_importance_0
             1 -> R.string.mem_importance_1
             2 -> R.string.mem_importance_2
-            3 -> R.string.mem_importance_3
-            4 -> R.string.mem_importance_4
-            else -> R.string.mem_importance_5
+            else -> R.string.mem_importance_3
         }
     )
 
@@ -407,12 +407,14 @@ class MemoryEditorActivity : FragmentActivity() {
     }
 
     private fun showImportancePicker() {
-        // 0..5, with 0 · Neutral (§7): 0 is a valid permanent value.
-        val labels = (0..5).map { importanceLabel(it) }.toTypedArray()
+        // Signed scale: -2, -1, 0 (neutral), +1, +2, +3 (mandatory when relevant).
+        val values = listOf(-2, -1, 0, 1, 2, 3)
+        val labels = values.map { importanceLabel(it) }.toTypedArray()
+        val selected = values.indexOf(currentImportance.coerceIn(-2, 3)).coerceAtLeast(0)
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.mem_edit_label_importance)
-            .setSingleChoiceItems(labels, currentImportance.coerceIn(0, 5)) { d, which ->
-                currentImportance = which
+            .setSingleChoiceItems(labels, selected) { d, which ->
+                currentImportance = values[which]
                 refreshImportance()
                 d.dismiss()
             }

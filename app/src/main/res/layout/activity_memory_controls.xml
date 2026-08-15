@@ -135,6 +135,25 @@
                     android:id="@+id/switch_chat_list_memory_status" />
             </LinearLayout>
 
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/memory_controls_importance_ratings" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="10"
+                        android:text="@string/memory_controls_importance_ratings_hint" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_use_importance_ratings"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
             <!-- ============ Memory Engine ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"

@@ -300,6 +300,8 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
             iconRes = iconForScope(m.scope, isOnCard(m)),
             pendingActions = pending && roleplay,
             pendingCard = usePendingCard,
+            importance = m.importance.coerceIn(-2, 3),
+            showImportance = usePendingCard && (preferences?.getUseImportanceRatings() ?: true),
             // Owner design: roleplay memories additionally get Add to Card —
             // but only once they have a target.
             showAddToCard = pending && roleplay && !needsTarget,
@@ -593,6 +595,40 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         currentAdapter?.notifyDataSetChanged()
         detectMatches(row.id)
     }
+
+    override fun onImportance(row: MemoryRow) {
+        val values = listOf(-2, -1, 0, 1, 2, 3)
+        val labels = values.map { importanceLabel(it) }.toTypedArray()
+        val selected = values.indexOf(row.importance.coerceIn(-2, 3)).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.mem_edit_label_importance)
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
+                val picked = values[which]
+                dialog.dismiss()
+                runOffThread {
+                    val store = MemoryStore.getInstance(this)
+                    val memory = store.getMemory(row.id) ?: return@runOffThread
+                    store.updateMemory(
+                        memory.copy(importance = picked),
+                        getString(R.string.memory_change_edited)
+                    )
+                    runOnUiThread { reload() }
+                }
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+            .show()
+    }
+
+    private fun importanceLabel(value: Int): String = getString(
+        when (value.coerceIn(-2, 3)) {
+            -2 -> R.string.mem_importance_minus_2
+            -1 -> R.string.mem_importance_minus_1
+            0 -> R.string.mem_importance_0
+            1 -> R.string.mem_importance_1
+            2 -> R.string.mem_importance_2
+            else -> R.string.mem_importance_3
+        }
+    )
 
     /* -------------------- pending actions (owner design) -------------------- */
 

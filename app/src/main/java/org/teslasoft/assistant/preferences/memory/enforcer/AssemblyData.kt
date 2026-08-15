@@ -47,6 +47,8 @@ data class AssembledMemory(
     /** Librarian score; budget cuts remove the lowest first. */
     val score: Float = 0f,
     val similarity: Float = 0f,
+    /** Canonical signed importance; +3 may exceed the normal memory-count cap. */
+    val importance: Int = 0,
     /** The memory's user-owned Type id (the source of truth), or null for No
      *  Type. An Instruction-Type memory renders as a context rule (law 5), not a
      *  fact. Keyed on the STABLE Instruction Type id, so a rename keeps the
