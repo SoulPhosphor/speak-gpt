@@ -17,41 +17,67 @@
 package org.teslasoft.assistant.preferences.memory
 
 /**
- * The one shared importance-access path for ranking (canonical recovery plan
- * Phase 2, item 3).
+ * One shared contract for user-owned memory importance.
  *
- * The "Use Importance Ratings" master toggle
- * ([org.teslasoft.assistant.preferences.Preferences.getUseImportanceRatings])
- * decides ONLY whether a memory's stored importance rating influences its
- * retrieval score. Every ranking path routes the stored importance weight
- * through [effectiveImportanceWeight] so the toggle behaves identically
- * everywhere:
+ * The ordinary ranking scale is signed around neutral:
+ * - -2 and -1 demote an otherwise eligible memory.
+ * - 0 is neutral and is also the fallback for an absent/invalid rating.
+ * - +1 and +2 promote an otherwise eligible memory.
+ * - +3 is a mandatory-inclusion marker. It gets the same ranking contribution
+ *   as +2, then independently bypasses the normal result-count cutoff after
+ *   scope and relevance have already made the memory eligible.
  *
- *  - Off — importance contributes EXACTLY ZERO to the score. The stored
- *    importance value on each memory is never read into the score, never
- *    modified, never reset, never deleted.
- *  - On  — the stored importance weight is used as-is, so the ratings the user
- *    already set take effect again with no rewrite.
- *
- * This gate touches only the scoring WEIGHT. It never rewrites memories and
- * never changes eligibility: importance is added to an already-eligible
- * candidate's score after the relevance floor / token-hit gate in the
- * librarian, so a zero (or non-zero) importance weight can never make an
- * otherwise ineligible memory eligible.
- *
- * Pure Kotlin, unit tested (ImportanceRankingTest).
+ * The "Use Importance Ratings" master toggle gates BOTH ranking influence and
+ * +3 mandatory inclusion. Turning it off never rewrites stored ratings, so
+ * turning it back on restores the user's values immediately.
  */
 object ImportanceRanking {
+    const val MIN_IMPORTANCE = -2
+    const val NEUTRAL_IMPORTANCE = 0
+    const val MAX_RANKING_IMPORTANCE = 2
+    const val ALWAYS_INCLUDE_IMPORTANCE = 3
+    const val MAX_IMPORTANCE = ALWAYS_INCLUDE_IMPORTANCE
+
+    /** Clamp imported/stored values to the supported range; null means neutral. */
+    fun sanitizeImportance(value: Int?): Int =
+        value?.coerceIn(MIN_IMPORTANCE, MAX_IMPORTANCE) ?: NEUTRAL_IMPORTANCE
 
     /**
-     * The importance weight the ranker should actually use.
+     * Signed ranking contribution in -1.0..1.0.
      *
-     * @param storedWeight the importance blend coefficient from the (bounded)
-     *   retrieval policy — the value that would apply if the setting were On.
-     * @param useImportanceRatings the "Use Importance Ratings" master toggle.
-     * @return [storedWeight] when the toggle is On; `0.0` when Off, so
-     *   importance contributes exactly zero. The stored ratings themselves are
-     *   untouched either way — turning the toggle back On restores their effect.
+     * +3 intentionally saturates at the +2 ranking value. Its extra meaning is
+     * handled by [isAlwaysIncluded] and [selectWithMandatory], not by giving it
+     * a magic oversized score.
+     */
+    fun normalizedRankingValue(value: Int?): Double {
+        val ranked = sanitizeImportance(value).coerceAtMost(MAX_RANKING_IMPORTANCE)
+        return ranked / MAX_RANKING_IMPORTANCE.toDouble()
+    }
+
+    /** True only when the feature is enabled and this memory carries +3. */
+    fun isAlwaysIncluded(value: Int?, useImportanceRatings: Boolean): Boolean =
+        useImportanceRatings && sanitizeImportance(value) == ALWAYS_INCLUDE_IMPORTANCE
+
+    /**
+     * Apply the normal result count while retaining every already-eligible +3
+     * memory. This is deliberately called after relevance/scope eligibility.
+     */
+    fun selectWithMandatory(
+        scored: List<ScoredMemory>,
+        topK: Int,
+        useImportanceRatings: Boolean
+    ): List<ScoredMemory> {
+        val sorted = scored.sortedByDescending { it.score }
+        val normalLimit = topK.coerceAtLeast(0)
+        if (!useImportanceRatings) return sorted.take(normalLimit)
+        return sorted.filterIndexed { index, hit ->
+            index < normalLimit || isAlwaysIncluded(hit.memory.importance, true)
+        }
+    }
+
+    /**
+     * The importance blend coefficient the ranker should actually use.
+     * Stored ratings are never modified by this gate.
      */
     fun effectiveImportanceWeight(storedWeight: Double, useImportanceRatings: Boolean): Double =
         if (useImportanceRatings) storedWeight else 0.0
