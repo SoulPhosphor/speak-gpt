@@ -24,6 +24,7 @@ jobs:
           sed -i 's/>3<\/string>/>3 Notable<\/string>/' .github/scripts/apply_signed_importance_patch.py
           sed -i 's/>4<\/string>/>4 High<\/string>/' .github/scripts/apply_signed_importance_patch.py
           sed -i 's/>5<\/string>/>5 Critical<\/string>/' .github/scripts/apply_signed_importance_patch.py
+          sed -i 's/mem_importance_dialog_title/mem_edit_label_importance/g' .github/scripts/apply_signed_importance_patch.py
       - name: Apply targeted patch
         run: python3 .github/scripts/apply_signed_importance_patch.py
       - name: Commit implementation and remove patch scaffolding
