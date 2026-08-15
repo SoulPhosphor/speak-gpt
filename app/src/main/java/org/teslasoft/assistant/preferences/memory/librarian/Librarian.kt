@@ -172,7 +172,7 @@ class Librarian private constructor(private val appContext: Context) {
 
         /**
          * Pure ranking: score each candidate and return the top [topK], highest
-         * first. score = w_sim·cosine + w_imp·(importance/5) + w_rec·recency +
+         * first. score = w_sim·cosine + w_imp·signedImportance + w_rec·recency +
          * boost. Provenance (confidence/source) does not influence the score
          * (Phase 2 review). No Android/ORT — unit tested (LibrarianRankingTest).
          *
@@ -185,20 +185,29 @@ class Librarian private constructor(private val appContext: Context) {
             candidates: List<Candidate>,
             weights: Weights,
             topK: Int,
-            minSimilarity: Float = 0f
+            minSimilarity: Float = 0f,
+            useImportanceRatings: Boolean = true,
+            includeMandatoryImportance: Boolean = true
         ): List<ScoredMemory> {
             val scored = candidates.mapNotNull { c ->
                 val sim = VectorMath.cosine(queryVector, c.vector)
                 if (sim < minSimilarity) return@mapNotNull null
+                val importance = if (useImportanceRatings) {
+                    ImportanceRanking.normalizedRankingImportance(c.memory.importance.toDouble())
+                } else 0.0
                 var s = weights.similarity * sim +
-                    weights.importance * (c.memory.importance / 5.0) +
+                    weights.importance * importance +
                     weights.recency * c.recency
                 // Provenance no longer influences ranking (Phase 2 review): a
                 // memory's confidence/source is not read into its score.
                 s += c.boost
                 ScoredMemory(c.memory, sim, s.toFloat())
             }
-            return scored.sortedByDescending { it.score }.take(topK)
+            val ranked = scored.sortedByDescending { it.score }
+            return ImportanceRanking.includeMandatory(ranked, topK) { hit ->
+                includeMandatoryImportance &&
+                    ImportanceRanking.isMandatory(hit.memory.importance.toDouble(), useImportanceRatings)
+            }
         }
 
         /**
@@ -216,7 +225,9 @@ class Librarian private constructor(private val appContext: Context) {
             query: String,
             candidates: List<LexicalCandidate>,
             weights: Weights,
-            topK: Int
+            topK: Int,
+            useImportanceRatings: Boolean = true,
+            includeMandatoryImportance: Boolean = true
         ): List<ScoredMemory> {
             val terms = lexicalTokens(query).filter { it.length >= MIN_TERM_LENGTH }
             if (terms.isEmpty()) return emptyList()
@@ -231,15 +242,22 @@ class Librarian private constructor(private val appContext: Context) {
                 val hits = terms.count { it in docTokens }
                 if (hits == 0) return@mapNotNull null
                 val relevance = hits.toFloat() / terms.size
+                val importance = if (useImportanceRatings) {
+                    ImportanceRanking.normalizedRankingImportance(mem.importance.toDouble())
+                } else 0.0
                 var s = weights.similarity * relevance +
-                    weights.importance * (mem.importance / 5.0) +
+                    weights.importance * importance +
                     weights.recency * c.recency
                 // Provenance no longer influences ranking (Phase 2 review).
                 s += c.boost
                 // No title bonus (§3.1): retrieval never rewards a title.
                 ScoredMemory(mem, relevance, s.toFloat())
             }
-            return scored.sortedByDescending { it.score }.take(topK)
+            val ranked = scored.sortedByDescending { it.score }
+            return ImportanceRanking.includeMandatory(ranked, topK) { hit ->
+                includeMandatoryImportance &&
+                    ImportanceRanking.isMandatory(hit.memory.importance.toDouble(), useImportanceRatings)
+            }
         }
 
         /**
@@ -257,6 +275,8 @@ class Librarian private constructor(private val appContext: Context) {
             corpus: List<CorpusMemory>,
             weights: Weights,
             topK: Int,
+            useImportanceRatings: Boolean = true,
+            includeMandatoryImportance: Boolean = true,
             onSemantic: ((Boolean) -> Unit)? = null
         ): List<ScoredMemory> {
             if (corpus.isEmpty()) return emptyList()
@@ -267,7 +287,8 @@ class Librarian private constructor(private val appContext: Context) {
                     return rank(
                         queryVec,
                         corpus.map { Candidate(it.memory, it.vector!!, it.recency, it.boost) },
-                        weights, topK, MIN_SIMILARITY
+                        weights, topK, MIN_SIMILARITY,
+                        useImportanceRatings, includeMandatoryImportance
                     )
                 }
             }
@@ -275,7 +296,8 @@ class Librarian private constructor(private val appContext: Context) {
             return rankLexical(
                 query,
                 corpus.map { LexicalCandidate(it.memory, it.tags, it.recency, it.boost, it.aliases) },
-                weights, topK
+                weights, topK,
+                useImportanceRatings, includeMandatoryImportance
             )
         }
 
@@ -695,8 +717,19 @@ class Librarian private constructor(private val appContext: Context) {
                 null
             }
         }
+        val useImportanceRatings = try {
+            Preferences.getPreferences(appContext, "").getUseImportanceRatings()
+        } catch (_: Exception) { true }
         val result = searchCore(
-            query, embedQuery, corpus, rankingWeights ?: weights(store), topK
+            query = query,
+            embedQuery = embedQuery,
+            corpus = corpus,
+            weights = rankingWeights ?: weights(store),
+            topK = topK,
+            useImportanceRatings = useImportanceRatings,
+            // +3's overflow rule is for live prompt delivery, not the
+            // Archivist's bounded reconciliation candidate pool.
+            includeMandatoryImportance = useImportanceRatings && !reconciliation
         ) { semantic ->
             diag?.invoke(
                 RetrievalDiagnostics(

@@ -32,7 +32,7 @@ class LibrarianRankingTest {
 
     private fun mem(
         id: String,
-        importance: Int = 3,
+        importance: Int = 0,
         scope: String = "global",
         content: String = id,
         embeddingText: String? = null,
@@ -104,8 +104,8 @@ class LibrarianRankingTest {
         val ranked = Librarian.rank(
             query,
             listOf(
-                cand(mem("low", importance = 1), floatArrayOf(1f, 0f, 0f)),
-                cand(mem("high", importance = 5), floatArrayOf(1f, 0f, 0f))
+                cand(mem("low", importance = -1), floatArrayOf(1f, 0f, 0f)),
+                cand(mem("high", importance = 2), floatArrayOf(1f, 0f, 0f))
             ),
             weights, topK = 10
         )
@@ -119,6 +119,29 @@ class LibrarianRankingTest {
             cand(mem("m$it"), floatArrayOf(1f, 0f, 0f))
         }
         assertEquals(3, Librarian.rank(query, candidates, weights, topK = 3).size)
+    }
+
+    @Test
+    fun plusThreeExtendsPastTopKOnlyWhenEnabled() {
+        val query = floatArrayOf(1f, 0f, 0f)
+        val candidates = listOf(
+            cand(mem("normal", importance = 0), floatArrayOf(1f, 0f, 0f)),
+            // Relevant but intentionally weaker, so it would fall outside topK
+            // without the explicit +3 inclusion pass.
+            cand(mem("mandatory", importance = 3), floatArrayOf(0.31f, 0.9507f, 0f))
+        )
+
+        val enabled = Librarian.rank(
+            query, candidates, weights, topK = 1, minSimilarity = 0.3f,
+            useImportanceRatings = true, includeMandatoryImportance = true
+        )
+        assertEquals(listOf("normal", "mandatory"), enabled.map { it.memory.memoryId })
+
+        val disabled = Librarian.rank(
+            query, candidates, weights, topK = 1, minSimilarity = 0.3f,
+            useImportanceRatings = false, includeMandatoryImportance = false
+        )
+        assertEquals(listOf("normal"), disabled.map { it.memory.memoryId })
     }
 
     /* -------- Stage 3.2: the priority ladder as a blended boost (§12) -------- */
@@ -186,11 +209,11 @@ class LibrarianRankingTest {
         val ranked = Librarian.rank(
             query,
             listOf(
-                // cosine ≈ 0.25 — below the 0.3 floor, but importance 5 and
+                // cosine ≈ 0.25 — below the 0.3 floor, but mandatory +3 and
                 // full recency give it the highest blended score.
-                cand(mem("irrelevant-important", importance = 5), floatArrayOf(0.25f, 0.968f, 0f), recency = 1.0),
-                cand(mem("relevant-strong", importance = 1), floatArrayOf(0.9f, 0.436f, 0f), recency = 0.0),
-                cand(mem("relevant-weak", importance = 1), floatArrayOf(0.35f, 0.937f, 0f), recency = 0.0)
+                cand(mem("irrelevant-important", importance = 3), floatArrayOf(0.25f, 0.968f, 0f), recency = 1.0),
+                cand(mem("relevant-strong", importance = 0), floatArrayOf(0.9f, 0.436f, 0f), recency = 0.0),
+                cand(mem("relevant-weak", importance = 0), floatArrayOf(0.35f, 0.937f, 0f), recency = 0.0)
             ),
             weights, topK = 2, minSimilarity = 0.3f
         )
@@ -322,7 +345,7 @@ class LibrarianRankingTest {
             boost = 0.0
         )
         val weakerWithEveryTieBreak = cand(
-            mem("weaker", importance = 5, scope = "campaign"),
+            mem("weaker", importance = 2, scope = "campaign"),
             floatArrayOf(0.83f, 0.557763f),
             recency = 1.0,
             boost = Librarian.reconciliationContextBoost(99.0)
