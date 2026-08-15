@@ -108,4 +108,19 @@ class RetrievalBackfillTest {
         assertEquals(listOf("must"), selection.kept)
         assertTrue(selection.scanCapReached)
     }
+
+    @Test
+    fun mandatoryCandidatesDoNotConsumeNormalCountOrScanBudget() {
+        val candidates = listOf("must-a", "must-b", "normal-a", "normal-b")
+        val selection = RetrievalBackfill.select(
+            candidates,
+            topK = 2,
+            scanCap = 2,
+            isMandatory = { it.startsWith("must-") }
+        ) { true }
+
+        assertEquals(listOf("must-a", "must-b", "normal-a", "normal-b"), selection.kept)
+        assertEquals(4, selection.examined)
+        assertFalse(selection.scanCapReached)
+    }
 }
