@@ -6380,6 +6380,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         startLifecycle(ResponseLifecycle.PHASE_TOOL_CONTINUATION, request.maxTokens)
         val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(request)
         scroll(true)
+        // Dispatch begins at collection; a failure past this point is a real
+        // provider/network end, not a pre-dispatch one.
+        providerRequestDispatched = true
         completions.flowOn(Dispatchers.IO).collect { v ->
             if (!currentCoroutineContext().isActive) throw CancellationException()
             val choice = v.choices.firstOrNull()
@@ -6421,6 +6424,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @Volatile
     private var currentLifecycle: ResponseLifecycleRecorder? = null
 
+    /** Whether the in-flight streamed request has actually begun dispatch/
+     *  collection. False throughout request construction; set true immediately
+     *  before the provider stream is collected, and reset per attempt in
+     *  [startLifecycle]. This — never the mere existence of a visible assistant
+     *  row — is the pre-dispatch boundary: a failure or a non-user, non-teardown
+     *  cancellation while this is false ended before anything reached the
+     *  provider, so it is recorded as request_not_sent and never written to the
+     *  Provider Failure Log. */
+    @Volatile
+    private var providerRequestDispatched: Boolean = false
+
     /** The provider-routing send hook's ACTUAL result for the in-flight
      *  request, written on the send thread and read when the lifecycle entry is
      *  finalized. Reset to null when each streamed request begins, so a hook
@@ -6451,6 +6465,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // with its own result), so the send hook's actual outcome is recorded
         // fresh and a hook that never runs never reports a stale attachment.
         lastRoutingAttachment = null
+        // Reset the dispatch boundary for THIS attempt regardless of whether
+        // lifecycle logging is on, because the Provider Failure Log gate also
+        // depends on it.
+        providerRequestDispatched = false
         if (preferences?.getResponseLifecycleLogging() != true) {
             currentLifecycle = null
             return
@@ -7491,6 +7509,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                 val completions: Flow<TextCompletion> = ai!!.completions(completionRequest)
 
+                // Dispatch begins at collection; a failure past this point is a
+                // real provider/network end, not a pre-dispatch one.
+                providerRequestDispatched = true
                 completions.flowOn(Dispatchers.IO).collect { v ->
                     run {
                         if (!currentCoroutineContext().isActive) throw CancellationException()
@@ -7638,13 +7659,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     )
                 }
                 else -> {
-                    // Cancelled mid-reply with no user stop and no teardown — the
-                    // app knows it ended early but cannot say why. A diagnostic
-                    // problem, not a benign stop.
-                    finalizeLifecycleTerminal(
-                        ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
-                        ResponseLifecycle.Termination.STREAM_CLOSED, "ended early; cause unknown"
-                    )
+                    // Cancelled with no user stop and no teardown. Split on the
+                    // dispatch boundary: before the provider request was sent this
+                    // is a pre-dispatch cancellation (request_not_sent), recorded
+                    // as Cancelled; once dispatched it is the existing "ended
+                    // early; cause unknown" diagnostic. The visible row's terminal
+                    // handling is unchanged either way.
+                    if (providerRequestDispatched) {
+                        finalizeLifecycleTerminal(
+                            ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
+                            ResponseLifecycle.Termination.STREAM_CLOSED, "ended early; cause unknown"
+                        )
+                    } else {
+                        finalizeLifecycleTerminal(
+                            ResponseLifecycle.Outcome.CANCELLED, "missing", true,
+                            ResponseLifecycle.Termination.REQUEST_NOT_SENT, null
+                        )
+                    }
                     showTerminalFailure(
                         state, detail, null, logAsError = true,
                         errorTag = "GenUnknownEnd", errorSummary = "reply ended early; cause unknown"
@@ -7700,7 +7731,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // separates a provider error (the server answered with an error)
             // from a dropped connection, a timeout, or a parse failure. The
             // error text is the raw server error / exception, verbatim.
-            val lifecycleTermination = when {
+            val lifecycleTermination = if (!providerRequestDispatched) {
+                // Nothing was dispatched to the provider — the attempt ended
+                // during request construction. Record only that fact; never a
+                // provider, network, parser, or timeout category.
+                ResponseLifecycle.Termination.REQUEST_NOT_SENT
+            } else when {
                 genError.reachedServer() -> ResponseLifecycle.Termination.PROVIDER_ERROR
                 (e::class.java.name + " " + (e.message ?: "")).contains("timeout", ignoreCase = true) ->
                     ResponseLifecycle.Termination.CLIENT_TIMEOUT
@@ -7721,7 +7757,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // actually answered — a user stop or a request that never reached a
             // server is not a provider fault and is never logged. The same
             // expanded fields the user sees, plus the server's own error.
-            if (preferences?.getLogChatFailures() == true && genError.reachedServer()) {
+            // A pre-dispatch failure contacted no provider, so it is never a
+            // provider fault: skip the Provider Failure Log even if a local
+            // exception happened to classify as one that "reached" a server.
+            if (preferences?.getLogChatFailures() == true && genError.reachedServer() && providerRequestDispatched) {
                 val providerErrorRaw = listOfNotNull(
                     genError.httpStatus?.toString(),
                     (providerInfo.message ?: e.message)?.trim()?.ifBlank { null }
@@ -8543,6 +8582,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         var response = ""
         putMessage("", true)
         markLastAssistantStreaming()
+        // Begin the lifecycle record the moment the visible assistant row
+        // exists — BEFORE request construction — so a failure or cancellation
+        // during construction still produces a record and is classified as a
+        // pre-dispatch (request_not_sent) end, not a provider/network failure.
+        // The requested-output value is read the same way the request below is
+        // built, so the recorded figure is unchanged.
+        startLifecycle(
+            ResponseLifecycle.PHASE_PRIMARY,
+            preparedTurn?.request?.maxTokens ?: preferences?.getMaxTokens()
+        )
 
         val msgs: ArrayList<ChatMessage>
         val chatCompletionRequest: ChatCompletionRequest
@@ -8837,8 +8886,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // judged as a tools rejection by the wrapper in generateResponse.
         lastRegularRequestCarriedImageTools = chatCompletionRequest.tools != null
 
-        startLifecycle(ResponseLifecycle.PHASE_PRIMARY, chatCompletionRequest.maxTokens)
-
         val completions: Flow<ChatCompletionChunk> =
             ai!!.chatCompletions(chatCompletionRequest)
 
@@ -8850,6 +8897,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         scroll(true)
 
+        // The provider request begins dispatch here; from this point a failure
+        // is a genuine provider/network/stream end, not a pre-dispatch one.
+        providerRequestDispatched = true
         completions.flowOn(Dispatchers.IO).collect { v ->
             run {
                 if (!currentCoroutineContext().isActive) throw CancellationException()

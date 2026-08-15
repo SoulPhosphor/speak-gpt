@@ -84,7 +84,15 @@ object ResponseLifecycle {
         PARSER_ERROR("parser_error"),
         CLIENT_TIMEOUT("client_timeout"),
         USER_STOP("user_stop"),
-        APP_CANCEL("app_cancel")
+        APP_CANCEL("app_cancel"),
+        // The generation attempt existed and a visible assistant row was
+        // created, but the provider request had NOT begun dispatch/collection
+        // when the attempt ended — a failure or a non-user, non-teardown
+        // cancellation during request construction. Names only the fact we
+        // know (nothing was sent), so a purely local pre-dispatch end is never
+        // attributed to the provider, the network, the parser, or a closed
+        // stream, and is never written to the Provider Failure Log.
+        REQUEST_NOT_SENT("request_not_sent")
     }
 
     /**
