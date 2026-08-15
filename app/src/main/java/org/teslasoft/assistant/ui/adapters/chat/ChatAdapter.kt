@@ -69,7 +69,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.GlideException
-import com.bumptech.glide.load.resource.bitmap.CenterCrop
+import com.bumptech.glide.load.resource.bitmap.FitCenter
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.RequestOptions
@@ -430,12 +430,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // identical. Present on both message layouts.
         private val btnImageShare: ImageButton = itemView.findViewById(R.id.btn_image_share)
         private val btnImageCopy: ImageButton = itemView.findViewById(R.id.btn_image_copy)
-        // The row container holding the bubble; centered for a generated image so
-        // the picture (and the in-bubble name with it) sits centered on screen.
+        // The row container holding the bubble; generated images now keep the
+        // same speaker-side geometry as ordinary assistant responses.
         private val messageRow: LinearLayout? = itemView.findViewById(R.id.linearLayout3)
-        // Speaker name drawn INSIDE the bubble, used only when a centered image
-        // bubble would otherwise strand the row-level name. Present on the bot
-        // layout only (generated images are assistant-side), hence nullable.
+        // Legacy in-bubble name slot. Generated images now use the same row-level
+        // speaker name as ordinary responses, so this stays hidden.
         private val bubbleName: TextView? = itemView.findViewById(R.id.bubble_name)
         private var boundGeneratedImagePath: String? = null
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
@@ -917,25 +916,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 ChatNameStyle.user(preferences)
             }
 
-            // A centered image bubble would leave the row-level name stranded to
-            // the side, so for that one case the name is drawn inside the bubble
-            // (bubbleName) and the row name is hidden. Every other case keeps the
-            // row name, which already lines up with the speaker-side bubble.
-            val nameInBubble = isImage && showName && showBubble && !showPortrait
-
+            // Generated images use the same row-level speaker label as ordinary
+            // replies. The image changes the bubble content, not identity placement.
             username.text = nameText
             ChatNameStyle.apply(username, context, nameStyle)
-            username.visibility = if (showName && !nameInBubble) View.VISIBLE else View.GONE
-
-            bubbleName?.let {
-                if (nameInBubble) {
-                    it.text = nameText
-                    ChatNameStyle.apply(it, context, nameStyle)
-                    it.visibility = View.VISIBLE
-                } else {
-                    it.visibility = View.GONE
-                }
-            }
+            username.visibility = if (showName) View.VISIBLE else View.GONE
+            bubbleName?.visibility = View.GONE
 
             icon.visibility = if (showPortrait) View.VISIBLE else View.GONE
             if (showPortrait) {
@@ -999,12 +985,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /**
          * Places the portrait, speaker name, and bubble.
          *
-         * A generated image bubble is centered on screen (owner ask, Aug 15
-         * 2026). To keep the name with that centered bubble it is drawn inside
-         * the bubble (bubbleName, wired in updatePresentation) rather than at the
-         * row level; under a portrait the bubble also drops below the portrait's
-         * full reach so the picture never overlaps it, and the row-level name
-         * stays beside the portrait.
+         * Generated images use the same horizontal assistant-message geometry
+         * as ordinary replies. Their bubble fills that normal available width so
+         * the image can use the space, while the image itself remains centered.
+         * With a portrait the image bubble still drops below the portrait's full
+         * reach, preserving the clean no-overlap behavior.
          *
          * For text, the bubble hugs the speaker side. With a portrait the name
          * sits beside it; with just a painted bubble the row name aligns with the
@@ -1020,16 +1005,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         ) {
             val contentPadding = dimensionPixelSize(R.dimen.chat_message_content_padding)
 
-            // A generated image bubble is centered on screen. Under a portrait it
-            // also drops below the portrait's full reach so it never overlaps.
-            val centerImage = isImage && showBubble
             val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
+            bubbleParams.width = if (isImage) {
+                ViewGroup.LayoutParams.MATCH_PARENT
+            } else {
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            }
             bubbleParams.topMargin = when {
                 isImage && showPortrait -> dimensionPixelSize(R.dimen.chat_portrait_size) +
                     dimensionPixelSize(R.dimen.chat_portrait_top_offset)
                 showPortrait -> dimensionPixelSize(R.dimen.chat_portrait_vertical_offset)
-                // Name inside the bubble: the bubble starts at the top with no
-                // half-line straddle, so the name no longer pokes above it.
                 showName && showBubble -> 0
                 // No-bubble name keeps its original centered-on-the-line placement.
                 showName -> username.lineHeight / 2
@@ -1037,11 +1022,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
             bubbleBg.layoutParams = bubbleParams
 
-            messageRow?.gravity = when {
-                centerImage -> Gravity.CENTER_HORIZONTAL
-                isBot -> Gravity.START
-                else -> Gravity.END
-            }
+            // The bubble remains on the same speaker side as a normal response.
+            // Only the generated image inside it is centered.
+            messageRow?.gravity = if (isBot) Gravity.START else Gravity.END
 
             bubbleBg.setPadding(
                 contentPadding,
@@ -1097,12 +1080,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
             username.layoutParams = nameParams
 
-            // The image frame's vertical position now comes from the bubble
-            // itself (pushed below the portrait) and the in-bubble name above it
-            // via the constraint chain, so the frame needs no extra margin.
+            // When there is no portrait, reserve the same name-to-body gap as a
+            // normal response before the image begins. With a portrait the whole
+            // image bubble is already pushed below the portrait and adjacent name.
             val imageParams = imageFrame.layoutParams as ViewGroup.MarginLayoutParams
-            if (imageParams.topMargin != 0) {
-                imageParams.topMargin = 0
+            val imageTopMargin = if (isImage && showName && !showPortrait && showBubble) {
+                username.lineHeight + dimensionPixelSize(R.dimen.chat_name_body_gap)
+            } else {
+                0
+            }
+            if (imageParams.topMargin != imageTopMargin) {
+                imageParams.topMargin = imageTopMargin
                 imageFrame.layoutParams = imageParams
             }
 
@@ -1622,7 +1610,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun loadImage(url: String) {
-            val requestOptions = RequestOptions().transform(CenterCrop(), RoundedCorners(convertDpToPixel(context).toInt()))
+            val requestOptions = RequestOptions().transform(FitCenter(), RoundedCorners(convertDpToPixel(context).toInt()))
             Glide.with(context)
                 .load(url.toUri())
                 .apply(requestOptions)
