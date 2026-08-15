@@ -70,24 +70,27 @@ object RetrievalBackfill {
     ): Selection<T> {
         val normalLimit = topK.coerceAtLeast(0)
         val kept = ArrayList<T>(minOf(normalLimit, candidates.size))
+        var normalKept = 0
         var examined = 0
         var ordinaryExamined = 0
         var capBlockedOrdinary = false
-        for (c in candidates) {
-            val mandatory = isMandatory(c)
-            if (!mandatory && kept.count { !isMandatory(it) } >= normalLimit) continue
+        for (candidate in candidates) {
+            val mandatory = isMandatory(candidate)
+            if (!mandatory && normalKept >= normalLimit) continue
             if (!mandatory && ordinaryExamined >= scanCap) {
                 capBlockedOrdinary = true
                 continue
             }
+
             examined++
             if (!mandatory) ordinaryExamined++
-            if (survives(c)) {
-                if (mandatory) {
-                    kept.add(c)
-                } else if (kept.count { !isMandatory(it) } < normalLimit) {
-                    kept.add(c)
-                }
+            if (!survives(candidate)) continue
+
+            if (mandatory) {
+                kept.add(candidate)
+            } else if (normalKept < normalLimit) {
+                kept.add(candidate)
+                normalKept++
             }
         }
         return Selection(kept, examined, capBlockedOrdinary)
