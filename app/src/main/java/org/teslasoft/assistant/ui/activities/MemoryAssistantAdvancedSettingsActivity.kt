@@ -104,8 +104,8 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     /** Guards the suggestion field's TextWatcher while we set text programmatically. */
     private var suppressSuggestionWatcher = false
 
-    /** Held until Save (spec §2 has an explicit Save button). */
-    private var selectedImportance = 1
+    /** Held until Save (spec §2 has an explicit Save button). 0 = No Minimum. */
+    private var selectedImportance = 0
     private var selectedConversationAmount = ArchivistRequestBudget.CHOICE_AUTO
 
     // The endpoint gear edits only the currently selected stable-id profile.
@@ -242,7 +242,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
         }
 
         /* ---- Minimum Importance ---- */
-        selectedImportance = (preferences?.getArchivistMinImportance() ?: 1).coerceIn(1, 5)
+        selectedImportance = (preferences?.getArchivistMinImportance() ?: 0).coerceIn(0, 5)
         updateImportanceLabel()
         textMinImportanceValue?.setOnClickListener { showImportancePicker() }
 
@@ -528,6 +528,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
     /* ------------------------------ Minimum Importance ------------------------------ */
 
     private fun importanceLabel(level: Int): String = when (level) {
+        0 -> getString(R.string.mem_importance_no_minimum)
         2 -> getString(R.string.mem_importance_2)
         3 -> getString(R.string.mem_importance_3)
         4 -> getString(R.string.mem_importance_4)
@@ -537,7 +538,7 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
     private fun updateImportanceLabel() {
         val anchor = textMinImportanceValue ?: return
-        val labels = (1..5).map { importanceLabel(it) }
+        val labels = (0..5).map { importanceLabel(it) }
         anchor.text = importanceLabel(selectedImportance)
         AppDropdown.sizeToOptions(anchor, labels) {
             (anchor.parent as? View)?.width ?: resources.displayMetrics.widthPixels
@@ -546,16 +547,12 @@ class MemoryAssistantAdvancedSettingsActivity : FragmentActivity() {
 
     private fun showImportancePicker() {
         val anchor = textMinImportanceValue ?: return
-        val labels = listOf(
-            getString(R.string.mem_importance_1),
-            getString(R.string.mem_importance_2),
-            getString(R.string.mem_importance_3),
-            getString(R.string.mem_importance_4),
-            getString(R.string.mem_importance_5)
-        )
+        // No Minimum (0) is the default and first option; the numeric floors
+        // 1–5 follow. Option index equals the stored value across 0..5.
+        val labels = (0..5).map { importanceLabel(it) }
 
-        AppDropdown.show(anchor, labels, selectedImportance - 1) { position ->
-            selectedImportance = (position + 1).coerceIn(1, 5)
+        AppDropdown.show(anchor, labels, selectedImportance.coerceIn(0, 5)) { position ->
+            selectedImportance = position.coerceIn(0, 5)
             updateImportanceLabel()
         }
     }

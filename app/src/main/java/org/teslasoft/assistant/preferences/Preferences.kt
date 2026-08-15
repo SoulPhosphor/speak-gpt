@@ -2057,13 +2057,14 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("archivist_temperature", value.coerceIn(0.0f, 2.0f).toString())
     }
 
-    /** Minimum Importance (1–5) a draft must reach to be filed. Default 1
-     *  (Low — everything comes through). */
+    /** Minimum Importance a draft must reach to be filed. 0 = No Minimum (the
+     *  default): the Memory Assistant suggests whatever it judges worth
+     *  suggesting, with no importance floor. 1–5 keep the older numeric floor. */
     fun getArchivistMinImportance(): Int =
-        getGlobalString("archivist_min_importance", "1").toIntOrNull()?.coerceIn(1, 5) ?: 1
+        getGlobalString("archivist_min_importance", "0").toIntOrNull()?.coerceIn(0, 5) ?: 0
 
     fun setArchivistMinImportance(value: Int) {
-        putGlobalString("archivist_min_importance", value.coerceIn(1, 5).toString())
+        putGlobalString("archivist_min_importance", value.coerceIn(0, 5).toString())
     }
 
     // The former "archivist_card_suggestions" toggle is retired (Phase 2 review):

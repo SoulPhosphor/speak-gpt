@@ -222,6 +222,17 @@ class MemoryFilterPanelActivity : FragmentActivity() {
             apply = { MemoryBrowserFilterState.superseded = it }
         )
 
+        // Memory Importance: multi-select over the signed scale (owner ruling,
+        // Aug 15 2026). Same canonical multi-dropdown as Scope/Type/Tags. Every
+        // value is always available; the section is shown regardless of the
+        // master toggle so the user can browse or audit ratings directly.
+        addMultiDropdownSection(
+            root, getString(R.string.mem_filter_importance),
+            options = IMPORTANCE_KEYS.map { it to importanceLabel(it) },
+            available = IMPORTANCE_KEYS.toSet(),
+            selection = MemoryBrowserFilterState.importance
+        )
+
         // The Status section is REMOVED (owner ruling, July 8 2026 evening):
         // the browser's Memories | Pending toggle owns the status split, so a
         // Status filter here was a duplicate. FilterState.status remains as
@@ -360,6 +371,17 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         else -> R.string.mem_scope_rp_character
     })
 
+    // The filter keys on the clamped importance number rendered as text, so it
+    // matches MemoryRecord.importance.coerceIn(-2, 3).toString() in the browser.
+    private fun importanceLabel(key: String): String = getString(when (key) {
+        "-2" -> R.string.mem_importance_minus_2
+        "-1" -> R.string.mem_importance_minus_1
+        "0" -> R.string.mem_importance_0
+        "1" -> R.string.mem_importance_1
+        "2" -> R.string.mem_importance_2
+        else -> R.string.mem_importance_3
+    })
+
     companion object {
         const val EXTRA_AVAILABLE_TAGS = "availableTags"
         const val EXTRA_AVAILABLE_SCOPES = "availableScopes"
@@ -370,5 +392,7 @@ class MemoryFilterPanelActivity : FragmentActivity() {
         private val SCOPE_KEYS = listOf(
             "global", "real_life", "companion", "project", "world", "campaign", "rp_character"
         )
+
+        private val IMPORTANCE_KEYS = listOf("-2", "-1", "0", "1", "2", "3")
     }
 }

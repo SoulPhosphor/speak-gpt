@@ -1707,6 +1707,10 @@
     <string name="mem_importance_3">+3 · Always include</string>
     <string name="mem_importance_value_fmt">Importance: %1$s</string>
     <string name="mem_importance_value_neutral">Importance: 0 · Neutral</string>
+    <!-- Memory Assistant minimum-importance option (owner ruling, Aug 15 2026):
+         the default. The Memory Assistant suggests whatever it judges worth
+         suggesting, with no importance floor. -->
+    <string name="mem_importance_no_minimum">No Minimum</string>
     <string name="mem_importance_4">4 High</string>
     <string name="mem_importance_5">5 Critical</string>
 
@@ -1765,6 +1769,9 @@
          first letter capitalised, per the style guide. -->
     <string name="title_memory_filters">Memory Filters</string>
     <string name="mem_filter_tags">Tags</string>
+    <!-- Memory Importance filter (owner ruling, Aug 15 2026): multi-select over
+         the signed scale so the user can browse or audit memories by rating. -->
+    <string name="mem_filter_importance">Memory Importance</string>
     <!-- Superseded Memories filter (owner ruling, Aug 3 2026). Hide is the
          default: normal browsing without old versions. Include mixes active,
          archived, and superseded together; Only browses just superseded. -->

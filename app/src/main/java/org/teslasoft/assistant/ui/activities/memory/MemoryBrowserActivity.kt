@@ -223,6 +223,13 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
         if (q.isNotEmpty()) list = list.filter { it.content.lowercase().contains(q) }
         if (!isScoped() && f.scope.isNotEmpty()) list = list.filter { it.scope in f.scope }
         if (f.type.isNotEmpty()) list = list.filter { it.typeId in f.type }
+        // Memory Importance filter: match the memory's stored importance,
+        // clamped to the signed scale, against the chosen values. Independent
+        // of the master toggle so the user can audit ratings even while
+        // importance is not affecting ranking.
+        if (f.importance.isNotEmpty()) {
+            list = list.filter { it.importance.coerceIn(-2, 3).toString() in f.importance }
+        }
         // The mode toggle IS the draft split (owner design, July 8 2026
         // evening): Pending = drafts only; Memories = everything approved
         // (non-draft). Within Memories, the Superseded Memories filter (owner

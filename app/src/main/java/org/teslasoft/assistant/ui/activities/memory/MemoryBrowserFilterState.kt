@@ -63,6 +63,13 @@ object MemoryBrowserFilterState {
      *  match on read). */
     val tags: MutableSet<String> = mutableSetOf()
 
+    /** Memory Importance: multi-select over the signed scale. Empty = match
+     *  anything. Values are the clamped importance numbers as text ("-2", "-1",
+     *  "0", "1", "2", "3"); a memory matches when its stored importance,
+     *  clamped to the scale, is in the set. Lets the user browse or audit by
+     *  rating independently of whether ratings currently affect ranking. */
+    val importance: MutableSet<String> = mutableSetOf()
+
     fun reset() {
         sort = "newest"
         source = "all"
@@ -71,5 +78,6 @@ object MemoryBrowserFilterState {
         type.clear()
         status.clear(); status.add("active")
         tags.clear()
+        importance.clear()
     }
 }
