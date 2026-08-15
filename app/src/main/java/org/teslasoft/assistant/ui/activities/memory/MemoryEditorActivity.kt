@@ -41,6 +41,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CardSections
 import org.teslasoft.assistant.preferences.memory.CardType
+import org.teslasoft.assistant.preferences.memory.ImportanceRanking
 import org.teslasoft.assistant.preferences.memory.MemoryRecord
 import org.teslasoft.assistant.preferences.memory.MemoryScopeGrouping
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -54,7 +55,7 @@ import org.teslasoft.assistant.theme.ThemeManager
  * pop-up editor — the owner's device mishandles large dialogs, so anything with
  * this many fields opens as its own screen. Fields, per owner_approved_rules
  * §§2/5/6/8: title (required) + content, a Type dropdown (six types with their
- * meanings shown as a hint line), an Importance dropdown (five steps), a primary
+ * meanings shown as a hint line), an Importance dropdown (six steps), a primary
  * Scope category (seven), and — for the target-bearing scopes — a multi-select
  * target picker whose choices show as removable pills (§2). Protection/handling
  * editing is unchanged; it stays on the browser row menu.
@@ -176,9 +177,9 @@ class MemoryEditorActivity : FragmentActivity() {
         btnType?.setOnClickListener { showTypePicker() }
         btnImportance?.setOnClickListener { showImportancePicker() }
         // Importance controls are hidden unless Use Importance Ratings is On
-        // (§7.1). When Off (the default), a new memory keeps the neutral 0 and
-        // an edit preserves its stored value without exposing the control.
-        val importanceOn = preferences?.getUseImportanceRatings() == true
+        // (§7.1). When Off, a new memory keeps the neutral 0 and an edit
+        // preserves its stored value without exposing the control.
+        val importanceOn = preferences?.getUseImportanceRatings() ?: true
         val importanceVisibility = if (importanceOn) View.VISIBLE else View.GONE
         findViewById<TextView>(R.id.text_importance_label)?.visibility = importanceVisibility
         btnImportance?.visibility = importanceVisibility
@@ -244,8 +245,8 @@ class MemoryEditorActivity : FragmentActivity() {
                     // untouched (item 2). It changes only if the user picks a
                     // different Type in the picker.
                     currentTypeId = record.typeId
-                    // Preserve the stored importance unchanged; range is 0..5 (§7).
-                    currentImportance = record.importance.coerceIn(0, 5)
+                    // Preserve the stored importance; sanitize only unsupported values.
+                    currentImportance = ImportanceRanking.sanitizeImportance(record.importance)
                     currentScope = record.scope.takeIf { it in SCOPE_KEYS } ?: "global"
                     selectedTargets.clear()
                     targetsForScope(currentScope, record).forEach { id ->
@@ -392,13 +393,13 @@ class MemoryEditorActivity : FragmentActivity() {
     /* ------------------------------ importance ------------------------------ */
 
     private fun importanceLabel(i: Int): String = getString(
-        when (i) {
+        when (ImportanceRanking.sanitizeImportance(i)) {
+            -2 -> R.string.mem_importance_minus_2
+            -1 -> R.string.mem_importance_minus_1
             0 -> R.string.mem_importance_0
             1 -> R.string.mem_importance_1
             2 -> R.string.mem_importance_2
-            3 -> R.string.mem_importance_3
-            4 -> R.string.mem_importance_4
-            else -> R.string.mem_importance_5
+            else -> R.string.mem_importance_3
         }
     )
 
@@ -407,12 +408,13 @@ class MemoryEditorActivity : FragmentActivity() {
     }
 
     private fun showImportancePicker() {
-        // 0..5, with 0 · Neutral (§7): 0 is a valid permanent value.
-        val labels = (0..5).map { importanceLabel(it) }.toTypedArray()
+        val values = listOf(-2, -1, 0, 1, 2, 3)
+        val labels = values.map { importanceLabel(it) }.toTypedArray()
+        val current = values.indexOf(ImportanceRanking.sanitizeImportance(currentImportance))
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.mem_edit_label_importance)
-            .setSingleChoiceItems(labels, currentImportance.coerceIn(0, 5)) { d, which ->
-                currentImportance = which
+            .setSingleChoiceItems(labels, current) { d, which ->
+                currentImportance = values[which]
                 refreshImportance()
                 d.dismiss()
             }

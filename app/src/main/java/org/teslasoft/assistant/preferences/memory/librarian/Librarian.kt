@@ -148,7 +148,8 @@ class Librarian private constructor(private val appContext: Context) {
         internal fun reconciliationWeights(useImportance: Boolean): Weights = Weights(
             similarity = 1.0,
             importance = if (useImportance) RECONCILIATION_IMPORTANCE_WEIGHT else 0.0,
-            recency = RECONCILIATION_RECENCY_WEIGHT
+            recency = RECONCILIATION_RECENCY_WEIGHT,
+            useImportanceRatings = useImportance
         )
 
         /** Union independent local topic-window searches by stable memory id.
@@ -172,7 +173,7 @@ class Librarian private constructor(private val appContext: Context) {
 
         /**
          * Pure ranking: score each candidate and return the top [topK], highest
-         * first. score = w_sim·cosine + w_imp·(importance/5) + w_rec·recency +
+         * first. score = w_sim·cosine + w_imp·signedImportance + w_rec·recency +
          * boost. Provenance (confidence/source) does not influence the score
          * (Phase 2 review). No Android/ORT — unit tested (LibrarianRankingTest).
          *
@@ -191,14 +192,14 @@ class Librarian private constructor(private val appContext: Context) {
                 val sim = VectorMath.cosine(queryVector, c.vector)
                 if (sim < minSimilarity) return@mapNotNull null
                 var s = weights.similarity * sim +
-                    weights.importance * (c.memory.importance / 5.0) +
+                    weights.importance * ImportanceRanking.normalizedRankingValue(c.memory.importance) +
                     weights.recency * c.recency
                 // Provenance no longer influences ranking (Phase 2 review): a
                 // memory's confidence/source is not read into its score.
                 s += c.boost
                 ScoredMemory(c.memory, sim, s.toFloat())
             }
-            return scored.sortedByDescending { it.score }.take(topK)
+            return ImportanceRanking.selectWithMandatory(scored, topK, weights.useImportanceRatings)
         }
 
         /**
@@ -232,14 +233,14 @@ class Librarian private constructor(private val appContext: Context) {
                 if (hits == 0) return@mapNotNull null
                 val relevance = hits.toFloat() / terms.size
                 var s = weights.similarity * relevance +
-                    weights.importance * (mem.importance / 5.0) +
+                    weights.importance * ImportanceRanking.normalizedRankingValue(mem.importance) +
                     weights.recency * c.recency
                 // Provenance no longer influences ranking (Phase 2 review).
                 s += c.boost
                 // No title bonus (§3.1): retrieval never rewards a title.
                 ScoredMemory(mem, relevance, s.toFloat())
             }
-            return scored.sortedByDescending { it.score }.take(topK)
+            return ImportanceRanking.selectWithMandatory(scored, topK, weights.useImportanceRatings)
         }
 
         /**
@@ -295,7 +296,12 @@ class Librarian private constructor(private val appContext: Context) {
         }
     }
 
-    data class Weights(val similarity: Double, val importance: Double, val recency: Double)
+    data class Weights(
+        val similarity: Double,
+        val importance: Double,
+        val recency: Double,
+        val useImportanceRatings: Boolean = true
+    )
 
     /** What one [search] turn actually did, for the debug view (counterplan
      *  Step 1.4 — truthful per-source diagnostics). [eligible] candidates
@@ -536,9 +542,9 @@ class Librarian private constructor(private val appContext: Context) {
         // can never make an ineligible memory eligible.
         val useImportance = try {
             Preferences.getPreferences(appContext, "").getUseImportanceRatings()
-        } catch (_: Exception) { false }
+        } catch (_: Exception) { true }
         val importanceWeight = ImportanceRanking.effectiveImportanceWeight(bounded.value[1], useImportance)
-        return Weights(bounded.value[0], importanceWeight, bounded.value[2])
+        return Weights(bounded.value[0], importanceWeight, bounded.value[2], useImportance)
     }
 
     /** Reconciliation has its own fixed relevance-first policy. The owner's
@@ -547,7 +553,7 @@ class Librarian private constructor(private val appContext: Context) {
     private fun reconciliationWeights(): Weights {
         val useImportance = try {
             Preferences.getPreferences(appContext, "").getUseImportanceRatings()
-        } catch (_: Exception) { false }
+        } catch (_: Exception) { true }
         return reconciliationWeights(useImportance)
     }
 

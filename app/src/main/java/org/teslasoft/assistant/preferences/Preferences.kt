@@ -1610,11 +1610,11 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * the setting.
      */
     fun getUseImportanceRatings() : Boolean {
-        return getGlobalBoolean("use_importance_ratings", false)
+        return getGlobalBoolean("use_importance_ratings", true)
     }
 
     fun setUseImportanceRatings(enabled: Boolean) {
-        putGlobalBoolean("use_importance_ratings", enabled, false)
+        putGlobalBoolean("use_importance_ratings", enabled, true)
     }
 
     /**

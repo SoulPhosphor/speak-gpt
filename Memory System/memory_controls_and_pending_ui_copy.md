@@ -77,9 +77,9 @@ Deleting a Type:
 
 **Subtext:**
 
-> Memories can be rated from 0 to 5. Completely neutral is 0. Higher importance may take precedence when multiple memories apply.
+> Memories can be rated from -2 to +3. Completely neutral is 0. Negative ratings reduce priority, positive ratings increase it, and +3 is always included when the memory is relevant.
 
-**Recommended Default:** Off.
+**Recommended Default:** On.
 
 There is no second toggle for default ratings and no initial AI-rating toggle.
 
@@ -93,15 +93,17 @@ When Off:
 When On:
 
 - importance controls appear in Pending, Possible Match Review, and ordinary memory editing;
-- allowed values are 0 through 5;
+- allowed values are -2, -1, 0, +1, +2, and +3;
 - new memories begin at 0;
 - stored ratings reappear.
 
 **Neutral Value:** `0 · Neutral`
 
-Values 1 through 5 are displayed as numbers. Do not invent semantic labels such as `Critical`, `Minor`, or `Essential` unless the owner later approves them.
+Values -2 through +2 are ranking preferences around neutral. `+3 · Always include` is special: after scope and semantic/lexical relevance make the memory eligible, it must be included even when doing so exceeds the normal memory-count maximum. The normal maximum is therefore a soft cap only for eligible +3 memories.
 
-Importance is considered only after scope and semantic relevance have already made a memory eligible. It may help choose among multiple applicable memories, but it cannot make an irrelevant memory apply.
+Do not invent additional semantic labels such as `Critical`, `Minor`, or `Essential` unless the owner later approves them.
+
+Importance is considered only after scope and relevance have already made a memory eligible. Negative and positive ratings may reorder applicable memories, but no importance value can make an irrelevant or out-of-scope memory apply.
 
 ## 2. Memory Browser Tabs
 

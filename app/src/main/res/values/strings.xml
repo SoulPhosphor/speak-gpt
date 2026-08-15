@@ -1663,6 +1663,9 @@
     <string name="mem_edit_hint_tags">Tags (comma-separated)</string>
     <string name="mem_edit_label_type">Type</string>
     <string name="mem_edit_label_importance">Importance</string>
+    <string name="memory_controls_section_importance">Importance Ratings</string>
+    <string name="memory_controls_use_importance">Use Importance Ratings</string>
+    <string name="memory_controls_use_importance_hint">Rate memories from -2 to +3. 0 is neutral. +3 memories are always included when relevant, even if that exceeds the normal memory limit.</string>
     <string name="mem_edit_label_scope">Scope</string>
     <!-- Owner rework (July 8–9 2026): the old "Which ones does this belong
          to?" sentence is GONE; the picker label is "Associated <Scope>",
@@ -1699,12 +1702,12 @@
     <string name="mem_scope_campaign">Campaign</string>
     <string name="mem_scope_rp_character">RP character</string>
     <!-- Importance (owner_approved_rules §8; canonical recovery plan §7) -->
+    <string name="mem_importance_minus_2">-2</string>
+    <string name="mem_importance_minus_1">-1</string>
     <string name="mem_importance_0">0 · Neutral</string>
-    <string name="mem_importance_1">1 Low importance</string>
-    <string name="mem_importance_2">2 Minor</string>
-    <string name="mem_importance_3">3 Notable</string>
-    <string name="mem_importance_4">4 High</string>
-    <string name="mem_importance_5">5 Critical</string>
+    <string name="mem_importance_1">+1</string>
+    <string name="mem_importance_2">+2</string>
+    <string name="mem_importance_3">+3 · Always include</string>
 
     <!-- Browser filter/sort (Stage 2.3) -->
     <string name="mem_filter_chip">%1$s: %2$s</string>

@@ -64,7 +64,7 @@ class MemoryControlsActivity : FragmentActivity() {
     private var switchDefaultMemory: MaterialSwitch? = null
     private var switchCompanionInRoleplay: MaterialSwitch? = null
     private var switchChatListMemoryStatus: MaterialSwitch? = null
-
+    private var switchUseImportanceRatings: MaterialSwitch? = null
 
     private var textMemoryEngineValue: TextView? = null
 
@@ -92,6 +92,7 @@ class MemoryControlsActivity : FragmentActivity() {
         switchDefaultMemory = findViewById(R.id.switch_default_memory)
         switchCompanionInRoleplay = findViewById(R.id.switch_companion_in_roleplay)
         switchChatListMemoryStatus = findViewById(R.id.switch_chat_list_memory_status)
+        switchUseImportanceRatings = findViewById(R.id.switch_use_importance_ratings)
         textMemoryEngineValue = findViewById(R.id.text_memory_engine_value)
     }
 
@@ -142,6 +143,13 @@ class MemoryControlsActivity : FragmentActivity() {
             preferences?.getShowMemoryStatusOnChatList() ?: true
         switchChatListMemoryStatus?.setOnCheckedChangeListener { _, checked ->
             preferences?.setShowMemoryStatusOnChatList(checked)
+        }
+
+        // User-owned signed importance ratings are enabled by default. Turning
+        // this off only gates ranking/+3 inclusion; stored values stay intact.
+        switchUseImportanceRatings?.isChecked = preferences?.getUseImportanceRatings() ?: true
+        switchUseImportanceRatings?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setUseImportanceRatings(checked)
         }
 
         /* ---- Memory Engine ---- */

@@ -32,7 +32,7 @@ class LibrarianRankingTest {
 
     private fun mem(
         id: String,
-        importance: Int = 3,
+        importance: Int = 0,
         scope: String = "global",
         content: String = id,
         embeddingText: String? = null,
@@ -105,7 +105,7 @@ class LibrarianRankingTest {
             query,
             listOf(
                 cand(mem("low", importance = 1), floatArrayOf(1f, 0f, 0f)),
-                cand(mem("high", importance = 5), floatArrayOf(1f, 0f, 0f))
+                cand(mem("high", importance = 2), floatArrayOf(1f, 0f, 0f))
             ),
             weights, topK = 10
         )
@@ -186,9 +186,9 @@ class LibrarianRankingTest {
         val ranked = Librarian.rank(
             query,
             listOf(
-                // cosine ≈ 0.25 — below the 0.3 floor, but importance 5 and
+                // cosine ≈ 0.25 — below the 0.3 floor, but importance +2 and
                 // full recency give it the highest blended score.
-                cand(mem("irrelevant-important", importance = 5), floatArrayOf(0.25f, 0.968f, 0f), recency = 1.0),
+                cand(mem("irrelevant-important", importance = 2), floatArrayOf(0.25f, 0.968f, 0f), recency = 1.0),
                 cand(mem("relevant-strong", importance = 1), floatArrayOf(0.9f, 0.436f, 0f), recency = 0.0),
                 cand(mem("relevant-weak", importance = 1), floatArrayOf(0.35f, 0.937f, 0f), recency = 0.0)
             ),
@@ -322,7 +322,7 @@ class LibrarianRankingTest {
             boost = 0.0
         )
         val weakerWithEveryTieBreak = cand(
-            mem("weaker", importance = 5, scope = "campaign"),
+            mem("weaker", importance = 2, scope = "campaign"),
             floatArrayOf(0.83f, 0.557763f),
             recency = 1.0,
             boost = Librarian.reconciliationContextBoost(99.0)
