@@ -16,6 +16,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feature/signed-importance-ratings
+      - name: Align patch script with current resource labels
+        shell: bash
+        run: |
+          sed -i 's/>1<\/string>/>1 Low importance<\/string>/' .github/scripts/apply_signed_importance_patch.py
+          sed -i 's/>2<\/string>/>2 Minor<\/string>/' .github/scripts/apply_signed_importance_patch.py
+          sed -i 's/>3<\/string>/>3 Notable<\/string>/' .github/scripts/apply_signed_importance_patch.py
+          sed -i 's/>4<\/string>/>4 High<\/string>/' .github/scripts/apply_signed_importance_patch.py
+          sed -i 's/>5<\/string>/>5 Critical<\/string>/' .github/scripts/apply_signed_importance_patch.py
       - name: Apply targeted patch
         run: python3 .github/scripts/apply_signed_importance_patch.py
       - name: Commit implementation and remove patch scaffolding
