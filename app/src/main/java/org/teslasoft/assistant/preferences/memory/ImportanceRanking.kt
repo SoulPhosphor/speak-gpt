@@ -17,42 +17,63 @@
 package org.teslasoft.assistant.preferences.memory
 
 /**
- * The one shared importance-access path for ranking (canonical recovery plan
- * Phase 2, item 3).
+ * Canonical importance behavior shared by every retrieval layer.
  *
- * The "Use Importance Ratings" master toggle
- * ([org.teslasoft.assistant.preferences.Preferences.getUseImportanceRatings])
- * decides ONLY whether a memory's stored importance rating influences its
- * retrieval score. Every ranking path routes the stored importance weight
- * through [effectiveImportanceWeight] so the toggle behaves identically
- * everywhere:
+ * Stored ratings use the signed scale -2, -1, 0, +1, +2, +3. Missing values
+ * are supplied by callers as 0. The master toggle controls whether ratings
+ * have any runtime effect, but never mutates the stored value.
  *
- *  - Off — importance contributes EXACTLY ZERO to the score. The stored
- *    importance value on each memory is never read into the score, never
- *    modified, never reset, never deleted.
- *  - On  — the stored importance weight is used as-is, so the ratings the user
- *    already set take effect again with no rewrite.
- *
- * This gate touches only the scoring WEIGHT. It never rewrites memories and
- * never changes eligibility: importance is added to an already-eligible
- * candidate's score after the relevance floor / token-hit gate in the
- * librarian, so a zero (or non-zero) importance weight can never make an
- * otherwise ineligible memory eligible.
- *
- * Pure Kotlin, unit tested (ImportanceRankingTest).
+ * -2..+2 form the ordinary symmetric ranking scale around neutral 0.
+ * +3 has the same ranking contribution as +2 and additionally means
+ * "mandatory when otherwise eligible": it can exceed the normal memory-count
+ * limit, but it does not bypass scope/relevance eligibility or later prompt
+ * assembly filters such as character budget, lore overlap, and cooldown.
  */
 object ImportanceRanking {
 
+    /** Clamp persisted/imported values to the supported signed scale. */
+    fun normalizeStoredImportance(rawValue: Double): Double =
+        rawValue.coerceIn(-2.0, 3.0)
+
     /**
-     * The importance weight the ranker should actually use.
-     *
-     * @param storedWeight the importance blend coefficient from the (bounded)
-     *   retrieval policy — the value that would apply if the setting were On.
-     * @param useImportanceRatings the "Use Importance Ratings" master toggle.
-     * @return [storedWeight] when the toggle is On; `0.0` when Off, so
-     *   importance contributes exactly zero. The stored ratings themselves are
-     *   untouched either way — turning the toggle back On restores their effect.
+     * Convert the stored rating to a symmetric -1..+1 ranking contribution.
+     * +3 deliberately saturates at the +2 contribution because its extra
+     * meaning is mandatory inclusion, not a larger ranking boost.
+     */
+    fun normalizedRankingImportance(storedValue: Double): Double =
+        normalizeStoredImportance(storedValue).coerceAtMost(2.0) / 2.0
+
+    /**
+     * The configured importance blend coefficient is active only when the
+     * master toggle is on. Turning the setting off contributes exactly zero
+     * without rewriting any memory.
      */
     fun effectiveImportanceWeight(storedWeight: Double, useImportanceRatings: Boolean): Double =
         if (useImportanceRatings) storedWeight else 0.0
+
+    /** True only for the +3 rating while the master feature is enabled. */
+    fun isMandatory(storedValue: Double, useImportanceRatings: Boolean): Boolean =
+        useImportanceRatings && normalizeStoredImportance(storedValue) >= 3.0
+
+    /**
+     * Return the normal top-K head plus every later mandatory candidate,
+     * preserving ranking order and never duplicating a mandatory item already
+     * present in the head. Eligibility must be applied before this helper.
+     */
+    fun <T> includeMandatory(
+        rankedEligible: List<T>,
+        topK: Int,
+        isMandatory: (T) -> Boolean
+    ): List<T> {
+        val normalCount = topK.coerceAtLeast(0)
+        if (rankedEligible.isEmpty()) return emptyList()
+        val head = rankedEligible.take(normalCount)
+        if (rankedEligible.size <= normalCount) return head
+        val out = ArrayList<T>(head.size)
+        out.addAll(head)
+        for (candidate in rankedEligible.drop(normalCount)) {
+            if (isMandatory(candidate)) out.add(candidate)
+        }
+        return out
+    }
 }
