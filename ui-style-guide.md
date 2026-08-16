@@ -554,6 +554,12 @@ styles the short names.
   line with the dropdown up to a trailing edit action or the proper right edge.
 - When no label belongs on the line, center the correctly measured dropdown.
   Choose Provider is an example of this standalone arrangement.
+- A standalone dropdown may also sit inside a plain dialog's custom view when the
+  choice is dialog-scoped rather than screen-scoped — Quick Settings' required
+  companion-recovery picker (shown when the chat's active companion no longer
+  exists) is the current example: a `Widget.App.Dropdown.CanonicalValue` control
+  sized with `AppDropdown.sizeToOptions`, opened with `AppDropdown.show`, no
+  dropdown label since the dialog's title supplies the context.
 - A form screen may explicitly approve a full-width stacked-field dropdown.
   Keep its existing label and help text above the control, then fill the form's
   content column between its standard left and right margins. Edit Companion's

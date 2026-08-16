@@ -513,9 +513,109 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 if (id != null) {
                     personaPreferences?.deletePersona(id)
                     updatePersonaLabel(preferences?.getPersonaId() ?: "")
+                    // Deleting from this shortcut always deletes the chat's
+                    // own active companion (that's the one it was launched
+                    // for), so the chat is now left pointing at an id that no
+                    // longer exists - resolve that before leaving the user
+                    // here with an invalid selection (owner spec, Aug 16 2026).
+                    recoverFromMissingActiveCompanion()
                 }
             }
         }
+    }
+
+    // Launches PersonasListActivity's createOnStart flow when no companions
+    // remain to choose from - the exact same mechanism
+    // ChatActivity.createFirstCompanionLauncher already uses for "a chat has
+    // no companion yet", reused here rather than calling EditPersonaActivity
+    // directly a second way. On success PersonasListActivity.finishWithActive
+    // returns the new companion's id via the "personaId" extra.
+    private val recoverCompanionCreationLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (!isAdded) return@registerForActivityResult
+        if (result.resultCode != android.app.Activity.RESULT_OK) return@registerForActivityResult
+        val personaId = result.data?.getStringExtra("personaId")
+        if (!personaId.isNullOrEmpty()) {
+            preferences?.setPersonaId(personaId)
+            updatePersonaLabel(personaId)
+            renderLoreBookList()
+            shouldForceUpdate = true
+        }
+    }
+
+    /**
+     * Required recovery when the chat's active companion no longer exists.
+     * Never leaves that state unresolved: if other companions exist, a
+     * non-dismissible picker forces an explicit choice; if none remain, the
+     * app's existing "create the first companion" flow opens directly. Both
+     * paths reuse the app's normal companion selection/creation plumbing -
+     * this only detects the gap and forces it to be filled.
+     */
+    private fun recoverFromMissingActiveCompanion() {
+        if (!isAdded) return
+        val activeId = preferences?.getPersonaId() ?: ""
+        val companions = personaPreferences?.getPersonasList() ?: emptyList()
+        val activeStillExists = activeId != "" && companions.any { it.id == activeId }
+        if (activeStillExists) return
+
+        if (companions.isNotEmpty()) {
+            showRequiredCompanionSelectionDialog(companions)
+        } else {
+            recoverCompanionCreationLauncher.launch(
+                Intent(requireContext(), PersonasListActivity::class.java)
+                    .putExtra("createOnStart", true)
+            )
+        }
+    }
+
+    /**
+     * Non-dismissible companion picker (owner spec, Aug 16 2026): the chat
+     * has no valid companion until one is explicitly chosen, so there is no
+     * back/outside-tap/skip escape. Uses the same canonical dropdown control
+     * and AppDropdown behavior as the inline Companion tile, just presented
+     * modally since this choice is required rather than optional, and the
+     * same companion list/selection plumbing as [showCompanionDropdown].
+     */
+    private fun showRequiredCompanionSelectionDialog(companions: List<PersonaObject>) {
+        val context = requireContext()
+        val labels = companions.map { it.label }
+        val density = resources.displayMetrics.density
+
+        val dropdown = TextView(context, null, 0, R.style.Widget_App_Dropdown_CanonicalValue)
+        dropdown.text = getString(R.string.qs_companion_deleted_dropdown_placeholder)
+        dropdown.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+
+        val padding = (24 * density).toInt()
+        val wrapper = LinearLayout(context)
+        wrapper.orientation = LinearLayout.VERTICAL
+        wrapper.setPadding(padding, padding, padding, padding)
+        wrapper.addView(dropdown)
+
+        val dialog = MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.qs_companion_deleted_dialog_title)
+            .setView(wrapper)
+            .setCancelable(false)
+            .create()
+        dialog.setCanceledOnTouchOutside(false)
+
+        AppDropdown.sizeToOptions(dropdown, labels) {
+            resources.displayMetrics.widthPixels - padding * 2 - (48 * density).toInt()
+        }
+
+        dropdown.setOnClickListener {
+            AppDropdown.show(dropdown, labels, selectedIndex = -1) { position ->
+                val chosen = companions[position]
+                preferences?.setPersonaId(chosen.id)
+                updatePersonaLabel(chosen.id)
+                renderLoreBookList()
+                shouldForceUpdate = true
+                dialog.dismiss()
+            }
+        }
+
+        dialog.show()
     }
 
     /* ------------------------------ Summoning Circle dropdowns ------------------------------ */
