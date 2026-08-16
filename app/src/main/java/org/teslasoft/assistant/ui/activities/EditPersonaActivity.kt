@@ -180,6 +180,13 @@ class EditPersonaActivity : FragmentActivity() {
     private var promptVariants: ArrayList<CompanionPromptVariant> = arrayListOf()
     private var activeTabIndex: Int = 0
 
+    // Manual pan-tracking state for the unfocused prompt field (see the touch
+    // listener below): whether the current gesture has crossed touch slop and
+    // become a drag, and the finger position it's tracked from.
+    private var promptFieldDragging = false
+    private var promptFieldTouchStartY = 0f
+    private var promptFieldLastY = 0f
+
     // Registered as an activity field so a pending gallery result survives
     // recreation (owner-approved lifecycle safety carried over from Phase 7).
     private val pickPictureLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -275,14 +282,72 @@ class EditPersonaActivity : FragmentActivity() {
         renderPromptTabs()
         loadActivePrompt()
 
+        // Lets the prompt field be panned by dragging while it is NOT focused,
+        // without opening the keyboard, while a plain tap still focuses it and
+        // opens the keyboard as normal (owner request, Aug 16 2026). Claims the
+        // gesture from the parent scroll container up front (matching how a
+        // nested scrollable child normally has to win the touch stream), then
+        // either consumes it as a manual, 1:1 finger-tracked scroll of the
+        // field's own text, or - once the field has no more room to pan, or the
+        // gesture turns out to be a tap rather than a drag, or the field is
+        // already focused (normal editing in progress) - releases the parent so
+        // it scrolls, or lets the field's own click/focus handling proceed.
+        val promptFieldTouchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
         fieldPrompt?.setOnTouchListener { v, event ->
-            if (v.hasFocus()) {
-                v.parent.requestDisallowInterceptTouchEvent(true)
-                if (event.action == android.view.MotionEvent.ACTION_UP) {
-                    v.parent.requestDisallowInterceptTouchEvent(false)
+            val tv = v as? android.widget.TextView ?: return@setOnTouchListener false
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    promptFieldDragging = false
+                    promptFieldTouchStartY = event.y
+                    promptFieldLastY = event.y
+                    v.parent.requestDisallowInterceptTouchEvent(true)
+                    false
                 }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    if (tv.hasFocus()) {
+                        // Normal editing in progress - unchanged from before:
+                        // keep the parent from stealing the gesture, but let the
+                        // field's own cursor/selection touch handling run it.
+                        false
+                    } else {
+                        if (!promptFieldDragging &&
+                            kotlin.math.abs(event.y - promptFieldTouchStartY) > promptFieldTouchSlop
+                        ) {
+                            promptFieldDragging = true
+                        }
+                        if (promptFieldDragging) {
+                            val visibleHeight = tv.height - tv.paddingTop - tv.paddingBottom
+                            val contentHeight = tv.layout?.height ?: 0
+                            val maxScroll = (contentHeight - visibleHeight).coerceAtLeast(0)
+                            if (maxScroll > 0) {
+                                val delta = promptFieldLastY - event.y
+                                val newScroll = (tv.scrollY + delta).coerceIn(0f, maxScroll.toFloat())
+                                tv.scrollTo(0, newScroll.toInt())
+                                promptFieldLastY = event.y
+                                true
+                            } else {
+                                // Nothing left to pan inside the field - hand the
+                                // gesture to the outer screen so it keeps scrolling.
+                                v.parent.requestDisallowInterceptTouchEvent(false)
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                }
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                    v.parent.requestDisallowInterceptTouchEvent(false)
+                    val consumed = !tv.hasFocus() && promptFieldDragging
+                    promptFieldDragging = false
+                    // A genuine tap (never crossed slop) falls through unconsumed
+                    // so the field's normal click handling focuses it and opens
+                    // the keyboard; a completed drag is consumed so it doesn't
+                    // also register as a click.
+                    consumed
+                }
+                else -> false
             }
-            false
         }
 
         btnPromptMenu?.setOnClickListener { showPromptMenu(it) }
