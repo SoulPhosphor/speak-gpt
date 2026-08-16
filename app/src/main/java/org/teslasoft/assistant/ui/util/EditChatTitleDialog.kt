@@ -60,7 +60,6 @@ object EditChatTitleDialog {
         }
 
         val dialog = MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.title_edit_chat_title)
             .setView(container)
             .setCancelable(true)
             .create()
