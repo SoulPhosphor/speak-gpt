@@ -274,8 +274,21 @@
                     android:maxLines="1"
                     android:ellipsize="end"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintEnd_toStartOf="@+id/btn_prompt_menu"
+                    app:layout_constraintEnd_toStartOf="@+id/btn_add_prompt"
                     app:layout_constraintTop_toTopOf="parent" />
+
+                <ImageButton
+                    android:id="@+id/btn_add_prompt"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginTop="2dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/btn_add_prompt"
+                    android:src="@drawable/ic_add"
+                    android:scaleType="centerInside"
+                    app:layout_constraintEnd_toStartOf="@+id/btn_prompt_menu"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:tint="?attr/appSubtleTextColor" />
 
                 <ImageButton
                     android:id="@+id/btn_prompt_menu"

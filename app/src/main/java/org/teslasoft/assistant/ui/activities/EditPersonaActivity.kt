@@ -161,6 +161,7 @@ class EditPersonaActivity : FragmentActivity() {
     private var btnDelete: ImageButton? = null
     private var promptTabRow: LinearLayout? = null
     private var promptTabName: TextView? = null
+    private var btnAddPrompt: ImageButton? = null
     private var btnPromptMenu: ImageButton? = null
 
     private var position: Int = -1
@@ -252,6 +253,7 @@ class EditPersonaActivity : FragmentActivity() {
         btnDelete = findViewById(R.id.btn_delete)
         promptTabRow = findViewById(R.id.prompt_tab_row)
         promptTabName = findViewById(R.id.prompt_tab_name)
+        btnAddPrompt = findViewById(R.id.btn_add_prompt)
         btnPromptMenu = findViewById(R.id.btn_prompt_menu)
 
         applyAmoledChrome()
@@ -351,6 +353,7 @@ class EditPersonaActivity : FragmentActivity() {
             }
         }
 
+        btnAddPrompt?.setOnClickListener { addPromptTab() }
         btnPromptMenu?.setOnClickListener { showPromptMenu(it) }
 
         selectedActivationPromptId = intent.getStringExtra(EXTRA_ACTIVATION_ID) ?: ""
@@ -687,7 +690,6 @@ class EditPersonaActivity : FragmentActivity() {
 
         val slantWidthPx = resources.getDimension(R.dimen.prompt_tab_slant_width)
         val strokeWidthPx = resources.getDimension(R.dimen.prompt_tab_stroke_width)
-        val slantOverlapPx = slantWidthPx.toInt()
         val outlineColor = com.google.android.material.color.MaterialColors.getColor(
             container, com.google.android.material.R.attr.colorOutline
         )
@@ -718,52 +720,32 @@ class EditPersonaActivity : FragmentActivity() {
             tabs.add(tab)
         }
 
-        val addBtn = TextView(this, null, 0, R.style.Widget_App_PromptTab_Add)
-        addBtn.text = "+"
-        addBtn.setOnClickListener { addPromptTab() }
-
-        // Measure every tab to determine row breaks.
         val unspec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
         for (tab in tabs) { tab.measure(unspec, unspec) }
-        addBtn.measure(unspec, unspec)
 
-        // Available width matches the container (screen minus its horizontal
-        // margins). On the first render the container may not have a width
-        // yet, so fall back to the display width minus the XML margins.
         val availWidth = if (container.width > 0) container.width
         else resources.displayMetrics.widthPixels -
                 2 * (24 * resources.displayMetrics.density).toInt()
 
-        // Pack tabs into rows, accounting for slant overlap between
-        // adjacent tabs. Each tab after the first in a row overlaps the
-        // previous by slantOverlapPx.
+        // Pack tabs into rows (zero spacing — adjacent tabs butt up).
         data class TabRow(val indices: List<Int>)
         val rows = mutableListOf<TabRow>()
         var rowIndices = mutableListOf<Int>()
         var rowWidth = 0
         for (i in tabs.indices) {
             val tw = tabs[i].measuredWidth
-            val needed = if (rowIndices.isEmpty()) tw else tw - slantOverlapPx
-            if (rowIndices.isNotEmpty() && rowWidth + needed > availWidth) {
+            if (rowIndices.isNotEmpty() && rowWidth + tw > availWidth) {
                 rows.add(TabRow(rowIndices.toList()))
                 rowIndices = mutableListOf()
                 rowWidth = 0
             }
             rowIndices.add(i)
-            rowWidth += if (rowIndices.size == 1) tw else needed
-        }
-        // The "+" button shares the last row.
-        val addBtnWidth = addBtn.measuredWidth
-        if (rowIndices.isNotEmpty() && rowWidth + addBtnWidth > availWidth) {
-            rows.add(TabRow(rowIndices.toList()))
-            rowIndices = mutableListOf()
+            rowWidth += tw
         }
         if (rowIndices.isNotEmpty()) rows.add(TabRow(rowIndices.toList()))
-        // The add button goes on the last row (it will be appended after the
-        // row reordering below).
 
-        // Find which row holds the active tab and move it to the end so it
-        // sits flush against the prompt frame.
+        // Move the row containing the active tab to the end so it sits
+        // flush against the prompt frame.
         var activeRowIdx = rows.indexOfFirst { activeTabIndex in it.indices }
         if (activeRowIdx < 0) activeRowIdx = rows.size - 1
         val reordered = rows.toMutableList()
@@ -772,7 +754,6 @@ class EditPersonaActivity : FragmentActivity() {
             reordered.add(active)
         }
 
-        // Build one horizontal LinearLayout per row.
         for ((rowPos, row) in reordered.withIndex()) {
             val isBottomRow = rowPos == reordered.size - 1
             val rowLayout = LinearLayout(this).apply {
@@ -782,50 +763,26 @@ class EditPersonaActivity : FragmentActivity() {
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 )
             }
+            val lastPosInRow = row.indices.size - 1
             for ((posInRow, tabIdx) in row.indices.withIndex()) {
                 val tab = tabs[tabIdx]
                 val isActive = tabIdx == activeTabIndex
-                val isFirst = posInRow == 0
                 tab.background = PromptTabBackground(
                     fillColor = if (isActive) activeFillColor else android.graphics.Color.TRANSPARENT,
                     strokeColor = outlineColor,
                     strokeWidthPx = strokeWidthPx,
                     slantWidthPx = slantWidthPx,
-                    isFirstInRow = isFirst,
+                    isFirstInRow = posInRow == 0,
+                    isLastInRow = posInRow == lastPosInRow,
                     drawBottomEdge = !(isActive && isBottomRow)
                 )
-                val lp = LinearLayout.LayoutParams(
+                tab.layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 )
-                if (!isFirst) lp.marginStart = -slantOverlapPx
-                tab.layoutParams = lp
                 rowLayout.addView(tab)
             }
-            // Append the "+" button on the last (bottom) row.
-            if (isBottomRow) {
-                val addLp = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { marginStart = (slantWidthPx * 0.5f).toInt() }
-                addBtn.layoutParams = addLp
-                rowLayout.addView(addBtn)
-            }
             container.addView(rowLayout)
-        }
-
-        // If there are no tabs at all (shouldn't happen), still show the "+"
-        // button.
-        if (rows.isEmpty()) {
-            val solo = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-            }
-            solo.addView(addBtn)
-            container.addView(solo)
         }
     }
 

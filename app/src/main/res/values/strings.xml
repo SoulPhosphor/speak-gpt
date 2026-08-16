@@ -286,6 +286,7 @@
     <string name="persona_friendly_name">Companion Name</string>
     <string name="persona_prompt_hint">Companion Prompt</string>
     <string name="persona_prompt_help">Sent before your system message at the start of every request.</string>
+    <string name="btn_add_prompt">Add prompt</string>
     <string name="prompt_menu_make_default">Make Default</string>
     <string name="prompt_menu_rename">Rename</string>
     <string name="prompt_menu_copy_from">Copy From…</string>
