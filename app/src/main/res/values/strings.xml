@@ -17,6 +17,7 @@
     <string name="hint_message">Message</string>
     <string name="btn_speak">Speak</string>
     <string name="btn_settings">Settings</string>
+    <string name="btn_quick_settings">Quick settings</string>
     <string name="btn_export_chat">Export chat</string>
     <string name="btn_export_image">Export image</string>
     <string name="title_report_abuse">Report abuse</string>
