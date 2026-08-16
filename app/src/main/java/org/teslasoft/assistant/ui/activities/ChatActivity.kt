@@ -194,6 +194,7 @@ import org.teslasoft.assistant.preferences.includes.IncludeMessageProjection
 import org.teslasoft.assistant.preferences.includes.ProjectedUserMessage
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
+import org.teslasoft.assistant.ui.util.EditChatTitleDialog
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
 import org.teslasoft.assistant.ui.util.IncludeStripController
 import org.teslasoft.assistant.util.AvatarRefreshCoordinator
@@ -2589,6 +2590,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         btnBack?.setOnClickListener {
             finishActivity()
+        }
+
+        activityTitle?.setOnClickListener {
+            // While a chat is still waiting on its AI-generated name, chatName
+            // holds the internal "_autoname_N" placeholder — show the same
+            // "Untitled chat" fallback the header itself displays rather than
+            // leaking the placeholder into the editable field.
+            val currentTitle = if (chatName.trim().contains("_autoname_")) {
+                getString(R.string.label_untitled_chat)
+            } else {
+                chatName
+            }
+            EditChatTitleDialog.show(this, currentTitle) { newTitle ->
+                renameChatTitle(newTitle)
+            }
         }
 
         val linearLayoutManager = LinearLayoutManager(this)
@@ -5086,7 +5102,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /** Open the Summoning Circle (Quick Settings) sheet for this chat. Shared by
-     *  the header title tap and the recovery dialogs above. */
+     *  the header's Quick Settings icon and the recovery dialogs above. */
     private fun openSummoningCircle() {
         if (isFinishing || isDestroyed) return
         val sheet = QuickSettingsBottomSheetDialogFragment
@@ -5103,6 +5119,55 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         })
         sheet.show(supportFragmentManager, "QuickSettingsBottomSheetDialogFragment")
+    }
+
+    /** Applies a user-edited title from [EditChatTitleDialog]. Reuses the same
+     *  atomic rename path as auto-naming (ChatPreferences.editChat /
+     *  ChatRenameTransaction — moves history and copies every per-chat
+     *  settings key, never re-derives them) and the same [renameInProgress]
+     *  guard, so a manual rename and an in-flight auto-name rename can never
+     *  overlap. */
+    private fun renameChatTitle(newTitle: String) {
+        if (newTitle == chatName || renameInProgress) return
+
+        val chatPreferences = ChatPreferences.getChatPreferences()
+        if (chatPreferences.checkDuplicate(this, newTitle)) {
+            Toast.makeText(this, R.string.chat_error_unique, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val oldName = chatName
+        renameInProgress = true
+        lifecycleScope.launch {
+            val renamed = try {
+                withContext(Dispatchers.IO) {
+                    chatPreferences.editChat(this@ChatActivity, newTitle, oldName)
+                }
+            } catch (e: Exception) {
+                false
+            } finally {
+                renameInProgress = false
+            }
+
+            if (isFinishing || isDestroyed) return@launch
+
+            if (renamed) {
+                val previousChatId = chatId
+                chatId = Hash.hash(newTitle)
+                ImageGenerationJobRegistry.rename(previousChatId, chatId)
+                chatName = newTitle
+                preferences = Preferences.getPreferences(this@ChatActivity, chatId)
+                intent.putExtra("chatId", chatId)
+                intent.putExtra("name", chatName)
+                activityTitle?.text = newTitle
+            } else {
+                MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.title_rename_failed)
+                    .setMessage(R.string.msg_rename_failed)
+                    .setPositiveButton(R.string.btn_ok) { _, _ -> }
+                    .show()
+            }
+        }
     }
 
     /** Open the API Endpoints screen so the user can set up a provider + model

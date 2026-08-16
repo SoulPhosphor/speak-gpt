@@ -393,7 +393,7 @@
                 android:singleLine="true"
                 android:text="debug.chat.name"
                 android:textColor="@color/text_title"
-                android:textSize="20sp"
+                android:textSize="18sp"
                 android:textStyle="bold"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/btn_summarizer_errors"

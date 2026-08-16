@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Body of the chat title edit dialog (ChatActivity): a single editable box
+  holding the chat's full title so a very long AI-generated title can be
+  read and corrected in place, not just the ellipsized header line.
+
+  Bounded to 4 lines (Widget.App.Field.Box's own height stays wrap_content,
+  so the line count and scrolling are set on this field per
+  ui-style-guide.md's "Standard label-above-box field" rule) with an
+  internal vertical scrollbar for anything longer than that, mirroring the
+  bounded-height/scrolling prompt editor pattern already used on the Edit
+  Companion screen.
+
+  The action buttons come from dialog_two_actions_end.xml (Cancel then
+  Save, right-aligned); this file is only the field.
+-->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingHorizontal="24dp"
+    android:paddingTop="8dp">
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/chat_title_edit_text"
+        style="@style/Widget.App.Field.Box"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="top|start"
+        android:inputType="text|textCapSentences"
+        android:minLines="4"
+        android:maxLines="4"
+        android:scrollbars="vertical"
+        android:isScrollContainer="true"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
