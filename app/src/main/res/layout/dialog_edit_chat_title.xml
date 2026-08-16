@@ -21,13 +21,16 @@
     android:paddingHorizontal="24dp"
     android:paddingTop="8dp">
 
+    <!-- textMultiLine in the inputType below is required, not decorative:
+         without it Android silently forces the field to single-line mode,
+         which ignores minLines/maxLines and disables the scrollbar. -->
     <com.google.android.material.textfield.TextInputEditText
         android:id="@+id/chat_title_edit_text"
         style="@style/Widget.App.Field.Box"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="top|start"
-        android:inputType="text|textCapSentences"
+        android:inputType="text|textMultiLine|textCapSentences"
         android:minLines="4"
         android:maxLines="4"
         android:scrollbars="vertical"
