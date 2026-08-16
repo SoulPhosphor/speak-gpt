@@ -159,7 +159,7 @@ class EditPersonaActivity : FragmentActivity() {
     private var imgPersonaAvatar: ImageView? = null
     private var btnSave: ImageButton? = null
     private var btnDelete: ImageButton? = null
-    private var promptTabRow: com.google.android.material.chip.ChipGroup? = null
+    private var promptTabRow: LinearLayout? = null
     private var promptTabName: TextView? = null
     private var btnPromptMenu: ImageButton? = null
 
@@ -664,7 +664,7 @@ class EditPersonaActivity : FragmentActivity() {
                     android.text.style.ForegroundColorSpan(
                         ResourcesCompat.getColor(resources, R.color.light_green, theme)
                     ),
-                    0, dot.length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                    0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
                 promptTabName?.text = dot
             } else {
@@ -685,58 +685,148 @@ class EditPersonaActivity : FragmentActivity() {
         val container = promptTabRow ?: return
         container.removeAllViews()
 
-        // Angled file-tab background (PromptTabBackground): geometry from
-        // shared dimens, colors resolved once here from theme attributes -
-        // never hardcoded - and handed to the drawable.
         val slantWidthPx = resources.getDimension(R.dimen.prompt_tab_slant_width)
         val strokeWidthPx = resources.getDimension(R.dimen.prompt_tab_stroke_width)
+        val slantOverlapPx = slantWidthPx.toInt()
         val outlineColor = com.google.android.material.color.MaterialColors.getColor(
             container, com.google.android.material.R.attr.colorOutline
         )
         val activeFillColor = com.google.android.material.color.MaterialColors.getColor(
             container, com.google.android.material.R.attr.colorSurfaceContainerHigh
         )
+        val greenColor = ResourcesCompat.getColor(resources, R.color.light_green, theme)
 
+        val tabs = mutableListOf<TextView>()
         for (i in promptVariants.indices) {
             val variant = promptVariants[i]
             val isActive = i == activeTabIndex
-            // Constructing with a defStyleRes (rather than setTextAppearance,
-            // which only applies text-color/size/weight) is what actually
-            // pulls in the style's padding, gravity, maxWidth, maxLines,
-            // ellipsize, clickable and focusable - setTextAppearance alone
-            // was silently dropping all of those on these code-built tabs.
             val styleRes = if (isActive) R.style.Widget_App_PromptTab_Active else R.style.Widget_App_PromptTab
             val tab = TextView(this, null, 0, styleRes)
-            tab.background = PromptTabBackground(
-                fillColor = if (isActive) activeFillColor else android.graphics.Color.TRANSPARENT,
-                strokeColor = outlineColor,
-                strokeWidthPx = strokeWidthPx,
-                slantWidthPx = slantWidthPx
-            )
 
             if (variant.isDefault) {
                 val dot = android.text.SpannableString("●  ${variant.name}")
-                if (!isActive) {
-                    dot.setSpan(
-                        android.text.style.ForegroundColorSpan(
-                            ResourcesCompat.getColor(resources, R.color.light_green, theme)
-                        ),
-                        0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
-                }
+                dot.setSpan(
+                    android.text.style.ForegroundColorSpan(greenColor),
+                    0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
                 tab.text = dot
             } else {
                 tab.text = variant.name
             }
 
             tab.setOnClickListener { switchToTab(i) }
-            container.addView(tab)
+            tabs.add(tab)
         }
 
         val addBtn = TextView(this, null, 0, R.style.Widget_App_PromptTab_Add)
         addBtn.text = "+"
         addBtn.setOnClickListener { addPromptTab() }
-        container.addView(addBtn)
+
+        // Measure every tab to determine row breaks.
+        val unspec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        for (tab in tabs) { tab.measure(unspec, unspec) }
+        addBtn.measure(unspec, unspec)
+
+        // Available width matches the container (screen minus its horizontal
+        // margins). On the first render the container may not have a width
+        // yet, so fall back to the display width minus the XML margins.
+        val availWidth = if (container.width > 0) container.width
+        else resources.displayMetrics.widthPixels -
+                2 * (24 * resources.displayMetrics.density).toInt()
+
+        // Pack tabs into rows, accounting for slant overlap between
+        // adjacent tabs. Each tab after the first in a row overlaps the
+        // previous by slantOverlapPx.
+        data class TabRow(val indices: List<Int>)
+        val rows = mutableListOf<TabRow>()
+        var rowIndices = mutableListOf<Int>()
+        var rowWidth = 0
+        for (i in tabs.indices) {
+            val tw = tabs[i].measuredWidth
+            val needed = if (rowIndices.isEmpty()) tw else tw - slantOverlapPx
+            if (rowIndices.isNotEmpty() && rowWidth + needed > availWidth) {
+                rows.add(TabRow(rowIndices.toList()))
+                rowIndices = mutableListOf()
+                rowWidth = 0
+            }
+            rowIndices.add(i)
+            rowWidth += if (rowIndices.size == 1) tw else needed
+        }
+        // The "+" button shares the last row.
+        val addBtnWidth = addBtn.measuredWidth
+        if (rowIndices.isNotEmpty() && rowWidth + addBtnWidth > availWidth) {
+            rows.add(TabRow(rowIndices.toList()))
+            rowIndices = mutableListOf()
+        }
+        if (rowIndices.isNotEmpty()) rows.add(TabRow(rowIndices.toList()))
+        // The add button goes on the last row (it will be appended after the
+        // row reordering below).
+
+        // Find which row holds the active tab and move it to the end so it
+        // sits flush against the prompt frame.
+        var activeRowIdx = rows.indexOfFirst { activeTabIndex in it.indices }
+        if (activeRowIdx < 0) activeRowIdx = rows.size - 1
+        val reordered = rows.toMutableList()
+        if (activeRowIdx < reordered.size) {
+            val active = reordered.removeAt(activeRowIdx)
+            reordered.add(active)
+        }
+
+        // Build one horizontal LinearLayout per row.
+        for ((rowPos, row) in reordered.withIndex()) {
+            val isBottomRow = rowPos == reordered.size - 1
+            val rowLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+            for ((posInRow, tabIdx) in row.indices.withIndex()) {
+                val tab = tabs[tabIdx]
+                val isActive = tabIdx == activeTabIndex
+                val isFirst = posInRow == 0
+                tab.background = PromptTabBackground(
+                    fillColor = if (isActive) activeFillColor else android.graphics.Color.TRANSPARENT,
+                    strokeColor = outlineColor,
+                    strokeWidthPx = strokeWidthPx,
+                    slantWidthPx = slantWidthPx,
+                    isFirstInRow = isFirst,
+                    drawBottomEdge = !(isActive && isBottomRow)
+                )
+                val lp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                if (!isFirst) lp.marginStart = -slantOverlapPx
+                tab.layoutParams = lp
+                rowLayout.addView(tab)
+            }
+            // Append the "+" button on the last (bottom) row.
+            if (isBottomRow) {
+                val addLp = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginStart = (slantWidthPx * 0.5f).toInt() }
+                addBtn.layoutParams = addLp
+                rowLayout.addView(addBtn)
+            }
+            container.addView(rowLayout)
+        }
+
+        // If there are no tabs at all (shouldn't happen), still show the "+"
+        // button.
+        if (rows.isEmpty()) {
+            val solo = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+            solo.addView(addBtn)
+            container.addView(solo)
+        }
     }
 
     private fun addPromptTab() {
@@ -754,6 +844,7 @@ class EditPersonaActivity : FragmentActivity() {
         menu.menu.add(0, 2, 0, getString(R.string.prompt_menu_rename))
         menu.menu.add(0, 3, 0, getString(R.string.prompt_menu_copy_from))
         menu.menu.add(0, 4, 0, getString(R.string.prompt_menu_duplicate))
+        menu.menu.add(0, 7, 0, getString(R.string.prompt_menu_copy))
         menu.menu.add(0, 5, 0, getString(R.string.prompt_menu_clear))
         menu.menu.add(0, 6, 0, getString(R.string.prompt_menu_delete))
         menu.setOnMenuItemClickListener { item ->
@@ -764,10 +855,17 @@ class EditPersonaActivity : FragmentActivity() {
                 4 -> duplicateCurrentPrompt()
                 5 -> clearCurrentPrompt()
                 6 -> deleteCurrentPrompt()
+                7 -> copyCurrentPromptToClipboard()
             }
             true
         }
         menu.show()
+    }
+
+    private fun copyCurrentPromptToClipboard() {
+        val text = fieldPrompt?.text?.toString() ?: return
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("prompt", text))
     }
 
     private fun makeCurrentDefault() {

@@ -290,6 +290,7 @@
     <string name="prompt_menu_rename">Rename</string>
     <string name="prompt_menu_copy_from">Copy From…</string>
     <string name="prompt_menu_duplicate">Duplicate</string>
+    <string name="prompt_menu_copy">Copy</string>
     <string name="prompt_menu_clear">Clear</string>
     <string name="prompt_menu_delete">Delete</string>
     <string name="prompt_delete_title">Delete Prompt?</string>

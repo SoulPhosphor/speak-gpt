@@ -26,21 +26,29 @@ import android.graphics.drawable.Drawable
 
 /**
  * The companion prompt tab's file-tab silhouette (owner design, Aug 16
- * 2026): a vertical left edge and horizontal top/bottom edges, with a
- * fixed-width diagonal cut on the trailing edge - narrower at the top,
- * full width at the bottom - so every tab reads as an angled file tab
- * regardless of its own text width. A plain XML `<shape>` cannot express a
- * non-rectangular edge, which is why this exists as a small Drawable
- * instead of a drawable resource; every color it paints with is resolved
- * by the caller from a theme attribute and passed in, never hardcoded
- * here, so the shape stays theme/palette-ready like the rest of the app's
- * shared visual system.
+ * 2026). Draws a trapezoidal shape with a fixed-width diagonal cut on
+ * the trailing (right) edge. Tabs after the first in a row also get a
+ * matching left-side slant so adjacent tabs tessellate into a
+ * continuous outline when placed with negative overlap.
+ *
+ * [isFirstInRow]: when true the left edge is a straight vertical line;
+ * when false the left edge slants from (slantWidth, height) up to
+ * (0, 0), matching the previous tab's right slant so the two edges
+ * share the same diagonal line.
+ *
+ * [drawBottomEdge]: when false the bottom stroke is suppressed so the
+ * active tab merges visually into the prompt frame beneath it.
+ *
+ * Every color is resolved by the caller from a theme attribute and
+ * passed in, never hardcoded.
  */
 class PromptTabBackground(
     fillColor: Int,
     strokeColor: Int,
     private val strokeWidthPx: Float,
-    private val slantWidthPx: Float
+    private val slantWidthPx: Float,
+    private val isFirstInRow: Boolean = true,
+    private val drawBottomEdge: Boolean = true
 ) : Drawable() {
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -55,7 +63,8 @@ class PromptTabBackground(
         strokeJoin = Paint.Join.MITER
     }
 
-    private val path = Path()
+    private val fillPath = Path()
+    private val strokePath = Path()
 
     override fun onBoundsChange(bounds: Rect) {
         super.onBoundsChange(bounds)
@@ -64,17 +73,39 @@ class PromptTabBackground(
         val h = bounds.height().toFloat()
         val slant = slantWidthPx.coerceIn(0f, (w - 2 * inset).coerceAtLeast(0f) * 0.6f)
 
-        path.reset()
-        path.moveTo(inset, inset)                 // top-left
-        path.lineTo(w - inset - slant, inset)      // top-right, cut inward
-        path.lineTo(w - inset, h - inset)          // bottom-right, full width
-        path.lineTo(inset, h - inset)              // bottom-left
-        path.close()
+        fillPath.reset()
+        if (isFirstInRow) {
+            fillPath.moveTo(inset, inset)
+            fillPath.lineTo(w - inset - slant, inset)
+            fillPath.lineTo(w - inset, h - inset)
+            fillPath.lineTo(inset, h - inset)
+        } else {
+            fillPath.moveTo(inset, inset)
+            fillPath.lineTo(w - inset - slant, inset)
+            fillPath.lineTo(w - inset, h - inset)
+            fillPath.lineTo(slant + inset, h - inset)
+        }
+        fillPath.close()
+
+        strokePath.reset()
+        if (drawBottomEdge) {
+            strokePath.addPath(fillPath)
+        } else {
+            if (isFirstInRow) {
+                strokePath.moveTo(inset, h - inset)
+                strokePath.lineTo(inset, inset)
+            } else {
+                strokePath.moveTo(slant + inset, h - inset)
+                strokePath.lineTo(inset, inset)
+            }
+            strokePath.lineTo(w - inset - slant, inset)
+            strokePath.lineTo(w - inset, h - inset)
+        }
     }
 
     override fun draw(canvas: Canvas) {
-        canvas.drawPath(path, fillPaint)
-        canvas.drawPath(path, strokePaint)
+        canvas.drawPath(fillPath, fillPaint)
+        canvas.drawPath(strokePath, strokePaint)
     }
 
     override fun setAlpha(alpha: Int) {
