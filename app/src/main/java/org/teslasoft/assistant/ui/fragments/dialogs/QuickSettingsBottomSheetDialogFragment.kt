@@ -65,6 +65,7 @@ import org.teslasoft.assistant.preferences.memory.WorldRecord
 import org.teslasoft.assistant.ui.activities.ActivationPromptsListActivity
 import org.teslasoft.assistant.ui.activities.ApiEndpointsListActivity
 import org.teslasoft.assistant.ui.activities.ChooseProviderActivity
+import org.teslasoft.assistant.ui.activities.EditPersonaActivity
 import org.teslasoft.assistant.ui.activities.LogitBiasConfigListActivity
 import org.teslasoft.assistant.ui.activities.LoreBookEntriesActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -490,6 +491,31 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updateActivationLabel(preferences?.getActivationPromptId() ?: "")
         updateSystemPromptLabel()
         loadUserPersonasForGlamour()
+    }
+
+    // The Companion tile's edit button goes straight to the active companion's
+    // own editor (owner ruling, Aug 16 2026 - it previously opened the general
+    // Companions list instead). Save/delete handling mirrors
+    // PersonasListActivity.editPersonaLauncher exactly, since this bypasses
+    // that screen and must persist the result itself.
+    private val editActivePersonaLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (!isAdded) return@registerForActivityResult
+        if (result.resultCode != android.app.Activity.RESULT_OK) return@registerForActivityResult
+        val data = result.data ?: return@registerForActivityResult
+        when (data.getStringExtra(EditPersonaActivity.EXTRA_RESULT_ACTION)) {
+            EditPersonaActivity.ACTION_SAVE -> {
+                val persona = EditPersonaActivity.readResultPersona(data)
+                personaPreferences?.setPersona(persona)
+                updatePersonaLabel(preferences?.getPersonaId() ?: "")
+            }
+            EditPersonaActivity.ACTION_DELETE -> {
+                val id = data.getStringExtra(EditPersonaActivity.EXTRA_RESULT_ID)
+                if (id != null) {
+                    personaPreferences?.deletePersona(id)
+                    updatePersonaLabel(preferences?.getPersonaId() ?: "")
+                }
+            }
+        }
     }
 
     /* ------------------------------ Summoning Circle dropdowns ------------------------------ */
@@ -1023,7 +1049,15 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // Activation include None.
         textPersona?.setOnClickListener { showCompanionDropdown(it) }
         btnEditPersona?.setOnClickListener {
-            managerRefreshLauncher.launch(Intent(requireContext(), PersonasListActivity::class.java))
+            val activeId = preferences?.getPersonaId() ?: ""
+            val activePersona = if (activeId != "") personaPreferences?.getPersona(activeId) else null
+            if (activePersona != null) {
+                editActivePersonaLauncher.launch(EditPersonaActivity.createIntent(requireContext(), activePersona, 0))
+            } else {
+                // No active companion to edit directly (shouldn't normally
+                // happen - a chat always has one) - fall back to the manager.
+                managerRefreshLauncher.launch(Intent(requireContext(), PersonasListActivity::class.java))
+            }
         }
 
         textGlamour?.setOnClickListener { showGlamourDropdown(it) }
