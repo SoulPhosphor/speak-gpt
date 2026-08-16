@@ -35,6 +35,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.DialogFragment
+import androidx.lifecycle.lifecycleScope
 import com.aallam.openai.api.http.Timeout
 import com.aallam.openai.api.logging.LogLevel
 import com.aallam.openai.api.logging.Logger
@@ -57,6 +58,8 @@ import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
+import org.teslasoft.assistant.providers.OnlyProviderAvailability
+import org.teslasoft.assistant.providers.OnlyProviderAvailabilityClient
 import org.teslasoft.assistant.ui.adapters.FavoriteModelListAdapter
 import org.teslasoft.assistant.ui.adapters.ModelListAdapter
 import org.teslasoft.core.api.network.RequestNetwork
@@ -177,6 +180,16 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     /** Image-generator picker variant (see [newInstance]). */
     private var imageMode = false
 
+    /**
+     * Only the ordinary chat model picker performs the interactive Only-provider
+     * check. Provider-wide/model-rule/image pickers have different jobs and must
+     * not suddenly acquire a chat-routing warning.
+     */
+    private var checkOnlyProviderOnSelection = false
+    private var providerAvailabilityGeneration = 0
+    /** Non-null only while Change Provider was launched from the forced warning. */
+    private var pendingProviderRecoveryModel: String? = null
+
     override fun onAttach(context: Context) {
         super.onAttach(context)
 
@@ -199,8 +212,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
     private var modelSelectedListener: ModelListAdapter.OnItemClickListener = object : ModelListAdapter.OnItemClickListener {
         override fun onItemClick(model: String) {
-            listener?.onModelSelected(model)
-            dismiss()
+            handleModelSelection(model)
         }
 
         override fun onActionClick(model: String, endpointId: String, position: Int) {
@@ -214,15 +226,31 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
     /** Return from the Choose Provider screen opened by a favorite's routing
      *  gear (it persists the favorite itself); refresh so the gear can flip
-     *  outline → filled once routing is set up. */
+     *  outline → filled once routing is set up. When the provider screen was
+     *  launched by the forced unavailable-provider warning, a successful Save
+     *  also completes the model selection that was waiting behind it. */
     private val chooseProviderLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { reloadFavorites(); render() }
+    ) { result ->
+        reloadFavorites()
+        render()
+
+        val pendingModel = pendingProviderRecoveryModel ?: return@registerForActivityResult
+        pendingProviderRecoveryModel = null
+        if (result.resultCode == Activity.RESULT_OK) {
+            val savedModel = result.data?.getStringExtra(org.teslasoft.assistant.ui.activities.ChooseProviderActivity.EXTRA_MODEL)
+                ?.takeIf { it.isNotBlank() }
+                ?: pendingModel
+            finishModelSelection(savedModel)
+        }
+        // Cancel/back leaves the selector open on purpose. The not-yet-applied
+        // bad model never reached the chat, so choosing another model is a valid
+        // recovery without another modal layer.
+    }
 
     private var favoriteSelectedListener: FavoriteModelListAdapter.OnItemClickListener = object : FavoriteModelListAdapter.OnItemClickListener {
         override fun onItemClick(model: String, endpointId: String) {
-            listener?.onModelSelected(model)
-            dismiss()
+            handleModelSelection(model)
         }
 
         override fun onActionClick(model: String, endpointId: String, position: Int) {
@@ -242,6 +270,110 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             FavoriteRoutingActions.buildRoutingIntent(requireActivity(), prefs, favPrefs, model, endpointId)
                 ?.let { chooseProviderLauncher.launch(it) }
         }
+    }
+
+    /** Finalize a normal model pick. Kept in one place so every resolution path
+     *  (available provider, Automatic rescue, provider-screen Save) behaves the
+     *  same and dismisses the selector exactly once. */
+    private fun finishModelSelection(model: String) {
+        listener?.onModelSelected(model)
+        dismiss()
+    }
+
+    /**
+     * Before an ordinary chat adopts a favorite whose saved routing is Only,
+     * verify that the selected provider is still in the model's current,
+     * authoritative OpenRouter provider list. The check is deliberately
+     * fail-open on UNKNOWN network state: request-time Only routing is still
+     * fail-closed, but a transient lookup failure must not falsely accuse the
+     * provider of being unavailable.
+     */
+    private fun handleModelSelection(model: String) {
+        val endpoint = apiEndpointObject
+        val favorite = favoriteModelsPreferences?.getFavorite(model, resolvedEndpointId)
+
+        if (!checkOnlyProviderOnSelection ||
+            endpoint == null ||
+            !endpoint.isOpenRouterRouting() ||
+            favorite?.routingType != FavoriteModelObject.ROUTING_ONLY ||
+            favorite.selectedProvider.isBlank()
+        ) {
+            finishModelSelection(model)
+            return
+        }
+
+        val selectedProvider = favorite.selectedProvider
+        val generation = ++providerAvailabilityGeneration
+        modelList?.isEnabled = false
+        progressBar?.visibility = View.VISIBLE
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            val availability = OnlyProviderAvailabilityClient.check(
+                endpoint = endpoint,
+                modelId = model,
+                providerSlug = selectedProvider
+            )
+            if (!isAdded || generation != providerAvailabilityGeneration) return@launch
+
+            modelList?.isEnabled = true
+            progressBar?.visibility = View.GONE
+
+            if (availability == OnlyProviderAvailability.UNAVAILABLE) {
+                showProviderUnavailableDialog(model, selectedProvider)
+            } else {
+                finishModelSelection(model)
+            }
+        }
+    }
+
+    /**
+     * A confirmed unavailable Only provider cannot be ignored: the dialog has no
+     * Cancel/back/outside-tap escape. Each button is a real resolution path.
+     * Change Model simply uncovers this already-open picker, so the user does
+     * not have to return to Quick Settings and tap the model tile again.
+     */
+    private fun showProviderUnavailableDialog(model: String, providerSlug: String) {
+        if (!isAdded) return
+        val dialog = MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.provider_unavailable_dialog_title)
+            .setMessage(getString(R.string.provider_unavailable_dialog_message, providerSlug, model))
+            .setPositiveButton(R.string.provider_unavailable_change_provider) { _, _ ->
+                val prefs = apiEndpointPreferences ?: return@setPositiveButton
+                val favPrefs = favoriteModelsPreferences ?: return@setPositiveButton
+                FavoriteRoutingActions.buildRoutingIntent(
+                    requireContext(),
+                    prefs,
+                    favPrefs,
+                    model,
+                    resolvedEndpointId,
+                    FavoriteModelObject.ROUTING_ONLY,
+                    keepRoutingOnModelChange = true
+                )?.let { intent ->
+                    pendingProviderRecoveryModel = model
+                    chooseProviderLauncher.launch(intent)
+                }
+            }
+            .setNegativeButton(R.string.provider_unavailable_use_automatic) { _, _ ->
+                val favPrefs = favoriteModelsPreferences ?: return@setNegativeButton
+                val favorite = favPrefs.getFavorite(model, resolvedEndpointId)
+                    ?: FavoriteModelObject(model, resolvedEndpointId)
+                // Preserve the remembered selected provider. Existing Provider
+                // Mode storage is favorite-scoped; changing only routingType is
+                // exactly what the normal Automatic dropdown action does.
+                favorite.routingType = FavoriteModelObject.ROUTING_AUTOMATIC
+                favPrefs.addFavoriteModel(favorite)
+                reloadFavorites()
+                finishModelSelection(model)
+            }
+            .setNeutralButton(R.string.provider_unavailable_change_model) { _, _ ->
+                // The selector is already underneath this dialog. Closing the
+                // warning exposes it immediately; the invalid model was never
+                // applied to the chat.
+            }
+            .setCancelable(false)
+            .create()
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.show()
     }
 
     private var requestListener: RequestNetwork.RequestListener = object : RequestNetwork.RequestListener {
@@ -434,12 +566,15 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             if (imageMode) R.string.label_select_image_model else R.string.label_select_ai_model
         )
 
-        preferences = Preferences.getPreferences(ctx, requireArguments().getString("chatId").toString())
+        val chatId = requireArguments().getString("chatId").orEmpty()
+        preferences = Preferences.getPreferences(ctx, chatId)
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(ctx)
         val endpointIdOverride = requireArguments().getString("endpointId").orEmpty()
         resolvedEndpointId = endpointIdOverride.ifEmpty { preferences?.getApiEndpointId() ?: "" }
         apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(ctx, resolvedEndpointId)
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(ctx)
+        checkOnlyProviderOnSelection =
+            chatId.isNotBlank() && endpointIdOverride.isBlank() && !imageMode && !startsWithAllModels && !rawModelCatalog
 
         reloadFavorites()
 
@@ -448,8 +583,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         btnUseCurrentModel?.apply {
             visibility = if (currentChatModel.isBlank()) View.GONE else View.VISIBLE
             setOnClickListener {
-                listener?.onModelSelected(currentChatModel)
-                dismiss()
+                finishModelSelection(currentChatModel)
             }
         }
 

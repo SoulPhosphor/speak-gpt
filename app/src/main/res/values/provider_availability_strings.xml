@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Quick Settings model-switch guard: an Only-mode favorite can outlive
+         the provider's actual availability for that model. The warning forces
+         an explicit recovery instead of allowing a silent routing surprise. -->
+    <string name="provider_unavailable_dialog_title">Provider Unavailable</string>
+    <string name="provider_unavailable_dialog_message">%1$s is not currently available for %2$s.\n\nOnly mode will not switch to another provider.</string>
+    <string name="provider_unavailable_change_provider">Change Provider</string>
+    <string name="provider_unavailable_use_automatic">Use Automatic Routing</string>
+    <string name="provider_unavailable_change_model">Change Model</string>
+</resources>
