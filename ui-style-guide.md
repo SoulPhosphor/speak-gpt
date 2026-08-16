@@ -423,29 +423,35 @@ That status icon does not replace the trailing removal control.
 
 ## Prompt tabs
 
-Used on the Edit Companion screen for the multiple-prompt variant feature. Each companion can have several named prompt variants displayed as wrapping tabs above the prompt editor.
+Used on the Edit Companion screen for the multiple-prompt variant feature. Each companion can have several named prompt variants displayed as wrapping tabs above the prompt editor. Shape and color reworked per owner design, Aug 16 2026: tabs now read as angled file tabs, and the active tab's fill matches the prompt editor frame instead of standing out as a bright accent block.
+
+### Angled file-tab shape
+
+`PromptTabBackground` (`org.teslasoft.assistant.ui.util`)
+
+A plain XML `<shape>` cannot draw a non-rectangular edge, so both the inactive and active tab backgrounds are drawn by this small `Drawable` class instead of a drawable resource: vertical left edge, horizontal top/bottom edges, and a fixed-width diagonal cut on the trailing edge (narrower at the top, full width at the bottom) so every tab reads as an angled file tab regardless of its own text width. The cut width comes from `@dimen/prompt_tab_slant_width` (10dp) and the stroke width from `@dimen/prompt_tab_stroke_width` (1dp) — both shared dimens, not inline numbers. The fill and stroke colors are never hardcoded in the drawable itself; the caller resolves them from theme attributes (`colorOutline`, `colorSurfaceContainerHigh`) and passes them in, so the shape stays theme/palette-ready. Corners are sharp by design (no rounding), matching the requested "edgy" look.
 
 ### Inactive prompt tab
 
 `Widget.App.PromptTab`
 
-Outlined rectangle (1dp `colorOutline` stroke, 4dp corners, transparent fill). 36dp tall, 14dp horizontal padding, 14sp text, 160dp max width, then ellipsizes. Uses `bg_prompt_tab` drawable — the same outlined-box pattern as `bg_field_box`. The default prompt's tab label is prefixed with a green dot (`light_green`).
+36dp tall, 14dp horizontal padding, 14sp `appTextColor` text, 160dp max width then ellipsizes. Background: `PromptTabBackground` with a transparent fill and `colorOutline` stroke.
 
 ### Active prompt tab
 
 `Widget.App.PromptTab.Active`
 
-Filled rectangle (`colorPrimary` background, `colorOnPrimary` text, 4dp corners). Uses `bg_prompt_tab_active` drawable. Inherits all other properties from the inactive tab.
+Inherits all sizing from the inactive tab. Background: `PromptTabBackground` with a `colorSurfaceContainerHigh` fill (the same tone as `bg_prompt_editor`, so the selected tab visually continues into the prompt box beneath it) and a `colorOutline` stroke. Text is `appTitleTextColor` and bold — the bright/bold text carries the "this one's selected" signal now that the fill is a muted surface tone rather than a bright accent color.
 
 ### Add-tab button
 
 `Widget.App.PromptTab.Add`
 
-Fixed 36x36dp square, centered "+" label. Outlined box matching the inactive tab. Always placed at the end of the wrapping row.
+Fixed 36x36dp square, centered "+" label. Outlined box (`bg_prompt_tab` drawable, plain rectangle) — intentionally kept as a plain square rather than the angled tab shape, since it's a small icon control and not a labeled file tab. Always placed at the end of the wrapping row.
 
 ### Prompt tab row
 
-A `ChipGroup` with `singleLine="false"` and `chipSpacingHorizontal/Vertical="6dp"`. The tabs are plain `TextView` views styled entirely by their `setTextAppearance` style — they are not Material `Chip` widgets. The `ChipGroup` provides only the wrapping-row layout. Do not duplicate style properties (dimensions, padding, gravity, maxLines, ellipsize, maxWidth) in Kotlin; the styles own those values.
+A `ChipGroup` with `singleLine="false"` and `chipSpacingHorizontal/Vertical="10dp"`. The tabs are plain `TextView` views constructed in code with the style passed as the `defStyleRes` constructor argument (`TextView(context, null, 0, styleRes)`), not `setTextAppearance` — `setTextAppearance` only applies text color/size/weight and was silently dropping the style's padding, gravity, maxWidth, maxLines, ellipsize, clickable and focusable. The `ChipGroup` provides only the wrapping-row layout; it does not use Material `Chip` widgets. Do not duplicate style properties (dimensions, padding, gravity, maxLines, ellipsize, maxWidth) in Kotlin; the styles own those values, and the background/colors are resolved once per render pass and handed to `PromptTabBackground`.
 
 ### Prompt editor frame
 
@@ -453,7 +459,7 @@ A `ConstraintLayout` containing:
 
 1. **Tab name** — a `TextView` showing the active variant's name, left-aligned. The default prompt's name is prefixed with a green dot (`light_green`).
 2. **Three-dot menu** — an `ImageButton` (36x36dp, `ic_more_vert`) anchored to the trailing edge, opening a `PopupMenu` with: Make Default, Rename, Copy From…, Duplicate, Clear, Delete.
-3. **Text field** — the `field_prompt` `TextInputEditText`, `minLines="8"` and `maxLines="8"` with `scrollbars="vertical"`, transparent background, bordered by `bg_prompt_editor` (same outlined-box pattern as `bg_field_box`). The bounded height makes the field scroll internally when content overflows.
+3. **Text field** — the `field_prompt` `TextInputEditText`, `minLines="8"` and `maxLines="8"` with `scrollbars="vertical"`, transparent background, bordered by `bg_prompt_editor`: a `colorSurfaceContainerHigh` fill (matching the active tab) with a 1dp `colorOutline` stroke and 4dp corners. The bounded height makes the field scroll internally when content overflows.
 
 ## Screen sections
 

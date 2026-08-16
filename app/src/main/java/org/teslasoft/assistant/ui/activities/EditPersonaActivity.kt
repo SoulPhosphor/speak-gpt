@@ -57,6 +57,7 @@ import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
+import org.teslasoft.assistant.ui.util.PromptTabBackground
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.util.ProfileImageBinder
 
@@ -684,18 +685,38 @@ class EditPersonaActivity : FragmentActivity() {
         val container = promptTabRow ?: return
         container.removeAllViews()
 
+        // Angled file-tab background (PromptTabBackground): geometry from
+        // shared dimens, colors resolved once here from theme attributes -
+        // never hardcoded - and handed to the drawable.
+        val slantWidthPx = resources.getDimension(R.dimen.prompt_tab_slant_width)
+        val strokeWidthPx = resources.getDimension(R.dimen.prompt_tab_stroke_width)
+        val outlineColor = com.google.android.material.color.MaterialColors.getColor(
+            container, com.google.android.material.R.attr.colorOutline
+        )
+        val activeFillColor = com.google.android.material.color.MaterialColors.getColor(
+            container, com.google.android.material.R.attr.colorSurfaceContainerHigh
+        )
+
         for (i in promptVariants.indices) {
             val variant = promptVariants[i]
-            val tab = TextView(this)
-            if (i == activeTabIndex) {
-                tab.setTextAppearance(R.style.Widget_App_PromptTab_Active)
-            } else {
-                tab.setTextAppearance(R.style.Widget_App_PromptTab)
-            }
+            val isActive = i == activeTabIndex
+            // Constructing with a defStyleRes (rather than setTextAppearance,
+            // which only applies text-color/size/weight) is what actually
+            // pulls in the style's padding, gravity, maxWidth, maxLines,
+            // ellipsize, clickable and focusable - setTextAppearance alone
+            // was silently dropping all of those on these code-built tabs.
+            val styleRes = if (isActive) R.style.Widget_App_PromptTab_Active else R.style.Widget_App_PromptTab
+            val tab = TextView(this, null, 0, styleRes)
+            tab.background = PromptTabBackground(
+                fillColor = if (isActive) activeFillColor else android.graphics.Color.TRANSPARENT,
+                strokeColor = outlineColor,
+                strokeWidthPx = strokeWidthPx,
+                slantWidthPx = slantWidthPx
+            )
 
             if (variant.isDefault) {
                 val dot = android.text.SpannableString("●  ${variant.name}")
-                if (i != activeTabIndex) {
+                if (!isActive) {
                     dot.setSpan(
                         android.text.style.ForegroundColorSpan(
                             ResourcesCompat.getColor(resources, R.color.light_green, theme)
@@ -712,8 +733,7 @@ class EditPersonaActivity : FragmentActivity() {
             container.addView(tab)
         }
 
-        val addBtn = TextView(this)
-        addBtn.setTextAppearance(R.style.Widget_App_PromptTab_Add)
+        val addBtn = TextView(this, null, 0, R.style.Widget_App_PromptTab_Add)
         addBtn.text = "+"
         addBtn.setOnClickListener { addPromptTab() }
         container.addView(addBtn)

@@ -1114,17 +1114,25 @@
         <item name="android:activityCloseExitAnimation">@anim/mtrl_activity_close_exit</item>
     </style>
 
-    <!-- ===== Companion prompt tabs (multiple-prompt feature, Aug 2026) =====
-         The tabbed prompt area on the Edit Companion screen. Each tab is a
-         tappable label for one prompt variant; the active tab is filled with
-         colorPrimary, inactive tabs show an outlined box matching Field.Box.
-         The add-tab button (+) sits at the end of the wrapping row. The
-         editor frame wraps the prompt name, three-dot menu, and text field. -->
+    <!-- ===== Companion prompt tabs (multiple-prompt feature, Aug 2026;
+         file-tab shape and colors reworked per owner design Aug 16 2026) =====
+         The tabbed prompt area on the Edit Companion screen. Each tab reads
+         as an angled file tab: a fixed-width diagonal cut on its trailing
+         edge (PromptTabBackground - a plain XML <shape> cannot draw a
+         non-rectangular edge, so this is a small Drawable class instead,
+         still colored entirely from theme attributes, never hardcoded).
+         The inactive tab is transparent with a colorOutline stroke; the
+         active tab fills with colorSurfaceContainerHigh - the same tone as
+         bg_prompt_editor - so the selected tab visually continues into the
+         prompt box beneath it, with bright/bold text carrying the "selected"
+         signal instead of a bright accent fill. The add-tab button (+) sits
+         at the end of the wrapping row and keeps its own plain square shape
+         - it is a small icon control, not a labeled file tab. The editor
+         frame wraps the prompt name, three-dot menu, and text field. -->
     <style name="Widget.App.PromptTab" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">36dp</item>
         <item name="android:maxWidth">160dp</item>
-        <item name="android:background">@drawable/bg_prompt_tab</item>
         <item name="android:gravity">center</item>
         <item name="android:paddingHorizontal">14dp</item>
         <item name="android:textColor">?attr/appTextColor</item>
@@ -1136,8 +1144,8 @@
     </style>
 
     <style name="Widget.App.PromptTab.Active" parent="Widget.App.PromptTab">
-        <item name="android:background">@drawable/bg_prompt_tab_active</item>
-        <item name="android:textColor">?attr/colorOnPrimary</item>
+        <item name="android:textColor">?attr/appTitleTextColor</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="Widget.App.PromptTab.Add" parent="">

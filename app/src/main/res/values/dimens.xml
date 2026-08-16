@@ -25,6 +25,12 @@
 
     <dimen name="button_corner_radius">4dp</dimen>
 
+    <!-- Companion prompt tab file-tab shape (PromptTabBackground): the fixed
+         diagonal-cut width on each tab's trailing edge, and the outline
+         stroke width matching the app's other 1dp outlined boxes. -->
+    <dimen name="prompt_tab_slant_width">10dp</dimen>
+    <dimen name="prompt_tab_stroke_width">1dp</dimen>
+
     <!-- Widget.App.Row.ProfileImage's leading preview size (profile-images-plan.md). -->
     <dimen name="row_profile_image_size">48dp</dimen>
 
