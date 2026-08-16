@@ -298,6 +298,43 @@
                     android:src="@drawable/ic_edit"
                     android:tooltipText="@string/btn_msg_edit"
                     app:srcCompat="@drawable/ic_edit" />
+
+                <!-- Regenerated-response pager (owner spec, Aug 16 2026), far
+                     right of the assistant action bar. GONE until a turn has
+                     two or more stored versions; ChatAdapter fills the count,
+                     hides the end-stop chevron, and makes the count tappable at
+                     four-plus versions. Chevron/count colors are set in code to
+                     the bubble foreground so they follow the theme. -->
+                <LinearLayout
+                    android:id="@+id/version_nav"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <ImageButton
+                        android:id="@+id/btn_version_prev"
+                        style="@style/Widget.App.ResponseVersion.Chevron"
+                        android:contentDescription="@string/version_nav_prev"
+                        android:src="@drawable/ic_chevron_left"
+                        android:tooltipText="@string/version_nav_prev"
+                        app:srcCompat="@drawable/ic_chevron_left" />
+
+                    <TextView
+                        android:id="@+id/version_count"
+                        style="@style/Widget.App.ResponseVersion.Count"
+                        android:background="?attr/selectableItemBackgroundBorderless" />
+
+                    <ImageButton
+                        android:id="@+id/btn_version_next"
+                        style="@style/Widget.App.ResponseVersion.Chevron"
+                        android:contentDescription="@string/version_nav_next"
+                        android:src="@drawable/ic_chevron_right"
+                        android:tooltipText="@string/version_nav_next"
+                        app:srcCompat="@drawable/ic_chevron_right" />
+                </LinearLayout>
             </LinearLayout>
 
         </androidx.constraintlayout.widget.ConstraintLayout>

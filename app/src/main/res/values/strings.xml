@@ -3176,6 +3176,10 @@
     <string name="message_details_empty">Details Not Available</string>
     <!-- Token count shown in the compact line and the details popup, e.g. "1,234 tokens". -->
     <string name="chat_token_count">%1$s tokens</string>
+    <!-- Regenerated-response pager on an assistant message. -->
+    <string name="version_nav_prev">Previous Response Version</string>
+    <string name="version_nav_next">Next Response Version</string>
+    <string name="version_nav_count">%1$d / %2$d</string>
     <string name="appearance_hardware_keyboard_shortcuts">Hardware Keyboard Shortcuts</string>
     <string name="appearance_hardware_keyboard_shortcuts_hint">Press Enter to send and Shift+Enter for a new line.</string>
     <string name="appearance_section_name_style">Name Style</string>

@@ -810,6 +810,35 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- Regenerated-response pager (owner spec, Aug 16 2026): the far-right
+         previous/next chevrons and the "n / m" count on an assistant message.
+         Colors default to colorPrimary here but ChatAdapter recolors the glyphs
+         and count to the bubble foreground so they follow the theme, exactly
+         like the other message-action glyphs. The four-plus-versions picker is
+         drawn in code as a bare borderless number list (no box, no chevron),
+         reusing the shared rounded-surface drawable for its background. -->
+    <style name="Widget.App.ResponseVersion.Chevron" parent="">
+        <item name="android:layout_width">28dp</item>
+        <item name="android:layout_height">28dp</item>
+        <item name="android:background">@color/transparent</item>
+        <item name="android:padding">2dp</item>
+        <item name="android:scaleType">centerInside</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.App.ResponseVersion.Count" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:minWidth">40dp</item>
+        <item name="android:paddingStart">2dp</item>
+        <item name="android:paddingEnd">2dp</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingBottom">4dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
     <!-- Summoning Circle placement variants. They inherit the canonical
          dropdown visuals and add only spacing for the trailing edit button. -->
     <style name="Widget.App.QuickTile.Label" parent="Widget.App.Dropdown.CanonicalLabel">

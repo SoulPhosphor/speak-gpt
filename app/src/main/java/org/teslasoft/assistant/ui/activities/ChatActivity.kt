@@ -5620,6 +5620,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             val m = preparedTurn?.storedMessage ?: (prefix + message + endSeparator)
 
+            // Sending a new message is the explicit continuation action: if the
+            // user browsed the latest turn to an older response version and is
+            // sending from there, that displayed version becomes the one the
+            // conversation continues from (owner spec, Aug 16 2026). Pure
+            // browsing never does this. A retry re-send (shouldAdd == false)
+            // regenerates the turn itself and must not pre-commit here.
+            if (shouldAdd) commitDisplayedVersionOfLatestTurn()
+
             if (shouldAdd) putMessage(m, false)
 
             // Attachments waiting in the strip belong to THIS message: they
@@ -7246,6 +7254,32 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  display omits tokens rather than inventing a value. */
     private var pendingResponseTokens: Int? = null
 
+    /** While a Retry is in flight, the versions the regenerated reply will be
+     *  folded into: the prior turn's existing version list, or its single
+     *  current reply wrapped as version one. Null for an ordinary first-time
+     *  reply, which is never versioned. */
+    private var pendingRetryVariants: MutableList<HashMap<String, String>>? = null
+
+    /**
+     * Fold the just-finished regenerated reply into its turn's version list as
+     * the newest version and make it the canonical one, preserving every prior
+     * version for browsing. No-op unless a Retry set [pendingRetryVariants].
+     * Runs on both a successful and a terminal (interrupted/failed) finish so a
+     * failed regeneration never discards the versions that came before it.
+     */
+    private fun mergePendingRetryVariants() {
+        val history = pendingRetryVariants ?: return
+        pendingRetryVariants = null
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] != true) return
+
+        history.add(ChatAdapter.snapshotVariant(last))
+        last[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(history)
+        last[ChatAdapter.KEY_CANONICAL_VARIANT] = (history.size - 1).toString()
+        last[ChatAdapter.KEY_DISPLAY_VARIANT] = (history.size - 1).toString()
+        adapter?.notifyItemChanged(messages.size - 1)
+    }
+
     /** Mark the last assistant reply as completed normally. The caller's
      *  existing completion saveSettings() persists it alongside the final text. */
     private fun markLastAssistantDone() {
@@ -7257,6 +7291,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // provider reported them. Stored as a string like every other
             // history key; absent when unreported.
             pendingResponseTokens?.let { last[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
+            // A regeneration folds this finished reply into the turn's version
+            // list. Runs after the metadata above so the new version captures
+            // the final model, tokens, and state.
+            mergePendingRetryVariants()
             // This chat just produced a successful reply, so its complete
             // model-and-companion snapshot may qualify for the next new chat.
             recordLastSuccessfulConfig()
@@ -7289,6 +7327,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (last[MessageCompletionState.KEY_STATE]?.toString() != MessageCompletionState.STREAMING) return
         last[MessageCompletionState.KEY_STATE] = state
         if (detail != null) last[MessageCompletionState.KEY_STATE_DETAIL] = detail
+        // A regeneration that ended in a terminal state still keeps the prior
+        // versions: fold this attempt in as the newest version rather than
+        // letting the earlier good replies vanish with the failed retry.
+        mergePendingRetryVariants()
         saveSettings()
     }
 
@@ -9545,6 +9587,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     override fun onRetryClick() {
+        // Keep the reply being regenerated as an alternate version instead of
+        // discarding it (owner spec, Aug 16 2026). Snapshot the current last
+        // assistant turn's existing version list (or wrap its single current
+        // reply) BEFORE it is removed; the regenerated reply is folded in as the
+        // newest version once it finishes.
+        val last = messages.lastOrNull()
+        pendingRetryVariants = if (last != null && last["isBot"] == true) {
+            val existing = ChatAdapter.parseVariants(last[ChatAdapter.KEY_VARIANTS]?.toString())
+            if (existing.isNotEmpty()) existing
+            else mutableListOf(ChatAdapter.snapshotVariant(last))
+        } else {
+            null
+        }
+
         removeLastAssistantMessageIfAvailable()
         saveSettings()
 
@@ -9554,6 +9610,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // via the normal send path — no legacy [image]/[imageType] fields
         // to unpack here.
         parseMessage(message["message"].toString(), false)
+    }
+
+    /**
+     * If the latest assistant turn is being viewed at a version other than its
+     * canonical one, make the displayed version canonical so the conversation
+     * continues from it. Only the latest turn (the current last message) is
+     * eligible; historical turns with later messages keep their canonical
+     * version and are changed only by an explicit Regenerate/Edit. Rebuilds the
+     * model-facing projection so the next request uses the committed version.
+     */
+    private fun commitDisplayedVersionOfLatestTurn() {
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] != true) return
+        val variants = ChatAdapter.parseVariants(last[ChatAdapter.KEY_VARIANTS]?.toString())
+        if (variants.size < 2) return
+        val canonical = last[ChatAdapter.KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull()
+            ?: (variants.size - 1)
+        val display = last[ChatAdapter.KEY_DISPLAY_VARIANT]?.toString()?.toIntOrNull() ?: canonical
+        if (display == canonical || display !in variants.indices) return
+
+        last[ChatAdapter.KEY_CANONICAL_VARIANT] = display.toString()
+        ChatAdapter.applyVariant(last, variants[display])
+        rebuildModelProjection()
+        adapter?.notifyItemChanged(messages.size - 1)
+    }
+
+    override fun onResponseVersionChanged() {
+        // Browsing is display-only: persist the pager position so it survives a
+        // reopen, but never truncate history or rebuild the model projection —
+        // the canonical version the conversation uses is unchanged.
+        saveSettings()
     }
 
     private fun syncChatProjection() {
