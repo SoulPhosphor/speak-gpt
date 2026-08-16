@@ -401,6 +401,10 @@ Keep field-specific behavior on the individual input, including:
 - character limits;
 - spacing unique to that field.
 
+### Bounded, internally-scrolling variant
+
+Set `minLines`/`maxLines` and `android:scrollbars="vertical"` (plus `android:isScrollContainer="true"`, or the field never actually scrolls) on the individual `Widget.App.Field.Box` input to pin it to a fixed number of visible lines instead of letting it grow the dialog taller — the same bounded-height-scrolls-past-that idea as the Prompt Editor's `field_prompt`/`bg_prompt_editor` skin above, applied here to the standard `bg_field_box` skin instead. Current example: `dialog_edit_chat_title.xml` (ChatActivity's title-edit dialog, opened by tapping the chat header title) — a 4-line field, since an AI-generated chat title can run far longer than the header ever shows.
+
 ### Small inline number field
 
 `Widget.App.Field.NumberBlank`
