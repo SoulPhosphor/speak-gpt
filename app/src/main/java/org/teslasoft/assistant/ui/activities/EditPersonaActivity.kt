@@ -598,7 +598,7 @@ class EditPersonaActivity : FragmentActivity() {
                     android.text.style.ForegroundColorSpan(
                         ResourcesCompat.getColor(resources, R.color.light_green, theme)
                     ),
-                    0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                    0, dot.length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
                 promptTabName?.text = dot
             } else {
@@ -690,6 +690,7 @@ class EditPersonaActivity : FragmentActivity() {
             promptVariants[i].isDefault = (i == activeTabIndex)
         }
         renderPromptTabs()
+        loadActivePrompt()
     }
 
     private fun renameCurrentPrompt() {
