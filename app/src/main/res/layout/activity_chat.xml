@@ -288,17 +288,17 @@
                 app:srcCompat="@drawable/ic_settings" />
 
             <ImageButton
-                android:id="@+id/btn_export"
+                android:id="@+id/btn_quick_settings"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/btn_accent_tonal_v4"
-                android:contentDescription="@string/btn_export_chat"
-                android:tooltipText="@string/btn_export_chat"
+                android:contentDescription="@string/btn_quick_settings"
+                android:tooltipText="@string/btn_quick_settings"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/btn_settings"
                 app:layout_constraintTop_toTopOf="parent"
-                app:srcCompat="@drawable/ic_upload" />
+                app:srcCompat="@drawable/ic_history_edu" />
 
             <!-- Shown only while audio/VAD diagnostics are on (see
                  ChatActivity.updateDebugLogButtonVisibility); a one-tap jump
@@ -314,7 +314,7 @@
                 android:tooltipText="@string/btn_open_event_log"
                 android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_export"
+                app:layout_constraintEnd_toStartOf="@+id/btn_quick_settings"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_bug"
                 tools:visibility="visible" />
@@ -393,7 +393,7 @@
                 android:singleLine="true"
                 android:text="debug.chat.name"
                 android:textColor="@color/text_title"
-                android:textSize="20sp"
+                android:textSize="18sp"
                 android:textStyle="bold"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/btn_summarizer_errors"

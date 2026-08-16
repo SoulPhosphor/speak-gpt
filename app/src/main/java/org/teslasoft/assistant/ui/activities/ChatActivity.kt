@@ -140,7 +140,6 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.progressindicator.CircularProgressIndicator
-import com.google.gson.Gson
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.languageid.LanguageIdentifier
 import eightbitlab.com.blurview.BlurView
@@ -195,6 +194,7 @@ import org.teslasoft.assistant.preferences.includes.IncludeMessageProjection
 import org.teslasoft.assistant.preferences.includes.ProjectedUserMessage
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
+import org.teslasoft.assistant.ui.util.EditChatTitleDialog
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
 import org.teslasoft.assistant.ui.util.IncludeStripController
 import org.teslasoft.assistant.util.AvatarRefreshCoordinator
@@ -337,7 +337,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var progress: CircularProgressIndicator? = null
     private var chat: RecyclerView? = null
     private var activityTitle: TextView? = null
-    private var btnExport: ImageButton? = null
+    private var btnQuickSettings: ImageButton? = null
     private var fileContents: ByteArray? = null
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
@@ -1261,7 +1261,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Force the chat's top action bar and its buttons back to fully visible. */
     private fun restoreTopBarVisibility() {
-        for (v in listOf(actionBar, btnBack, activityTitle, btnExport, btnSettings)) {
+        for (v in listOf(actionBar, btnBack, activityTitle, btnQuickSettings, btnSettings)) {
             v?.visibility = View.VISIBLE
             v?.alpha = 1f
         }
@@ -1445,7 +1445,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )!!, this
             )
 
-            btnExport?.background = getAmoledAccentDrawable(
+            btnQuickSettings?.background = getAmoledAccentDrawable(
                 AppCompatResources.getDrawable(
                     this,
                     R.drawable.btn_accent_tonal_v5_amoled
@@ -1509,7 +1509,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )!!, this
             )
 
-            btnExport?.background = getDarkAccentDrawable(
+            btnQuickSettings?.background = getDarkAccentDrawable(
                 AppCompatResources.getDrawable(
                     this,
                     R.drawable.btn_accent_tonal_v4
@@ -2461,7 +2461,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnSend = findViewById(R.id.btn_send)
         progress = findViewById(R.id.progress)
         activityTitle = findViewById(R.id.chat_activity_title)
-        btnExport = findViewById(R.id.btn_export)
+        btnQuickSettings = findViewById(R.id.btn_quick_settings)
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         btnDebugLog = findViewById(R.id.btn_debug_log)
@@ -2532,7 +2532,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         visionActions?.visibility = View.GONE
 
-        btnExport?.setImageResource(R.drawable.ic_upload)
+        btnQuickSettings?.setImageResource(R.drawable.ic_history_edu)
         btnBack?.setImageResource(R.drawable.ic_back)
 
         activityTitle?.text = if (chatName.trim().contains("_autoname_")) "Untitled chat" else chatName
@@ -2567,7 +2567,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             shareSelectedMessages()
         }
 
-        btnExport?.background = getDarkAccentDrawable(
+        btnQuickSettings?.background = getDarkAccentDrawable(
             AppCompatResources.getDrawable(
                 this,
                 R.drawable.btn_accent_tonal_v4
@@ -2593,7 +2593,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         activityTitle?.setOnClickListener {
-            openSummoningCircle()
+            // While a chat is still waiting on its AI-generated name, chatName
+            // holds the internal "_autoname_N" placeholder — show the same
+            // "Untitled chat" fallback the header itself displays rather than
+            // leaking the placeholder into the editable field.
+            val currentTitle = if (chatName.trim().contains("_autoname_")) {
+                getString(R.string.label_untitled_chat)
+            } else {
+                chatName
+            }
+            EditChatTitleDialog.show(this, currentTitle) { newTitle ->
+                renameChatTitle(newTitle)
+            }
         }
 
         val linearLayoutManager = LinearLayoutManager(this)
@@ -3832,19 +3843,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
         }
 
-        btnExport?.setOnClickListener {
-            val gson = Gson()
-            val json: String = gson.toJson(messages)
-
-            fileContents = json.toByteArray()
-
-            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                addCategory(Intent.CATEGORY_OPENABLE)
-                type = "application/json"
-                putExtra(Intent.EXTRA_TITLE, "$chatId.json")
-                putExtra(DocumentsContract.EXTRA_INITIAL_URI, (Environment.getExternalStorageDirectory().path + "/SpeakGPT/$chatId.json").toUri())
-            }
-            fileSaveIntentLauncher.launch(intent)
+        btnQuickSettings?.setOnClickListener {
+            openSummoningCircle()
         }
 
         btnDebugLog?.setOnClickListener {
@@ -5102,7 +5102,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /** Open the Summoning Circle (Quick Settings) sheet for this chat. Shared by
-     *  the header title tap and the recovery dialogs above. */
+     *  the header's Quick Settings icon and the recovery dialogs above. */
     private fun openSummoningCircle() {
         if (isFinishing || isDestroyed) return
         val sheet = QuickSettingsBottomSheetDialogFragment
@@ -5119,6 +5119,55 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         })
         sheet.show(supportFragmentManager, "QuickSettingsBottomSheetDialogFragment")
+    }
+
+    /** Applies a user-edited title from [EditChatTitleDialog]. Reuses the same
+     *  atomic rename path as auto-naming (ChatPreferences.editChat /
+     *  ChatRenameTransaction — moves history and copies every per-chat
+     *  settings key, never re-derives them) and the same [renameInProgress]
+     *  guard, so a manual rename and an in-flight auto-name rename can never
+     *  overlap. */
+    private fun renameChatTitle(newTitle: String) {
+        if (newTitle == chatName || renameInProgress) return
+
+        val chatPreferences = ChatPreferences.getChatPreferences()
+        if (chatPreferences.checkDuplicate(this, newTitle)) {
+            Toast.makeText(this, R.string.chat_error_unique, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val oldName = chatName
+        renameInProgress = true
+        lifecycleScope.launch {
+            val renamed = try {
+                withContext(Dispatchers.IO) {
+                    chatPreferences.editChat(this@ChatActivity, newTitle, oldName)
+                }
+            } catch (e: Exception) {
+                false
+            } finally {
+                renameInProgress = false
+            }
+
+            if (isFinishing || isDestroyed) return@launch
+
+            if (renamed) {
+                val previousChatId = chatId
+                chatId = Hash.hash(newTitle)
+                ImageGenerationJobRegistry.rename(previousChatId, chatId)
+                chatName = newTitle
+                preferences = Preferences.getPreferences(this@ChatActivity, chatId)
+                intent.putExtra("chatId", chatId)
+                intent.putExtra("name", chatName)
+                activityTitle?.text = newTitle
+            } else {
+                MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.title_rename_failed)
+                    .setMessage(R.string.msg_rename_failed)
+                    .setPositiveButton(R.string.btn_ok) { _, _ -> }
+                    .show()
+            }
+        }
     }
 
     /** Open the API Endpoints screen so the user can set up a provider + model
