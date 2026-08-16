@@ -2263,6 +2263,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return super.dispatchTouchEvent(event)
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Reached only for configuration changes listed in the manifest's
+        // configChanges — those are absorbed here WITHOUT recreating the Activity,
+        // so the live conversation, generation, and mic loop survive untouched.
+        // Logged so a screen-off reproduction can show a night-mode/orientation
+        // flip landing here (conversation preserved) rather than in onDestroy
+        // (conversation torn down). Gated on voice diagnostics: config changes
+        // (e.g. rotations) can be frequent, so this must not spam the Event log.
+        val night = (newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+        val orientation = when (newConfig.orientation) {
+            Configuration.ORIENTATION_LANDSCAPE -> "landscape"
+            Configuration.ORIENTATION_PORTRAIT -> "portrait"
+            else -> "undefined"
+        }
+        logVoiceEvent(
+            "ChatActivity configuration change absorbed (no recreation):" +
+                    " night=$night orientation=$orientation" +
+                    " handsFreeService=${HandsFreeService.isRunning}"
+        )
+    }
+
     public override fun onDestroy() {
         // Tombstone for the event log: when the OS (or a navigation flow)
         // destroys this screen while a voice conversation is live, everything
@@ -2276,6 +2299,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             logVoiceEvent("chat screen destroyed while voice was active — readback and mic loop torn down" +
                     if (isFinishing) " (screen was closed)" else " (destroyed by the system)")
         }
+        // Decisive lifecycle record for the screen-off / route-change interruption
+        // investigation. onDestroy currently always runs the full session teardown
+        // below (killAllProcesses + stopHandsFreeService), so changingConfig=true
+        // here means a mere Android configuration recreation is being treated as a
+        // genuine conversation end — the exact condition that produced an
+        // app_cancel "screen was closed" on a turn the user never abandoned. With
+        // uiMode now handled in the manifest, a night-mode flip should no longer
+        // reach this path; if this line still reports changingConfig=true after
+        // the fix, a different configuration change is recreating the Activity and
+        // the teardown must learn to distinguish the two. Always persisted (bounded
+        // to once per destroy) so the next reproduction is conclusive.
+        val teardownAction = if (isChangingConfigurations)
+            "full teardown (configuration recreation — session state will be lost)"
+        else "full teardown (genuine destroy)"
+        logVoiceEventAlways(
+            "ChatActivity destroy: finishing=$isFinishing" +
+                    " changingConfig=$isChangingConfigurations" +
+                    " generationActive=${requestPreparationInProgress || providerRequestDispatched}" +
+                    " providerDispatched=$providerRequestDispatched" +
+                    " handsFreePref=${preferences?.getHandsFreeMode() == true}" +
+                    " handsFreeService=${HandsFreeService.isRunning}" +
+                    " turn=${currentLifecycleTurnId.ifBlank { "none" }}" +
+                    " action=$teardownAction"
+        )
         if (tts != null) {
             tts!!.stop()
             tts!!.shutdown()
