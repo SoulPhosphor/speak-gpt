@@ -26,21 +26,30 @@ import android.graphics.drawable.Drawable
 
 /**
  * The companion prompt tab's file-tab silhouette (owner design, Aug 16
- * 2026): a vertical left edge and horizontal top/bottom edges, with a
- * fixed-width diagonal cut on the trailing edge - narrower at the top,
- * full width at the bottom - so every tab reads as an angled file tab
- * regardless of its own text width. A plain XML `<shape>` cannot express a
- * non-rectangular edge, which is why this exists as a small Drawable
- * instead of a drawable resource; every color it paints with is resolved
- * by the caller from a theme attribute and passed in, never hardcoded
- * here, so the shape stays theme/palette-ready like the rest of the app's
- * shared visual system.
+ * 2026). Every tab shares one continuous horizontal top edge across the
+ * row. The diagonal slant appears only as an internal separator between
+ * adjacent tabs (and as the outer right edge of the last tab in the
+ * row). The fill is always a trapezoid whose right edge follows the
+ * slant; the top stroke extends past the fill to the view's full width
+ * on non-last tabs so the top line reads as one piece.
+ *
+ * [isFirstInRow]: draw the outer left edge stroke.
+ * [isLastInRow]: the slant is the outer right boundary; do not extend
+ *   the top stroke past it.
+ * [drawBottomEdge]: false on the active tab in the bottom row so it
+ *   merges into the prompt frame.
+ *
+ * Every color is resolved by the caller from a theme attribute, never
+ * hardcoded.
  */
 class PromptTabBackground(
     fillColor: Int,
     strokeColor: Int,
     private val strokeWidthPx: Float,
-    private val slantWidthPx: Float
+    private val slantWidthPx: Float,
+    private val isFirstInRow: Boolean = true,
+    private val isLastInRow: Boolean = true,
+    private val drawBottomEdge: Boolean = true
 ) : Drawable() {
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -55,7 +64,8 @@ class PromptTabBackground(
         strokeJoin = Paint.Join.MITER
     }
 
-    private val path = Path()
+    private val fillPath = Path()
+    private val strokePath = Path()
 
     override fun onBoundsChange(bounds: Rect) {
         super.onBoundsChange(bounds)
@@ -63,18 +73,56 @@ class PromptTabBackground(
         val w = bounds.width().toFloat()
         val h = bounds.height().toFloat()
         val slant = slantWidthPx.coerceIn(0f, (w - 2 * inset).coerceAtLeast(0f) * 0.6f)
+        val topY = inset
+        val botY = h - inset
 
-        path.reset()
-        path.moveTo(inset, inset)                 // top-left
-        path.lineTo(w - inset - slant, inset)      // top-right, cut inward
-        path.lineTo(w - inset, h - inset)          // bottom-right, full width
-        path.lineTo(inset, h - inset)              // bottom-left
-        path.close()
+        // Fill: trapezoid — straight left edge, slanted right edge. Same
+        // shape for every tab.
+        fillPath.reset()
+        fillPath.moveTo(inset, topY)
+        fillPath.lineTo(w - inset - slant, topY)
+        fillPath.lineTo(w - inset, botY)
+        fillPath.lineTo(inset, botY)
+        fillPath.close()
+
+        // Stroke: open path of individual segments. Horizontal edges butt
+        // to the view's true left/right bounds (0 and w) wherever a
+        // neighbour sits, so adjacent tabs meet with no gap and the row's
+        // top reads as one continuous line.
+        strokePath.reset()
+
+        // Top edge — runs the full width unless this is the last tab, where
+        // it stops at the slant so the slant becomes the outer right edge.
+        val topLeftX = if (isFirstInRow) inset else 0f
+        val topRightX = if (isLastInRow) w - inset - slant else w
+        strokePath.moveTo(topLeftX, topY)
+        strokePath.lineTo(topRightX, topY)
+
+        // Outer left edge (first tab only): straight vertical.
+        if (isFirstInRow) {
+            strokePath.moveTo(inset, topY)
+            strokePath.lineTo(inset, botY)
+        }
+
+        // Right edge: the slant. On the last tab it is the outer edge of
+        // the row; on every other tab it is the internal separator between
+        // this tab and the next.
+        strokePath.moveTo(w - inset - slant, topY)
+        strokePath.lineTo(w - inset, botY)
+
+        // Bottom edge — suppressed on the active tab so it opens into the
+        // prompt frame. Butts to the true bounds so neighbours meet.
+        if (drawBottomEdge) {
+            val botLeftX = if (isFirstInRow) inset else 0f
+            val botRightX = if (isLastInRow) w - inset else w
+            strokePath.moveTo(botLeftX, botY)
+            strokePath.lineTo(botRightX, botY)
+        }
     }
 
     override fun draw(canvas: Canvas) {
-        canvas.drawPath(path, fillPaint)
-        canvas.drawPath(path, strokePaint)
+        canvas.drawPath(fillPath, fillPaint)
+        canvas.drawPath(strokePath, strokePaint)
     }
 
     override fun setAlpha(alpha: Int) {

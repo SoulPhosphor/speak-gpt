@@ -1180,7 +1180,7 @@
     <style name="Widget.App.PromptTab.Add" parent="">
         <item name="android:layout_width">36dp</item>
         <item name="android:layout_height">36dp</item>
-        <item name="android:background">@drawable/bg_prompt_tab</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
         <item name="android:gravity">center</item>
         <item name="android:textColor">?attr/appTextColor</item>
         <item name="android:textSize">20sp</item>
