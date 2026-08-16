@@ -549,6 +549,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val btnVersionPrev: ImageButton? = itemView.findViewById(R.id.btn_version_prev)
         private val versionCount: TextView? = itemView.findViewById(R.id.version_count)
         private val btnVersionNext: ImageButton? = itemView.findViewById(R.id.btn_version_next)
+        // To the right of the pager: check_circle when the shown version is the
+        // canonical one (a no-op placeholder), or resume when a non-canonical
+        // version is shown, tapping which makes it the canonical response.
+        private val btnVersionPromote: ImageButton? = itemView.findViewById(R.id.btn_version_promote)
         // Present only on the assistant layout (the user row has no completion
         // marker); nullable so the shared binder remains safe on both sides.
         private val statusMarker: TextView? = itemView.findViewById(R.id.status_marker)
@@ -923,6 +927,30 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             } else {
                 count.isClickable = false
                 count.setOnClickListener(null)
+            }
+
+            // The promote control: check_circle (placeholder, no-op) when the
+            // shown version is already canonical; resume when it is not, tapping
+            // which makes the shown version the canonical response.
+            btnVersionPromote?.let { promote ->
+                if (current == canonical) {
+                    promote.setImageResource(R.drawable.ic_check_circle)
+                    promote.contentDescription = context.getString(R.string.version_current_desc)
+                    promote.setOnClickListener(null)
+                    promote.isClickable = false
+                } else {
+                    promote.setImageResource(R.drawable.ic_resume)
+                    promote.contentDescription = context.getString(R.string.version_make_current_desc)
+                    promote.isClickable = true
+                    promote.setOnClickListener {
+                        val pos = bindingAdapterPosition
+                        if (!bulkActionMode) {
+                            listener?.onMakeVersionCurrent(
+                                if (pos != RecyclerView.NO_POSITION) pos else position
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -1443,6 +1471,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnVersionPrev?.setColorFilter(foreground)
             btnVersionNext?.setColorFilter(foreground)
             versionCount?.setTextColor(foreground)
+            btnVersionPromote?.setColorFilter(foreground)
         }
 
         /**
@@ -2212,22 +2241,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // Mirror onDelete's guard: a stale dialog position (the list changed
         // while the edit dialog was open) must not index past the array.
         if (position < 0 || position >= dataArray.size) return
-        // Editing a message that still has later messages branches the thread:
-        // hand off to the host to confirm ("Edit and Clear") and truncate. An
-        // edit to the last message keeps the original in-place behavior.
-        if (position < dataArray.size - 1) {
-            listener?.onBranchEditRequested(prompt, position)
-            return
-        }
-        applyConfirmedEdit(position, prompt)
-    }
-
-    /** Apply an edit to the message at [position] in place. Used both for an
-     *  edit of the last message and, after the host's branch confirmation, for
-     *  an earlier message just before its later messages are truncated. Only
-     *  the text changes; the message keeps its attachments. */
-    fun applyConfirmedEdit(position: Int, prompt: String) {
-        if (position < 0 || position >= dataArray.size) return
+        // Editing only changes this message's stored text (owner spec, Aug 16
+        // 2026). It never truncates later messages — that is what Regenerate
+        // and Make Current do. Attachments on the message are kept.
         editMessage(position, prompt)
         // If this turn carries regenerated versions, keep the canonical
         // version's stored text in step with the edit so paging back to it
@@ -2276,10 +2292,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  and truncates the messages after it first (owner spec, Aug 16 2026). */
         fun onRegenerate(position: Int)
 
-        /** Editing the message at [position] would discard the messages after
-         *  it. The host confirms the branch, then applies the edit and
-         *  truncates via [ChatAdapter.applyConfirmedEdit]. */
-        fun onBranchEditRequested(prompt: String, position: Int)
+        /** Make the response version currently displayed on the turn at
+         *  [position] the canonical one. On the latest turn this switches the
+         *  version silently; on an earlier turn the host confirms ("Make Current
+         *  Response?") and truncates everything after that turn. */
+        fun onMakeVersionCurrent(position: Int)
 
         fun onMessageEdited()
         fun onMessageDeleted()

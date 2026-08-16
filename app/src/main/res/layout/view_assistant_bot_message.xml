@@ -334,6 +334,17 @@
                         android:src="@drawable/ic_chevron_right"
                         android:tooltipText="@string/version_nav_next"
                         app:srcCompat="@drawable/ic_chevron_right" />
+
+                    <!-- Promote control: check_circle (placeholder) on the
+                         canonical version, resume on a non-canonical one.
+                         ChatAdapter swaps the icon and wires the tap. -->
+                    <ImageButton
+                        android:id="@+id/btn_version_promote"
+                        style="@style/Widget.App.ResponseVersion.Chevron"
+                        android:layout_marginStart="2dp"
+                        android:contentDescription="@string/version_current_desc"
+                        android:src="@drawable/ic_check_circle"
+                        app:srcCompat="@drawable/ic_check_circle" />
                 </LinearLayout>
             </LinearLayout>
 

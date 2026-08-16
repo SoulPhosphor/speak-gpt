@@ -5620,14 +5620,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             val m = preparedTurn?.storedMessage ?: (prefix + message + endSeparator)
 
-            // Sending a new message is the explicit continuation action: if the
-            // user browsed the latest turn to an older response version and is
-            // sending from there, that displayed version becomes the one the
-            // conversation continues from (owner spec, Aug 16 2026). Pure
-            // browsing never does this. A retry re-send (shouldAdd == false)
-            // regenerates the turn itself and must not pre-commit here.
-            if (shouldAdd) commitDisplayedVersionOfLatestTurn()
-
             if (shouldAdd) putMessage(m, false)
 
             // Attachments waiting in the strip belong to THIS message: they
@@ -9639,23 +9631,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .show()
     }
 
-    override fun onBranchEditRequested(prompt: String, position: Int) {
-        if (position < 0 || position >= messages.size) return
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.branch_edit_title)
-            .setMessage(R.string.branch_edit_body)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.branch_edit_confirm) { _, _ ->
-                // Apply the edit (attachments on this message are kept), then
-                // discard the messages after it. Record-only — the underlying
-                // image/attachment files are never deleted here.
-                adapter?.applyConfirmedEdit(position, prompt)
-                truncateAfter(position)
-            }
-            .show()
-    }
-
     /**
      * Remove every message after [index] from the visible thread and the
      * model-facing projection, and persist the shortened history. Record-only,
@@ -9677,27 +9652,55 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /**
-     * If the latest assistant turn is being viewed at a version other than its
-     * canonical one, make the displayed version canonical so the conversation
-     * continues from it. Only the latest turn (the current last message) is
-     * eligible; historical turns with later messages keep their canonical
-     * version and are changed only by an explicit Regenerate/Edit. Rebuilds the
-     * model-facing projection so the next request uses the committed version.
+     * Make the response version currently displayed on the turn at [position]
+     * its canonical one (owner spec, Aug 16 2026). On the latest turn nothing
+     * follows it, so the switch is silent. On an earlier turn this changes the
+     * causal branch, so it confirms ("Make Current Response?") and then discards
+     * every message after that turn.
      */
-    private fun commitDisplayedVersionOfLatestTurn() {
-        val last = messages.lastOrNull() ?: return
-        if (last["isBot"] != true) return
-        val variants = ChatAdapter.parseVariants(last[ChatAdapter.KEY_VARIANTS]?.toString())
+    override fun onMakeVersionCurrent(position: Int) {
+        if (position < 0 || position >= messages.size) return
+        val msg = messages[position]
+        if (msg["isBot"] != true) return
+        val variants = ChatAdapter.parseVariants(msg[ChatAdapter.KEY_VARIANTS]?.toString())
         if (variants.size < 2) return
-        val canonical = last[ChatAdapter.KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull()
+        val canonical = msg[ChatAdapter.KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull()
             ?: (variants.size - 1)
-        val display = last[ChatAdapter.KEY_DISPLAY_VARIANT]?.toString()?.toIntOrNull() ?: canonical
+        val display = msg[ChatAdapter.KEY_DISPLAY_VARIANT]?.toString()?.toIntOrNull() ?: canonical
         if (display == canonical || display !in variants.indices) return
 
-        last[ChatAdapter.KEY_CANONICAL_VARIANT] = display.toString()
-        ChatAdapter.applyVariant(last, variants[display])
+        if (position == messages.size - 1) {
+            // Newest turn: nothing after it to destroy, so switch silently.
+            promoteVersionAt(position, display)
+            return
+        }
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.make_current_title)
+            .setMessage(R.string.make_current_body)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.make_current_confirm) { _, _ ->
+                promoteVersionAt(position, display)
+                truncateAfter(position)
+            }
+            .show()
+    }
+
+    /** Make version [index] of the turn at [position] canonical: mirror it into
+     *  the message's top-level fields, rebuild the model projection so context
+     *  uses it, and persist. The pager rebinds, so its icon flips to the
+     *  check_circle placeholder. */
+    private fun promoteVersionAt(position: Int, index: Int) {
+        if (position < 0 || position >= messages.size) return
+        val msg = messages[position]
+        val variants = ChatAdapter.parseVariants(msg[ChatAdapter.KEY_VARIANTS]?.toString())
+        if (index !in variants.indices) return
+        msg[ChatAdapter.KEY_CANONICAL_VARIANT] = index.toString()
+        msg[ChatAdapter.KEY_DISPLAY_VARIANT] = index.toString()
+        ChatAdapter.applyVariant(msg, variants[index])
         rebuildModelProjection()
-        adapter?.notifyItemChanged(messages.size - 1)
+        adapter?.notifyItemChanged(position)
+        saveSettings()
     }
 
     override fun onResponseVersionChanged() {
