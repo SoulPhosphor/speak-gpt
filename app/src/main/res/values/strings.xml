@@ -653,11 +653,11 @@
          marker, so the conversation model knows an image exists at that point
          and who created it. %1$s is the summary (or the full prompt when no
          summary has been made). -->
-    <string name="image_gen_injection_model">You generated an image for the user: %1$s</string>
+    <string name="image_gen_injection_model">You generated an image: %1$s</string>
     <string name="image_gen_injection_user">User generated image: %1$s</string>
     <!-- Older images created before summaries existed carry no stored prompt;
          the model is still told an image is here, without a fabricated who. -->
-    <string name="image_gen_injection_legacy">An image was generated at this point in the conversation.</string>
+    <string name="image_gen_injection_legacy">Image was generated.</string>
     <string name="image_gen_save_action">Save Image</string>
     <string name="image_gen_save_failed">The image could not be prepared for saving.</string>
     <string name="provider_function_image_generation">Image Generation</string>

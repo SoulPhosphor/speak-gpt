@@ -376,9 +376,9 @@ summarization request:
 
 2. **A completed image now contributes a text reminder to the model each
    turn.** Instead of the meaningless file marker, the model receives a short
-   sentence at that point in the conversation — "You generated an image for the
-   user: …" for a model-created image, "User generated image: …" for an
-   `/imagine` image. When a Summary Model is configured, the token-saving
+   sentence at that point in the conversation — "You generated an image: …"
+   for a model-created image, "User generated image: …" for an `/imagine`
+   image. When a Summary Model is configured, the token-saving
    summary (or the user's edit) is sent; otherwise the full prompt is sent.
    This is text only — no image bytes are re-sent, so the vision-token concern
    above still holds.
