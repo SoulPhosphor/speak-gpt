@@ -454,6 +454,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val includeSummaryList: LinearLayout? = itemView.findViewById(R.id.include_summary_list)
         private val condensedBookmark: ImageView? = itemView.findViewById(R.id.condensed_bookmark)
         private val artifactBookmark: ImageView? = itemView.findViewById(R.id.artifact_bookmark)
+        // Present only on the user layout (attachments are user-side only), so
+        // nullable like includeSummary. Lets the tray swap sides of Message
+        // Actions depending on whether the message also carries text.
+        private val messageActionsRow: View? = itemView.findViewById(R.id.message_actions_row)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
@@ -462,7 +466,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnEdit.visibility = if (isGeneratedImage) View.GONE else View.VISIBLE
             if (isGeneratedImage) btnShare.isEnabled = false
 
-            updateIncludeSummary(chatMessage, position)
+            val hasAttachments = updateIncludeSummary(chatMessage, position)
+            // Attachment-only: no text, so nothing sits between identity and
+            // the tray, and the tray moves ahead of Message Actions instead of
+            // trailing them (chat-redesign-plan.md §6.1).
+            val attachmentOnly = hasAttachments && chatMessage["message"].toString().isBlank()
+            positionAttachmentTray(attachmentOnly)
             updatePresentation(chatMessage)
             updateRetryButton(chatMessage, position)
             updateShareButton(chatMessage)
@@ -571,8 +580,38 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 }
                 btnShare.isEnabled = true
 
-                message.visibility = View.VISIBLE
+                // An attachment-only message has no text to show; leaving the
+                // (empty) text view VISIBLE would reserve a blank line above
+                // the tray (chat-redesign-plan.md §6.1).
+                message.visibility = if (attachmentOnly) View.GONE else View.VISIBLE
             }
+        }
+
+        /**
+         * Swaps which side of Message Actions the attachment tray sits on.
+         *
+         * With text: text -> Message Actions -> attachment tray (default XML
+         * order). Attachment-only: identity -> attachment tray -> Message
+         * Actions (chat-redesign-plan.md §6.1). No-op on the assistant
+         * layout, which has neither view.
+         */
+        private fun positionAttachmentTray(attachmentOnly: Boolean) {
+            val tray = includeSummary ?: return
+            val actionsRow = messageActionsRow ?: return
+
+            val trayParams = tray.layoutParams as ConstraintLayout.LayoutParams
+            val actionsParams = actionsRow.layoutParams as ConstraintLayout.LayoutParams
+
+            if (attachmentOnly) {
+                trayParams.topToBottom = R.id.include_bookmarks
+                actionsParams.topToBottom = R.id.include_summary
+            } else {
+                trayParams.topToBottom = R.id.message_actions_row
+                actionsParams.topToBottom = R.id.image_frame
+            }
+
+            tray.layoutParams = trayParams
+            actionsRow.layoutParams = actionsParams
         }
 
         /**
@@ -586,15 +625,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * dialog, notification, or sound — just this line.
          */
         /**
-         * Renders sent documents directly under the user's name. One to three
-         * rows remain visible; only four or more collapse behind the count.
+         * Renders sent documents in the tray positioned by [positionAttachmentTray].
+         * One to three rows remain visible; only four or more collapse behind
+         * the count.
          *
          * Every branch sets visibility explicitly: these rows are recycled, so
          * an early return would let one message's open accordion reappear on
          * an unrelated message further down the conversation.
+         *
+         * @return true when the tray is showing at least one full attachment
+         * record (used by [bind] to decide whether the message is attachment-only).
          */
-        private fun updateIncludeSummary(chatMessage: HashMap<String, Any>, position: Int) {
-            val summary = includeSummary ?: return
+        private fun updateIncludeSummary(chatMessage: HashMap<String, Any>, position: Int): Boolean {
+            val summary = includeSummary ?: return false
             val includes = ChatInclude.listFromJson(
                 chatMessage[ChatActivity.INCLUDES_KEY]?.toString()
             )
@@ -604,7 +647,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 condensedBookmark?.visibility = View.GONE
                 artifactBookmark?.visibility = View.GONE
                 includeSummaryList?.removeAllViews()
-                return
+                return false
             }
 
             val groups = IncludeHistoryPresentation.group(includes)
@@ -613,7 +656,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (fullIncludes.isEmpty()) {
                 summary.visibility = View.GONE
                 includeSummaryList?.removeAllViews()
-                return
+                return false
             }
 
             summary.visibility = View.VISIBLE
@@ -653,6 +696,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     null
                 }
             )
+
+            return true
         }
 
         /**
