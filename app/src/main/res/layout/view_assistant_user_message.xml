@@ -208,6 +208,19 @@
                 app:layout_constraintTop_toBottomOf="@+id/image_frame">
 
                 <ImageButton
+                    android:id="@+id/btn_details"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1"
+                    android:background="@color/transparent"
+                    android:contentDescription="@string/message_details_action"
+                    android:descendantFocusability="blocksDescendants"
+                    android:src="@drawable/ic_info"
+                    android:tooltipText="@string/message_details_action"
+                    app:srcCompat="@drawable/ic_info" />
+
+                <ImageButton
                     android:id="@+id/btn_speak"
                     android:layout_width="32dp"
                     android:layout_height="32dp"

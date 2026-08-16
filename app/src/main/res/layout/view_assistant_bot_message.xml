@@ -62,6 +62,24 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toTopOf="parent" />
 
+            <!-- Compact per-message metadata (chat-redesign-plan.md §4.3): the
+                 producing model and/or provider token count, each gated by its
+                 own Appearance toggle and shown only when that turn actually
+                 carries the value. Sits beneath the identity line, above the
+                 reply. GONE (a zero-height point) whenever nothing is enabled or
+                 available, so the reply keeps its original position. Its color is
+                 set in code to the bubble foreground so it follows the theme. -->
+            <TextView
+                android:id="@+id/message_meta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="12sp"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/bubble_name" />
+
             <org.teslasoft.assistant.ui.chat.PortraitAwareMessageTextView
                 android:id="@+id/message"
                 android:layout_width="wrap_content"
@@ -72,7 +90,7 @@
                 android:textIsSelectable="true"
                 android:textSize="16sp"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/bubble_name" />
+                app:layout_constraintTop_toBottomOf="@+id/message_meta" />
 
             <LinearLayout
                 android:id="@+id/image_frame"
@@ -207,6 +225,19 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/status_marker">
+
+                <ImageButton
+                    android:id="@+id/btn_details"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1"
+                    android:background="@color/transparent"
+                    android:contentDescription="@string/message_details_action"
+                    android:descendantFocusability="blocksDescendants"
+                    android:src="@drawable/ic_info"
+                    android:tooltipText="@string/message_details_action"
+                    app:srcCompat="@drawable/ic_info" />
 
                 <ImageButton
                     android:id="@+id/btn_speak"

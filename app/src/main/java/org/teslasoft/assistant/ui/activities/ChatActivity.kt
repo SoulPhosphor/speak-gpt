@@ -6391,6 +6391,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
                 v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
             )
+            v.usage?.totalTokens?.let { pendingResponseTokens = it }
             val delta = choice?.delta?.content
             if (delta != null && delta != "null") {
                 response += delta
@@ -7189,6 +7190,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         map["message"] = message
         map["isBot"] = isBot
 
+        // When this message was created, for the Message Details popup. Stored
+        // as a string so it round-trips through the generic Gson history map
+        // like every other key. Both roles get one; nothing invents a time for
+        // messages saved before this feature.
+        map[ChatAdapter.KEY_MESSAGE_TIME] = System.currentTimeMillis().toString()
+
         // Lock this assistant reply's label to the companion active right now,
         // so a later companion switch never rewrites past labels.
         if (isBot) {
@@ -7218,8 +7225,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  leaves nothing on disk to mislead. */
     private fun markLastAssistantStreaming() {
         val last = messages.lastOrNull() ?: return
-        if (last["isBot"] == true) last[MessageCompletionState.KEY_STATE] = MessageCompletionState.STREAMING
+        if (last["isBot"] == true) {
+            last[MessageCompletionState.KEY_STATE] = MessageCompletionState.STREAMING
+            // Freeze the producing model onto the reply the moment it begins, so
+            // a later model switch never relabels this turn (plan §4.1). Only a
+            // genuine streamed reply reaches here — error/image placeholders do
+            // not — so those correctly carry no model attribution.
+            val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
+            if (usedModel.isNotBlank()) last[ChatAdapter.KEY_MESSAGE_MODEL] = usedModel
+            // Reset the provider token capture for this fresh reply so a turn
+            // whose provider reports no usage does not inherit the previous
+            // turn's count.
+            pendingResponseTokens = null
+        }
     }
+
+    /** Provider-reported total tokens for the reply currently streaming, taken
+     *  from the usage-bearing final chunk (streamOptions.includeUsage). Null
+     *  until reported and null when the provider does not report usage, so the
+     *  display omits tokens rather than inventing a value. */
+    private var pendingResponseTokens: Int? = null
 
     /** Mark the last assistant reply as completed normally. The caller's
      *  existing completion saveSettings() persists it alongside the final text. */
@@ -7228,6 +7253,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             last.remove(MessageCompletionState.KEY_STATE_DETAIL)
+            // Stamp the provider-reported total tokens for this turn, when the
+            // provider reported them. Stored as a string like every other
+            // history key; absent when unreported.
+            pendingResponseTokens?.let { last[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
             // This chat just produced a successful reply, so its complete
             // model-and-companion snapshot may qualify for the next new chat.
             recordLastSuccessfulConfig()
@@ -7521,6 +7550,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             (choice?.text?.takeIf { it != "null" }?.length ?: 0),
                             v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
                         )
+                        v.usage?.totalTokens?.let { pendingResponseTokens = it }
                         if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
                             response += v.choices[0].text
                             messages[messages.size - 1]["message"] = response
@@ -8929,6 +8959,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
                     v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
                 )
+                v.usage?.totalTokens?.let { pendingResponseTokens = it }
                 choice?.delta?.toolCalls?.forEach { fragment ->
                     toolCallAssembler.accept(
                         fragment.index,

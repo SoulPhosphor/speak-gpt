@@ -27,6 +27,8 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.Paint
 import android.graphics.PorterDuff
@@ -57,6 +59,7 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.PopupWindow
 import android.widget.TextView
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -89,7 +92,9 @@ import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.DateFormat
 import java.text.NumberFormat
+import java.util.Date
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
@@ -197,6 +202,23 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // messages written before this feature; those fall back to the chat's
         // current companion name at display time.
         const val KEY_COMPANION_NAME = "companionName"
+
+        // Durable per-message attribution for the compact metadata line and the
+        // Message Details popup (chat-redesign-plan.md §4, §5). All stored as
+        // strings so they round-trip through the chat's generic Gson HashMap the
+        // same way every other persisted key does. Each is absent on messages
+        // written before this feature and on messages where the value was never
+        // reported; the display side omits whatever is absent rather than
+        // inventing a value.
+        //   KEY_MESSAGE_MODEL  — the model that produced this assistant reply,
+        //                        frozen when the reply began so a later model
+        //                        switch never relabels past turns.
+        //   KEY_MESSAGE_TOKENS — provider-reported total tokens for that turn.
+        //   KEY_MESSAGE_TIME   — epoch-millis timestamp of when the message was
+        //                        created (both roles).
+        const val KEY_MESSAGE_MODEL = "responseModel"
+        const val KEY_MESSAGE_TOKENS = "responseTokens"
+        const val KEY_MESSAGE_TIME = "messageTime"
 
         // Transient inline Creating Image row (plan §5 progress
         // experience): the visible status and Cancel action for a running
@@ -442,6 +464,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val btnRetry: ImageButton = itemView.findViewById(R.id.btn_retry)
         private val btnShare: ImageButton = itemView.findViewById(R.id.btn_share)
         private val btnSpeak: ImageButton = itemView.findViewById(R.id.btn_speak)
+        // Far-left Message Action on both layouts; opens the anchored Message
+        // Details popup (chat-redesign-plan.md §5). Always present.
+        private val btnDetails: ImageButton = itemView.findViewById(R.id.btn_details)
+        // Compact model/token line under the identity. Present only on the
+        // assistant layout (model/tokens are AI-side), so nullable.
+        private val messageMeta: TextView? = itemView.findViewById(R.id.message_meta)
         // Present only on the assistant layout (the user row has no completion
         // marker); nullable so the shared binder remains safe on both sides.
         private val statusMarker: TextView? = itemView.findViewById(R.id.status_marker)
@@ -477,6 +505,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateShareButton(chatMessage)
             updateSpeakButton(chatMessage, position)
             updateStatusMarker(chatMessage)
+            updateMessageMeta(chatMessage, isGeneratedImage)
+
+            btnDetails.setOnClickListener { anchor ->
+                if (!bulkActionMode) showMessageDetailsPopup(anchor, chatMessage)
+            }
 
             if (selectorProjection[position]["selected"].toString() == "true") {
                 ui.setBackgroundColor(getSurface3Color(context))
@@ -612,6 +645,130 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             tray.layoutParams = trayParams
             actionsRow.layoutParams = actionsParams
+        }
+
+        /**
+         * The compact metadata line beneath the identity (chat-redesign-plan.md
+         * §4.3). Present only on the assistant layout. Shows the producing model
+         * when Model Names is on, the provider token total when Token Usage is
+         * on, joined by a centered dot when both are present and both enabled.
+         * Anything not enabled or not stored on this turn is simply omitted; the
+         * whole line is GONE when nothing remains. Never invents a value.
+         */
+        private fun updateMessageMeta(chatMessage: HashMap<String, Any>, isGeneratedImage: Boolean) {
+            val meta = messageMeta ?: return
+
+            // Generated images are produced by the image service, not a chat
+            // model, and carry no chat token usage; their bubble owns its own
+            // presentation, so the compact line never appears there.
+            if (chatMessage["isBot"] != true || isGeneratedImage) {
+                meta.visibility = View.GONE
+                meta.text = ""
+                return
+            }
+
+            val parts = mutableListOf<String>()
+            if (preferences.getShowModelNames()) {
+                chatMessage[KEY_MESSAGE_MODEL]?.toString()?.takeIf { it.isNotBlank() }
+                    ?.let { parts.add(it) }
+            }
+            if (preferences.getShowTokenUsage()) {
+                tokenCountLabel(chatMessage)?.let { parts.add(it) }
+            }
+
+            if (parts.isEmpty()) {
+                meta.visibility = View.GONE
+                meta.text = ""
+            } else {
+                meta.text = parts.joinToString("  ·  ")
+                meta.visibility = View.VISIBLE
+            }
+        }
+
+        /** The provider token total for this turn, worded per the approved
+         *  format (e.g. "1,234 tokens"), or null when this turn stored no
+         *  usable count so the caller omits it. */
+        private fun tokenCountLabel(chatMessage: HashMap<String, Any>): String? {
+            val raw = chatMessage[KEY_MESSAGE_TOKENS]?.toString()?.takeIf { it.isNotBlank() }
+                ?: return null
+            val count = raw.toLongOrNull() ?: return null
+            val grouped = NumberFormat.getIntegerInstance(Locale.getDefault()).format(count)
+            return context.getString(R.string.chat_token_count, grouped)
+        }
+
+        /**
+         * The anchored Message Details popup (chat-redesign-plan.md §5). Always
+         * reachable regardless of the compact-display toggles. Shows only the
+         * fields stored for this message — date & time, and, for an assistant
+         * reply, the producing model and provider token total. Fields never
+         * recorded (older messages, or a turn the provider gave no usage for)
+         * are omitted; a message with nothing stored shows the empty line. Text
+         * is selectable. Outside tap or Back dismisses.
+         */
+        private fun showMessageDetailsPopup(anchor: View, chatMessage: HashMap<String, Any>) {
+            val content = LayoutInflater.from(context)
+                .inflate(R.layout.view_message_details_popup, null)
+
+            val isBot = chatMessage["isBot"] == true
+            var anyShown = false
+
+            val dateTime = chatMessage[KEY_MESSAGE_TIME]?.toString()?.toLongOrNull()?.let {
+                DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it))
+            }
+            anyShown = bindDetailRow(
+                content, R.id.details_row_datetime, R.id.details_value_datetime, dateTime
+            ) || anyShown
+
+            val model = if (isBot) {
+                chatMessage[KEY_MESSAGE_MODEL]?.toString()?.takeIf { it.isNotBlank() }
+            } else null
+            anyShown = bindDetailRow(
+                content, R.id.details_row_model, R.id.details_value_model, model
+            ) || anyShown
+
+            val tokens = if (isBot) tokenCountLabel(chatMessage) else null
+            anyShown = bindDetailRow(
+                content, R.id.details_row_tokens, R.id.details_value_tokens, tokens
+            ) || anyShown
+
+            content.findViewById<TextView>(R.id.details_empty).visibility =
+                if (anyShown) View.GONE else View.VISIBLE
+
+            val popup = PopupWindow(
+                content,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true
+            )
+            popup.isOutsideTouchable = true
+            // A non-null background is what makes outside-tap dismissal work.
+            popup.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            popup.elevation = anchor.resources.displayMetrics.density * 8f
+
+            // Anchor above the action so the popup rises from the action area and
+            // may overlap the chat content above it, per the plan.
+            content.measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            val yOffset = -(anchor.height + content.measuredHeight)
+            popup.showAsDropDown(anchor, 0, yOffset, Gravity.START)
+        }
+
+        /** Fills one detail row's value and shows the row, or hides it when the
+         *  value is absent. Returns whether the row is shown. */
+        private fun bindDetailRow(
+            content: View, rowId: Int, valueId: Int, value: String?
+        ): Boolean {
+            val row = content.findViewById<View>(rowId)
+            return if (value.isNullOrBlank()) {
+                row.visibility = View.GONE
+                false
+            } else {
+                content.findViewById<TextView>(valueId).text = value
+                row.visibility = View.VISIBLE
+                true
+            }
         }
 
         /**
@@ -984,6 +1141,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 message.setTextColor(foreground)
                 username.setTextColor(foreground)
                 bubbleName?.setTextColor(foreground)
+                applyMetaForeground(foreground)
                 tintActionIcons(foreground)
                 return
             }
@@ -1010,7 +1168,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             message.setTextColor(foreground)
             username.setTextColor(foreground)
             bubbleName?.setTextColor(foreground)
+            applyMetaForeground(foreground)
             tintActionIcons(foreground)
+        }
+
+        /** The compact metadata line follows the bubble's text color so it
+         *  contrasts on any theme, held at reduced opacity so it reads as
+         *  subordinate to the reply without a hardcoded muted color. */
+        private fun applyMetaForeground(foreground: Int) {
+            messageMeta?.setTextColor(foreground)
+            messageMeta?.alpha = 0.7f
         }
 
         /**
@@ -1021,6 +1188,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * updateSpeakButton, which owns its speaking-state color.
          */
         private fun tintActionIcons(foreground: Int) {
+            btnDetails.setColorFilter(foreground)
             btnShare.setColorFilter(foreground)
             btnRetry.setColorFilter(foreground)
             btnCopy.setColorFilter(foreground)
