@@ -305,7 +305,7 @@
     <string name="label_persona_none">No Companion</string>
     <string name="create_first_companion_message">Please create a new companion to begin a chat.</string>
     <string name="create_first_companion_button">Create Companion</string>
-    <string name="qs_companion_deleted_dialog_title">This chat needs a Companion. Select one to continue.</string>
+    <string name="qs_companion_deleted_dialog_title">This chat needs a companion. Select one to continue.</string>
     <string name="qs_companion_deleted_dropdown_placeholder">Select Companion</string>
     <string name="btn_attach">Attach</string>
     <string name="btn_discard_image">Discard image</string>
