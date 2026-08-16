@@ -81,6 +81,8 @@ import com.bumptech.glide.request.RequestOptions
 import com.bumptech.glide.request.target.Target
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
+import org.teslasoft.assistant.util.summarizer.SummarizerController
 import com.google.android.material.elevation.SurfaceColors
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.Markwon
@@ -2183,20 +2185,95 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnImageCopy.visibility = View.GONE
         }
 
+        /**
+         * The generated-image prompt box. The Image Prompt stays read-only;
+         * the Summarized Image Text is the short reminder the model receives
+         * each turn and becomes editable only through Edit. Saving an edit
+         * persists it on the message's record and is what the model receives
+         * from then on (owner request, Aug 16 2026).
+         */
         private fun showGeneratedImagePrompt(chatMessage: HashMap<String, Any>) {
-            val prompt = GeneratedImageMetadata
+            val metadata = GeneratedImageMetadata
                 .fromJson(chatMessage[GeneratedImageMetadata.KEY]?.toString())
-                ?.prompt
-                ?.takeIf { it.isNotBlank() }
-                ?: context.getString(R.string.image_gen_prompt_unavailable)
             val view = LayoutInflater.from(context)
                 .inflate(R.layout.dialog_generated_image_prompt, null, false)
-            view.findViewById<TextView>(R.id.prompt_dialog_text).text = prompt
+
+            val promptText = view.findViewById<TextView>(R.id.prompt_dialog_text)
+            val summaryTitle = view.findViewById<TextView>(R.id.summary_dialog_title)
+            val summaryText = view.findViewById<TextView>(R.id.summary_dialog_text)
+            val summaryField = view.findViewById<TextInputEditText>(R.id.summary_dialog_field)
+            val btnEdit = view.findViewById<MaterialButton>(R.id.btn_prompt_summary_edit)
+            val btnSave = view.findViewById<MaterialButton>(R.id.btn_prompt_summary_save)
+            val btnCancel = view.findViewById<MaterialButton>(R.id.btn_prompt_summary_cancel)
+
+            promptText.text = metadata?.prompt?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.image_gen_prompt_unavailable)
+
             val dialog = MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)
                 .setView(view)
                 .create()
             view.findViewById<ImageButton>(R.id.btn_prompt_close)
                 .setOnClickListener { dialog.dismiss() }
+
+            // A legacy image (no stored record) has nothing to summarize or
+            // persist to: show only the read-only prompt.
+            if (metadata == null) {
+                summaryTitle.visibility = View.GONE
+                summaryText.visibility = View.GONE
+                summaryField.visibility = View.GONE
+                btnEdit.visibility = View.GONE
+                dialog.show()
+                return
+            }
+
+            val effective = metadata.effectiveSummary()
+            val summaryConfigured = SummarizerController.isConfigured(context)
+
+            fun renderViewMode() {
+                summaryText.text = when {
+                    effective != null -> effective
+                    summaryConfigured -> context.getString(R.string.image_gen_summary_summarizing)
+                    else -> context.getString(R.string.image_gen_summary_no_summarizer)
+                }
+                summaryText.visibility = View.VISIBLE
+                summaryField.visibility = View.GONE
+                btnEdit.visibility = View.VISIBLE
+                btnSave.visibility = View.GONE
+                btnCancel.visibility = View.GONE
+            }
+
+            btnEdit.setOnClickListener {
+                // Only the summarizer's version is editable; the field starts
+                // from any existing summary, or empty so the user writes one.
+                summaryField.setText(effective ?: "")
+                summaryText.visibility = View.GONE
+                summaryField.visibility = View.VISIBLE
+                summaryField.requestFocus()
+                btnEdit.visibility = View.GONE
+                btnSave.visibility = View.VISIBLE
+                btnCancel.visibility = View.VISIBLE
+            }
+
+            btnCancel.setOnClickListener { renderViewMode() }
+
+            btnSave.setOnClickListener {
+                val edited = summaryField.text?.toString()?.trim().orEmpty().ifBlank { null }
+                listener?.onImageSummaryEdited(bindingAdapterPosition, edited)
+                summaryText.text = edited
+                    ?: metadata.imageSummary?.takeIf { it.isNotBlank() }
+                    ?: if (summaryConfigured) {
+                        context.getString(R.string.image_gen_summary_summarizing)
+                    } else {
+                        context.getString(R.string.image_gen_summary_no_summarizer)
+                    }
+                summaryText.visibility = View.VISIBLE
+                summaryField.visibility = View.GONE
+                btnEdit.visibility = View.VISIBLE
+                btnSave.visibility = View.GONE
+                btnCancel.visibility = View.GONE
+            }
+
+            renderViewMode()
             dialog.show()
         }
 
@@ -2323,5 +2400,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /** The downward-arrow action below a generated image. The host owns
          *  the document launcher so Android can return the selected save URI. */
         fun onGeneratedImageSaveClick(dataUrl: String, mimeType: String)
+
+        /** The user saved an edit to a generated image's summary in the prompt
+         *  box. [editedSummary] is null when the field was cleared. The host
+         *  stores it on the message's record and sends it to the model instead
+         *  of the full prompt from then on. */
+        fun onImageSummaryEdited(position: Int, editedSummary: String?)
     }
 }

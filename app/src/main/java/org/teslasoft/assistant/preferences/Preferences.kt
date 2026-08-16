@@ -2468,6 +2468,16 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalString("summarizer_slot_recency", csv)
     }
 
+    /** The single Image Summary Prompt (global). "" = never written; the call
+     *  site then reads the shipped SummarizerPrompts.IMAGE_SUMMARY default so a
+     *  summary can never run on empty instructions. */
+    fun getImageSummaryPrompt(): String =
+        getGlobalString("image_summary_prompt", "")
+
+    fun setImageSummaryPrompt(prompt: String) {
+        putGlobalString("image_summary_prompt", prompt)
+    }
+
     /** Per-chat Use Summarizer state: "" = never stamped, else "true"/"false".
      *  Stamped once per chat (see ChatActivity) so flipping the new-chats
      *  default later never silently changes what an existing chat sends. */

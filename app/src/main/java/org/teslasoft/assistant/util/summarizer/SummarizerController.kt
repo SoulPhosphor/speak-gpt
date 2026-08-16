@@ -191,6 +191,70 @@ class SummarizerController(
         }
     }
 
+    /**
+     * One-shot image-prompt summary (owner request, Aug 16 2026). Sends the
+     * single [imagePrompt] to the configured Summary Model under the Image
+     * Summary Prompt and returns the model's short version, or null when the
+     * summarizer is not configured or the call fails. Deliberately silent: an
+     * image summary is a token-saving convenience, so a failure never writes a
+     * Summarizer Error, never interrupts chat, and simply leaves the caller to
+     * fall back to the full prompt and try again on a later turn.
+     */
+    suspend fun summarizeImagePrompt(imagePrompt: String): String? {
+        if (imagePrompt.isBlank()) return null
+        val prefs = Preferences.getPreferences(appContext, "")
+
+        val endpointId = prefs.getSummarizerEndpointId()
+        if (endpointId.isBlank()) return null
+        val endpoint = try {
+            ApiEndpointPreferences.getApiEndpointPreferences(appContext)
+                .getApiEndpoint(appContext, endpointId)
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        val model = prefs.getSummarizerModel()
+        if (endpoint.host.isBlank() || model.isBlank()) return null
+
+        val routingMode = prefs.getSummarizerRoutingType()
+        val savedFavorite = FavoriteModelsPreferences.getPreferences(appContext)
+            .getFavorite(model, endpointId)
+        if (endpoint.isOpenRouterRouting() &&
+            DedicatedModelRoutingPolicy.needsSetup(routingMode, savedFavorite)
+        ) {
+            return null
+        }
+        val requestFavorite = if (endpoint.isOpenRouterRouting()) {
+            DedicatedModelRoutingPolicy.favoriteForRequest(
+                model, endpointId, routingMode, savedFavorite
+            )
+        } else {
+            null
+        }
+        val routingResolution = ProviderRoutingResolver.resolve(
+            endpoint.isOpenRouterRouting(), requestFavorite
+        )
+        if (routingResolution.block != RoutingBlock.NONE) return null
+
+        val instruction = prefs.getImageSummaryPrompt().ifBlank { SummarizerPrompts.IMAGE_SUMMARY }
+        val body = SummarizerPrompts.imageSummaryRequestBody(instruction, imagePrompt)
+        return try {
+            withContext(Dispatchers.IO) {
+                val client = buildClient(endpoint, routingResolution.providerJson)
+                val request = ChatCompletionRequest(
+                    model = ModelId(model),
+                    maxTokens = 200,
+                    messages = listOf(ChatMessage(role = ChatRole.User, content = body))
+                )
+                client.chatCompletion(request)
+                    .choices.firstOrNull()?.message?.content?.toString().orEmpty()
+            }.trim().ifBlank { null }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /** @return true when a batch was folded and committed (keep looping). */
     private suspend fun foldOneBatch(force: Boolean, snapshotProvider: () -> Snapshot?): Boolean {
         val snapshot = snapshotProvider() ?: return false

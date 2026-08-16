@@ -363,6 +363,31 @@ The image should not automatically be sent back to the conversation model on
 every future turn. That would create avoidable vision-token cost. The stored
 prompt and description can preserve text-level conversational continuity.
 
+#### Superseded by the image-prompt summarization work (owner request, Aug 16 2026)
+
+Two earlier decisions in this plan are superseded by the owner's image-prompt
+summarization request:
+
+1. **The prompt box is no longer purely read-only.** The Image Prompt itself
+   stays immutable (its provenance value is unchanged), but the dialog now also
+   shows a **Summarized Image Text** section. That short summary is editable
+   through an Edit button, with Save/Cancel, so the user can revise only the
+   summary without touching the original prompt.
+
+2. **A completed image now contributes a text reminder to the model each
+   turn.** Instead of the meaningless file marker, the model receives a short
+   sentence at that point in the conversation — "You generated an image for the
+   user: …" for a model-created image, "User generated image: …" for an
+   `/imagine` image. When a Summary Model is configured, the token-saving
+   summary (or the user's edit) is sent; otherwise the full prompt is sent.
+   This is text only — no image bytes are re-sent, so the vision-token concern
+   above still holds.
+
+The token-saving summary is produced by the existing Summarizer's Summary
+Model under a single, editable **Image Summary Prompt** in Summarizer Settings.
+A failed or not-yet-made summary is silent: the full prompt is sent meanwhile
+and the app retries on later turns.
+
 ### Shared styles and theme compatibility are mandatory
 
 The app's current and future theming depends entirely on the shared style

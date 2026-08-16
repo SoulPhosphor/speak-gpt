@@ -1220,6 +1220,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // removed, defaults changed) — re-resolve the icons and badge.
         if (chatStartupComplete && chatId != "") refreshSummarizerIcons()
 
+        // Catch images that finished while the screen was detached, and retry
+        // any summary that failed earlier — silently, without touching chat.
+        if (chatStartupComplete && chatId != "") ensureImageSummaries()
+
         // A2 banner refresh: a repair finished (banner clears) or a database
         // was flagged while we were away (banner appears). No audio cue here —
         // the screen is visible on resume; the cue belongs to the mid-session
@@ -3990,6 +3994,58 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
     }
 
+    /** Image ids whose summary call is in flight, so a repeat pass (each
+     *  turn, each resume) never starts a second call for the same image. */
+    private val imageSummaryInFlight = HashSet<String>()
+
+    /**
+     * Give every completed generated image a token-saving summary, silently.
+     * Independent of the conversation-summarizer toggle: whenever a Summary
+     * Model is configured, each image whose prompt has no summary and no user
+     * edit yet is summarized once. A failure is quiet — the image keeps
+     * sending its full prompt and the next turn or resume tries again (owner
+     * request, Aug 16 2026).
+     */
+    private fun ensureImageSummaries() {
+        val controller = summarizerController ?: return
+        if (!org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this)) return
+        val targets = messages.mapNotNull { msg ->
+            if (msg["isBot"] != true) return@mapNotNull null
+            val meta = GeneratedImageMetadata.fromJson(msg[GeneratedImageMetadata.KEY]?.toString())
+                ?: return@mapNotNull null
+            if (meta.status != GeneratedImageMetadata.STATUS_COMPLETE) return@mapNotNull null
+            if (meta.prompt.isBlank()) return@mapNotNull null
+            if (meta.effectiveSummary() != null) return@mapNotNull null
+            if (meta.imageId in imageSummaryInFlight) return@mapNotNull null
+            meta
+        }
+        for (meta in targets) {
+            imageSummaryInFlight.add(meta.imageId)
+            lifecycleScope.launch {
+                val summary = controller.summarizeImagePrompt(meta.prompt)
+                imageSummaryInFlight.remove(meta.imageId)
+                if (!summary.isNullOrBlank()) applyImageSummary(meta.imageId, summary)
+            }
+        }
+    }
+
+    /** Store a freshly made image summary on its message, unless a user edit
+     *  or another summary landed meanwhile, then refresh the row and the
+     *  model projection. */
+    private fun applyImageSummary(imageId: String, summary: String) {
+        val index = messages.indexOfFirst {
+            GeneratedImageMetadata.fromJson(it[GeneratedImageMetadata.KEY]?.toString())?.imageId == imageId
+        }
+        if (index < 0) return
+        val meta = GeneratedImageMetadata.fromJson(messages[index][GeneratedImageMetadata.KEY]?.toString())
+            ?: return
+        if (meta.effectiveSummary() != null) return
+        messages[index][GeneratedImageMetadata.KEY] = meta.withImageSummary(summary).toJson()
+        saveSettings()
+        rebuildModelProjection()
+        adapter?.notifyItemChanged(index)
+    }
+
     /** Runs a fold-in cycle when the summarizer is on for this chat. [force]
      *  (Update Now) also folds the final partial batch; automatic cycles
      *  wait for a full batch so provider prompt caching keeps applying. */
@@ -4222,6 +4278,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             fileSaveIntentLauncher.launch(intent)
         }
+    }
+
+    /** The user saved an edited image summary in the prompt box. Store it on
+     *  the message's record so it becomes both what the box shows and what the
+     *  model receives instead of the full prompt. */
+    override fun onImageSummaryEdited(position: Int, editedSummary: String?) {
+        if (position < 0 || position >= messages.size) return
+        val meta = GeneratedImageMetadata.fromJson(
+            messages[position][GeneratedImageMetadata.KEY]?.toString()
+        ) ?: return
+        messages[position][GeneratedImageMetadata.KEY] =
+            meta.withSummaryEdited(editedSummary).toJson()
+        saveSettings()
+        rebuildModelProjection()
+        adapter?.notifyItemChanged(position)
     }
 
     private fun writeToFile(uri: Uri) {
@@ -5884,6 +5955,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 scroll(true)
                 scroll(false)
                 saveSettings()
+                // Make the token-saving summary right after the image finishes
+                // (owner request, Aug 16 2026); silent, so chat is not disturbed.
+                ensureImageSummaries()
                 ChatPreferences.getChatPreferences()
                     .putTimestampToChatById(this, chatId)
                 if (fromImagine) {
@@ -7442,6 +7516,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun modelFacingContent(message: HashMap<String, Any>): String {
         val content = message["message"].toString()
         if (message["isBot"] == true) {
+            // A completed generated image is stored to the model as a file
+            // marker, which means nothing to the model. Replace it with a plain
+            // sentence saying an image exists here and who made it, using the
+            // token-saving summary when one exists (owner request, Aug 16 2026).
+            val meta = GeneratedImageMetadata.fromJson(message[GeneratedImageMetadata.KEY]?.toString())
+            if (meta != null && meta.status == GeneratedImageMetadata.STATUS_COMPLETE) {
+                return imageInjectionSentence(meta)
+            }
+            if (meta == null && content.trimStart().startsWith("~file:")) {
+                return getString(R.string.image_gen_injection_legacy)
+            }
             if (content.isNotBlank() && MessageCompletionState.isIncomplete(
                     message[MessageCompletionState.KEY_STATE]?.toString())) {
                 return content + "\n\n" + getString(R.string.message_incomplete_model_note)
@@ -7452,6 +7537,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             typedText = content,
             includesJson = message[INCLUDES_KEY]?.toString()
         )
+    }
+
+    /** The reminder a completed generated image contributes to the model each
+     *  turn: the token-saving summary (user edit, else summarizer version) or
+     *  the full prompt when no summary exists yet, prefixed by who made it. */
+    private fun imageInjectionSentence(meta: GeneratedImageMetadata): String {
+        val text = meta.effectiveSummary() ?: meta.prompt
+        if (text.isBlank()) return getString(R.string.image_gen_injection_legacy)
+        val res = if (meta.initiatedByUser()) {
+            R.string.image_gen_injection_user
+        } else {
+            R.string.image_gen_injection_model
+        }
+        return getString(res, text)
     }
 
     private suspend fun resolveImagePartsForSend(
@@ -7560,6 +7659,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // A fresh generation: any user-stop flag left from a previous turn is
         // cleared, so only a Stop during THIS generation counts as a user stop.
         userRequestedStop = false
+
+        // Silent retry point: any completed image still missing its summary
+        // gets one before this turn's history is projected to the model.
+        ensureImageSummaries()
 
         // Clear any provider error captured on a previous turn before this one
         // makes its request, so a failure never shows a stale provider.

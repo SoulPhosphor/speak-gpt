@@ -88,6 +88,8 @@ class SummarizerSettingsActivity : FragmentActivity() {
     private var fieldPrompt: TextInputEditText? = null
     private var btnRevertPrompt: MaterialButton? = null
     private var btnSavePrompt: MaterialButton? = null
+    private var fieldImageSummaryPrompt: TextInputEditText? = null
+    private var btnSaveImageSummaryPrompt: MaterialButton? = null
 
     private var suppressWatchers = false
     private var selectedSlot = 0
@@ -167,6 +169,8 @@ class SummarizerSettingsActivity : FragmentActivity() {
         fieldPrompt = findViewById(R.id.field_prompt)
         btnRevertPrompt = findViewById(R.id.btn_revert_prompt)
         btnSavePrompt = findViewById(R.id.btn_save_prompt)
+        fieldImageSummaryPrompt = findViewById(R.id.field_image_summary_prompt)
+        btnSaveImageSummaryPrompt = findViewById(R.id.btn_save_image_summary_prompt)
     }
 
     private fun applyTheme() {
@@ -229,6 +233,18 @@ class SummarizerSettingsActivity : FragmentActivity() {
         btnRenameSlot?.setOnClickListener { showRenameDialog() }
         btnRevertPrompt?.setOnClickListener { onRevertPressed() }
         btnSavePrompt?.setOnClickListener { savePrompt() }
+
+        // Image Summary Prompt: a single global prompt, blank showing the
+        // shipped default, saved only through its own Save button.
+        fieldImageSummaryPrompt?.setText(
+            preferences?.getImageSummaryPrompt().orEmpty()
+                .ifBlank { SummarizerPrompts.IMAGE_SUMMARY }
+        )
+        btnSaveImageSummaryPrompt?.setOnClickListener {
+            preferences?.setImageSummaryPrompt(
+                fieldImageSummaryPrompt?.text?.toString().orEmpty()
+            )
+        }
     }
 
     /* ------------------------------ Summary Model ------------------------------ */

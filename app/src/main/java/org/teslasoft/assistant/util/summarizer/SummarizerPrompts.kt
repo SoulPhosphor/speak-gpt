@@ -65,6 +65,25 @@ Do not preserve conversational flow, emotional narration, repeated explanations,
 Use brief bullet points, with one fact per bullet. Keep the complete list under {length} words. Reply only with the updated list.
     """.trimIndent()
 
+    /**
+     * The shipped Image Summary Prompt (owner-authored, Aug 16 2026). Sent to
+     * the Summary Model with a single image prompt so the model receives a
+     * short reminder of the image each turn instead of the full prompt. Unlike
+     * the conversation prompts there is only one, and it has no rolling summary
+     * to fold into — just the one image prompt to condense.
+     */
+    val IMAGE_SUMMARY =
+        "Summarize the important content of this image prompt in 1–2 sentences. " +
+            "Preserve specific details that may matter later, and do not speculate " +
+            "beyond what is visible."
+
+    /**
+     * The complete user-message body of one image-prompt summary call: the
+     * instruction followed by the image prompt under a plain label.
+     */
+    fun imageSummaryRequestBody(instruction: String, imagePrompt: String): String =
+        instruction + "\n\nImage prompt:\n" + imagePrompt
+
     /** The shipped prompt text for a slot, or empty for slots three to five. */
     fun shippedPrompt(slot: Int): String = when (slot) {
         0 -> STORYTELLER

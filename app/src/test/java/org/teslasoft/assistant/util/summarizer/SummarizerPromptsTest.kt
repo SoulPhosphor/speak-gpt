@@ -60,4 +60,21 @@ class SummarizerPromptsTest {
         val body = SummarizerPrompts.foldInRequestBody("PROMPT", "", listOf(Pair("User", "Hi")))
         assertTrue(body.contains("None yet."))
     }
+
+    @Test
+    fun theImageSummaryPromptShipsWithInstructions() {
+        assertTrue(SummarizerPrompts.IMAGE_SUMMARY.isNotBlank())
+        assertTrue(SummarizerPrompts.IMAGE_SUMMARY.contains("1–2 sentences"))
+    }
+
+    @Test
+    fun imageSummaryBodyCarriesTheInstructionAndThePrompt() {
+        val body = SummarizerPrompts.imageSummaryRequestBody(
+            instruction = "INSTRUCTION",
+            imagePrompt = "a fox beneath glowing mushrooms"
+        )
+        assertTrue(body.startsWith("INSTRUCTION"))
+        assertTrue(body.contains("Image prompt:"))
+        assertTrue(body.contains("a fox beneath glowing mushrooms"))
+    }
 }

@@ -17,7 +17,9 @@
 package org.teslasoft.assistant.imagegen
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -120,6 +122,56 @@ class GeneratedImageMetadataTest {
             )
         )
         assertNull(GeneratedImageMetadata.referencedFileHash(mapOf("isBot" to true)))
+    }
+
+    // --- image summary fields (owner request, Aug 16 2026) ---
+
+    @Test
+    fun imageSummaryAndUserEditSurviveARoundTrip() {
+        val restored = GeneratedImageMetadata.fromJson(
+            completeRecord()
+                .withImageSummary("A lighthouse glows over dark water at dusk.")
+                .withSummaryEdited("A calm dusk lighthouse scene.")
+                .toJson()
+        )!!
+        assertEquals("A lighthouse glows over dark water at dusk.", restored.imageSummary)
+        assertEquals("A calm dusk lighthouse scene.", restored.summaryEdited)
+    }
+
+    @Test
+    fun absentSummaryFieldsStayNull() {
+        val restored = GeneratedImageMetadata.fromJson(completeRecord().toJson())!!
+        assertNull(restored.imageSummary)
+        assertNull(restored.summaryEdited)
+    }
+
+    @Test
+    fun effectiveSummaryPrefersTheUserEditThenTheSummarizerVersion() {
+        val base = completeRecord()
+        assertNull(base.effectiveSummary())
+        assertEquals("s", base.withImageSummary("s").effectiveSummary())
+        assertEquals(
+            "e",
+            base.withImageSummary("s").withSummaryEdited("e").effectiveSummary()
+        )
+        // A cleared edit falls back to the summarizer version, never blank.
+        assertEquals(
+            "s",
+            base.withImageSummary("s").withSummaryEdited("  ").effectiveSummary()
+        )
+    }
+
+    @Test
+    fun initiatorComesFromWhetherADescriptionWasSupplied() {
+        // The create_image tool always supplies a description; /imagine never.
+        assertFalse(completeRecord().initiatedByUser())
+        assertTrue(completeRecord().let {
+            GeneratedImageMetadata(
+                it.imageId, it.fileHash, it.mimeType, it.width, it.height,
+                it.endpointId, it.modelId, it.prompt, description = null,
+                createdAt = it.createdAt, status = it.status, failureCode = null
+            )
+        }.initiatedByUser())
     }
 
     @Test

@@ -644,6 +644,20 @@
     <string name="image_gen_prompt_title">Image Prompt</string>
     <string name="image_gen_prompt_action">Prompt</string>
     <string name="image_gen_prompt_unavailable">The prompt is unavailable for this older image.</string>
+    <string name="image_gen_summary_title">Summarized Image Text</string>
+    <string name="image_gen_summary_summarizing">Summarizing…</string>
+    <string name="image_gen_summary_no_summarizer">No Summarizer AI Model was set up. Complete image prompt is being sent to the model as a reminder of what it generated. Editing this will create a new image summary that will be sent to the AI each turn.</string>
+    <string name="image_gen_summary_edit">Edit</string>
+    <string name="image_gen_summary_edit_hint">Write a short summary to send to the AI each turn instead of the full prompt.</string>
+    <!-- Model-facing reminders injected in place of the stored image file
+         marker, so the conversation model knows an image exists at that point
+         and who created it. %1$s is the summary (or the full prompt when no
+         summary has been made). -->
+    <string name="image_gen_injection_model">You generated an image for the user: %1$s</string>
+    <string name="image_gen_injection_user">User generated image: %1$s</string>
+    <!-- Older images created before summaries existed carry no stored prompt;
+         the model is still told an image is here, without a fabricated who. -->
+    <string name="image_gen_injection_legacy">An image was generated at this point in the conversation.</string>
     <string name="image_gen_save_action">Save Image</string>
     <string name="image_gen_save_failed">The image could not be prepared for saving.</string>
     <string name="provider_function_image_generation">Image Generation</string>
@@ -3070,7 +3084,7 @@
          ================================================================== -->
     <string name="title_summarizer_settings">Summarizer Settings</string>
     <string name="tile_summarizer_settings_subtitle">Settings related to the summarizer feature.</string>
-    <string name="summarizer_intro">The summarizer sends the specified number of messages to the model each turn. Anything beyond that amount is summarized using the AI model selected in these settings. At any time, the summarizer can be turned off in Quick settings, which will allow all messages to be sent to the AI again.</string>
+    <string name="summarizer_intro">The summarizer sends the specified number of messages to the model each turn. Anything beyond that amount is summarized using the AI model selected in these settings. At any time, the summarizer can be turned off in Quick settings, which will allow all messages to be sent to the AI again.\n\nThe Summarizer also creates a summarized version of image prompts to save on tokens.</string>
 
     <string name="summarizer_section_model">Summary Model</string>
     <string name="summarizer_row_endpoint">Summarizer Endpoint</string>
@@ -3097,6 +3111,8 @@
     <string name="summarizer_revert_prompt">Revert</string>
     <string name="summarizer_revert_prompt_confirm">Revert to the shipped prompt?</string>
     <string name="summarizer_empty_prompt_guard">Model summary prompts can\'t be empty. Last good prompt has been selected.</string>
+    <string name="summarizer_section_image_prompt">Image Summary Prompt</string>
+    <string name="summarizer_section_image_prompt_hint">This single prompt tells the Summarizer Model how to shorten an image prompt. The short version is what the AI receives each turn as a reminder of the image, instead of the full prompt.</string>
 
     <!-- Quick Settings (decision 3): toggle and number box, no hints. -->
     <string name="summarizer_use_toggle">Use Summarizer</string>

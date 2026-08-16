@@ -52,8 +52,44 @@ class GeneratedImageMetadata(
      *  [STATUS_CANCELLED]. */
     val status: String,
     /** Sanitized failure code (an [ImageErrorCause] name) when applicable. */
-    val failureCode: String?
+    val failureCode: String?,
+    /** The Summarizer's short version of [prompt], used as the model-facing
+     *  reminder to save tokens. Null until a summarizer has produced one (or
+     *  none is configured). */
+    val imageSummary: String? = null,
+    /** The user's edited image summary from the prompt box. When present it
+     *  overrides [imageSummary] both in the box and in the text sent to the
+     *  model. Null unless the user has saved an edit. */
+    val summaryEdited: String? = null
 ) {
+
+    /** True when this image was produced by the user's `/imagine` command
+     *  rather than a model tool call. The `create_image` tool always supplies
+     *  a non-blank description; `/imagine` never does (see [description]), so
+     *  the presence of a description is the stored who-made-it signal. */
+    fun initiatedByUser(): Boolean = description.isNullOrBlank()
+
+    /** The image summary the model should receive, and the box should show:
+     *  the user's edit, else the summarizer's version, else null when neither
+     *  exists (caller falls back to the full prompt). */
+    fun effectiveSummary(): String? =
+        summaryEdited?.takeIf { it.isNotBlank() }
+            ?: imageSummary?.takeIf { it.isNotBlank() }
+
+    fun withImageSummary(summary: String?): GeneratedImageMetadata =
+        copyWith(imageSummary = summary)
+
+    fun withSummaryEdited(edited: String?): GeneratedImageMetadata =
+        copyWith(summaryEdited = edited)
+
+    private fun copyWith(
+        imageSummary: String? = this.imageSummary,
+        summaryEdited: String? = this.summaryEdited
+    ): GeneratedImageMetadata = GeneratedImageMetadata(
+        imageId, fileHash, mimeType, width, height, endpointId, modelId,
+        prompt, description, createdAt, status, failureCode,
+        imageSummary, summaryEdited
+    )
 
     fun toJson(): String {
         val json = JSONObject()
@@ -69,6 +105,8 @@ class GeneratedImageMetadata(
         json.put("createdAt", createdAt)
         json.put("status", status)
         if (failureCode != null) json.put("failureCode", failureCode)
+        if (imageSummary != null) json.put("imageSummary", imageSummary)
+        if (summaryEdited != null) json.put("summaryEdited", summaryEdited)
         return json.toString()
     }
 
@@ -102,7 +140,9 @@ class GeneratedImageMetadata(
                     description = json.optString("description").ifBlank { null },
                     createdAt = json.optLong("createdAt"),
                     status = json.optString("status"),
-                    failureCode = json.optString("failureCode").ifBlank { null }
+                    failureCode = json.optString("failureCode").ifBlank { null },
+                    imageSummary = json.optString("imageSummary").ifBlank { null },
+                    summaryEdited = json.optString("summaryEdited").ifBlank { null }
                 )
             } catch (_: Exception) {
                 null
