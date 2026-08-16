@@ -3180,6 +3180,14 @@
     <string name="version_nav_prev">Previous Response Version</string>
     <string name="version_nav_next">Next Response Version</string>
     <string name="version_nav_count">%1$d / %2$d</string>
+    <!-- Branch/truncate confirmation dialogs shown when editing or regenerating
+         an earlier message would discard the messages that follow it. -->
+    <string name="branch_edit_title">Edit Response?</string>
+    <string name="branch_edit_body">Editing this message will start a new branch from here. All messages after this point will be permanently lost.</string>
+    <string name="branch_edit_confirm">Edit and Clear</string>
+    <string name="branch_regenerate_title">Regenerate Response?</string>
+    <string name="branch_regenerate_body">Generating a new response here will discard all subsequent messages in this thread.</string>
+    <string name="branch_regenerate_confirm">Regenerate</string>
     <string name="appearance_hardware_keyboard_shortcuts">Hardware Keyboard Shortcuts</string>
     <string name="appearance_hardware_keyboard_shortcuts_hint">Press Enter to send and Shift+Enter for a new line.</string>
     <string name="appearance_section_name_style">Name Style</string>

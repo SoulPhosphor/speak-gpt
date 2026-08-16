@@ -9612,6 +9612,70 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         parseMessage(message["message"].toString(), false)
     }
 
+    override fun onRegenerate(position: Int) {
+        if (position < 0 || position >= messages.size) return
+        if (messages[position]["isBot"] != true) return
+
+        // The latest turn just adds a version (Stage 1) — nothing follows it, so
+        // there is nothing to discard and no warning is needed.
+        if (position == messages.size - 1) {
+            onRetryClick()
+            return
+        }
+
+        // An earlier turn: regenerating here discards everything after it, so
+        // confirm the branch first (owner spec, Aug 16 2026, exact wording).
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.branch_regenerate_title)
+            .setMessage(R.string.branch_regenerate_body)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.branch_regenerate_confirm) { _, _ ->
+                // Record-only truncation (files preserved), then the turn at
+                // this position is the last one, so the normal regenerate path
+                // applies and keeps this turn's version history.
+                truncateAfter(position)
+                onRetryClick()
+            }
+            .show()
+    }
+
+    override fun onBranchEditRequested(prompt: String, position: Int) {
+        if (position < 0 || position >= messages.size) return
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.branch_edit_title)
+            .setMessage(R.string.branch_edit_body)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.branch_edit_confirm) { _, _ ->
+                // Apply the edit (attachments on this message are kept), then
+                // discard the messages after it. Record-only — the underlying
+                // image/attachment files are never deleted here.
+                adapter?.applyConfirmedEdit(position, prompt)
+                truncateAfter(position)
+            }
+            .show()
+    }
+
+    /**
+     * Remove every message after [index] from the visible thread and the
+     * model-facing projection, and persist the shortened history. Record-only,
+     * by owner spec (Aug 16 2026): a truncated message that referenced a
+     * generated image or an uploaded attachment loses only that reference — the
+     * stored file keeps its independent lifetime and is never deleted here.
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    private fun truncateAfter(index: Int) {
+        if (index < 0 || index >= messages.size - 1) return
+        while (messages.size > index + 1) {
+            messages.removeAt(messages.size - 1)
+        }
+        // Rebuild the projections to the shortened thread before rebinding so
+        // the adapter never reads a selection slot that no longer exists.
+        syncChatProjection()
+        adapter?.notifyDataSetChanged()
+        saveSettings()
+    }
+
     /**
      * If the latest assistant turn is being viewed at a version other than its
      * canonical one, make the displayed version canonical so the conversation

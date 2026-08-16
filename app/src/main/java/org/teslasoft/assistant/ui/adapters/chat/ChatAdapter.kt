@@ -1313,12 +1313,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun updateRetryButton(chatMessage: HashMap<String, Any>, position: Int) {
-            if (dataArray.isNotEmpty() && position == dataArray.size - 1 && chatMessage["isBot"] == true) {
+            // Regenerate is offered on every assistant text reply now, not only
+            // the last one, so earlier turns can be regenerated too (owner spec,
+            // Aug 16 2026). Generated-image replies keep their original
+            // last-only affordance — they are produced by the image flow, not by
+            // text regeneration, and their presentation is out of scope.
+            val isBot = chatMessage["isBot"] == true
+            val isImage = chatMessage["message"].toString().startsWith("~file:")
+            val isLast = position == dataArray.size - 1
+            if (isBot && (!isImage || isLast)) {
                 btnRetry.visibility = View.VISIBLE
-
                 btnRetry.setOnClickListener {
                     if (!bulkActionMode) {
-                        listener?.onRetryClick()
+                        val pos = bindingAdapterPosition
+                        listener?.onRegenerate(if (pos != RecyclerView.NO_POSITION) pos else position)
                     }
                 }
             } else {
@@ -2204,7 +2212,34 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // Mirror onDelete's guard: a stale dialog position (the list changed
         // while the edit dialog was open) must not index past the array.
         if (position < 0 || position >= dataArray.size) return
+        // Editing a message that still has later messages branches the thread:
+        // hand off to the host to confirm ("Edit and Clear") and truncate. An
+        // edit to the last message keeps the original in-place behavior.
+        if (position < dataArray.size - 1) {
+            listener?.onBranchEditRequested(prompt, position)
+            return
+        }
+        applyConfirmedEdit(position, prompt)
+    }
+
+    /** Apply an edit to the message at [position] in place. Used both for an
+     *  edit of the last message and, after the host's branch confirmation, for
+     *  an earlier message just before its later messages are truncated. Only
+     *  the text changes; the message keeps its attachments. */
+    fun applyConfirmedEdit(position: Int, prompt: String) {
+        if (position < 0 || position >= dataArray.size) return
         editMessage(position, prompt)
+        // If this turn carries regenerated versions, keep the canonical
+        // version's stored text in step with the edit so paging back to it
+        // shows the edited text, not the pre-edit one.
+        val message = dataArray[position]
+        val variants = parseVariants(message[KEY_VARIANTS]?.toString())
+        if (variants.size >= 2) {
+            val canonical = (message[KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull()
+                ?: (variants.size - 1)).coerceIn(0, variants.size - 1)
+            variants[canonical]["message"] = prompt
+            message[KEY_VARIANTS] = variantsToJson(variants)
+        }
         notifyItemChanged(position)
 
         if (chatId !== "") {
@@ -2235,6 +2270,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
     interface OnUpdateListener {
         fun onRetryClick()
+
+        /** Regenerate the assistant turn at [position]. On the latest turn this
+         *  just adds a version; on an earlier turn the host confirms the branch
+         *  and truncates the messages after it first (owner spec, Aug 16 2026). */
+        fun onRegenerate(position: Int)
+
+        /** Editing the message at [position] would discard the messages after
+         *  it. The host confirms the branch, then applies the edit and
+         *  truncates via [ChatAdapter.applyConfirmedEdit]. */
+        fun onBranchEditRequested(prompt: String, position: Int)
+
         fun onMessageEdited()
         fun onMessageDeleted()
         fun onIncludeEdit(includeId: String)
