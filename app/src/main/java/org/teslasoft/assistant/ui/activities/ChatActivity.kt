@@ -6440,6 +6440,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
                 v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
             )
+            v.usage?.totalTokens?.let { pendingResponseTokens = it }
             val delta = choice?.delta?.content
             if (delta != null && delta != "null") {
                 response += delta
@@ -7238,6 +7239,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         map["message"] = message
         map["isBot"] = isBot
 
+        // When this message was created, for the Message Details popup. Stored
+        // as a string so it round-trips through the generic Gson history map
+        // like every other key. Both roles get one; nothing invents a time for
+        // messages saved before this feature.
+        map[ChatAdapter.KEY_MESSAGE_TIME] = System.currentTimeMillis().toString()
+
         // Lock this assistant reply's label to the companion active right now,
         // so a later companion switch never rewrites past labels.
         if (isBot) {
@@ -7267,7 +7274,51 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  leaves nothing on disk to mislead. */
     private fun markLastAssistantStreaming() {
         val last = messages.lastOrNull() ?: return
-        if (last["isBot"] == true) last[MessageCompletionState.KEY_STATE] = MessageCompletionState.STREAMING
+        if (last["isBot"] == true) {
+            last[MessageCompletionState.KEY_STATE] = MessageCompletionState.STREAMING
+            // Freeze the producing model onto the reply the moment it begins, so
+            // a later model switch never relabels this turn (plan §4.1). Only a
+            // genuine streamed reply reaches here — error/image placeholders do
+            // not — so those correctly carry no model attribution.
+            val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
+            if (usedModel.isNotBlank()) last[ChatAdapter.KEY_MESSAGE_MODEL] = usedModel
+            // Reset the provider token capture for this fresh reply so a turn
+            // whose provider reports no usage does not inherit the previous
+            // turn's count.
+            pendingResponseTokens = null
+        }
+    }
+
+    /** Provider-reported total tokens for the reply currently streaming, taken
+     *  from the usage-bearing final chunk (streamOptions.includeUsage). Null
+     *  until reported and null when the provider does not report usage, so the
+     *  display omits tokens rather than inventing a value. */
+    private var pendingResponseTokens: Int? = null
+
+    /** While a Retry is in flight, the versions the regenerated reply will be
+     *  folded into: the prior turn's existing version list, or its single
+     *  current reply wrapped as version one. Null for an ordinary first-time
+     *  reply, which is never versioned. */
+    private var pendingRetryVariants: MutableList<HashMap<String, String>>? = null
+
+    /**
+     * Fold the just-finished regenerated reply into its turn's version list as
+     * the newest version and make it the canonical one, preserving every prior
+     * version for browsing. No-op unless a Retry set [pendingRetryVariants].
+     * Runs on both a successful and a terminal (interrupted/failed) finish so a
+     * failed regeneration never discards the versions that came before it.
+     */
+    private fun mergePendingRetryVariants() {
+        val history = pendingRetryVariants ?: return
+        pendingRetryVariants = null
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] != true) return
+
+        history.add(ChatAdapter.snapshotVariant(last))
+        last[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(history)
+        last[ChatAdapter.KEY_CANONICAL_VARIANT] = (history.size - 1).toString()
+        last[ChatAdapter.KEY_DISPLAY_VARIANT] = (history.size - 1).toString()
+        adapter?.notifyItemChanged(messages.size - 1)
     }
 
     /** Mark the last assistant reply as completed normally. The caller's
@@ -7277,6 +7328,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             last.remove(MessageCompletionState.KEY_STATE_DETAIL)
+            // Stamp the provider-reported total tokens for this turn, when the
+            // provider reported them. Stored as a string like every other
+            // history key; absent when unreported.
+            pendingResponseTokens?.let { last[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
+            // A regeneration folds this finished reply into the turn's version
+            // list. Runs after the metadata above so the new version captures
+            // the final model, tokens, and state.
+            mergePendingRetryVariants()
             // This chat just produced a successful reply, so its complete
             // model-and-companion snapshot may qualify for the next new chat.
             recordLastSuccessfulConfig()
@@ -7309,6 +7368,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (last[MessageCompletionState.KEY_STATE]?.toString() != MessageCompletionState.STREAMING) return
         last[MessageCompletionState.KEY_STATE] = state
         if (detail != null) last[MessageCompletionState.KEY_STATE_DETAIL] = detail
+        // A regeneration that ended in a terminal state still keeps the prior
+        // versions: fold this attempt in as the newest version rather than
+        // letting the earlier good replies vanish with the failed retry.
+        mergePendingRetryVariants()
         saveSettings()
     }
 
@@ -7570,6 +7633,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             (choice?.text?.takeIf { it != "null" }?.length ?: 0),
                             v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
                         )
+                        v.usage?.totalTokens?.let { pendingResponseTokens = it }
                         if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
                             response += v.choices[0].text
                             messages[messages.size - 1]["message"] = response
@@ -8978,6 +9042,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
                     v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
                 )
+                v.usage?.totalTokens?.let { pendingResponseTokens = it }
                 choice?.delta?.toolCalls?.forEach { fragment ->
                     toolCallAssembler.accept(
                         fragment.index,
@@ -9563,6 +9628,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     override fun onRetryClick() {
+        // Keep the reply being regenerated as an alternate version instead of
+        // discarding it (owner spec, Aug 16 2026). Snapshot the current last
+        // assistant turn's existing version list (or wrap its single current
+        // reply) BEFORE it is removed; the regenerated reply is folded in as the
+        // newest version once it finishes.
+        val last = messages.lastOrNull()
+        pendingRetryVariants = if (last != null && last["isBot"] == true) {
+            val existing = ChatAdapter.parseVariants(last[ChatAdapter.KEY_VARIANTS]?.toString())
+            if (existing.isNotEmpty()) existing
+            else mutableListOf(ChatAdapter.snapshotVariant(last))
+        } else {
+            null
+        }
+
         removeLastAssistantMessageIfAvailable()
         saveSettings()
 
@@ -9572,6 +9651,112 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // via the normal send path — no legacy [image]/[imageType] fields
         // to unpack here.
         parseMessage(message["message"].toString(), false)
+    }
+
+    override fun onRegenerate(position: Int) {
+        if (position < 0 || position >= messages.size) return
+        if (messages[position]["isBot"] != true) return
+
+        // The latest turn just adds a version (Stage 1) — nothing follows it, so
+        // there is nothing to discard and no warning is needed.
+        if (position == messages.size - 1) {
+            onRetryClick()
+            return
+        }
+
+        // An earlier turn: regenerating here discards everything after it, so
+        // confirm the branch first (owner spec, Aug 16 2026, exact wording).
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.branch_regenerate_title)
+            .setMessage(R.string.branch_regenerate_body)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.branch_regenerate_confirm) { _, _ ->
+                // Record-only truncation (files preserved), then the turn at
+                // this position is the last one, so the normal regenerate path
+                // applies and keeps this turn's version history.
+                truncateAfter(position)
+                onRetryClick()
+            }
+            .show()
+    }
+
+    /**
+     * Remove every message after [index] from the visible thread and the
+     * model-facing projection, and persist the shortened history. Record-only,
+     * by owner spec (Aug 16 2026): a truncated message that referenced a
+     * generated image or an uploaded attachment loses only that reference — the
+     * stored file keeps its independent lifetime and is never deleted here.
+     */
+    @SuppressLint("NotifyDataSetChanged")
+    private fun truncateAfter(index: Int) {
+        if (index < 0 || index >= messages.size - 1) return
+        while (messages.size > index + 1) {
+            messages.removeAt(messages.size - 1)
+        }
+        // Rebuild the projections to the shortened thread before rebinding so
+        // the adapter never reads a selection slot that no longer exists.
+        syncChatProjection()
+        adapter?.notifyDataSetChanged()
+        saveSettings()
+    }
+
+    /**
+     * Make the response version currently displayed on the turn at [position]
+     * its canonical one (owner spec, Aug 16 2026). On the latest turn nothing
+     * follows it, so the switch is silent. On an earlier turn this changes the
+     * causal branch, so it confirms ("Make Current Response?") and then discards
+     * every message after that turn.
+     */
+    override fun onMakeVersionCurrent(position: Int) {
+        if (position < 0 || position >= messages.size) return
+        val msg = messages[position]
+        if (msg["isBot"] != true) return
+        val variants = ChatAdapter.parseVariants(msg[ChatAdapter.KEY_VARIANTS]?.toString())
+        if (variants.size < 2) return
+        val canonical = msg[ChatAdapter.KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull()
+            ?: (variants.size - 1)
+        val display = msg[ChatAdapter.KEY_DISPLAY_VARIANT]?.toString()?.toIntOrNull() ?: canonical
+        if (display == canonical || display !in variants.indices) return
+
+        if (position == messages.size - 1) {
+            // Newest turn: nothing after it to destroy, so switch silently.
+            promoteVersionAt(position, display)
+            return
+        }
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.make_current_title)
+            .setMessage(R.string.make_current_body)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.make_current_confirm) { _, _ ->
+                promoteVersionAt(position, display)
+                truncateAfter(position)
+            }
+            .show()
+    }
+
+    /** Make version [index] of the turn at [position] canonical: mirror it into
+     *  the message's top-level fields, rebuild the model projection so context
+     *  uses it, and persist. The pager rebinds, so its icon flips to the
+     *  check_circle placeholder. */
+    private fun promoteVersionAt(position: Int, index: Int) {
+        if (position < 0 || position >= messages.size) return
+        val msg = messages[position]
+        val variants = ChatAdapter.parseVariants(msg[ChatAdapter.KEY_VARIANTS]?.toString())
+        if (index !in variants.indices) return
+        msg[ChatAdapter.KEY_CANONICAL_VARIANT] = index.toString()
+        msg[ChatAdapter.KEY_DISPLAY_VARIANT] = index.toString()
+        ChatAdapter.applyVariant(msg, variants[index])
+        rebuildModelProjection()
+        adapter?.notifyItemChanged(position)
+        saveSettings()
+    }
+
+    override fun onResponseVersionChanged() {
+        // Browsing is display-only: persist the pager position so it survives a
+        // reopen, but never truncate history or rebuild the model projection —
+        // the canonical version the conversation uses is unchanged.
+        saveSettings()
     }
 
     private fun syncChatProjection() {

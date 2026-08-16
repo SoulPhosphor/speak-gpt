@@ -27,6 +27,8 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.Paint
 import android.graphics.PorterDuff
@@ -57,7 +59,10 @@ import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.PopupWindow
 import android.widget.TextView
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.ContextCompat
@@ -89,7 +94,9 @@ import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.DateFormat
 import java.text.NumberFormat
+import java.util.Date
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
@@ -197,6 +204,94 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // messages written before this feature; those fall back to the chat's
         // current companion name at display time.
         const val KEY_COMPANION_NAME = "companionName"
+
+        // Durable per-message attribution for the compact metadata line and the
+        // Message Details popup (chat-redesign-plan.md §4, §5). All stored as
+        // strings so they round-trip through the chat's generic Gson HashMap the
+        // same way every other persisted key does. Each is absent on messages
+        // written before this feature and on messages where the value was never
+        // reported; the display side omits whatever is absent rather than
+        // inventing a value.
+        //   KEY_MESSAGE_MODEL  — the model that produced this assistant reply,
+        //                        frozen when the reply began so a later model
+        //                        switch never relabels past turns.
+        //   KEY_MESSAGE_TOKENS — provider-reported total tokens for that turn.
+        //   KEY_MESSAGE_TIME   — epoch-millis timestamp of when the message was
+        //                        created (both roles).
+        const val KEY_MESSAGE_MODEL = "responseModel"
+        const val KEY_MESSAGE_TOKENS = "responseTokens"
+        const val KEY_MESSAGE_TIME = "messageTime"
+
+        // Regenerated-response history for one assistant turn (owner spec, Aug
+        // 16 2026). Each turn that has been regenerated keeps every version:
+        //   KEY_VARIANTS          — JSON array of version snapshots, each a
+        //                           {message, model, tokens, time, state, ...}
+        //                           map, stored as strings so it round-trips
+        //                           through the chat's generic Gson history map.
+        //   KEY_CANONICAL_VARIANT — index of the version the conversation
+        //                           actually continues from; the message's
+        //                           top-level fields always mirror it, so
+        //                           context, saving, and copy work on it
+        //                           unchanged.
+        //   KEY_DISPLAY_VARIANT   — index currently shown by the pager; pure
+        //                           display state, defaults to the canonical
+        //                           one. Browsing changes only this.
+        // Absent entirely on a turn that was never regenerated (one version).
+        const val KEY_VARIANTS = "variants"
+        const val KEY_CANONICAL_VARIANT = "canonicalVariant"
+        const val KEY_DISPLAY_VARIANT = "displayVariant"
+
+        // The per-version fields copied between a message's top-level keys and a
+        // stored variant snapshot. The visible reply text plus its own
+        // provider metadata and completion state, so browsing to a version
+        // restores exactly what that regeneration produced.
+        private val VARIANT_FIELDS = listOf(
+            "message",
+            KEY_MESSAGE_MODEL,
+            KEY_MESSAGE_TOKENS,
+            KEY_MESSAGE_TIME,
+            MessageCompletionState.KEY_STATE,
+            MessageCompletionState.KEY_STATE_DETAIL,
+            MessageCompletionState.KEY_ERROR_TEXT
+        )
+
+        /** Parse the stored version list, or an empty list when a turn has none. */
+        fun parseVariants(json: String?): MutableList<HashMap<String, String>> {
+            if (json.isNullOrBlank()) return mutableListOf()
+            return try {
+                val type = TypeToken.getParameterized(
+                    ArrayList::class.java, HashMap::class.java
+                ).type
+                Gson().fromJson<ArrayList<HashMap<String, String>>>(json, type)
+                    ?: mutableListOf()
+            } catch (_: Exception) {
+                mutableListOf()
+            }
+        }
+
+        fun variantsToJson(variants: List<Map<String, String>>): String =
+            Gson().toJson(variants)
+
+        /** Copy a message's current visible reply + metadata into a version
+         *  snapshot. Absent fields are simply left out of the snapshot. */
+        fun snapshotVariant(message: Map<String, Any>): HashMap<String, String> {
+            val snapshot = HashMap<String, String>()
+            for (field in VARIANT_FIELDS) {
+                message[field]?.toString()?.let { snapshot[field] = it }
+            }
+            if (!snapshot.containsKey("message")) snapshot["message"] = ""
+            return snapshot
+        }
+
+        /** Write a version snapshot back onto a message's top-level fields,
+         *  removing any versioned field the snapshot does not carry so a
+         *  version with (say) no token count never inherits another's. */
+        fun applyVariant(message: HashMap<String, Any>, variant: Map<String, String>) {
+            for (field in VARIANT_FIELDS) {
+                val value = variant[field]
+                if (value != null) message[field] = value else message.remove(field)
+            }
+        }
 
         // Transient inline Creating Image row (plan §5 progress
         // experience): the visible status and Cancel action for a running
@@ -442,6 +537,22 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val btnRetry: ImageButton = itemView.findViewById(R.id.btn_retry)
         private val btnShare: ImageButton = itemView.findViewById(R.id.btn_share)
         private val btnSpeak: ImageButton = itemView.findViewById(R.id.btn_speak)
+        // Far-left Message Action on both layouts; opens the anchored Message
+        // Details popup (chat-redesign-plan.md §5). Always present.
+        private val btnDetails: ImageButton = itemView.findViewById(R.id.btn_details)
+        // Compact model/token line under the identity. Present only on the
+        // assistant layout (model/tokens are AI-side), so nullable.
+        private val messageMeta: TextView? = itemView.findViewById(R.id.message_meta)
+        // Regenerated-response version pager, far right of the assistant action
+        // bar. Present only on the assistant layout, so nullable.
+        private val versionNav: View? = itemView.findViewById(R.id.version_nav)
+        private val btnVersionPrev: ImageButton? = itemView.findViewById(R.id.btn_version_prev)
+        private val versionCount: TextView? = itemView.findViewById(R.id.version_count)
+        private val btnVersionNext: ImageButton? = itemView.findViewById(R.id.btn_version_next)
+        // To the right of the pager: check_circle when the shown version is the
+        // canonical one (a no-op placeholder), or resume when a non-canonical
+        // version is shown, tapping which makes it the canonical response.
+        private val btnVersionPromote: ImageButton? = itemView.findViewById(R.id.btn_version_promote)
         // Present only on the assistant layout (the user row has no completion
         // marker); nullable so the shared binder remains safe on both sides.
         private val statusMarker: TextView? = itemView.findViewById(R.id.status_marker)
@@ -454,20 +565,42 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val includeSummaryList: LinearLayout? = itemView.findViewById(R.id.include_summary_list)
         private val condensedBookmark: ImageView? = itemView.findViewById(R.id.condensed_bookmark)
         private val artifactBookmark: ImageView? = itemView.findViewById(R.id.artifact_bookmark)
+        // Present only on the user layout (attachments are user-side only), so
+        // nullable like includeSummary. Lets the tray swap sides of Message
+        // Actions depending on whether the message also carries text.
+        private val messageActionsRow: View? = itemView.findViewById(R.id.message_actions_row)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
 
-            val isGeneratedImage = chatMessage["message"].toString().startsWith("~file:")
+            // The version the pager is currently showing. For a turn with one
+            // version (or none regenerated) this is just chatMessage itself; when
+            // the user has paged to an older version it is that version's content
+            // and metadata laid over the message, without disturbing the stored
+            // canonical version used for context and saving.
+            val display = displayVariantMap(chatMessage)
+
+            val isGeneratedImage = display["message"].toString().startsWith("~file:")
             btnEdit.visibility = if (isGeneratedImage) View.GONE else View.VISIBLE
             if (isGeneratedImage) btnShare.isEnabled = false
 
-            updateIncludeSummary(chatMessage, position)
+            val hasAttachments = updateIncludeSummary(chatMessage, position)
+            // Attachment-only: no text, so nothing sits between identity and
+            // the tray, and the tray moves ahead of Message Actions instead of
+            // trailing them (chat-redesign-plan.md §6.1).
+            val attachmentOnly = hasAttachments && chatMessage["message"].toString().isBlank()
+            positionAttachmentTray(attachmentOnly)
             updatePresentation(chatMessage)
             updateRetryButton(chatMessage, position)
             updateShareButton(chatMessage)
-            updateSpeakButton(chatMessage, position)
-            updateStatusMarker(chatMessage)
+            updateSpeakButton(display, position)
+            updateStatusMarker(display)
+            updateMessageMeta(display, isGeneratedImage)
+            updateVersionNav(chatMessage, position)
+
+            btnDetails.setOnClickListener { anchor ->
+                if (!bulkActionMode) showMessageDetailsPopup(anchor, display)
+            }
 
             if (selectorProjection[position]["selected"].toString() == "true") {
                 ui.setBackgroundColor(getSurface3Color(context))
@@ -506,7 +639,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnCopy.setImageResource(R.drawable.ic_copy)
             btnCopy.setOnClickListener {
                 val clipboard: ClipboardManager = context.getSystemService(FragmentActivity.CLIPBOARD_SERVICE) as ClipboardManager
-                val messageText = chatMessage["message"].toString()
+                val messageText = display["message"].toString()
                 // The failed/interrupted/stopped marker (and, when "Show chat
                 // errors" is on, the coded error beneath it) lives in a separate
                 // TextView from the reply body. Fold it into the copied text so
@@ -541,17 +674,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 // already set VISIBLE by updateShareButton above.
                 btnShare.visibility = View.GONE
                 btnCopy.visibility = View.GONE
-                processGeneratedImageFile(chatMessage)
+                processGeneratedImageFile(display)
             } else {
                 boundGeneratedImagePath = null
                 Glide.with(context).clear(generatedImage)
                 (debugContext as FragmentActivity).runOnUiThread {
-                    applyMarkdown(chatMessage)
+                    applyMarkdown(display)
                 }
 
                 Handler(Looper.getMainLooper()).postDelayed({
                     debugContext.runOnUiThread {
-                        applyMarkdown(chatMessage)
+                        applyMarkdown(display)
                     }
                 }, 100)
 
@@ -567,11 +700,339 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 btnImageCopy.visibility = View.GONE
 
                 btnShare.setOnClickListener {
-                    sharePlainText(context, chatMessage["message"].toString())
+                    sharePlainText(context, display["message"].toString())
                 }
                 btnShare.isEnabled = true
 
-                message.visibility = View.VISIBLE
+                // An attachment-only message has no text to show; leaving the
+                // (empty) text view VISIBLE would reserve a blank line above
+                // the tray (chat-redesign-plan.md §6.1).
+                message.visibility = if (attachmentOnly) View.GONE else View.VISIBLE
+            }
+        }
+
+        /**
+         * Swaps which side of Message Actions the attachment tray sits on.
+         *
+         * With text: text -> Message Actions -> attachment tray (default XML
+         * order). Attachment-only: identity -> attachment tray -> Message
+         * Actions (chat-redesign-plan.md §6.1). No-op on the assistant
+         * layout, which has neither view.
+         */
+        private fun positionAttachmentTray(attachmentOnly: Boolean) {
+            val tray = includeSummary ?: return
+            val actionsRow = messageActionsRow ?: return
+
+            val trayParams = tray.layoutParams as ConstraintLayout.LayoutParams
+            val actionsParams = actionsRow.layoutParams as ConstraintLayout.LayoutParams
+
+            if (attachmentOnly) {
+                trayParams.topToBottom = R.id.include_bookmarks
+                actionsParams.topToBottom = R.id.include_summary
+            } else {
+                trayParams.topToBottom = R.id.message_actions_row
+                actionsParams.topToBottom = R.id.image_frame
+            }
+
+            tray.layoutParams = trayParams
+            actionsRow.layoutParams = actionsParams
+        }
+
+        /**
+         * The compact metadata line beneath the identity (chat-redesign-plan.md
+         * §4.3). Present only on the assistant layout. Shows the producing model
+         * when Model Names is on, the provider token total when Token Usage is
+         * on, joined by a centered dot when both are present and both enabled.
+         * Anything not enabled or not stored on this turn is simply omitted; the
+         * whole line is GONE when nothing remains. Never invents a value.
+         */
+        private fun updateMessageMeta(chatMessage: HashMap<String, Any>, isGeneratedImage: Boolean) {
+            val meta = messageMeta ?: return
+
+            // Generated images are produced by the image service, not a chat
+            // model, and carry no chat token usage; their bubble owns its own
+            // presentation, so the compact line never appears there.
+            if (chatMessage["isBot"] != true || isGeneratedImage) {
+                meta.visibility = View.GONE
+                meta.text = ""
+                return
+            }
+
+            val parts = mutableListOf<String>()
+            if (preferences.getShowModelNames()) {
+                chatMessage[KEY_MESSAGE_MODEL]?.toString()?.takeIf { it.isNotBlank() }
+                    ?.let { parts.add(it) }
+            }
+            if (preferences.getShowTokenUsage()) {
+                tokenCountLabel(chatMessage)?.let { parts.add(it) }
+            }
+
+            if (parts.isEmpty()) {
+                meta.visibility = View.GONE
+                meta.text = ""
+            } else {
+                meta.text = parts.joinToString("  ·  ")
+                meta.visibility = View.VISIBLE
+            }
+        }
+
+        /** The provider token total for this turn, worded per the approved
+         *  format (e.g. "1,234 tokens"), or null when this turn stored no
+         *  usable count so the caller omits it. */
+        private fun tokenCountLabel(chatMessage: HashMap<String, Any>): String? {
+            val raw = chatMessage[KEY_MESSAGE_TOKENS]?.toString()?.takeIf { it.isNotBlank() }
+                ?: return null
+            val count = raw.toLongOrNull() ?: return null
+            val grouped = NumberFormat.getIntegerInstance(Locale.getDefault()).format(count)
+            return context.getString(R.string.chat_token_count, grouped)
+        }
+
+        /**
+         * The anchored Message Details popup (chat-redesign-plan.md §5). Always
+         * reachable regardless of the compact-display toggles. Shows only the
+         * fields stored for this message — date & time, and, for an assistant
+         * reply, the producing model and provider token total. Fields never
+         * recorded (older messages, or a turn the provider gave no usage for)
+         * are omitted; a message with nothing stored shows the empty line. Text
+         * is selectable. Outside tap or Back dismisses.
+         */
+        private fun showMessageDetailsPopup(anchor: View, chatMessage: HashMap<String, Any>) {
+            val content = LayoutInflater.from(context)
+                .inflate(R.layout.view_details_popup, null)
+
+            val isBot = chatMessage["isBot"] == true
+            var anyShown = false
+
+            val dateTime = chatMessage[KEY_MESSAGE_TIME]?.toString()?.toLongOrNull()?.let {
+                DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it))
+            }
+            anyShown = bindDetailValue(content, R.id.details_value_datetime, dateTime) || anyShown
+
+            val model = if (isBot) {
+                chatMessage[KEY_MESSAGE_MODEL]?.toString()?.takeIf { it.isNotBlank() }
+            } else null
+            anyShown = bindDetailValue(content, R.id.details_value_model, model) || anyShown
+
+            val tokens = if (isBot) tokenCountLabel(chatMessage) else null
+            anyShown = bindDetailValue(content, R.id.details_value_tokens, tokens) || anyShown
+
+            content.findViewById<TextView>(R.id.details_empty).visibility =
+                if (anyShown) View.GONE else View.VISIBLE
+
+            val popup = PopupWindow(
+                content,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true
+            )
+            popup.isOutsideTouchable = true
+            // A non-null background is what makes outside-tap dismissal work.
+            popup.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            popup.elevation = anchor.resources.displayMetrics.density * 8f
+
+            // Anchor above the action so the popup rises from the action area and
+            // may overlap the chat content above it, per the plan.
+            content.measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            val yOffset = -(anchor.height + content.measuredHeight)
+            popup.showAsDropDown(anchor, 0, yOffset, Gravity.START)
+        }
+
+        /** Fills one detail value and shows it, or hides it when the value is
+         *  absent. Returns whether the value is shown. */
+        private fun bindDetailValue(content: View, valueId: Int, value: String?): Boolean {
+            val view = content.findViewById<TextView>(valueId)
+            return if (value.isNullOrBlank()) {
+                view.visibility = View.GONE
+                false
+            } else {
+                view.text = value
+                view.visibility = View.VISIBLE
+                true
+            }
+        }
+
+        /**
+         * The version the pager is currently showing, laid over the message.
+         * Returns the message untouched for a turn with fewer than two versions
+         * or when the displayed version is the canonical one, so the common path
+         * allocates nothing. Otherwise a shallow copy carries the chosen
+         * version's reply and metadata while the original keeps the canonical
+         * fields the conversation and saving use.
+         */
+        private fun displayVariantMap(chatMessage: HashMap<String, Any>): HashMap<String, Any> {
+            val variants = parseVariants(chatMessage[KEY_VARIANTS]?.toString())
+            if (variants.size < 2) return chatMessage
+            val canonical = canonicalIndexOf(chatMessage, variants.size)
+            val displayIndex = displayIndexOf(chatMessage, variants.size, canonical)
+            if (displayIndex == canonical) return chatMessage
+            val copy = HashMap<String, Any>(chatMessage)
+            applyVariant(copy, variants[displayIndex])
+            return copy
+        }
+
+        private fun canonicalIndexOf(chatMessage: Map<String, Any>, count: Int): Int =
+            (chatMessage[KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull() ?: (count - 1))
+                .coerceIn(0, count - 1)
+
+        private fun displayIndexOf(chatMessage: Map<String, Any>, count: Int, canonical: Int): Int =
+            (chatMessage[KEY_DISPLAY_VARIANT]?.toString()?.toIntOrNull() ?: canonical)
+                .coerceIn(0, count - 1)
+
+        /**
+         * The regenerated-response pager at the far right of the assistant
+         * action bar (owner spec, Aug 16 2026). Hidden unless the turn has two
+         * or more stored versions. Two or three versions show only the
+         * previous/next chevrons with the count; four or more also make the
+         * count tappable, opening the bare number picker. The first version
+         * hides the left chevron and the last hides the right, since there is
+         * nowhere to page. Paging is display-only — it never truncates history
+         * or changes the canonical version.
+         */
+        private fun updateVersionNav(chatMessage: HashMap<String, Any>, position: Int) {
+            val nav = versionNav ?: return
+            val prev = btnVersionPrev ?: return
+            val next = btnVersionNext ?: return
+            val count = versionCount ?: return
+
+            val variants = parseVariants(chatMessage[KEY_VARIANTS]?.toString())
+            if (chatMessage["isBot"] != true || variants.size < 2) {
+                nav.visibility = View.GONE
+                return
+            }
+
+            val total = variants.size
+            val canonical = canonicalIndexOf(chatMessage, total)
+            val current = displayIndexOf(chatMessage, total, canonical)
+
+            nav.visibility = View.VISIBLE
+            count.text = context.getString(R.string.version_nav_count, current + 1, total)
+
+            prev.visibility = if (current > 0) View.VISIBLE else View.INVISIBLE
+            next.visibility = if (current < total - 1) View.VISIBLE else View.INVISIBLE
+            prev.setOnClickListener {
+                if (!bulkActionMode && current > 0) showVersion(chatMessage, position, current - 1)
+            }
+            next.setOnClickListener {
+                if (!bulkActionMode && current < total - 1) showVersion(chatMessage, position, current + 1)
+            }
+
+            if (total >= 4) {
+                count.isClickable = true
+                count.setOnClickListener {
+                    if (!bulkActionMode) showVersionPicker(count, chatMessage, position, total, current)
+                }
+            } else {
+                count.isClickable = false
+                count.setOnClickListener(null)
+            }
+
+            // The promote control: check_circle (placeholder, no-op) when the
+            // shown version is already canonical; resume when it is not, tapping
+            // which makes the shown version the canonical response.
+            btnVersionPromote?.let { promote ->
+                if (current == canonical) {
+                    promote.setImageResource(R.drawable.ic_check_circle)
+                    promote.contentDescription = context.getString(R.string.version_current_desc)
+                    promote.setOnClickListener(null)
+                    promote.isClickable = false
+                } else {
+                    promote.setImageResource(R.drawable.ic_resume)
+                    promote.contentDescription = context.getString(R.string.version_make_current_desc)
+                    promote.isClickable = true
+                    promote.setOnClickListener {
+                        val pos = bindingAdapterPosition
+                        if (!bulkActionMode) {
+                            listener?.onMakeVersionCurrent(
+                                if (pos != RecyclerView.NO_POSITION) pos else position
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        /** Page the turn to another stored version. Display-only: it records the
+         *  new pager position and rebinds; it never changes the canonical
+         *  version or later history. */
+        private fun showVersion(chatMessage: HashMap<String, Any>, position: Int, index: Int) {
+            chatMessage[KEY_DISPLAY_VARIANT] = index.toString()
+            notifyItemChanged(position)
+            listener?.onResponseVersionChanged()
+        }
+
+        /**
+         * The bare version picker shown for four-plus versions: a borderless
+         * list of the OTHER version numbers (the current one stays in the count
+         * itself, like the app's dropdowns keep the selection in the anchor).
+         * No box and no chevron. It drops down from the count, flipping upward
+         * only when it would be clipped at the screen bottom.
+         */
+        private fun showVersionPicker(
+            anchor: View,
+            chatMessage: HashMap<String, Any>,
+            position: Int,
+            total: Int,
+            current: Int
+        ) {
+            val density = anchor.resources.displayMetrics.density
+            val list = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundResource(R.drawable.ui_dialog_rounded)
+                val pad = (density * 6f).toInt()
+                setPadding(pad, pad, pad, pad)
+            }
+
+            val popup = PopupWindow(
+                list,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true
+            )
+            popup.isOutsideTouchable = true
+            popup.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            popup.elevation = density * 8f
+
+            val foreground = versionCount?.currentTextColor ?: resolveThemeColor(R.attr.appTextColor)
+            val rowBg = TypedValue()
+            context.theme.resolveAttribute(
+                android.R.attr.selectableItemBackground, rowBg, true
+            )
+            for (i in 0 until total) {
+                if (i == current) continue
+                val row = TextView(context).apply {
+                    text = (i + 1).toString()
+                    setTextColor(foreground)
+                    textSize = 15f
+                    gravity = Gravity.CENTER
+                    minWidth = (density * 44f).toInt()
+                    val vpad = (density * 8f).toInt()
+                    val hpad = (density * 12f).toInt()
+                    setPadding(hpad, vpad, hpad, vpad)
+                    if (rowBg.resourceId != 0) setBackgroundResource(rowBg.resourceId)
+                    setOnClickListener {
+                        popup.dismiss()
+                        showVersion(chatMessage, position, i)
+                    }
+                }
+                list.addView(row)
+            }
+
+            list.measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            val location = IntArray(2)
+            anchor.getLocationOnScreen(location)
+            val spaceBelow = anchor.resources.displayMetrics.heightPixels - (location[1] + anchor.height)
+            if (list.measuredHeight <= spaceBelow) {
+                popup.showAsDropDown(anchor, 0, 0, Gravity.START)
+            } else {
+                popup.showAsDropDown(
+                    anchor, 0, -(anchor.height + list.measuredHeight), Gravity.START
+                )
             }
         }
 
@@ -586,15 +1047,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * dialog, notification, or sound — just this line.
          */
         /**
-         * Renders sent documents directly under the user's name. One to three
-         * rows remain visible; only four or more collapse behind the count.
+         * Renders sent documents in the tray positioned by [positionAttachmentTray].
+         * One to three rows remain visible; only four or more collapse behind
+         * the count.
          *
          * Every branch sets visibility explicitly: these rows are recycled, so
          * an early return would let one message's open accordion reappear on
          * an unrelated message further down the conversation.
+         *
+         * @return true when the tray is showing at least one full attachment
+         * record (used by [bind] to decide whether the message is attachment-only).
          */
-        private fun updateIncludeSummary(chatMessage: HashMap<String, Any>, position: Int) {
-            val summary = includeSummary ?: return
+        private fun updateIncludeSummary(chatMessage: HashMap<String, Any>, position: Int): Boolean {
+            val summary = includeSummary ?: return false
             val includes = ChatInclude.listFromJson(
                 chatMessage[ChatActivity.INCLUDES_KEY]?.toString()
             )
@@ -604,7 +1069,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 condensedBookmark?.visibility = View.GONE
                 artifactBookmark?.visibility = View.GONE
                 includeSummaryList?.removeAllViews()
-                return
+                return false
             }
 
             val groups = IncludeHistoryPresentation.group(includes)
@@ -613,7 +1078,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (fullIncludes.isEmpty()) {
                 summary.visibility = View.GONE
                 includeSummaryList?.removeAllViews()
-                return
+                return false
             }
 
             summary.visibility = View.VISIBLE
@@ -653,6 +1118,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     null
                 }
             )
+
+            return true
         }
 
         /**
@@ -874,12 +1341,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun updateRetryButton(chatMessage: HashMap<String, Any>, position: Int) {
-            if (dataArray.isNotEmpty() && position == dataArray.size - 1 && chatMessage["isBot"] == true) {
+            // Regenerate is offered on every assistant text reply now, not only
+            // the last one, so earlier turns can be regenerated too (owner spec,
+            // Aug 16 2026). Generated-image replies keep their original
+            // last-only affordance — they are produced by the image flow, not by
+            // text regeneration, and their presentation is out of scope.
+            val isBot = chatMessage["isBot"] == true
+            val isImage = chatMessage["message"].toString().startsWith("~file:")
+            val isLast = position == dataArray.size - 1
+            if (isBot && (!isImage || isLast)) {
                 btnRetry.visibility = View.VISIBLE
-
                 btnRetry.setOnClickListener {
                     if (!bulkActionMode) {
-                        listener?.onRetryClick()
+                        val pos = bindingAdapterPosition
+                        listener?.onRegenerate(if (pos != RecyclerView.NO_POSITION) pos else position)
                     }
                 }
             } else {
@@ -939,6 +1414,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 message.setTextColor(foreground)
                 username.setTextColor(foreground)
                 bubbleName?.setTextColor(foreground)
+                applyMetaForeground(foreground)
                 tintActionIcons(foreground)
                 return
             }
@@ -965,7 +1441,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             message.setTextColor(foreground)
             username.setTextColor(foreground)
             bubbleName?.setTextColor(foreground)
+            applyMetaForeground(foreground)
             tintActionIcons(foreground)
+        }
+
+        /** The compact metadata line follows the bubble's text color so it
+         *  contrasts on any theme, held at reduced opacity so it reads as
+         *  subordinate to the reply without a hardcoded muted color. */
+        private fun applyMetaForeground(foreground: Int) {
+            messageMeta?.setTextColor(foreground)
+            messageMeta?.alpha = 0.7f
         }
 
         /**
@@ -976,10 +1461,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * updateSpeakButton, which owns its speaking-state color.
          */
         private fun tintActionIcons(foreground: Int) {
+            btnDetails.setColorFilter(foreground)
             btnShare.setColorFilter(foreground)
             btnRetry.setColorFilter(foreground)
             btnCopy.setColorFilter(foreground)
             btnEdit.setColorFilter(foreground)
+            // The version pager sits on the same bar and follows the same
+            // bubble foreground so its glyphs and count read on any theme.
+            btnVersionPrev?.setColorFilter(foreground)
+            btnVersionNext?.setColorFilter(foreground)
+            versionCount?.setTextColor(foreground)
+            btnVersionPromote?.setColorFilter(foreground)
         }
 
         /**
@@ -1749,7 +2241,21 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // Mirror onDelete's guard: a stale dialog position (the list changed
         // while the edit dialog was open) must not index past the array.
         if (position < 0 || position >= dataArray.size) return
+        // Editing only changes this message's stored text (owner spec, Aug 16
+        // 2026). It never truncates later messages — that is what Regenerate
+        // and Make Current do. Attachments on the message are kept.
         editMessage(position, prompt)
+        // If this turn carries regenerated versions, keep the canonical
+        // version's stored text in step with the edit so paging back to it
+        // shows the edited text, not the pre-edit one.
+        val message = dataArray[position]
+        val variants = parseVariants(message[KEY_VARIANTS]?.toString())
+        if (variants.size >= 2) {
+            val canonical = (message[KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull()
+                ?: (variants.size - 1)).coerceIn(0, variants.size - 1)
+            variants[canonical]["message"] = prompt
+            message[KEY_VARIANTS] = variantsToJson(variants)
+        }
         notifyItemChanged(position)
 
         if (chatId !== "") {
@@ -1780,6 +2286,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
     interface OnUpdateListener {
         fun onRetryClick()
+
+        /** Regenerate the assistant turn at [position]. On the latest turn this
+         *  just adds a version; on an earlier turn the host confirms the branch
+         *  and truncates the messages after it first (owner spec, Aug 16 2026). */
+        fun onRegenerate(position: Int)
+
+        /** Make the response version currently displayed on the turn at
+         *  [position] the canonical one. On the latest turn this switches the
+         *  version silently; on an earlier turn the host confirms ("Make Current
+         *  Response?") and truncates everything after that turn. */
+        fun onMakeVersionCurrent(position: Int)
+
         fun onMessageEdited()
         fun onMessageDeleted()
         fun onIncludeEdit(includeId: String)
@@ -1788,6 +2306,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         fun onBulkSelectionChanged(position: Int, selected: Boolean)
         fun onChangeBulkActionMode(mode: Boolean)
         fun onSpeakClick(message: String, position: Int)
+
+        /** The user paged to a different stored response version. Display-only:
+         *  the host just persists the new pager position; it never truncates
+         *  history or changes which version the conversation continues from. */
+        fun onResponseVersionChanged()
 
         /** The inline image-confirmation card's Create (true) or Cancel
          *  (false) tap (image-generation-rebuild-plan.md §5). */

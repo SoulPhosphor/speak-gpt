@@ -3172,6 +3172,31 @@
     <string name="appearance_model_names_hint">Show the model that produced each message.</string>
     <string name="appearance_token_usage">Token Usage</string>
     <string name="appearance_token_usage_hint">Show provider-reported token usage for each message.</string>
+    <!-- Message Details popup (ⓘ) and the compact metadata line. The popup
+         shows bare values (a date/time, the model, the token count) with no
+         heading or field labels; the empty line covers a message with nothing
+         stored. -->
+    <string name="message_details_action">Message Details</string>
+    <string name="message_details_empty">Details Not Available</string>
+    <!-- Token count shown in the compact line and the details popup, e.g. "1,234 tokens". -->
+    <string name="chat_token_count">%1$s tokens</string>
+    <!-- Regenerated-response pager on an assistant message. -->
+    <string name="version_nav_prev">Previous Response Version</string>
+    <string name="version_nav_next">Next Response Version</string>
+    <string name="version_nav_count">%1$d / %2$d</string>
+    <string name="version_current_desc">Current Response Version</string>
+    <string name="version_make_current_desc">Make This the Current Response</string>
+    <!-- Confirmation shown when regenerating an earlier response would discard
+         the messages that follow it. Editing a message no longer branches;
+         it only changes that message's stored text. -->
+    <string name="branch_regenerate_title">Regenerate Response?</string>
+    <string name="branch_regenerate_body">Generating a new response here will discard all subsequent messages in this thread.</string>
+    <string name="branch_regenerate_confirm">Regenerate</string>
+    <!-- Confirmation shown when making a browsed older response version the
+         canonical one truncates the messages that followed the original. -->
+    <string name="make_current_title">Make Current Response?</string>
+    <string name="make_current_body">This will replace the original response in the conversation and make it the canonical response. This will destroy all chat history after this response.</string>
+    <string name="make_current_confirm">Okay</string>
     <string name="appearance_hardware_keyboard_shortcuts">Hardware Keyboard Shortcuts</string>
     <string name="appearance_hardware_keyboard_shortcuts_hint">Press Enter to send and Shift+Enter for a new line.</string>
     <string name="appearance_section_name_style">Name Style</string>
