@@ -707,7 +707,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          */
         private fun showMessageDetailsPopup(anchor: View, chatMessage: HashMap<String, Any>) {
             val content = LayoutInflater.from(context)
-                .inflate(R.layout.view_message_details_popup, null)
+                .inflate(R.layout.view_details_popup, null)
 
             val isBot = chatMessage["isBot"] == true
             var anyShown = false
