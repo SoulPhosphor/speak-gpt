@@ -55,6 +55,7 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -947,9 +948,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     promote.setOnClickListener {
                         val pos = bindingAdapterPosition
                         if (!bulkActionMode) {
-                            listener?.onMakeVersionCurrent(
-                                if (pos != RecyclerView.NO_POSITION) pos else position
-                            )
+                            keepingActionBarInPlace {
+                                listener?.onMakeVersionCurrent(
+                                    if (pos != RecyclerView.NO_POSITION) pos else position
+                                )
+                            }
                         }
                     }
                 }
@@ -960,9 +963,51 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  new pager position and rebinds; it never changes the canonical
          *  version or later history. */
         private fun showVersion(chatMessage: HashMap<String, Any>, position: Int, index: Int) {
-            chatMessage[KEY_DISPLAY_VARIANT] = index.toString()
-            notifyItemChanged(position)
-            listener?.onResponseVersionChanged()
+            keepingActionBarInPlace {
+                chatMessage[KEY_DISPLAY_VARIANT] = index.toString()
+                notifyItemChanged(position)
+                listener?.onResponseVersionChanged()
+            }
+        }
+
+        /**
+         * Runs [action] while keeping the version-pager action bar (@id/version_nav)
+         * at the screen position it was at before [action] runs, regardless of how
+         * much the message content above it grows or shrinks (owner ask, Aug 16
+         * 2026). Without this, paging to a longer or shorter version shifts the
+         * whole row and can push the action bar off the bottom of the screen.
+         *
+         * Reads the row's position again on the next predraw pass — after the
+         * rebound item has been measured and laid out but before it is drawn —
+         * and scrolls the RecyclerView by the difference so the row lands back
+         * where it was. RecyclerView.scrollBy clamps to the available content, so
+         * near the top of the list this is a best-effort correction rather than a
+         * guarantee.
+         */
+        private fun keepingActionBarInPlace(action: () -> Unit) {
+            val nav = versionNav
+            val recyclerView = itemView.parent as? RecyclerView
+            if (nav == null || recyclerView == null) {
+                action()
+                return
+            }
+
+            val before = IntArray(2)
+            nav.getLocationOnScreen(before)
+            val beforeY = before[1]
+
+            action()
+
+            recyclerView.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    recyclerView.viewTreeObserver.removeOnPreDrawListener(this)
+                    val after = IntArray(2)
+                    nav.getLocationOnScreen(after)
+                    val delta = after[1] - beforeY
+                    if (delta != 0) recyclerView.scrollBy(0, delta)
+                    return true
+                }
+            })
         }
 
         /**
@@ -970,7 +1015,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * list of the OTHER version numbers (the current one stays in the count
          * itself, like the app's dropdowns keep the selection in the anchor).
          * No box and no chevron. It drops down from the count, flipping upward
-         * only when it would be clipped at the screen bottom.
+         * only when it would be clipped by the docked message-input bar at the
+         * bottom of the screen.
          */
         private fun showVersionPicker(
             anchor: View,
@@ -1028,7 +1074,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             )
             val location = IntArray(2)
             anchor.getLocationOnScreen(location)
-            val spaceBelow = anchor.resources.displayMetrics.heightPixels - (location[1] + anchor.height)
+            // Measure available space against the top of the docked message-input
+            // bar, not the raw screen height, so the popup flips up before it
+            // would cover the typing area rather than merely before the screen
+            // edge (owner ask, Aug 16 2026).
+            val inputBarTop = context.findViewById<View?>(R.id.keyboard_input)?.let {
+                val inputLocation = IntArray(2)
+                it.getLocationOnScreen(inputLocation)
+                inputLocation[1]
+            } ?: anchor.resources.displayMetrics.heightPixels
+            val spaceBelow = inputBarTop - (location[1] + anchor.height)
             if (list.measuredHeight <= spaceBelow) {
                 popup.showAsDropDown(anchor, 0, 0, Gravity.START)
             } else {

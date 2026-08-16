@@ -159,8 +159,9 @@ class EditPersonaActivity : FragmentActivity() {
     private var imgPersonaAvatar: ImageView? = null
     private var btnSave: ImageButton? = null
     private var btnDelete: ImageButton? = null
-    private var promptTabRow: com.google.android.material.chip.ChipGroup? = null
+    private var promptTabRow: LinearLayout? = null
     private var promptTabName: TextView? = null
+    private var btnAddPrompt: ImageButton? = null
     private var btnPromptMenu: ImageButton? = null
 
     private var position: Int = -1
@@ -252,6 +253,7 @@ class EditPersonaActivity : FragmentActivity() {
         btnDelete = findViewById(R.id.btn_delete)
         promptTabRow = findViewById(R.id.prompt_tab_row)
         promptTabName = findViewById(R.id.prompt_tab_name)
+        btnAddPrompt = findViewById(R.id.btn_add_prompt)
         btnPromptMenu = findViewById(R.id.btn_prompt_menu)
 
         applyAmoledChrome()
@@ -351,6 +353,7 @@ class EditPersonaActivity : FragmentActivity() {
             }
         }
 
+        btnAddPrompt?.setOnClickListener { addPromptTab() }
         btnPromptMenu?.setOnClickListener { showPromptMenu(it) }
 
         selectedActivationPromptId = intent.getStringExtra(EXTRA_ACTIVATION_ID) ?: ""
@@ -664,7 +667,7 @@ class EditPersonaActivity : FragmentActivity() {
                     android.text.style.ForegroundColorSpan(
                         ResourcesCompat.getColor(resources, R.color.light_green, theme)
                     ),
-                    0, dot.length, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                    0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
                 promptTabName?.text = dot
             } else {
@@ -685,9 +688,6 @@ class EditPersonaActivity : FragmentActivity() {
         val container = promptTabRow ?: return
         container.removeAllViews()
 
-        // Angled file-tab background (PromptTabBackground): geometry from
-        // shared dimens, colors resolved once here from theme attributes -
-        // never hardcoded - and handed to the drawable.
         val slantWidthPx = resources.getDimension(R.dimen.prompt_tab_slant_width)
         val strokeWidthPx = resources.getDimension(R.dimen.prompt_tab_stroke_width)
         val outlineColor = com.google.android.material.color.MaterialColors.getColor(
@@ -696,47 +696,94 @@ class EditPersonaActivity : FragmentActivity() {
         val activeFillColor = com.google.android.material.color.MaterialColors.getColor(
             container, com.google.android.material.R.attr.colorSurfaceContainerHigh
         )
+        val greenColor = ResourcesCompat.getColor(resources, R.color.light_green, theme)
 
+        val tabs = mutableListOf<TextView>()
         for (i in promptVariants.indices) {
             val variant = promptVariants[i]
             val isActive = i == activeTabIndex
-            // Constructing with a defStyleRes (rather than setTextAppearance,
-            // which only applies text-color/size/weight) is what actually
-            // pulls in the style's padding, gravity, maxWidth, maxLines,
-            // ellipsize, clickable and focusable - setTextAppearance alone
-            // was silently dropping all of those on these code-built tabs.
             val styleRes = if (isActive) R.style.Widget_App_PromptTab_Active else R.style.Widget_App_PromptTab
             val tab = TextView(this, null, 0, styleRes)
-            tab.background = PromptTabBackground(
-                fillColor = if (isActive) activeFillColor else android.graphics.Color.TRANSPARENT,
-                strokeColor = outlineColor,
-                strokeWidthPx = strokeWidthPx,
-                slantWidthPx = slantWidthPx
-            )
 
             if (variant.isDefault) {
                 val dot = android.text.SpannableString("●  ${variant.name}")
-                if (!isActive) {
-                    dot.setSpan(
-                        android.text.style.ForegroundColorSpan(
-                            ResourcesCompat.getColor(resources, R.color.light_green, theme)
-                        ),
-                        0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
-                }
+                dot.setSpan(
+                    android.text.style.ForegroundColorSpan(greenColor),
+                    0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
                 tab.text = dot
             } else {
                 tab.text = variant.name
             }
 
             tab.setOnClickListener { switchToTab(i) }
-            container.addView(tab)
+            tabs.add(tab)
         }
 
-        val addBtn = TextView(this, null, 0, R.style.Widget_App_PromptTab_Add)
-        addBtn.text = "+"
-        addBtn.setOnClickListener { addPromptTab() }
-        container.addView(addBtn)
+        val unspec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        for (tab in tabs) { tab.measure(unspec, unspec) }
+
+        val availWidth = if (container.width > 0) container.width
+        else resources.displayMetrics.widthPixels -
+                2 * (24 * resources.displayMetrics.density).toInt()
+
+        // Pack tabs into rows (zero spacing — adjacent tabs butt up).
+        data class TabRow(val indices: List<Int>)
+        val rows = mutableListOf<TabRow>()
+        var rowIndices = mutableListOf<Int>()
+        var rowWidth = 0
+        for (i in tabs.indices) {
+            val tw = tabs[i].measuredWidth
+            if (rowIndices.isNotEmpty() && rowWidth + tw > availWidth) {
+                rows.add(TabRow(rowIndices.toList()))
+                rowIndices = mutableListOf()
+                rowWidth = 0
+            }
+            rowIndices.add(i)
+            rowWidth += tw
+        }
+        if (rowIndices.isNotEmpty()) rows.add(TabRow(rowIndices.toList()))
+
+        // Move the row containing the active tab to the end so it sits
+        // flush against the prompt frame.
+        var activeRowIdx = rows.indexOfFirst { activeTabIndex in it.indices }
+        if (activeRowIdx < 0) activeRowIdx = rows.size - 1
+        val reordered = rows.toMutableList()
+        if (activeRowIdx < reordered.size) {
+            val active = reordered.removeAt(activeRowIdx)
+            reordered.add(active)
+        }
+
+        for ((rowPos, row) in reordered.withIndex()) {
+            val isBottomRow = rowPos == reordered.size - 1
+            val rowLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+            val lastPosInRow = row.indices.size - 1
+            for ((posInRow, tabIdx) in row.indices.withIndex()) {
+                val tab = tabs[tabIdx]
+                val isActive = tabIdx == activeTabIndex
+                tab.background = PromptTabBackground(
+                    fillColor = if (isActive) activeFillColor else android.graphics.Color.TRANSPARENT,
+                    strokeColor = outlineColor,
+                    strokeWidthPx = strokeWidthPx,
+                    slantWidthPx = slantWidthPx,
+                    isFirstInRow = posInRow == 0,
+                    isLastInRow = posInRow == lastPosInRow,
+                    drawBottomEdge = !(isActive && isBottomRow)
+                )
+                tab.layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+                rowLayout.addView(tab)
+            }
+            container.addView(rowLayout)
+        }
     }
 
     private fun addPromptTab() {
@@ -754,6 +801,7 @@ class EditPersonaActivity : FragmentActivity() {
         menu.menu.add(0, 2, 0, getString(R.string.prompt_menu_rename))
         menu.menu.add(0, 3, 0, getString(R.string.prompt_menu_copy_from))
         menu.menu.add(0, 4, 0, getString(R.string.prompt_menu_duplicate))
+        menu.menu.add(0, 7, 0, getString(R.string.prompt_menu_copy))
         menu.menu.add(0, 5, 0, getString(R.string.prompt_menu_clear))
         menu.menu.add(0, 6, 0, getString(R.string.prompt_menu_delete))
         menu.setOnMenuItemClickListener { item ->
@@ -764,10 +812,17 @@ class EditPersonaActivity : FragmentActivity() {
                 4 -> duplicateCurrentPrompt()
                 5 -> clearCurrentPrompt()
                 6 -> deleteCurrentPrompt()
+                7 -> copyCurrentPromptToClipboard()
             }
             true
         }
         menu.show()
+    }
+
+    private fun copyCurrentPromptToClipboard() {
+        val text = fieldPrompt?.text?.toString() ?: return
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("prompt", text))
     }
 
     private fun makeCurrentDefault() {
