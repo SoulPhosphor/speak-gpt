@@ -715,21 +715,15 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val dateTime = chatMessage[KEY_MESSAGE_TIME]?.toString()?.toLongOrNull()?.let {
                 DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(it))
             }
-            anyShown = bindDetailRow(
-                content, R.id.details_row_datetime, R.id.details_value_datetime, dateTime
-            ) || anyShown
+            anyShown = bindDetailValue(content, R.id.details_value_datetime, dateTime) || anyShown
 
             val model = if (isBot) {
                 chatMessage[KEY_MESSAGE_MODEL]?.toString()?.takeIf { it.isNotBlank() }
             } else null
-            anyShown = bindDetailRow(
-                content, R.id.details_row_model, R.id.details_value_model, model
-            ) || anyShown
+            anyShown = bindDetailValue(content, R.id.details_value_model, model) || anyShown
 
             val tokens = if (isBot) tokenCountLabel(chatMessage) else null
-            anyShown = bindDetailRow(
-                content, R.id.details_row_tokens, R.id.details_value_tokens, tokens
-            ) || anyShown
+            anyShown = bindDetailValue(content, R.id.details_value_tokens, tokens) || anyShown
 
             content.findViewById<TextView>(R.id.details_empty).visibility =
                 if (anyShown) View.GONE else View.VISIBLE
@@ -755,18 +749,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             popup.showAsDropDown(anchor, 0, yOffset, Gravity.START)
         }
 
-        /** Fills one detail row's value and shows the row, or hides it when the
-         *  value is absent. Returns whether the row is shown. */
-        private fun bindDetailRow(
-            content: View, rowId: Int, valueId: Int, value: String?
-        ): Boolean {
-            val row = content.findViewById<View>(rowId)
+        /** Fills one detail value and shows it, or hides it when the value is
+         *  absent. Returns whether the value is shown. */
+        private fun bindDetailValue(content: View, valueId: Int, value: String?): Boolean {
+            val view = content.findViewById<TextView>(valueId)
             return if (value.isNullOrBlank()) {
-                row.visibility = View.GONE
+                view.visibility = View.GONE
                 false
             } else {
-                content.findViewById<TextView>(valueId).text = value
-                row.visibility = View.VISIBLE
+                view.text = value
+                view.visibility = View.VISIBLE
                 true
             }
         }

@@ -3168,13 +3168,12 @@
     <string name="appearance_model_names_hint">Show the model that produced each message.</string>
     <string name="appearance_token_usage">Token Usage</string>
     <string name="appearance_token_usage_hint">Show provider-reported token usage for each message.</string>
-    <!-- Message Details popup (ⓘ) and the compact metadata line. -->
-    <string name="message_details_title">Message Details</string>
+    <!-- Message Details popup (ⓘ) and the compact metadata line. The popup
+         shows bare values (a date/time, the model, the token count) with no
+         heading or field labels; the empty line covers a message with nothing
+         stored. -->
     <string name="message_details_action">Message Details</string>
-    <string name="message_details_datetime">Date &amp; Time</string>
-    <string name="message_details_model">Model</string>
-    <string name="message_details_tokens">Tokens</string>
-    <string name="message_details_empty">No saved details for this message.</string>
+    <string name="message_details_empty">Details Not Available</string>
     <!-- Token count shown in the compact line and the details popup, e.g. "1,234 tokens". -->
     <string name="chat_token_count">%1$s tokens</string>
     <string name="appearance_hardware_keyboard_shortcuts">Hardware Keyboard Shortcuts</string>
