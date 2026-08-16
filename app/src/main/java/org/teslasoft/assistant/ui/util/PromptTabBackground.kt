@@ -73,42 +73,50 @@ class PromptTabBackground(
         val w = bounds.width().toFloat()
         val h = bounds.height().toFloat()
         val slant = slantWidthPx.coerceIn(0f, (w - 2 * inset).coerceAtLeast(0f) * 0.6f)
+        val topY = inset
+        val botY = h - inset
 
-        // Fill: trapezoid whose right edge follows the slant. Same shape
-        // for every tab — first, middle, or last.
+        // Fill: trapezoid — straight left edge, slanted right edge. Same
+        // shape for every tab.
         fillPath.reset()
-        fillPath.moveTo(inset, inset)
-        fillPath.lineTo(w - inset - slant, inset)
-        fillPath.lineTo(w - inset, h - inset)
-        fillPath.lineTo(inset, h - inset)
+        fillPath.moveTo(inset, topY)
+        fillPath.lineTo(w - inset - slant, topY)
+        fillPath.lineTo(w - inset, botY)
+        fillPath.lineTo(inset, botY)
         fillPath.close()
 
-        // Stroke: open path of individual segments.
+        // Stroke: open path of individual segments. Horizontal edges butt
+        // to the view's true left/right bounds (0 and w) wherever a
+        // neighbour sits, so adjacent tabs meet with no gap and the row's
+        // top reads as one continuous line.
         strokePath.reset()
 
-        // Left edge (first tab only).
+        // Top edge — runs the full width unless this is the last tab, where
+        // it stops at the slant so the slant becomes the outer right edge.
+        val topLeftX = if (isFirstInRow) inset else 0f
+        val topRightX = if (isLastInRow) w - inset - slant else w
+        strokePath.moveTo(topLeftX, topY)
+        strokePath.lineTo(topRightX, topY)
+
+        // Outer left edge (first tab only): straight vertical.
         if (isFirstInRow) {
-            strokePath.moveTo(inset, h - inset)
-            strokePath.lineTo(inset, inset)
-        } else {
-            strokePath.moveTo(inset, inset)
+            strokePath.moveTo(inset, topY)
+            strokePath.lineTo(inset, botY)
         }
 
-        if (isLastInRow) {
-            // Top ends at the slant start, then the slant is the outer edge.
-            strokePath.lineTo(w - inset - slant, inset)
-            strokePath.lineTo(w - inset, h - inset)
-        } else {
-            // Top extends to the view's full width (continuous top line).
-            strokePath.lineTo(w - inset, inset)
-            // Internal separator: diagonal from slant-start to bottom-right.
-            strokePath.moveTo(w - inset - slant, inset)
-            strokePath.lineTo(w - inset, h - inset)
-        }
+        // Right edge: the slant. On the last tab it is the outer edge of
+        // the row; on every other tab it is the internal separator between
+        // this tab and the next.
+        strokePath.moveTo(w - inset - slant, topY)
+        strokePath.lineTo(w - inset, botY)
 
-        // Bottom edge.
+        // Bottom edge — suppressed on the active tab so it opens into the
+        // prompt frame. Butts to the true bounds so neighbours meet.
         if (drawBottomEdge) {
-            strokePath.lineTo(inset, h - inset)
+            val botLeftX = if (isFirstInRow) inset else 0f
+            val botRightX = if (isLastInRow) w - inset else w
+            strokePath.moveTo(botLeftX, botY)
+            strokePath.lineTo(botRightX, botY)
         }
     }
 
