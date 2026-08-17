@@ -264,17 +264,16 @@ object ResponseLifecycle {
             }
         }
 
+        // "Collection started" is not proof that bytes left the device. Only
+        // affirmative response/chunk evidence, a provider reply, or a typed flow
+        // that actually reached its terminal path earns `true`. Transport/parser
+        // failures without such evidence remain explicitly unconfirmed.
         val requestDispatched = when {
             evidence?.requestDispatchedObserved == true -> "true"
             finalTermination == Termination.REQUEST_NOT_SENT -> "false"
-            finalTermination in setOf(
-                Termination.PROVIDER_DONE,
-                Termination.PREMATURE_STREAM_CLOSE,
-                Termination.PROVIDER_ERROR,
-                Termination.NETWORK_ERROR,
-                Termination.PARSER_ERROR,
-                Termination.CLIENT_TIMEOUT
-            ) -> "true"
+            finalTermination == Termination.PROVIDER_ERROR -> "true"
+            finalTermination == Termination.PROVIDER_DONE -> "true"
+            finalTermination == Termination.PREMATURE_STREAM_CLOSE -> "true"
             else -> NOT_CONFIRMED
         }
 
@@ -301,6 +300,13 @@ object ResponseLifecycle {
             raw.flowEndedNormally -> "normal"
             else -> "exception"
         }
+        val rawSseEventsDisplay = raw?.let { boolCount(rawSseEvents > 0, rawSseEvents) } ?: NOT_OBSERVED
+        val providerSseErrorDisplay = raw?.providerErrorReceived?.toString() ?: NOT_OBSERVED
+        val rawFlowExceptionDisplay = when {
+            raw == null -> NOT_OBSERVED
+            raw.flowException != null -> raw.flowException
+            else -> NONE_REPORTED
+        }
 
         fun num(v: Int?): String = v?.toString() ?: NOT_REPORTED
         val error = finalError ?: NONE_REPORTED
@@ -324,15 +330,15 @@ object ResponseLifecycle {
                 .append('\n')
             append("Stream Closed: ").append(finalStreamClosed).append('\n')
             append("Termination Source: ").append(finalTermination.wire).append('\n')
-            append("Raw SSE Events Received: ").append(boolCount(rawSseEvents > 0, rawSseEvents)).append('\n')
+            append("Raw SSE Events Received: ").append(rawSseEventsDisplay).append('\n')
             append("Typed Chunks Received: ").append(boolCount(typedChunks > 0, typedChunks)).append('\n')
             append("Content Chunks Received: ").append(anyContentChunks)
                 .append(" (typed=").append(typedContentChunks)
                 .append(", raw=").append(rawContentChunks).append(")\n")
-            append("Provider SSE Error Received: ").append(raw?.providerErrorReceived ?: false).append('\n')
+            append("Provider SSE Error Received: ").append(providerSseErrorDisplay).append('\n')
             append("Usage Metadata Received: ").append(usageReceived).append('\n')
             append("Raw SSE Flow End: ").append(rawFlowEnd).append('\n')
-            append("Raw SSE Flow Exception: ").append(raw?.flowException ?: NONE_REPORTED).append('\n')
+            append("Raw SSE Flow Exception: ").append(rawFlowExceptionDisplay).append('\n')
             append("Malformed Raw SSE Data Events: ").append(raw?.malformedDataEvents ?: 0).append('\n')
             append("Requested Max Output: ").append(num(requestedMaxOutput)).append('\n')
             append("Prompt Tokens: ").append(num(promptTokens)).append('\n')
