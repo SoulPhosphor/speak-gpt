@@ -93,11 +93,13 @@ object ResponseLifecycle {
      * intentionally checked BEFORE zero-content handling: EOF + zero characters
      * does not prove the provider intentionally generated an empty answer.
      *
-     * A clean finish reason establishes provider termination semantics. `stop`
-     * may be Empty only when no visible content was delivered. Modern
-     * `tool_calls` and legacy `function_call` are successful no-text handoffs.
-     * `length` and `content_filter` are clean protocol completions whose answer
-     * is nevertheless incomplete. `error` is an explicit provider failure.
+     * Known finish reasons establish provider termination semantics. `stop` may
+     * be Empty only when no visible content was delivered. Modern `tool_calls`
+     * and legacy `function_call` are successful no-text handoffs. `length` and
+     * `content_filter` are clean protocol completions whose answer is nevertheless
+     * incomplete. `error` is an explicit provider failure. Unknown nonblank
+     * finish reasons are preserved verbatim but remain Incomplete rather than
+     * being promoted to Complete/Empty on semantics the app does not know.
      */
     fun classifyNormalCompletion(lastFinishReason: String?, receivedCharacters: Int): NormalResult {
         val fr = lastFinishReason?.trim()?.ifBlank { null }
@@ -131,14 +133,20 @@ object ResponseLifecycle {
                 fr,
                 streamClosed = false
             )
-            receivedCharacters <= 0 -> NormalResult(
+            fr.equals("stop", ignoreCase = true) && receivedCharacters <= 0 -> NormalResult(
                 Outcome.EMPTY,
                 Termination.PROVIDER_DONE,
                 fr,
                 streamClosed = false
             )
-            else -> NormalResult(
+            fr.equals("stop", ignoreCase = true) -> NormalResult(
                 Outcome.COMPLETE,
+                Termination.PROVIDER_DONE,
+                fr,
+                streamClosed = false
+            )
+            else -> NormalResult(
+                Outcome.INCOMPLETE,
                 Termination.PROVIDER_DONE,
                 fr,
                 streamClosed = false
