@@ -16,11 +16,14 @@
 
 package org.teslasoft.assistant.ui.chat
 
+import android.app.Activity
 import android.content.Context
 import android.text.Editable
 import android.text.StaticLayout
 import android.text.TextWatcher
 import android.util.AttributeSet
+import android.view.WindowInsets
+import android.view.WindowManager
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -90,6 +93,11 @@ class ChatComposerLayout @JvmOverloads constructor(
         }
     }
 
+    /**
+     * Always measures against the compact center slot. That gives the layout a
+     * stable threshold: once the draft needs a second compact line it remains
+     * in multiline mode until it truly fits between the controls again.
+     */
     private fun wouldWrapInCompactSlot(): Boolean {
         val text = messageInput.text?.toString().orEmpty()
         if (text.isEmpty()) return false
@@ -254,10 +262,15 @@ class ChatComposerLayout @JvmOverloads constructor(
 }
 
 /**
- * Adds only the IME portion not already supplied by ChatActivity's existing
- * navigation-bar padding on keyboard_frame. Together the two paddings equal
- * max(navigationBars, ime), so there is one coherent bottom inset result
- * without changing ChatActivity's adjustPan/window contract.
+ * Owns the chat screen's live bottom inset. The old generic inset helper still
+ * targets keyboard_frame for navigation-bar padding, so this container
+ * neutralizes that legacy child padding after inset dispatch and applies the
+ * single authoritative bottom value itself: max(navigation bars, IME).
+ *
+ * ChatActivity's manifest historically requests adjustPan. Once this view is
+ * attached we disable automatic window panning so the system and this layout
+ * cannot both move the composer for the same keyboard. Hardware-keyboard
+ * behavior is unchanged because no IME inset is present in that case.
  */
 class ChatImeInsetLayout @JvmOverloads constructor(
     context: Context,
@@ -274,8 +287,7 @@ class ChatImeInsetLayout @JvmOverloads constructor(
         ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
             val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-            val imeOnlyBottom = max(0, imeBottom - navBottom)
-            val targetBottom = baseBottom + imeOnlyBottom
+            val targetBottom = baseBottom + max(navBottom, imeBottom)
 
             if (view.paddingBottom != targetBottom) {
                 view.setPadding(baseLeft, baseTop, baseRight, targetBottom)
@@ -286,6 +298,24 @@ class ChatImeInsetLayout @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        (context as? Activity)?.window?.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+        )
         ViewCompat.requestApplyInsets(this)
+    }
+
+    override fun dispatchApplyWindowInsets(insets: WindowInsets): WindowInsets {
+        val result = super.dispatchApplyWindowInsets(insets)
+
+        // WindowInsetsUtil still targets this legacy ID from ChatActivity.
+        // Clear only its bottom padding after child dispatch; this parent now
+        // owns navigation-bar and IME clearance together.
+        findViewById<android.view.View?>(R.id.keyboard_frame)?.let { frame ->
+            if (frame.paddingBottom != 0) {
+                frame.setPadding(frame.paddingLeft, frame.paddingTop, frame.paddingRight, 0)
+            }
+        }
+
+        return result
     }
 }
