@@ -20,6 +20,20 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
+ * Raised from the typed chunk path when OpenRouter's unified mid-stream error
+ * chunk reaches the OpenAI-compatible client as finish_reason="error".
+ *
+ * The top-level `error` object is not represented by aallam's typed
+ * ChatCompletionChunk model, but OpenRouter guarantees this terminal choice on
+ * its Chat Completions mid-stream error shape. Throwing here keeps the existing
+ * ChatActivity error/UI path in charge instead of letting a provider error fall
+ * through the normal-success tail and mark the message done.
+ */
+class ProviderStreamTerminalException : RuntimeException(
+    "HTTP/1.1 200 provider SSE stream terminated with finish_reason=error"
+)
+
+/**
  * Response Lifecycle diagnostics: an evidence record of how each user-visible
  * streamed generation ended. One entry is written per streamed generation
  * request, so retries/continuations remain separately diagnosable.
@@ -198,8 +212,12 @@ object ResponseLifecycle {
             finalTermination = Termination.PROVIDER_ERROR
             finalFinish = observedFinish ?: "error"
             finalStreamClosed = true
-            if (finalError == null) {
-                finalError = raw.providerErrorSummary ?: "provider error event received in SSE stream"
+            val rawSummary = raw.providerErrorSummary ?: "provider error event received in SSE stream"
+            finalError = when {
+                finalError == null -> rawSummary
+                raw.providerErrorSummary != null && !finalError.contains(raw.providerErrorSummary) ->
+                    "$finalError | SSE: ${raw.providerErrorSummary}"
+                else -> finalError
             }
         } else if (finalError == null &&
             termination in setOf(Termination.PROVIDER_DONE, Termination.STREAM_CLOSED, Termination.PREMATURE_STREAM_CLOSE)
@@ -357,7 +375,8 @@ class ResponseLifecycleRecorder(
         completionTokens: Int?,
         totalTokens: Int?
     ) {
-        finishReason?.trim()?.ifBlank { null }?.let { lastFinishReason = it }
+        val normalizedFinish = finishReason?.trim()?.ifBlank { null }
+        normalizedFinish?.let { lastFinishReason = it }
         if (generationId == null) id?.trim()?.ifBlank { null }?.let { generationId = it }
         if (contentLength > 0) receivedCharacters += contentLength
         promptTokens?.let { this.promptTokens = it }
@@ -369,6 +388,14 @@ class ResponseLifecycleRecorder(
             contentLength = contentLength,
             usageReceived = promptTokens != null || completionTokens != null || totalTokens != null
         )
+
+        // OpenRouter's Chat Completions mid-stream provider error is a normal
+        // HTTP-200 SSE chunk whose choice terminates with finish_reason="error".
+        // aallam ignores the unknown top-level `error` object, so without this
+        // explicit terminal signal ChatActivity would continue its success tail.
+        if (normalizedFinish.equals("error", ignoreCase = true)) {
+            throw ProviderStreamTerminalException()
+        }
     }
 
     /** Called only by ResponseObserver's successful-HTTP branch. */
