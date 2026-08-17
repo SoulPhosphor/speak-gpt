@@ -5337,9 +5337,36 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * endpoint, non-chat body, parse issue, Automatic with no exclusions)
      * remains byte-for-byte unchanged.
      */
+    /**
+     * Bind lifecycle diagnostics to the exact Ktor request BEFORE dispatch.
+     * Auxiliary non-stream requests share this client, so request identity is
+     * attached only to streamed chat/legacy-completion bodies.
+     */
+    private fun bindLifecycleRecorderToGenerationRequest(request: HttpRequestBuilder) {
+        if (request.attributes.contains(responseLifecycleRecorderAttribute)) return
+        val recorder = currentLifecycle ?: return
+        if (recorder.finalized) return
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+
+        val isStreamedGeneration = try {
+            val root = com.google.gson.JsonParser.parseString(content.text).asJsonObject
+            val streamed = root.get("stream")
+                ?.takeUnless { it.isJsonNull }
+                ?.asBoolean == true
+            val hasGenerationInput = root.has("messages") || root.has("prompt")
+            streamed && root.has("model") && hasGenerationInput
+        } catch (_: Exception) {
+            false
+        }
+        if (isStreamedGeneration) {
+            request.attributes.put(responseLifecycleRecorderAttribute, recorder)
+        }
+    }
+
     private fun augmentRequestWithProviderRouting(request: HttpRequestBuilder) {
         if (apiEndpointObject?.isOpenRouterRouting() != true) return
-        if (currentLifecycle != null) {
+        if (request.attributes.contains(responseLifecycleRecorderAttribute)) {
             // Official OpenRouter audit metadata, delivered on the final stream
             // chunk. This is the response authority for Automatic routing; the
             // app's requested provider settings are never substituted for it.
@@ -5469,14 +5496,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 // while lifecycle logging owns a recorder. The
                                 // observer receives a split copy, so the normal
                                 // typed stream is neither buffered nor consumed.
-                                val recorder = currentLifecycle
-                                if (recorder == null) {
+                                val recorder = if (call.attributes.contains(responseLifecycleRecorderAttribute)) {
+                                    call.attributes[responseLifecycleRecorderAttribute]
+                                } else {
+                                    null
+                                }
+                                if (recorder == null || recorder.finalized) {
                                     false
                                 } else {
                                     recorder.beginProviderObservation()
-                                    if (!call.attributes.contains(responseLifecycleRecorderAttribute)) {
-                                        call.attributes.put(responseLifecycleRecorderAttribute, recorder)
-                                    }
                                     true
                                 }
                             }
@@ -5518,6 +5546,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     // broken by this hook.
                     install(createClientPlugin("OpenRouterProviderRouting") {
                         on(Send) { request ->
+                            bindLifecycleRecorderToGenerationRequest(request)
                             try {
                                 augmentRequestWithProviderRouting(request)
                             } catch (blocked: ProviderRoutingBlockedException) {
@@ -6738,7 +6767,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             requestedMaxOutput = r.requestedMaxOutput, promptTokens = r.promptTokens,
             completionTokens = r.completionTokens, totalTokens = r.totalTokens,
             receivedCharacters = r.receivedCharacters, durationMs = durationMs,
-            generationId = r.generationId, errorText = errorText
+            generationId = r.generationId, errorText = errorText,
+            attemptId = r.attemptId
         ) + providerRoutingLogLine(r.model)
         currentLifecycle = null
         org.teslasoft.assistant.preferences.Logger.logResponseLifecycleAsync(this, body)
