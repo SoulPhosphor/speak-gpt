@@ -65,6 +65,36 @@ class LifecycleAttemptIsolationTest {
         assertFalse(bodyB.contains("Provider SSE Error Received: true"))
     }
 
+    @Test fun finalizedRecorderStillAcceptsRawEvidenceUntilAtomicClose() {
+        val recorder = recorder("T-grace")
+        recorder.beginProviderObservation()
+        recorder.markFinalized()
+
+        // markFinalized() happens before ChatActivity's bounded observer wait.
+        // The attempt slot, not this boolean, is the forensic ownership gate.
+        assertTrue(recorder.finalized)
+        assertTrue(LifecycleDiagnosticEvidenceStore.isOpen(recorder.attemptId))
+        recorder.noteActualModelProvider(
+            RawStreamObservationCodec.encode(
+                RawStreamObservation(
+                    sseDataEvents = 2,
+                    finishReason = "stop",
+                    receivedDone = true,
+                    protocolTerminalMarker = "[DONE]",
+                    generationId = "gen-within-grace",
+                    flowEndedNormally = true
+                )
+            )
+        )
+        recorder.finishProviderObservation()
+
+        val body = formatPremature(recorder)
+        assertTrue(body.contains("Generation ID: gen-within-grace"))
+        assertTrue(body.contains("Finish Reason: stop"))
+        assertTrue(body.contains("Received Done: true"))
+        assertFalse(LifecycleDiagnosticEvidenceStore.isOpen(recorder.attemptId))
+    }
+
     @Test fun closedAttemptRejectsLateRawEvidenceRatherThanReopening() {
         val recorder = recorder("T-closed")
         val id = recorder.attemptId
