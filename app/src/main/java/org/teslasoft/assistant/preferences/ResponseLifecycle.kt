@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.preferences
 
+import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -92,13 +93,18 @@ object ResponseLifecycle {
      * intentionally checked BEFORE zero-content handling: EOF + zero characters
      * does not prove the provider intentionally generated an empty answer.
      *
-     * A clean finish reason does establish provider completion. Only then may a
-     * zero-visible-content reply be called Empty. Tool-call handoffs are a normal
-     * no-text completion. `length` is a clean but truncated provider completion.
+     * A clean finish reason establishes provider termination semantics. `stop`
+     * may be Empty only when no visible content was delivered. Modern
+     * `tool_calls` and legacy `function_call` are successful no-text handoffs.
+     * `length` and `content_filter` are clean protocol completions whose answer
+     * is nevertheless incomplete. `error` is an explicit provider failure.
      */
     fun classifyNormalCompletion(lastFinishReason: String?, receivedCharacters: Int): NormalResult {
         val fr = lastFinishReason?.trim()?.ifBlank { null }
-        val isToolCallFinish = fr != null && fr.equals("tool_calls", ignoreCase = true)
+        val isFunctionHandoff = fr != null && (
+            fr.equals("tool_calls", ignoreCase = true) ||
+                fr.equals("function_call", ignoreCase = true)
+            )
         return when {
             fr == null -> NormalResult(
                 Outcome.INCOMPLETE,
@@ -112,13 +118,20 @@ object ResponseLifecycle {
                 fr,
                 streamClosed = true
             )
-            fr.equals("length", ignoreCase = true) -> NormalResult(
+            fr.equals("length", ignoreCase = true) ||
+                fr.equals("content_filter", ignoreCase = true) -> NormalResult(
                 Outcome.INCOMPLETE,
                 Termination.PROVIDER_DONE,
                 fr,
                 streamClosed = false
             )
-            receivedCharacters <= 0 && !isToolCallFinish -> NormalResult(
+            isFunctionHandoff -> NormalResult(
+                Outcome.COMPLETE,
+                Termination.PROVIDER_DONE,
+                fr,
+                streamClosed = false
+            )
+            receivedCharacters <= 0 -> NormalResult(
                 Outcome.EMPTY,
                 Termination.PROVIDER_DONE,
                 fr,
@@ -162,8 +175,9 @@ object ResponseLifecycle {
 
     /**
      * Build one lifecycle entry. Raw/typed diagnostic counters are retrieved from
-     * the recorder's cross-coroutine evidence store using turn+phase; no response
-     * content is stored or logged.
+     * the recorder's cross-coroutine evidence store by opaque attempt id; turn
+     * and phase remain descriptive grouping fields and are never used as request
+     * identity. No response content is stored or logged.
      *
      * Raw evidence can strengthen a normal typed completion. For example, an SSE
      * error event received over HTTP 200 is provider_error even if the typed Flow
@@ -188,9 +202,13 @@ object ResponseLifecycle {
         receivedCharacters: Int,
         durationMs: Long,
         generationId: String?,
-        errorText: String?
+        errorText: String?,
+        attemptId: String? = null
     ): String {
-        val evidence = LifecycleDiagnosticEvidenceStore.take(turnId, phase)
+        // takeAndClose is deliberately delayed until formatting, after
+        // ChatActivity's bounded observer grace period. Once this executes, the
+        // attempt slot cannot be recreated by a late raw observer callback.
+        val evidence = attemptId?.let(LifecycleDiagnosticEvidenceStore::takeAndClose)
         val raw = evidence?.rawObservation
 
         val suppliedFinish = finishReasonDisplay.trim().ifBlank { "missing" }
@@ -308,10 +326,21 @@ object ResponseLifecycle {
             else -> NONE_REPORTED
         }
 
+        // Raw terminal metadata is also a fallback for typed fields. This matters
+        // when the observer finishes at the edge of the bounded grace period:
+        // evidence accepted before takeAndClose remains authoritative even if a
+        // recorder-side convenience field has not been copied yet.
+        val effectivePromptTokens = promptTokens ?: raw?.promptTokens
+        val effectiveCompletionTokens = completionTokens ?: raw?.completionTokens
+        val effectiveTotalTokens = totalTokens ?: raw?.totalTokens
+        val effectiveGenerationId = generationId?.trim()?.ifBlank { null }
+            ?: raw?.generationId?.trim()?.ifBlank { null }
+
         fun num(v: Int?): String = v?.toString() ?: NOT_REPORTED
         val error = finalError ?: NONE_REPORTED
         return buildString {
             append("Turn ID: ").append(turnId).append('\n')
+            append("Attempt ID: ").append(attemptId?.ifBlank { null } ?: NOT_REPORTED).append('\n')
             append("Phase: ").append(phase).append('\n')
             append("Configured API Provider: ").append(apiProvider.ifBlank { NOT_REPORTED }).append('\n')
             append("API Endpoint: ").append(apiEndpoint.ifBlank { NOT_REPORTED }).append('\n')
@@ -341,15 +370,15 @@ object ResponseLifecycle {
             append("Raw SSE Flow Exception: ").append(rawFlowExceptionDisplay).append('\n')
             append("Malformed Raw SSE Data Events: ").append(raw?.malformedDataEvents ?: 0).append('\n')
             append("Requested Max Output: ").append(num(requestedMaxOutput)).append('\n')
-            append("Prompt Tokens: ").append(num(promptTokens)).append('\n')
-            append("Completion Tokens: ").append(num(completionTokens)).append('\n')
+            append("Prompt Tokens: ").append(num(effectivePromptTokens)).append('\n')
+            append("Completion Tokens: ").append(num(effectiveCompletionTokens)).append('\n')
             append("Reasoning Tokens: ").append(NOT_REPORTED).append('\n')
-            append("Total Tokens: ").append(num(totalTokens)).append('\n')
+            append("Total Tokens: ").append(num(effectiveTotalTokens)).append('\n')
             append("Provider Cost: ").append(NOT_REPORTED).append('\n')
             append("Received Characters: ").append(receivedCharacters).append('\n')
             append("Duration: ").append(durationMs).append(" ms").append('\n')
-            append("Generation ID: ").append(generationId?.trim()?.ifBlank { null } ?: NOT_REPORTED).append('\n')
-            append("Generation ID Received: ").append(!generationId.isNullOrBlank()).append('\n')
+            append("Generation ID: ").append(effectiveGenerationId ?: NOT_REPORTED).append('\n')
+            append("Generation ID Received: ").append(effectiveGenerationId != null).append('\n')
             append("Error: ").append(error)
         }
     }
@@ -358,7 +387,8 @@ object ResponseLifecycle {
 /**
  * Accumulates observable facts for one streamed generation. Typed chunk facts
  * are kept separately from raw-SSE facts so a parser/client loss does not erase
- * what actually arrived on the wire.
+ * what actually arrived on the wire. [attemptId] is the request identity; turn
+ * id and phase are grouping metadata only and may legitimately repeat on retry.
  */
 class ResponseLifecycleRecorder(
     val turnId: String,
@@ -367,8 +397,13 @@ class ResponseLifecycleRecorder(
     val apiEndpoint: String,
     val model: String,
     val requestedMaxOutput: Int?,
-    val startUptimeMs: Long
+    val startUptimeMs: Long,
+    val attemptId: String = UUID.randomUUID().toString()
 ) {
+    init {
+        LifecycleDiagnosticEvidenceStore.open(attemptId)
+    }
+
     @Volatile
     var actualModelProvider: String? = null
         private set
@@ -407,8 +442,7 @@ class ResponseLifecycleRecorder(
         completionTokens?.let { this.completionTokens = it }
         totalTokens?.let { this.totalTokens = it }
         LifecycleDiagnosticEvidenceStore.noteTypedChunk(
-            turnId = turnId,
-            phase = phase,
+            attemptId = attemptId,
             contentLength = contentLength,
             usageReceived = promptTokens != null || completionTokens != null || totalTokens != null
         )
@@ -425,17 +459,22 @@ class ResponseLifecycleRecorder(
     /** Called only by ResponseObserver's successful-HTTP branch. */
     fun beginProviderObservation() {
         providerObservationExpected = true
-        LifecycleDiagnosticEvidenceStore.noteSuccessfulHttpResponse(turnId, phase)
+        LifecycleDiagnosticEvidenceStore.noteSuccessfulHttpResponse(attemptId)
     }
 
     /**
      * Existing observer callback. Normal strings are provider names. A private
      * raw-observation envelope is decoded into terminal metadata and is never
      * allowed to become the displayed provider name.
+     *
+     * The attempt slot is the acceptance gate. A late callback after formatting
+     * has atomically closed the slot is discarded rather than mutating this stale
+     * recorder or creating evidence that a later retry could consume.
      */
     fun noteActualModelProvider(value: String?) {
         if (RawStreamObservationCodec.isEncoded(value)) {
             val raw = RawStreamObservationCodec.decode(value) ?: return
+            if (!LifecycleDiagnosticEvidenceStore.noteRawObservation(attemptId, raw)) return
             raw.finishReason?.trim()?.ifBlank { null }?.let {
                 if (lastFinishReason == null) lastFinishReason = it
             }
@@ -445,9 +484,9 @@ class ResponseLifecycleRecorder(
             raw.promptTokens?.let { if (promptTokens == null) promptTokens = it }
             raw.completionTokens?.let { if (completionTokens == null) completionTokens = it }
             raw.totalTokens?.let { if (totalTokens == null) totalTokens = it }
-            LifecycleDiagnosticEvidenceStore.noteRawObservation(turnId, phase, raw)
             return
         }
+        if (!LifecycleDiagnosticEvidenceStore.isOpen(attemptId)) return
         value?.trim()?.ifBlank { null }?.let { actualModelProvider = it }
     }
 
