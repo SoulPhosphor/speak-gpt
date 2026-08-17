@@ -5496,8 +5496,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 // while lifecycle logging owns a recorder. The
                                 // observer receives a split copy, so the normal
                                 // typed stream is neither buffered nor consumed.
-                                val recorder = if (call.attributes.contains(responseLifecycleRecorderAttribute)) {
-                                    call.attributes[responseLifecycleRecorderAttribute]
+                                val recorder = if (call.request.attributes.contains(responseLifecycleRecorderAttribute)) {
+                                    call.request.attributes[responseLifecycleRecorderAttribute]
                                 } else {
                                     null
                                 }
@@ -5513,8 +5513,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             try {
                                 if (!response.status.isSuccess()) {
                                     capturedProviderErrorBody = response.bodyAsText()
-                                } else if (response.call.attributes.contains(responseLifecycleRecorderAttribute)) {
-                                    val recorder = response.call.attributes[responseLifecycleRecorderAttribute]
+                                } else if (response.call.request.attributes.contains(responseLifecycleRecorderAttribute)) {
+                                    val recorder = response.call.request.attributes[responseLifecycleRecorderAttribute]
                                     try {
                                         // Receive the observer's split copy ONCE (a second
                                         // bodyAsChannel() throws and cancels the origin,
