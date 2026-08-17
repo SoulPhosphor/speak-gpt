@@ -279,6 +279,38 @@ The implementation agent, not the owner, is responsible for targeted verificatio
 - gracefully show no Thinking row when no separate reasoning is supplied;
 - document any supported provider path where upstream reasoning exists but the app cannot currently obtain it.
 
+### 7.4 Favorite-model reasoning settings
+
+Reasoning configuration is stored with the favorite model and remains independent from provider routing. Do not fold reasoning controls into `ChooseProviderActivity` or otherwise make provider routing responsible for reasoning configuration. A model may support provider routing, configurable reasoning, both, or neither.
+
+In favorite-model rows:
+
+- keep the existing **provider cog** as the direct shortcut to provider routing;
+- add a separate **lightbulb icon using the Google/Material lightbulb icon treatment** as the direct shortcut to reasoning settings;
+- show the provider cog only where provider routing is available under the existing rules;
+- show the lightbulb only when SpeakGPT knows that the selected model supports configurable reasoning;
+- allow both icons to appear on the same favorite when both capabilities apply;
+- do not replace these two direct actions with a three-dot overflow menu at this stage. If favorite-specific actions grow beyond these two later, reconsider an overflow menu then.
+
+Tapping the lightbulb opens a dedicated **full-screen Reasoning Settings screen**. Use the app's existing full-screen header pattern with a back action on the left and a single **Save** action at the upper right.
+
+The Reasoning Settings screen contains, in order:
+
+1. **Thinking** — a dropdown containing only the reasoning-effort levels supported for that model/provider combination. `Auto` means SpeakGPT does not explicitly request an effort level and allows the provider/model default to apply.
+2. **Show Reasoning** — an On/Off toggle controlling whether available provider-supplied reasoning is requested/returned for display.
+
+These values are the favorite model's saved default reasoning behavior. They are not provider-routing settings and must not be stored inside the provider-routing configuration merely because a particular model happens to use OpenRouter.
+
+The screen uses explicit save behavior:
+
+- changing either control marks the screen dirty;
+- Save persists the favorite's reasoning settings;
+- after a successful save, briefly show the Save action in the app's existing green success state and show a `Saved` toast;
+- after saving, clear dirty state so Back exits normally;
+- if the user tries to leave with unsaved changes, use the app's existing unsaved-changes confirmation dialog behavior and wording rather than inventing a new dialog pattern.
+
+Conversation-level reasoning controls may later inherit from the favorite and override it for the current conversation. That conversation control is separate from this favorite settings screen and must not silently rewrite the favorite.
+
 ## 8. Appearance destination and legacy settings migration
 
 Add **Appearance** in Control Center directly beneath **Images**.
@@ -387,6 +419,7 @@ The redesign delivers:
 - permanent far-left `ⓘ` Message Details;
 - preserved attachment behavior and provider-neutral visual media presentation;
 - provider-neutral Thinking disclosure for reasoning actually supplied by providers;
+- favorite-model reasoning defaults with a dedicated lightbulb shortcut and full-screen saved settings;
 - dedicated Appearance settings with safe legacy preference migration;
 - upward-growing composer with stable controls and corrected keyboard insets;
 - compatibility with the separate app-wide style/theme system;
