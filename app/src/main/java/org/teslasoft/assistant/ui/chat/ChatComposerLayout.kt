@@ -30,6 +30,7 @@ import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.util.WindowInsetsUtil
 import kotlin.math.max
 
 /**
@@ -275,14 +276,16 @@ class ChatComposerLayout @JvmOverloads constructor(
  * adjustResize in the manifest as the AndroidX backward-compatibility signal,
  * especially for API 29 and earlier where compat IME reporting is approximate.
  *
- * No child view should apply its own bottom system-bar padding; this parent is
- * the single explicit inset owner for the composer area.
+ * The ownership contract also makes the old keyboard_frame/messages navigation
+ * padding calls inert before they can install a competing listener or duplicate
+ * the same bottom system-bar space.
  */
 class ChatImeInsetLayout @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
-) : LinearLayout(context, attrs, defStyleAttr) {
+) : LinearLayout(context, attrs, defStyleAttr),
+    WindowInsetsUtil.Companion.NavigationInsetOwner {
 
     private val baseLeft = paddingLeft
     private val baseTop = paddingTop
@@ -301,6 +304,9 @@ class ChatImeInsetLayout @JvmOverloads constructor(
             insets
         }
     }
+
+    override fun ownsNavigationInsetFor(viewId: Int): Boolean =
+        viewId == R.id.keyboard_frame || viewId == R.id.messages
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
