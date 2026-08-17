@@ -16,14 +16,12 @@
 
 package org.teslasoft.assistant.ui.chat
 
-import android.app.Activity
 import android.content.Context
 import android.text.Editable
 import android.text.StaticLayout
 import android.text.TextWatcher
 import android.util.AttributeSet
 import android.view.View
-import android.view.WindowManager
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -273,9 +271,9 @@ class ChatComposerLayout @JvmOverloads constructor(
 
 /**
  * Owns the chat screen's explicit bottom inset for edge-to-edge layout: the
- * larger of the navigation-bar or software-keyboard inset. The window uses
- * adjustResize as the platform compatibility fallback, especially for older
- * Android versions where compat IME inset reporting is less exact.
+ * larger of the navigation-bar or software-keyboard inset. ChatActivity keeps
+ * adjustResize in the manifest as the AndroidX backward-compatibility signal,
+ * especially for API 29 and earlier where compat IME reporting is approximate.
  *
  * No child view should apply its own bottom system-bar padding; this parent is
  * the single explicit inset owner for the composer area.
@@ -306,9 +304,6 @@ class ChatImeInsetLayout @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        (context as? Activity)?.window?.setSoftInputMode(
-            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
-        )
         ViewCompat.requestApplyInsets(this)
     }
 }
