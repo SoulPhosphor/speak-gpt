@@ -31,20 +31,20 @@ jobs:
           text = path.read_text()
           replacements = [
               (
-                  "val recorder = if (call.attributes.contains(responseLifecycleRecorderAttribute)) {",
-                  "val recorder = if (call.request.attributes.contains(responseLifecycleRecorderAttribute)) {"
-              ),
-              (
-                  "call.attributes[responseLifecycleRecorderAttribute]",
-                  "call.request.attributes[responseLifecycleRecorderAttribute]"
-              ),
-              (
                   "response.call.attributes.contains(responseLifecycleRecorderAttribute)",
                   "response.call.request.attributes.contains(responseLifecycleRecorderAttribute)"
               ),
               (
                   "response.call.attributes[responseLifecycleRecorderAttribute]",
                   "response.call.request.attributes[responseLifecycleRecorderAttribute]"
+              ),
+              (
+                  "val recorder = if (call.attributes.contains(responseLifecycleRecorderAttribute)) {",
+                  "val recorder = if (call.request.attributes.contains(responseLifecycleRecorderAttribute)) {"
+              ),
+              (
+                  "call.attributes[responseLifecycleRecorderAttribute]",
+                  "call.request.attributes[responseLifecycleRecorderAttribute]"
               ),
           ]
           for old, new in replacements:
