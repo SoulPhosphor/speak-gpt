@@ -20,99 +20,52 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Response Lifecycle diagnostics — the temporary, opt-in record of how each
- * user-visible AI reply ended. One entry is written per actual streamed
- * generation request (never one combined entry for a whole multi-step turn),
- * so a completed stream and the interrupted stream that follows it are two
- * separate, comparable records that share a turn id.
+ * Response Lifecycle diagnostics: an evidence record of how each user-visible
+ * streamed generation ended. One entry is written per streamed generation
+ * request, so retries/continuations remain separately diagnosable.
  *
- * This file holds ONLY the pure data and formatting/classification logic so it
- * can be unit-tested without a device. The capture itself lives at the streaming
- * sites in the chat screen; the durable write lives in [Logger].
- *
- * Three fields are deliberately recorded as unavailable/not reported rather than
- * guessed, because the app's OpenAI client library does not surface them:
- *   - receivedDone: the protocol-level end-of-stream marker (e.g. SSE "[DONE]").
- *     The library consumes it internally and never exposes whether it arrived,
- *     so this is logged as "unavailable" — NOT redefined to mean "a finish
- *     reason arrived" or "the stream looked done", which are separate facts
- *     captured independently (finishReason / streamClosed / terminationSource).
- *   - reasoningTokens and providerCost: provider extensions (e.g. OpenRouter)
- *     that the typed usage model does not carry, so they read "not reported".
- * Surfacing any of the three truthfully would require reading the raw response
- * stream ourselves; until that exists these stay honest placeholders.
+ * The typed OpenAI client is not treated as the protocol authority. A typed Flow
+ * completing without throwing means only that the APP-side Flow completed. Raw
+ * SSE terminal evidence gathered by the split Ktor response observer is recorded
+ * separately and is allowed to correct a too-weak typed conclusion.
  */
 object ResponseLifecycle {
 
-    // Phases of a single visible turn. Each streamed request is logged under
-    // exactly one of these; related requests in one turn share a turn id.
     const val PHASE_PRIMARY = "primary"
     const val PHASE_TOOL_CONTINUATION = "tool_continuation"
-    // Defined for a future "continue generating" control. No such path exists
-    // in the app today (regenerate is simply a fresh primary turn), so nothing
-    // writes this value yet.
     const val PHASE_MANUAL_CONTINUE = "manual_continue"
 
-    // The fixed reading for the protocol end-of-stream marker (see the file
-    // header). Kept as a constant so the reason it is not true/false is in one
-    // place.
     const val RECEIVED_DONE_UNAVAILABLE = "unavailable"
-
-    // Fields the current client library cannot surface.
     const val NOT_REPORTED = "not reported"
     const val NOT_REPORTED_BY_API = "not reported by API"
     const val NONE_REPORTED = "none reported"
+    private const val NOT_OBSERVED = "not observed"
+    private const val NOT_CONFIRMED = "not confirmed"
 
-    /** The terminal outcomes. [INCOMPLETE] and [EMPTY] are shown in red. */
     enum class Outcome(val display: String) {
         COMPLETE("Complete"),
         INCOMPLETE("Incomplete"),
-        // The stream ended on its own but delivered no visible text at all —
-        // the provider returned nothing. Its own outcome (not Complete or
-        // Incomplete) so an empty answer is unmistakable, and shown in red.
+        /** Reserved for a clean provider completion that intentionally carried no visible text. */
         EMPTY("Empty"),
         STOPPED("Stopped"),
         CANCELLED("Cancelled")
     }
 
-    /** Why the stream ended, in the owner-specified vocabulary. */
     enum class Termination(val wire: String) {
         PROVIDER_DONE("provider_done"),
+        /** Existing generic close/cancellation bucket used by non-normal caller paths. */
         STREAM_CLOSED("stream_closed"),
+        /** Typed stream reached EOF without semantic/protocol proof of provider completion. */
+        PREMATURE_STREAM_CLOSE("premature_stream_close"),
         PROVIDER_ERROR("provider_error"),
         NETWORK_ERROR("network_error"),
         PARSER_ERROR("parser_error"),
         CLIENT_TIMEOUT("client_timeout"),
         USER_STOP("user_stop"),
         APP_CANCEL("app_cancel"),
-        // The generation attempt existed and a visible assistant row was
-        // created, but the provider request had NOT begun dispatch/collection
-        // when the attempt ended — a failure or a non-user, non-teardown
-        // cancellation during request construction. Names only the fact we
-        // know (nothing was sent), so a purely local pre-dispatch end is never
-        // attributed to the provider, the network, the parser, or a closed
-        // stream, and is never written to the Provider Failure Log.
         REQUEST_NOT_SENT("request_not_sent")
     }
 
-    /**
-     * The terminal decision for a stream that ended on its own (the library's
-     * flow completed without throwing). This is the ONLY case decided purely
-     * from the recorded finish reason; error, stop and cancel cases are decided
-     * by the caller from the failure it caught and are passed to [format]
-     * directly.
-     *
-     *  - no visible text at all -> Empty: the provider returned nothing. This
-     *    wins over every finish reason below (a "stop" that delivered zero
-     *    characters is still an empty answer), EXCEPT a tool-call handoff,
-     *    which legitimately has no text and is not an empty reply.
-     *  - no finish reason seen  -> Incomplete, the stream just closed. The reply
-     *    is NOT treated as complete merely because text arrived or the callback
-     *    ended.
-     *  - finish reason "length" -> Incomplete: the answer was truncated even
-     *    though the provider ended the stream normally.
-     *  - any other finish reason ("stop", "tool_calls", …) -> Complete.
-     */
     data class NormalResult(
         val outcome: Outcome,
         val termination: Termination,
@@ -120,30 +73,88 @@ object ResponseLifecycle {
         val streamClosed: Boolean
     )
 
+    /**
+     * Classify a typed Flow that returned normally. Missing finish_reason is
+     * intentionally checked BEFORE zero-content handling: EOF + zero characters
+     * does not prove the provider intentionally generated an empty answer.
+     *
+     * A clean finish reason does establish provider completion. Only then may a
+     * zero-visible-content reply be called Empty. Tool-call handoffs are a normal
+     * no-text completion. `length` is a clean but truncated provider completion.
+     */
     fun classifyNormalCompletion(lastFinishReason: String?, receivedCharacters: Int): NormalResult {
         val fr = lastFinishReason?.trim()?.ifBlank { null }
-        // A tool-call finish carries no visible text on purpose (the model
-        // called a tool instead of answering), so it is never "empty".
         val isToolCallFinish = fr != null && fr.equals("tool_calls", ignoreCase = true)
         return when {
-            receivedCharacters <= 0 && !isToolCallFinish -> {
-                // Nothing reached the user. The termination source still records
-                // whether the provider ended cleanly or the stream just closed.
-                val termination = if (fr == null) Termination.STREAM_CLOSED else Termination.PROVIDER_DONE
-                NormalResult(Outcome.EMPTY, termination, fr ?: "missing", streamClosed = fr == null)
-            }
-            fr == null -> NormalResult(Outcome.INCOMPLETE, Termination.STREAM_CLOSED, "missing", streamClosed = true)
-            fr.equals("length", ignoreCase = true) ->
-                NormalResult(Outcome.INCOMPLETE, Termination.PROVIDER_DONE, fr, streamClosed = false)
-            else -> NormalResult(Outcome.COMPLETE, Termination.PROVIDER_DONE, fr, streamClosed = false)
+            fr == null -> NormalResult(
+                Outcome.INCOMPLETE,
+                Termination.PREMATURE_STREAM_CLOSE,
+                "missing",
+                streamClosed = true
+            )
+            fr.equals("error", ignoreCase = true) -> NormalResult(
+                Outcome.INCOMPLETE,
+                Termination.PROVIDER_ERROR,
+                fr,
+                streamClosed = true
+            )
+            fr.equals("length", ignoreCase = true) -> NormalResult(
+                Outcome.INCOMPLETE,
+                Termination.PROVIDER_DONE,
+                fr,
+                streamClosed = false
+            )
+            receivedCharacters <= 0 && !isToolCallFinish -> NormalResult(
+                Outcome.EMPTY,
+                Termination.PROVIDER_DONE,
+                fr,
+                streamClosed = false
+            )
+            else -> NormalResult(
+                Outcome.COMPLETE,
+                Termination.PROVIDER_DONE,
+                fr,
+                streamClosed = false
+            )
         }
     }
 
     /**
-     * Build the entry body — every line AFTER the "[timestamp]" header, which
-     * [Logger] prepends. Labels and order match the owner's specified format
-     * exactly. A null numeric field is rendered as the honest placeholder rather
-     * than as 0.
+     * Pure failure/cancellation matrix used by regression tests and by callers
+     * that have explicit terminal facts. Strong intentional/local causes win
+     * before provider/transport causes; pre-dispatch is never attributed to a
+     * provider or network.
+     */
+    fun classifyTerminalFailure(
+        requestDispatched: Boolean,
+        userStop: Boolean = false,
+        appCancel: Boolean = false,
+        providerError: Boolean = false,
+        networkError: Boolean = false,
+        parserError: Boolean = false,
+        clientTimeout: Boolean = false
+    ): Termination = when {
+        userStop -> Termination.USER_STOP
+        appCancel -> Termination.APP_CANCEL
+        !requestDispatched -> Termination.REQUEST_NOT_SENT
+        providerError -> Termination.PROVIDER_ERROR
+        clientTimeout -> Termination.CLIENT_TIMEOUT
+        parserError -> Termination.PARSER_ERROR
+        networkError -> Termination.NETWORK_ERROR
+        else -> Termination.STREAM_CLOSED
+    }
+
+    private fun boolCount(value: Boolean, count: Int): String = "$value ($count)"
+
+    /**
+     * Build one lifecycle entry. Raw/typed diagnostic counters are retrieved from
+     * the recorder's cross-coroutine evidence store using turn+phase; no response
+     * content is stored or logged.
+     *
+     * Raw evidence can strengthen a normal typed completion. For example, an SSE
+     * error event received over HTTP 200 is provider_error even if the typed Flow
+     * merely reaches EOF. Conversely, a missing finish reason is never upgraded
+     * to Complete/Empty merely because EOF was orderly on the client side.
      */
     fun format(
         turnId: String,
@@ -165,8 +176,98 @@ object ResponseLifecycle {
         generationId: String?,
         errorText: String?
     ): String {
+        val evidence = LifecycleDiagnosticEvidenceStore.take(turnId, phase)
+        val raw = evidence?.rawObservation
+
+        val suppliedFinish = finishReasonDisplay.trim().ifBlank { "missing" }
+        val observedFinish = raw?.finishReason?.trim()?.ifBlank { null }
+        val effectiveFinish = when {
+            suppliedFinish.equals("missing", ignoreCase = true) && observedFinish != null -> observedFinish
+            suppliedFinish.equals("error", ignoreCase = true) && observedFinish != null -> observedFinish
+            else -> suppliedFinish
+        }
+
+        var finalOutcome = outcome
+        var finalTermination = termination
+        var finalFinish = effectiveFinish
+        var finalStreamClosed = streamClosed
+        var finalError = errorText?.trim()?.ifBlank { null }
+
+        if (raw?.providerErrorReceived == true) {
+            finalOutcome = Outcome.INCOMPLETE
+            finalTermination = Termination.PROVIDER_ERROR
+            finalFinish = observedFinish ?: "error"
+            finalStreamClosed = true
+            if (finalError == null) {
+                finalError = raw.providerErrorSummary ?: "provider error event received in SSE stream"
+            }
+        } else if (finalError == null &&
+            termination in setOf(Termination.PROVIDER_DONE, Termination.STREAM_CLOSED, Termination.PREMATURE_STREAM_CLOSE)
+        ) {
+            // Success-path classification may have run a few scheduling ticks
+            // before the split raw observer reached its final event. Reconcile
+            // after ChatActivity's bounded await, when format() is called.
+            val finishForClassification = observedFinish ?: suppliedFinish.takeUnless {
+                it.equals("missing", ignoreCase = true) || it.equals("error", ignoreCase = true)
+            }
+            val normal = classifyNormalCompletion(finishForClassification, receivedCharacters)
+            finalOutcome = normal.outcome
+            finalTermination = normal.termination
+            finalFinish = normal.finishReasonDisplay
+            finalStreamClosed = normal.streamClosed
+        }
+
+        if (finalError == null && finalTermination == Termination.PREMATURE_STREAM_CLOSE) {
+            finalError = when {
+                raw?.flowException != null -> raw.flowException
+                raw != null && raw.flowEndedNormally && !raw.receivedDone ->
+                    "stream ended without provider finish_reason or protocol terminal marker"
+                raw != null && raw.flowEndedNormally ->
+                    "stream ended without provider finish_reason"
+                else -> "typed stream ended without provider finish_reason"
+            }
+        }
+
+        val requestDispatched = when {
+            evidence?.requestDispatchedObserved == true -> "true"
+            finalTermination == Termination.REQUEST_NOT_SENT -> "false"
+            finalTermination in setOf(
+                Termination.PROVIDER_DONE,
+                Termination.PREMATURE_STREAM_CLOSE,
+                Termination.PROVIDER_ERROR,
+                Termination.NETWORK_ERROR,
+                Termination.PARSER_ERROR,
+                Termination.CLIENT_TIMEOUT
+            ) -> "true"
+            else -> NOT_CONFIRMED
+        }
+
+        val httpSuccessful = when {
+            evidence?.httpSuccessful == true -> "true"
+            finalTermination == Termination.PROVIDER_ERROR && raw == null -> "false"
+            finalTermination == Termination.REQUEST_NOT_SENT -> NOT_OBSERVED
+            else -> NOT_OBSERVED
+        }
+
+        val rawSseEvents = raw?.sseDataEvents ?: 0
+        val rawContentChunks = raw?.rawContentChunks ?: 0
+        val typedChunks = evidence?.typedChunks ?: 0
+        val typedContentChunks = evidence?.typedContentChunks ?: 0
+        val anyContentChunks = typedContentChunks > 0 || rawContentChunks > 0
+        val usageReceived = evidence?.typedUsageReceived == true || raw?.usageReceived == true
+        val receivedDoneDisplay = when {
+            raw == null -> RECEIVED_DONE_UNAVAILABLE
+            raw.receivedDone -> "true"
+            else -> "false"
+        }
+        val rawFlowEnd = when {
+            raw == null -> NOT_OBSERVED
+            raw.flowEndedNormally -> "normal"
+            else -> "exception"
+        }
+
         fun num(v: Int?): String = v?.toString() ?: NOT_REPORTED
-        val error = errorText?.trim()?.ifBlank { null } ?: NONE_REPORTED
+        val error = finalError ?: NONE_REPORTED
         return buildString {
             append("Turn ID: ").append(turnId).append('\n')
             append("Phase: ").append(phase).append('\n')
@@ -176,11 +277,27 @@ object ResponseLifecycle {
                 .append(actualModelProvider?.trim()?.ifBlank { null } ?: NOT_REPORTED_BY_API)
                 .append('\n')
             append("Model: ").append(model.ifBlank { NOT_REPORTED }).append('\n')
-            append("Outcome: ").append(outcome.display).append('\n')
-            append("Finish Reason: ").append(finishReasonDisplay).append('\n')
-            append("Received Done: ").append(RECEIVED_DONE_UNAVAILABLE).append('\n')
-            append("Stream Closed: ").append(streamClosed).append('\n')
-            append("Termination Source: ").append(termination.wire).append('\n')
+            append("Request Dispatched: ").append(requestDispatched).append('\n')
+            append("HTTP Status Successful: ").append(httpSuccessful).append('\n')
+            append("Outcome: ").append(finalOutcome.display).append('\n')
+            append("Finish Reason: ").append(finalFinish).append('\n')
+            append("Finish Reason Received: ").append(!finalFinish.equals("missing", ignoreCase = true)).append('\n')
+            append("Received Done: ").append(receivedDoneDisplay).append('\n')
+            append("Protocol Terminal Marker: ")
+                .append(raw?.protocolTerminalMarker ?: if (raw == null) RECEIVED_DONE_UNAVAILABLE else "missing")
+                .append('\n')
+            append("Stream Closed: ").append(finalStreamClosed).append('\n')
+            append("Termination Source: ").append(finalTermination.wire).append('\n')
+            append("Raw SSE Events Received: ").append(boolCount(rawSseEvents > 0, rawSseEvents)).append('\n')
+            append("Typed Chunks Received: ").append(boolCount(typedChunks > 0, typedChunks)).append('\n')
+            append("Content Chunks Received: ").append(anyContentChunks)
+                .append(" (typed=").append(typedContentChunks)
+                .append(", raw=").append(rawContentChunks).append(")\n")
+            append("Provider SSE Error Received: ").append(raw?.providerErrorReceived ?: false).append('\n')
+            append("Usage Metadata Received: ").append(usageReceived).append('\n')
+            append("Raw SSE Flow End: ").append(rawFlowEnd).append('\n')
+            append("Raw SSE Flow Exception: ").append(raw?.flowException ?: NONE_REPORTED).append('\n')
+            append("Malformed Raw SSE Data Events: ").append(raw?.malformedDataEvents ?: 0).append('\n')
             append("Requested Max Output: ").append(num(requestedMaxOutput)).append('\n')
             append("Prompt Tokens: ").append(num(promptTokens)).append('\n')
             append("Completion Tokens: ").append(num(completionTokens)).append('\n')
@@ -190,20 +307,16 @@ object ResponseLifecycle {
             append("Received Characters: ").append(receivedCharacters).append('\n')
             append("Duration: ").append(durationMs).append(" ms").append('\n')
             append("Generation ID: ").append(generationId?.trim()?.ifBlank { null } ?: NOT_REPORTED).append('\n')
+            append("Generation ID Received: ").append(!generationId.isNullOrBlank()).append('\n')
             append("Error: ").append(error)
         }
     }
 }
 
 /**
- * Accumulates the observable facts of one streamed generation request as its
- * chunks arrive, then hands them to [ResponseLifecycle.format] at finalization.
- * A recorder is finalized exactly once; [finalized] guards the streaming sites'
- * success path and the shared error/cancel funnel from double-writing.
- *
- * Most fields are confined to the generation coroutine. The actual provider is
- * the one exception: Ktor's split-response observer fills it from the API's raw
- * response stream while the normal typed stream continues unchanged.
+ * Accumulates observable facts for one streamed generation. Typed chunk facts
+ * are kept separately from raw-SSE facts so a parser/client loss does not erase
+ * what actually arrived on the wire.
  */
 class ResponseLifecycleRecorder(
     val turnId: String,
@@ -236,13 +349,6 @@ class ResponseLifecycleRecorder(
     var finalized: Boolean = false
         private set
 
-    /**
-     * Record one chunk. The finish reason is kept as the LAST one seen (the
-     * parser keeps consuming after a finish reason, since usage can arrive in a
-     * later chunk), the generation id as the FIRST seen, and received characters
-     * as the running length of the visible text the app actually obtained —
-     * which is compared against the provider's completion-token count.
-     */
     fun noteChunk(
         finishReason: String?,
         id: String?,
@@ -257,13 +363,40 @@ class ResponseLifecycleRecorder(
         promptTokens?.let { this.promptTokens = it }
         completionTokens?.let { this.completionTokens = it }
         totalTokens?.let { this.totalTokens = it }
+        LifecycleDiagnosticEvidenceStore.noteTypedChunk(
+            turnId = turnId,
+            phase = phase,
+            contentLength = contentLength,
+            usageReceived = promptTokens != null || completionTokens != null || totalTokens != null
+        )
     }
 
+    /** Called only by ResponseObserver's successful-HTTP branch. */
     fun beginProviderObservation() {
         providerObservationExpected = true
+        LifecycleDiagnosticEvidenceStore.noteSuccessfulHttpResponse(turnId, phase)
     }
 
+    /**
+     * Existing observer callback. Normal strings are provider names. A private
+     * raw-observation envelope is decoded into terminal metadata and is never
+     * allowed to become the displayed provider name.
+     */
     fun noteActualModelProvider(value: String?) {
+        if (RawStreamObservationCodec.isEncoded(value)) {
+            val raw = RawStreamObservationCodec.decode(value) ?: return
+            raw.finishReason?.trim()?.ifBlank { null }?.let {
+                if (lastFinishReason == null) lastFinishReason = it
+            }
+            raw.generationId?.trim()?.ifBlank { null }?.let {
+                if (generationId == null) generationId = it
+            }
+            raw.promptTokens?.let { if (promptTokens == null) promptTokens = it }
+            raw.completionTokens?.let { if (completionTokens == null) completionTokens = it }
+            raw.totalTokens?.let { if (totalTokens == null) totalTokens = it }
+            LifecycleDiagnosticEvidenceStore.noteRawObservation(turnId, phase, raw)
+            return
+        }
         value?.trim()?.ifBlank { null }?.let { actualModelProvider = it }
     }
 
@@ -271,7 +404,7 @@ class ResponseLifecycleRecorder(
         providerObservationFinished.complete(Unit)
     }
 
-    /** Close the small observer/main-stream scheduling race on very short replies. */
+    /** Close the observer/main-stream scheduling race on very short replies. */
     suspend fun awaitProviderObservation(timeoutMs: Long) {
         if (!providerObservationExpected || providerObservationFinished.isCompleted) return
         withTimeoutOrNull(timeoutMs) { providerObservationFinished.await() }
