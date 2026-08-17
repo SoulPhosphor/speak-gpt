@@ -60,24 +60,24 @@ class PersonasListActivity : FragmentActivity() {
     // chevron edits. Manager mode (launched from Characters or the
     // create-first-companion prompt): tapping anywhere edits. Owner ruling,
     // July 21 2026 - supersedes the July 19 "no select tap" rule for the Quick
-    // Settings case; open-then-Save still selects too, unchanged.
+    // Settings case. Editing an existing companion no longer selects it just
+    // because Save was tapped; selection remains an explicit row action.
     private var pickMode: Boolean = false
 
     private fun newEmptyPersona(): PersonaObject {
         return PersonaObject("", "")
     }
 
-    // Applies the full-screen editor's result exactly as the old dialog listener
-    // did: a save adds or edits the companion then selects it and finishes
-    // (finishWithActive); a delete removes it and reloads the list.
+    // Creation still returns ACTION_SAVE so the caller can add/select the new
+    // companion and finish. Existing companions persist in the editor itself;
+    // delete still returns ACTION_DELETE so the list can remove and reload it.
     private val editPersonaLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) return@registerForActivityResult
         val data = result.data ?: return@registerForActivityResult
         when (data.getStringExtra(EditPersonaActivity.EXTRA_RESULT_ACTION)) {
             EditPersonaActivity.ACTION_SAVE -> {
-                // The persona carries its stable id (blank for a new one, which
-                // setPersona mints in place). One save path for create AND rename
-                // — a rename updates the record under the same id.
+                // New companions arrive with a blank stable id; setPersona mints
+                // it in place before finishWithActive selects the new companion.
                 val persona = EditPersonaActivity.readResultPersona(data)
                 personaPreferences!!.setPersona(persona)
                 finishWithActive(persona.id)
@@ -113,8 +113,8 @@ class PersonasListActivity : FragmentActivity() {
         // Manager mode: the row is pure browse/edit (matching the System Prompts
         // row) - tapping opens the editor. Pick mode (opened from Quick
         // Settings): tapping the row SWITCHES the chat to that Companion
-        // instantly (owner ruling, July 21 2026). Saving in the editor also
-        // finishes with that Companion active (finishWithActive).
+        // instantly (owner ruling, July 21 2026). Save inside an existing editor
+        // now only saves; it no longer doubles as a selection/navigation action.
         override fun onClick(position: Int) {
             if (pickMode) {
                 val id = list[position]["id"] ?: return
