@@ -311,6 +311,18 @@ The screen uses explicit save behavior:
 
 Conversation-level reasoning controls may later inherit from the favorite and override it for the current conversation. That conversation control is separate from this favorite settings screen and must not silently rewrite the favorite.
 
+### 7.5 Quick Settings reasoning control
+
+Reasoning effort is expected to be changed more frequently than the favorite's full reasoning configuration, so expose the current conversation's **Thinking** level near the top of Quick Settings rather than burying it with lower-frequency tuning controls.
+
+- Place the **Thinking** dropdown directly beneath **System Prompt** in Quick Settings.
+- Use the same available reasoning levels and capability rules as the favorite Reasoning Settings screen, but apply the selected value to the current conversation rather than silently rewriting the favorite.
+- Keep this control visually lightweight: **do not give the Thinking row/tile a separate card or background treatment** like the larger controls above it. It should read as a simple inline dropdown within the Quick Settings flow.
+- Show it only when the active model/provider combination exposes configurable reasoning.
+- Do **not** add **Show Reasoning** to Quick Settings at this stage. That lower-frequency preference remains in the favorite's full Reasoning Settings screen.
+
+The Quick Settings control should make changing reasoning effort fast and obvious while preserving the distinction between a conversation override and the favorite's saved default.
+
 ## 8. Appearance destination and legacy settings migration
 
 Add **Appearance** in Control Center directly beneath **Images**.
@@ -320,7 +332,7 @@ Visible copy:
 - Title: `Appearance`
 - Subtitle: `Customize the look of your chat.`
 
-Use the existing shared overall-app row/style system. Do not copy the general style sheet into this plan.
+Use the existing shared overall-app row/style system. Do not copy or merge the general style sheet into this plan.
 
 Appearance controls, in order:
 
@@ -420,6 +432,7 @@ The redesign delivers:
 - preserved attachment behavior and provider-neutral visual media presentation;
 - provider-neutral Thinking disclosure for reasoning actually supplied by providers;
 - favorite-model reasoning defaults with a dedicated lightbulb shortcut and full-screen saved settings;
+- high-placement Quick Settings Thinking dropdown for fast per-conversation effort changes, without a Show Reasoning control there;
 - dedicated Appearance settings with safe legacy preference migration;
 - upward-growing composer with stable controls and corrected keyboard insets;
 - compatibility with the separate app-wide style/theme system;
