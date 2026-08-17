@@ -22,9 +22,11 @@ import io.ktor.utils.io.writeStringUtf8
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.preferences.RawStreamObservationCodec
 
 class ReportedProviderParserTest {
 
@@ -66,44 +68,104 @@ class ReportedProviderParserTest {
         assertNull(ReportedProviderParser.fromResponseLine("data: {broken"))
     }
 
-    // The observed copy of a generation stream must be read through to its
-    // end even after the provider is found: stopping early stalls Ktor's
-    // channel splitter and freezes the live reply the copy was split from.
-    @Test fun consumesObservedStreamToEndAfterFindingProvider() = runBlocking {
+    @Test fun consumesObservedStreamToEndAndEmitsOneTerminalEnvelope() = runBlocking {
         val channel = ByteChannel(autoFlush = true)
         launch {
             channel.writeStringUtf8("data: {\"id\":\"gen-1\",\"provider\":\"Open Inference\",\"choices\":[]}\n")
             repeat(200) {
                 channel.writeStringUtf8("data: {\"id\":\"gen-1\",\"choices\":[{\"delta\":{\"content\":\"${"x".repeat(400)}\"}}]}\n")
             }
+            channel.writeStringUtf8("data: {\"id\":\"gen-1\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":20,\"total_tokens\":30}}\n")
             channel.writeStringUtf8("data: [DONE]\n")
             channel.close()
         }
-        val providers = mutableListOf<String>()
-        ReportedProviderParser.consumeObservedStream(channel) { providers.add(it) }
-        assertEquals(listOf("Open Inference"), providers)
+        val signals = mutableListOf<String>()
+        ReportedProviderParser.consumeObservedStream(channel) { signals.add(it) }
+
+        assertEquals("Open Inference", signals.first())
+        val raw = RawStreamObservationCodec.decode(signals.last())!!
+        assertEquals(203, raw.sseDataEvents)
+        assertEquals(200, raw.rawContentChunks)
+        assertEquals("stop", raw.finishReason)
+        assertTrue(raw.receivedDone)
+        assertEquals("[DONE]", raw.protocolTerminalMarker)
+        assertTrue(raw.usageReceived)
+        assertEquals(10, raw.promptTokens)
+        assertEquals(20, raw.completionTokens)
+        assertEquals(30, raw.totalTokens)
+        assertEquals("gen-1", raw.generationId)
+        assertTrue(raw.flowEndedNormally)
         assertTrue(channel.isClosedForRead)
         assertEquals(0, channel.availableForRead)
     }
 
-    @Test fun reportsOnlyFirstProviderSeenInObservedStream() = runBlocking {
+    @Test fun reportsOnlyFirstProviderPlusTerminalEnvelope() = runBlocking {
         val channel = ByteChannel(autoFlush = true)
         channel.writeStringUtf8("data: {\"provider\":\"First\",\"choices\":[]}\n")
         channel.writeStringUtf8("data: {\"provider\":\"Second\",\"choices\":[]}\n")
         channel.close()
-        val providers = mutableListOf<String>()
-        ReportedProviderParser.consumeObservedStream(channel) { providers.add(it) }
-        assertEquals(listOf("First"), providers)
+        val signals = mutableListOf<String>()
+        ReportedProviderParser.consumeObservedStream(channel) { signals.add(it) }
+        assertEquals("First", signals.first())
+        assertEquals(2, signals.size)
+        assertTrue(RawStreamObservationCodec.isEncoded(signals.last()))
     }
 
-    @Test fun consumesObservedStreamFullyWhenNoProviderIsReported() = runBlocking {
+    @Test fun noProviderStillProducesTerminalEvidenceAndDrains() = runBlocking {
         val channel = ByteChannel(autoFlush = true)
-        channel.writeStringUtf8("data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n")
+        channel.writeStringUtf8("data: {\"id\":\"gen-3\",\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n")
         channel.writeStringUtf8("data: [DONE]\n")
         channel.close()
-        val providers = mutableListOf<String>()
-        ReportedProviderParser.consumeObservedStream(channel) { providers.add(it) }
-        assertTrue(providers.isEmpty())
+        val signals = mutableListOf<String>()
+        ReportedProviderParser.consumeObservedStream(channel) { signals.add(it) }
+        assertEquals(1, signals.size)
+        val raw = RawStreamObservationCodec.decode(signals.single())!!
+        assertEquals("gen-3", raw.generationId)
+        assertTrue(raw.receivedDone)
         assertTrue(channel.isClosedForRead)
+    }
+
+    @Test fun midStreamProviderErrorIsCapturedWithoutLoggingGeneratedText() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine("data: {\"id\":\"gen-2\",\"choices\":[{\"delta\":{\"content\":\"private partial text\"},\"finish_reason\":null}]}")
+        inspector.acceptLine("data: {\"id\":\"gen-2\",\"error\":{\"code\":502,\"message\":\"upstream disconnected\",\"metadata\":{\"error_type\":\"provider_error\",\"provider_name\":\"StreamLake\"}},\"choices\":[{\"delta\":{},\"finish_reason\":\"error\"}]}")
+
+        val result = inspector.finishNormally()
+        assertTrue(result.providerErrorReceived)
+        assertEquals("error", result.finishReason)
+        assertTrue(result.providerErrorSummary!!.contains("code=502"))
+        assertTrue(result.providerErrorSummary!!.contains("upstream disconnected"))
+        assertTrue(result.providerErrorSummary!!.contains("provider=StreamLake"))
+        assertFalse(result.receivedDone)
+        assertFalse(result.toString().contains("private partial text"))
+    }
+
+    @Test fun eofWithoutDoneOrFinishRemainsIncompleteEvidence() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine("data: {\"id\":\"gen-4\",\"choices\":[{\"delta\":{},\"finish_reason\":null}]}")
+        val result = inspector.finishNormally()
+        assertEquals("gen-4", result.generationId)
+        assertNull(result.finishReason)
+        assertFalse(result.receivedDone)
+        assertTrue(result.flowEndedNormally)
+    }
+
+    @Test fun malformedDataIsCountedButNotInventedIntoProviderFailure() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine("data: {not-json")
+        val result = inspector.finishNormally()
+        assertEquals(1, result.sseDataEvents)
+        assertEquals(1, result.malformedDataEvents)
+        assertFalse(result.providerErrorReceived)
+        assertNull(result.finishReason)
+    }
+
+    @Test fun responsesStyleTerminalMarkerIsRecognized() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine("data: {\"type\":\"response.done\",\"id\":\"resp-1\",\"usage\":{\"total_tokens\":12}}")
+        val result = inspector.finishNormally()
+        assertEquals("response.done", result.protocolTerminalMarker)
+        assertTrue(result.usageReceived)
+        assertEquals(12, result.totalTokens)
     }
 }
