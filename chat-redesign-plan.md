@@ -237,6 +237,37 @@ Remove dead DALL-E/OpenAI presentation branches only after targeted reference ch
 
 Preserve the existing provider-neutral generation architecture and separation between image-generator configuration and current conversation configuration. A compile/static audit is not an end-to-end provider runtime test; do not claim runtime verification unless a real request has succeeded.
 
+### 6.4 Persistent Includes access on later user messages
+
+A document or image that was sent on an earlier user message may continue to affect later requests. That persistent context must remain discoverable and manageable without visually repeating the full attachment tray on every later message.
+
+The original user message where an Include entered the conversation remains the **single canonical owner** of that Include. Later messages must never receive a copied attachment record merely to make the state visible. Do not duplicate image bytes, extracted document text, summaries, artifact text, or model-facing content, and do not move the canonical Include forward through history. Preserving this ownership also preserves the stable request history/prefix rather than manufacturing repeated attachment payloads.
+
+For every **later user message** that follows one or more earlier sent Includes still represented in conversation context, add a **paperclip Message Action immediately to the right of the universal `ⓘ` action**.
+
+- The paperclip is a derived **persistent-context indicator and control surface**, not evidence that the later message itself owns or re-attached those files/images.
+- The original attachment-bearing message keeps its ordinary file/image presentation from Sections 6.1 and 6.2. A paperclip on a later message represents inherited persistent context from earlier messages.
+- If a later user message also introduces a new attachment of its own, its normal attachment/media presentation remains independent; the paperclip still represents any earlier persistent Includes.
+- AI messages do not gain this inherited-Includes paperclip.
+- If no earlier sent Include is represented in the conversation context, do not show the paperclip.
+
+Tapping the paperclip opens an anchored **Includes popup** from/above the Message Actions area. The popup is the compact replacement for permanently rendering the old Includes box on every later message. It must expose the same established Include information and post-send controls rather than inventing a second attachment-management system.
+
+The popup shows the **current canonical state** of all applicable earlier Includes, not a snapshot copied onto the tapped message. It must make clear, using the established Includes UI vocabulary, what each item is and what form it is currently in: **Full**, **Condensed** for documents, **Reduced** for images, or **Artifact**. Show the existing filename/display name, document/image distinction, approximate token weight where meaningful, persistent truncation/size notices where applicable, and the established post-send actions for that kind/form.
+
+The Include ladder and action semantics are not redesigned by this phase. Preserve the existing `document-includes-plan.md` rules, including:
+
+- Full document → **Condense** or **Remove**;
+- Full image → **Reduce to Text Only** or **Remove**;
+- condensed/reduced text remains viewable/editable and can still be removed to an Artifact;
+- a previously sent item that is removed becomes the existing editable **Artifact** rather than silently disappearing from conversation history;
+- Condense/Reduce/Artifact generation continues to use the existing auxiliary-model workflows, fallbacks, progress/error behavior, storage deletion rules, token/size guards, and kind-specific wording;
+- nothing automatically moves down the Full → Condensed/Reduced → Artifact ladder. Those transitions remain user-initiated.
+
+An action taken from a later message's Includes popup must mutate the **canonical Include on its original message**. All paperclip popups that derive from that Include must then reflect the updated state. Do not create a new Include on the message where the user happened to press the action.
+
+The purpose of this control is transparency and cost/context management: a user should be able to discover and shrink persistent documents/images from the current end of a long conversation without scrolling back to the message where they were first attached. The paperclip is intentionally less visually dominant than a repeated full Includes box, but persistent context must never become inaccessible or silently retained.
+
 ## 7. Thinking / provider-supplied reasoning
 
 Provider-supplied reasoning or reasoning summaries belong to the specific AI message that produced them and remain visually distinct from the final answer.
@@ -272,7 +303,7 @@ The universal `ⓘ`, Model names, and Token usage behavior remains independent o
 The implementation agent, not the owner, is responsible for targeted verification when this feature is implemented:
 
 - inspect only the provider/protocol adapters actually supported by the app;
-- verify current primary API/provider documentation for those adapters;
+- verify current primary provider/API documentation for those adapters;
 - determine which supported response/stream forms expose separate reasoning or summaries;
 - normalize supported forms;
 - add focused parsing/persistence tests where the existing test architecture permits;
@@ -357,39 +388,3 @@ Chat-specific requirements:
 - preserve AMOLED capability/wiring; do not resume or redesign the AMOLED/theme project during this work.
 
 Future decorative chat backgrounds may include solid color, subtle texture/pattern, or user-supplied image. They belong behind the conversation area; header and composer remain controlled surfaces.
-
-**Readability rule:** if a non-solid/decorative background is active, readable user/AI message text must have an opaque theme-controlled reading surface underneath it even if the user's normal bubble decoration is off. Keep required reading surface and optional bubble decoration conceptually separate.
-
-## 12. Implementation-level freedom
-
-The owner does not need to make ordinary coding decisions. Choose the smallest implementation that satisfies this contract.
-
-Implementation-level tuning includes:
-
-- responsive constraints needed to preserve approved geometry on unusual widths/font scales;
-- portrait frame/border details that do not change approved geometry;
-- tiny border-clearance adjustments around name glyphs;
-- small Message Details popup dimensions;
-- targeted schema/storage changes needed to persist message metadata/reasoning while keeping existing chats readable;
-- exact Android XML/Kotlin technique.
-
-Do not use implementation freedom to reopen product decisions, redesign unrelated systems, or perform broad cleanup.
-
-## 13. Final contract summary
-
-The redesign delivers:
-
-- one shared chat behavior/data system;
-- one current adaptable presentation shell for AI/user messages, with a clean boundary that permits a second shell later without building it now;
-- independent portraits, names, AI/User bubbles, model names, token usage, and name styling;
-- approved `27dp` / `26dp` alignment, `16dp` corners, `14dp` internal padding, `76dp` portrait geometry, and `53dp` message rhythm;
-- durable per-message model/token ownership;
-- permanent far-left `ⓘ` Message Details;
-- preserved attachment behavior and provider-neutral visual media presentation;
-- provider-neutral Thinking disclosure for reasoning actually supplied by providers;
-- dedicated Appearance settings with safe legacy preference migration;
-- upward-growing composer with stable controls and corrected keyboard insets;
-- compatibility with the separate app-wide style/theme system;
-- preserved existing chat behavior throughout.
-
-No dated addenda or parallel design authority are required. Future approved chat-design changes update this file directly.
