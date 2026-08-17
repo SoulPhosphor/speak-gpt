@@ -255,6 +255,53 @@ Keep the current compact composer interaction while improving long drafting and 
 
 ---
 
+# Phase 6.1 — Persistent Includes access from later messages
+
+## Goal
+
+Restore continuous user control over documents/images that remain in conversation context without repeating the full Includes box on every later turn or duplicating attachment payloads.
+
+## Implement
+
+- Read Section 6.4 of `chat-redesign-plan.md` as the product contract and consult `document-includes-plan.md` only for the existing Include ladder/actions that Section 6.4 explicitly preserves.
+- Keep every sent Include canonically owned by the original user message where it entered history. Do not copy an Include, its image bytes, extracted document text, condensed/reduced text, or artifact onto later messages.
+- Derive which earlier Includes are represented in conversation context at each later **user** message.
+- When one or more earlier Includes apply, add a paperclip Message Action immediately to the right of the universal `ⓘ` action. Do not add the inherited-context paperclip to AI messages.
+- The paperclip is only an indicator/control surface. It must not alter the model-facing message list merely by being rendered.
+- Tapping it opens the anchored Includes popup specified in the plan and reads the **current canonical state** of the applicable earlier Includes.
+- Reuse the established Include vocabulary, state information, token/size notices, and post-send controls. Do not create a parallel Condense/Reduce/Remove implementation.
+- Route every popup action back to the canonical Include on its original message. A Reduce/Condense/Remove/Edit action invoked from a later message must update that original state and refresh every derived paperclip popup that references it.
+- Preserve the existing Full → Condensed/Reduced → Artifact semantics and all existing auxiliary-model, fallback, progress/error, persistence, image-byte deletion, and editing behavior.
+- Keep the original attachment-bearing message's ordinary file/image presentation unchanged. If a later message also attaches something new, its own attachment presentation is separate from the inherited-context paperclip.
+
+## Do not do
+
+- do not stamp the same attachment onto every subsequent message;
+- do not resend or duplicate image/document content solely for UI visibility;
+- do not replace the existing canonical Include model with a new global attachment store unless current code proves the approved behavior cannot otherwise be implemented;
+- do not redesign Condense, Reduce to Text Only, Remove, Artifact generation, or their prompts as part of this phase;
+- do not fold the separate composer visual-polish idea into this repair.
+
+## Verify
+
+At minimum:
+
+- send a document, then several later user turns: every later user message exposes the paperclip without receiving a copied Include record;
+- repeat with a full image and with mixed document/image history;
+- tapping any later paperclip shows the same current canonical state and established actions;
+- Condense a document from a later message and confirm the original Include changes state while later indicators remain usable;
+- Reduce an image from a later message and confirm image bytes/model-facing visual content are removed according to the existing rules without creating a new Include on the later message;
+- Remove a previously sent Include from a later message and confirm the original canonical item becomes the existing Artifact rather than disappearing;
+- reopen the chat and confirm derived paperclips and canonical state reconstruct correctly;
+- confirm AI messages do not get the inherited-context paperclip;
+- confirm no paperclip appears before the first Include exists;
+- inspect request construction to prove this UI repair does not duplicate attachment payloads or move their historical position;
+- test RecyclerView recycling so paperclips do not leak onto unrelated user rows.
+
+**Checkpoint commit:** `phase4: restore persistent Includes controls on later messages`
+
+---
+
 # Phase 7 — Integration hardening and regression sweep
 
 ## Goal
@@ -266,8 +313,9 @@ Verify the complete redesign without reopening the design or broadening scope.
 - fix the standing chat-header/title disappearance bug if still present;
 - verify future drawer integration does not require rewriting message rows/chat behavior;
 - test top/bottom/system-bar insets, rotation/configuration changes, large font scale, and long conversations;
-- test RecyclerView reuse/recycling for stale visibility/state across portraits, names, metadata, Thinking, images, attachments, and Message Details;
+- test RecyclerView reuse/recycling for stale visibility/state across portraits, names, metadata, Thinking, images, attachments, persistent Includes paperclips/popups, and Message Details;
 - verify streamed responses do not inherit stale metadata/reasoning from recycled views;
+- verify persistent Includes actions still mutate only their canonical original-message records and do not duplicate model-facing payloads;
 - verify Appearance combinations remain readable and compatible with the existing app-wide theme/style system;
 - verify no chat-specific palette system or duplicated general style sheet was introduced;
 - verify Classic/Non-Classic and Monochrome are removed, AMOLED wiring remains, and Auto-save Chats is untouched;
@@ -304,4 +352,4 @@ Do **not** stop for ordinary Kotlin/XML technique, moved filenames, provider fie
 
 # Definition of done
 
-The chat redesign is implementation-complete when all seven phases are committed and pass required build/CI checks, the single authoritative plan is satisfied, existing chat behavior is preserved, and any unperformed provider/runtime tests are documented rather than claimed as verified.
+The chat redesign is implementation-complete when all planned phases, including Phase 6.1, are committed and pass required build/CI checks, the single authoritative plan is satisfied, existing chat behavior is preserved, and any unperformed provider/runtime tests are documented rather than claimed as verified.
