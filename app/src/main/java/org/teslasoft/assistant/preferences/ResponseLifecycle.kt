@@ -207,6 +207,24 @@ object ResponseLifecycle {
         var finalStreamClosed = streamClosed
         var finalError = errorText?.trim()?.ifBlank { null }
 
+        // ChatActivity historically classifies timeout/parser catches from only
+        // the top throwable class/message. If Ktor wraps the real cause, that
+        // local check can fall through to NETWORK_ERROR even though the error
+        // text still contains clear client-side parser/timeout evidence. Refine
+        // only that weak fallback here; never rewrite an explicit provider,
+        // user, app, pre-dispatch, or already-specific terminal cause.
+        if (finalTermination == Termination.NETWORK_ERROR && finalError != null) {
+            val diagnostic = finalError.lowercase()
+            finalTermination = when {
+                diagnostic.contains("timeout") -> Termination.CLIENT_TIMEOUT
+                diagnostic.contains("serialization") ||
+                    diagnostic.contains("jsondecodingexception") ||
+                    diagnostic.contains("notransformationfoundexception") ||
+                    diagnostic.contains("expected response body") -> Termination.PARSER_ERROR
+                else -> finalTermination
+            }
+        }
+
         if (raw?.providerErrorReceived == true) {
             finalOutcome = Outcome.INCOMPLETE
             finalTermination = Termination.PROVIDER_ERROR
