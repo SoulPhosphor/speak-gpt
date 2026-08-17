@@ -22,6 +22,7 @@ import android.text.Editable
 import android.text.StaticLayout
 import android.text.TextWatcher
 import android.util.AttributeSet
+import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.widget.EditText
@@ -50,7 +51,7 @@ class ChatComposerLayout @JvmOverloads constructor(
     private lateinit var btnAttach: ImageButton
     private lateinit var btnMicro: ImageButton
     private lateinit var btnSend: ImageButton
-    private var progressView: android.view.View? = null
+    private var progressView: View? = null
 
     private var expanded = false
     private var updatePosted = false
@@ -132,7 +133,9 @@ class ChatComposerLayout @JvmOverloads constructor(
         configureControlRow(set, R.id.btn_attach, startToParent = true)
         configureControlRow(set, R.id.btn_send, endToParent = true)
         configureControlRow(set, R.id.btn_micro, endToView = R.id.btn_send)
-        progressView?.let { configureControlRow(set, R.id.progress, endToParent = true) }
+        if (progressView != null) {
+            configureControlRow(set, R.id.progress, endToParent = true)
+        }
 
         set.clear(R.id.message_input)
         set.constrainWidth(R.id.message_input, ConstraintSet.MATCH_CONSTRAINT)
@@ -310,7 +313,7 @@ class ChatImeInsetLayout @JvmOverloads constructor(
         // WindowInsetsUtil still targets this legacy ID from ChatActivity.
         // Clear only its bottom padding after child dispatch; this parent now
         // owns navigation-bar and IME clearance together.
-        findViewById<android.view.View?>(R.id.keyboard_frame)?.let { frame ->
+        findViewById<View>(R.id.keyboard_frame)?.let { frame ->
             if (frame.paddingBottom != 0) {
                 frame.setPadding(frame.paddingLeft, frame.paddingTop, frame.paddingRight, 0)
             }
