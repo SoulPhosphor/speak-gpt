@@ -5501,7 +5501,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 } else {
                                     null
                                 }
-                                if (recorder == null || recorder.finalized) {
+                                if (recorder == null) {
                                     false
                                 } else {
                                     recorder.beginProviderObservation()
