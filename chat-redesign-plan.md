@@ -270,6 +270,50 @@ An action taken from a later message's Includes popup or from the composer's Inc
 
 The purpose of these controls is transparency and cost/context management: a user should be able to discover and shrink persistent documents/images from the current end of a long conversation without scrolling back to the message where they were first attached. The paperclip is intentionally less visually dominant than a repeated full Includes box, but persistent context must never become inaccessible or silently retained.
 
+### 6.5 Summarizer-safe persistent Includes projection — Phase 6.2
+
+The conversation Summarizer and the Includes ladder control different things. The Summarizer compresses **conversation history**. Includes control the model-facing form of persistent documents/images. Conversation folding must never silently transform, absorb, move, duplicate, or drop an Include.
+
+Canonical storage does not change: every Include remains owned by the original user message where it entered the chat, and the UI/history continues to present it there. Phase 6.2 changes only the **model-facing projection while Summarizer transmission is active**.
+
+When Summarizer transmission is active, derive two parallel model-facing layers from the same canonical chat state:
+
+1. **Persistent Include layer.** Each sent Include that remains represented in conversation context contributes its current model-facing payload exactly once: Full document text, Full image data, Condensed document text, Reduced image text, or Artifact text according to its current canonical form.
+2. **Conversation layer.** Conversation text is sent through the existing rolling-summary + retained-recent-message mechanism. Messages that introduced Includes contain a stable attachment reference in this layer rather than repeating the attachment payload.
+
+The split begins **immediately when Summarizer transmission becomes active**, including first enable on an already-long chat and while catch-up is still running. Do not leave payloads inline until their origin message crosses the fold bookmark and then relocate them later. That would both risk duplication/disappearance and unnecessarily change the prompt position later.
+
+The conversation Summarizer receives normal conversation text plus **minimal stable attachment references only**. A reference may identify the Include by stable ID, kind, and display/filename so discussion such as “the attached contract” remains coherent. The Summarizer must not receive Full document payloads, Full image bytes, Condensed document payloads, Reduced image descriptions, or Artifact payload text as material to summarize.
+
+The Summarizer may summarize what the user and AI said **about** an attachment. It may not become an attachment-transformation mechanism. It must never cause a Full document to become Condensed, a Full image to become Reduced, any Include to become an Artifact, or any Include payload to disappear. The Full → Condensed/Reduced → Artifact ladder remains controlled by the established explicit Include actions.
+
+#### Stable projection and cache eligibility
+
+Prompt caching is an optimization that depends on provider/model behavior; Speak GPT cannot guarantee that a routed provider will cache a particular document or image. The app's responsibility is to **preserve stable-prefix eligibility** whenever the model-facing context itself has not intentionally changed.
+
+- Keep the stable system/persona prefix before the persistent Include layer.
+- Keep persistent Include units before the rolling conversation summary and retained conversation history.
+- Preserve the existing cache-friendly placement of genuinely dynamic per-turn material near the newest turn; Phase 6.2 is not permission to move changing memory/lore or other dynamic injections ahead of otherwise stable history.
+- Keep Include units in original activation/message order. Adding a new Include appends a new unit after existing Include units.
+- A user-initiated Condense, Reduce, Remove-to-Artifact, or Edit changes that Include **in the same logical slot**. Do not move the changed Include to the end merely because its form changed.
+- Do not place a changing attachment count, mutable table of contents/manifest, timestamp, request-time metadata, nondeterministic ordering, or other volatile material ahead of stable Include payloads.
+- Reuse the stored document representation and stored image bytes. Do not re-extract documents, recompress/resize images, or regenerate Condensed/Reduced/Artifact content on every request merely to rebuild the projection.
+- Preserve deterministic serialization and the existing rule that text precedes Full image parts where the transport supports that structure.
+
+A new Include or an explicit Include state/content change is an intentional context change and may invalidate the provider cache from that point. Ordinary conversation folding, Complete Messages changes, summary catch-up, or passage of time must not move or rewrite an otherwise unchanged persistent Include.
+
+#### Authority and request truth
+
+Moving attachment payloads into a persistent model-facing layer is a transport/projection change only. **User-supplied attachment content remains user-origin content.** It must not be promoted to system/developer authority simply because its request position changes.
+
+The persistent Include layer and conversation layer must be the single truth used for both transmission and request-size decisions. Context-window/token-capacity measurement must evaluate the **same effective projection that will actually be sent**, with each Include payload counted exactly once. Do not maintain a separate approximation that can double-count an Include or fail to count one.
+
+Every regular chat path that supports Summarizer transmission must preserve the same semantics, including normal frozen Send and legacy/retry/voice paths. Implementation may share one projection builder or use equivalent paths, but no path may silently retain the old behavior of summarizing or dropping attachment payloads.
+
+When Summarizer transmission is off, preserve the existing full-history inline-Include request behavior. Turning Summarizer on or off is itself a meaningful request-shape change and may rebuild provider cache; do not redesign ordinary non-Summarizer chats solely to avoid that one intentional transition.
+
+The Phase 6.1 paperclip controls must reflect model-facing reality. An Include shown as persistent Full/Condensed/Reduced/Artifact context must not be silently omitted by Summarizer trimming. If a request cannot be sent because the actual persistent context exceeds a model/provider limit, use the existing explicit capacity/error behavior; do not silently auto-condense, auto-reduce, or auto-drop the Include as a hidden fallback.
+
 ## 7. Thinking / provider-supplied reasoning
 
 Provider-supplied reasoning or reasoning summaries belong to the specific AI message that produced them and remain visually distinct from the final answer.
@@ -451,6 +495,7 @@ The redesign delivers:
 - permanent far-left `ⓘ` Message Details;
 - preserved attachment behavior and provider-neutral visual media presentation;
 - persistent paperclip access on later user messages and in the composer for managing earlier Includes without duplicating attachment ownership or payloads;
+- Summarizer-safe two-layer model projection that keeps persistent Include payloads independent of conversation folding, preserves user-origin authority, and optimizes stable-prefix cache eligibility without promising provider cache hits;
 - provider-neutral Thinking disclosure for reasoning actually supplied by providers;
 - dedicated Appearance settings with safe legacy preference migration;
 - one rounded composer with full-width text above a bottom control row, Add (`+`) for new attachments, and theme-safe controls;
