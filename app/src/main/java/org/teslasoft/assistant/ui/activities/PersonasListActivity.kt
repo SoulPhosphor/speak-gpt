@@ -181,6 +181,14 @@ class PersonasListActivity : FragmentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Existing companions can now save in place without returning a result.
+        // Refresh when the editor eventually closes so renamed/edited rows show
+        // the persisted values immediately instead of waiting for a new screen.
+        if (personaPreferences != null) reloadList()
+    }
+
     private fun reloadList() {
         if (list == null) list = arrayListOf()
 
