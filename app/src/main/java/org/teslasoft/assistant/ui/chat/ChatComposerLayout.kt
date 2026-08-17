@@ -137,7 +137,7 @@ class ChatComposerLayout @JvmOverloads constructor(
             configureControlRow(set, R.id.progress, endToParent = true)
         }
 
-        set.clear(R.id.message_input)
+        clearAnchors(set, R.id.message_input)
         set.constrainWidth(R.id.message_input, ConstraintSet.MATCH_CONSTRAINT)
         set.constrainHeight(R.id.message_input, ConstraintSet.WRAP_CONTENT)
 
@@ -211,7 +211,7 @@ class ChatComposerLayout @JvmOverloads constructor(
         endToParent: Boolean = false,
         endToView: Int? = null
     ) {
-        set.clear(viewId)
+        clearAnchors(set, viewId)
         set.constrainWidth(viewId, dp(48))
         set.constrainHeight(viewId, dp(48))
 
@@ -258,6 +258,14 @@ class ChatComposerLayout @JvmOverloads constructor(
                 controlGap
             )
         }
+    }
+
+    /** Clear only geometry anchors so cloned visibility/property state survives. */
+    private fun clearAnchors(set: ConstraintSet, viewId: Int) {
+        set.clear(viewId, ConstraintSet.START)
+        set.clear(viewId, ConstraintSet.END)
+        set.clear(viewId, ConstraintSet.TOP)
+        set.clear(viewId, ConstraintSet.BOTTOM)
     }
 
     private fun dp(value: Int): Int =
