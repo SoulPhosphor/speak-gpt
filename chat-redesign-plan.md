@@ -323,6 +323,20 @@ Reasoning effort is expected to be changed more frequently than the favorite's f
 
 The Quick Settings control should make changing reasoning effort fast and obvious while preserving the distinction between a conversation override and the favorite's saved default.
 
+### 7.6 Reasoning indicator in View All models
+
+The full **Select AI model → View All** list must identify models that SpeakGPT knows support reasoning before the user favorites or selects them. Do not require the user to infer reasoning capability from the model name, because provider-visible names and variants are not consistently self-describing.
+
+- Use the same **Google/Material lightbulb** visual language as the favorite-model reasoning shortcut.
+- For a model whose reasoning capability is known, show a **small, non-clickable lightbulb indicator immediately to the left of the existing favorite/thumbs-up control**.
+- Keep the model-name text in its existing aligned column. Do not place the lightbulb before the model name and do not reserve a leading-icon column on every row merely to keep names aligned.
+- The View All lightbulb is informational only. Tapping it must not open reasoning settings; the favorite-row lightbulb remains the actionable reasoning-settings shortcut after a model is favorited.
+- Keep the capability indicator visually quieter and smaller than the favorite action so the repeated icon does not dominate the model list.
+- Show the indicator only when reasoning support is known from provider/model capability data. Unknown capability must remain unknown rather than being guessed from names such as `thinking`, `reasoning`, or similar substrings.
+- Start with OpenRouter capability metadata where reliable reasoning metadata is already available, but keep the internal capability model provider-neutral so other endpoints can expose the same indicator whenever their model-list or adapter metadata can establish reasoning support without a paid generation request.
+
+The meaning of the lightbulb is consistent across surfaces: in **View All** it means “this model supports reasoning”; on a **favorite** it is the direct control for that model's saved reasoning settings.
+
 ## 8. Appearance destination and legacy settings migration
 
 Add **Appearance** in Control Center directly beneath **Images**.
@@ -433,6 +447,7 @@ The redesign delivers:
 - provider-neutral Thinking disclosure for reasoning actually supplied by providers;
 - favorite-model reasoning defaults with a dedicated lightbulb shortcut and full-screen saved settings;
 - high-placement Quick Settings Thinking dropdown for fast per-conversation effort changes, without a Show Reasoning control there;
+- reasoning-capability lightbulb indicators in the View All model list when capability is known;
 - dedicated Appearance settings with safe legacy preference migration;
 - upward-growing composer with stable controls and corrected keyboard insets;
 - compatibility with the separate app-wide style/theme system;
