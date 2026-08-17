@@ -16,87 +16,257 @@
 
 package org.teslasoft.assistant.providers
 
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readUTF8Line
+import kotlinx.coroutines.CancellationException
+import org.teslasoft.assistant.preferences.RawStreamObservation
+import org.teslasoft.assistant.preferences.RawStreamObservationCodec
 
-/** Reads an API-reported serving provider without consulting app configuration. */
+/** Reads API-reported serving-provider and terminal SSE metadata. */
 object ReportedProviderParser {
 
     /**
-     * Read the observer's split copy of a generation stream, reporting the
-     * first API-reported provider found.
+     * Read the observer's split copy of a generation stream.
      *
-     * The copy MUST be read through to end of stream, found or not. Ktor's
-     * channel splitter feeds the live reply and this copy in lockstep;
-     * abandoning the copy mid-stream stalls the splitter once the copy's
-     * ~4 KB buffer fills, freezing the visible reply. Cancelling the copy
-     * instead makes Ktor's body copier cancel the origin response, killing
-     * the reply outright. Draining to the end is the only safe exit.
+     * The copy MUST be drained through end-of-stream. Ktor's channel splitter
+     * feeds the live reply and this observer copy in lockstep; abandoning or
+     * cancelling the copy can stall/cancel the origin. While draining, collect
+     * only protocol/terminal metadata. Generated content is counted but never
+     * retained or emitted into diagnostics.
+     *
+     * ChatActivity's existing callback is pinned to the exact lifecycle recorder
+     * for this response. Provider names are sent normally; at terminal time one
+     * private RawStreamObservation envelope is sent through that same callback so
+     * raw metadata cannot race onto a later request.
      */
     suspend fun consumeObservedStream(channel: ByteReadChannel, onProvider: (String) -> Unit) {
-        var noted = false
-        while (true) {
-            val line = channel.readUTF8Line() ?: break
-            if (!noted) {
-                val reported = fromResponseLine(line)
-                if (reported != null) {
-                    onProvider(reported)
-                    noted = true
+        val inspector = RawSseInspector()
+        var providerNoted = false
+        try {
+            while (true) {
+                val line = channel.readUTF8Line() ?: break
+                val provider = inspector.acceptLine(line)
+                if (!providerNoted && provider != null) {
+                    onProvider(provider)
+                    providerNoted = true
                 }
             }
+            onProvider(RawStreamObservationCodec.encode(inspector.finishNormally()))
+        } catch (t: Throwable) {
+            // The observer is diagnostics, not generation control. Record its
+            // exception instead of converting an observer-side read failure into
+            // a new app-visible generation failure. Preserve coroutine cancel.
+            onProvider(RawStreamObservationCodec.encode(inspector.finishByException(t)))
+            if (t is CancellationException) throw t
         }
     }
 
     /**
      * OpenRouter's opted-in router metadata is authoritative: use the endpoint
      * whose response marks `selected: true`. A top-level `provider` supplied by
-     * another response shape is the fallback. Comments, `[DONE]`, malformed
-     * JSON, and blank/missing values are ignored.
+     * another response shape is the fallback. Comments, `[DONE]`, malformed JSON,
+     * and blank/missing values are ignored.
      */
     fun fromResponseLine(line: String): String? {
+        val payload = payloadFromLine(line) ?: return null
+        if (payload == "[DONE]") return null
+        return try {
+            providerFromRoot(JsonParser.parseString(payload).asJsonObject)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    internal fun payloadFromLine(line: String): String? {
         val trimmed = line.trim()
         val payload = when {
             trimmed.startsWith("data:", ignoreCase = true) -> trimmed.substring(5).trim()
             trimmed.startsWith("{") -> trimmed
             else -> return null
         }
-        if (payload.isBlank() || payload == "[DONE]") return null
-        if (!payload.contains("\"provider\"") && !payload.contains("\"openrouter_metadata\"")) return null
+        return payload.ifBlank { null }
+    }
 
-        return try {
-            val root = JsonParser.parseString(payload).asJsonObject
-            val available = root.get("openrouter_metadata")
-                ?.takeUnless { it.isJsonNull }
-                ?.asJsonObject
-                ?.get("endpoints")
-                ?.takeUnless { it.isJsonNull }
-                ?.asJsonObject
-                ?.get("available")
-                ?.takeUnless { it.isJsonNull }
-                ?.asJsonArray
+    internal fun providerFromRoot(root: JsonObject): String? {
+        val available = root.get("openrouter_metadata")
+            ?.takeUnless { it.isJsonNull }
+            ?.takeIf { it.isJsonObject }
+            ?.asJsonObject
+            ?.get("endpoints")
+            ?.takeUnless { it.isJsonNull }
+            ?.takeIf { it.isJsonObject }
+            ?.asJsonObject
+            ?.get("available")
+            ?.takeUnless { it.isJsonNull }
+            ?.takeIf { it.isJsonArray }
+            ?.asJsonArray
 
-            if (available != null) {
-                for (element in available) {
-                    val endpoint = element.takeUnless { it.isJsonNull }?.asJsonObject ?: continue
-                    if (endpoint.get("selected")?.takeUnless { it.isJsonNull }?.asBoolean == true) {
-                        endpoint.get("provider")
-                            ?.takeUnless { it.isJsonNull }
-                            ?.asString
-                            ?.trim()
-                            ?.ifBlank { null }
-                            ?.let { return it }
-                    }
+        if (available != null) {
+            for (element in available) {
+                val endpoint = element.takeUnless { it.isJsonNull }
+                    ?.takeIf { it.isJsonObject }
+                    ?.asJsonObject ?: continue
+                if (endpoint.get("selected")?.takeUnless { it.isJsonNull }?.asBoolean == true) {
+                    endpoint.get("provider")
+                        ?.takeUnless { it.isJsonNull }
+                        ?.takeIf { it.isJsonPrimitive }
+                        ?.asString
+                        ?.trim()
+                        ?.ifBlank { null }
+                        ?.let { return it }
                 }
             }
-
-            root.get("provider")
-                ?.takeUnless { it.isJsonNull }
-                ?.asString
-                ?.trim()
-                ?.ifBlank { null }
-        } catch (_: Exception) {
-            null
         }
+
+        return root.get("provider")
+            ?.takeUnless { it.isJsonNull }
+            ?.takeIf { it.isJsonPrimitive }
+            ?.asString
+            ?.trim()
+            ?.ifBlank { null }
     }
+}
+
+/** Pure line inspector, kept device-free so terminal protocol behavior is unit-testable. */
+internal class RawSseInspector {
+    private var sseDataEvents = 0
+    private var rawContentChunks = 0
+    private var providerErrorReceived = false
+    private var providerErrorSummary: String? = null
+    private var finishReason: String? = null
+    private var receivedDone = false
+    private var protocolTerminalMarker: String? = null
+    private var usageReceived = false
+    private var promptTokens: Int? = null
+    private var completionTokens: Int? = null
+    private var totalTokens: Int? = null
+    private var generationId: String? = null
+    private var malformedDataEvents = 0
+
+    /** Returns an API-reported provider if this line contains one. */
+    fun acceptLine(line: String): String? {
+        val payload = ReportedProviderParser.payloadFromLine(line) ?: return null
+        if (line.trim().startsWith("data:", ignoreCase = true)) sseDataEvents++
+
+        if (payload == "[DONE]") {
+            receivedDone = true
+            protocolTerminalMarker = "[DONE]"
+            return null
+        }
+
+        val root = try {
+            JsonParser.parseString(payload).takeIf { it.isJsonObject }?.asJsonObject
+                ?: run {
+                    malformedDataEvents++
+                    return null
+                }
+        } catch (_: Exception) {
+            malformedDataEvents++
+            return null
+        }
+
+        if (generationId == null) {
+            generationId = root.stringOrNull("id")
+        }
+
+        root.get("usage")?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject?.let { usage ->
+            usageReceived = true
+            usage.intOrNull("prompt_tokens")?.let { promptTokens = it }
+            usage.intOrNull("completion_tokens")?.let { completionTokens = it }
+            usage.intOrNull("total_tokens")?.let { totalTokens = it }
+        }
+
+        root.stringOrNull("type")?.let { type ->
+            if (type.equals("response.done", ignoreCase = true)) {
+                protocolTerminalMarker = "response.done"
+            }
+        }
+
+        root.get("choices")?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonArray }?.asJsonArray?.let { choices ->
+            var hasContent = false
+            for (element in choices) {
+                val choice = element.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+                choice.stringOrNull("finish_reason")?.let { finishReason = it }
+
+                val text = choice.stringOrNull("text")
+                if (!text.isNullOrEmpty()) hasContent = true
+
+                val delta = choice.get("delta")?.takeUnless { it.isJsonNull }
+                    ?.takeIf { it.isJsonObject }?.asJsonObject
+                val content = delta?.stringOrNull("content")
+                if (!content.isNullOrEmpty()) hasContent = true
+            }
+            if (hasContent) rawContentChunks++
+        }
+
+        root.get("error")?.takeUnless { it.isJsonNull }?.let { error ->
+            providerErrorReceived = true
+            providerErrorSummary = when {
+                error.isJsonObject -> summarizeError(error.asJsonObject)
+                error.isJsonPrimitive -> error.asString.trim().ifBlank { "provider error event received" }
+                else -> "provider error event received"
+            }.take(1200)
+        }
+
+        return ReportedProviderParser.providerFromRoot(root)
+    }
+
+    fun finishNormally(): RawStreamObservation = snapshot(
+        flowEndedNormally = true,
+        flowException = null
+    )
+
+    fun finishByException(t: Throwable): RawStreamObservation = snapshot(
+        flowEndedNormally = false,
+        flowException = buildString {
+            append(t::class.java.simpleName.ifBlank { t::class.java.name })
+            t.message?.trim()?.ifBlank { null }?.let { append(": ").append(it) }
+        }.take(1200)
+    )
+
+    private fun snapshot(flowEndedNormally: Boolean, flowException: String?): RawStreamObservation =
+        RawStreamObservation(
+            sseDataEvents = sseDataEvents,
+            rawContentChunks = rawContentChunks,
+            providerErrorReceived = providerErrorReceived,
+            providerErrorSummary = providerErrorSummary,
+            finishReason = finishReason,
+            receivedDone = receivedDone,
+            protocolTerminalMarker = protocolTerminalMarker,
+            usageReceived = usageReceived,
+            promptTokens = promptTokens,
+            completionTokens = completionTokens,
+            totalTokens = totalTokens,
+            generationId = generationId,
+            malformedDataEvents = malformedDataEvents,
+            flowEndedNormally = flowEndedNormally,
+            flowException = flowException
+        )
+
+    private fun summarizeError(error: JsonObject): String {
+        val parts = linkedSetOf<String>()
+        error.stringOrNull("code")?.let { parts.add("code=$it") }
+        error.stringOrNull("type")?.let { parts.add("type=$it") }
+        error.stringOrNull("message")?.let { parts.add(it) }
+        error.get("metadata")?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject?.let { metadata ->
+            metadata.stringOrNull("error_type")?.let { parts.add("error_type=$it") }
+            metadata.stringOrNull("provider_name")?.let { parts.add("provider=$it") }
+        }
+        return parts.joinToString("; ").ifBlank { "provider error event received" }
+    }
+}
+
+private fun JsonObject.stringOrNull(name: String): String? = try {
+    get(name)?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonPrimitive }?.asString
+        ?.trim()?.ifBlank { null }
+} catch (_: Exception) {
+    null
+}
+
+private fun JsonObject.intOrNull(name: String): Int? = try {
+    get(name)?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonPrimitive }?.asInt
+} catch (_: Exception) {
+    null
 }
