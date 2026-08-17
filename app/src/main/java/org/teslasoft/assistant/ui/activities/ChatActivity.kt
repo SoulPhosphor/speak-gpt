@@ -597,6 +597,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // Media player for OpenAI TTS
     private var mediaPlayer: MediaPlayer? = null
 
+    // Diagnostic-only observer of audio output-route changes (Bluetooth / wired
+    // headset connect & disconnect). READ-ONLY: it never changes routing — mic
+    // route selection stays in the STT layer (MicRouteSelector / the whisper
+    // engine) and is untouched here. Registered for the life of the Activity so a
+    // connect that happens while the screen is off is still recorded. Its entries
+    // are kept in the "AudioRoute" log family, deliberately separate from the
+    // ChatActivity lifecycle lines, so a reproduction can tell whether a
+    // Bluetooth handoff and an Activity destruction are related or coincidental.
+    private var audioRouteCallback: android.media.AudioDeviceCallback? = null
+    private val audioRouteHandler = Handler(Looper.getMainLooper())
+
     // Keep-alive that spans the read-aloud *after* generation in the plain
     // (non-hands-free) path. The generation keep-alive is released the instant
     // the text stream ends (the generateResponse finally), but TTS playback
@@ -2207,6 +2218,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         reloadAmoled()
 
         mediaPlayer = MediaPlayer()
+
+        // Read-only audio output-route observer (Bluetooth / wired headset
+        // connect & disconnect). Diagnostics only; it never changes routing.
+        registerAudioRouteDiagnostics()
+
         threadLoader = findViewById(R.id.thread_loader)
         threadLoader?.visibility = View.VISIBLE
 
@@ -2267,6 +2283,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return super.dispatchTouchEvent(event)
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Reached only for configuration changes listed in the manifest's
+        // configChanges — those are absorbed here WITHOUT recreating the Activity,
+        // so the live conversation, generation, and mic loop survive untouched.
+        // Logged so a screen-off reproduction can show a night-mode/orientation
+        // flip landing here (conversation preserved) rather than in onDestroy
+        // (conversation torn down). Gated on voice diagnostics: config changes
+        // (e.g. rotations) can be frequent, so this must not spam the Event log.
+        val night = (newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+        val orientation = when (newConfig.orientation) {
+            Configuration.ORIENTATION_LANDSCAPE -> "landscape"
+            Configuration.ORIENTATION_PORTRAIT -> "portrait"
+            else -> "undefined"
+        }
+        logVoiceEvent(
+            "ChatActivity configuration change absorbed (no recreation):" +
+                    " night=$night orientation=$orientation" +
+                    " handsFreeService=${HandsFreeService.isRunning}"
+        )
+    }
+
     public override fun onDestroy() {
         // Tombstone for the event log: when the OS (or a navigation flow)
         // destroys this screen while a voice conversation is live, everything
@@ -2280,6 +2319,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             logVoiceEvent("chat screen destroyed while voice was active — readback and mic loop torn down" +
                     if (isFinishing) " (screen was closed)" else " (destroyed by the system)")
         }
+        // Decisive lifecycle record for the screen-off / route-change interruption
+        // investigation. onDestroy currently always runs the full session teardown
+        // below (killAllProcesses + stopHandsFreeService), so changingConfig=true
+        // here means a mere Android configuration recreation is being treated as a
+        // genuine conversation end — the exact condition that produced an
+        // app_cancel "screen was closed" on a turn the user never abandoned. With
+        // uiMode now handled in the manifest, a night-mode flip should no longer
+        // reach this path; if this line still reports changingConfig=true after
+        // the fix, a different configuration change is recreating the Activity and
+        // the teardown must learn to distinguish the two. Always persisted (bounded
+        // to once per destroy) so the next reproduction is conclusive.
+        val teardownAction = if (isChangingConfigurations)
+            "full teardown (configuration recreation — session state will be lost)"
+        else "full teardown (genuine destroy)"
+        logVoiceEventAlways(
+            "ChatActivity destroy: finishing=$isFinishing" +
+                    " changingConfig=$isChangingConfigurations" +
+                    " generationActive=${requestPreparationInProgress || providerRequestDispatched}" +
+                    " providerDispatched=$providerRequestDispatched" +
+                    " readbackActive=$voiceWasLive" +
+                    " readbackExpected=$handsFreeReadbackExpected" +
+                    " handsFreePref=${preferences?.getHandsFreeMode() == true}" +
+                    " handsFreeService=${HandsFreeService.isRunning}" +
+                    " turn=${currentLifecycleTurnId.ifBlank { "none" }}" +
+                    " action=$teardownAction"
+        )
+        // Route snapshot at destruction, in the separate AudioRoute family. Pairs
+        // with the "readback start" snapshot and any device add/remove lines so a
+        // destroy at the TTS/readback boundary can be matched against whatever the
+        // audio route was doing at that moment.
+        logVoiceEventAlways("AudioRoute [chat destroy]: ${describeAudioOutputRoute()}")
         if (tts != null) {
             tts!!.stop()
             tts!!.shutdown()
@@ -2325,6 +2395,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         try { recognizer?.destroy() } catch (_: Exception) { /* ignore */ }
         recognizer = null
         try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
+
+        // Release the read-only audio-route observer with this Activity instance.
+        unregisterAudioRouteDiagnostics()
 
         // Cancel any in-flight image import. Its own completion handler sees
         // isDestroyed and deletes freshly written bytes that never became a
@@ -8205,6 +8278,75 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if ((getSystemService(POWER_SERVICE) as android.os.PowerManager).isPowerSaveMode) "on" else "off"
     } catch (_: Throwable) { "unknown" }
 
+    /** Short name for an AudioDeviceInfo type, for the AudioRoute diagnostics. */
+    private fun audioDeviceTypeName(type: Int): String = when (type) {
+        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bluetooth_sco"
+        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "bluetooth_a2dp"
+        android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wired_headset"
+        android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "wired_headphones"
+        android.media.AudioDeviceInfo.TYPE_USB_HEADSET -> "usb_headset"
+        android.media.AudioDeviceInfo.TYPE_USB_DEVICE -> "usb_device"
+        android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "builtin_speaker"
+        android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "builtin_earpiece"
+        android.media.AudioDeviceInfo.TYPE_HEARING_AID -> "hearing_aid"
+        else -> "type_$type"
+    }
+
+    /** Best-effort snapshot of the current audio OUTPUT route. Read-only; any
+     *  failure is reported rather than thrown so diagnostics never break audio. */
+    private fun describeAudioOutputRoute(): String = try {
+        val am = getSystemService(AUDIO_SERVICE) as AudioManager
+        val outputs = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .map { audioDeviceTypeName(it.type) }
+            .distinct()
+            .joinToString(",")
+            .ifEmpty { "none" }
+        @Suppress("DEPRECATION")
+        val sco = try { am.isBluetoothScoOn } catch (_: Throwable) { false }
+        "outputs=$outputs btSco=$sco"
+    } catch (e: Throwable) { "unavailable (${e.javaClass.simpleName})" }
+
+    /** AudioRoute-family snapshot, gated on voice diagnostics (called per turn). */
+    private fun logAudioRoute(context: String) {
+        logVoiceEvent("AudioRoute [$context]: ${describeAudioOutputRoute()}")
+    }
+
+    /** Register the read-only output-route observer. Device add/remove are rare,
+     *  decisive events (a Bluetooth headset connecting), so they are always
+     *  persisted; the current route is included so the connect and the resulting
+     *  route land in one line. Never alters routing. */
+    private fun registerAudioRouteDiagnostics() {
+        try {
+            val am = getSystemService(AUDIO_SERVICE) as AudioManager
+            val cb = object : android.media.AudioDeviceCallback() {
+                override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                    val names = addedDevices?.map { audioDeviceTypeName(it.type) }?.distinct()
+                        ?.joinToString(",")?.ifEmpty { "none" } ?: "none"
+                    logVoiceEventAlways("AudioRoute device(s) added: $names; now ${describeAudioOutputRoute()}")
+                }
+                override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                    val names = removedDevices?.map { audioDeviceTypeName(it.type) }?.distinct()
+                        ?.joinToString(",")?.ifEmpty { "none" } ?: "none"
+                    logVoiceEventAlways("AudioRoute device(s) removed: $names; now ${describeAudioOutputRoute()}")
+                }
+            }
+            am.registerAudioDeviceCallback(cb, audioRouteHandler)
+            audioRouteCallback = cb
+        } catch (e: Throwable) {
+            logVoiceEventAlways("AudioRoute diagnostics unavailable: ${e.javaClass.simpleName}")
+        }
+    }
+
+    /** Detach the read-only output-route observer. Activity-owned, so it must be
+     *  released with the Activity instance (called from onDestroy). */
+    private fun unregisterAudioRouteDiagnostics() {
+        val cb = audioRouteCallback ?: return
+        try {
+            (getSystemService(AUDIO_SERVICE) as AudioManager).unregisterAudioDeviceCallback(cb)
+        } catch (_: Throwable) { /* already gone */ }
+        audioRouteCallback = null
+    }
+
     /** Active transport: wifi/cellular/ethernet/other/none/unknown. Best-effort;
      *  any failure (e.g. missing permission) is reported as "unknown". */
     private fun networkState(): String = try {
@@ -9411,6 +9553,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val protection = if (HandsFreeService.isRunning) "hands-free service"
                              else "readback keep-alive (hands-free loop idle)"
             logVoiceEvent("reply ready; reading it back (${preferences?.getTtsEngine()}); protected by: $protection")
+            // TTS/readback boundary — the point the later reproduction reported the
+            // chat being destroyed right at. Snapshot the output route here so a
+            // Bluetooth handoff at this boundary can be correlated with (or ruled
+            // out against) an Activity destruction recorded moments later.
+            logAudioRoute("readback start")
             // This is a loop readback: its completion is what re-arms the mic.
             // (Manual speaker-button re-reads never set this flag, so they
             // never reopen the mic.)

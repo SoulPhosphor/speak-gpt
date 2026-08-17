@@ -63,12 +63,23 @@
              Recreation runs onDestroy, which tears down TTS readback and the
              hands-free mic loop — so merely tilting the phone mid-conversation
              killed whatever was happening (owner report, July 10 2026). There is
-             no landscape-specific layout; the view tree just reflows. -->
+             no landscape-specific layout; the view tree just reflows.
+
+             uiMode belongs in the same list. The app follows the system
+             day/night theme, and a night-mode flip is a configuration change
+             that most often happens while the screen is off and idle — battery
+             saver forcing dark theme, or a scheduled/sunset dark switch. Without
+             uiMode that flip recreated ChatActivity mid-reply, ran onDestroy, and
+             the interrupted stream came back as "The screen was closed before the
+             reply finished" even though the user never left the chat. Handling
+             uiMode here keeps the current colors until the chat is reopened; it
+             does not repaint an already-open chat on a live theme toggle, which
+             is the accepted trade for surviving screen-off voice use. -->
         <activity
             android:name=".ui.activities.ChatActivity"
             android:exported="false"
             android:theme="@style/Theme.Transparent"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
             android:windowSoftInputMode="adjustPan">
         </activity>
 
