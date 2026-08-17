@@ -17,135 +17,247 @@
 package org.teslasoft.assistant.preferences
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * Pins the Response Lifecycle outcome rules and entry shape — the parts a user
- * reads and that drive the red "Outcome: Incomplete" line.
- */
+/** Regression matrix for generation termination semantics. */
 class ResponseLifecycleTest {
 
-    @Test fun actualProviderStartsUnknownAndOnlyChangesFromObservedValue() {
-        val recorder = ResponseLifecycleRecorder(
-            turnId = "T-provider", phase = ResponseLifecycle.PHASE_PRIMARY,
-            apiProvider = "Open Router", apiEndpoint = "https://openrouter.ai/api/v1/",
-            model = "google/gemma", requestedMaxOutput = 8000, startUptimeMs = 0L
-        )
-        assertNull(recorder.actualModelProvider)
-        recorder.noteActualModelProvider("  Open Inference  ")
-        assertEquals("Open Inference", recorder.actualModelProvider)
-    }
-
-    @Test fun noFinishReasonIsIncompleteAndStreamClosed() {
-        val r = ResponseLifecycle.classifyNormalCompletion(null, receivedCharacters = 100)
-        // A stream that closed without a terminal finish reason is never treated
-        // as complete just because text arrived.
+    @Test fun zeroCharsNoFinishIsPrematureNotEmpty() {
+        val r = ResponseLifecycle.classifyNormalCompletion(null, 0)
         assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
-        assertEquals(ResponseLifecycle.Termination.STREAM_CLOSED, r.termination)
+        assertEquals(ResponseLifecycle.Termination.PREMATURE_STREAM_CLOSE, r.termination)
         assertEquals("missing", r.finishReasonDisplay)
         assertTrue(r.streamClosed)
     }
 
-    @Test fun lengthIsIncompleteButProviderEndedTheStream() {
-        val r = ResponseLifecycle.classifyNormalCompletion("length", receivedCharacters = 100)
-        // Truncated by the token limit: the provider ended normally, but the
-        // answer was cut off, so this is Incomplete (and shown in red).
+    @Test fun zeroCharsCleanStopIsEmpty() {
+        val r = ResponseLifecycle.classifyNormalCompletion("stop", 0)
+        assertEquals(ResponseLifecycle.Outcome.EMPTY, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
+        assertFalse(r.streamClosed)
+    }
+
+    @Test fun charsNoFinishIsPremature() {
+        val r = ResponseLifecycle.classifyNormalCompletion(null, 42)
+        assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PREMATURE_STREAM_CLOSE, r.termination)
+    }
+
+    @Test fun charsAndStopAreComplete() {
+        val r = ResponseLifecycle.classifyNormalCompletion("stop", 42)
+        assertEquals(ResponseLifecycle.Outcome.COMPLETE, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
+    }
+
+    @Test fun lengthIsProviderDoneButIncomplete() {
+        val r = ResponseLifecycle.classifyNormalCompletion("length", 42)
         assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
         assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
         assertEquals("length", r.finishReasonDisplay)
-        assertEquals(false, r.streamClosed)
     }
 
-    @Test fun stopWithTextIsComplete() {
-        val r = ResponseLifecycle.classifyNormalCompletion("stop", receivedCharacters = 100)
+    @Test fun explicitProviderErrorFinishBeatsZeroContent() {
+        val r = ResponseLifecycle.classifyNormalCompletion("error", 0)
+        assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PROVIDER_ERROR, r.termination)
+    }
+
+    @Test fun toolCallWithNoTextIsNormalCompletion() {
+        val r = ResponseLifecycle.classifyNormalCompletion("tool_calls", 0)
         assertEquals(ResponseLifecycle.Outcome.COMPLETE, r.outcome)
         assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
-        assertEquals("stop", r.finishReasonDisplay)
     }
 
-    @Test fun toolCallsWithTextIsComplete() {
-        val r = ResponseLifecycle.classifyNormalCompletion("tool_calls", receivedCharacters = 100)
-        assertEquals(ResponseLifecycle.Outcome.COMPLETE, r.outcome)
+    @Test fun networkExceptionClassification() {
+        assertEquals(
+            ResponseLifecycle.Termination.NETWORK_ERROR,
+            ResponseLifecycle.classifyTerminalFailure(requestDispatched = true, networkError = true)
+        )
     }
 
-    @Test fun emptyStopIsEmptyNotComplete() {
-        // The provider ended cleanly ("stop") but sent no visible text: the
-        // owner wants this called out as Empty, not Complete.
-        val r = ResponseLifecycle.classifyNormalCompletion("stop", receivedCharacters = 0)
-        assertEquals(ResponseLifecycle.Outcome.EMPTY, r.outcome)
-        assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
-        assertEquals("stop", r.finishReasonDisplay)
+    @Test fun parserExceptionClassification() {
+        assertEquals(
+            ResponseLifecycle.Termination.PARSER_ERROR,
+            ResponseLifecycle.classifyTerminalFailure(requestDispatched = true, parserError = true)
+        )
     }
 
-    @Test fun emptyClosedStreamIsEmpty() {
-        // No text AND no finish reason: still Empty (the headline), with the
-        // stream-closed detail preserved in the termination source.
-        val r = ResponseLifecycle.classifyNormalCompletion(null, receivedCharacters = 0)
-        assertEquals(ResponseLifecycle.Outcome.EMPTY, r.outcome)
-        assertEquals(ResponseLifecycle.Termination.STREAM_CLOSED, r.termination)
-        assertTrue(r.streamClosed)
+    @Test fun timeoutClassification() {
+        assertEquals(
+            ResponseLifecycle.Termination.CLIENT_TIMEOUT,
+            ResponseLifecycle.classifyTerminalFailure(requestDispatched = true, clientTimeout = true)
+        )
     }
 
-    @Test fun toolCallWithNoTextIsNotEmpty() {
-        // A tool-call handoff legitimately has no visible text — never Empty.
-        val r = ResponseLifecycle.classifyNormalCompletion("tool_calls", receivedCharacters = 0)
-        assertEquals(ResponseLifecycle.Outcome.COMPLETE, r.outcome)
+    @Test fun userStopClassification() {
+        assertEquals(
+            ResponseLifecycle.Termination.USER_STOP,
+            ResponseLifecycle.classifyTerminalFailure(
+                requestDispatched = true,
+                userStop = true,
+                networkError = true
+            )
+        )
     }
 
-    @Test fun emptyOutcomeLineIsRed() {
+    @Test fun appCancellationClassification() {
+        assertEquals(
+            ResponseLifecycle.Termination.APP_CANCEL,
+            ResponseLifecycle.classifyTerminalFailure(
+                requestDispatched = true,
+                appCancel = true,
+                providerError = true
+            )
+        )
+    }
+
+    @Test fun preDispatchTerminationIsNeverAttributedToProvider() {
+        assertEquals(
+            ResponseLifecycle.Termination.REQUEST_NOT_SENT,
+            ResponseLifecycle.classifyTerminalFailure(
+                requestDispatched = false,
+                providerError = true,
+                networkError = true,
+                parserError = true,
+                clientTimeout = true
+            )
+        )
+    }
+
+    @Test fun providerErrorClassificationAfterDispatch() {
+        assertEquals(
+            ResponseLifecycle.Termination.PROVIDER_ERROR,
+            ResponseLifecycle.classifyTerminalFailure(requestDispatched = true, providerError = true)
+        )
+    }
+
+    @Test fun actualProviderStartsUnknownAndDiagnosticEnvelopeCannotBecomeProviderName() {
+        val recorder = recorder("T-provider")
+        assertNull(recorder.actualModelProvider)
+        recorder.noteActualModelProvider("  Open Inference  ")
+        assertEquals("Open Inference", recorder.actualModelProvider)
+
+        recorder.noteActualModelProvider(
+            RawStreamObservationCodec.encode(
+                RawStreamObservation(sseDataEvents = 1, flowEndedNormally = true)
+            )
+        )
+        assertEquals("Open Inference", recorder.actualModelProvider)
+    }
+
+    @Test fun prematureCloseNeverLogsErrorNoneReported() {
         val body = ResponseLifecycle.format(
-            turnId = "T3-1", phase = ResponseLifecycle.PHASE_PRIMARY,
-            apiProvider = "Open Router", apiEndpoint = "https://openrouter.ai/api/v1/",
-            actualModelProvider = "Open Inference", model = "LongCat",
+            turnId = "T-premature", phase = ResponseLifecycle.PHASE_PRIMARY,
+            apiProvider = "OpenRouter", apiEndpoint = "https://openrouter.ai/api/v1/",
+            actualModelProvider = "StreamLake", model = "moonshotai/kimi-k2.5",
+            outcome = ResponseLifecycle.Outcome.INCOMPLETE, finishReasonDisplay = "missing",
+            streamClosed = true, termination = ResponseLifecycle.Termination.PREMATURE_STREAM_CLOSE,
+            requestedMaxOutput = 8000, promptTokens = null, completionTokens = null,
+            totalTokens = null, receivedCharacters = 0, durationMs = 37007,
+            generationId = "gen-123", errorText = null
+        )
+        assertTrue(body.contains("Outcome: Incomplete"))
+        assertTrue(body.contains("Termination Source: premature_stream_close"))
+        assertTrue(body.contains("Generation ID Received: true"))
+        assertFalse(body.contains("Error: none reported"))
+        assertTrue(body.contains("typed stream ended without provider finish_reason"))
+    }
+
+    @Test fun cleanEmptyCompletionMayLegitimatelyHaveNoError() {
+        val body = ResponseLifecycle.format(
+            turnId = "T-empty", phase = ResponseLifecycle.PHASE_PRIMARY,
+            apiProvider = "OpenRouter", apiEndpoint = "https://openrouter.ai/api/v1/",
+            actualModelProvider = null, model = "model",
             outcome = ResponseLifecycle.Outcome.EMPTY, finishReasonDisplay = "stop",
             streamClosed = false, termination = ResponseLifecycle.Termination.PROVIDER_DONE,
-            requestedMaxOutput = 8000, promptTokens = 30, completionTokens = 0,
-            totalTokens = 30, receivedCharacters = 0, durationMs = 600,
+            requestedMaxOutput = null, promptTokens = 10, completionTokens = 0,
+            totalTokens = 10, receivedCharacters = 0, durationMs = 12,
             generationId = "gen-empty", errorText = null
         )
-        // The viewer reds any whole line matching ^Outcome: (Incomplete|Empty)$.
         assertTrue(body.contains("Outcome: Empty"))
-        assertTrue(Regex("(?m)^Outcome: (?:Incomplete|Empty)$").containsMatchIn(body))
-    }
-
-    @Test fun incompleteLineMatchesTheRedRenderExactly() {
-        val body = ResponseLifecycle.format(
-            turnId = "T1-1", phase = ResponseLifecycle.PHASE_PRIMARY,
-            apiProvider = "Open Router", apiEndpoint = "https://openrouter.ai/api/v1/",
-            actualModelProvider = "Open Inference", model = "LongCat",
-            outcome = ResponseLifecycle.Outcome.INCOMPLETE, finishReasonDisplay = "missing",
-            streamClosed = true, termination = ResponseLifecycle.Termination.STREAM_CLOSED,
-            requestedMaxOutput = 8000, promptTokens = null, completionTokens = 742,
-            totalTokens = null, receivedCharacters = 1200, durationMs = 1843,
-            generationId = "gen-abc", errorText = null
-        )
-        // The viewer reds any whole line matching ^Outcome: Incomplete$ — the
-        // body must produce exactly that line so the red pass fires.
-        assertTrue(Regex("(?m)^Outcome: Incomplete$").containsMatchIn(body))
-        // Fields the client library cannot surface are honest placeholders, not
-        // guesses or zeros.
-        assertTrue(body.contains("Received Done: unavailable"))
-        assertTrue(body.contains("Reasoning Tokens: not reported"))
-        assertTrue(body.contains("Provider Cost: not reported"))
-        // A null token count reads "not reported", never 0.
-        assertTrue(body.contains("Prompt Tokens: not reported"))
-        assertTrue(body.contains("Completion Tokens: 742"))
-        assertTrue(body.contains("Configured API Provider: Open Router"))
-        assertTrue(body.contains("API Endpoint: https://openrouter.ai/api/v1/"))
-        assertTrue(body.contains("Actual Model Provider (API response): Open Inference"))
-        // No error means the honest "none reported", and the body carries no
-        // leading timestamp (Logger prepends the header).
+        assertTrue(body.contains("Finish Reason: stop"))
         assertTrue(body.contains("Error: none reported"))
-        assertTrue(body.startsWith("Turn ID: T1-1"))
     }
 
-    @Test fun completeEntryReadsComplete() {
+    @Test fun rawProviderErrorOverridesTypedNormalEof() {
+        val recorder = recorder("T-sse-error")
+        recorder.beginProviderObservation()
+        recorder.noteActualModelProvider(
+            RawStreamObservationCodec.encode(
+                RawStreamObservation(
+                    sseDataEvents = 2,
+                    providerErrorReceived = true,
+                    providerErrorSummary = "code=502; upstream disconnected",
+                    finishReason = "error",
+                    flowEndedNormally = true
+                )
+            )
+        )
+        recorder.finishProviderObservation()
+
         val body = ResponseLifecycle.format(
-            turnId = "T2-1", phase = ResponseLifecycle.PHASE_TOOL_CONTINUATION,
+            turnId = "T-sse-error", phase = ResponseLifecycle.PHASE_PRIMARY,
+            apiProvider = "OpenRouter", apiEndpoint = "https://openrouter.ai/api/v1/",
+            actualModelProvider = null, model = "model",
+            outcome = ResponseLifecycle.Outcome.INCOMPLETE, finishReasonDisplay = "missing",
+            streamClosed = true, termination = ResponseLifecycle.Termination.PREMATURE_STREAM_CLOSE,
+            requestedMaxOutput = null, promptTokens = null, completionTokens = null,
+            totalTokens = null, receivedCharacters = 0, durationMs = 20,
+            generationId = null, errorText = null
+        )
+        assertTrue(body.contains("HTTP Status Successful: true"))
+        assertTrue(body.contains("Provider SSE Error Received: true"))
+        assertTrue(body.contains("Termination Source: provider_error"))
+        assertTrue(body.contains("Error: code=502; upstream disconnected"))
+    }
+
+    @Test fun rawFinishAndDoneCanRecoverTerminalFactsTypedClientMissed() {
+        val recorder = recorder("T-raw-stop")
+        recorder.beginProviderObservation()
+        recorder.noteActualModelProvider(
+            RawStreamObservationCodec.encode(
+                RawStreamObservation(
+                    sseDataEvents = 3,
+                    finishReason = "stop",
+                    receivedDone = true,
+                    protocolTerminalMarker = "[DONE]",
+                    usageReceived = true,
+                    promptTokens = 11,
+                    completionTokens = 0,
+                    totalTokens = 11,
+                    generationId = "gen-from-raw",
+                    flowEndedNormally = true
+                )
+            )
+        )
+        recorder.finishProviderObservation()
+
+        val body = ResponseLifecycle.format(
+            turnId = "T-raw-stop", phase = ResponseLifecycle.PHASE_PRIMARY,
+            apiProvider = "OpenRouter", apiEndpoint = "https://openrouter.ai/api/v1/",
+            actualModelProvider = null, model = "model",
+            outcome = ResponseLifecycle.Outcome.INCOMPLETE, finishReasonDisplay = "missing",
+            streamClosed = true, termination = ResponseLifecycle.Termination.PREMATURE_STREAM_CLOSE,
+            requestedMaxOutput = null, promptTokens = recorder.promptTokens,
+            completionTokens = recorder.completionTokens, totalTokens = recorder.totalTokens,
+            receivedCharacters = 0, durationMs = 20,
+            generationId = recorder.generationId, errorText = null
+        )
+        assertTrue(body.contains("Outcome: Empty"))
+        assertTrue(body.contains("Finish Reason: stop"))
+        assertTrue(body.contains("Received Done: true"))
+        assertTrue(body.contains("Usage Metadata Received: true"))
+        assertTrue(body.contains("Generation ID: gen-from-raw"))
+    }
+
+    @Test fun responseEntryStillContainsExistingUsefulFields() {
+        val body = ResponseLifecycle.format(
+            turnId = "T-fields", phase = ResponseLifecycle.PHASE_TOOL_CONTINUATION,
             apiProvider = "OpenAI", apiEndpoint = "https://api.openai.com/v1/",
-            actualModelProvider = null, model = "LongCat",
+            actualModelProvider = null, model = "model",
             outcome = ResponseLifecycle.Outcome.COMPLETE, finishReasonDisplay = "stop",
             streamClosed = false, termination = ResponseLifecycle.Termination.PROVIDER_DONE,
             requestedMaxOutput = 8000, promptTokens = 30, completionTokens = 40,
@@ -153,10 +265,21 @@ class ResponseLifecycleTest {
             generationId = "gen-xyz", errorText = null
         )
         assertTrue(body.contains("Outcome: Complete"))
-        assertTrue(body.contains("Finish Reason: stop"))
-        assertTrue(body.contains("Phase: tool_continuation"))
+        assertTrue(body.contains("Termination Source: provider_done"))
+        assertTrue(body.contains("Configured API Provider: OpenAI"))
         assertTrue(body.contains("Actual Model Provider (API response): not reported by API"))
-        // A Complete entry must never trip the red-incomplete matcher.
-        assertTrue(!Regex("(?m)^Outcome: Incomplete$").containsMatchIn(body))
+        assertTrue(body.contains("Reasoning Tokens: not reported"))
+        assertTrue(body.contains("Provider Cost: not reported"))
+        assertTrue(Regex("(?m)^Outcome: Complete$").containsMatchIn(body))
     }
+
+    private fun recorder(turnId: String) = ResponseLifecycleRecorder(
+        turnId = turnId,
+        phase = ResponseLifecycle.PHASE_PRIMARY,
+        apiProvider = "OpenRouter",
+        apiEndpoint = "https://openrouter.ai/api/v1/",
+        model = "model",
+        requestedMaxOutput = 8000,
+        startUptimeMs = 0L
+    )
 }
