@@ -92,6 +92,22 @@ class ResponseLifecycleTest {
         assertFalse(r.streamClosed)
     }
 
+    @Test fun unknownFinishWithTextIsIncompleteAndPreserved() {
+        val r = ResponseLifecycle.classifyNormalCompletion("provider_specific_terminal", 42)
+        assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
+        assertEquals("provider_specific_terminal", r.finishReasonDisplay)
+        assertFalse(r.streamClosed)
+    }
+
+    @Test fun unknownFinishWithoutTextIsIncompleteNeverEmpty() {
+        val r = ResponseLifecycle.classifyNormalCompletion("provider_specific_terminal", 0)
+        assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
+        assertEquals("provider_specific_terminal", r.finishReasonDisplay)
+        assertFalse(r.streamClosed)
+    }
+
     @Test fun networkExceptionClassification() {
         assertEquals(
             ResponseLifecycle.Termination.NETWORK_ERROR,
