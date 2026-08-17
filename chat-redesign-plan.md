@@ -253,6 +253,8 @@ For every **later user message** that follows one or more earlier sent Includes 
 
 Tapping the paperclip opens an anchored **Includes popup** from/above the Message Actions area. The popup is the compact replacement for permanently rendering the old Includes box on every later message. It must expose the same established Include information and post-send controls rather than inventing a second attachment-management system.
 
+The current composer also exposes the same persistent-context control whenever one or more earlier sent Includes are still represented in conversation context. In the composer's bottom control row, show a **paperclip immediately to the right of the Add (`+`) control**. This composer paperclip opens the same current-state Includes popup and supports the same post-send actions before the next message is sent. It is a management shortcut only; rendering or tapping it must not copy, move, or resend an Include.
+
 The popup shows the **current canonical state** of all applicable earlier Includes, not a snapshot copied onto the tapped message. It must make clear, using the established Includes UI vocabulary, what each item is and what form it is currently in: **Full**, **Condensed** for documents, **Reduced** for images, or **Artifact**. Show the existing filename/display name, document/image distinction, approximate token weight where meaningful, persistent truncation/size notices where applicable, and the established post-send actions for that kind/form.
 
 The Include ladder and action semantics are not redesigned by this phase. Preserve the existing `document-includes-plan.md` rules, including:
@@ -264,9 +266,9 @@ The Include ladder and action semantics are not redesigned by this phase. Preser
 - Condense/Reduce/Artifact generation continues to use the existing auxiliary-model workflows, fallbacks, progress/error behavior, storage deletion rules, token/size guards, and kind-specific wording;
 - nothing automatically moves down the Full → Condensed/Reduced → Artifact ladder. Those transitions remain user-initiated.
 
-An action taken from a later message's Includes popup must mutate the **canonical Include on its original message**. All paperclip popups that derive from that Include must then reflect the updated state. Do not create a new Include on the message where the user happened to press the action.
+An action taken from a later message's Includes popup or from the composer's Includes popup must mutate the **canonical Include on its original message**. All derived paperclip controls must then reflect the updated state. Do not create a new Include on the message or composer location where the user happened to press the action.
 
-The purpose of this control is transparency and cost/context management: a user should be able to discover and shrink persistent documents/images from the current end of a long conversation without scrolling back to the message where they were first attached. The paperclip is intentionally less visually dominant than a repeated full Includes box, but persistent context must never become inaccessible or silently retained.
+The purpose of these controls is transparency and cost/context management: a user should be able to discover and shrink persistent documents/images from the current end of a long conversation without scrolling back to the message where they were first attached. The paperclip is intentionally less visually dominant than a repeated full Includes box, but persistent context must never become inaccessible or silently retained.
 
 ## 7. Thinking / provider-supplied reasoning
 
@@ -359,15 +361,46 @@ For fresh installs, use conservative defaults that most closely preserve the app
 
 ## 9. Composer and keyboard behavior
 
-Keep the current short-message interaction model while improving multiline drafting.
+Keep the current upward-growing multiline behavior and coherent keyboard/inset ownership from Phase 6, but change the normal composer geometry to a modern two-level surface.
 
-- At one line, the editable field occupies the available center space between the existing side controls.
-- The field never renders behind/under those controls.
-- As text wraps, the text area/composer grows **upward** while side controls remain bottom-anchored.
-- Preserve a sensible maximum height; the existing approximately **`120dp`** maximum is the reference unless device testing requires a small correction.
-- Beyond the maximum, the draft scrolls internally rather than consuming the conversation viewport.
-- Preserve existing attach/mic/send/conversation behavior, IDs/listeners, text watcher, voice-state tinting, send semantics, and hardware keyboard behavior.
-- Fix the case where the composer can sit partly beneath the software keyboard by using one coherent window-inset/keyboard mechanism. Do not stack a second competing offset hack on top of the existing system.
+### 9.1 Normal composer surface
+
+Use one rounded composer surface containing a full-width editable text region **above** a bottom control row. The first line of text is no longer squeezed horizontally between side controls.
+
+Bottom-row control order:
+
+- left side: **Add (`+`)**;
+- immediately to the right of Add, show the conditional **persistent Includes paperclip** from Section 6.4 when earlier sent Includes remain represented in conversation context;
+- right side: **Expand content**, then **Mic**, then the existing **Send / Conversation** control in its current state-dependent behavior.
+
+The Add (`+`) control replaces the paperclip as the entry point for attaching new content. Tapping Add opens the existing attachment chooser with the existing **Camera / Image / Document** behavior. This is a presentation/entry-point change only; attachment import, pending attachment state, capability checks, and send semantics remain the existing system.
+
+The persistent Includes paperclip and Add control have deliberately different meanings: **Add creates new pending context; paperclip manages already-sent persistent context.** Do not merge those actions into one menu.
+
+Pending unsent attachment presentation is not otherwise redesigned by this section. Preserve the existing pending Includes information and removal behavior unless a later approved design explicitly moves it.
+
+As text wraps, the normal composer continues to grow **upward**. Preserve a sensible normal-mode maximum height; the existing approximately **`120dp`** maximum remains the reference unless device testing requires a small correction. Beyond the normal-mode maximum, the draft scrolls internally rather than consuming the conversation viewport.
+
+All composer icons use the existing theme/semantic color system. Do not hard-code palette-specific icon colors or reintroduce low-contrast icon-on-similar-surface combinations.
+
+### 9.2 Expanded drafting mode
+
+Place an **Expand content** action immediately to the left of the Mic control in the normal bottom row.
+
+Tapping Expand enters an expanded drafting mode in which the **same composer and same live draft** expand to fill the available chat content area above the software keyboard and below the app/header/system-bar region. The keyboard remains usable. The expanded surface must use the existing coherent IME/window-inset mechanism rather than adding another keyboard-offset system.
+
+- Do not create a second editor and copy text between normal and expanded modes. Cursor position, selection, composing text/IME state, undo-relevant editing state where supported, and draft contents must remain continuous across the transition.
+- In expanded mode, the editable text region uses the available height instead of the normal approximately `120dp` cap and scrolls internally only when its expanded space is exhausted.
+- Keep the bottom composer controls available in expanded mode so Add, persistent Includes management, Mic, and Send/Conversation remain reachable while drafting.
+- Remove/hide the normal Expand action while expanded.
+- Show a **Collapse content** action in the **upper-right corner of the expanded composer surface**.
+- Tapping Collapse returns to normal composer mode and restores the normal height appropriate to the current draft. It must not truncate, clear, submit, or otherwise mutate the draft.
+- Entering or leaving expanded mode must not send a message, alter pending Includes, mutate canonical Includes, change voice state, or change the selected model/provider.
+- Hardware-keyboard behavior remains supported in both normal and expanded modes.
+
+### 9.3 Preserved behavior
+
+Preserve attach/add, mic, send/conversation behavior, load-bearing listeners, text watcher behavior, voice-state tinting, send semantics, hardware keyboard behavior, and the single coherent software-keyboard inset mechanism. Do not stack a second competing offset hack on top of the Phase 6 inset ownership.
 
 ## 10. Header and future drawer
 
@@ -417,10 +450,12 @@ The redesign delivers:
 - durable per-message model/token ownership;
 - permanent far-left `ⓘ` Message Details;
 - preserved attachment behavior and provider-neutral visual media presentation;
-- persistent paperclip access on later user messages for managing earlier Includes without duplicating attachment ownership or payloads;
+- persistent paperclip access on later user messages and in the composer for managing earlier Includes without duplicating attachment ownership or payloads;
 - provider-neutral Thinking disclosure for reasoning actually supplied by providers;
 - dedicated Appearance settings with safe legacy preference migration;
-- upward-growing composer with stable controls and corrected keyboard insets;
+- one rounded composer with full-width text above a bottom control row, Add (`+`) for new attachments, and theme-safe controls;
+- optional expanded drafting mode that uses the same live draft and fills the available chat area above the keyboard;
+- upward-growing normal composer with stable controls and corrected keyboard insets;
 - compatibility with the separate app-wide style/theme system;
 - preserved existing chat behavior throughout.
 
