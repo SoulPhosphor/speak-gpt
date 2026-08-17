@@ -19,13 +19,6 @@ package org.teslasoft.assistant.util
 import android.content.Context
 import org.teslasoft.assistant.R
 
-/**
- * Android-side mapping from a classified [GenErrorCode] to its user-facing chat
- * message. Kept separate from [GenerationErrorClassifier] so the classifier
- * stays pure and unit-testable; this half is the only part that touches `R` and
- * a [Context]. The neutral sentences live in strings.xml; the stable `[code]`
- * prefix is prepended here so the wording and the code never drift apart.
- */
 fun GenErrorCode.messageRes(): Int = when (this) {
     GenErrorCode.N1 -> R.string.gen_error_n1
     GenErrorCode.N2 -> R.string.gen_error_n2
@@ -42,42 +35,30 @@ fun GenErrorCode.messageRes(): Int = when (this) {
     GenErrorCode.U0 -> R.string.gen_error_u0
 }
 
-/** The exact text shown in chat: `[N1] <neutral sentence>`. No profile, Base
- *  URL, model, or stack trace — those go only to the Error Log. */
 fun GenErrorResult.chatMessage(context: Context): String =
     "[${code.code}] " + context.getString(code.messageRes())
 
-/** Transport codes mean the request never reached a server, so there is no
- *  provider response to quote — the detail block says so explicitly rather than
- *  inventing one. */
 private val NO_RESPONSE_CODES = setOf(
     GenErrorCode.N1, GenErrorCode.N2, GenErrorCode.N3, GenErrorCode.N4
 )
 
-/** Whether the request reached a server that actually answered (even with an
- *  error). A transport failure did not, so nothing can be attributed to a
- *  provider — the Provider Failure Log skips these. */
-fun GenErrorResult.reachedServer(): Boolean = code !in NO_RESPONSE_CODES
-
 /**
- * The raw provider detail shown beneath the app's own failure explanation
- * (owner ruling, Aug 1 2026). Below the Client Error line the caller prepends,
- * five lines:
+ * Whether there is evidence that a server actually answered.
  *
- *   Provider Error: <the server's status and message, verbatim>
- *   API Provider: <the connection profile's name>
- *   Model Service Provider: <the upstream model service the server reported>
- *   Model: <the model the request used>
- *   Function: <what the app was doing — "Chat" for a chat reply>
- *
- * Each value falls back to a truthful placeholder rather than a blank: a request
- * that never reached a server still names the connection, model, and function,
- * and any value the app cannot determine says "Not Reported". [apiProvider] is
- * the profile name; [modelServiceProvider] is the upstream provider the server
- * itself reported (aggregators like OpenRouter include it, direct providers do
- * not — hence "Not Reported" there is normal). Callers pass already-resolved
- * strings so the on-screen block and the Provider Failure Log entry match.
+ * The old rule treated every non-network error code as a provider response.
+ * That made local response-parser failures (S2) and wholly unknown client-side
+ * failures (U0) look like provider failures even when no HTTP status or provider
+ * limit evidence existed. Those two ambiguous buckets now require affirmative
+ * response evidence instead of being attributed to a server by elimination.
  */
+fun GenErrorResult.reachedServer(): Boolean = when {
+    httpStatus != null -> true
+    providerLimit != null -> true
+    code in NO_RESPONSE_CODES -> false
+    code == GenErrorCode.S2 || code == GenErrorCode.U0 -> false
+    else -> true
+}
+
 fun GenErrorResult.providerDetailBlock(
     context: Context,
     exceptionMessage: String?,
@@ -87,7 +68,7 @@ fun GenErrorResult.providerDetailBlock(
     function: String,
     rawProviderMessage: String? = null
 ): String {
-    val detail: String = if (code in NO_RESPONSE_CODES) {
+    val detail: String = if (!reachedServer()) {
         context.getString(R.string.provider_error_no_response)
     } else {
         val message = rawProviderMessage?.trim()?.ifBlank { null }
@@ -106,7 +87,6 @@ fun GenErrorResult.providerDetailBlock(
         "\n" + context.getString(R.string.provider_function_line, function)
 }
 
-/** Exact explanation for a provider-confirmed capacity system. */
 fun GenErrorResult.providerLimitMessage(context: Context): String? =
     when (providerLimit) {
         ProviderLimitKind.MODEL_CONTEXT ->
