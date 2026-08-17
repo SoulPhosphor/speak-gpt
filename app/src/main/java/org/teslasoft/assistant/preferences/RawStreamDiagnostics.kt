@@ -45,10 +45,9 @@ data class RawStreamObservation(
 
 /**
  * Compatibility envelope used by ReportedProviderParser's existing String
- * callback. ChatActivity already wires that callback to the exact lifecycle
- * recorder for the exact split response, so carrying one private terminal
- * summary through the same callback avoids a second global/current-response
- * lookup and cannot attach metadata to a later request.
+ * callback. ChatActivity wires that callback to the lifecycle recorder bound to
+ * the exact HTTP attempt, so terminal metadata never needs a global/current
+ * response lookup.
  */
 object RawStreamObservationCodec {
     private const val PREFIX = "\u0000response-lifecycle-raw-v1:"
@@ -133,51 +132,75 @@ internal data class LifecycleDiagnosticEvidence(
 
 /**
  * The response observer runs on a different coroutine from the typed stream.
- * Store only counters/terminal facts keyed by the lifecycle record until the
- * formatter consumes them. startLifecycle finalizes an old record before a new
- * record of the same turn/phase is opened, so this key is unambiguous in the
- * app's strictly sequential visible-generation pipeline.
+ * Every HTTP generation attempt gets its own opaque attempt id and therefore its
+ * own evidence slot, even when a retry reuses the same turn id and phase.
+ *
+ * [takeAndClose] is the ownership boundary: it atomically removes the attempt's
+ * slot and snapshots it. Any observer callback that arrives after that point is
+ * rejected instead of recreating a bucket that a later retry could consume.
  */
 internal object LifecycleDiagnosticEvidenceStore {
     private val records = ConcurrentHashMap<String, LifecycleDiagnosticEvidence>()
 
-    private fun key(turnId: String, phase: String): String = "$turnId\u0000$phase"
+    fun open(attemptId: String) {
+        require(attemptId.isNotBlank()) { "Lifecycle attempt id must not be blank" }
+        check(records.putIfAbsent(attemptId, LifecycleDiagnosticEvidence()) == null) {
+            "Lifecycle attempt already open: $attemptId"
+        }
+    }
 
-    private fun mutate(turnId: String, phase: String, block: (LifecycleDiagnosticEvidence) -> Unit) {
-        val k = key(turnId, phase)
-        records.compute(k) { _, current ->
-            val value = current ?: LifecycleDiagnosticEvidence()
-            synchronized(value) { block(value) }
-            value
+    fun isOpen(attemptId: String): Boolean = records.containsKey(attemptId)
+
+    private fun mutate(
+        attemptId: String,
+        block: (LifecycleDiagnosticEvidence) -> Unit
+    ): Boolean {
+        val value = records[attemptId] ?: return false
+        return synchronized(value) {
+            // The slot may have been atomically closed after the initial lookup.
+            // Never mutate an orphaned object and report that evidence accepted.
+            if (records[attemptId] !== value) {
+                false
+            } else {
+                block(value)
+                true
+            }
         }
     }
 
     fun noteTypedChunk(
-        turnId: String,
-        phase: String,
+        attemptId: String,
         contentLength: Int,
         usageReceived: Boolean
-    ) = mutate(turnId, phase) {
+    ): Boolean = mutate(attemptId) {
         it.requestDispatchedObserved = true
         it.typedChunks++
         if (contentLength > 0) it.typedContentChunks++
         if (usageReceived) it.typedUsageReceived = true
     }
 
-    fun noteSuccessfulHttpResponse(turnId: String, phase: String) = mutate(turnId, phase) {
+    fun noteSuccessfulHttpResponse(attemptId: String): Boolean = mutate(attemptId) {
         it.requestDispatchedObserved = true
         it.httpSuccessful = true
     }
 
-    fun noteRawObservation(turnId: String, phase: String, observation: RawStreamObservation) =
-        mutate(turnId, phase) {
-            it.requestDispatchedObserved = true
-            it.httpSuccessful = true
-            it.rawObservation = observation
-        }
+    fun noteRawObservation(
+        attemptId: String,
+        observation: RawStreamObservation
+    ): Boolean = mutate(attemptId) {
+        it.requestDispatchedObserved = true
+        it.httpSuccessful = true
+        it.rawObservation = observation
+    }
 
-    fun take(turnId: String, phase: String): LifecycleDiagnosticEvidence? {
-        val value = records.remove(key(turnId, phase)) ?: return null
-        return synchronized(value) { value.snapshot() }
+    fun takeAndClose(attemptId: String): LifecycleDiagnosticEvidence? {
+        val value = records[attemptId] ?: return null
+        return synchronized(value) {
+            if (!records.remove(attemptId, value)) {
+                null
+            } else {
+                value.snapshot()
+            }
+        }
     }
 }
