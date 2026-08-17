@@ -63,6 +63,7 @@ class SettingsActivity : FragmentActivity() {
     private var rowAboutApp: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
     private var rowAlertDebugMenu: LinearLayout? = null
+    private var rowLogCabin: LinearLayout? = null
     // private var threadLoading: LinearLayout? = null
     private var root: ScrollView? = null
     private var btnBack: ImageButton? = null
@@ -112,6 +113,7 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_about_app, true)
         transition.excludeTarget(R.id.tile_documentation, true)
         transition.excludeTarget(R.id.tile_alert_debug_menu, true)
+        transition.excludeTarget(R.id.tile_log_cabin, true)
 
         val transition2 = TransitionInflater.from(this).inflateTransition(android.R.transition.move).apply {
             interpolator = FastOutLinearInInterpolator()
@@ -141,6 +143,7 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_about_app, true)
         transition2.excludeTarget(R.id.tile_documentation, true)
         transition2.excludeTarget(R.id.tile_alert_debug_menu, true)
+        transition2.excludeTarget(R.id.tile_log_cabin, true)
 
         // Set the transition as the shared element enter transition
         window.sharedElementEnterTransition = transition
@@ -254,6 +257,7 @@ class SettingsActivity : FragmentActivity() {
         rowAppearance = findViewById(R.id.tile_appearance)
         rowAboutApp = findViewById(R.id.tile_about_app)
         rowAlertDebugMenu = findViewById(R.id.tile_alert_debug_menu)
+        rowLogCabin = findViewById(R.id.tile_log_cabin)
 
         rowCharacters?.setOnClickListener {
             startActivity(Intent(this, CharactersActivity::class.java).putExtra("chatId", chatId))
@@ -296,6 +300,10 @@ class SettingsActivity : FragmentActivity() {
 
         rowAlertDebugMenu?.setOnClickListener {
             startActivity(Intent(this, AlertDebugMenuActivity::class.java).putExtra("chatId", chatId))
+        }
+
+        rowLogCabin?.setOnClickListener {
+            startActivity(Intent(this, LogCabinActivity::class.java).putExtra("chatId", chatId))
         }
 
         tileDocumentation?.setOnTileClickListener {

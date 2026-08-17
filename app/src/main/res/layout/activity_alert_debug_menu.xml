@@ -681,6 +681,109 @@
                     android:layout_marginStart="12dp" />
             </LinearLayout>
 
+            <!-- ============ Text to Speech lifecycle logging ============
+                 Diagnoses a completed reply that was never read aloud (owner
+                 instruction, Aug 16 2026): logs the TTS lifecycle (requested /
+                 onStart / onDone / onError / skipped) for every turn where
+                 readback is expected. Same toggle/retention composition as
+                 the other logs above. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="20dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tts_lifecycle_logging_title"
+                        android:textColor="@color/text"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tts_lifecycle_logging_desc"
+                        android:textColor="@color/text_subtitle"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_tts_lifecycle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
+
+            <!-- Retention for the Text to Speech Log. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="4dp"
+                android:paddingTop="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:labelFor="@+id/field_tts_lifecycle_max_logs"
+                        android:text="@string/label_max_logs_saved"
+                        android:textColor="@color/text"
+                        android:textSize="15sp" />
+
+                    <EditText
+                        android:id="@+id/field_tts_lifecycle_max_logs"
+                        style="@style/Widget.App.Field.NumberBlank"
+                        android:layout_marginStart="12dp"
+                        android:contentDescription="@string/label_max_logs_saved"
+                        android:ems="4"
+                        android:imeOptions="actionDone"
+                        android:maxLength="4"
+                        android:maxLines="1" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingTop="10dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:labelFor="@+id/field_tts_lifecycle_max_days"
+                        android:text="@string/label_max_days_saved"
+                        android:textColor="@color/text"
+                        android:textSize="15sp" />
+
+                    <EditText
+                        android:id="@+id/field_tts_lifecycle_max_days"
+                        style="@style/Widget.App.Field.NumberBlank"
+                        android:layout_marginStart="12dp"
+                        android:contentDescription="@string/label_max_days_saved"
+                        android:ems="3"
+                        android:imeOptions="actionDone"
+                        android:maxLength="2"
+                        android:maxLines="1" />
+                </LinearLayout>
+            </LinearLayout>
+
             <!-- Retention for the Image Generation Log. Same fields and limit
                  dialogs as the log retention pairs above, with one difference
                  (plan §13): ZERO means unlimited — never on the error logs. -->
@@ -789,284 +892,6 @@
                     android:layout_height="24dp"
                     android:layout_marginStart="12dp"
                     android:contentDescription="@string/row_audio_debugging_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
-
-            <!-- ============ Logs ============ -->
-            <!-- Plain "label >" rows, not tiles: tapping a row opens that log.
-                 Logs are local-only and always available (CLAUDE.md: the Logger
-                 must not be gated on the installation id). -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="28dp"
-                android:text="@string/alert_debug_section_logs"
-                android:textColor="?attr/colorPrimary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:id="@+id/row_crash_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/tile_crash_log_title"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/tile_crash_log_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/row_event_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/tile_events_log_title"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/tile_events_log_title"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/row_memory_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/title_memory_log"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/title_memory_log"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
-
-            <!-- The old single Performance Log row was split into these two
-                 (owner spec, July 23 2026). The old "performance" storage is
-                 left untouched but no longer has a viewer row. -->
-            <LinearLayout
-                android:id="@+id/row_whisper_perf_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/title_whisper_perf_log"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/title_whisper_perf_log"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/row_memory_usage_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/title_memory_usage_log"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/title_memory_usage_log"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/row_provider_fail_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/title_provider_fail_log"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/title_provider_fail_log"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/row_response_lifecycle_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/title_response_lifecycle_log"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/title_response_lifecycle_log"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/row_image_gen_errors_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/title_image_gen_errors_log"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/title_image_gen_errors_log"
-                    android:src="@drawable/ic_chevron_right"
-                    android:tint="@color/text_subtitle" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/row_image_gen_log"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center_vertical"
-                android:minHeight="56dp"
-                android:orientation="horizontal"
-                android:paddingVertical="12dp">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/title_image_gen_log"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:layout_marginStart="12dp"
-                    android:contentDescription="@string/title_image_gen_log"
                     android:src="@drawable/ic_chevron_right"
                     android:tint="@color/text_subtitle" />
             </LinearLayout>

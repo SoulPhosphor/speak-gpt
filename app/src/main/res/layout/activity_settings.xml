@@ -363,7 +363,7 @@
                 android:paddingHorizontal="20dp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/tile_alert_debug_menu">
+                app:layout_constraintTop_toBottomOf="@+id/tile_log_cabin">
 
                 <ImageView
                     style="@style/Widget.App.Row.Icon"
@@ -444,6 +444,37 @@
                 <ImageView
                     style="@style/Widget.App.Row.Chevron"
                     android:contentDescription="@string/tile_alert_debug_menu_title" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/tile_log_cabin"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:paddingHorizontal="20dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/tile_alert_debug_menu">
+
+                <ImageView
+                    style="@style/Widget.App.Row.Icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_cabin"
+                    android:tint="?attr/colorPrimary" />
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_log_cabin_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/tile_log_cabin_subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/tile_log_cabin_title" />
             </LinearLayout>
 
         </androidx.constraintlayout.widget.ConstraintLayout>
