@@ -20,6 +20,7 @@ import android.app.Activity
 import android.content.Context
 import android.os.Build
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -33,7 +34,38 @@ class WindowInsetsUtil {
             IGNORE_PADDINGS
         }
 
+        /**
+         * A screen-local inset owner can claim legacy navigation-padding
+         * targets that it already keeps clear through its own layout/inset
+         * geometry. This prevents a second helper from installing a competing
+         * listener or representing the same bottom inset twice.
+         */
+        interface NavigationInsetOwner {
+            fun ownsNavigationInsetFor(viewId: Int): Boolean
+        }
+
+        private fun isNavigationInsetOwnedElsewhere(
+            activity: Activity,
+            res: Int,
+            flags: EnumSet<Flags>
+        ): Boolean {
+            if (!flags.contains(Flags.NAVIGATION_BAR)) return false
+            val owner = findNavigationInsetOwner(activity.window.decorView) ?: return false
+            return owner.ownsNavigationInsetFor(res)
+        }
+
+        private fun findNavigationInsetOwner(view: View): NavigationInsetOwner? {
+            if (view is NavigationInsetOwner) return view
+            if (view !is ViewGroup) return null
+            for (index in 0 until view.childCount) {
+                findNavigationInsetOwner(view.getChildAt(index))?.let { return it }
+            }
+            return null
+        }
+
         fun adjustPaddings(activity: Activity, parentView: View?, res: Int, flags: EnumSet<Flags>, customPaddingTop: Int = 0, customPaddingBottom: Int = 0, forceFromAndroidR: Boolean = false) {
+            if (isNavigationInsetOwnedElsewhere(activity, res, flags)) return
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S || (forceFromAndroidR && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)) {
                 try {
                     val view = parentView?.findViewById<View>(res)
@@ -87,6 +119,8 @@ class WindowInsetsUtil {
         }
 
         fun adjustPaddings(activity: Activity, res: Int, flags: EnumSet<Flags>, customPaddingTop: Int = 0, customPaddingBottom: Int = 0, forceFromAndroidR: Boolean = false) {
+            if (isNavigationInsetOwnedElsewhere(activity, res, flags)) return
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S || (forceFromAndroidR && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)) {
                 try {
                     val view = activity.findViewById<View>(res)
