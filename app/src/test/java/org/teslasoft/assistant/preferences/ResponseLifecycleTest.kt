@@ -59,6 +59,20 @@ class ResponseLifecycleTest {
         assertEquals("length", r.finishReasonDisplay)
     }
 
+    @Test fun contentFilterIsProviderDoneButIncompleteWithText() {
+        val r = ResponseLifecycle.classifyNormalCompletion("content_filter", 42)
+        assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
+        assertEquals("content_filter", r.finishReasonDisplay)
+        assertFalse(r.streamClosed)
+    }
+
+    @Test fun contentFilterIsNeverEmptyWithoutText() {
+        val r = ResponseLifecycle.classifyNormalCompletion("content_filter", 0)
+        assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
+    }
+
     @Test fun explicitProviderErrorFinishBeatsZeroContent() {
         val r = ResponseLifecycle.classifyNormalCompletion("error", 0)
         assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
@@ -69,6 +83,13 @@ class ResponseLifecycleTest {
         val r = ResponseLifecycle.classifyNormalCompletion("tool_calls", 0)
         assertEquals(ResponseLifecycle.Outcome.COMPLETE, r.outcome)
         assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
+    }
+
+    @Test fun legacyFunctionCallWithNoTextIsNormalCompletion() {
+        val r = ResponseLifecycle.classifyNormalCompletion("function_call", 0)
+        assertEquals(ResponseLifecycle.Outcome.COMPLETE, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
+        assertFalse(r.streamClosed)
     }
 
     @Test fun networkExceptionClassification() {
@@ -146,6 +167,7 @@ class ResponseLifecycleTest {
             )
         )
         assertEquals("Open Inference", recorder.actualModelProvider)
+        LifecycleDiagnosticEvidenceStore.takeAndClose(recorder.attemptId)
     }
 
     @Test fun prematureCloseNeverLogsErrorNoneReported() {
@@ -206,8 +228,9 @@ class ResponseLifecycleTest {
             streamClosed = true, termination = ResponseLifecycle.Termination.PREMATURE_STREAM_CLOSE,
             requestedMaxOutput = null, promptTokens = null, completionTokens = null,
             totalTokens = null, receivedCharacters = 0, durationMs = 20,
-            generationId = null, errorText = null
+            generationId = null, errorText = null, attemptId = recorder.attemptId
         )
+        assertTrue(body.contains("Attempt ID: ${recorder.attemptId}"))
         assertTrue(body.contains("HTTP Status Successful: true"))
         assertTrue(body.contains("Provider SSE Error Received: true"))
         assertTrue(body.contains("Termination Source: provider_error"))
@@ -244,7 +267,7 @@ class ResponseLifecycleTest {
             requestedMaxOutput = null, promptTokens = recorder.promptTokens,
             completionTokens = recorder.completionTokens, totalTokens = recorder.totalTokens,
             receivedCharacters = 0, durationMs = 20,
-            generationId = recorder.generationId, errorText = null
+            generationId = recorder.generationId, errorText = null, attemptId = recorder.attemptId
         )
         assertTrue(body.contains("Outcome: Empty"))
         assertTrue(body.contains("Finish Reason: stop"))
