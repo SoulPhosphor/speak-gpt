@@ -32,6 +32,7 @@ import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -70,10 +71,10 @@ import org.teslasoft.assistant.util.ProfileImageBinder
  * Save; there is no Change/Remove button (owner: every gallery already holds
  * all images, so changing is just picking a different one).
  *
- * It owns no persistence: it validates and returns the result (save or delete)
- * to the caller ([PersonasListActivity]), which applies it exactly as the old
- * dialog listener did - preserving the "select the companion and finish" and
- * last-used behaviour.
+ * Existing companions persist their editable fields in place when Save is
+ * tapped, so save confirmation no longer navigates away. New companion creation
+ * and delete still return results to [PersonasListActivity], preserving the
+ * caller-owned creation/selection/deletion behaviour.
  */
 class EditPersonaActivity : FragmentActivity() {
 
@@ -1040,6 +1041,20 @@ class EditPersonaActivity : FragmentActivity() {
         }
 
         val persona = buildPersonaObject()
+
+        // Existing companions save directly so the editor can remain open.
+        // Creation still returns to the caller, which owns mint/select/finish.
+        if (position != -1 && personaId.isNotEmpty()) {
+            PersonaPreferences.getPersonaPreferences(this).setPersona(persona)
+            personaId = persona.id
+            originalLabel = persona.label
+            lastUsedLoreBookIds = persona.lastUsedLoreBookIds
+            initialSnapshot = snapshot()
+            markSaveButtonGreen()
+            Toast.makeText(this, R.string.companion_editor_saved_toast, Toast.LENGTH_SHORT).show()
+            return
+        }
+
         val result = Intent()
             .putExtra(EXTRA_RESULT_ACTION, ACTION_SAVE)
             .putExtra(EXTRA_ID, persona.id)
@@ -1056,16 +1071,14 @@ class EditPersonaActivity : FragmentActivity() {
             .putExtra(EXTRA_CHAT_NAME_FONT_ID, persona.chatNameFontId)
             .putExtra(EXTRA_CHAT_NAME_SIZE_SP, persona.chatNameSizeSp)
         setResult(RESULT_OK, result)
-        flashSaveButtonGreen()
+        markSaveButtonGreen()
         finish()
     }
 
-    /** This screen closes on save with no toast - a brief green flash on the
-     *  save icon's own background (owner ruling, July 21 2026) is the only
-     *  save confirmation the user sees, visible during the closing
-     *  slide-out transition since it's set synchronously right before
-     *  finish(). */
-    private fun flashSaveButtonGreen() {
+    /** Marks a successful save directly on the disk icon. Existing companion
+     *  editors remain open so the green confirmation stays visible; creation
+     *  still closes after handing its result back to the caller. */
+    private fun markSaveButtonGreen() {
         btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.light_green, theme))
     }
 
