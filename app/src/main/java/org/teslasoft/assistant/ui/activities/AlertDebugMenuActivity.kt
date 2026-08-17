@@ -42,22 +42,23 @@ import org.teslasoft.assistant.theme.ThemeManager
 
 /**
  * The "Alerts, Errors & Logs" screen, opened from the single full-width tile
- * under the Debug header in Settings. Holds the NON-audio diagnostics: the two
- * model-error toggles (show chat errors, error sound), a shortcut row down to
- * Audio Debugging (where everything microphone/voice related now lives), and
- * the crash/event log rows. The audio toggles (VAD logging, Audio Health,
- * transcription chime) moved out to [AudioDebuggingActivity] so audio settings
- * sit together under Voice and aren't buried in a non-voice menu.
+ * under the Debug header in Settings. Holds the NON-audio diagnostics: the
+ * model-error toggles, every log's recording toggle and retention fields, and
+ * a shortcut row down to Audio Debugging (where everything microphone/voice
+ * related lives). The audio toggles (VAD logging, Audio Health, transcription
+ * chime) moved out to [AudioDebuggingActivity] so audio settings sit together
+ * under Voice; the "open this log" rows moved out to [LogCabinActivity]
+ * (owner instruction, Aug 16 2026) so every log lives in one place, reached
+ * from its own Settings row. Only the toggle/retention configuration for each
+ * log stays here.
  *
  * Deliberately NOT tiles: the error toggles read better as inline switch rows
- * (label + description), and the shortcut/log rows read better as plain
- * "label >" rows that open the target when tapped.
+ * (label + description), and the shortcut row reads better as a plain
+ * "label >" row that opens the target when tapped.
  *
  * The error toggles are global preferences (one error policy per app); chatId
- * is only threaded through so the log screen keeps the same intent contract it
- * had when launched from Settings. The logs are intentionally always available
- * — they are local-only and must not be gated on the (telemetry) installation
- * id (see CLAUDE.md).
+ * is only threaded through so the destination screens keep the same intent
+ * contract they had when launched from Settings.
  */
 class AlertDebugMenuActivity : FragmentActivity() {
 
@@ -83,12 +84,14 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var switchLogChatFailures: MaterialSwitch? = null
     private var fieldProviderFailMaxLogs: EditText? = null
     private var fieldProviderFailMaxDays: EditText? = null
-    private var rowProviderFailLog: LinearLayout? = null
-    // Response Lifecycle Log: toggle, its own retention pair, and the open row.
+    // Response Lifecycle Log: toggle and its own retention pair.
     private var switchResponseLifecycle: MaterialSwitch? = null
     private var fieldResponseLifecycleMaxLogs: EditText? = null
     private var fieldResponseLifecycleMaxDays: EditText? = null
-    private var rowResponseLifecycleLog: LinearLayout? = null
+    // Text to Speech lifecycle logging: toggle and its own retention pair.
+    private var switchTtsLifecycle: MaterialSwitch? = null
+    private var fieldTtsLifecycleMaxLogs: EditText? = null
+    private var fieldTtsLifecycleMaxDays: EditText? = null
     // Image generation logs (image-generation-rebuild-plan.md §13): the two
     // recording toggles and the success log's own retention pair, where
     // ZERO means unlimited (only these two fields — never the error logs).
@@ -96,16 +99,9 @@ class AlertDebugMenuActivity : FragmentActivity() {
     private var switchSuccessfulImageTracking: MaterialSwitch? = null
     private var fieldImageGenMaxInfo: EditText? = null
     private var fieldImageGenMaxDays: EditText? = null
-    private var rowImageGenErrorsLog: LinearLayout? = null
-    private var rowImageGenLog: LinearLayout? = null
     // Shortcut down to the audio-only diagnostics, so a user who lands here
     // looking for VAD logging doesn't have to know it lives under Voice.
     private var rowAudioDebugging: LinearLayout? = null
-    private var rowCrashLog: LinearLayout? = null
-    private var rowEventLog: LinearLayout? = null
-    private var rowMemoryLog: LinearLayout? = null
-    private var rowWhisperPerfLog: LinearLayout? = null
-    private var rowMemoryUsageLog: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -138,23 +134,17 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchLogChatFailures = findViewById(R.id.switch_log_chat_failures)
         fieldProviderFailMaxLogs = findViewById(R.id.field_provider_fail_max_logs)
         fieldProviderFailMaxDays = findViewById(R.id.field_provider_fail_max_days)
-        rowProviderFailLog = findViewById(R.id.row_provider_fail_log)
         switchResponseLifecycle = findViewById(R.id.switch_response_lifecycle)
         fieldResponseLifecycleMaxLogs = findViewById(R.id.field_response_lifecycle_max_logs)
         fieldResponseLifecycleMaxDays = findViewById(R.id.field_response_lifecycle_max_days)
-        rowResponseLifecycleLog = findViewById(R.id.row_response_lifecycle_log)
+        switchTtsLifecycle = findViewById(R.id.switch_tts_lifecycle)
+        fieldTtsLifecycleMaxLogs = findViewById(R.id.field_tts_lifecycle_max_logs)
+        fieldTtsLifecycleMaxDays = findViewById(R.id.field_tts_lifecycle_max_days)
         switchImageGenErrors = findViewById(R.id.switch_image_gen_errors)
         switchSuccessfulImageTracking = findViewById(R.id.switch_successful_image_tracking)
         fieldImageGenMaxInfo = findViewById(R.id.field_image_gen_max_info)
         fieldImageGenMaxDays = findViewById(R.id.field_image_gen_max_days)
-        rowImageGenErrorsLog = findViewById(R.id.row_image_gen_errors_log)
-        rowImageGenLog = findViewById(R.id.row_image_gen_log)
         rowAudioDebugging = findViewById(R.id.row_audio_debugging)
-        rowCrashLog = findViewById(R.id.row_crash_log)
-        rowEventLog = findViewById(R.id.row_event_log)
-        rowMemoryLog = findViewById(R.id.row_memory_log)
-        rowWhisperPerfLog = findViewById(R.id.row_whisper_perf_log)
-        rowMemoryUsageLog = findViewById(R.id.row_memory_usage_log)
     }
 
     @Suppress("DEPRECATION")
@@ -204,6 +194,10 @@ class AlertDebugMenuActivity : FragmentActivity() {
         switchResponseLifecycle?.isChecked = p.getResponseLifecycleLogging()
         fieldResponseLifecycleMaxLogs?.setText(p.getResponseLifecycleLogMaxEntries().toString())
         fieldResponseLifecycleMaxDays?.setText(p.getResponseLifecycleLogMaxDays().toString())
+
+        switchTtsLifecycle?.isChecked = p.getTtsLifecycleLogging()
+        fieldTtsLifecycleMaxLogs?.setText(p.getTtsLifecycleLogMaxEntries().toString())
+        fieldTtsLifecycleMaxDays?.setText(p.getTtsLifecycleLogMaxDays().toString())
 
         switchImageGenErrors?.isChecked = p.getImageGenErrorLogging()
         switchSuccessfulImageTracking?.isChecked = p.getSuccessfulImageTracking()
@@ -263,10 +257,6 @@ class AlertDebugMenuActivity : FragmentActivity() {
             { p.getProviderFailLogMaxDays() }, { v -> p.setProviderFailLogMaxDays(v) },
             R.string.dialog_max_days_exceeded
         )
-        rowProviderFailLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "provider_fail").putExtra("chatId", chatId))
-        }
-
         switchResponseLifecycle?.setOnCheckedChangeListener { _, checked -> p.setResponseLifecycleLogging(checked) }
         wireRetentionField(
             fieldResponseLifecycleMaxLogs, Preferences.LOG_MAX_ENTRIES_LIMIT,
@@ -278,29 +268,21 @@ class AlertDebugMenuActivity : FragmentActivity() {
             { p.getResponseLifecycleLogMaxDays() }, { v -> p.setResponseLifecycleLogMaxDays(v) },
             R.string.dialog_max_days_exceeded
         )
-        rowResponseLifecycleLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "response_lifecycle").putExtra("chatId", chatId))
-        }
-
         rowAudioDebugging?.setOnClickListener {
             startActivity(Intent(this, AudioDebuggingActivity::class.java).putExtra("chatId", chatId))
         }
 
-        rowCrashLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "crash").putExtra("chatId", chatId))
-        }
-        rowEventLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "event").putExtra("chatId", chatId))
-        }
-        rowMemoryLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "memory").putExtra("chatId", chatId))
-        }
-        rowWhisperPerfLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "whisper_perf").putExtra("chatId", chatId))
-        }
-        rowMemoryUsageLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "memory_usage").putExtra("chatId", chatId))
-        }
+        switchTtsLifecycle?.setOnCheckedChangeListener { _, checked -> p.setTtsLifecycleLogging(checked) }
+        wireRetentionField(
+            fieldTtsLifecycleMaxLogs, Preferences.LOG_MAX_ENTRIES_LIMIT,
+            { p.getTtsLifecycleLogMaxEntries() }, { v -> p.setTtsLifecycleLogMaxEntries(v) },
+            R.string.dialog_max_logs_exceeded
+        )
+        wireRetentionField(
+            fieldTtsLifecycleMaxDays, Preferences.LOG_MAX_DAYS_LIMIT,
+            { p.getTtsLifecycleLogMaxDays() }, { v -> p.setTtsLifecycleLogMaxDays(v) },
+            R.string.dialog_max_days_exceeded
+        )
 
         // Image generation logs (plan §13).
         switchImageGenErrors?.setOnCheckedChangeListener { _, checked ->
@@ -319,12 +301,6 @@ class AlertDebugMenuActivity : FragmentActivity() {
             { p.getImageGenLogMaxDays() }, { v -> p.setImageGenLogMaxDays(v) },
             R.string.dialog_max_days_exceeded
         )
-        rowImageGenErrorsLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "image_gen_errors").putExtra("chatId", chatId))
-        }
-        rowImageGenLog?.setOnClickListener {
-            startActivity(Intent(this, LogsActivity::class.java).putExtra("type", "image_gen").putExtra("chatId", chatId))
-        }
     }
 
     /**

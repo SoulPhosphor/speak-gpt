@@ -1710,6 +1710,25 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * Text to Speech lifecycle logging (Alerts, Errors & Logs). Off by
+     * default — when on, every assistant turn where readback is expected
+     * writes its TTS lifecycle (requested / onStart / onDone / onError /
+     * skipped, with the turn/utterance id) to its own log, so a reply that
+     * completed but was never read aloud can be diagnosed: never reached
+     * pronounce(), requested but never started, started then failed, or
+     * completed normally (pointing at audio routing/output instead). Written
+     * independent of the VAD logging toggles, which govern the separate
+     * per-frame voice-pipeline trail.
+     */
+    fun getTtsLifecycleLogging() : Boolean {
+        return getGlobalBoolean("tts_lifecycle_logging", false)
+    }
+
+    fun setTtsLifecycleLogging(enabled: Boolean) {
+        putGlobalBoolean("tts_lifecycle_logging", enabled, false)
+    }
+
+    /**
      * Log entry ordering for the Logs viewer. On (the default) shows each log
      * newest entry first; off shows oldest first. Remembered app-wide so a
      * person's chosen order carries across every log and across sessions until
@@ -1781,6 +1800,22 @@ class Preferences private constructor(private var preferences: SharedPreferences
 
     fun setMemoryUsageLogMaxDays(value: Int) {
         putGlobalInt("memory_usage_log_max_days", coerceLogMaxDays(value), LOG_DEFAULT_MAX_DAYS)
+    }
+
+    fun getTtsLifecycleLogMaxEntries() : Int {
+        return coerceLogMaxEntries(getGlobalInt("tts_lifecycle_log_max_entries", LOG_DEFAULT_MAX_ENTRIES))
+    }
+
+    fun setTtsLifecycleLogMaxEntries(value: Int) {
+        putGlobalInt("tts_lifecycle_log_max_entries", coerceLogMaxEntries(value), LOG_DEFAULT_MAX_ENTRIES)
+    }
+
+    fun getTtsLifecycleLogMaxDays() : Int {
+        return coerceLogMaxDays(getGlobalInt("tts_lifecycle_log_max_days", LOG_DEFAULT_MAX_DAYS))
+    }
+
+    fun setTtsLifecycleLogMaxDays(value: Int) {
+        putGlobalInt("tts_lifecycle_log_max_days", coerceLogMaxDays(value), LOG_DEFAULT_MAX_DAYS)
     }
 
     // Provider Failure Log (owner ruling, July 31 2026): records the raw

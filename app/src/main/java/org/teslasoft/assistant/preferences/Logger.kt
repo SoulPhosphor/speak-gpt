@@ -245,6 +245,28 @@ class Logger {
         }
 
         /**
+         * Text to Speech Lifecycle Log — one short line per TTS lifecycle
+         * event (requested / onStart / onDone / onError / skipped) for every
+         * assistant turn where readback is expected, written only while
+         * "Text to Speech" logging is on. Diagnoses a completed reply that
+         * was never read aloud: never reached pronounce(), requested but
+         * never started, started then failed, or completed normally
+         * (pointing at audio routing/output instead). Never contains the
+         * text actually spoken.
+         * */
+        fun getTtsLifecycleLog(context: Context) : String {
+            return EncryptedPreferences.getEncryptedPreference(context, "logs", "tts_lifecycle")
+        }
+
+        private fun setTtsLifecycleLog(context: Context, log: String) {
+            EncryptedPreferences.setEncryptedPreference(context, "logs", "tts_lifecycle", log)
+        }
+
+        fun clearTtsLifecycleLog(context: Context) {
+            setTtsLifecycleLog(context, "")
+        }
+
+        /**
          * The persistent log channels [log] recognizes. A `type` outside this
          * set is silently dropped (see the unknown-channel `else` in [log]),
          * so a caller passing e.g. "error" instead of "crash" writes nowhere.
@@ -256,7 +278,7 @@ class Logger {
             type == "crash" || type == "event" || type == "memory" || type == "performance" ||
                 type == "whisper_perf" || type == "memory_usage" ||
                 type == "image_gen_errors" || type == "image_gen" ||
-                type == "response_lifecycle"
+                type == "response_lifecycle" || type == "tts_lifecycle"
 
         /**
          * @param type - type of log (crash/event/memory/performance)
@@ -339,6 +361,15 @@ class Logger {
                         p.getMemoryUsageLogMaxEntries(), p.getMemoryUsageLogMaxDays().toLong()
                     )
                     setMemoryUsageLog(context, log)
+                }
+
+                "tts_lifecycle" -> {
+                    val p = Preferences.getPreferences(context, "")
+                    val log = trimByEntries(
+                        "${getTtsLifecycleLog(context)}$logString",
+                        p.getTtsLifecycleLogMaxEntries(), p.getTtsLifecycleLogMaxDays().toLong()
+                    )
+                    setTtsLifecycleLog(context, log)
                 }
 
                 // Response Lifecycle: the structured entries are written by

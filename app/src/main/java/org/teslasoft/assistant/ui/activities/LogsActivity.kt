@@ -138,6 +138,7 @@ class LogsActivity : FragmentActivity() {
         "response_lifecycle" -> Logger.getResponseLifecycleLog(this)
         "image_gen_errors" -> Logger.getImageGenErrorsLog(this)
         "image_gen" -> Logger.getImageGenLog(this)
+        "tts_lifecycle" -> Logger.getTtsLifecycleLog(this)
         else -> ""
     }
 
@@ -225,6 +226,7 @@ class LogsActivity : FragmentActivity() {
                         "response_lifecycle" -> setHeader(R.string.title_response_lifecycle_log, iconHeader = false)
                         "image_gen_errors" -> setHeader(R.string.title_image_gen_errors_log, iconHeader = false)
                         "image_gen" -> setHeader(R.string.title_image_gen_log, iconHeader = false)
+                        "tts_lifecycle" -> setHeader(R.string.title_tts_lifecycle_log, iconHeader = false)
                         else -> {
                             finish()
                             return@runOnUiThread
@@ -263,6 +265,7 @@ class LogsActivity : FragmentActivity() {
                                 "response_lifecycle" -> Logger.clearResponseLifecycleLog(this)
                                 "image_gen_errors" -> Logger.clearImageGenErrorsLog(this)
                                 "image_gen" -> Logger.clearImageGenLog(this)
+                                "tts_lifecycle" -> Logger.clearTtsLifecycleLog(this)
                             }
                             renderLog()
                         }

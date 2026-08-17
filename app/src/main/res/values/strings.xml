@@ -811,6 +811,16 @@
     <string name="tile_alert_debug_menu_subtitle">Choose diagnostic settings and review logs.</string>
     <string name="tile_alert_debug_menu_desc">Choose how model errors are surfaced in chat, toggle the error alert sound, jump to Audio Debugging for anything microphone/voice related, and open the crash and event logs.</string>
     <string name="alert_debug_intro">Settings for non-audio problems — model errors and alert sounds — plus the diagnostic logs. Anything to do with the microphone, voice detection, or transcription lives in Audio Debugging.</string>
+    <!-- The Log Cabin: a single full-width entry under the Debug header in
+         Settings, underneath Alerts, Errors & Logs, that opens every log in
+         one place (owner instruction, Aug 16 2026). -->
+    <string name="tile_log_cabin_title">The Log Cabin</string>
+    <string name="tile_log_cabin_subtitle">Every log you could ever want.</string>
+    <!-- Text to Speech lifecycle logging toggle (Alerts, Errors & Logs) and
+         its log's title (Log Cabin row + viewer header). -->
+    <string name="tts_lifecycle_logging_title">Text to Speech</string>
+    <string name="tts_lifecycle_logging_desc">Records the TTS lifecycle.</string>
+    <string name="title_tts_lifecycle_log">Text to Speech Log</string>
     <string name="row_audio_debugging_title">Audio Debugging</string>
     <string name="row_audio_debugging_subtitle">Microphone, voice detection &amp; transcription diagnostics</string>
     <string name="alert_debug_section_alerts">Alerts</string>

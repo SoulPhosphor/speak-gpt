@@ -1640,7 +1640,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
     private val ttsProgressListener = object : UtteranceProgressListener() {
-        override fun onStart(utteranceId: String?) { lastTtsUtteranceStarted = true }
+        override fun onStart(utteranceId: String?) {
+            lastTtsUtteranceStarted = true
+            logTtsLifecycle("TTS onStart engine=google utteranceId=$utteranceId")
+        }
         override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
             // Progress marker for the failure retry: the engine is about to
             // speak [start, end) of the current utterance, so everything
@@ -1653,7 +1656,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         override fun onDone(utteranceId: String?) {
             if (utteranceId == null || ttsUtteranceText.remove(utteranceId) == null) return
-            if (utteranceId != finalTtsUtteranceId) {
+            val isFinal = utteranceId == finalTtsUtteranceId
+            logTtsLifecycle("TTS onDone engine=google utteranceId=$utteranceId final=$isFinal")
+            if (!isFinal) {
                 val remainingText = ttsRemainingText
                 ttsRemainingText = ""
                 Handler(Looper.getMainLooper()).post {
@@ -1670,10 +1675,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         @Suppress("OverridingDeprecatedMember")
         override fun onError(utteranceId: String?) {
             Log.w("TTS", "TTS utterance error: $utteranceId")
+            logTtsLifecycle("TTS onError engine=google utteranceId=$utteranceId code=null")
             handleTtsReadbackError(utteranceId, null)
         }
         override fun onError(utteranceId: String?, errorCode: Int) {
             Log.w("TTS", "TTS utterance error code $errorCode: $utteranceId")
+            logTtsLifecycle("TTS onError engine=google utteranceId=$utteranceId code=$errorCode")
             handleTtsReadbackError(utteranceId, errorCode)
         }
     }
@@ -4891,6 +4898,28 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         try {
             org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "VoiceLoop", "warning", message)
         } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
+    }
+
+    /**
+     * Text to Speech lifecycle diagnostic (owner instruction, Aug 16 2026):
+     * one short line per TTS event — requested / onStart / onDone / onError /
+     * skipped — for every turn where readback is expected, so a completed
+     * reply that was never read aloud can be diagnosed: never reached
+     * pronounce(), requested but never started, started then failed, or
+     * completed normally (pointing at audio routing/output instead). Gated
+     * only on its own recording toggle, independent of the VAD-logging
+     * toggles [voiceDiagnosticsEnabled] gates — the point is to catch a rare,
+     * unreproducible failure, so it must not depend on a separate diagnostics
+     * setting also being on. Never includes the text being spoken.
+     */
+    private fun logTtsLifecycle(event: String) {
+        if (preferences?.getTtsLifecycleLogging() != true) return
+        val turn = currentLifecycleTurnId.ifBlank { "none" }
+        try {
+            org.teslasoft.assistant.preferences.Logger.logAsync(
+                this, "tts_lifecycle", "TTS", "info", "$event turn=$turn"
+            )
+        } catch (_: Throwable) { /* diagnostics must never disturb readback */ }
     }
 
     // Warm the model into RAM while the user is still talking so the
@@ -9427,6 +9456,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Always-speak drive the readback.
         val willReadAloud = st || preferences!!.getNotSilence() || handsFree
 
+        // TTS lifecycle: proves pronounce() was reached and a readback was
+        // expected for this turn — the baseline every later TTS lifecycle
+        // line (or its absence) is read against.
+        if (willReadAloud) {
+            logTtsLifecycle("TTS requested engine=${preferences?.getTtsEngine()} handsFree=$handsFree")
+        }
+
         // Stamp this readback: if the user stops while we're still inside an
         // async hop below (ML Kit language detection), the stale stamp keeps
         // speak() from firing after the stop. See readbackSession.
@@ -9544,7 +9580,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun speak(message: String, session: Int = readbackSession) {
         // The user stopped this readback while it was still in flight (see
         // readbackSession) — starting the audio now would speak over a stop.
-        if (session != readbackSession) return
+        if (session != readbackSession) {
+            logTtsLifecycle("TTS skipped reason=stale_session (stopped or superseded before dispatch)")
+            return
+        }
         if (preferences!!.getTtsEngine() == "google") {
             val engine = tts
             if (engine == null || !isTTSInitialized) {
@@ -9558,7 +9597,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val runSpeak = runSpeak@{
                 // Re-check on the main looper too: a stop can land between the
                 // entry check above and this posted execution.
-                if (session != readbackSession) return@runSpeak
+                if (session != readbackSession) {
+                    logTtsLifecycle("TTS skipped reason=stale_session (stopped between dispatch and main-looper run)")
+                    return@runSpeak
+                }
                 val maxLength = try {
                     TextToSpeech.getMaxSpeechInputLength()
                 } catch (_: Throwable) {
@@ -9580,6 +9622,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val result = engine.speak(chunk, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
                 if (result == TextToSpeech.ERROR) {
                     Log.w("TTS", "speak() returned ERROR")
+                    logTtsLifecycle("TTS onError utteranceId=$utteranceId code=dispatch_rejected (engine.speak() returned ERROR)")
                     handleTtsReadbackError(utteranceId, TextToSpeech.ERROR)
                 } else {
                     beginHandsFreeReadbackWatch()
@@ -9592,6 +9635,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         } else {
             if (openAIKey == null) {
+                logTtsLifecycle("TTS skipped reason=openai_key_missing")
                 adapter?.clearSpeakingPosition()
                 openAIMissing("tts", message)
             } else {
@@ -9628,12 +9672,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 mediaPlayer?.setDataSource(fis.fd)
                                 mediaPlayer?.prepare()
                                 mediaPlayer?.setOnCompletionListener {
+                                    logTtsLifecycle("TTS onDone engine=openai")
                                     adapter?.clearSpeakingPosition()
                                     // Mirror the device-TTS onDone path so a
                                     // cloud voice also keeps hands-free looping.
                                     onHandsFreeReadbackFinished()
                                 }
-                                mediaPlayer?.setOnErrorListener { _, _, _ ->
+                                mediaPlayer?.setOnErrorListener { _, what, extra ->
+                                    logTtsLifecycle("TTS onError engine=openai code=$what/$extra (mediaPlayer playback error)")
                                     adapter?.clearSpeakingPosition()
                                     // A playback error must not strand the loop
                                     // either — re-arm as if readback finished.
@@ -9641,8 +9687,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                     false
                                 }
                                 mediaPlayer?.start()
+                                logTtsLifecycle("TTS onStart engine=openai")
                                 beginHandsFreeReadbackWatch()
                             } catch (ex: IOException) {
+                                logTtsLifecycle("TTS onError engine=openai code=io_exception (preparing local playback)")
                                 adapter?.clearSpeakingPosition()
                                 MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)
                                     .setTitle(R.string.label_audio_error)
@@ -9660,6 +9708,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         // hands-free loop. Fail just the readback instead:
                         // log it and re-arm exactly like the playback-error
                         // listener above.
+                        logTtsLifecycle("TTS onError engine=openai code=request_failed (speech request never returned audio)")
                         logVoiceEventAlways("cloud voice request failed: ${e.message}")
                         runOnUiThread {
                             adapter?.clearSpeakingPosition()
