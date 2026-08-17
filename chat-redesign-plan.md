@@ -388,3 +388,40 @@ Chat-specific requirements:
 - preserve AMOLED capability/wiring; do not resume or redesign the AMOLED/theme project during this work.
 
 Future decorative chat backgrounds may include solid color, subtle texture/pattern, or user-supplied image. They belong behind the conversation area; header and composer remain controlled surfaces.
+
+**Readability rule:** if a non-solid/decorative background is active, readable user/AI message text must have an opaque theme-controlled reading surface underneath it even if the user's normal bubble decoration is off. Keep required reading surface and optional bubble decoration conceptually separate.
+
+## 12. Implementation-level freedom
+
+The owner does not need to make ordinary coding decisions. Choose the smallest implementation that satisfies this contract.
+
+Implementation-level tuning includes:
+
+- responsive constraints needed to preserve approved geometry on unusual widths/font scales;
+- portrait frame/border details that do not change approved geometry;
+- tiny border-clearance adjustments around name glyphs;
+- small Message Details popup dimensions;
+- targeted schema/storage changes needed to persist message metadata/reasoning while keeping existing chats readable;
+- exact Android XML/Kotlin technique.
+
+Do not use implementation freedom to reopen product decisions, redesign unrelated systems, or perform broad cleanup.
+
+## 13. Final contract summary
+
+The redesign delivers:
+
+- one shared chat behavior/data system;
+- one current adaptable presentation shell for AI/user messages, with a clean boundary that permits a second shell later without building it now;
+- independent portraits, names, AI/User bubbles, model names, token usage, and name styling;
+- approved `27dp` / `26dp` alignment, `16dp` corners, `14dp` internal padding, `76dp` portrait geometry, and `53dp` message rhythm;
+- durable per-message model/token ownership;
+- permanent far-left `ⓘ` Message Details;
+- preserved attachment behavior and provider-neutral visual media presentation;
+- persistent paperclip access on later user messages for managing earlier Includes without duplicating attachment ownership or payloads;
+- provider-neutral Thinking disclosure for reasoning actually supplied by providers;
+- dedicated Appearance settings with safe legacy preference migration;
+- upward-growing composer with stable controls and corrected keyboard insets;
+- compatibility with the separate app-wide style/theme system;
+- preserved existing chat behavior throughout.
+
+No dated addenda or parallel design authority are required. Future approved chat-design changes update this file directly.
