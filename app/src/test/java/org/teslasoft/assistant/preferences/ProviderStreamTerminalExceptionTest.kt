@@ -2,6 +2,7 @@ package org.teslasoft.assistant.preferences
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.teslasoft.assistant.util.reachedServer
 
 class ProviderStreamTerminalExceptionTest {
 
