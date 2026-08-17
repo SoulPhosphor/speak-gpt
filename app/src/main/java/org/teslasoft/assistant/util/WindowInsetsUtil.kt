@@ -23,6 +23,8 @@ import android.view.View
 import android.view.WindowInsets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import org.teslasoft.assistant.R
+import org.teslasoft.assistant.ui.chat.ChatImeInsetLayout
 import java.util.EnumSet
 
 class WindowInsetsUtil {
@@ -33,7 +35,27 @@ class WindowInsetsUtil {
             IGNORE_PADDINGS
         }
 
+        /**
+         * Phase 6 gives the chat composer one explicit bottom-inset owner.
+         * ChatActivity still contains two legacy NAVIGATION_BAR adjustment
+         * calls for keyboard_frame and messages; once ChatImeInsetLayout is
+         * present those calls must be inert so they cannot install competing
+         * listeners or count the navigation bar twice.
+         */
+        private fun isComposerManagedNavigationTarget(
+            activity: Activity,
+            res: Int,
+            flags: EnumSet<Flags>
+        ): Boolean {
+            if (!flags.contains(Flags.NAVIGATION_BAR)) return false
+            val owner = activity.findViewById<View>(R.id.keyboard_input)
+            if (owner !is ChatImeInsetLayout) return false
+            return res == R.id.keyboard_frame || res == R.id.messages
+        }
+
         fun adjustPaddings(activity: Activity, parentView: View?, res: Int, flags: EnumSet<Flags>, customPaddingTop: Int = 0, customPaddingBottom: Int = 0, forceFromAndroidR: Boolean = false) {
+            if (isComposerManagedNavigationTarget(activity, res, flags)) return
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S || (forceFromAndroidR && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)) {
                 try {
                     val view = parentView?.findViewById<View>(res)
@@ -87,6 +109,8 @@ class WindowInsetsUtil {
         }
 
         fun adjustPaddings(activity: Activity, res: Int, flags: EnumSet<Flags>, customPaddingTop: Int = 0, customPaddingBottom: Int = 0, forceFromAndroidR: Boolean = false) {
+            if (isComposerManagedNavigationTarget(activity, res, flags)) return
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S || (forceFromAndroidR && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)) {
                 try {
                     val view = activity.findViewById<View>(res)
