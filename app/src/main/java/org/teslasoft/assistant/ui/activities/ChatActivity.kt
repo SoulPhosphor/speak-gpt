@@ -215,6 +215,7 @@ import org.teslasoft.assistant.stt.SpeechTextFormatter
 import org.teslasoft.assistant.stt.LocalWhisperModels
 import org.teslasoft.assistant.stt.LocalWhisperStorage
 import org.teslasoft.assistant.service.GenerationForegroundService
+import org.teslasoft.assistant.service.HandsFreeActivityLifetimePolicy
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
@@ -326,6 +327,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         /** Pins a split raw response to the lifecycle recorder for that exact request. */
         private val responseLifecycleRecorderAttribute =
             AttributeKey<ResponseLifecycleRecorder>("ResponseLifecycleRecorder")
+
+        // Hands-free is still driven by ChatActivity's recognizer/TTS/coroutine
+        // controller. Android may destroy the window while the foreground
+        // HandsFreeService remains alive, so retain exactly the Activity that
+        // owns that live controller until the user explicitly stops the session
+        // (or the loop ends on its own). This is intentional lifetime ownership,
+        // not a UI cache: replacement screens never become the controller.
+        @SuppressLint("StaticFieldLeak")
+        @Volatile
+        private var handsFreeSessionOwner: ChatActivity? = null
 
     }
 
@@ -534,6 +545,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // Hands-free conversation loop state
     private var handsFreeUserSpoke = false
     private var handsFreeStopped = false
+    // Set when Android destroys this Activity while it still owns a live
+    // hands-free controller. Voice resources are then released by the real
+    // session-ending funnel, not by the window lifecycle callback.
+    private var deferredHandsFreeDestroyCleanup = false
     private var handsFreeListenDeadline = 0L
     private val handsFreeHandler = Handler(Looper.getMainLooper())
 
@@ -639,7 +654,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // When a session ends "by itself", this line is the evidence.
                 logVoiceEventAlways("Hang Up received from the notification action " +
                         "(the notification button, a paired device, or an app with notification access) — stopping everything")
-                cancelAllAiActivity("notification Hang Up action")
+                cancelHandsFreeOwnerOrSelf("notification Hang Up action")
                 restoreUIState()
             }
         }
@@ -847,6 +862,89 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun isHandsFreeEngaged(): Boolean =
         preferences?.getHandsFreeMode() == true && !handsFreeStopped
 
+    private fun isHandsFreeSessionOwner(): Boolean = handsFreeSessionOwner === this
+
+    private fun claimHandsFreeSessionOwnership() {
+        if (handsFreeSessionOwner == null || handsFreeSessionOwner === this) {
+            handsFreeSessionOwner = this
+        }
+    }
+
+    private fun releaseHandsFreeSessionOwnership() {
+        if (handsFreeSessionOwner === this) handsFreeSessionOwner = null
+    }
+
+    private fun retainedHandsFreeOwnerForThisChat(): ChatActivity? {
+        val owner = handsFreeSessionOwner ?: return null
+        if (owner === this || owner.chatId != chatId || !owner.isHandsFreeEngaged()) return null
+        return owner
+    }
+
+    private fun shouldPreserveHandsFreeControllerOnDestroy(): Boolean =
+        HandsFreeActivityLifetimePolicy.shouldPreserveOnDestroy(
+            isSessionOwner = isHandsFreeSessionOwner(),
+            handsFreeEnabled = preferences?.getHandsFreeMode() == true,
+            loopStopped = handsFreeStopped
+        )
+
+    private fun handsFreeControllerCanRun(): Boolean =
+        HandsFreeActivityLifetimePolicy.controllerCanRun(
+            activityDestroyed = isDestroyed,
+            isSessionOwner = isHandsFreeSessionOwner(),
+            loopStopped = handsFreeStopped,
+            cancelled = cancelState
+        )
+
+    private fun backgroundVoiceControllerAvailable(): Boolean =
+        !isDestroyed || isHandsFreeSessionOwner()
+
+    /** A replacement ChatActivity can display the same chat while the old,
+     *  destroyed instance still owns the live voice controller. Stop/Hang Up
+     *  must reach that owner rather than merely tearing down the replacement
+     *  screen's idle state. */
+    private fun cancelHandsFreeOwnerOrSelf(source: String) {
+        val owner = retainedHandsFreeOwnerForThisChat()
+        if (owner != null) {
+            owner.cancelAllAiActivity("$source (forwarded from replacement screen)")
+            handsFreeStopped = true
+            micIdle()
+            refreshConversationButton()
+            return
+        }
+        cancelAllAiActivity(source)
+    }
+
+    /** Release the Activity-bound voice objects that were deliberately kept
+     *  across onDestroy for a live hands-free controller. This runs only when
+     *  the session itself has ended. */
+    private fun cleanupDeferredHandsFreeDestroy() {
+        if (!deferredHandsFreeDestroyCleanup) return
+        deferredHandsFreeDestroyCleanup = false
+        releaseDestroyedActivityVoiceResources()
+    }
+
+    private fun releaseDestroyedActivityVoiceResources() {
+        try { tts?.stop() } catch (_: Exception) { /* ignore */ }
+        try { tts?.shutdown() } catch (_: Exception) { /* ignore */ }
+        tts = null
+        try {
+            if (mediaPlayer?.isPlaying == true) mediaPlayer?.stop()
+            mediaPlayer?.reset()
+            mediaPlayer?.release()
+        } catch (_: Exception) { /* ignore */ }
+        mediaPlayer = null
+        try { applicationContext.unregisterReceiver(hangUpReceiver) } catch (_: Exception) { /* not registered */ }
+        try { languageIdentifier?.close() } catch (_: Exception) { /* ignore */ }
+        languageIdentifier = null
+        releaseReadbackKeepAlive()
+        readbackKeepAliveHandler.removeCallbacksAndMessages(null)
+        try { recognizer?.cancel() } catch (_: Exception) { /* ignore */ }
+        try { recognizer?.destroy() } catch (_: Exception) { /* ignore */ }
+        recognizer = null
+        try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
+        unregisterAudioRouteDiagnostics()
+    }
+
     /**
      * Resting look of the conversation/send button (btnSend) when NO hands-free
      * loop is running: the upward-arrow SEND glyph when the input box has text
@@ -980,7 +1078,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val midUtterance = handsFreeBuffer.isNotEmpty() || handsFreeSubmitRunnable != null
                 if (harmless && (waitingForFirstWord || midUtterance)) {
                     handsFreeHandler.postDelayed({
-                        if (!isFinishing && !isDestroyed && isRecording && !handsFreeStopped && !cancelState) {
+                        if (handsFreeControllerCanRun() && isRecording) {
                             startRecognition(false)
                         }
                     }, 350)
@@ -1000,7 +1098,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     logVoiceEvent("recognizer error $error before speech; " +
                             "rebuilding recognizer (retry $handsFreeTurnRetries)")
                     handsFreeHandler.postDelayed({
-                        if (!isFinishing && !isDestroyed && isRecording && !handsFreeStopped && !cancelState) {
+                        if (handsFreeControllerCanRun() && isRecording) {
                             try { recognizer?.destroy() } catch (_: Exception) { /* ignore */ }
                             initSpeechListener()
                             startRecognition(false)
@@ -1059,9 +1157,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (handsFreeBuffer.isNotEmpty()) {
                     scheduleHandsFreeSubmit()
                 }
-                if (!isFinishing && !isDestroyed && !cancelState) {
+                if (handsFreeControllerCanRun()) {
                     handsFreeHandler.postDelayed({
-                        if (!isFinishing && !isDestroyed && isRecording && !handsFreeStopped && !cancelState) {
+                        if (handsFreeControllerCanRun() && isRecording) {
                             startRecognition(false)
                         }
                     }, 80)
@@ -1080,9 +1178,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  submits as an ordinary message. Gives up silently after ~60s so a
      *  wedged turn cannot queue ghost messages forever. */
     private fun submitRecognizedTextWhenIdle(recognizedText: String, attempt: Int = 0) {
-        if (attempt > 120 || isFinishing || isDestroyed) return
+        if (attempt > 120 || !backgroundVoiceControllerAvailable()) return
         handsFreeHandler.postDelayed({
-            if (isFinishing || isDestroyed) return@postDelayed
+            if (!backgroundVoiceControllerAvailable()) return@postDelayed
             if (isAiCurrentlyBusy()) {
                 submitRecognizedTextWhenIdle(recognizedText, attempt + 1)
             } else {
@@ -1817,9 +1915,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val sttSupported = effModel == "google" || effModel == "whisper-local"
         // Auto-send governs only the manual mic button (owner ruling, July
         // 2026); the hands-free loop always keeps listening after a readback.
-        if (handsFree && sttSupported && !cancelState && !handsFreeStopped && !isRecording &&
-            !isFinishing && !isDestroyed
-        ) {
+        if (handsFree && sttSupported && handsFreeControllerCanRun() && !isRecording) {
             // If audio is somehow still audible (the watchdog can race the real
             // completion), opening the mic now would mute the rest of the
             // readback and let the recognizer transcribe the assistant's own
@@ -1899,7 +1995,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         poll = Runnable {
             // Superseded by a faster completion path, or the loop ended.
             if (token != handsFreeReadbackToken) return@Runnable
-            if (isFinishing || isDestroyed || cancelState || handsFreeStopped || isRecording) return@Runnable
+            if (!handsFreeControllerCanRun() || isRecording) return@Runnable
             val playing = (try { tts?.isSpeaking == true } catch (_: Exception) { false }) ||
                           (try { mediaPlayer?.isPlaying == true } catch (_: Exception) { false })
             if (playing) {
@@ -1939,7 +2035,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             tts?.shutdown()
         } catch (_: Exception) { /* ignore */ }
         isTTSInitialized = false
-        tts = TextToSpeech(this, ttsListener)
+        tts = TextToSpeech(applicationContext, ttsListener)
     }
 
     // One-shot guard for the delivery-tuning retry so overlapping ttsPostInit
@@ -1999,7 +2095,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         ttsTuningRetryPending = true
         Handler(Looper.getMainLooper()).postDelayed({
             ttsTuningRetryPending = false
-            if (!isFinishing && !isDestroyed) applyTtsDeliveryTuning(isRetry = true)
+            if (backgroundVoiceControllerAvailable()) applyTtsDeliveryTuning(isRetry = true)
         }, 750)
     }
 
@@ -2172,13 +2268,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         apiEndpointObject = prepared.apiEndpointObject
         title = chatName
 
-        // Hands-free is a live, per-session control started from the conversation
-        // button — never a persisted setting (there is no settings toggle any
-        // more). Opening a chat always starts disengaged; the flag is only ever
-        // turned on by an explicit button tap, so a value left over from a
-        // previous session (or a hard kill mid-loop) can never auto-resume a
-        // conversation the moment the chat opens.
-        preferences?.setHandsFreeMode(false)
+        // Normally a new ChatActivity starts disengaged. The exception is a
+        // replacement screen for this same chat while a destroyed Activity is
+        // deliberately retained as the live hands-free controller; clearing the
+        // shared preference here would silently hang up that still-running loop.
+        val retainedOwner = handsFreeSessionOwner
+        val reattachingToLiveHandsFree = retainedOwner != null &&
+            retainedOwner !== this && retainedOwner.chatId == chatId &&
+            retainedOwner.isHandsFreeEngaged()
+        if (!reattachingToLiveHandsFree) preferences?.setHandsFreeMode(false)
         handsFreeStopped = false
 
         if (Build.VERSION.SDK_INT >= 33) {
@@ -2215,7 +2313,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // bar is the only way to stop a readback. Not exported: only our own
         // services post this package-scoped broadcast.
         ContextCompat.registerReceiver(
-            this,
+            applicationContext,
             hangUpReceiver,
             IntentFilter(ACTION_HANG_UP),
             ContextCompat.RECEIVER_NOT_EXPORTED
@@ -2314,32 +2412,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     public override fun onDestroy() {
-        // Tombstone for the event log: when the OS (or a navigation flow)
-        // destroys this screen while a voice conversation is live, everything
-        // below silently kills the readback and the loop. Without this line
-        // the user sees "the voice just stopped / the mic never came back"
-        // with no trace anywhere.
         val voiceWasLive = isRecording || handsFreeReadbackExpected ||
                 (try { tts?.isSpeaking == true } catch (_: Exception) { false }) ||
                 (try { mediaPlayer?.isPlaying == true } catch (_: Exception) { false })
+        val preserveHandsFreeController = shouldPreserveHandsFreeControllerOnDestroy()
+
         if (voiceWasLive) {
-            logVoiceEvent("chat screen destroyed while voice was active — readback and mic loop torn down" +
-                    if (isFinishing) " (screen was closed)" else " (destroyed by the system)")
+            if (preserveHandsFreeController) {
+                logVoiceEvent("chat screen destroyed while hands-free was active — voice controller retained; session continues")
+            } else {
+                logVoiceEvent("chat screen destroyed while voice was active — readback and mic loop torn down" +
+                        if (isFinishing) " (screen was closed)" else " (destroyed by the system)")
+            }
         }
-        // Decisive lifecycle record for the screen-off / route-change interruption
-        // investigation. onDestroy currently always runs the full session teardown
-        // below (killAllProcesses + stopHandsFreeService), so changingConfig=true
-        // here means a mere Android configuration recreation is being treated as a
-        // genuine conversation end — the exact condition that produced an
-        // app_cancel "screen was closed" on a turn the user never abandoned. With
-        // uiMode now handled in the manifest, a night-mode flip should no longer
-        // reach this path; if this line still reports changingConfig=true after
-        // the fix, a different configuration change is recreating the Activity and
-        // the teardown must learn to distinguish the two. Always persisted (bounded
-        // to once per destroy) so the next reproduction is conclusive.
-        val teardownAction = if (isChangingConfigurations)
-            "full teardown (configuration recreation — session state will be lost)"
-        else "full teardown (genuine destroy)"
+
+        val teardownAction = when {
+            preserveHandsFreeController -> "detach screen only (hands-free controller retained)"
+            isChangingConfigurations ->
+                "full teardown (configuration recreation — session state will be lost)"
+            else -> "full teardown (genuine destroy)"
+        }
         logVoiceEventAlways(
             "ChatActivity destroy: finishing=$isFinishing" +
                     " changingConfig=$isChangingConfigurations" +
@@ -2349,71 +2441,35 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     " readbackExpected=$handsFreeReadbackExpected" +
                     " handsFreePref=${preferences?.getHandsFreeMode() == true}" +
                     " handsFreeService=${HandsFreeService.isRunning}" +
+                    " handsFreeOwner=${isHandsFreeSessionOwner()}" +
                     " turn=${currentLifecycleTurnId.ifBlank { "none" }}" +
                     " action=$teardownAction"
         )
-        // Route snapshot at destruction, in the separate AudioRoute family. Pairs
-        // with the "readback start" snapshot and any device add/remove lines so a
-        // destroy at the TTS/readback boundary can be matched against whatever the
-        // audio route was doing at that moment.
         logVoiceEventAlways("AudioRoute [chat destroy]: ${describeAudioOutputRoute()}")
-        if (tts != null) {
-            tts!!.stop()
-            tts!!.shutdown()
-        }
-        // Null-safe: when the locked-storage gate finishes onCreate early,
-        // mediaPlayer was never constructed but onDestroy still runs.
-        if (mediaPlayer?.isPlaying == true) {
-            mediaPlayer!!.stop()
-            mediaPlayer!!.reset()
-        }
 
-        try { unregisterReceiver(hangUpReceiver) } catch (_: Exception) { /* not registered */ }
-        // Release the last ML Kit language-detector client (see pronounce()).
-        try { languageIdentifier?.close() } catch (_: Exception) { /* ignore */ }
-        // The read-aloud keep-alive must not outlive the activity: its poll runs on
-        // a handler tied to this instance, so without this the service could hold a
-        // wake lock with nothing to release it.
-        releaseReadbackKeepAlive()
-        readbackKeepAliveHandler.removeCallbacksAndMessages(null)
-
-        // Deliberate cancellation of any in-flight fold-in: leaving the chat
-        // is never a Summarizer Error, and the bookmark only ever advances on
-        // a completed save (errors doc §4).
+        // These jobs belong to the visible screen, not to the live microphone /
+        // generation controller, so they are always safe to detach here.
         summarizerController?.cancel()
-
-        // Detach from the image job registry WITHOUT cancelling the job:
-        // the generation deliberately survives leaving the chat and
-        // recreation (§5); with no screen attached its result is written
-        // straight into the stored history.
         ImageGenerationJobRegistry.detach(chatId, this)
-
-        killAllProcesses()
-        stopHandsFreeService()
-
-        // Fully release the microphone when the chat is destroyed (app closed).
-        // The SpeechRecognizer holds a live binding to the system recognition
-        // service; if it's never destroyed it can keep the mic/recognizer tied
-        // up system-wide and starve other apps' voice input (keyboard voice
-        // typing, other AI voice). Releasing the whisper AudioRecord here covers
-        // the on-device path the same way. Background/screen-off hands-free is
-        // intentionally untouched — this only runs when the activity is gone.
-        try { recognizer?.cancel() } catch (_: Exception) { /* ignore */ }
-        try { recognizer?.destroy() } catch (_: Exception) { /* ignore */ }
-        recognizer = null
-        try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
-
-        // Release the read-only audio-route observer with this Activity instance.
-        unregisterAudioRouteDiagnostics()
-
-        // Cancel any in-flight image import. Its own completion handler sees
-        // isDestroyed and deletes freshly written bytes that never became a
-        // persisted include, so cancelling here just stops the work promptly.
         for (scope in imageImportScopes.toList()) {
             try { scope.cancel() } catch (_: Exception) { /* ignore */ }
         }
         imageImportScopes.clear()
 
+        if (preserveHandsFreeController) {
+            // Do NOT call killAllProcesses(), stopHandsFreeService(), stop TTS,
+            // destroy the recognizer, or cancel LocalWhisper here. Those are the
+            // exact objects driving the foreground-service-protected conversation.
+            // The actual session-ending funnels eventually call stopHandsFreeService,
+            // which releases these deferred Activity resources exactly once.
+            deferredHandsFreeDestroyCleanup = true
+            super.onDestroy()
+            return
+        }
+
+        killAllProcesses()
+        stopHandsFreeService()
+        releaseDestroyedActivityVoiceResources()
         super.onDestroy()
     }
 
@@ -2524,6 +2580,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             adapter?.setOnUpdateListener(this)
 
             initUI()
+            retainedHandsFreeOwnerForThisChat()?.let { owner ->
+                micHandsFreeActive(listening = owner.isRecording)
+                logVoiceEvent("replacement chat screen attached while the hands-free controller remains active")
+            }
             reloadAmoled()
             initSpeechListener()
             initTTS()
@@ -4792,7 +4852,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 handsFreeTurnRetries++
                 logVoiceEvent("whisper capture failed to start; retry $handsFreeTurnRetries")
                 handsFreeHandler.postDelayed({
-                    if (!isFinishing && !isDestroyed && !handsFreeStopped && !cancelState && !isRecording) {
+                    if (handsFreeControllerCanRun() && !isRecording) {
                         startLocalWhisperHandsFreeTurn(freshTurn = false)
                     }
                 }, 600)
@@ -4856,7 +4916,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (whisperCaptureErrorBudget.tryConsume()) {
                 logVoiceEvent("re-arming after capture error (attempt ${whisperCaptureErrorBudget.attemptsUsed()})")
                 handsFreeHandler.postDelayed({
-                    if (!isFinishing && !isDestroyed && !handsFreeStopped && !cancelState && !isRecording) {
+                    if (handsFreeControllerCanRun() && !isRecording) {
                         startLocalWhisperHandsFreeTurn(freshTurn = false)
                     }
                 }, 600)
@@ -5167,12 +5227,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun initSpeechListener() {
-        recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        recognizer = SpeechRecognizer.createSpeechRecognizer(applicationContext)
         recognizer?.setRecognitionListener(speechListener)
     }
 
     private fun initTTS() {
-        tts = TextToSpeech(this, ttsListener)
+        tts = TextToSpeech(applicationContext, ttsListener)
     }
 
     /**
@@ -7209,6 +7269,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             cancelAllAiActivity("conversation button tap (busy) on this screen")
             return
         }
+        val existingOwner = handsFreeSessionOwner
+        if (existingOwner != null && existingOwner !== this) {
+            // Starting a different live conversation is an explicit user action;
+            // end the prior retained controller first so there can never be two
+            // Activity-owned microphone loops competing for one service.
+            existingOwner.cancelAllAiActivity("hands-free session replaced by another chat")
+        }
         val engine = preferences!!.getEffectiveAudioModel()
         if (engine != "google" && engine != "whisper-local") {
             // Cloud Whisper: no end-of-speech detection → no loop. Fall back to a
@@ -7229,7 +7296,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the service) and already clears the engaged flag and resets this button. */
     private fun stopHandsFreeByUser() {
         logVoiceEvent("hands-free stopped (conversation button)")
-        cancelAllAiActivity("conversation button tap (stop hands-free)")
+        cancelHandsFreeOwnerOrSelf("conversation button tap (stop hands-free)")
     }
 
     /** True while the AI is generating, speaking through TTS, playing back
@@ -7406,6 +7473,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun startHandsFreeService() {
+        claimHandsFreeSessionOwnership()
         ensurePostNotificationsPermission()
         try {
             HandsFreeService.start(this, chatId, chatName)
@@ -7421,9 +7489,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun stopHandsFreeService() {
+        // A replacement screen is not allowed to stop the service that keeps
+        // another Activity's retained voice controller alive. Its Stop action
+        // is forwarded to the owner by cancelHandsFreeOwnerOrSelf instead.
+        val owner = handsFreeSessionOwner
+        if (owner != null && owner !== this) return
+        releaseHandsFreeSessionOwnership()
         try {
             HandsFreeService.stop(this)
         } catch (_: Exception) { /* ignore */ }
+        cleanupDeferredHandsFreeDestroy()
     }
 
     /** The active companion's display name for this chat, or "" when none is
