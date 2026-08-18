@@ -24,6 +24,10 @@ jobs:
         if: ${{ hashFiles('scripts/apply_chat_lifecycle_fix.py') != '' }}
         run: python3 scripts/apply_chat_lifecycle_fix.py
 
+      - name: Keep retained voice bindings application scoped
+        if: ${{ hashFiles('scripts/apply_chat_lifecycle_context_fix.py') != '' }}
+        run: python3 scripts/apply_chat_lifecycle_context_fix.py
+
       - name: Set up Java 21 (Temurin)
         uses: actions/setup-java@v4
         with:
