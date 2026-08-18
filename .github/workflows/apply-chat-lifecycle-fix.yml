@@ -1,0 +1,46 @@
+name: Apply chat lifecycle fix
+
+on:
+  push:
+    branches:
+      - claude/fix-chat-lifecycle-screen-destroy
+    paths:
+      - .github/workflows/apply-chat-lifecycle-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Apply lifecycle patch
+        run: python3 scripts/apply_chat_lifecycle_fix.py
+
+      - name: Run unit tests
+        run: |
+          chmod +x gradlew
+          ./gradlew test --stacktrace
+
+      - name: Commit tested source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt \
+                  app/src/main/java/org/teslasoft/assistant/service/HandsFreeActivityLifetimePolicy.kt \
+                  app/src/test/java/org/teslasoft/assistant/service/HandsFreeActivityLifetimePolicyTest.kt
+          git diff --cached --check
+          git commit -m "Keep hands-free alive across chat screen destruction"
+          git push
