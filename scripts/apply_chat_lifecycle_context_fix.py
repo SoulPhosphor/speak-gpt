@@ -12,6 +12,14 @@ def replace_once(old: str, new: str, label: str) -> None:
     source = source.replace(old, new, 1)
 
 
+def replace_exact_count(old: str, new: str, expected: int, label: str) -> None:
+    global source
+    count = source.count(old)
+    if count != expected:
+        raise RuntimeError(f"{label}: expected {expected} matches, found {count}")
+    source = source.replace(old, new)
+
+
 # ActivityThread performs final cleanup of receivers and bound services that were
 # registered with an Activity Context after Activity.onDestroy. The retained
 # hands-free controller must therefore bind long-lived voice infrastructure to
@@ -38,10 +46,11 @@ replace_once(
     "application-scoped SpeechRecognizer binding",
 )
 
-replace_once(
+replace_exact_count(
     "        tts = TextToSpeech(this, ttsListener)\n",
     "        tts = TextToSpeech(applicationContext, ttsListener)\n",
-    "application-scoped TTS binding",
+    2,
+    "application-scoped TTS bindings",
 )
 
 chat.write_text(source)
