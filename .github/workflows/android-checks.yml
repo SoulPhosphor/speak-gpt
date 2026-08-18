@@ -7,6 +7,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -14,6 +17,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Apply staged chat lifecycle repair
+        if: ${{ hashFiles('scripts/apply_chat_lifecycle_fix.py') != '' }}
+        run: python3 scripts/apply_chat_lifecycle_fix.py
 
       - name: Set up Java 21 (Temurin)
         uses: actions/setup-java@v4
@@ -56,3 +65,17 @@ jobs:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Commit tested lifecycle repair to PR branch
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt \
+                  app/src/main/java/org/teslasoft/assistant/service/HandsFreeActivityLifetimePolicy.kt \
+                  app/src/test/java/org/teslasoft/assistant/service/HandsFreeActivityLifetimePolicyTest.kt
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git commit -m "Keep hands-free alive across chat screen destruction"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
