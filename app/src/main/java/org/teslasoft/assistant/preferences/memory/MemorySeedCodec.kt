@@ -38,6 +38,37 @@ object MemorySeedCodec {
 
     const val EXPORT_FORMAT = "companion-memory-export-v1"
 
+    /**
+     * Serialize ONE memory record to a self-contained JSON string (a minimal
+     * export envelope carrying only this memory). Used to persist the incoming
+     * side of an import identity conflict so a future UI can show and, if the
+     * user chooses, re-import it. Round-trips through [decodeSingleMemory].
+     */
+    fun encodeSingleMemory(m: MemoryRecord): String =
+        serialize(singleMemoryEnvelope(m))
+
+    /** Parse a string produced by [encodeSingleMemory] back to its record, or
+     *  null if it carries no memory. */
+    fun decodeSingleMemory(json: String): MemoryRecord? =
+        parse(json).memories.firstOrNull()
+
+    private fun singleMemoryEnvelope(m: MemoryRecord): MemoryStoreData = MemoryStoreData(
+        schemaVersion = "1.11.0",
+        ownerProfile = null,
+        companions = emptyList(),
+        entities = emptyList(),
+        memories = listOf(m),
+        modes = emptyList(),
+        directives = emptyList(),
+        worlds = emptyList(),
+        userPersonas = emptyList(),
+        roleplayCharacters = emptyList(),
+        archivistSettings = null,
+        proposals = emptyList(),
+        retrievalPolicyJson = null,
+        transcripts = emptyList()
+    )
+
     /* ------------------------------ helpers ------------------------------ */
 
     /** Absent OR JSON-null both mean "no value" — optString would return "" or "null". */

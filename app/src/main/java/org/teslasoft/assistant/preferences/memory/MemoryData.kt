@@ -780,29 +780,58 @@ data class ScoredMemory(
 )
 
 /** Per-record-type added/skipped tallies from an import, for the user-facing summary. */
+/**
+ * One import case that genuinely needs the user's intent (MemoryIdImport cases
+ * 4 and 5), captured as STRUCTURED data for a future resolution UI — never as
+ * user-facing text here. The incoming record is persisted separately (the store
+ * writes it to `import_conflicts`, keyed by [conflictId]); this row names the
+ * pieces a UI would need to fetch and offer a choice between.
+ */
+data class ImportConflict(
+    val conflictId: String,
+    val kind: String,               // "version" (case 4) | "restore" (case 5)
+    val existingMemoryId: String,   // the live-or-deleted memory already on record
+    val incomingMemoryId: String    // the incoming record's original id
+)
+
+/**
+ * A cross-reference (a supersedes pointer, a proposal target, or a roleplay-tag
+ * target) that was DROPPED during a repair import because its old memory id was
+ * ambiguous — it could have meant the existing memory or a newly remapped
+ * incoming one. Retained as a diagnostic; the reference is not written.
+ */
+data class SkippedReference(
+    val refKind: String,            // "supersedes" | "proposal_target" | "rp_tag_target"
+    val ownerId: String?,           // the record that held the reference, when known
+    val oldTargetId: String         // the ambiguous memory id it pointed at
+)
+
 data class ImportReport(
     val added: LinkedHashMap<String, Int> = LinkedHashMap(),
     val skipped: LinkedHashMap<String, Int> = LinkedHashMap(),
-    // Identity-hardening outcomes, kept DISTINCT from an ordinary "already
-    // present" skip so a genuine problem is never hidden inside a duplicate
-    // count: [conflicts] is a different logical record wearing an existing id
-    // (refused, not overwritten); [invalid] is an incoming id that is not a
-    // canonical id (refused). Both are counted per record type.
-    val conflicts: LinkedHashMap<String, Int> = LinkedHashMap(),
-    val invalid: LinkedHashMap<String, Int> = LinkedHashMap()
+    // Structured, non-user-facing detail of the id-hardening outcomes:
+    //  - [repaired]: memories imported under a freshly minted id (a subset of
+    //    [added] — they were still added to the library, just with a new id).
+    //  - [conflicts]: cases 4/5 deferred to the user (nothing written yet).
+    //  - [skippedReferences]: ambiguous cross-references dropped during repair.
+    // None of these is rendered into user-facing text here; wording for them is
+    // an unapproved product decision left to a future UI.
+    val repaired: LinkedHashMap<String, Int> = LinkedHashMap(),
+    val conflicts: MutableList<ImportConflict> = ArrayList(),
+    val skippedReferences: MutableList<SkippedReference> = ArrayList()
 ) {
     fun addAdded(type: String, n: Int = 1) { added[type] = (added[type] ?: 0) + n }
     fun addSkipped(type: String, n: Int = 1) { skipped[type] = (skipped[type] ?: 0) + n }
-    fun addConflict(type: String, n: Int = 1) { conflicts[type] = (conflicts[type] ?: 0) + n }
-    fun addInvalid(type: String, n: Int = 1) { invalid[type] = (invalid[type] ?: 0) + n }
+    fun addRepaired(type: String, n: Int = 1) { repaired[type] = (repaired[type] ?: 0) + n }
+    fun addConflict(c: ImportConflict) { conflicts.add(c) }
+    fun addSkippedReference(r: SkippedReference) { skippedReferences.add(r) }
 
     fun summary(): String {
         val a = added.filterValues { it > 0 }.entries.joinToString(", ") { "${it.value} ${it.key}" }
         val s = skipped.filterValues { it > 0 }.entries.joinToString(", ") { "${it.value} ${it.key}" }
-        // NOTE: [conflicts] and [invalid] are counted (above) but deliberately
-        // NOT rendered into any user-facing string here. Their wording — and how
-        // these outcomes are surfaced at all — is an unapproved product decision;
-        // no invented text is written until the owner approves the copy.
+        // Only the pre-existing Added/Skipped lines are user-facing. The repair,
+        // conflict, and dropped-reference outcomes are carried as structured data
+        // (above) with NO invented wording until the owner approves the copy.
         val parts = ArrayList<String>()
         if (a.isNotEmpty()) parts.add("Added: $a")
         if (s.isNotEmpty()) parts.add("Skipped (already present): $s")

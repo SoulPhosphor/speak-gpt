@@ -17,111 +17,136 @@
 package org.teslasoft.assistant.preferences.memory
 
 /**
- * The pure identity-disposition decision for an incoming memory during an
- * import or restore. Kept out of [MemoryStore] so the whole same-record vs.
- * identity-collision rule is unit-tested on the JVM; the store only supplies the
- * database facts (is the id live, is it tombstoned, and the birth timestamps)
- * and then acts on the returned [Disposition].
+ * The pure identity-disposition decision for one incoming memory during a MERGE
+ * import. Kept out of [MemoryStore] so the whole rule is unit-tested on the JVM;
+ * the store supplies the database facts and acts on the returned [Disposition].
  *
- * ## The rule
+ * The merge import REPAIRS the cases it can resolve safely and defers only the
+ * cases that genuinely need the user's intent:
  *
- * A memory's permanent id is a random UUID, so two *different* logical records
- * sharing one id never happens by chance — it means corrupted, hand-edited, or
- * reused data. The discriminator is the immutable birth timestamp `created_at`
- * (never derived from mutable content): the same logical record always carries
- * the same `created_at`, a different record almost never does. When the id
- * already exists but `created_at` disagrees, the incoming record is refused
- * rather than silently overwriting or merging an unrelated memory.
+ *  - [Disposition.INSERT] — a canonical id novel to this store: write it as-is.
+ *  - [Disposition.INSERT_REMAPPED] — the incoming record is a DIFFERENT logical
+ *    memory than whatever currently holds (or once held) its id, or the id is
+ *    non-canonical. Mint a fresh canonical id and import it as a separate
+ *    memory; references are remapped where unambiguous (see [MemoryIdRemap]).
+ *      · same id, different birth timestamp  → different memory        (case 1)
+ *      · non-canonical / blank incoming id    → malformed identity      (case 2)
+ *      · id matches a tombstone, different birth (or unknown birth) → the
+ *        tombstoned id stays burned; import under a new id             (case 3)
+ *  - [Disposition.PRESERVE_EXISTING] — the SAME logical record is already
+ *    present and its substance is identical: keep the stored one, write nothing.
+ *  - [Disposition.CONFLICT_VERSION] — the SAME logical memory (same id, same
+ *    birth) but the imported substance DIFFERS from the live one. Two versions
+ *    of one memory: the system must not pick for the user. Store structured
+ *    conflict data for a future UI; write nothing now.                 (case 4)
+ *  - [Disposition.CONFLICT_RESTORE] — the import contains the exact memory the
+ *    user previously deleted (id matches a tombstone with the SAME birth). Only
+ *    the user can say whether importing should resurrect it. Store structured
+ *    conflict data for a future UI; write nothing now.                 (case 5)
  *
- * A deleted id leaves a tombstone carrying the original `created_at`. That lets
- * a genuine RESTORE of the deleted memory (timestamps match) be admitted while a
- * DIFFERENT memory trying to reuse the freed id (timestamps differ) is refused —
- * ids are never reused across logical records.
- *
- * ## Import requires a canonical id — there is no non-canonical legacy format
- *
- * Import/restore is a preservation path, but "preserve any non-blank id" would
- * re-admit exactly the arbitrary-string leniency the id-hardening ruling removed
- * — only at the import layer. Investigation of the shipped export format settles
- * it: the associative `memory_id` has been `m-<uuid>` since the memory schema's
- * inception (the v1.11 seed template and every example use `m-<uuid>`; the
- * generator has only ever produced it; the codec's sole "legacy" handling is the
- * retired `kind`/`title` fields, never the id shape). A GENUINE legacy
- * associative identity is therefore already canonical, so requiring canonical
- * preserves every real identity while refusing arbitrary malformed input. A
- * non-canonical associative id in an import is not a legacy identity to keep — it
- * is malformed, and is refused ([Disposition.REJECT_INVALID]).
- *
- * (This governs the portable MERGE import only. A whole-file backup RESTORE is an
- * atomic file replacement that never runs this path, so a user's full-database
- * restore is unaffected regardless of id shape.)
- *
- * ## Ambiguous identity fails closed
- *
- * When an id's identity cannot be proven — an incoming record with no birth
- * timestamp against a live row, or a tombstone whose birth timestamp is unknown
- * (written before v30 recorded it) — the record is REFUSED, not admitted. The
- * ruling is to fail safely rather than risk a different logical memory silently
- * reclaiming an id.
+ * A whole-file backup RESTORE is a separate, identity-preserving file
+ * replacement and never runs this path.
  */
 object MemoryIdImport {
 
-    /** What the database already knows about an incoming id. */
+    /** The store-known state of an incoming id. [Live] also carries the live
+     *  record's substance so a same-birth import can be told identical (skip)
+     *  from a changed version (conflict). */
     sealed interface Existing {
-        /** No live row and no tombstone — the id is new to this store. */
         object None : Existing
-
-        /** A live memory currently holds this id, born at [createdAt]. */
-        data class Live(val createdAt: String) : Existing
-
-        /**
-         * The id was deleted and tombstoned. [createdAt] is the deleted memory's
-         * birth timestamp, or null when it is unknown (a tombstone written before
-         * birth timestamps were recorded).
-         */
+        data class Live(val createdAt: String, val substance: Substance) : Existing
         data class Tombstoned(val createdAt: String?) : Existing
     }
 
-    /** The action the store must take for one incoming record. */
     enum class Disposition {
-        /** Write the record; its id is free (or a legitimate restore of it). */
         INSERT,
-
-        /** The same logical record is already present; keep the stored one. */
+        INSERT_REMAPPED,
         PRESERVE_EXISTING,
-
-        /** A different logical record wears this id — refuse it, visibly. */
-        REJECT_COLLISION,
-
-        /** The incoming id is not a canonical id — refuse it, visibly. */
-        REJECT_INVALID
+        CONFLICT_VERSION,
+        CONFLICT_RESTORE
     }
 
     /**
-     * Decide what to do with an incoming record of [type] carrying [incomingId]
-     * and [incomingCreatedAt], given what the store already knows ([existing]).
-     * A non-canonical id is invalid; identity that cannot be proven fails closed.
+     * The user-meaningful state of a memory, used only to tell an identical
+     * re-import (skip) from a genuine version change (conflict). Deliberately
+     * EXCLUDES derived/bookkeeping fields (embedding text, timestamps, the
+     * supersedes reference, legacy card hints): a difference there is not a
+     * content change. Target/link sets are order-normalized so a reordered
+     * export never looks like a change. Comparing broadly errs toward flagging a
+     * conflict, which defers to the user and never silently drops an edit.
+     */
+    data class Substance(
+        val content: String,
+        val scope: String,
+        val typeId: String?,
+        val importance: Int,
+        val tagsJson: String,
+        val protectionJson: String?,
+        val modeHintsJson: String,
+        val status: String,
+        val companionIds: List<String>,
+        val entityRefs: List<String>,
+        val worldIds: List<String>,
+        val roleplayCharacterIds: List<String>,
+        val campaignIds: List<String>,
+        val projectIds: List<String>
+    )
+
+    /** Build the comparable [Substance] of a memory record. The JSON-valued
+     *  fields are whitespace-normalized so a pretty-vs-compact reformat from an
+     *  export round-trip never reads as a content change (both sides are
+     *  transformed identically, so a genuine value change still differs). */
+    fun substanceOf(m: MemoryRecord): Substance = Substance(
+        content = m.content,
+        scope = m.scope,
+        typeId = m.typeId,
+        importance = m.importance,
+        tagsJson = normalizeJson(m.tagsJson),
+        protectionJson = m.protectionJson?.let { normalizeJson(it) },
+        modeHintsJson = normalizeJson(m.modeHintsJson),
+        status = m.status,
+        companionIds = m.companionIds.sorted(),
+        entityRefs = m.entityRefs.sorted(),
+        worldIds = m.worldIds.sorted(),
+        roleplayCharacterIds = m.roleplayCharacterIds.sorted(),
+        campaignIds = m.campaignIds.sorted(),
+        projectIds = m.projectIds.sorted()
+    )
+
+    private fun normalizeJson(s: String): String = s.filterNot { it.isWhitespace() }
+
+    /**
+     * Decide what to do with an incoming record of [type] carrying [incomingId],
+     * [incomingCreatedAt], and [incomingSubstance], given what the store already
+     * knows ([existing]).
      */
     fun classify(
         incomingId: String?,
         incomingCreatedAt: String?,
+        incomingSubstance: Substance,
         type: MemoryId.Type,
         existing: Existing
     ): Disposition {
-        if (!MemoryId.isCanonical(incomingId, type)) return Disposition.REJECT_INVALID
+        // Case 2: a non-canonical or blank id is not an identity we can keep.
+        if (!MemoryId.isCanonical(incomingId, type)) return Disposition.INSERT_REMAPPED
         return when (existing) {
             is Existing.None -> Disposition.INSERT
             is Existing.Live ->
-                if (sameBirth(incomingCreatedAt, existing.createdAt)) Disposition.PRESERVE_EXISTING
-                else Disposition.REJECT_COLLISION
+                when {
+                    // Case 1: same id, different birth ⇒ a different memory.
+                    !sameBirth(incomingCreatedAt, existing.createdAt) -> Disposition.INSERT_REMAPPED
+                    // Same logical record, unchanged ⇒ nothing to do.
+                    existing.substance == incomingSubstance -> Disposition.PRESERVE_EXISTING
+                    // Case 4: same memory, two versions ⇒ the user must choose.
+                    else -> Disposition.CONFLICT_VERSION
+                }
             is Existing.Tombstoned ->
-                // Fail closed on an unknown tombstone birth: the restore cannot be
-                // proven to be the same record, so it is refused rather than risk
-                // a different memory reclaiming the freed id. A matching known
-                // birth is a genuine restore and is admitted.
+                // Case 5: proven the exact deleted memory ⇒ the user must choose
+                // whether to resurrect. Case 3 (different or unknown birth) ⇒ a
+                // different memory; the tombstoned id stays burned, import anew.
                 if (existing.createdAt != null && sameBirth(incomingCreatedAt, existing.createdAt))
-                    Disposition.INSERT
-                else Disposition.REJECT_COLLISION
+                    Disposition.CONFLICT_RESTORE
+                else Disposition.INSERT_REMAPPED
         }
     }
 

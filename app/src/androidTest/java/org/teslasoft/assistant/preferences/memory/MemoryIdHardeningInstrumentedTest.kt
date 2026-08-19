@@ -116,7 +116,7 @@ class MemoryIdHardeningInstrumentedTest {
     }
 
     @Test
-    fun importPreservesIdSkipsSameRecordAndRejectsCollision() {
+    fun importPreservesIdentityAndRepairsCollisionAsSeparateMemory() {
         val src = open(freshDbName())
         val rec = mem("2026-01-01T00:00:00Z", content = "the original")
         src.insertMemory(rec)
@@ -127,42 +127,78 @@ class MemoryIdHardeningInstrumentedTest {
         assertEquals(1, added.added["memories"])
         assertNotNull(dest.getMemory(rec.memoryId)) // id preserved
 
-        // Re-import the SAME record (birth timestamp matches) → preserved/skipped.
+        // Re-import the SAME record (birth + substance match) → preserved, no-op.
         val again = dest.importData(data, overwriteSingletons = false)
         assertEquals(1, again.skipped["memories"])
-        assertNull(again.conflicts["memories"])
+        assertTrue(again.conflicts.isEmpty())
+        assertNull(again.repaired["memories"])
 
-        // A DIFFERENT record wearing the same id (different birth) → collision,
-        // reported distinctly, and the stored record is NOT overwritten.
+        // A DIFFERENT record wearing the same id (different birth) → REPAIRED:
+        // imported as a separate memory under a new id; the original is untouched.
         val colliding = data.copy(
-            memories = data.memories.map { it.copy(content = "impostor", createdAt = "2026-09-09T00:00:00Z") }
+            memories = data.memories.map { it.copy(content = "different memory", createdAt = "2026-09-09T00:00:00Z") }
         )
-        val conflict = dest.importData(colliding, overwriteSingletons = false)
-        assertEquals(1, conflict.conflicts["memories"])
-        assertEquals("the original", dest.getMemory(rec.memoryId)!!.content)
+        val repaired = dest.importData(colliding, overwriteSingletons = false)
+        assertEquals(1, repaired.repaired["memories"])
+        assertEquals(1, repaired.added["memories"])
+        assertEquals("the original", dest.getMemory(rec.memoryId)!!.content) // unchanged
+        assertEquals(2, dest.exportData().memories.size) // original + separate repair
     }
 
     @Test
-    fun restoreOfDeletedMemoryAdmittedButDifferentRecordRejected() {
+    fun sameBirthDifferentContentIsStoredAsVersionConflict() {
+        val src = open(freshDbName())
+        val rec = mem("2026-01-01T00:00:00Z", content = "the original")
+        src.insertMemory(rec)
+        val dest = open(freshDbName())
+        dest.importData(src.exportData(), overwriteSingletons = true)
+
+        // Same id, same birth, DIFFERENT content → the user must choose; store it.
+        val changed = src.exportData().copy(
+            memories = src.exportData().memories.map { it.copy(content = "an edited version") }
+        )
+        val report = dest.importData(changed, overwriteSingletons = false)
+        assertEquals(1, report.conflicts.size)
+        assertEquals("version", report.conflicts[0].kind)
+        // Nothing overwritten and no second copy created.
+        assertEquals("the original", dest.getMemory(rec.memoryId)!!.content)
+        assertEquals(1, dest.exportData().memories.size)
+        // The imported version is retrievable for a future UI.
+        val stored = dest.importConflicts()
+        assertEquals(1, stored.size)
+        assertEquals("an edited version", dest.importConflictIncoming(stored[0].conflictId)!!.content)
+    }
+
+    @Test
+    fun deletedMemorySameBirthIsStoredAsRestoreConflictNotAutoRestored() {
         val store = open(freshDbName())
         val rec = mem("2026-01-01T00:00:00Z", content = "kept")
         store.insertMemory(rec)
-        val backup = store.exportData()          // captured before deletion
-        store.deleteMemory(rec.memoryId)          // tombstoned with created_at
-
-        // Restoring the SAME record (matching birth timestamp) is admitted.
-        val restore = store.importData(backup, overwriteSingletons = false)
-        assertEquals(1, restore.added["memories"])
-        assertNotNull(store.getMemory(rec.memoryId))
-
-        // Delete again, then a DIFFERENT record reusing the freed id is refused.
+        val backup = store.exportData()
         store.deleteMemory(rec.memoryId)
-        val impostor = backup.copy(
-            memories = backup.memories.map { it.copy(content = "impostor", createdAt = "2026-09-09T00:00:00Z") }
+
+        // The exact deleted memory is in the import → the user must choose; store.
+        val report = store.importData(backup, overwriteSingletons = false)
+        assertEquals(1, report.conflicts.size)
+        assertEquals("restore", report.conflicts[0].kind)
+        assertNull(store.getMemory(rec.memoryId)) // NOT auto-restored
+    }
+
+    @Test
+    fun deletedIdDifferentBirthImportsAsRepairedSeparateMemory() {
+        val store = open(freshDbName())
+        val rec = mem("2026-01-01T00:00:00Z", content = "kept")
+        store.insertMemory(rec)
+        val backup = store.exportData()
+        store.deleteMemory(rec.memoryId)
+
+        val different = backup.copy(
+            memories = backup.memories.map { it.copy(content = "unrelated", createdAt = "2026-09-09T00:00:00Z") }
         )
-        val conflict = store.importData(impostor, overwriteSingletons = false)
-        assertEquals(1, conflict.conflicts["memories"])
-        assertNull(store.getMemory(rec.memoryId))
+        val report = store.importData(different, overwriteSingletons = false)
+        assertEquals(1, report.repaired["memories"])
+        assertNull(store.getMemory(rec.memoryId)) // burned id not reused
+        assertEquals(1, store.exportData().memories.size) // the separate repaired memory
     }
 
     /* ---- lorebook entries ------------------------------------------------ */
