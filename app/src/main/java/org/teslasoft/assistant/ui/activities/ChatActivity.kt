@@ -5441,6 +5441,90 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /**
+     * The reasoning capability of the active endpoint for [model], layering the
+     * §7.7 confidence ladder over this endpoint's persisted capability store.
+     */
+    private fun reasoningCapabilityForModel(model: String): org.teslasoft.assistant.reasoning.ReasoningCapability =
+        org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
+            apiEndpointObject?.reasoningCapabilityByModel, model
+        )
+
+    /**
+     * The effective reasoning settings for this turn (§7.5/§7.9): the
+     * conversation's own override, else this model's favorite default, else
+     * Auto — with the §7.8 clamp for an effort the active path no longer
+     * supports. Read from the same favorite/conversation storage the UI writes,
+     * so every send path (typed, voice, retry) resolves identically.
+     */
+    private fun resolveReasoningForModel(model: String): org.teslasoft.assistant.reasoning.ResolvedReasoning {
+        val capability = reasoningCapabilityForModel(model)
+        val favorite = favoriteForActiveEndpoint(model)
+        val favoriteEffort = favorite?.let {
+            org.teslasoft.assistant.reasoning.ReasoningEffort.fromSerialized(it.reasoningEffort)
+        }
+        val override = org.teslasoft.assistant.reasoning.ReasoningEffort.fromSerialized(
+            preferences?.getReasoningEffortOverride()
+        )
+        return org.teslasoft.assistant.reasoning.ReasoningSettingsResolver.resolve(
+            conversationOverride = override,
+            favoriteEffort = favoriteEffort,
+            favoriteShowReasoning = favorite?.showReasoning,
+            capability = capability
+        )
+    }
+
+    /**
+     * Just-before-send hook that merges this turn's reasoning instruction into
+     * the outgoing Chat Completions body (§7.9), using the same body-mutation
+     * approach as provider routing so no separate request transport exists. It
+     * applies to OpenRouter and generic OpenAI-compatible endpoints alike, in
+     * each provider's own field shape. Fully fail-safe: a non-chat body, a
+     * parse issue, a non-reasoning model, or Auto with reasoning returned leaves
+     * the request byte-for-byte unchanged, so ordinary chat can never break.
+     */
+    private fun augmentRequestWithReasoning(request: HttpRequestBuilder) {
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val text = content.text
+
+        val model = try {
+            val root = com.google.gson.JsonParser.parseString(text).asJsonObject
+            // Only streamed chat generation carries reasoning. Auxiliary
+            // non-streamed calls on this same client (auto-naming, tool-name
+            // resolution, summarizer) must not inherit a reasoning instruction.
+            val streamed = root.get("stream")?.takeUnless { it.isJsonNull }?.asBoolean == true
+            if (streamed && root.has("messages")) {
+                root.get("model")?.takeIf { !it.isJsonNull }?.asString
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        } ?: return
+
+        val resolved = resolveReasoningForModel(model)
+        val capability = reasoningCapabilityForModel(model)
+        val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
+
+        val augmented = org.teslasoft.assistant.reasoning.ReasoningRequestSerializer.augmentBody(
+            text, resolved, isOpenRouter, capability.isReasoningCapable
+        )
+        if (augmented != text) {
+            request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
+            lastReasoningAttachment =
+                "reasoning attached (effort=${resolved.effort.serialized}, show=${resolved.showReasoning}, " +
+                    "source=${resolved.source}, capability=${capability.source})" +
+                    (resolved.clampedFrom?.let { ", dropped unsupported=${it.serialized}" } ?: "")
+        } else {
+            lastReasoningAttachment = if (!capability.isReasoningCapable) {
+                "no reasoning fields (model not known to reason)"
+            } else {
+                "no reasoning fields (Auto / provider default)"
+            }
+        }
+    }
+
     /** Existing user-facing wording for a blocked routing configuration. */
     private fun providerBlockMessage(block: RoutingBlock): String = when (block) {
         RoutingBlock.ONLY_PROVIDER_NOT_SELECTED,
@@ -5463,6 +5547,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val favorite = favoriteForActiveEndpoint(model)
         val status = lastRoutingAttachment ?: "attachment requested (send hook did not run)"
         return "\n" + ProviderRoutingDiagnostics.describe(isOpenRouter, favorite, status)
+    }
+
+    /**
+     * The reasoning line appended to a Response Lifecycle entry (§7.8): what
+     * reasoning instruction was actually written on the outgoing body and the
+     * capability source it was resolved from. Reads the send hook's real
+     * outcome ([lastReasoningAttachment]); if the hook never ran it says so
+     * rather than implying anything was sent.
+     */
+    private fun reasoningLogLine(): String {
+        val status = lastReasoningAttachment ?: "reasoning hook did not run"
+        return "\nReasoning: $status"
     }
 
     private fun initAI() {
@@ -5584,6 +5680,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 throw blocked
                             } catch (_: Exception) {
                                 // Any other issue is non-fatal: send unmodified.
+                            }
+                            try {
+                                // Reasoning rides the same just-before-send body
+                                // mutation; independent of routing and fully
+                                // fail-safe, so it never blocks or breaks a send.
+                                augmentRequestWithReasoning(request)
+                            } catch (_: Exception) {
+                                // Non-fatal: send without a reasoning instruction.
                             }
                             proceed(request)
                         }
@@ -6696,6 +6800,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  that never runs is reported as unconfirmed rather than "attached". */
     @Volatile
     private var lastRoutingAttachment: String? = null
+    /** Diagnostic: the reasoning instruction actually written onto the outgoing
+     *  body by [augmentRequestWithReasoning] for this streamed request, or a
+     *  reason none was (§7.8). Written on the send thread, read when the
+     *  lifecycle entry finalizes. Reset with [lastRoutingAttachment]. */
+    @Volatile
+    private var lastReasoningAttachment: String? = null
     private var currentLifecycleTurnId: String = ""
     private var lifecycleTurnCounter: Int = 0
 
@@ -6720,6 +6830,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // with its own result), so the send hook's actual outcome is recorded
         // fresh and a hook that never runs never reports a stale attachment.
         lastRoutingAttachment = null
+        lastReasoningAttachment = null
         // Reset the dispatch boundary for THIS attempt regardless of whether
         // lifecycle logging is on, because the Provider Failure Log gate also
         // depends on it.
@@ -6798,7 +6909,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             receivedCharacters = r.receivedCharacters, durationMs = durationMs,
             generationId = r.generationId, errorText = errorText,
             attemptId = r.attemptId
-        ) + providerRoutingLogLine(r.model)
+        ) + providerRoutingLogLine(r.model) + reasoningLogLine()
         currentLifecycle = null
         org.teslasoft.assistant.preferences.Logger.logResponseLifecycleAsync(this, body)
     }
