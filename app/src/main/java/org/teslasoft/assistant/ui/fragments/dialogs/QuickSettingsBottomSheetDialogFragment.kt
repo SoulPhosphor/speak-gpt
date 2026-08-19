@@ -96,6 +96,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var dropdownProviderMode: TextView? = null
     private var btnSelectSystemPrompt: ConstraintLayout? = null
     private var textSystemPrompt: TextView? = null
+    private var rowReasoning: View? = null
+    private var textReasoningEffort: TextView? = null
     private var systemPromptsPreferences: SystemPromptsPreferences? = null
     private var btnSelectLogitBias: ConstraintLayout? = null
     private var btnSelectApiEndpoint: ConstraintLayout? = null
@@ -286,6 +288,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 // model on this endpoint, so re-evaluate it when the endpoint
                 // changes.
                 refreshProviderModeTile()
+                setupReasoningTile()
             }
         }
     }
@@ -307,6 +310,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         updateListener?.onUpdate()
         shouldForceUpdate = true
         refreshProviderModeDisplay()
+        setupReasoningTile()
     }
 
     private var personaActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -676,6 +680,86 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
+    /**
+     * The reasoning capability of the chat's current model/endpoint, resolved
+     * through the §7.7 ladder over the endpoint's persisted capability store.
+     */
+    private fun currentReasoningCapability(): org.teslasoft.assistant.reasoning.ReasoningCapability {
+        val endpointId = preferences?.getApiEndpointId().orEmpty()
+        val model = preferences?.getModel().orEmpty()
+        if (model.isBlank()) return org.teslasoft.assistant.reasoning.ReasoningCapability.UNKNOWN
+        val endpoint = apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId)
+        return org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
+            endpoint?.reasoningCapabilityByModel, model
+        )
+    }
+
+    /**
+     * Quick Settings Thinking control (chat-redesign-plan.md §7.5). Shown only
+     * when the active model/provider exposes configurable reasoning; its value
+     * is the conversation's effective effort, and picking a level persists a
+     * per-conversation override without rewriting the favorite.
+     */
+    private fun setupReasoningTile() {
+        val row = rowReasoning ?: return
+        val capability = currentReasoningCapability()
+        if (!capability.effortConfigurable) {
+            row.visibility = View.GONE
+            row.setOnClickListener(null)
+            textReasoningEffort?.setOnClickListener(null)
+            return
+        }
+        row.visibility = View.VISIBLE
+        refreshReasoningEffortLabel(capability)
+        row.setOnClickListener { showReasoningEffortDropdown(textReasoningEffort ?: it, capability) }
+        textReasoningEffort?.setOnClickListener { showReasoningEffortDropdown(it, capability) }
+    }
+
+    /** The effort this conversation would send now: its own override, else the
+     *  favorite default, else Auto — clamped to what the path supports (§7.9). */
+    private fun effectiveReasoningEffort(
+        capability: org.teslasoft.assistant.reasoning.ReasoningCapability
+    ): org.teslasoft.assistant.reasoning.ReasoningEffort {
+        val endpointId = preferences?.getApiEndpointId().orEmpty()
+        val model = preferences?.getModel().orEmpty()
+        val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
+        val favoriteEffort = favorite?.let {
+            org.teslasoft.assistant.reasoning.ReasoningEffort.fromSerialized(it.reasoningEffort)
+        }
+        val override = org.teslasoft.assistant.reasoning.ReasoningEffort.fromSerialized(
+            preferences?.getReasoningEffortOverride()
+        )
+        return org.teslasoft.assistant.reasoning.ReasoningSettingsResolver.resolve(
+            override, favoriteEffort, favorite?.showReasoning, capability
+        ).effort
+    }
+
+    private fun refreshReasoningEffortLabel(
+        capability: org.teslasoft.assistant.reasoning.ReasoningCapability
+    ) {
+        textReasoningEffort?.text = org.teslasoft.assistant.ui.reasoning.ReasoningEffortLabels.label(
+            requireContext(), effectiveReasoningEffort(capability)
+        )
+    }
+
+    private fun showReasoningEffortDropdown(
+        anchor: View,
+        capability: org.teslasoft.assistant.reasoning.ReasoningCapability
+    ) {
+        val choices = capability.thinkingChoices()
+        if (choices.isEmpty()) return
+        val labels = choices.map {
+            org.teslasoft.assistant.ui.reasoning.ReasoningEffortLabels.label(requireContext(), it)
+        }
+        showTileDropdown(anchor, labels) { position ->
+            // The conversation owns and persists its override (§7.5); Auto is a
+            // real persisted choice, not "inherit the favorite".
+            preferences?.setReasoningEffortOverride(choices[position].serialized)
+            refreshReasoningEffortLabel(capability)
+            shouldForceUpdate = true
+        }
+    }
+
     private fun updateGlamourLabel() {
         val id = preferences?.getChatUserPersonaId().orEmpty()
         textGlamour?.text = if (id.isEmpty()) {
@@ -712,6 +796,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textModel?.text = model
         // The Provider Mode dropdown reflects the active model's routing.
         refreshProviderModeDisplay()
+        // Reasoning controls are keyed to the model/provider path (§7.9).
+        setupReasoningTile()
     }
 
     private var modelSelectedListenerV2: AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener = AdvancedFavoriteModelSelectorDialogFragment.OnModelSelectedListener { model, endpointId ->
@@ -723,6 +809,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textModel?.text = model
         // Model and endpoint may both have changed; re-evaluate the tile.
         refreshProviderModeTile()
+        setupReasoningTile()
     }
 
     /* ------------------------------ Provider Mode (OpenRouter) ------------------------------ */
@@ -929,6 +1016,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         dropdownProviderMode = view.findViewById(R.id.dropdown_provider_mode)
         btnSelectSystemPrompt = view.findViewById(R.id.btn_select_system_prompt)
         textSystemPrompt = view.findViewById(R.id.text_system_prompt)
+        rowReasoning = view.findViewById(R.id.row_reasoning)
+        textReasoningEffort = view.findViewById(R.id.text_reasoning_effort)
         btnSelectLogitBias = view.findViewById(R.id.btn_set_logit_biases)
         btnSelectApiEndpoint = view.findViewById(R.id.btn_select_api_endpoint)
         btnSelectPersona = view.findViewById(R.id.btn_select_persona)
@@ -1095,6 +1184,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // selected-or-first prompt effective, so a real None needs a small
         // per-chat mechanism that doesn't exist; deferred rather than guessed.
         textSystemPrompt?.setOnClickListener { showSystemPromptDropdown(it) }
+        setupReasoningTile()
         btnEditSystemPrompt?.setOnClickListener {
             managerRefreshLauncher.launch(Intent(requireContext(), SystemPromptsListActivity::class.java))
         }

@@ -3207,6 +3207,14 @@
     <string name="message_details_empty">Details Not Available</string>
     <!-- Collapsed disclosure label for provider-supplied reasoning (chat-redesign-plan.md §7.1). -->
     <string name="reasoning_thinking_label">Thinking</string>
+    <!-- Reasoning-effort level names for the Thinking dropdown (§7.4/§7.5). "Auto"
+         means send no explicit effort; "Off" disables reasoning where supported. -->
+    <string name="reasoning_effort_auto">Auto</string>
+    <string name="reasoning_effort_off">Off</string>
+    <string name="reasoning_effort_minimal">Minimal</string>
+    <string name="reasoning_effort_low">Low</string>
+    <string name="reasoning_effort_medium">Medium</string>
+    <string name="reasoning_effort_high">High</string>
     <!-- Token count shown in the compact line and the details popup, e.g. "1,234 tokens". -->
     <string name="chat_token_count">%1$s tokens</string>
     <!-- Regenerated-response pager on an assistant message. -->

@@ -238,6 +238,46 @@
                         app:layout_constraintTop_toTopOf="parent" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
+                <!-- Thinking (reasoning effort) for THIS conversation
+                     (chat-redesign-plan.md §7.5). Deliberately a lightweight
+                     inline row with NO card/background treatment, unlike the
+                     tiles above. Placed directly beneath System Prompt because
+                     effort is changed often. GONE — a zero-height point — unless
+                     the active model/provider exposes configurable reasoning. -->
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/row_reasoning"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginEnd="24dp"
+                    android:layout_marginTop="6dp"
+                    android:background="?attr/selectableItemBackground"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="6dp"
+                    android:visibility="gone"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/btn_select_system_prompt">
+
+                    <TextView
+                        android:id="@+id/textView_reasoning_title"
+                        style="@style/Widget.App.QuickTile.Label"
+                        android:text="@string/reasoning_thinking_label"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <TextView
+                        android:id="@+id/text_reasoning_effort"
+                        style="@style/Widget.App.QuickTile.Value"
+                        android:layout_width="0dp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintHorizontal_bias="1"
+                        app:layout_constraintStart_toEndOf="@+id/textView_reasoning_title"
+                        app:layout_constraintTop_toTopOf="parent" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/btn_select_lorebook"
                     android:layout_width="0dp"
@@ -250,7 +290,7 @@
                     android:paddingBottom="8dp"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/btn_select_system_prompt">
+                    app:layout_constraintTop_toBottomOf="@+id/row_reasoning">
 
                     <TextView
                         android:id="@+id/textView_lorebook_title"
