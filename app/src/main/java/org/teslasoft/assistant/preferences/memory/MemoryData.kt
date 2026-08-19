@@ -799,16 +799,13 @@ data class ImportReport(
     fun summary(): String {
         val a = added.filterValues { it > 0 }.entries.joinToString(", ") { "${it.value} ${it.key}" }
         val s = skipped.filterValues { it > 0 }.entries.joinToString(", ") { "${it.value} ${it.key}" }
-        val c = conflicts.filterValues { it > 0 }.entries.joinToString(", ") { "${it.value} ${it.key}" }
-        val i = invalid.filterValues { it > 0 }.entries.joinToString(", ") { "${it.value} ${it.key}" }
+        // NOTE: [conflicts] and [invalid] are counted (above) but deliberately
+        // NOT rendered into any user-facing string here. Their wording — and how
+        // these outcomes are surfaced at all — is an unapproved product decision;
+        // no invented text is written until the owner approves the copy.
         val parts = ArrayList<String>()
         if (a.isNotEmpty()) parts.add("Added: $a")
         if (s.isNotEmpty()) parts.add("Skipped (already present): $s")
-        // Provisional wording — surfaces the distinct outcomes the owner
-        // approved; exact user-facing phrasing is subject to the owner's copy
-        // review before this ships.
-        if (c.isNotEmpty()) parts.add("Not imported (id already used by a different memory): $c")
-        if (i.isNotEmpty()) parts.add("Not imported (invalid id): $i")
         return if (parts.isEmpty()) "Nothing to import." else parts.joinToString(". ")
     }
 }
