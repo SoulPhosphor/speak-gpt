@@ -43,13 +43,15 @@ object ReportedProviderParser {
      */
     suspend fun consumeObservedStream(
         channel: ByteReadChannel,
-        onProvider: (String) -> Unit,
         /** Optional side observer given every raw SSE line as it is drained, so
          *  a second consumer (reasoning capture) can ride the SAME single drain
          *  without a second bodyAsChannel() read. It runs before this parser's
          *  own line handling and must never throw; any exception it raises is
-         *  swallowed so it can never disturb the drain or the live stream. */
-        lineObserver: ((String) -> Unit)? = null
+         *  swallowed so it can never disturb the drain or the live stream.
+         *  Declared before [onProvider] so existing trailing-lambda callers
+         *  still bind their lambda to [onProvider]. */
+        lineObserver: ((String) -> Unit)? = null,
+        onProvider: (String) -> Unit
     ) {
         val inspector = RawSseInspector()
         var providerNoted = false
