@@ -110,7 +110,17 @@ class ApiEndpointObject(
      * and unchanged. Kept at the END of the constructor so existing positional
      * callers stay valid.
      */
-    var identity: String = IDENTITY_GENERIC
+    var identity: String = IDENTITY_GENERIC,
+    /**
+     * Compact JSON map of `model-id -> reasoning capability` learned from this
+     * endpoint's model/list metadata (chat-redesign-plan.md §7.7). Populated
+     * during normal catalog work so a favorite row or request path knows a
+     * model reasons without re-fetching; only established (KNOWN) capabilities
+     * are stored. See [org.teslasoft.assistant.reasoning.ReasoningCapabilityStore]
+     * for the format. Kept at the END of the constructor so existing positional
+     * callers stay valid.
+     */
+    var reasoningCapabilityByModel: String = ""
 ) {
     /** True when this endpoint carries OpenRouter routing identity. */
     fun isOpenRouterRouting(): Boolean = identity == IDENTITY_OPENROUTER
