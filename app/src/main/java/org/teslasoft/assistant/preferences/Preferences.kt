@@ -966,6 +966,36 @@ class Preferences private constructor(private var preferences: SharedPreferences
     }
 
     /**
+     * This conversation's own reasoning-effort override (chat-redesign-plan.md
+     * §7.5/§7.9), as a ReasoningEffort serialized value.
+     *
+     * Tri-state by design:
+     *  - empty string  → the conversation has NO override yet; it inherits the
+     *    favorite's saved default (and Auto beneath that).
+     *  - any value, INCLUDING "auto" → the conversation owns and persists its
+     *    own choice. "auto" is a real persisted decision ("send no explicit
+     *    effort"), not an alias for inherit and not an alias for a middle level.
+     *
+     * The override is never cleared automatically: if the conversation switches
+     * to a non-reasoning model the control is hidden, but this value is
+     * preserved so switching back does not erase the user's last choice.
+     *
+     * @return the serialized override, or "" when the conversation inherits.
+     */
+    fun getReasoningEffortOverride() : String {
+        return getString("reasoning_effort", "")
+    }
+
+    /**
+     * Persist this conversation's reasoning-effort override. Pass a
+     * ReasoningEffort serialized value ("auto" included) to record an explicit
+     * per-conversation choice.
+     */
+    fun setReasoningEffortOverride(effort: String) {
+        putString("reasoning_effort", effort)
+    }
+
+    /**
      * Automatically send messages after voice input is complete
      *
      * @return auto send
