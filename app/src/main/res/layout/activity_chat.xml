@@ -152,13 +152,13 @@
                 app:indicatorSize="72dp" />
         </LinearLayout>
 
-        <LinearLayout
+        <org.teslasoft.assistant.ui.chat.ChatImeInsetLayout
             android:id="@+id/keyboard_input"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:background="?attr/colorSurfaceContainerHigh"
             android:elevation="6dp"
-            android:orientation="horizontal"
+            android:orientation="vertical"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent">
@@ -166,103 +166,118 @@
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/keyboard_frame"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent">
+                android:layout_height="wrap_content">
 
-<!-- Primary action button (rightmost). Doubles as the hands-free CONVERSATION
-                     control and the SEND control: it shows the conversation waveform while the
-                     input box is empty (tap engages/stops hands-free) and switches to the
-                     upward-arrow send glyph while there is text (tap sends). The field is still
-                     called btnSend in code. Default icon is the waveform; the text watcher and
-                     click wiring that flip it live are added in the behavior phase. -->
-                <ImageButton
-                    android:id="@+id/btn_send"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginEnd="16dp"
-                    android:layout_marginBottom="16dp"
-                    android:background="@drawable/btn_accent_tonal_v5"
-                    android:contentDescription="@string/btn_send"
-                    android:src="@drawable/ic_conversation"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
-
-                <EditText
-                    android:id="@+id/message_input"
+                <org.teslasoft.assistant.ui.chat.ChatComposerLayout
+                    android:id="@+id/composer_surface"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="76dp"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginEnd="128dp"
-                    android:layout_marginBottom="16dp"
-                    android:autofillHints="message"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginEnd="12dp"
+                    android:layout_marginBottom="8dp"
                     android:background="@drawable/btn_accent_tonal_selector_v6"
-                    android:ems="10"
-                    android:hint="@string/hint_message"
-                    android:inputType="text|textMultiLine|textCapSentences"
-                    android:isScrollContainer="true"
-                    android:maxHeight="120dp"
-                    android:paddingLeft="12dp"
-                    android:paddingTop="13dp"
-                    android:paddingRight="12dp"
-                    android:paddingBottom="13dp"
-                    android:textColorHint="@color/text_hint"
-                    android:textSize="16sp"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
+                    app:layout_constraintTop_toTopOf="parent">
 
-                <com.google.android.material.progressindicator.CircularProgressIndicator
-                    android:id="@+id/progress"
-                    style="@style/Widget.Material3.CircularProgressIndicator"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginEnd="16dp"
-                    android:layout_marginBottom="16dp"
-                    android:background="@drawable/assistant_clear_v2"
-                    android:elevation="0.02dip"
-                    android:indeterminate="true"
-                    android:visibility="gone"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
+                    <!-- Primary action button (rightmost). Doubles as the hands-free
+                         CONVERSATION control and the SEND control. Its existing listeners,
+                         text watcher, tinting, and icon switching stay owned by ChatActivity. -->
+                    <ImageButton
+                        android:id="@+id/btn_send"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="8dp"
+                        android:background="@drawable/btn_accent_tonal_v5"
+                        android:contentDescription="@string/btn_send"
+                        android:src="@drawable/ic_conversation"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
 
-<!-- Single-turn transcription button. Sits immediately LEFT of the primary
-                     conversation/send button; both stay in the bar together. Anchored to the
-                     start edge of btn_send so the two never overlap. -->
-                <ImageButton
-                    android:id="@+id/btn_micro"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginEnd="8dp"
-                    android:layout_marginBottom="16dp"
-                    android:background="@drawable/btn_accent_tonal_v5"
-                    android:clickable="true"
-                    android:contentDescription="@string/btn_speak"
-                    android:elevation="0.01dip"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toStartOf="@id/btn_send"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:srcCompat="@drawable/ic_microphone" />
+                    <EditText
+                        android:id="@+id/message_input"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="8dp"
+                        android:autofillHints="message"
+                        android:background="@android:color/transparent"
+                        android:ems="10"
+                        android:hint="@string/hint_message"
+                        android:inputType="text|textMultiLine|textCapSentences"
+                        android:isScrollContainer="true"
+                        android:maxHeight="120dp"
+                        android:overScrollMode="ifContentScrolls"
+                        android:paddingLeft="8dp"
+                        android:paddingTop="13dp"
+                        android:paddingRight="8dp"
+                        android:paddingBottom="13dp"
+                        android:scrollbars="vertical"
+                        android:textColorHint="@color/text_hint"
+                        android:textSize="16sp"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@+id/btn_micro"
+                        app:layout_constraintStart_toEndOf="@+id/btn_attach"
+                        app:layout_constraintTop_toTopOf="parent" />
 
-                <ImageButton
-                    android:id="@+id/btn_attach"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="16dp"
-                    android:background="@drawable/btn_accent_tonal_v5"
-                    android:contentDescription="@string/btn_attach"
-                    android:src="@drawable/ic_attach"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent"
-                    app:srcCompat="@drawable/ic_attach" />
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/progress"
+                        style="@style/Widget.Material3.CircularProgressIndicator"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="8dp"
+                        android:background="@drawable/assistant_clear_v2"
+                        android:elevation="0.02dip"
+                        android:indeterminate="true"
+                        android:visibility="gone"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <!-- Single-turn transcription button. It remains immediately left
+                         of the primary conversation/send control in both composer modes. -->
+                    <ImageButton
+                        android:id="@+id/btn_micro"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:layout_marginBottom="8dp"
+                        android:background="@drawable/btn_accent_tonal_v5"
+                        android:clickable="true"
+                        android:contentDescription="@string/btn_speak"
+                        android:elevation="0.01dip"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toStartOf="@id/btn_send"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:srcCompat="@drawable/ic_microphone" />
+
+                    <ImageButton
+                        android:id="@+id/btn_attach"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="8dp"
+                        android:background="@drawable/btn_accent_tonal_v5"
+                        android:contentDescription="@string/btn_attach"
+                        android:src="@drawable/ic_attach"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:srcCompat="@drawable/ic_attach" />
+                </org.teslasoft.assistant.ui.chat.ChatComposerLayout>
             </androidx.constraintlayout.widget.ConstraintLayout>
-        </LinearLayout>
+        </org.teslasoft.assistant.ui.chat.ChatImeInsetLayout>
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/action_bar"
@@ -450,37 +465,33 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Height is 0dp (match-constraint), NOT match_parent: match_parent
-             ignores constraints inside ConstraintLayout (the old 64dp top
-             margin existed to hand-compensate for the 64dp action bar). With
-             real constraints the list starts under the A2 banner when it is
-             visible and exactly under the action bar when it is gone — same
-             position as before. -->
+        <!-- The message viewport now ends at the live composer instead of
+             extending behind it with a guessed fixed bottom padding. As the
+             composer grows, or as its IME inset grows, the viewport follows. -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/messages"
             android:layout_width="match_parent"
             android:layout_height="0dp"
+            android:clipToPadding="false"
             android:contentDescription="@string/menu_chat"
             android:listSelector="@android:color/transparent"
-            android:paddingBottom="80dp"
+            android:paddingBottom="12dp"
             android:scrollbars="none"
             android:stackFromBottom="true"
-            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintBottom_toTopOf="@+id/keyboard_input"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/health_banner"
             tools:listitem="@layout/view_assistant_bot_message" />
 
-<!-- Pending Includes strip: one row per unsent document, directly above the
+        <!-- Pending Includes strip: one row per unsent document, directly above the
              message box. Sent attachments leave this surface and appear in
              the transcript under the user name.
 
              Rows are inflated into include_list from view_include_row.xml; at
              four or more items include_collapsed takes over instead and the
              list becomes a tap-to-expand overlay (see IncludeStripController).
-             It floats over the chat like the attachment preview beside it —
-             the RecyclerView is bottom-anchored to the parent with padding, so
-             nothing here shifts the conversation around. -->
+             It floats over the chat like the attachment preview beside it. -->
         <LinearLayout
             android:id="@+id/include_strip"
             style="@style/Widget.App.Include.Container"
@@ -515,7 +526,7 @@
                 android:text="@string/include_image_pending_hint"
                 android:visibility="gone" />
 
-<!-- No android:id here on purpose: an id on an <include> REPLACES the
+            <!-- No android:id here on purpose: an id on an <include> REPLACES the
                  included layout's own root id, which would make
                  findViewById(R.id.include_collapsed_row) return null. -->
             <include layout="@layout/view_include_collapsed" />

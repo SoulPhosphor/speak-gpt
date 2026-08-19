@@ -685,8 +685,11 @@ class MemoryStoreInstrumentedTest {
     @Test
     fun backupAndRestorePreservesTypesNoTypeAssignmentsAndImportance() {
         val src = open(freshDbName())
-        src.insertMemory(mem("typed", scope = "global", typeId = "mtype-fact", importance = 4))
-        src.insertMemory(mem("untyped", scope = "global", typeId = null, importance = 0))
+        // Canonical ids: import now requires the canonical m-<uuid> format.
+        val typedId = MemoryId.generate(MemoryId.Type.ASSOCIATIVE)
+        val untypedId = MemoryId.generate(MemoryId.Type.ASSOCIATIVE)
+        src.insertMemory(mem(typedId, scope = "global", typeId = "mtype-fact", importance = 4))
+        src.insertMemory(mem(untypedId, scope = "global", typeId = null, importance = 0))
         insertTranscript(src, "reviewed", "chat-backup", "1", "processed", "1")
         insertTranscript(src, "waiting", "chat-backup", "2", "pending", null)
         src.rebuildBookmarkCutoverForTest()
@@ -697,10 +700,10 @@ class MemoryStoreInstrumentedTest {
         val dest = open(freshDbName())
         dest.importData(MemorySeedCodec.parse(exported), overwriteSingletons = true)
 
-        assertEquals("mtype-fact", dest.getMemory("typed")!!.typeId)
-        assertEquals(4, dest.getMemory("typed")!!.importance)
-        assertNull(dest.getMemory("untyped")!!.typeId)
-        assertEquals(0, dest.getMemory("untyped")!!.importance)
+        assertEquals("mtype-fact", dest.getMemory(typedId)!!.typeId)
+        assertEquals(4, dest.getMemory(typedId)!!.importance)
+        assertNull(dest.getMemory(untypedId)!!.typeId)
+        assertEquals(0, dest.getMemory(untypedId)!!.importance)
         assertEquals("reviewed", dest.getAnalysisBookmark("chat-backup")!!.lastTranscriptId)
         assertTrue(dest.getAnalysisBookmark("chat-backup")!!.archivePaused)
         assertTrue(dest.bookmarkEligibleTranscripts().none { it.chatId == "chat-backup" })
