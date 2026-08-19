@@ -378,6 +378,22 @@ Reasoning capability can change over time as providers update models. The client
 - When the provider reports reasoning/thinking token usage separately, preserve that value separately from ordinary answer-token usage. Message Details and generation diagnostics may surface the provider-reported reasoning-token count where meaningful. Do not estimate missing reasoning tokens.
 - Hiding reasoning does not imply that reasoning becomes free or disabled. Cost/latency are controlled primarily by whether/how much the model reasons, while Show Reasoning controls whether available reasoning is returned/displayed.
 
+### 7.9 Resolved defaults and generation-time edge behavior
+
+These rules close the remaining ambiguity so implementation does not invent product behavior:
+
+- **Default effort is `Auto`.** A newly favorited reasoning-capable model starts with Thinking = Auto unless the user changes it.
+- **Default Show Reasoning is On.** For a newly favorited model, display provider-supplied reasoning when the provider actually returns user-visible reasoning. Do not fabricate reasoning and do not force a provider-specific reasoning-enable request solely to satisfy the display toggle.
+- **A reasoning model does not have to be favorited to work correctly.** If the user selects a reasoning-capable model directly from View All and there is no favorite reasoning configuration, use Auto for effort and display any user-visible reasoning the provider returns. The lack of a favorite must not silently disable reasoning support.
+- **Precedence is conversation override → current favorite default → Auto/provider/model default.** A persisted conversation override wins while it exists. If the conversation has no override and the user switches to another favorite, that favorite's saved default becomes effective. If there is neither an override nor a favorite-saved value, use Auto and do not send an explicit effort.
+- **Off is capability-driven.** Show an Off/None choice only when the active model/provider path explicitly supports disabling reasoning. Off means send the provider-appropriate disable signal. Never synthesize Off for a mandatory-reasoning model.
+- **Do not invent a generic reasoning-budget UI in this design.** If a provider or gateway safely maps semantic effort levels to token budgets, the adapter may perform that translation. If a direct provider exposes only a raw token budget and there is no documented, stable semantic mapping, do not guess a Low/Medium/High mapping and do not add an unplanned token slider. Omit the effort control for that path and preserve the capability for a future explicit budget UI decision.
+- **Capabilities are keyed to the effective endpoint/provider/model path, not just the visible model name.** Re-evaluate available reasoning controls when endpoint, provider routing, or model changes. Do not assume two providers serving the same model identifier expose identical reasoning controls.
+- **Retries/regenerations use the current effective reasoning setting at dispatch time.** This allows the user to raise or lower Thinking in Quick Settings and then retry intentionally. Historical messages retain their own reasoning content and metadata and are not rewritten.
+- **Persist useful per-generation reasoning metadata where available.** Keep the requested reasoning preference and any provider-reported effective effort, reasoning-token usage, or other supported reasoning metadata with the generation/message diagnostics so later inspection can explain what was requested and what actually happened. Do not invent an “actual effort” when the provider does not report one.
+- **Filtered/search View All rows use the same capability indicator rules as the unfiltered list.** Search must not accidentally remove the reasoning lightbulb from a known reasoning-capable model.
+- **Accessibility is required for both lightbulb uses.** The informational View All bulb should expose a concise accessibility description such as `Reasoning model`; the actionable favorite bulb should expose `Reasoning settings`. Do not make the informational bulb a fake button merely to give it an accessibility label.
+
 ## 8. Appearance destination and legacy settings migration
 
 Add **Appearance** in Control Center directly beneath **Images**.
@@ -492,6 +508,7 @@ The redesign delivers:
 - reasoning-capability lightbulb indicators in the View All model list when capability is known;
 - provider-neutral reasoning capability discovery using structured metadata first and conservative fallbacks thereafter;
 - safe handling of capability changes, unsupported saved levels, mandatory reasoning, reasoning usage, and capability-mismatch diagnostics;
+- explicit defaults, precedence, direct-selection behavior, retry behavior, budget-only handling, and reasoning accessibility semantics;
 - dedicated Appearance settings with safe legacy preference migration;
 - upward-growing composer with stable controls and corrected keyboard insets;
 - compatibility with the separate app-wide style/theme system;
