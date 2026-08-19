@@ -1446,7 +1446,10 @@ object Archivist {
                 is CandidateResult.Valid -> {
                     val record =
                         org.teslasoft.assistant.preferences.memory.PendingMemoryRecordFactory.build(
-                            filingResult.candidate, MemoryStore.newId("m-"), MemoryStore.nowIso()
+                            filingResult.candidate,
+                            org.teslasoft.assistant.preferences.memory.MemoryId
+                                .generate(org.teslasoft.assistant.preferences.memory.MemoryId.Type.ASSOCIATIVE),
+                            MemoryStore.nowIso()
                         )
                     records.add(record)
                     // Request-local M aliases were validated by the parser.

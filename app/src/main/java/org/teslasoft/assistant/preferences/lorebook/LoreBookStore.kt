@@ -26,6 +26,7 @@ import org.teslasoft.assistant.preferences.backup.DatabaseDegradedException
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.dto.LoreBook
 import org.teslasoft.assistant.preferences.dto.LoreBookEntry
+import org.teslasoft.assistant.preferences.memory.MemoryId
 import java.util.UUID
 
 /**
@@ -51,9 +52,11 @@ import java.util.UUID
  *
  * A chat injects only from the single lorebook selected as active for that chat.
  */
-class LoreBookStore private constructor(context: Context, password: ByteArray) :
+class LoreBookStore private constructor(
+    context: Context, password: ByteArray, databaseName: String = DATABASE_NAME
+) :
     SQLiteOpenHelper(
-        context.applicationContext, DATABASE_NAME, password, null, DATABASE_VERSION, 0,
+        context.applicationContext, databaseName, password, null, DATABASE_VERSION, 0,
         // Explicit corruption handler (Build Phase 3): the library DEFAULT
         // deletes a corrupt database file; ours flags the store degraded and
         // preserves the file for quarantine + repair. Never pass null here.
@@ -67,7 +70,8 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
         // v1: single flat memory pool.
         // v2: introduced lorebooks; memories scoped by lorebook_id.
         // v3: lorebooks gained a single "tag" (type) column for filtering.
-        private const val DATABASE_VERSION = 3
+        // v4: entry-id tombstone so a deleted entry's id is never reused.
+        private const val DATABASE_VERSION = 4
 
         private const val TABLE_BOOKS = "lorebooks"
         private const val COL_BOOK_ID = "id"
@@ -91,6 +95,13 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
         private const val COL_TRIGGER_ROW_ID = "_id"
         private const val COL_TRIGGER_MEMORY_ID = "memory_id"
         private const val COL_TRIGGER_TEXT = "trigger_text"
+
+        // Tombstone of deleted entry ids (v4): a deleted entry's id is never
+        // reused by a newly created entry (id-hardening). created_at carries the
+        // deleted entry's birth timestamp for parity with the memory store; the
+        // new-entry guard only needs the id's presence here.
+        private const val TABLE_DELETED_ENTRIES = "deleted_entry_ids"
+        private const val COL_DELETED_AT = "deleted_at"
 
         // Injection safety budget: if many memories trigger at once, only this
         // many entries / characters are injected per request (core book first),
@@ -134,6 +145,12 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
         fun isProvisioned(context: Context): Boolean =
             context.getDatabasePath(DATABASE_NAME).exists()
 
+        /** Open a throwaway lorebook database against [databaseName] for
+         *  instrumentation tests (mirrors MemoryStore.openForTest); bypasses the
+         *  singleton and the degraded gate. */
+        fun openForTest(context: Context, databaseName: String, password: ByteArray): LoreBookStore =
+            LoreBookStore(context.applicationContext, password, databaseName)
+
         /**
          * Close and forget the cached helper so the database FILE can be
          * replaced underneath (repair swap / restore / fresh start —
@@ -152,6 +169,7 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
         createBooksTable(db)
         createEntriesTable(db)
         createTriggersTable(db)
+        createDeletedEntriesTable(db)
 
         // Fresh installs start with one empty lorebook so the UI and the active-book
         // selector always have something to point at.
@@ -177,6 +195,12 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
         // v2 -> v3: lorebooks gain a single tag for type filtering.
         if (oldVersion in 2 until 3) {
             db.execSQL("ALTER TABLE $TABLE_BOOKS ADD COLUMN $COL_BOOK_TAG TEXT NOT NULL DEFAULT ''")
+        }
+
+        // v3 -> v4: entry-id tombstone. Additive; existing ids are preserved
+        // verbatim and no entry is rewritten.
+        if (oldVersion < 4) {
+            createDeletedEntriesTable(db)
         }
     }
 
@@ -232,6 +256,16 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
                 ")"
         )
         db.execSQL("CREATE INDEX idx_entries_book ON $TABLE_ENTRIES($COL_LOREBOOK_ID)")
+    }
+
+    private fun createDeletedEntriesTable(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS $TABLE_DELETED_ENTRIES (" +
+                "$COL_ID TEXT PRIMARY KEY, " +
+                "$COL_DELETED_AT INTEGER NOT NULL DEFAULT 0, " +
+                "$COL_CREATED_AT INTEGER NOT NULL DEFAULT 0" +
+                ")"
+        )
     }
 
     private fun createTriggersTable(db: SQLiteDatabase) {
@@ -366,16 +400,37 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
         val now = System.currentTimeMillis()
         val isNew = entry.id.isBlank()
 
-        val saved = entry.copy(
-            id = if (isNew) UUID.randomUUID().toString() else entry.id,
-            createdAt = if (isNew || entry.createdAt == 0L) now else entry.createdAt,
-            updatedAt = now,
-            triggers = ArrayList(entry.triggers.map { it.trim() }.filter { it.isNotEmpty() })
-        )
-
+        // New entries mint a canonical id here (the single generator); edits keep
+        // their existing id. created_at is the immutable birth timestamp: on an
+        // edit it is taken from the stored row, never from the caller.
+        val newId = if (isNew) {
+            MemoryId.requireCanonical(
+                MemoryId.generate(MemoryId.Type.LOREBOOK), MemoryId.Type.LOREBOOK, "saveEntry"
+            )
+        } else {
+            entry.id
+        }
         val db = writableDatabase
         db.beginTransaction()
         try {
+            if (isNew && isEntryTombstoned(db, newId)) {
+                throw IllegalStateException(
+                    "Refusing to reuse a deleted lorebook entry id (ids are never reused): $newId"
+                )
+            }
+            val storedCreatedAt = if (isNew) 0L else storedEntryCreatedAt(db, entry.id)
+            val saved = entry.copy(
+                id = newId,
+                createdAt = when {
+                    isNew -> now
+                    storedCreatedAt != 0L -> storedCreatedAt
+                    entry.createdAt != 0L -> entry.createdAt
+                    else -> now
+                },
+                updatedAt = now,
+                triggers = ArrayList(entry.triggers.map { it.trim() }.filter { it.isNotEmpty() })
+            )
+
             val values = ContentValues().apply {
                 put(COL_ID, saved.id)
                 put(COL_LOREBOOK_ID, saved.lorebookId)
@@ -386,7 +441,13 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
                 put(COL_CREATED_AT, saved.createdAt)
                 put(COL_UPDATED_AT, saved.updatedAt)
             }
-            db.insertWithOnConflict(TABLE_ENTRIES, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+            // A NEW entry must never silently overwrite an existing row (a
+            // collision fails visibly); an EDIT deliberately replaces its own row.
+            if (isNew) {
+                db.insertOrThrow(TABLE_ENTRIES, null, values)
+            } else {
+                db.insertWithOnConflict(TABLE_ENTRIES, null, values, SQLiteDatabase.CONFLICT_REPLACE)
+            }
 
             db.delete(TABLE_TRIGGERS, "$COL_TRIGGER_MEMORY_ID = ?", arrayOf(saved.id))
             for (trigger in saved.triggers) {
@@ -398,11 +459,10 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
             }
 
             db.setTransactionSuccessful()
+            return saved
         } finally {
             db.endTransaction()
         }
-
-        return saved
     }
 
     fun setEnabled(id: String, enabled: Boolean) {
@@ -413,9 +473,39 @@ class LoreBookStore private constructor(context: Context, password: ByteArray) :
         writableDatabase.update(TABLE_ENTRIES, values, "$COL_ID = ?", arrayOf(id))
     }
 
+    /** True when [id] is a tombstoned (previously deleted) entry id. */
+    private fun isEntryTombstoned(db: SQLiteDatabase, id: String): Boolean {
+        db.rawQuery(
+            "SELECT 1 FROM $TABLE_DELETED_ENTRIES WHERE $COL_ID = ?", arrayOf(id)
+        ).use { return it.moveToFirst() }
+    }
+
+    /** The stored birth timestamp for an existing entry, or 0 when unknown. */
+    private fun storedEntryCreatedAt(db: SQLiteDatabase, id: String): Long {
+        db.query(TABLE_ENTRIES, arrayOf(COL_CREATED_AT), "$COL_ID = ?", arrayOf(id),
+            null, null, null).use {
+            return if (it.moveToFirst()) it.getLong(0) else 0L
+        }
+    }
+
     fun deleteEntry(id: String) {
-        // Triggers go away via ON DELETE CASCADE.
-        writableDatabase.delete(TABLE_ENTRIES, "$COL_ID = ?", arrayOf(id))
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            // Tombstone the freed id with the entry's birth timestamp BEFORE the
+            // delete (id-hardening): a new entry can never reclaim it.
+            val createdAt = storedEntryCreatedAt(db, id)
+            db.execSQL(
+                "INSERT OR REPLACE INTO $TABLE_DELETED_ENTRIES " +
+                    "($COL_ID, $COL_DELETED_AT, $COL_CREATED_AT) VALUES (?, ?, ?)",
+                arrayOf(id, System.currentTimeMillis(), createdAt)
+            )
+            // Triggers go away via ON DELETE CASCADE.
+            db.delete(TABLE_ENTRIES, "$COL_ID = ?", arrayOf(id))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     fun getEntry(id: String): LoreBookEntry? {

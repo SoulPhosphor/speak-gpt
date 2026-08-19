@@ -73,7 +73,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 29
+        private const val DATABASE_VERSION = 31
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -89,6 +89,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         // meta keys
         const val META_SCHEMA_VERSION = "schema_version"
         const val META_DB_MIGRATION = "db_migration"
+        // Count of grandfathered non-canonical associative ids found at the v30
+        // migration. Observability only — the ids themselves are preserved.
+        const val META_NONCANONICAL_MEMORY_IDS = "noncanonical_memory_ids"
         const val META_SEED_IMPORTED_AT = "seed_imported_at"
         const val META_BOOTSTRAP_DONE = "bootstrap_done"
         const val META_AUTO_EXPORT_ENABLED = "auto_export_enabled"
@@ -803,7 +806,29 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "record_type TEXT NOT NULL, " +
                 "record_id TEXT NOT NULL, " +
                 "deleted_at TEXT NOT NULL, " +
+                // The deleted record's immutable birth timestamp (v30). Lets a
+                // genuine RESTORE of the deleted memory (created_at matches) be
+                // told apart from a DIFFERENT memory trying to reuse the freed
+                // id (created_at differs). Nullable: tombstones written before
+                // v30 carry no birth timestamp (unknown).
+                "created_at TEXT, " +
                 "PRIMARY KEY (record_type, record_id))"
+        )
+
+        // Merge-import identity conflicts that need the user's intent (v31,
+        // MemoryIdImport cases 4/5). Structured only — NO user-facing text. A
+        // future UI reads these to let the user choose between the current
+        // memory (loaded live by existing_memory_id) and the imported one
+        // (rebuilt from incoming_json). 'version' = same memory changed;
+        // 'restore' = a previously deleted memory is in the import.
+        db.execSQL(
+            "CREATE TABLE import_conflicts (" +
+                "conflict_id TEXT PRIMARY KEY, " +
+                "kind TEXT NOT NULL CHECK (kind IN ('version','restore')), " +
+                "existing_memory_id TEXT NOT NULL, " +
+                "incoming_memory_id TEXT NOT NULL, " +
+                "incoming_json TEXT NOT NULL, " +
+                "created_at TEXT NOT NULL)"
         )
 
         // Freshness cooldown (rules §10 / Stage 3.3): when each entry was last
@@ -2043,6 +2068,61 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "29")
             )
         }
+        if (oldVersion < 30) {
+            // Memory-id hardening. The tombstone gains the deleted record's
+            // birth timestamp so a restore of a deleted memory can be told apart
+            // from a different memory reusing its freed id. Existing tombstones
+            // keep created_at = NULL (unknown birth). Already-valid ids are
+            // preserved verbatim — this step NEVER rewrites an id. Any existing
+            // non-canonical associative id is grandfathered; we only count them
+            // into a meta marker so the condition is observable without changing
+            // data (owner ruling: preserve existing identities, do not rewrite).
+            // deleted_ids exists on real devices, but guard for any install that
+            // reached here without it, then add created_at only if missing.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS deleted_ids (" +
+                    "record_type TEXT NOT NULL, record_id TEXT NOT NULL, " +
+                    "deleted_at TEXT NOT NULL, created_at TEXT, " +
+                    "PRIMARY KEY (record_type, record_id))"
+            )
+            if (!hasColumn(db, "deleted_ids", "created_at")) {
+                db.execSQL("ALTER TABLE deleted_ids ADD COLUMN created_at TEXT")
+            }
+            var nonCanonical = 0
+            db.query("memories", arrayOf("memory_id"), null, null, null, null, null).use {
+                while (it.moveToNext()) {
+                    val id = it.getString(0)
+                    if (!MemoryId.isCanonical(id, MemoryId.Type.ASSOCIATIVE)) nonCanonical++
+                }
+            }
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_NONCANONICAL_MEMORY_IDS, nonCanonical.toString())
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "30")
+            )
+        }
+        if (oldVersion < 31) {
+            // Merge-import identity conflicts (cases 4/5). Additive new table.
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS import_conflicts (" +
+                    "conflict_id TEXT PRIMARY KEY, " +
+                    "kind TEXT NOT NULL CHECK (kind IN ('version','restore')), " +
+                    "existing_memory_id TEXT NOT NULL, " +
+                    "incoming_memory_id TEXT NOT NULL, " +
+                    "incoming_json TEXT NOT NULL, " +
+                    "created_at TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "31")
+            )
+        }
     }
 
     /**
@@ -2242,10 +2322,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     fun pendingReviewCount(): Int =
         bookmarkEligibleTranscripts().mapNotNull { it.chatId }.toSet().size
 
-    fun recordDeletion(recordType: String, recordId: String) {
+    fun recordDeletion(recordType: String, recordId: String, createdAt: String? = null) {
         writableDatabase.execSQL(
-            "INSERT OR REPLACE INTO deleted_ids (record_type, record_id, deleted_at) VALUES (?, ?, ?)",
-            arrayOf(recordType, recordId, nowIso())
+            "INSERT OR REPLACE INTO deleted_ids (record_type, record_id, deleted_at, created_at) " +
+                "VALUES (?, ?, ?, ?)",
+            arrayOf(recordType, recordId, nowIso(), createdAt)
         )
     }
 
@@ -2614,16 +2695,76 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 report.addAdded("projects")
             }
 
+            // Merge-import identity repair (MemoryIdImport). PASS 1: classify
+            // every incoming memory, mint fresh ids for the ones that are a
+            // DIFFERENT logical memory than whatever holds their id (cases 1-3),
+            // and stash the cases that need the user's intent (4-5) as structured
+            // conflicts. Building the complete old-id -> new-id map first is why
+            // this is two passes: a supersedes/target reference may point at a
+            // memory not yet reached in the list.
+            val memWrites = ArrayList<Pair<MemoryRecord, String>>()
+            val remapEntries = ArrayList<MemoryIdRemap.Entry>()
+            // Ids already claimed for a write in THIS import, so a payload that
+            // repeats an id (a hand-edited/corrupt file) mints a fresh id for the
+            // later one instead of colliding on the primary key at write time.
+            val claimedIds = HashSet<String>()
             for (m in data.memories) {
-                if (rowExists(db, "memories", "memory_id", m.memoryId)) {
-                    report.addSkipped("memories"); continue
+                val existing = existingMemoryIdentityTx(db, m.memoryId)
+                when (MemoryIdImport.classify(
+                    m.memoryId, m.createdAt, MemoryIdImport.substanceOf(m),
+                    MemoryId.Type.ASSOCIATIVE, existing
+                )) {
+                    MemoryIdImport.Disposition.INSERT -> {
+                        if (m.memoryId in claimedIds) {
+                            val newId = reserveNewMemoryIdTx(db); claimedIds.add(newId)
+                            memWrites.add(m to newId)
+                            remapEntries.add(MemoryIdRemap.Entry(m.memoryId, newId, remapped = true, collidesWithLive = false))
+                        } else {
+                            claimedIds.add(m.memoryId)
+                            memWrites.add(m to m.memoryId)
+                            remapEntries.add(MemoryIdRemap.Entry(m.memoryId, m.memoryId, false, false))
+                        }
+                    }
+                    MemoryIdImport.Disposition.INSERT_REMAPPED -> {
+                        val newId = reserveNewMemoryIdTx(db); claimedIds.add(newId)
+                        memWrites.add(m to newId)
+                        remapEntries.add(
+                            MemoryIdRemap.Entry(
+                                m.memoryId, newId, remapped = true,
+                                collidesWithLive = existing is MemoryIdImport.Existing.Live
+                            )
+                        )
+                    }
+                    MemoryIdImport.Disposition.PRESERVE_EXISTING -> {
+                        report.addSkipped("memories")
+                        remapEntries.add(MemoryIdRemap.Entry(m.memoryId, m.memoryId, false, true))
+                    }
+                    MemoryIdImport.Disposition.CONFLICT_VERSION -> {
+                        val cid = storeImportConflictTx(db, "version", m.memoryId, m)
+                        report.addConflict(ImportConflict(cid, "version", m.memoryId, m.memoryId))
+                    }
+                    MemoryIdImport.Disposition.CONFLICT_RESTORE -> {
+                        val cid = storeImportConflictTx(db, "restore", m.memoryId, m)
+                        report.addConflict(ImportConflict(cid, "restore", m.memoryId, m.memoryId))
+                    }
                 }
+            }
+            val memoryIdResolution = MemoryIdRemap.buildResolution(remapEntries)
+
+            // PASS 2: write the planned memories under their final ids, remapping
+            // the supersedes pointer where it is unambiguous and dropping it (with
+            // a diagnostic) where it is not.
+            for ((m, finalId) in memWrites) {
                 // Resolve the memory's Type (§5): the codec already translated
                 // a legacy backup's kind into a type_id at parse time; an id
                 // that no longer exists degrades to No Type.
                 val resolvedTypeId = m.typeId?.takeIf { it in knownTypeIds }
+                val supersedesResolved = MemoryIdRemap.resolve(memoryIdResolution, m.supersedes)
+                if (supersedesResolved.dropped) {
+                    report.addSkippedReference(SkippedReference("supersedes", finalId, m.supersedes!!))
+                }
                 db.insert("memories", null, ContentValues().apply {
-                    put("memory_id", m.memoryId)
+                    put("memory_id", finalId)
                     put("scope", m.scope)
                     put("type_id", resolvedTypeId)
                     put("content", m.content)
@@ -2639,18 +2780,18 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     put("created_at", m.createdAt)
                     put("updated_at", m.updatedAt)
                     put("status", m.status)
-                    put("supersedes", m.supersedes)
+                    put("supersedes", supersedesResolved.value)
                     put("origin", m.origin)
                 })
-                writeLinkSet(db, "memory_companions", "companion_id", m.memoryId, m.companionIds)
-                writeLinkSet(db, "memory_entities", "entity_id", m.memoryId, m.entityRefs)
-                writeLinkSet(db, "memory_worlds", "world_id", m.memoryId, m.worldIds)
-                writeLinkSet(db, "memory_campaigns", "campaign_id", m.memoryId, m.campaignIds)
-                writeLinkSet(db, "memory_roleplay_characters", "roleplay_character_id", m.memoryId, m.roleplayCharacterIds)
-                writeLinkSet(db, "memory_projects", "project_id", m.memoryId, m.projectIds)
+                writeLinkSet(db, "memory_companions", "companion_id", finalId, m.companionIds)
+                writeLinkSet(db, "memory_entities", "entity_id", finalId, m.entityRefs)
+                writeLinkSet(db, "memory_worlds", "world_id", finalId, m.worldIds)
+                writeLinkSet(db, "memory_campaigns", "campaign_id", finalId, m.campaignIds)
+                writeLinkSet(db, "memory_roleplay_characters", "roleplay_character_id", finalId, m.roleplayCharacterIds)
+                writeLinkSet(db, "memory_projects", "project_id", finalId, m.projectIds)
                 for (l in m.changeLog) {
                     db.insert("change_log", null, ContentValues().apply {
-                        put("memory_id", m.memoryId)
+                        put("memory_id", finalId)
                         put("at", l.at)
                         put("actor", l.actor)
                         put("action", l.action)
@@ -2659,6 +2800,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     })
                 }
                 report.addAdded("memories")
+                if (finalId != m.memoryId) report.addRepaired("memories")
             }
 
             for (m in data.modes) {
@@ -2700,10 +2842,22 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 if (rowExists(db, "proposals", "proposal_id", p.proposalId)) {
                     report.addSkipped("proposals"); continue
                 }
+                // A proposal aimed at a memory follows that memory's repaired id.
+                var proposalTargetId = p.targetId
+                if (p.targetType == RpTagTargetType.MEMORY && p.targetId != null) {
+                    val r = MemoryIdRemap.resolve(memoryIdResolution, p.targetId)
+                    if (r.dropped) {
+                        report.addSkippedReference(
+                            SkippedReference("proposal_target", p.proposalId, p.targetId!!)
+                        )
+                        continue // ambiguous target — skip this proposal safely
+                    }
+                    proposalTargetId = r.value
+                }
                 db.insert("proposals", null, ContentValues().apply {
                     put("proposal_id", p.proposalId)
                     put("target_type", p.targetType)
-                    put("target_id", p.targetId)
+                    put("target_id", proposalTargetId)
                     put("summary", p.summary)
                     put("proposed_change_json", p.proposedChangeJson)
                     put("rationale", p.rationale)
@@ -2816,9 +2970,21 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     // Unknown target types (a hand-edited file) would trip the
                     // CHECK and abort the whole import — skip them instead.
                     if (targetType !in RpTagTargetType.ALL) continue
+                    // A tag link onto a memory follows that memory's repaired id.
+                    var effectiveTarget = targetId
+                    if (targetType == RpTagTargetType.MEMORY) {
+                        val r = MemoryIdRemap.resolve(memoryIdResolution, targetId)
+                        if (r.dropped) {
+                            report.addSkippedReference(
+                                SkippedReference("rp_tag_target", effectiveId, targetId)
+                            )
+                            continue // ambiguous target — skip this link safely
+                        }
+                        effectiveTarget = r.value ?: continue
+                    }
                     db.execSQL(
                         "INSERT OR IGNORE INTO rp_tag_links (tag_id, target_type, target_id) VALUES (?, ?, ?)",
-                        arrayOf(effectiveId, targetType, targetId)
+                        arrayOf(effectiveId, targetType, effectiveTarget)
                     )
                 }
             }
@@ -2865,6 +3031,16 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         db.rawQuery("SELECT 1 FROM $table WHERE $pkColumn = ? LIMIT 1", arrayOf(id)).use {
             return it.moveToFirst()
         }
+    }
+
+    private fun hasColumn(db: SQLiteDatabase, table: String, column: String): Boolean {
+        db.rawQuery("PRAGMA table_info($table)", emptyArray<String>()).use {
+            val nameIdx = it.getColumnIndex("name")
+            while (it.moveToNext()) {
+                if (it.getString(nameIdx) == column) return true
+            }
+        }
+        return false
     }
 
     /* ---------------------------------------------------------------------- */
@@ -4022,7 +4198,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 )
             ))
             db.delete("memories", "memory_id = ?", arrayOf(memoryId))
-            recordDeletionTx(db, "memory", memoryId)
+            recordDeletionTx(db, "memory", memoryId, m.createdAt)
             clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
             db.setTransactionSuccessful()
             return true
@@ -5333,6 +5509,14 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      *  transaction so drafts and bookmark advance commit together. */
     private fun insertPendingMemoryTx(db: SQLiteDatabase, m: MemoryRecord, generated: Boolean) {
         require(m.status == "draft") { "Pending memories must be drafts" }
+        // Same contract as insertMemory: canonical format is guaranteed at the
+        // creation source, so this primitive accepts a grandfathered id but never
+        // lets a new draft reclaim a tombstoned (deleted) one.
+        if (isMemoryTombstonedTx(db, m.memoryId)) {
+            throw IllegalStateException(
+                "Refusing to reuse a deleted memory id (ids are never reused): ${m.memoryId}"
+            )
+        }
         val safe = m.copy(protectionJson = null)
         db.insertOrThrow("memories", null, memoryValues(safe))
         writeMemoryLinks(db, safe)
@@ -6590,6 +6774,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             db.delete("directives", null, null)
             db.delete("owner_profile", null, null)
             db.delete("deleted_ids", null, null)
+            db.delete("import_conflicts", null, null)
             db.delete("injection_cooldowns", null, null)
             db.delete("chat_turn_counters", null, null)
             // Run history describes conversations/memories that no longer
@@ -6754,9 +6939,20 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      *  The new vector is filled in by a later index rebuild (or a targeted
      *  re-embed), so the caller should refresh the index. */
     fun insertMemory(m: MemoryRecord) {
+        // Canonical format is guaranteed at the CREATION SOURCE (every production
+        // path mints its id via MemoryId.generate); this low-level primitive must
+        // still accept a grandfathered legacy id, so it does not re-require
+        // canonical here. It DOES enforce that a new memory never reclaims a
+        // tombstoned (deleted) id — ids are never reused — while a live-duplicate
+        // id fails visibly via the PRIMARY KEY (insertOrThrow).
         val db = writableDatabase
         db.beginTransaction()
         try {
+            if (isMemoryTombstonedTx(db, m.memoryId)) {
+                throw IllegalStateException(
+                    "Refusing to reuse a deleted memory id (ids are never reused): ${m.memoryId}"
+                )
+            }
             db.insertOrThrow("memories", null, memoryValues(m))
             writeMemoryLinks(db, m)
             logChange(db, m.memoryId, "user", "created", null, null)
@@ -6787,7 +6983,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 prior.content != m.content || prior.tagsJson != m.tagsJson
             val updated = m.copy(
                 updatedAt = nowIso(),
-                embeddingText = if (sourceTextChanged) null else m.embeddingText
+                embeddingText = if (sourceTextChanged) null else m.embeddingText,
+                // created_at is the immutable birth timestamp and the collision
+                // discriminator: an edit NEVER changes it. Keep the value already
+                // stored, ignoring whatever the caller supplied.
+                createdAt = prior?.createdAt ?: m.createdAt
             )
             db.update("memories", memoryValues(updated), "memory_id = ?", arrayOf(m.memoryId))
             writeMemoryLinks(db, updated)
@@ -6908,7 +7108,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         // keys and need no manual cleanup.
         db.execSQL("UPDATE memories SET supersedes = NULL WHERE supersedes = ?", arrayOf(memoryId))
         db.delete("memories", "memory_id = ?", arrayOf(memoryId))
-        recordDeletionTx(db, "memory", memoryId)
+        // Tombstone the freed id with the deleted memory's birth timestamp so a
+        // later restore of THIS record is distinguishable from a different
+        // memory reusing the id (id-hardening; created_at is immutable).
+        recordDeletionTx(db, "memory", memoryId, prior?.createdAt)
         clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
     }
 
@@ -7368,10 +7571,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         // Tombstone each id first (change_log + embeddings cascade on delete).
         // Cooldown rows have no FK, so they're cleared per id here — same
         // contract as the single-memory deleteMemory path.
-        db.query("memories", arrayOf("memory_id"), where, args, null, null, null).use {
+        db.query("memories", arrayOf("memory_id", "created_at"), where, args, null, null, null).use {
             while (it.moveToNext()) {
                 val memoryId = it.getString(0)
-                recordDeletionTx(db, "memory", memoryId)
+                recordDeletionTx(db, "memory", memoryId, it.getString(1))
                 clearEntryCooldownTx(db, COOLDOWN_SOURCE_MEMORY, memoryId)
             }
         }
@@ -7395,11 +7598,103 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }, where, args)
     }
 
-    private fun recordDeletionTx(db: SQLiteDatabase, recordType: String, recordId: String) {
+    private fun recordDeletionTx(
+        db: SQLiteDatabase, recordType: String, recordId: String, createdAt: String? = null
+    ) {
         db.execSQL(
-            "INSERT OR REPLACE INTO deleted_ids (record_type, record_id, deleted_at) VALUES (?, ?, ?)",
-            arrayOf(recordType, recordId, nowIso())
+            "INSERT OR REPLACE INTO deleted_ids (record_type, record_id, deleted_at, created_at) " +
+                "VALUES (?, ?, ?, ?)",
+            arrayOf(recordType, recordId, nowIso(), createdAt)
         )
+    }
+
+    /** A fresh canonical associative id proven free of both a live row and a
+     *  tombstone — a transactional reservation so an already-issued id can never
+     *  be minted again. */
+    private fun reserveNewMemoryIdTx(db: SQLiteDatabase): String {
+        while (true) {
+            val id = MemoryId.generate(MemoryId.Type.ASSOCIATIVE)
+            if (!rowExists(db, "memories", "memory_id", id) && !isMemoryTombstonedTx(db, id)) return id
+        }
+    }
+
+    /** Persist one merge-import identity conflict (MemoryIdImport case 4/5) as
+     *  structured data for a future resolution UI; returns its conflict id. The
+     *  incoming record is stored verbatim so the UI can show and, if chosen,
+     *  re-import it. No user-facing text is produced here. */
+    private fun storeImportConflictTx(
+        db: SQLiteDatabase, kind: String, existingMemoryId: String, incoming: MemoryRecord
+    ): String {
+        val conflictId = "ic-" + UUID.randomUUID()
+        db.insert("import_conflicts", null, ContentValues().apply {
+            put("conflict_id", conflictId)
+            put("kind", kind)
+            put("existing_memory_id", existingMemoryId)
+            put("incoming_memory_id", incoming.memoryId)
+            put("incoming_json", MemorySeedCodec.encodeSingleMemory(incoming))
+            put("created_at", nowIso())
+        })
+        return conflictId
+    }
+
+    /** The unresolved merge-import identity conflicts (cases 4/5), oldest first.
+     *  Structured only — a future UI enumerates these to offer the user a choice.
+     *  [importConflictIncoming] reconstructs the imported record for one of them. */
+    fun importConflicts(): List<ImportConflict> {
+        val out = ArrayList<ImportConflict>()
+        readableDatabase.query(
+            "import_conflicts",
+            arrayOf("conflict_id", "kind", "existing_memory_id", "incoming_memory_id"),
+            null, null, null, null, "created_at ASC"
+        ).use {
+            while (it.moveToNext()) {
+                out.add(ImportConflict(it.getString(0), it.getString(1), it.getString(2), it.getString(3)))
+            }
+        }
+        return out
+    }
+
+    /** The imported memory captured for one stored conflict, or null if unknown. */
+    fun importConflictIncoming(conflictId: String): MemoryRecord? {
+        readableDatabase.query(
+            "import_conflicts", arrayOf("incoming_json"), "conflict_id = ?", arrayOf(conflictId),
+            null, null, null
+        ).use {
+            if (it.moveToFirst()) return MemorySeedCodec.decodeSingleMemory(it.getString(0))
+        }
+        return null
+    }
+
+    /** True when [memoryId] is tombstoned — an id that was issued to a memory
+     *  and later deleted. A NEW memory must never reclaim one (ids are never
+     *  reused); only a restore of the same record may, decided by created_at. */
+    private fun isMemoryTombstonedTx(db: SQLiteDatabase, memoryId: String): Boolean {
+        db.rawQuery(
+            "SELECT 1 FROM deleted_ids WHERE record_type = 'memory' AND record_id = ?",
+            arrayOf(memoryId)
+        ).use { return it.moveToFirst() }
+    }
+
+    /** What the store already knows about an associative memory [memoryId] — a
+     *  live row (with its birth timestamp), a tombstone (with the deleted
+     *  record's birth timestamp, possibly unknown), or nothing. Drives the
+     *  import/restore collision decision ([MemoryIdImport.classify]). */
+    private fun existingMemoryIdentityTx(
+        db: SQLiteDatabase, memoryId: String
+    ): MemoryIdImport.Existing {
+        db.query("memories", null, "memory_id = ?", arrayOf(memoryId), null, null, null).use {
+            if (it.moveToFirst()) {
+                val rec = readFullMemory(db, it)
+                return MemoryIdImport.Existing.Live(rec.createdAt, MemoryIdImport.substanceOf(rec))
+            }
+        }
+        db.rawQuery(
+            "SELECT created_at FROM deleted_ids WHERE record_type = 'memory' AND record_id = ?",
+            arrayOf(memoryId)
+        ).use {
+            if (it.moveToFirst()) return MemoryIdImport.Existing.Tombstoned(it.getString(0))
+        }
+        return MemoryIdImport.Existing.None
     }
 
     /* ---------------------------------------------------------------------- */

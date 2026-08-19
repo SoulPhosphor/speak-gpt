@@ -60,7 +60,7 @@ class PendingMemoryFiler private constructor(private val appContext: Context) {
     fun file(candidate: MemoryCandidate, generated: Boolean = false): String {
         val store = MemoryStore.getInstance(appContext)
         val record = PendingMemoryRecordFactory.build(
-            candidate, MemoryStore.newId("m-"), MemoryStore.nowIso()
+            candidate, MemoryId.generate(MemoryId.Type.ASSOCIATIVE), MemoryStore.nowIso()
         )
         store.insertPendingMemory(record, generated = generated)
         return record.memoryId
