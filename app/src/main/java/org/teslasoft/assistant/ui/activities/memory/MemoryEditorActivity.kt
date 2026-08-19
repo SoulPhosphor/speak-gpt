@@ -657,7 +657,8 @@ class MemoryEditorActivity : FragmentActivity() {
             }
             if (prior == null) {
                 val record = MemoryRecord(
-                    memoryId = MemoryStore.newId("m-"),
+                    memoryId = org.teslasoft.assistant.preferences.memory.MemoryId
+                        .generate(org.teslasoft.assistant.preferences.memory.MemoryId.Type.ASSOCIATIVE),
                     scope = currentScope, typeId = typeId, content = content,
                     embeddingText = null, tagsJson = tagsJson, importance = currentImportance,
                     worldIds = worldIds, roleplayCharacterIds = rpIds, campaignIds = campaignIds,

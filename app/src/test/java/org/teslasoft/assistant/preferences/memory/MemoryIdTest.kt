@@ -26,11 +26,12 @@ import org.junit.Test
 /**
  * The permanent-identity format contract ([MemoryId]).
  *
- * The suite pins the two things the owner's id-hardening ruling requires and
- * that the rest of the system now trusts: new creation always yields the
- * canonical format for its family, and the strict canonical gate is kept
- * separate from the lenient legacy-recognition gate so "new creation" can never
- * quietly start accepting arbitrary strings.
+ * The suite pins what the owner's id-hardening ruling requires and that the rest
+ * of the system now trusts: new creation always yields the canonical format for
+ * its family, and the canonical gate is strict — uppercase, short-field, legacy,
+ * cross-family, and malformed ids are all rejected so "new creation" can never
+ * quietly start accepting arbitrary strings. Legacy preservation is evidence-
+ * based at the call site, so this object exposes no permissive recognizer.
  */
 class MemoryIdTest {
 
@@ -85,10 +86,45 @@ class MemoryIdTest {
     }
 
     @Test
+    fun malformedLorebookIdsAreRejected() {
+        val bad = listOf(
+            null,
+            "",
+            "   ",
+            "not-a-uuid",
+            "m-b6d2f0e2-1c3a-4b5c-8d7e-9f0a1b2c3d4e", // associative-prefixed
+            "b6d2f0e2-1c3a-4b5c-8d7e-9f0a1b2c3d4e-extra",
+            "b6d2f0e2 1c3a 4b5c 8d7e 9f0a1b2c3d4e"
+        )
+        for (id in bad) {
+            assertFalse("expected non-canonical: $id", MemoryId.isCanonical(id, MemoryId.Type.LOREBOOK))
+        }
+    }
+
+    @Test
     fun lorebookGateRejectsAssociativePrefixedIds() {
         // A well-formed associative id must not pass as a canonical lorebook id.
         val assoc = MemoryId.generate(MemoryId.Type.ASSOCIATIVE)
         assertFalse(MemoryId.isCanonical(assoc, MemoryId.Type.LOREBOOK))
+    }
+
+    @Test
+    fun uppercaseUuidTextIsNotCanonical() {
+        // Canonical is exactly the lowercase UUID text UUID.toString emits, even
+        // though UUID.fromString would happily parse the uppercase form.
+        val lowerAssoc = MemoryId.generate(MemoryId.Type.ASSOCIATIVE)
+        val upperAssoc = "m-" + lowerAssoc.removePrefix("m-").uppercase()
+        assertFalse(MemoryId.isCanonical(upperAssoc, MemoryId.Type.ASSOCIATIVE))
+
+        val lowerLore = MemoryId.generate(MemoryId.Type.LOREBOOK)
+        assertFalse(MemoryId.isCanonical(lowerLore.uppercase(), MemoryId.Type.LOREBOOK))
+    }
+
+    @Test
+    fun shortFieldUuidTextIsNotCanonical() {
+        // UUID.fromString accepts "1-1-1-1-1"; canonical requires full 8-4-4-4-12.
+        assertFalse(MemoryId.isCanonical("m-1-1-1-1-1", MemoryId.Type.ASSOCIATIVE))
+        assertFalse(MemoryId.isCanonical("1-1-1-1-1", MemoryId.Type.LOREBOOK))
     }
 
     @Test
@@ -103,17 +139,4 @@ class MemoryIdTest {
         }
     }
 
-    /* ---- recognition is lenient (preservation paths) but not blank -------- */
-
-    @Test
-    fun recognitionAcceptsCanonicalAndLegacyButNotBlank() {
-        val canonical = MemoryId.generate(MemoryId.Type.ASSOCIATIVE)
-        assertTrue(MemoryId.isRecognized(canonical, MemoryId.Type.ASSOCIATIVE))
-        // A grandfathered legacy shape an existing record already carries.
-        assertTrue(MemoryId.isRecognized("legacy-hash-9f0a1b2c3d4e", MemoryId.Type.ASSOCIATIVE))
-        assertTrue(MemoryId.isRecognized("b6d2f0e2-1c3a-4b5c-8d7e-9f0a1b2c3d4e", MemoryId.Type.ASSOCIATIVE))
-        assertFalse(MemoryId.isRecognized(null, MemoryId.Type.ASSOCIATIVE))
-        assertFalse(MemoryId.isRecognized("", MemoryId.Type.ASSOCIATIVE))
-        assertFalse(MemoryId.isRecognized("   ", MemoryId.Type.ASSOCIATIVE))
-    }
 }

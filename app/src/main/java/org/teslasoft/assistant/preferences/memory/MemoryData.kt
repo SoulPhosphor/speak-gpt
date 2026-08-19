@@ -782,17 +782,33 @@ data class ScoredMemory(
 /** Per-record-type added/skipped tallies from an import, for the user-facing summary. */
 data class ImportReport(
     val added: LinkedHashMap<String, Int> = LinkedHashMap(),
-    val skipped: LinkedHashMap<String, Int> = LinkedHashMap()
+    val skipped: LinkedHashMap<String, Int> = LinkedHashMap(),
+    // Identity-hardening outcomes, kept DISTINCT from an ordinary "already
+    // present" skip so a genuine problem is never hidden inside a duplicate
+    // count: [conflicts] is a different logical record wearing an existing id
+    // (refused, not overwritten); [invalid] is an incoming id that is not a
+    // canonical id (refused). Both are counted per record type.
+    val conflicts: LinkedHashMap<String, Int> = LinkedHashMap(),
+    val invalid: LinkedHashMap<String, Int> = LinkedHashMap()
 ) {
     fun addAdded(type: String, n: Int = 1) { added[type] = (added[type] ?: 0) + n }
     fun addSkipped(type: String, n: Int = 1) { skipped[type] = (skipped[type] ?: 0) + n }
+    fun addConflict(type: String, n: Int = 1) { conflicts[type] = (conflicts[type] ?: 0) + n }
+    fun addInvalid(type: String, n: Int = 1) { invalid[type] = (invalid[type] ?: 0) + n }
 
     fun summary(): String {
         val a = added.filterValues { it > 0 }.entries.joinToString(", ") { "${it.value} ${it.key}" }
         val s = skipped.filterValues { it > 0 }.entries.joinToString(", ") { "${it.value} ${it.key}" }
+        val c = conflicts.filterValues { it > 0 }.entries.joinToString(", ") { "${it.value} ${it.key}" }
+        val i = invalid.filterValues { it > 0 }.entries.joinToString(", ") { "${it.value} ${it.key}" }
         val parts = ArrayList<String>()
         if (a.isNotEmpty()) parts.add("Added: $a")
         if (s.isNotEmpty()) parts.add("Skipped (already present): $s")
+        // Provisional wording — surfaces the distinct outcomes the owner
+        // approved; exact user-facing phrasing is subject to the owner's copy
+        // review before this ships.
+        if (c.isNotEmpty()) parts.add("Not imported (id already used by a different memory): $c")
+        if (i.isNotEmpty()) parts.add("Not imported (invalid id): $i")
         return if (parts.isEmpty()) "Nothing to import." else parts.joinToString(". ")
     }
 }

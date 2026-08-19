@@ -30,21 +30,44 @@ import java.util.UUID
  *  - [Type.ASSOCIATIVE] : `m-<uuid>`  (the existing intended associative format)
  *  - [Type.LOREBOOK]    : `<uuid>`    (the existing intended lorebook format)
  *
- * ## Canonical creation vs. legacy recognition are deliberately separate
+ * The canonical UUID text is exactly the lowercase 8-4-4-4-12 form that
+ * [UUID.toString] emits. This object DEFINES that representation, so uppercase
+ * or short-field variants are NOT canonical even though `UUID.fromString` would
+ * parse them — see [isCanonical].
+ *
+ * ## Canonical creation vs. legacy preservation are deliberately separate
  *
  * The owner's id-hardening ruling requires that *new* identities always use the
  * canonical format, while *existing* identities are preserved unchanged even if
  * an older build minted them in a shape this validator would no longer produce.
- * Those two jobs must never be conflated into one permissive check, or "new
- * creation" would silently start accepting arbitrary strings.
  *
- *  - [generate] / [isCanonical] / [requireCanonical] — the STRICT gate. Used on
- *    every new-memory creation path. Only the exact canonical format passes.
+ * This object only owns the STRICT side — the format every NEW identity must
+ * satisfy:
  *
- *  - [isRecognized] — the LENIENT gate, for preservation paths only (migration,
- *    import, restore, copy). It accepts a canonical id AND a non-blank legacy id
- *    that a record already carries, so a grandfathered id rides through
- *    untouched. It must never be used to admit a *new* identity.
+ *  - [generate] / [isCanonical] / [requireCanonical]
+ *
+ * It deliberately provides NO "recognize any legacy string" helper. A permissive
+ * check would let a malformed id arriving in a current-format import quietly
+ * become grandfathered, which is exactly what the ruling forbids. Legacy ids are
+ * preserved only where there is real EVIDENCE that they are pre-existing
+ * identities, and that evidence lives at the call site, not in a format guess:
+ *
+ *  - MIGRATION preserves the ids already stored in the database verbatim (their
+ *    presence in the DB is the evidence); it may scan and report non-canonical
+ *    ones, but never rewrites them.
+ *  - A genuinely OLDER backup/export format preserves the ids it carries because
+ *    that format predates canonical ids (the format version is the evidence).
+ *  - A CURRENT-format import/restore requires the canonical format
+ *    ([requireCanonical]); a malformed id there fails rather than being admitted
+ *    as legacy.
+ *
+ * ## Preserve vs. copy
+ *
+ * Identity-PRESERVING operations — export, import of the same record, backup,
+ * restore, sync, and in-place migration — keep the record's existing id
+ * unchanged. Intentionally DUPLICATING a memory as a new, independent memory is
+ * a creation, not a preservation: it mints a fresh id via [generate] and must
+ * never carry the source record's id.
  *
  * Pure Kotlin (no Android, no store) so it unit-tests on the JVM and can be
  * shared by the pure record factories. Transactional reservation and tombstone
@@ -67,25 +90,24 @@ object MemoryId {
 
     /**
      * True only when [id] is EXACTLY the canonical format for [type]: the
-     * required prefix followed by a syntactically valid UUID. This is the gate a
-     * newly created identity must pass; it deliberately rejects legacy shapes.
+     * required prefix followed by the canonical lowercase UUID text. This is the
+     * gate a newly created identity must pass; it rejects legacy or malformed
+     * shapes (including uppercase or short-field UUID text).
      */
     fun isCanonical(id: String?, type: Type): Boolean {
         if (id == null) return false
         if (!id.startsWith(type.prefix)) return false
-        val uuidPart = id.substring(type.prefix.length)
-        // For LOREBOOK the prefix is empty, so this is the whole string; a bare
-        // UUID must NOT carry the associative prefix, which startsWith already
-        // guarantees only for ASSOCIATIVE. Guard the empty-prefix case so an
-        // `m-...` value is never mistaken for a canonical lorebook id.
+        // For LOREBOOK the prefix is empty; guard so an `m-...` value is never
+        // mistaken for a canonical bare-uuid lorebook id.
         if (type == Type.LOREBOOK && id.startsWith(Type.ASSOCIATIVE.prefix)) return false
-        return isUuid(uuidPart)
+        return isCanonicalUuid(id.substring(type.prefix.length))
     }
 
     /**
      * Returns [id] when it is canonical for [type], else throws. The hard stop a
-     * new-creation path uses so a malformed or hand-invented id can never reach
-     * storage. [where] names the calling path for a legible failure.
+     * new-creation (or current-format import) path uses so a malformed or
+     * hand-invented id can never reach storage. [where] names the calling path
+     * for a legible failure.
      */
     fun requireCanonical(id: String?, type: Type, where: String): String {
         if (!isCanonical(id, type)) {
@@ -98,25 +120,14 @@ object MemoryId {
     }
 
     /**
-     * Lenient recognition for PRESERVATION paths (migration / import / restore /
-     * copy) only. True when [id] is either canonical for [type] or a non-blank
-     * legacy id an existing record already carries. Never admit a *new* identity
-     * with this — new creation uses [requireCanonical].
+     * True when [s] is the canonical lowercase 8-4-4-4-12 UUID text. Compared
+     * against the ORIGINAL string (not a lowercased copy), so uppercase or
+     * short-field text that `UUID.fromString` would otherwise accept is rejected
+     * — this object defines canonical as exactly what [UUID.toString] emits.
      */
-    fun isRecognized(id: String?, type: Type): Boolean {
-        if (id.isNullOrBlank()) return false
-        if (isCanonical(id, type)) return true
-        // A grandfathered legacy id: any non-blank, non-whitespace value the
-        // record was already stored under. Preserved verbatim, never rewritten.
-        return id.isNotBlank()
-    }
-
-    /** True when [s] is a syntactically valid UUID (canonical 8-4-4-4-12 form). */
-    private fun isUuid(s: String): Boolean {
-        // UUID.fromString is lenient about field widths, so validate the shape
-        // ourselves: it must round-trip to the same canonical string.
+    private fun isCanonicalUuid(s: String): Boolean {
         return try {
-            UUID.fromString(s).toString() == s.lowercase()
+            UUID.fromString(s).toString() == s
         } catch (_: IllegalArgumentException) {
             false
         }
