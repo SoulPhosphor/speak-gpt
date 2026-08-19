@@ -24,8 +24,10 @@ import org.junit.Test
  *
  * Pins the collision-safety contract: an incoming id that already exists is
  * admitted only when the immutable birth timestamp proves it is the SAME logical
- * record (or a legitimate restore of a deleted one); a birth mismatch is refused
- * rather than silently overwriting, and a malformed id is refused outright.
+ * record (or a legitimate restore of a deleted one); a birth mismatch — or any
+ * ambiguous identity — is refused rather than silently overwriting, and a
+ * non-canonical id is refused outright (import requires the canonical format,
+ * because a genuine legacy associative id is already canonical).
  */
 class MemoryIdImportTest {
 
@@ -36,7 +38,7 @@ class MemoryIdImportTest {
     fun newIdInserts() {
         assertEquals(
             MemoryIdImport.Disposition.INSERT,
-            MemoryIdImport.classify(id, "2026-08-19T00:00:00Z", MemoryIdImport.Existing.None)
+            MemoryIdImport.classify(id, "2026-08-19T00:00:00Z", type, MemoryIdImport.Existing.None)
         )
     }
 
@@ -45,7 +47,7 @@ class MemoryIdImportTest {
         assertEquals(
             MemoryIdImport.Disposition.PRESERVE_EXISTING,
             MemoryIdImport.classify(
-                id, "2026-08-19T00:00:00Z",
+                id, "2026-08-19T00:00:00Z", type,
                 MemoryIdImport.Existing.Live("2026-08-19T00:00:00Z")
             )
         )
@@ -56,7 +58,7 @@ class MemoryIdImportTest {
         assertEquals(
             MemoryIdImport.Disposition.REJECT_COLLISION,
             MemoryIdImport.classify(
-                id, "2026-08-19T09:00:00Z",
+                id, "2026-08-19T09:00:00Z", type,
                 MemoryIdImport.Existing.Live("2026-08-19T00:00:00Z")
             )
         )
@@ -67,7 +69,7 @@ class MemoryIdImportTest {
         assertEquals(
             MemoryIdImport.Disposition.INSERT,
             MemoryIdImport.classify(
-                id, "2026-08-19T00:00:00Z",
+                id, "2026-08-19T00:00:00Z", type,
                 MemoryIdImport.Existing.Tombstoned("2026-08-19T00:00:00Z")
             )
         )
@@ -78,43 +80,37 @@ class MemoryIdImportTest {
         assertEquals(
             MemoryIdImport.Disposition.REJECT_COLLISION,
             MemoryIdImport.classify(
-                id, "2026-08-19T09:00:00Z",
+                id, "2026-08-19T09:00:00Z", type,
                 MemoryIdImport.Existing.Tombstoned("2026-08-19T00:00:00Z")
             )
         )
     }
 
     @Test
-    fun unknownTombstoneBirthAdmitsRestoreBestEffort() {
+    fun unknownTombstoneBirthFailsClosed() {
+        // A tombstone with no recorded birth cannot prove the incoming record is
+        // the same one that was deleted, so the reuse is refused, not admitted.
         assertEquals(
-            MemoryIdImport.Disposition.INSERT,
+            MemoryIdImport.Disposition.REJECT_COLLISION,
             MemoryIdImport.classify(
-                id, "2026-08-19T09:00:00Z",
+                id, "2026-08-19T09:00:00Z", type,
                 MemoryIdImport.Existing.Tombstoned(null)
             )
         )
     }
 
     @Test
-    fun blankIncomingIdIsRejectedInvalid() {
-        // Only a blank id — which names no identity — is invalid on import.
-        assertEquals(
-            MemoryIdImport.Disposition.REJECT_INVALID,
-            MemoryIdImport.classify(null, "2026-08-19T00:00:00Z", MemoryIdImport.Existing.None)
-        )
-        assertEquals(
-            MemoryIdImport.Disposition.REJECT_INVALID,
-            MemoryIdImport.classify("   ", "2026-08-19T00:00:00Z", MemoryIdImport.Existing.None)
-        )
-    }
-
-    @Test
-    fun nonCanonicalLegacyIdIsPreservedNotRejected() {
-        // A grandfathered legacy id names a real identity; import preserves it.
-        assertEquals(
-            MemoryIdImport.Disposition.INSERT,
-            MemoryIdImport.classify("legacy-id-42", "2026-08-19T00:00:00Z", MemoryIdImport.Existing.None)
-        )
+    fun nonCanonicalIncomingIdIsRejectedInvalid() {
+        // Import requires the canonical format; a genuine legacy associative id
+        // is already m-<uuid>, so a non-canonical id is malformed, not legacy.
+        for (bad in listOf(null, "", "   ", "m-not-a-uuid", "legacy-id-42",
+            "b6d2f0e2-1c3a-4b5c-8d7e-9f0a1b2c3d4e")) {
+            assertEquals(
+                "expected REJECT_INVALID for $bad",
+                MemoryIdImport.Disposition.REJECT_INVALID,
+                MemoryIdImport.classify(bad, "2026-08-19T00:00:00Z", type, MemoryIdImport.Existing.None)
+            )
+        }
     }
 
     @Test
@@ -122,7 +118,7 @@ class MemoryIdImportTest {
         // A record with no birth timestamp cannot prove it is the same record.
         assertEquals(
             MemoryIdImport.Disposition.REJECT_COLLISION,
-            MemoryIdImport.classify(id, null, MemoryIdImport.Existing.Live("2026-08-19T00:00:00Z"))
+            MemoryIdImport.classify(id, null, type, MemoryIdImport.Existing.Live("2026-08-19T00:00:00Z"))
         )
     }
 }

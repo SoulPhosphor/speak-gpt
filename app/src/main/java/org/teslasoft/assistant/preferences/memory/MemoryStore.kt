@@ -2670,7 +2670,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 // is refused and reported DISTINCTLY — never silently overwritten
                 // or hidden inside the "already present" count.
                 val existing = existingMemoryIdentityTx(db, m.memoryId)
-                when (MemoryIdImport.classify(m.memoryId, m.createdAt, existing)) {
+                when (MemoryIdImport.classify(
+                    m.memoryId, m.createdAt, MemoryId.Type.ASSOCIATIVE, existing
+                )) {
                     MemoryIdImport.Disposition.REJECT_INVALID -> {
                         report.addInvalid("memories"); continue
                     }

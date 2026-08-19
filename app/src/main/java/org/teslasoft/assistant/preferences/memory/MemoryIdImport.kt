@@ -38,17 +38,31 @@ package org.teslasoft.assistant.preferences.memory
  * DIFFERENT memory trying to reuse the freed id (timestamps differ) is refused —
  * ids are never reused across logical records.
  *
- * ## Why import PRESERVES a non-canonical id instead of rejecting it
+ * ## Import requires a canonical id — there is no non-canonical legacy format
  *
- * An import/restore is a PRESERVATION path, not a new-creation path. Canonical
- * format is required only when MINTING a new identity (that happens at the
- * generator, [MemoryId.generate]). An incoming record already carries an
- * identity: rejecting it because the id is not canonical would refuse to restore
- * a user's real, possibly legacy, memory. The export format carries no version
- * signal that could tell a genuine legacy id apart from garbage, so the safe
- * choice is to preserve any incoming id that names an identity at all, and treat
- * only a blank id — which names no identity — as invalid. Collision safety is
- * still enforced independently by the birth-timestamp check below.
+ * Import/restore is a preservation path, but "preserve any non-blank id" would
+ * re-admit exactly the arbitrary-string leniency the id-hardening ruling removed
+ * — only at the import layer. Investigation of the shipped export format settles
+ * it: the associative `memory_id` has been `m-<uuid>` since the memory schema's
+ * inception (the v1.11 seed template and every example use `m-<uuid>`; the
+ * generator has only ever produced it; the codec's sole "legacy" handling is the
+ * retired `kind`/`title` fields, never the id shape). A GENUINE legacy
+ * associative identity is therefore already canonical, so requiring canonical
+ * preserves every real identity while refusing arbitrary malformed input. A
+ * non-canonical associative id in an import is not a legacy identity to keep — it
+ * is malformed, and is refused ([Disposition.REJECT_INVALID]).
+ *
+ * (This governs the portable MERGE import only. A whole-file backup RESTORE is an
+ * atomic file replacement that never runs this path, so a user's full-database
+ * restore is unaffected regardless of id shape.)
+ *
+ * ## Ambiguous identity fails closed
+ *
+ * When an id's identity cannot be proven — an incoming record with no birth
+ * timestamp against a live row, or a tombstone whose birth timestamp is unknown
+ * (written before v30 recorded it) — the record is REFUSED, not admitted. The
+ * ruling is to fail safely rather than risk a different logical memory silently
+ * reclaiming an id.
  */
 object MemoryIdImport {
 
@@ -79,32 +93,33 @@ object MemoryIdImport {
         /** A different logical record wears this id — refuse it, visibly. */
         REJECT_COLLISION,
 
-        /** The incoming id names no identity (blank) — refuse it, visibly. */
+        /** The incoming id is not a canonical id — refuse it, visibly. */
         REJECT_INVALID
     }
 
     /**
-     * Decide what to do with an incoming record carrying [incomingId] and
-     * [incomingCreatedAt], given what the store already knows ([existing]). A
-     * blank id is invalid; any non-blank id (canonical or grandfathered legacy)
-     * is preserved, subject to the birth-timestamp collision check.
+     * Decide what to do with an incoming record of [type] carrying [incomingId]
+     * and [incomingCreatedAt], given what the store already knows ([existing]).
+     * A non-canonical id is invalid; identity that cannot be proven fails closed.
      */
     fun classify(
         incomingId: String?,
         incomingCreatedAt: String?,
+        type: MemoryId.Type,
         existing: Existing
     ): Disposition {
-        if (incomingId.isNullOrBlank()) return Disposition.REJECT_INVALID
+        if (!MemoryId.isCanonical(incomingId, type)) return Disposition.REJECT_INVALID
         return when (existing) {
             is Existing.None -> Disposition.INSERT
             is Existing.Live ->
                 if (sameBirth(incomingCreatedAt, existing.createdAt)) Disposition.PRESERVE_EXISTING
                 else Disposition.REJECT_COLLISION
             is Existing.Tombstoned ->
-                // Unknown tombstone birth ⇒ cannot prove a collision; admit the
-                // restore rather than block a legitimate one. A known, differing
-                // birth ⇒ a different record reusing a freed id ⇒ refuse.
-                if (existing.createdAt == null || sameBirth(incomingCreatedAt, existing.createdAt))
+                // Fail closed on an unknown tombstone birth: the restore cannot be
+                // proven to be the same record, so it is refused rather than risk
+                // a different memory reclaiming the freed id. A matching known
+                // birth is a genuine restore and is admitted.
+                if (existing.createdAt != null && sameBirth(incomingCreatedAt, existing.createdAt))
                     Disposition.INSERT
                 else Disposition.REJECT_COLLISION
         }
