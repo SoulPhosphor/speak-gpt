@@ -3205,6 +3205,8 @@
          stored. -->
     <string name="message_details_action">Message Details</string>
     <string name="message_details_empty">Details Not Available</string>
+    <!-- Collapsed disclosure label for provider-supplied reasoning (chat-redesign-plan.md §7.1). -->
+    <string name="reasoning_thinking_label">Thinking</string>
     <!-- Token count shown in the compact line and the details popup, e.g. "1,234 tokens". -->
     <string name="chat_token_count">%1$s tokens</string>
     <!-- Regenerated-response pager on an assistant message. -->

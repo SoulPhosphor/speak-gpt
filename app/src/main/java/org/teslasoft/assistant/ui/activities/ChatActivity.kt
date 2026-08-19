@@ -327,6 +327,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         private val responseLifecycleRecorderAttribute =
             AttributeKey<ResponseLifecycleRecorder>("ResponseLifecycleRecorder")
 
+        /** Pins the current turn's reasoning accumulator to a request whose
+         *  resolved settings want provider reasoning displayed (§7.2). Its
+         *  presence is what tells the response observer to split this stream for
+         *  reasoning even when lifecycle logging is off. */
+        private val reasoningObservationAttribute =
+            AttributeKey<org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator>("ReasoningObservation")
+
     }
 
     // Init UI
@@ -5507,6 +5514,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val capability = reasoningCapabilityForModel(model)
         val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
 
+        // Ask the response observer to split THIS stream for reasoning when the
+        // path can return visible reasoning and the user wants it shown. Effort
+        // level is irrelevant here (Auto still returns reasoning by default);
+        // only capability + Show Reasoning decide whether to observe.
+        if (capability.isReasoningCapable && capability.canReturnVisibleReasoning && resolved.showReasoning) {
+            currentTurnReasoning?.let { request.attributes.put(reasoningObservationAttribute, it) }
+        }
+
         val augmented = org.teslasoft.assistant.reasoning.ReasoningRequestSerializer.augmentBody(
             text, resolved, isOpenRouter, capability.isReasoningCapable
         )
@@ -5559,6 +5574,35 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun reasoningLogLine(): String {
         val status = lastReasoningAttachment ?: "reasoning hook did not run"
         return "\nReasoning: $status"
+    }
+
+    /**
+     * Attach the reasoning captured from the split stream copy to the reply it
+     * belongs to (§7.1/§7.2). Runs from the response observer once the copy has
+     * drained; it is the sole writer of the reasoning fields, so it never races
+     * the typed stream's own completion/persistence for the answer text. It
+     * mutates the reply's in-memory map, so whichever save runs last (this one
+     * or the answer's completion save) keeps the reasoning. Reasoning is a
+     * separate channel and is never merged into the answer text — so it never
+     * reaches TTS and never signals completion. Fully best-effort.
+     */
+    private fun deliverObservedReasoning(acc: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator) {
+        if (!acc.hasReasoning()) return
+        val snapshot = acc.snapshot()
+        if (snapshot.text.isBlank()) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            val index = messages.indexOfLast { it["isBot"] == true }
+            if (index < 0) return@runOnUiThread
+            val msg = messages[index]
+            msg[ChatAdapter.KEY_MESSAGE_REASONING] = snapshot.text
+            msg[ChatAdapter.KEY_MESSAGE_REASONING_SUMMARY] = snapshot.isSummary.toString()
+            snapshot.reasoningTokens?.let {
+                msg[ChatAdapter.KEY_MESSAGE_REASONING_TOKENS] = it.toString()
+            }
+            adapter?.notifyItemChanged(index)
+            saveSettings()
+        }
     }
 
     private fun initAI() {
@@ -5617,20 +5661,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             if (!call.response.status.isSuccess()) {
                                 true
                             } else {
-                                // Observe successful generation streams only
-                                // while lifecycle logging owns a recorder. The
-                                // observer receives a split copy, so the normal
-                                // typed stream is neither buffered nor consumed.
+                                // Observe a successful generation stream when
+                                // lifecycle logging owns a recorder OR this turn
+                                // wants provider reasoning displayed. The observer
+                                // receives a split copy, so the normal typed
+                                // stream is neither buffered nor consumed.
                                 val recorder = if (call.request.attributes.contains(responseLifecycleRecorderAttribute)) {
                                     call.request.attributes[responseLifecycleRecorderAttribute]
                                 } else {
                                     null
                                 }
-                                if (recorder == null) {
-                                    false
-                                } else {
-                                    recorder.beginProviderObservation()
-                                    true
+                                val wantsReasoning = call.request.attributes.contains(reasoningObservationAttribute)
+                                when {
+                                    recorder != null -> {
+                                        recorder.beginProviderObservation()
+                                        true
+                                    }
+                                    wantsReasoning -> true
+                                    else -> false
                                 }
                             }
                         }
@@ -5638,23 +5686,44 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             try {
                                 if (!response.status.isSuccess()) {
                                     capturedProviderErrorBody = response.bodyAsText()
-                                } else if (response.call.request.attributes.contains(responseLifecycleRecorderAttribute)) {
-                                    val recorder = response.call.request.attributes[responseLifecycleRecorderAttribute]
-                                    try {
-                                        // Receive the observer's split copy ONCE (a second
-                                        // bodyAsChannel() throws and cancels the origin,
-                                        // killing the live stream) and drain it to end of
-                                        // stream — stopping early stalls Ktor's splitter
-                                        // and freezes the visible reply after ~4 KB; see
-                                        // consumeObservedStream.
-                                        val observedChannel = response.bodyAsChannel()
-                                        ReportedProviderParser.consumeObservedStream(observedChannel) { reported ->
-                                            // Response-derived only. Never substitute the
-                                            // configured or requested provider here.
-                                            recorder.noteActualModelProvider(reported)
+                                } else {
+                                    val attrs = response.call.request.attributes
+                                    val recorder = if (attrs.contains(responseLifecycleRecorderAttribute)) {
+                                        attrs[responseLifecycleRecorderAttribute]
+                                    } else {
+                                        null
+                                    }
+                                    val reasoningAcc = if (attrs.contains(reasoningObservationAttribute)) {
+                                        attrs[reasoningObservationAttribute]
+                                    } else {
+                                        null
+                                    }
+                                    if (recorder != null || reasoningAcc != null) {
+                                        try {
+                                            // Receive the observer's split copy ONCE (a second
+                                            // bodyAsChannel() throws and cancels the origin,
+                                            // killing the live stream) and drain it to end of
+                                            // stream — stopping early stalls Ktor's splitter
+                                            // and freezes the visible reply after ~4 KB; see
+                                            // consumeObservedStream. One drain feeds both the
+                                            // lifecycle inspector and, via lineObserver, the
+                                            // reasoning accumulator.
+                                            val observedChannel = response.bodyAsChannel()
+                                            ReportedProviderParser.consumeObservedStream(
+                                                observedChannel,
+                                                onProvider = { reported ->
+                                                    // Response-derived only. Never substitute the
+                                                    // configured or requested provider here.
+                                                    recorder?.noteActualModelProvider(reported)
+                                                },
+                                                lineObserver = reasoningAcc?.let { acc -> { line -> acc.acceptLine(line) } }
+                                            )
+                                        } finally {
+                                            recorder?.finishProviderObservation()
+                                            if (reasoningAcc != null) {
+                                                deliverObservedReasoning(reasoningAcc)
+                                            }
                                         }
-                                    } finally {
-                                        recorder.finishProviderObservation()
                                     }
                                 }
                             } catch (_: Exception) { /* best effort; never disturb the failure path */ }
@@ -7603,8 +7672,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // whose provider reports no usage does not inherit the previous
             // turn's count.
             pendingResponseTokens = null
+            // Fresh reasoning accumulator for this turn. The send hook attaches
+            // it to reasoning-wanted requests; the response observer feeds it
+            // from the split stream copy. A turn that never wants reasoning
+            // simply never has it observed.
+            currentTurnReasoning = org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator()
         }
     }
+
+    /** The current turn's reasoning accumulator (§7.2). Created when the
+     *  streamed reply begins; fed by the response observer on reasoning-wanted
+     *  turns; read once the split stream drains to stamp the reply's Thinking
+     *  content. Null between turns. */
+    @Volatile
+    private var currentTurnReasoning: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator? = null
 
     /** Provider-reported total tokens for the reply currently streaming, taken
      *  from the usage-bearing final chunk (streamOptions.includeUsage). Null

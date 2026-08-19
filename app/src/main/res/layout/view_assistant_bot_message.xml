@@ -80,6 +80,61 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/bubble_name" />
 
+            <!-- Provider-supplied reasoning disclosure (chat-redesign-plan.md
+                 §7.1): sits between the identity/metadata line and the final
+                 answer. Collapsed by default; the chevron points right when
+                 collapsed and down (rotated 90) when expanded. GONE — a
+                 zero-height point — whenever this reply carries no separately
+                 supplied reasoning, so the answer keeps its position. Colors
+                 follow the theme via colorPrimary; nothing is hardcoded. -->
+            <LinearLayout
+                android:id="@+id/reasoning_container"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                android:orientation="vertical"
+                android:visibility="gone"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/message_meta">
+
+                <LinearLayout
+                    android:id="@+id/reasoning_header"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:gravity="center_vertical"
+                    android:minHeight="32dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/reasoning_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/reasoning_thinking_label"
+                        android:textColor="?attr/colorPrimary"
+                        android:textSize="13sp" />
+
+                    <ImageView
+                        android:id="@+id/reasoning_chevron"
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginStart="4dp"
+                        android:contentDescription="@string/reasoning_thinking_label"
+                        app:srcCompat="@drawable/ic_chevron_right"
+                        app:tint="?attr/colorPrimary" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/reasoning_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="?attr/colorPrimary"
+                    android:textIsSelectable="true"
+                    android:textSize="14sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
             <org.teslasoft.assistant.ui.chat.PortraitAwareMessageTextView
                 android:id="@+id/message"
                 android:layout_width="wrap_content"
@@ -90,7 +145,7 @@
                 android:textIsSelectable="true"
                 android:textSize="16sp"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/message_meta" />
+                app:layout_constraintTop_toBottomOf="@+id/reasoning_container" />
 
             <LinearLayout
                 android:id="@+id/image_frame"

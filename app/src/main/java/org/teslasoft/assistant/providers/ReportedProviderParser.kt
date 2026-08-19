@@ -41,12 +41,26 @@ object ReportedProviderParser {
      * private RawStreamObservation envelope is sent through that same callback so
      * raw metadata cannot race onto a later request.
      */
-    suspend fun consumeObservedStream(channel: ByteReadChannel, onProvider: (String) -> Unit) {
+    suspend fun consumeObservedStream(
+        channel: ByteReadChannel,
+        onProvider: (String) -> Unit,
+        /** Optional side observer given every raw SSE line as it is drained, so
+         *  a second consumer (reasoning capture) can ride the SAME single drain
+         *  without a second bodyAsChannel() read. It runs before this parser's
+         *  own line handling and must never throw; any exception it raises is
+         *  swallowed so it can never disturb the drain or the live stream. */
+        lineObserver: ((String) -> Unit)? = null
+    ) {
         val inspector = RawSseInspector()
         var providerNoted = false
         try {
             while (true) {
                 val line = channel.readUTF8Line() ?: break
+                if (lineObserver != null) {
+                    try {
+                        lineObserver(line)
+                    } catch (_: Exception) { /* side observer is best-effort only */ }
+                }
                 val provider = inspector.acceptLine(line)
                 if (!providerNoted && provider != null) {
                     onProvider(provider)
