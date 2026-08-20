@@ -1,0 +1,931 @@
+name: Apply Generation Diagnostics Repair
+
+on:
+  push:
+    branches:
+      - agent/generation-diagnostics-repair
+
+permissions:
+  contents: write
+
+jobs:
+  apply-repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repair branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/generation-diagnostics-repair
+
+      - name: Apply targeted diagnostics repair
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          def regex_once(path, pattern, replacement, label):
+              p = Path(path)
+              text = p.read_text()
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one regex match, found {count}")
+              p.write_text(updated)
+
+          chat = 'app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt'
+          lifecycle = 'app/src/main/java/org/teslasoft/assistant/preferences/ResponseLifecycle.kt'
+          generation_service = 'app/src/main/java/org/teslasoft/assistant/service/GenerationForegroundService.kt'
+          handsfree_service = 'app/src/main/java/org/teslasoft/assistant/service/HandsFreeService.kt'
+
+          # ChatActivity: retain a per-request network monitor alongside the lifecycle recorder.
+          replace_once(
+              chat,
+              '''    @Volatile
+              private var currentLifecycle: ResponseLifecycleRecorder? = null
+          ''',
+              '''    @Volatile
+              private var currentLifecycle: ResponseLifecycleRecorder? = null
+
+              /** Network transport evidence for the currently dispatched provider request. */
+              private var generationNetworkMonitor: org.teslasoft.assistant.util.GenerationNetworkMonitor? = null
+          ''',
+              'ChatActivity network monitor field'
+          )
+
+          # Start monitoring at the three real stream-collection dispatch points.
+          p = Path(chat)
+          text = p.read_text()
+          marker = '        providerRequestDispatched = true\n'
+          count = text.count(marker)
+          if count != 3:
+              raise SystemExit(f'ChatActivity dispatch points: expected 3, found {count}')
+          text = text.replace(
+              marker,
+              '        startGenerationNetworkDiagnostics()\n        providerRequestDispatched = true\n'
+          )
+          p.write_text(text)
+
+          # Capture all failure diagnostics before hands-free teardown mutates state.
+          replace_once(
+              chat,
+              '''        } catch (e: Exception) {
+                      playErrorSignal()
+                      stopHandsFreeOnError()
+                      // Single funnel: classify the failure to a stable code, always write
+          ''',
+              '''        } catch (e: Exception) {
+                      playErrorSignal()
+                      val failureDiagnostics = captureGenerationFailureDiagnostics()
+                      stopHandsFreeOnError()
+                      // Single funnel: classify the failure to a stable code, always write
+          ''',
+              'ChatActivity pre-teardown failure capture'
+          )
+          replace_once(
+              chat,
+              '            logGenerationError(genError, e, "message")\n',
+              '            logGenerationError(genError, e, "message", failureDiagnostics)\n',
+              'ChatActivity message error snapshot handoff'
+          )
+
+          # Synthetic local failures must not masquerade as provider finish_reason=error.
+          replace_once(
+              chat,
+              '''                            finalizeLifecycleTerminal(
+                                      ResponseLifecycle.Outcome.INCOMPLETE, "error", true,
+                                      ResponseLifecycle.Termination.PROVIDER_ERROR, toolsError.message
+                                  )
+          ''',
+              '''                            finalizeLifecycleTerminal(
+                                      ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
+                                      ResponseLifecycle.Termination.PROVIDER_ERROR, toolsError.message
+                                  )
+          ''',
+              'ChatActivity tools rejection finish provenance'
+          )
+          replace_once(
+              chat,
+              '''            finalizeLifecycleTerminal(
+                          ResponseLifecycle.Outcome.INCOMPLETE, "error", true,
+                          lifecycleTermination, lifecycleError
+                      )
+          ''',
+              '''            finalizeLifecycleTerminal(
+                          ResponseLifecycle.Outcome.INCOMPLETE,
+                          currentLifecycle?.lastFinishReason ?: "missing",
+                          true,
+                          lifecycleTermination,
+                          lifecycleError
+                      )
+          ''',
+              'ChatActivity terminal finish provenance'
+          )
+
+          # Add scoped network/failure helpers immediately before the existing networkState helper.
+          replace_once(
+              chat,
+              '''    /** Active transport: wifi/cellular/ethernet/other/none/unknown. Best-effort;
+                   *  any failure (e.g. missing permission) is reported as "unknown". */
+                  private fun networkState(): String = try {
+          ''',
+              '''    /** Start a fresh trace at the exact point this provider request begins collection. */
+                  private fun startGenerationNetworkDiagnostics() {
+                      try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
+                      generationNetworkMonitor = try {
+                          org.teslasoft.assistant.util.GenerationNetworkMonitor(this)
+                      } catch (_: Throwable) {
+                          null
+                      }
+                  }
+
+                  /** Freeze failure facts before stopHandsFreeOnError()/finally tear services down. */
+                  private fun captureGenerationFailureDiagnostics(): org.teslasoft.assistant.util.GenerationFailureSnapshot {
+                      val network = generationNetworkMonitor?.snapshot()
+                          ?: org.teslasoft.assistant.util.GenerationNetworkSnapshot(
+                              atDispatch = "not observed",
+                              atFailure = networkState(),
+                              transitions = emptyList()
+                          )
+                      return org.teslasoft.assistant.util.GenerationFailureSnapshot(
+                          voiceLive = isVoiceLive(),
+                          network = network,
+                          generationKeepAlive = GenerationForegroundService.diagnostics(),
+                          handsFreeKeepAlive = HandsFreeService.connectionDiagnostics()
+                      )
+                  }
+
+                  /** Active transport: wifi/cellular/ethernet/other/none/unknown. Best-effort;
+                   *  any failure (e.g. missing permission) is reported as "unknown". */
+                  private fun networkState(): String = try {
+          ''',
+              'ChatActivity generation diagnostic helpers'
+          )
+
+          # Use the frozen voice state, emit explicit network provenance and keep-alive state.
+          replace_once(
+              chat,
+              '''    private fun logGenerationError(result: GenErrorResult, e: Throwable, trigger: String) {
+                      val voiceLive = isVoiceLive()
+          ''',
+              '''    private fun logGenerationError(
+                      result: GenErrorResult,
+                      e: Throwable,
+                      trigger: String,
+                      failureSnapshot: org.teslasoft.assistant.util.GenerationFailureSnapshot? = null
+                  ) {
+                      val voiceLive = org.teslasoft.assistant.util.resolveFailureVoiceState(
+                          failureSnapshot,
+                          isVoiceLive()
+                      )
+          ''',
+              'ChatActivity logGenerationError signature'
+          )
+          replace_once(
+              chat,
+              '''            sb.append("Trigger: $trigger\\n")
+                      sb.append("Screen: ${screenState()}\\n")
+                      sb.append("Network: ${networkState()}\\n")
+                      sb.append("Power save: ${powerSaveState()}")
+          ''',
+              '''            sb.append("Trigger: $trigger\\n")
+                      sb.append("Screen: ${screenState()}\\n")
+                      if (failureSnapshot != null) {
+                          failureSnapshot.asLogLines().forEach { line ->
+                              sb.append(line).append('\\n')
+                          }
+                      } else {
+                          sb.append("Network: ${networkState()}\\n")
+                      }
+                      sb.append("Power save: ${powerSaveState()}")
+          ''',
+              'ChatActivity explicit network provenance output'
+          )
+          replace_once(
+              chat,
+              '        logVoiceFailureSnapshot(result.code.code)\n',
+              '        logVoiceFailureSnapshot(result.code.code, voiceLive)\n',
+              'ChatActivity voice debug snapshot call'
+          )
+          replace_once(
+              chat,
+              '''    private fun logVoiceFailureSnapshot(code: String) {
+                      if (!isVoiceLive()) return
+          ''',
+              '''    private fun logVoiceFailureSnapshot(code: String, voiceWasLive: Boolean = isVoiceLive()) {
+                      if (!voiceWasLive) return
+          ''',
+              'ChatActivity voice debug snapshot pre-teardown guard'
+          )
+
+          # Close the callback in the single generation finally path.
+          replace_once(
+              chat,
+              '''        } finally {
+                      GenerationForegroundService.end(this)
+          ''',
+              '''        } finally {
+                      try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
+                      generationNetworkMonitor = null
+                      GenerationForegroundService.end(this)
+          ''',
+              'ChatActivity network monitor cleanup'
+          )
+
+          # ResponseLifecycle: make received/not-received about provider evidence, not final display text.
+          replace_once(
+              lifecycle,
+              '''        val effectiveFinish = when {
+                      suppliedFinish.equals("missing", ignoreCase = true) && observedFinish != null -> observedFinish
+                      suppliedFinish.equals("error", ignoreCase = true) && observedFinish != null -> observedFinish
+                      else -> suppliedFinish
+                  }
+          ''',
+              '''        val effectiveFinish = when {
+                      suppliedFinish.equals("missing", ignoreCase = true) && observedFinish != null -> observedFinish
+                      suppliedFinish.equals("error", ignoreCase = true) && observedFinish != null -> observedFinish
+                      else -> suppliedFinish
+                  }
+                  val finishReasonReceived = observedFinish != null ||
+                      !suppliedFinish.equals("missing", ignoreCase = true)
+          ''',
+              'ResponseLifecycle finish reason provenance flag'
+          )
+          replace_once(
+              lifecycle,
+              '            finalFinish = observedFinish ?: "error"\n',
+              '''            finalFinish = observedFinish
+                          ?: suppliedFinish.takeUnless { it.equals("missing", ignoreCase = true) }
+                          ?: "missing"
+          ''',
+              'ResponseLifecycle provider error finish fallback'
+          )
+          replace_once(
+              lifecycle,
+              '            append("Finish Reason Received: ").append(!finalFinish.equals("missing", ignoreCase = true)).append(\'\\n\')\n',
+              '            append("Finish Reason Received: ").append(finishReasonReceived).append(\'\\n\')\n',
+              'ResponseLifecycle received flag output'
+          )
+
+          # GenerationForegroundService: expose real service/lock state and stop swallowing lock failures.
+          replace_once(
+              generation_service,
+              'import android.os.PowerManager\n',
+              'import android.os.PowerManager\nimport android.os.SystemClock\n',
+              'GenerationForegroundService SystemClock import'
+          )
+          replace_once(
+              generation_service,
+              '''        // Generations in flight. The service stops only when this drops to 0.
+                      private val activeGenerations = AtomicInteger(0)
+          ''',
+              '''        // Generations in flight. The service stops only when this drops to 0.
+                      private val activeGenerations = AtomicInteger(0)
+
+                      @Volatile private var activeService: GenerationForegroundService? = null
+                      @Volatile private var lastKeepAliveFailure: String? = null
+
+                      /** Actual state sampled before generation teardown on a failure. */
+                      fun diagnostics(): GenerationKeepAliveDiagnostics =
+                          activeService?.snapshotDiagnostics()
+                              ?: GenerationKeepAliveDiagnostics(
+                                  serviceRunning = false,
+                                  activeGenerations = activeGenerations.get(),
+                                  serviceAgeMs = 0L,
+                                  wakeLockHeld = false,
+                                  wifiLockHeld = false,
+                                  lastFailure = lastKeepAliveFailure
+                              )
+          ''',
+              'GenerationForegroundService diagnostics companion state'
+          )
+          replace_once(
+              generation_service,
+              '''            } catch (e: Exception) {
+                          // Starting a foreground service can be refused (e.g. the app is
+          ''',
+              '''            } catch (e: Exception) {
+                          lastKeepAliveFailure = "${e.javaClass.simpleName}: ${e.message}"
+                          // Starting a foreground service can be refused (e.g. the app is
+          ''',
+              'GenerationForegroundService start refusal capture'
+          )
+          replace_once(
+              generation_service,
+              '''    private var wakeLock: PowerManager.WakeLock? = null
+                  private var wifiLock: WifiManager.WifiLock? = null
+          ''',
+              '''    private var wakeLock: PowerManager.WakeLock? = null
+                  private var wifiLock: WifiManager.WifiLock? = null
+                  @Volatile private var serviceStartedAtMs: Long = 0L
+          ''',
+              'GenerationForegroundService service age field'
+          )
+          replace_once(
+              generation_service,
+              '''        } catch (e: Exception) {
+                      // If startForeground fails, bail out cleanly rather than crash;
+          ''',
+              '''        } catch (e: Exception) {
+                      lastKeepAliveFailure = "${e.javaClass.simpleName}: ${e.message}"
+                      // If startForeground fails, bail out cleanly rather than crash;
+          ''',
+              'GenerationForegroundService startForeground failure capture'
+          )
+          replace_once(
+              generation_service,
+              '''        acquireLocks()
+                  // NOT sticky: a resurrected copy with no generation in flight would
+          ''',
+              '''        activeService = this
+                  if (serviceStartedAtMs == 0L) serviceStartedAtMs = SystemClock.elapsedRealtime()
+                  lastKeepAliveFailure = null
+                  acquireLocks()
+                  // NOT sticky: a resurrected copy with no generation in flight would
+          ''',
+              'GenerationForegroundService active service marker'
+          )
+          regex_once(
+              generation_service,
+              r'''    @Suppress\("DEPRECATION"\)\n    private fun acquireLocks\(\) \{.*?\n    \}\n\n    private fun releaseLocks''',
+              '''    @Suppress("DEPRECATION")
+                  private fun acquireLocks() {
+                      if (wakeLock?.isHeld != true) {
+                          try {
+                              val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                              wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
+                                  setReferenceCounted(false)
+                                  acquire(30 * 60 * 1000L)
+                              }
+                          } catch (t: Throwable) {
+                              recordKeepAliveFailure("CPU wake-lock acquisition failed", t)
+                          }
+                      }
+                      if (wifiLock?.isHeld != true) {
+                          try {
+                              val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                              wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WAKE_LOCK_TAG).apply {
+                                  setReferenceCounted(false)
+                                  acquire()
+                              }
+                          } catch (t: Throwable) {
+                              recordKeepAliveFailure("Wi-Fi lock acquisition failed", t)
+                          }
+                      }
+                  }
+
+                  private fun recordKeepAliveFailure(prefix: String, t: Throwable) {
+                      val detail = "$prefix: ${t.javaClass.simpleName}: ${t.message}"
+                      lastKeepAliveFailure = detail
+                      try {
+                          Logger.log(applicationContext, "event", "GenerationService", "warning", detail)
+                      } catch (_: Throwable) { /* diagnostics must never disturb generation */ }
+                  }
+
+                  private fun snapshotDiagnostics(): GenerationKeepAliveDiagnostics {
+                      val now = SystemClock.elapsedRealtime()
+                      val started = serviceStartedAtMs
+                      return GenerationKeepAliveDiagnostics(
+                          serviceRunning = activeService === this,
+                          activeGenerations = activeGenerations.get(),
+                          serviceAgeMs = if (started > 0L) (now - started).coerceAtLeast(0L) else 0L,
+                          wakeLockHeld = try { wakeLock?.isHeld == true } catch (_: Throwable) { false },
+                          wifiLockHeld = try { wifiLock?.isHeld == true } catch (_: Throwable) { false },
+                          lastFailure = lastKeepAliveFailure
+                      )
+                  }
+
+                  private fun releaseLocks''',
+              'GenerationForegroundService lock diagnostics'
+          )
+          replace_once(
+              generation_service,
+              '''    override fun onDestroy() {
+                      releaseLocks()
+                      super.onDestroy()
+                  }
+              }
+          ''',
+              '''    override fun onDestroy() {
+                      releaseLocks()
+                      if (activeService === this) activeService = null
+                      serviceStartedAtMs = 0L
+                      super.onDestroy()
+                  }
+              }
+
+              data class GenerationKeepAliveDiagnostics(
+                  val serviceRunning: Boolean,
+                  val activeGenerations: Int,
+                  val serviceAgeMs: Long,
+                  val wakeLockHeld: Boolean,
+                  val wifiLockHeld: Boolean,
+                  val lastFailure: String?
+              ) {
+                  fun asLogFields(): String =
+                      "serviceRunning=$serviceRunning activeGenerations=$activeGenerations " +
+                          "serviceAge=${serviceAgeMs}ms wakeLockHeld=$wakeLockHeld " +
+                          "wifiLockHeld=$wifiLockHeld lastFailure=${lastFailure ?: "none"}"
+              }
+          ''',
+              'GenerationForegroundService diagnostics data class'
+          )
+
+          # HandsFreeService: expose Wi-Fi lock state and persist acquisition failures.
+          replace_once(
+              handsfree_service,
+              '''        @Volatile
+                      private var activeService: HandsFreeService? = null
+          ''',
+              '''        @Volatile
+                      private var activeService: HandsFreeService? = null
+
+                      @Volatile
+                      private var lastWifiLockFailure: String? = null
+          ''',
+              'HandsFreeService Wi-Fi failure state'
+          )
+          replace_once(
+              handsfree_service,
+              '''        fun wakeLockDiagnostics(): HandsFreeWakeLockDiagnostics =
+                          activeService?.snapshotWakeLockDiagnostics()
+                              ?: HandsFreeWakeLockDiagnostics(
+                                  serviceRunning = false,
+                                  serviceAgeMs = 0L,
+                                  wakeLockHeld = false,
+                                  leaseAgeMs = 0L
+                              )
+          ''',
+              '''        fun wakeLockDiagnostics(): HandsFreeWakeLockDiagnostics =
+                          activeService?.snapshotWakeLockDiagnostics()
+                              ?: HandsFreeWakeLockDiagnostics(
+                                  serviceRunning = false,
+                                  serviceAgeMs = 0L,
+                                  wakeLockHeld = false,
+                                  leaseAgeMs = 0L
+                              )
+
+                      /** Service + CPU/Wi-Fi protection sampled before hands-free teardown. */
+                      fun connectionDiagnostics(): HandsFreeConnectionDiagnostics =
+                          activeService?.snapshotConnectionDiagnostics()
+                              ?: HandsFreeConnectionDiagnostics(
+                                  serviceRunning = false,
+                                  serviceAgeMs = 0L,
+                                  wakeLockHeld = false,
+                                  wifiLockHeld = false,
+                                  wifiLockFailure = lastWifiLockFailure
+                              )
+          ''',
+              'HandsFreeService connection diagnostics accessor'
+          )
+          replace_once(
+              handsfree_service,
+              '''    private fun logWakeLockEvent(level: String, message: String) {
+          ''',
+              '''    private fun snapshotConnectionDiagnostics(): HandsFreeConnectionDiagnostics {
+                      val wake = snapshotWakeLockDiagnostics()
+                      return HandsFreeConnectionDiagnostics(
+                          serviceRunning = wake.serviceRunning,
+                          serviceAgeMs = wake.serviceAgeMs,
+                          wakeLockHeld = wake.wakeLockHeld,
+                          wifiLockHeld = try { wifiLock?.isHeld == true } catch (_: Throwable) { false },
+                          wifiLockFailure = lastWifiLockFailure
+                      )
+                  }
+
+                  private fun logWakeLockEvent(level: String, message: String) {
+          ''',
+              'HandsFreeService connection diagnostics snapshot'
+          )
+          regex_once(
+              handsfree_service,
+              r'''    @Suppress\("DEPRECATION"\)\n    private fun acquireWifiLock\(\) \{.*?\n    \}\n\n    private fun releaseLocks''',
+              '''    @Suppress("DEPRECATION")
+                  private fun acquireWifiLock() {
+                      if (wifiLock?.isHeld == true) {
+                          lastWifiLockFailure = null
+                          return
+                      }
+                      try {
+                          val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                          wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WAKE_LOCK_TAG).apply {
+                              setReferenceCounted(false)
+                              acquire()
+                          }
+                          lastWifiLockFailure = null
+                      } catch (t: Throwable) {
+                          val detail = "${t.javaClass.simpleName}: ${t.message}"
+                          lastWifiLockFailure = detail
+                          try {
+                              Logger.log(
+                                  applicationContext,
+                                  "event",
+                                  "HandsFreeService",
+                                  "warning",
+                                  "Wi-Fi lock acquisition failed: $detail"
+                              )
+                          } catch (_: Throwable) { /* diagnostics must never disturb hands-free */ }
+                      }
+                  }
+
+                  private fun releaseLocks''',
+              'HandsFreeService Wi-Fi lock acquisition diagnostics'
+          )
+          p = Path(handsfree_service)
+          text = p.read_text()
+          if 'data class HandsFreeConnectionDiagnostics' in text:
+              raise SystemExit('HandsFreeConnectionDiagnostics unexpectedly already exists')
+          text += '''
+
+          /** Actual hands-free keep-alive state sampled at generation failure time. */
+          data class HandsFreeConnectionDiagnostics(
+              val serviceRunning: Boolean,
+              val serviceAgeMs: Long,
+              val wakeLockHeld: Boolean,
+              val wifiLockHeld: Boolean,
+              val wifiLockFailure: String?
+          ) {
+              fun asLogFields(): String =
+                  "serviceRunning=$serviceRunning serviceAge=${serviceAgeMs}ms " +
+                      "wakeLockHeld=$wakeLockHeld wifiLockHeld=$wifiLockHeld " +
+                      "wifiLockFailure=${wifiLockFailure ?: "none"}"
+          }
+          '''
+          p.write_text(text)
+
+          # New per-request transport trace. Android callback handling is thin; transition logic is pure/testable.
+          Path('app/src/main/java/org/teslasoft/assistant/util/GenerationNetworkDiagnostics.kt').write_text(r'''/**************************************************************************
+           * Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+           *
+           * Licensed under the Apache License, Version 2.0 (the "License");
+           * you may not use this file except in compliance with the License.
+           * You may obtain a copy of the License at
+           *
+           *  http://www.apache.org/licenses/LICENSE-2.0
+           **************************************************************************/
+
+          package org.teslasoft.assistant.util
+
+          import android.content.Context
+          import android.net.ConnectivityManager
+          import android.net.Network
+          import android.net.NetworkCapabilities
+          import android.os.SystemClock
+          import org.teslasoft.assistant.service.GenerationKeepAliveDiagnostics
+          import org.teslasoft.assistant.service.HandsFreeConnectionDiagnostics
+
+          data class NetworkTransition(
+              val from: String,
+              val to: String,
+              val elapsedMs: Long
+          )
+
+          data class GenerationNetworkSnapshot(
+              val atDispatch: String,
+              val atFailure: String,
+              val transitions: List<NetworkTransition>
+          ) {
+              fun transitionsDisplay(): String = if (transitions.isEmpty()) {
+                  "none observed"
+              } else {
+                  transitions.joinToString(" | ") {
+                      "${it.from} -> ${it.to} at +${it.elapsedMs} ms"
+                  }
+              }
+          }
+
+          internal class NetworkTransitionTrace(
+              val initial: String,
+              private val startedAtMs: Long
+          ) {
+              private var current: String = initial
+              private val changes = ArrayList<NetworkTransition>()
+
+              fun record(state: String, nowMs: Long) {
+                  if (state == current) return
+                  changes += NetworkTransition(
+                      from = current,
+                      to = state,
+                      elapsedMs = (nowMs - startedAtMs).coerceAtLeast(0L)
+                  )
+                  current = state
+              }
+
+              fun snapshot(finalState: String): GenerationNetworkSnapshot =
+                  GenerationNetworkSnapshot(
+                      atDispatch = initial,
+                      atFailure = finalState,
+                      transitions = changes.toList()
+                  )
+          }
+
+          class GenerationNetworkMonitor(context: Context) : AutoCloseable {
+              private val connectivityManager =
+                  context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+              private val startedAtMs = SystemClock.elapsedRealtime()
+              private val traceLock = Any()
+              private val trace = NetworkTransitionTrace(currentTransport(), startedAtMs)
+              @Volatile private var registered = false
+
+              private val callback = object : ConnectivityManager.NetworkCallback() {
+                  override fun onAvailable(network: Network) {
+                      record(stateFor(network))
+                  }
+
+                  override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                      record(stateFor(networkCapabilities))
+                  }
+
+                  override fun onLost(network: Network) {
+                      record(currentTransport())
+                  }
+              }
+
+              init {
+                  try {
+                      connectivityManager.registerDefaultNetworkCallback(callback)
+                      registered = true
+                  } catch (_: Throwable) {
+                      registered = false
+                  }
+              }
+
+              fun snapshot(): GenerationNetworkSnapshot {
+                  val finalState = currentTransport()
+                  synchronized(traceLock) {
+                      // If a callback was delayed/missed, the failure-time sample still records
+                      // that the default transport changed during this request.
+                      trace.record(finalState, SystemClock.elapsedRealtime())
+                      return trace.snapshot(finalState)
+                  }
+              }
+
+              private fun record(state: String) {
+                  synchronized(traceLock) {
+                      trace.record(state, SystemClock.elapsedRealtime())
+                  }
+              }
+
+              private fun currentTransport(): String = try {
+                  val network = connectivityManager.activeNetwork ?: return "none"
+                  stateFor(network)
+              } catch (_: Throwable) {
+                  "unknown"
+              }
+
+              private fun stateFor(network: Network): String = try {
+                  val caps = connectivityManager.getNetworkCapabilities(network) ?: return "unknown"
+                  stateFor(caps)
+              } catch (_: Throwable) {
+                  "unknown"
+              }
+
+              private fun stateFor(caps: NetworkCapabilities): String = when {
+                  caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+                  caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+                  caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+                  caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "vpn"
+                  else -> "other"
+              }
+
+              override fun close() {
+                  if (!registered) return
+                  registered = false
+                  try {
+                      connectivityManager.unregisterNetworkCallback(callback)
+                  } catch (_: Throwable) {}
+              }
+          }
+
+          data class GenerationFailureSnapshot(
+              val voiceLive: Boolean,
+              val network: GenerationNetworkSnapshot,
+              val generationKeepAlive: GenerationKeepAliveDiagnostics,
+              val handsFreeKeepAlive: HandsFreeConnectionDiagnostics
+          ) {
+              fun asLogLines(): List<String> = listOf(
+                  "Network at dispatch: ${network.atDispatch}",
+                  "Network at failure: ${network.atFailure}",
+                  "Network transitions: ${network.transitionsDisplay()}",
+                  "Generation keep-alive: ${generationKeepAlive.asLogFields()}",
+                  "Hands-free keep-alive: ${handsFreeKeepAlive.asLogFields()}"
+              )
+          }
+
+          internal fun resolveFailureVoiceState(
+              captured: GenerationFailureSnapshot?,
+              currentVoiceLive: Boolean
+          ): Boolean = captured?.voiceLive ?: currentVoiceLive
+          ''')
+
+          # Regression coverage for network transitions and pre-teardown voice provenance.
+          Path('app/src/test/java/org/teslasoft/assistant/util/GenerationNetworkDiagnosticsTest.kt').write_text(r'''package org.teslasoft.assistant.util
+
+          import org.junit.Assert.assertEquals
+          import org.junit.Assert.assertFalse
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+          import org.teslasoft.assistant.service.GenerationKeepAliveDiagnostics
+          import org.teslasoft.assistant.service.HandsFreeConnectionDiagnostics
+
+          class GenerationNetworkDiagnosticsTest {
+              @Test fun traceRecordsOnlyRealTransportChanges() {
+                  val trace = NetworkTransitionTrace("wifi", 1000L)
+                  trace.record("wifi", 1200L)
+                  trace.record("cellular", 195842L)
+                  trace.record("cellular", 196000L)
+
+                  val snapshot = trace.snapshot("cellular")
+                  assertEquals("wifi", snapshot.atDispatch)
+                  assertEquals("cellular", snapshot.atFailure)
+                  assertEquals(1, snapshot.transitions.size)
+                  assertEquals("wifi", snapshot.transitions.single().from)
+                  assertEquals("cellular", snapshot.transitions.single().to)
+                  assertEquals(194842L, snapshot.transitions.single().elapsedMs)
+                  assertEquals("wifi -> cellular at +194842 ms", snapshot.transitionsDisplay())
+              }
+
+              @Test fun noTransitionIsExplicit() {
+                  val trace = NetworkTransitionTrace("wifi", 0L)
+                  val snapshot = trace.snapshot("wifi")
+                  assertEquals("none observed", snapshot.transitionsDisplay())
+              }
+
+              @Test fun capturedVoiceStateWinsAfterTeardown() {
+                  val captured = GenerationFailureSnapshot(
+                      voiceLive = true,
+                      network = GenerationNetworkSnapshot("wifi", "cellular", emptyList()),
+                      generationKeepAlive = GenerationKeepAliveDiagnostics(
+                          serviceRunning = true,
+                          activeGenerations = 1,
+                          serviceAgeMs = 100L,
+                          wakeLockHeld = true,
+                          wifiLockHeld = true,
+                          lastFailure = null
+                      ),
+                      handsFreeKeepAlive = HandsFreeConnectionDiagnostics(
+                          serviceRunning = true,
+                          serviceAgeMs = 1000L,
+                          wakeLockHeld = true,
+                          wifiLockHeld = true,
+                          wifiLockFailure = null
+                      )
+                  )
+
+                  assertTrue(resolveFailureVoiceState(captured, currentVoiceLive = false))
+                  assertFalse(resolveFailureVoiceState(null, currentVoiceLive = false))
+              }
+          }
+          ''')
+
+          # Regression coverage for provider finish-reason provenance.
+          Path('app/src/test/java/org/teslasoft/assistant/preferences/ResponseLifecycleFinishReasonProvenanceTest.kt').write_text(r'''package org.teslasoft.assistant.preferences
+
+          import org.junit.Assert.assertTrue
+          import org.junit.Test
+
+          class ResponseLifecycleFinishReasonProvenanceTest {
+              @Test fun networkFailureWithoutProviderFinishReasonReportsMissing() {
+                  val body = format(
+                      finishReason = "missing",
+                      termination = ResponseLifecycle.Termination.NETWORK_ERROR,
+                      error = "SocketException: Software caused connection abort"
+                  )
+                  assertTrue(body.contains("Finish Reason: missing"))
+                  assertTrue(body.contains("Finish Reason Received: false"))
+              }
+
+              @Test fun typedProviderErrorFinishReasonIsStillReportedAsReceived() {
+                  val body = format(
+                      finishReason = "error",
+                      termination = ResponseLifecycle.Termination.PROVIDER_ERROR,
+                      error = "provider stream terminated"
+                  )
+                  assertTrue(body.contains("Finish Reason: error"))
+                  assertTrue(body.contains("Finish Reason Received: true"))
+              }
+
+              @Test fun rawProviderErrorWithoutFinishReasonDoesNotInventOne() {
+                  val recorder = recorder("T-provider-error-no-finish")
+                  recorder.beginProviderObservation()
+                  recorder.noteActualModelProvider(
+                      RawStreamObservationCodec.encode(
+                          RawStreamObservation(
+                              sseDataEvents = 2,
+                              providerErrorReceived = true,
+                              providerErrorSummary = "upstream disconnected",
+                              finishReason = null,
+                              flowEndedNormally = true
+                          )
+                      )
+                  )
+                  recorder.finishProviderObservation()
+
+                  val body = format(
+                      finishReason = "missing",
+                      termination = ResponseLifecycle.Termination.PREMATURE_STREAM_CLOSE,
+                      error = null,
+                      attemptId = recorder.attemptId
+                  )
+                  assertTrue(body.contains("Termination Source: provider_error"))
+                  assertTrue(body.contains("Finish Reason: missing"))
+                  assertTrue(body.contains("Finish Reason Received: false"))
+              }
+
+              @Test fun rawProviderFinishReasonIsReportedAsReceived() {
+                  val recorder = recorder("T-provider-error-finish")
+                  recorder.beginProviderObservation()
+                  recorder.noteActualModelProvider(
+                      RawStreamObservationCodec.encode(
+                          RawStreamObservation(
+                              sseDataEvents = 2,
+                              providerErrorReceived = true,
+                              providerErrorSummary = "upstream disconnected",
+                              finishReason = "error",
+                              flowEndedNormally = true
+                          )
+                      )
+                  )
+                  recorder.finishProviderObservation()
+
+                  val body = format(
+                      finishReason = "missing",
+                      termination = ResponseLifecycle.Termination.PREMATURE_STREAM_CLOSE,
+                      error = null,
+                      attemptId = recorder.attemptId
+                  )
+                  assertTrue(body.contains("Finish Reason: error"))
+                  assertTrue(body.contains("Finish Reason Received: true"))
+              }
+
+              private fun format(
+                  finishReason: String,
+                  termination: ResponseLifecycle.Termination,
+                  error: String?,
+                  attemptId: String? = null
+              ): String = ResponseLifecycle.format(
+                  turnId = "T-finish-provenance",
+                  phase = ResponseLifecycle.PHASE_PRIMARY,
+                  apiProvider = "OpenRouter",
+                  apiEndpoint = "https://openrouter.ai/api/v1/",
+                  actualModelProvider = null,
+                  model = "model",
+                  outcome = ResponseLifecycle.Outcome.INCOMPLETE,
+                  finishReasonDisplay = finishReason,
+                  streamClosed = true,
+                  termination = termination,
+                  requestedMaxOutput = null,
+                  promptTokens = null,
+                  completionTokens = null,
+                  totalTokens = null,
+                  receivedCharacters = 0,
+                  durationMs = 10L,
+                  generationId = null,
+                  errorText = error,
+                  attemptId = attemptId
+              )
+
+              private fun recorder(turnId: String) = ResponseLifecycleRecorder(
+                  turnId = turnId,
+                  phase = ResponseLifecycle.PHASE_PRIMARY,
+                  apiProvider = "OpenRouter",
+                  apiEndpoint = "https://openrouter.ai/api/v1/",
+                  model = "model",
+                  requestedMaxOutput = null,
+                  startUptimeMs = 0L
+              )
+          }
+          ''')
+
+          print('Targeted generation diagnostics repair applied.')
+          PY
+
+      - name: Show scoped diff
+        run: |
+          git status --short
+          git diff --check
+          git diff --stat
+
+      - name: Commit repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt \
+            app/src/main/java/org/teslasoft/assistant/preferences/ResponseLifecycle.kt \
+            app/src/main/java/org/teslasoft/assistant/service/GenerationForegroundService.kt \
+            app/src/main/java/org/teslasoft/assistant/service/HandsFreeService.kt \
+            app/src/main/java/org/teslasoft/assistant/util/GenerationNetworkDiagnostics.kt \
+            app/src/test/java/org/teslasoft/assistant/util/GenerationNetworkDiagnosticsTest.kt \
+            app/src/test/java/org/teslasoft/assistant/preferences/ResponseLifecycleFinishReasonProvenanceTest.kt
+          git diff --cached --check
+          git commit -m "Fix generation failure diagnostics provenance"
+          git push origin HEAD:agent/generation-diagnostics-repair
