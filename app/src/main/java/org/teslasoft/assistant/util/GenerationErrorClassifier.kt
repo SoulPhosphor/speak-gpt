@@ -90,11 +90,11 @@ object GenerationErrorClassifier {
             }
             append(error.stackTraceToString())
         }
-        val status = extractHttpStatus(text)
-        val lower = text.lowercase()
         val structured = extractStructuredEvidence(chain)
         val structuredCodes = structured.codesAndTypes.lowercase()
         val structuredBodies = structured.bodies.lowercase()
+        val status = extractHttpStatus(text) ?: extractStructuredHttpStatus(structuredCodes)
+        val lower = text.lowercase()
 
         // 1. Auth.
         if (status == 401 || lower.contains("incorrect api key") ||
@@ -340,6 +340,15 @@ object GenerationErrorClassifier {
         return StructuredEvidence(codesAndTypes.toString(), bodies.toString())
     }
 
+    private fun extractStructuredHttpStatus(codesAndTypes: String): Int? {
+        val matches = Regex("""\b([1-5]\d{2})\b""").findAll(codesAndTypes)
+        for (match in matches) {
+            val code = match.groupValues[1].toIntOrNull() ?: continue
+            if (code in 100..599) return code
+        }
+        return null
+    }
+
     /** The throwable and its cause chain, guarding against a cyclic `cause`. */
     private fun causeChain(error: Throwable): List<Throwable> {
         val out = ArrayList<Throwable>()
@@ -359,17 +368,17 @@ object GenerationErrorClassifier {
 
     /**
      * Best-effort HTTP status from common phrasings ("status code 401",
-     * "HTTP/1.1 404", "429 Too Many Requests"). Conservative on purpose: a status
-     * is a bonus for the log and for disambiguation, but classification never
-     * depends on it alone, so a missed status simply falls through to text
-     * matching rather than risking a wrong number scraped out of a stack trace.
+     * "HTTP/1.1 404", "429 Too Many Requests", or client-generic "400 ERROR").
+     * Conservative on purpose: a status is a bonus for the log and for
+     * disambiguation, but classification never depends on it alone.
      */
     private fun extractHttpStatus(text: String): Int? {
         val patterns = listOf(
             Regex("""status\s*code[ =:]*\s*(\d{3})""", RegexOption.IGNORE_CASE),
             Regex("""\bHTTP/?\d?(?:\.\d)?\s+(\d{3})\b"""),
+            Regex("""\b(\d{3})\s+ERROR\b""", RegexOption.IGNORE_CASE),
             Regex(
-                """\b(\d{3})\s+(?:Unauthorized|Payment Required|Forbidden|Not Found|Bad Request|Too Many Requests|""" +
+                """\b(\d{3})\s+(?:Unauthorized|Payment Required|Forbidden|Not Found|Bad Request|Unprocessable Entity|Too Many Requests|""" +
                     """Payload Too Large|Request Entity Too Large|Internal Server Error|""" +
                     """Bad Gateway|Service Unavailable|Gateway Timeout)\b"""
             )
