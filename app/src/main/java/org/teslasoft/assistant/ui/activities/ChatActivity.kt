@@ -7039,6 +7039,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         scroll(true)
         // Dispatch begins at collection; a failure past this point is a real
         // provider/network end, not a pre-dispatch one.
+        startGenerationNetworkDiagnostics()
         providerRequestDispatched = true
         completions.flowOn(Dispatchers.IO).collect { v ->
             if (!currentCoroutineContext().isActive) throw CancellationException()
@@ -7081,6 +7082,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // when it is off, [currentLifecycle] stays null and these helpers no-op.
     @Volatile
     private var currentLifecycle: ResponseLifecycleRecorder? = null
+
+    /** Network transport evidence for the currently dispatched provider request. */
+    private var generationNetworkMonitor: org.teslasoft.assistant.util.GenerationNetworkMonitor? = null
 
     /** Whether the in-flight streamed request has actually begun dispatch/
      *  collection. False throughout request construction; set true immediately
@@ -8303,7 +8307,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                 // Dispatch begins at collection; a failure past this point is a
                 // real provider/network end, not a pre-dispatch one.
-                providerRequestDispatched = true
+                startGenerationNetworkDiagnostics()
+        providerRequestDispatched = true
                 completions.flowOn(Dispatchers.IO).collect { v ->
                     run {
                         if (!currentCoroutineContext().isActive) throw CancellationException()
@@ -8372,7 +8377,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             // tools. Close its lifecycle record before the
                             // without-tools retry opens a fresh primary record.
                             finalizeLifecycleTerminal(
-                                ResponseLifecycle.Outcome.INCOMPLETE, "error", true,
+                                ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
                                 ResponseLifecycle.Termination.PROVIDER_ERROR, toolsError.message
                             )
                             val previousState = learnToolsUnsupportedAndNotify()
@@ -8481,13 +8486,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         } catch (e: Exception) {
             playErrorSignal()
+            val failureDiagnostics = captureGenerationFailureDiagnostics()
             stopHandsFreeOnError()
             // Single funnel: classify the failure to a stable code, always write
             // the diagnostic Error Log entry, and show the user the short coded
             // message (no profile/URL/model/trace — those live in the log). See
             // ERROR_CODES.md.
             val genError = GenerationErrorClassifier.classify(e)
-            logGenerationError(genError, e, "message")
+            logGenerationError(genError, e, "message", failureDiagnostics)
 
             if (genError.isVisionRejection && conversationHasFullImages(chatMessageIncludes)) {
                 recordVisionCapability(ImageCapability.UNSUPPORTED)
@@ -8542,7 +8548,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 (providerInfo.message ?: e.message)?.trim()?.ifBlank { null }
             ).joinToString(" ").ifBlank { e.message ?: "error" }
             finalizeLifecycleTerminal(
-                ResponseLifecycle.Outcome.INCOMPLETE, "error", true,
+                ResponseLifecycle.Outcome.INCOMPLETE,
+                currentLifecycle?.lastFinishReason ?: "missing",
+                true,
                 lifecycleTermination, lifecycleError
             )
 
@@ -8602,6 +8610,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 messageInput?.requestFocus()
             }
         } finally {
+            try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
+            generationNetworkMonitor = null
             GenerationForegroundService.end(this)
             // Memory system transcript capture: this finally is the one place
             // every turn (typed or voice, success or failure) passes exactly
@@ -8743,8 +8753,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * and the full last-known voice info is left in the Voice Debug Log too (see
      * logVoiceFailureSnapshot) so a clue is there even with per-turn logging off.
      */
-    private fun logGenerationError(result: GenErrorResult, e: Throwable, trigger: String) {
-        val voiceLive = isVoiceLive()
+    private fun logGenerationError(
+        result: GenErrorResult,
+        e: Throwable,
+        trigger: String,
+        failureSnapshot: org.teslasoft.assistant.util.GenerationFailureSnapshot? = null
+    ) {
+        val voiceLive = org.teslasoft.assistant.util.resolveFailureVoiceState(
+            failureSnapshot,
+            isVoiceLive()
+        )
         try {
             val sb = StringBuilder()
             sb.append(result.providerLimitMessage(this) ?: result.chatMessage(this)).append('\n')
@@ -8754,7 +8772,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             sb.append("Voice: ${if (voiceLive) "active" else "inactive"}\n")
             sb.append("Trigger: $trigger\n")
             sb.append("Screen: ${screenState()}\n")
-            sb.append("Network: ${networkState()}\n")
+            if (failureSnapshot != null) {
+                failureSnapshot.asLogLines().forEach { line ->
+                    sb.append(line).append('\n')
+                }
+            } else {
+                sb.append("Network: ${networkState()}\n")
+            }
             sb.append("Power save: ${powerSaveState()}")
             result.httpStatus?.let { sb.append("\nHTTP status: $it") }
             if (voiceLive) sb.append('\n').append(compactVoiceContext())
@@ -8768,7 +8792,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         // Failure clue into the Voice Debug Log even when per-turn voice logging is
         // off (ERROR_CODES.md section 5). No-op when voice wasn't live.
-        logVoiceFailureSnapshot(result.code.code)
+        logVoiceFailureSnapshot(result.code.code, voiceLive)
     }
 
     /** "on"/"off"/"unknown" — whether the screen was interactive at failure time.
@@ -8851,6 +8875,32 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         audioRouteCallback = null
     }
 
+    /** Start a fresh trace at the exact point this provider request begins collection. */
+    private fun startGenerationNetworkDiagnostics() {
+        try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
+        generationNetworkMonitor = try {
+            org.teslasoft.assistant.util.GenerationNetworkMonitor(this)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /** Freeze failure facts before hands-free/error teardown mutates the evidence. */
+    private fun captureGenerationFailureDiagnostics(): org.teslasoft.assistant.util.GenerationFailureSnapshot {
+        val network = generationNetworkMonitor?.snapshot()
+            ?: org.teslasoft.assistant.util.GenerationNetworkSnapshot(
+                atDispatch = "not observed",
+                atFailure = networkState(),
+                transitions = emptyList()
+            )
+        return org.teslasoft.assistant.util.GenerationFailureSnapshot(
+            voiceLive = isVoiceLive(),
+            network = network,
+            generationKeepAlive = GenerationForegroundService.diagnostics(),
+            handsFreeKeepAlive = HandsFreeService.connectionDiagnostics()
+        )
+    }
+
     /** Active transport: wifi/cellular/ethernet/other/none/unknown. Best-effort;
      *  any failure (e.g. missing permission) is reported as "unknown". */
     private fun networkState(): String = try {
@@ -8885,8 +8935,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** On a failure while voice was live, write the full last-known voice info to
      *  the Voice Debug Log ("event" channel) regardless of the VAD-logging
      *  toggles, so a failure always leaves a clue there (ERROR_CODES.md section 5). */
-    private fun logVoiceFailureSnapshot(code: String) {
-        if (!isVoiceLive()) return
+    private fun logVoiceFailureSnapshot(code: String, voiceWasLive: Boolean = isVoiceLive()) {
+        if (!voiceWasLive) return
         try {
             val engine = LocalWhisperEngine.get()
             val parts = ArrayList<String>()
@@ -9778,6 +9828,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         // The provider request begins dispatch here; from this point a failure
         // is a genuine provider/network/stream end, not a pre-dispatch one.
+        startGenerationNetworkDiagnostics()
         providerRequestDispatched = true
         completions.flowOn(Dispatchers.IO).collect { v ->
             run {
