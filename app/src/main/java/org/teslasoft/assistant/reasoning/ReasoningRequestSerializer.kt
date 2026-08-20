@@ -26,8 +26,8 @@ import com.google.gson.JsonParser
  * provider-routing serializer and rides the SAME body-augmentation hook, so no
  * separate request transport is introduced.
  *
- * Two wire shapes, chosen by endpoint identity, since capability is keyed to
- * the effective path (§7.9):
+ * Two wire shapes, chosen by the normalized request boundary on the capability
+ * object. Callers never pass an OpenRouter boolean into this layer:
  *
  * - **OpenRouter** — the unified `reasoning` object: `{ "effort": "..." }` for
  *   an explicit level, `{ "enabled": false }` to disable, and `"exclude": true`
@@ -48,24 +48,27 @@ object ReasoningRequestSerializer {
 
     /**
      * The fields to set on the request root for this turn, or null when there
-     * is nothing to add. Shape depends on [isOpenRouter].
+     * is nothing to add. Unsupported saved values are rejected defensively
+     * here as well as by [ReasoningSettingsResolver].
      */
     fun requestFields(
         resolved: ResolvedReasoning,
-        isOpenRouter: Boolean,
-        reasoningCapable: Boolean
+        capability: ReasoningCapability
     ): JsonObject? {
         // Never send a reasoning parameter to a model not known to reason.
-        if (!reasoningCapable) return null
+        if (!capability.isReasoningCapable || !capability.supports(resolved.effort)) return null
 
-        return if (isOpenRouter) {
-            openRouterFields(resolved)
+        return if (capability.requestFormat == ReasoningRequestFormat.OPENROUTER) {
+            openRouterFields(resolved, capability.canReturnVisibleReasoning)
         } else {
             genericFields(resolved)
         }
     }
 
-    private fun openRouterFields(resolved: ResolvedReasoning): JsonObject? {
+    private fun openRouterFields(
+        resolved: ResolvedReasoning,
+        canReturnVisibleReasoning: Boolean
+    ): JsonObject? {
         val reasoning = JsonObject()
         when {
             resolved.disablesReasoning -> reasoning.addProperty("enabled", false)
@@ -73,7 +76,7 @@ object ReasoningRequestSerializer {
         }
         // Show Reasoning Off → ask OpenRouter not to return reasoning content.
         // The model still reasons; only its return/display is suppressed.
-        if (!resolved.showReasoning && !resolved.disablesReasoning) {
+        if (!resolved.showReasoning && canReturnVisibleReasoning && !resolved.disablesReasoning) {
             reasoning.addProperty("exclude", true)
         }
         if (reasoning.size() == 0) return null
@@ -103,10 +106,9 @@ object ReasoningRequestSerializer {
     fun augmentBody(
         body: String,
         resolved: ResolvedReasoning,
-        isOpenRouter: Boolean,
-        reasoningCapable: Boolean
+        capability: ReasoningCapability
     ): String {
-        val fields = requestFields(resolved, isOpenRouter, reasoningCapable) ?: return body
+        val fields = requestFields(resolved, capability) ?: return body
         return try {
             val root = JsonParser.parseString(body).asJsonObject
             for ((key, value) in fields.entrySet()) {

@@ -25,6 +25,7 @@ import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -78,6 +79,7 @@ import kotlin.time.Duration.Companion.seconds
  */
 class AdvancedModelSelectorDialogFragment : DialogFragment() {
     companion object {
+        private const val TAG = "AdvancedModelSelector"
         private const val ARG_START_WITH_ALL_MODELS = "startWithAllModels"
         private const val ARG_RAW_MODEL_CATALOG = "rawModelCatalog"
         private const val ARG_CURRENT_CHAT_MODEL = "currentChatModel"
@@ -384,8 +386,29 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
                 val dataEl = parsed.get("data")
                 if (dataEl == null || dataEl.isJsonNull || !dataEl.isJsonArray) {
+                    Log.w(TAG, "Model catalog capability discovery failed: response has no data array")
                     showProviderError(message)
                     return
+                }
+
+                // Reuse this catalog response for capability discovery. The
+                // model list and reasoning metadata must come from one request,
+                // so a failed capability pass cannot be hidden by a second
+                // request that only exists for reasoning.
+                apiEndpointObject?.let { endpoint ->
+                    val current = endpoint.reasoningCapabilityByModel
+                    val requestFormat = org.teslasoft.assistant.reasoning.ReasoningRequestFormat
+                        .forEndpoint(endpoint.provider, endpoint.host)
+                    val updated = org.teslasoft.assistant.reasoning.EndpointReasoningCapability
+                        .learnFromCatalogJson(current, message, requestFormat)
+                    if (updated != current) {
+                        endpoint.reasoningCapabilityByModel = updated
+                        try {
+                            apiEndpointPreferences?.setApiEndpoint(requireContext(), endpoint)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not persist model reasoning capabilities", e)
+                        }
+                    }
                 }
 
                 val ids = dataEl.asJsonArray.mapNotNull { el ->
@@ -393,6 +416,13 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                     val obj = el.asJsonObject
                     val id = obj.get("id")?.takeIf { !it.isJsonNull }?.asString
                         ?: return@mapNotNull null
+                    // The ordinary chat picker keeps the SDK path's existing
+                    // exclusions even though OpenRouter now uses raw JSON so
+                    // its capability metadata is available. Provider-wide,
+                    // image, and model-rule modes intentionally keep every id.
+                    if (!imageMode && !startsWithAllModels && !rawModelCatalog &&
+                        !catalogAllowsChatModel(id)
+                    ) return@mapNotNull null
                     // Image variant: capability metadata may narrow the list
                     // (§10) — an entry is dropped ONLY when its catalog entry
                     // explicitly says its outputs exclude image. Entries with
@@ -403,6 +433,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 }
 
                 if (ids.isEmpty()) {
+                    Log.w(TAG, "Model catalog capability discovery failed: data array contains no usable model ids")
                     showProviderError(message)
                     return
                 }
@@ -411,11 +442,13 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 catalogLoaded = true
                 render()
             } catch (e: Exception) {
+                Log.w(TAG, "Model catalog capability discovery failed while parsing response", e)
                 showProviderError(message, e)
             }
         }
 
         override fun onErrorResponse(tag: String, message: String) {
+            Log.w(TAG, "Model catalog capability discovery request failed: ${message.take(400)}")
             showProviderError(message)
         }
     }
@@ -430,6 +463,16 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         return modalities.any { m ->
             !m.isJsonNull && m.isJsonPrimitive && m.asString.equals("image", ignoreCase = true)
         }
+    }
+
+    private fun catalogAllowsChatModel(id: String): Boolean {
+        val lower = id.lowercase()
+        return (!lower.contains("tts") &&
+            !lower.contains("dall") &&
+            !lower.contains("whisper") &&
+            !lower.contains("embedding") &&
+            !lower.contains("vision")) ||
+            lower.contains("ft:") || lower.contains(":ft")
     }
 
     private fun showProviderError(responseBody: String?, e: Exception? = null) {
@@ -609,48 +652,6 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
         render()
         startCatalogFetch()
-        syncReasoningCapability()
-    }
-
-    /**
-     * Best-effort background capability discovery (chat-redesign-plan.md §7.7):
-     * for an OpenRouter endpoint, read the model catalog's structured
-     * `supported_parameters` and fold any reasoning models into this endpoint's
-     * persisted capability store, so favorite rows and View All can show the
-     * reasoning lightbulb and requests can send reasoning without a paid call.
-     * Independent of the visible list fetch and fully fail-safe: any error just
-     * leaves capability as it was. When it learns something new it persists the
-     * endpoint and re-renders so newly-known lightbulbs appear.
-     */
-    private fun syncReasoningCapability() {
-        val endpoint = apiEndpointObject ?: return
-        if (!endpoint.isOpenRouterRouting()) return
-        val activity = (mContext as? Activity) ?: return
-        val net = RequestNetwork(activity)
-        val authHeaders = HashMap<String, Any>()
-        val apiKey = endpoint.apiKey
-        when (endpoint.authType) {
-            ApiEndpointObject.AUTH_X_API_KEY -> authHeaders["x-api-key"] = apiKey
-            ApiEndpointObject.AUTH_API_KEY -> authHeaders["api-key"] = apiKey
-            else -> authHeaders["Authorization"] = "Bearer $apiKey"
-        }
-        net.setHeaders(authHeaders)
-        val base = endpoint.host.let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
-        net.startRequestNetwork("GET", base + "models", "reasoningCaps", object : RequestNetwork.RequestListener {
-            override fun onResponse(tag: String, message: String) {
-                if (!isAdded) return
-                val current = endpoint.reasoningCapabilityByModel
-                val updated = org.teslasoft.assistant.reasoning.EndpointReasoningCapability
-                    .learnFromCatalogJson(current, message)
-                if (updated != current) {
-                    endpoint.reasoningCapabilityByModel = updated
-                    apiEndpointPreferences?.setApiEndpoint(requireContext(), endpoint)
-                    render()
-                }
-            }
-
-            override fun onErrorResponse(tag: String, message: String) { /* capability sync is best-effort */ }
-        })
     }
 
     /** System/hardware back: from the full list return to the favorites
@@ -699,10 +700,12 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     /** Fetch the endpoint's catalog. The provider-wide purpose uses the raw
      *  endpoint response so "all models" really means every model id the
      *  endpoint advertises. The ordinary chat picker keeps its established SDK
-     *  filtering, and image mode keeps the raw capability-aware path. */
+     *  filtering, and image mode keeps the raw capability-aware path. OpenRouter
+     *  also uses the raw path so its richer reasoning metadata is learned from
+     *  the same catalog response that populates the list. */
     private fun startCatalogFetch() {
         val endpoint = apiEndpointObject ?: return
-        if (imageMode || startsWithAllModels || rawModelCatalog) {
+        if (endpoint.isOpenRouterRouting() || imageMode || startsWithAllModels || rawModelCatalog) {
             startRawModelsRequest()
             return
         }

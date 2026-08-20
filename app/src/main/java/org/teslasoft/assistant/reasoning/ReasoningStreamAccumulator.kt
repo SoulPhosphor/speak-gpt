@@ -31,8 +31,9 @@ import com.google.gson.JsonParser
  * - `choices[].delta.reasoning` — OpenRouter / xAI and compatibles.
  * - `choices[].delta.reasoning_content` — DeepSeek and compatibles.
  * - `choices[].delta.reasoning_details[]` — OpenRouter structured blocks, whose
- *   `text` is concatenated and whose `type` can mark a summary rather than raw
- *   reasoning (a `*.summary` type preserves it AS a summary, §7.2).
+ *   `summary` (or legacy-compatible `text`) is concatenated and whose `type`
+ *   can mark a summary rather than raw reasoning (a `*.summary` type preserves
+ *   it AS a summary, §7.2).
  * - reasoning token usage from `usage.completion_tokens_details.reasoning_tokens`
  *   or `usage.reasoning_tokens`, kept SEPARATE from answer tokens (§7.8).
  *
@@ -96,9 +97,11 @@ class ReasoningStreamAccumulator {
                 collectDetailBlock(block)
                 val type = stringOrNull(block, "type").orEmpty().lowercase()
                 if (type.contains("summary")) sawSummaryBlock = true else if (type.isNotEmpty()) sawRawBlock = true
-                // The human-readable payload is `text`; `data` blocks (encrypted
-                // continuation state) carry no display text and are skipped here.
-                stringOrNull(block, "text")?.let { reasoning.append(it) }
+                // Current OpenRouter summary blocks carry `summary`. Keep the
+                // older `text` shape as a compatibility fallback; `data` blocks
+                // (encrypted continuation state) carry no display text.
+                (stringOrNull(block, "summary") ?: stringOrNull(block, "text"))
+                    ?.let { reasoning.append(it) }
             }
     }
 

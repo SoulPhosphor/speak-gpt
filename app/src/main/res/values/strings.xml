@@ -3215,6 +3215,8 @@
     <string name="reasoning_effort_low">Low</string>
     <string name="reasoning_effort_medium">Medium</string>
     <string name="reasoning_effort_high">High</string>
+    <string name="reasoning_effort_xhigh">XHigh</string>
+    <string name="reasoning_effort_max">Max</string>
     <!-- Favorite Reasoning Settings screen (chat-redesign-plan.md §7.4). -->
     <string name="reasoning_settings_title">Reasoning Settings</string>
     <string name="reasoning_show_reasoning_label">Show Reasoning</string>

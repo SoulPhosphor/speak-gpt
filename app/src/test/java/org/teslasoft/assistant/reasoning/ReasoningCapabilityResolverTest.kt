@@ -19,6 +19,7 @@ package org.teslasoft.assistant.reasoning
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReasoningCapabilityResolverTest {
@@ -31,7 +32,7 @@ class ReasoningCapabilityResolverTest {
         // an OpenRouter entry present for it should decide via metadata.
         val cap = ReasoningCapabilityResolver.resolve(
             modelId = "openai/o3",
-            openRouterModelEntry = entry("""{"supported_parameters":["reasoning"]}""")
+            modelCatalogEntry = entry("""{"supported_parameters":["reasoning"]}""")
         )
         assertEquals(CapabilitySource.PROVIDER_METADATA, cap.source)
     }
@@ -41,6 +42,18 @@ class ReasoningCapabilityResolverTest {
         val cap = ReasoningCapabilityResolver.resolve(modelId = "o3-mini")
         assertEquals(CapabilitySource.PROVIDER_ADAPTER, cap.source)
         assertEquals(ReasoningSupport.KNOWN, cap.support)
+    }
+
+    @Test
+    fun nonOpenRouterProviderUsesTheSameNormalizedCapability() {
+        val cap = ReasoningCapabilityResolver.resolve(
+            modelId = "deepseek-reasoner",
+            providerHint = "DeepSeek",
+            endpointHost = "https://api.deepseek.com/v1/"
+        )
+        assertEquals(CapabilitySource.PROVIDER_ADAPTER, cap.source)
+        assertEquals(ReasoningRequestFormat.OPENAI_COMPATIBLE, cap.requestFormat)
+        assertTrue(cap.canReturnVisibleReasoning)
     }
 
     @Test
@@ -62,7 +75,7 @@ class ReasoningCapabilityResolverTest {
         // known reasoning family, so the adapter tier should classify it.
         val cap = ReasoningCapabilityResolver.resolve(
             modelId = "o3",
-            openRouterModelEntry = entry("""{"supported_parameters":["tools","max_tokens"]}""")
+            modelCatalogEntry = entry("""{"supported_parameters":["tools","max_tokens"]}""")
         )
         assertEquals(CapabilitySource.PROVIDER_ADAPTER, cap.source)
     }

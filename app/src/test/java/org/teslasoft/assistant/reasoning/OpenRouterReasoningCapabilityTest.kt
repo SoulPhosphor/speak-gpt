@@ -29,20 +29,101 @@ class OpenRouterReasoningCapabilityTest {
     private fun entry(json: String): JsonObject = JsonParser.parseString(json).asJsonObject
 
     @Test
-    fun reasoningObjectMarkerGivesFullControl() {
+    fun currentReasoningMetadataUsesTheModelEffortList() {
         val cap = OpenRouterReasoningCapability.fromModelEntry(
-            entry("""{"id":"x/y","supported_parameters":["max_tokens","reasoning","tools"]}""")
+            entry("""{"id":"x/y","reasoning":{"supported_efforts":["high","medium","low"],"supports_max_tokens":false,"mandatory":false}}""")
         )!!
         assertEquals(ReasoningSupport.KNOWN, cap.support)
         assertTrue(cap.effortConfigurable)
         assertEquals(
-            listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH),
+            listOf(ReasoningEffort.HIGH, ReasoningEffort.MEDIUM, ReasoningEffort.LOW),
             cap.supportedEfforts
         )
         assertTrue(cap.canDisableReasoning)
         assertTrue(cap.canReturnVisibleReasoning)
-        assertTrue(cap.tokenBudgetSupported)
+        assertFalse(cap.tokenBudgetSupported)
         assertEquals(CapabilitySource.PROVIDER_METADATA, cap.source)
+    }
+
+    @Test
+    fun currentMetadataPreservesXhighMediumAndLow() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry("""{"id":"x/y","reasoning":{"supported_efforts":["xhigh","medium","low"]}}""")
+        )!!
+        assertEquals(
+            listOf(ReasoningEffort.XHIGH, ReasoningEffort.MEDIUM, ReasoningEffort.LOW),
+            cap.supportedEfforts
+        )
+    }
+
+    @Test
+    fun nullEffortListMeansAllCurrentGatewayEfforts() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry("""{"id":"x/y","reasoning":{"supported_efforts":null}}""")
+        )!!
+        assertEquals(
+            listOf(
+                ReasoningEffort.MAX,
+                ReasoningEffort.XHIGH,
+                ReasoningEffort.HIGH,
+                ReasoningEffort.MEDIUM,
+                ReasoningEffort.LOW,
+                ReasoningEffort.MINIMAL
+            ),
+            cap.supportedEfforts
+        )
+    }
+
+    @Test
+    fun mandatoryReasoningOmitsOff() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry("""{"id":"x/y","reasoning":{"supported_efforts":["max","high","low"],"mandatory":true}}""")
+        )!!
+        assertFalse(cap.canDisableReasoning)
+        assertFalse(cap.thinkingChoices().contains(ReasoningEffort.OFF))
+        assertFalse(cap.supports(ReasoningEffort.OFF))
+    }
+
+    @Test
+    fun onOffOnlyMetadataDoesNotInventEffortLevels() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry("""{"id":"x/y","reasoning":{"supported_efforts":["none"]}}""")
+        )!!
+        assertTrue(cap.effortConfigurable)
+        assertTrue(cap.supportedEfforts.isEmpty())
+        assertEquals(
+            listOf(ReasoningEffort.AUTO, ReasoningEffort.OFF),
+            cap.thinkingChoices()
+        )
+    }
+
+    @Test
+    fun supportsMaxTokensIsReadOnlyFromDedicatedMetadata() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry("""{"id":"x/y","reasoning":{"supported_efforts":["high"],"supports_max_tokens":true}}""")
+        )!!
+        assertTrue(cap.tokenBudgetSupported)
+    }
+
+    @Test
+    fun knownOpenAiReasoningModelDoesNotPromiseVisibleThinking() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry("""{"id":"openai/o3","reasoning":{"supported_efforts":["low","high"]}}""")
+        )!!
+        assertFalse(cap.canReturnVisibleReasoning)
+    }
+
+    @Test
+    fun legacySupportedParametersRemainACompatibilityFallback() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry("""{"id":"x/y","supported_parameters":["max_tokens","reasoning","tools"]}""")
+        )!!
+        assertEquals(
+            listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH),
+            cap.supportedEfforts
+        )
+        assertFalse(cap.tokenBudgetSupported)
+        assertTrue(cap.canDisableReasoning)
     }
 
     @Test

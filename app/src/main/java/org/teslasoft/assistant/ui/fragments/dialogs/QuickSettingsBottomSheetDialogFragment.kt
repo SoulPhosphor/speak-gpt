@@ -690,7 +690,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         if (model.isBlank()) return org.teslasoft.assistant.reasoning.ReasoningCapability.UNKNOWN
         val endpoint = apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId)
         return org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
-            endpoint?.reasoningCapabilityByModel, model
+            endpoint?.reasoningCapabilityByModel,
+            model,
+            providerHint = endpoint?.provider,
+            endpointHost = endpoint?.host
         )
     }
 

@@ -170,7 +170,10 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
     private fun bindReasoningLightbulb(viewHolder: ViewHolder, modelId: String, endpointId: String, tintColor: Int) {
         val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
         val capability = org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
-            endpoint.reasoningCapabilityByModel, modelId
+            endpoint.reasoningCapabilityByModel,
+            modelId,
+            providerHint = endpoint.provider,
+            endpointHost = endpoint.host
         )
         if (!capability.hasConfigurableSetting) {
             viewHolder.reasoningSettings.visibility = View.GONE

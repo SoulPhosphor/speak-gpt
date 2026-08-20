@@ -25,6 +25,30 @@ import org.junit.Test
 
 class ReasoningRequestSerializerTest {
 
+    private fun capability(
+        format: ReasoningRequestFormat,
+        efforts: List<ReasoningEffort> = listOf(
+            ReasoningEffort.MINIMAL,
+            ReasoningEffort.LOW,
+            ReasoningEffort.MEDIUM,
+            ReasoningEffort.HIGH,
+            ReasoningEffort.XHIGH,
+            ReasoningEffort.MAX
+        ),
+        canDisable: Boolean = true,
+        visible: Boolean = true
+    ) = ReasoningCapability(
+        support = ReasoningSupport.KNOWN,
+        effortConfigurable = efforts.isNotEmpty(),
+        supportedEfforts = efforts,
+        canDisableReasoning = canDisable,
+        canReturnVisibleReasoning = visible,
+        requestFormat = format
+    )
+
+    private val openRouter = capability(ReasoningRequestFormat.OPENROUTER)
+    private val generic = capability(ReasoningRequestFormat.OPENAI_COMPATIBLE)
+
     private fun resolved(
         effort: ReasoningEffort,
         show: Boolean = true
@@ -35,7 +59,7 @@ class ReasoningRequestSerializerTest {
     @Test
     fun openRouterExplicitEffortEmitsReasoningObject() {
         val fields = ReasoningRequestSerializer.requestFields(
-            resolved(ReasoningEffort.HIGH), isOpenRouter = true, reasoningCapable = true
+            resolved(ReasoningEffort.HIGH), openRouter
         )!!
         assertEquals("high", fields.getAsJsonObject("reasoning").get("effort").asString)
     }
@@ -43,7 +67,7 @@ class ReasoningRequestSerializerTest {
     @Test
     fun openRouterOffEmitsEnabledFalse() {
         val fields = ReasoningRequestSerializer.requestFields(
-            resolved(ReasoningEffort.OFF), isOpenRouter = true, reasoningCapable = true
+            resolved(ReasoningEffort.OFF), openRouter
         )!!
         assertFalse(fields.getAsJsonObject("reasoning").get("enabled").asBoolean)
     }
@@ -51,7 +75,7 @@ class ReasoningRequestSerializerTest {
     @Test
     fun openRouterShowReasoningOffExcludesReturnButKeepsEffort() {
         val fields = ReasoningRequestSerializer.requestFields(
-            resolved(ReasoningEffort.MEDIUM, show = false), isOpenRouter = true, reasoningCapable = true
+            resolved(ReasoningEffort.MEDIUM, show = false), openRouter
         )!!
         val reasoning = fields.getAsJsonObject("reasoning")
         assertEquals("medium", reasoning.get("effort").asString)
@@ -62,7 +86,7 @@ class ReasoningRequestSerializerTest {
     fun openRouterAutoWithShowReasoningOnEmitsNothing() {
         assertNull(
             ReasoningRequestSerializer.requestFields(
-                resolved(ReasoningEffort.AUTO), isOpenRouter = true, reasoningCapable = true
+                resolved(ReasoningEffort.AUTO), openRouter
             )
         )
     }
@@ -70,7 +94,7 @@ class ReasoningRequestSerializerTest {
     @Test
     fun openRouterAutoWithShowReasoningOffStillExcludes() {
         val fields = ReasoningRequestSerializer.requestFields(
-            resolved(ReasoningEffort.AUTO, show = false), isOpenRouter = true, reasoningCapable = true
+            resolved(ReasoningEffort.AUTO, show = false), openRouter
         )!!
         assertTrue(fields.getAsJsonObject("reasoning").get("exclude").asBoolean)
     }
@@ -80,7 +104,7 @@ class ReasoningRequestSerializerTest {
     @Test
     fun genericExplicitEffortEmitsReasoningEffort() {
         val fields = ReasoningRequestSerializer.requestFields(
-            resolved(ReasoningEffort.LOW), isOpenRouter = false, reasoningCapable = true
+            resolved(ReasoningEffort.LOW), generic
         )!!
         assertEquals("low", fields.get("reasoning_effort").asString)
     }
@@ -88,7 +112,7 @@ class ReasoningRequestSerializerTest {
     @Test
     fun genericOffEmitsNone() {
         val fields = ReasoningRequestSerializer.requestFields(
-            resolved(ReasoningEffort.OFF), isOpenRouter = false, reasoningCapable = true
+            resolved(ReasoningEffort.OFF), generic
         )!!
         assertEquals("none", fields.get("reasoning_effort").asString)
     }
@@ -97,7 +121,7 @@ class ReasoningRequestSerializerTest {
     fun genericAutoEmitsNothingAndIgnoresShowReasoning() {
         assertNull(
             ReasoningRequestSerializer.requestFields(
-                resolved(ReasoningEffort.AUTO, show = false), isOpenRouter = false, reasoningCapable = true
+                resolved(ReasoningEffort.AUTO, show = false), generic
             )
         )
     }
@@ -108,12 +132,31 @@ class ReasoningRequestSerializerTest {
     fun nonReasoningPathNeverEmitsFields() {
         assertNull(
             ReasoningRequestSerializer.requestFields(
-                resolved(ReasoningEffort.HIGH), isOpenRouter = true, reasoningCapable = false
+                resolved(ReasoningEffort.HIGH), ReasoningCapability.UNKNOWN
             )
         )
         assertNull(
             ReasoningRequestSerializer.requestFields(
-                resolved(ReasoningEffort.HIGH), isOpenRouter = false, reasoningCapable = false
+                resolved(ReasoningEffort.HIGH), ReasoningCapability.UNKNOWN
+            )
+        )
+    }
+
+    @Test
+    fun unsupportedEffortOrDisableSignalIsNeverSerialized() {
+        val highOnlyMandatory = capability(
+            format = ReasoningRequestFormat.OPENROUTER,
+            efforts = listOf(ReasoningEffort.HIGH),
+            canDisable = false
+        )
+        assertNull(
+            ReasoningRequestSerializer.requestFields(
+                resolved(ReasoningEffort.MEDIUM), highOnlyMandatory
+            )
+        )
+        assertNull(
+            ReasoningRequestSerializer.requestFields(
+                resolved(ReasoningEffort.OFF), highOnlyMandatory
             )
         )
     }
@@ -122,7 +165,7 @@ class ReasoningRequestSerializerTest {
     fun augmentBodyMergesReasoningAndPreservesExistingFields() {
         val body = """{"model":"x/y","messages":[],"temperature":0.7}"""
         val out = ReasoningRequestSerializer.augmentBody(
-            body, resolved(ReasoningEffort.HIGH), isOpenRouter = true, reasoningCapable = true
+            body, resolved(ReasoningEffort.HIGH), openRouter
         )
         val root = JsonParser.parseString(out).asJsonObject
         assertEquals("x/y", root.get("model").asString)
@@ -134,7 +177,7 @@ class ReasoningRequestSerializerTest {
     fun augmentBodyIsIdempotentOnReplay() {
         val body = """{"model":"x/y","reasoning":{"effort":"low"}}"""
         val out = ReasoningRequestSerializer.augmentBody(
-            body, resolved(ReasoningEffort.HIGH), isOpenRouter = true, reasoningCapable = true
+            body, resolved(ReasoningEffort.HIGH), openRouter
         )
         val root = JsonParser.parseString(out).asJsonObject
         // Overwritten, not duplicated/merged into a second object.
@@ -147,7 +190,7 @@ class ReasoningRequestSerializerTest {
         assertEquals(
             body,
             ReasoningRequestSerializer.augmentBody(
-                body, resolved(ReasoningEffort.HIGH), isOpenRouter = true, reasoningCapable = true
+                body, resolved(ReasoningEffort.HIGH), openRouter
             )
         )
     }
@@ -158,7 +201,7 @@ class ReasoningRequestSerializerTest {
         assertEquals(
             body,
             ReasoningRequestSerializer.augmentBody(
-                body, resolved(ReasoningEffort.AUTO), isOpenRouter = true, reasoningCapable = true
+                body, resolved(ReasoningEffort.AUTO), openRouter
             )
         )
     }

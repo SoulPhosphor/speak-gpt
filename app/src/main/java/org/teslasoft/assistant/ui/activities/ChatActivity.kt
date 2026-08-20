@@ -5454,7 +5454,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun reasoningCapabilityForModel(model: String): org.teslasoft.assistant.reasoning.ReasoningCapability =
         org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
-            apiEndpointObject?.reasoningCapabilityByModel, model
+            apiEndpointObject?.reasoningCapabilityByModel,
+            model,
+            providerHint = apiEndpointObject?.provider,
+            endpointHost = apiEndpointObject?.host
         )
 
     /**
@@ -5515,17 +5518,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         val resolved = resolveReasoningForModel(model)
         val capability = reasoningCapabilityForModel(model)
-        val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
 
         // Split THIS stream for reasoning when either is true:
         //  - display is wanted: the path can return visible reasoning and Show
         //    Reasoning is on (Auto still returns reasoning by default); or
-        //  - continuation state may be needed: an OpenRouter reasoning path that
-        //    is offering tools, so any reasoning_details produced alongside a
-        //    tool call are captured to echo back on the follow-up (§7.2) — this
-        //    happens even when Show Reasoning is Off.
+        //  - continuation state may be needed: a provider path that requires
+        //    reasoning_details alongside a tool call to be echoed on the
+        //    follow-up (§7.2) — this happens even when Show Reasoning is Off.
         val wantDisplay = capability.isReasoningCapable && capability.canReturnVisibleReasoning && resolved.showReasoning
-        val wantContinuationState = capability.isReasoningCapable && isOpenRouter && bodyHasTools
+        val wantContinuationState = capability.isReasoningCapable && capability.continuationStateSupported && bodyHasTools
         currentTurnShowReasoning = wantDisplay
         if (wantDisplay || wantContinuationState) {
             currentTurnReasoning?.let { request.attributes.put(reasoningObservationAttribute, it) }
@@ -5534,17 +5535,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         // 1) The reasoning request fields for this turn.
         val afterParam = org.teslasoft.assistant.reasoning.ReasoningRequestSerializer.augmentBody(
-            text, resolved, isOpenRouter, capability.isReasoningCapable
+            text, resolved, capability
         )
         val paramAttached = afterParam != text
-        // 2) Reasoning-state continuation (§7.2): on an OpenRouter follow-up that
-        //    carries an assistant tool-call message, echo back the reasoning
-        //    details captured from the turn that produced the tool call. A no-op
-        //    on the primary request (no tool-call assistant message yet) and off
-        //    OpenRouter. Independent of Show Reasoning; never surfaced in the UI.
+        // 2) Reasoning-state continuation (§7.2): on a follow-up that carries an
+        //    assistant tool-call message, echo back the reasoning details
+        //    captured from the turn that produced the tool call. A no-op on the
+        //    primary request and on paths without this capability. Independent
+        //    of Show Reasoning; never surfaced in the UI.
         var newBody = afterParam
         var continuationAttached = false
-        if (isOpenRouter) {
+        if (capability.continuationStateSupported) {
             val withState = org.teslasoft.assistant.reasoning.ReasoningContinuationSerializer
                 .attachToToolCallMessage(newBody, currentTurnReasoning?.reasoningDetails())
             if (withState != newBody) {

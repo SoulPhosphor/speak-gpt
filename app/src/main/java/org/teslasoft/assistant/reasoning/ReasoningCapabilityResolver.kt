@@ -24,8 +24,9 @@ import com.google.gson.JsonObject
  * strongest available source and never converting uncertainty to "absent".
  *
  * Order, strongest first:
- *  1. **Provider/model metadata** — an OpenRouter catalog entry's
- *     `supported_parameters` ([OpenRouterReasoningCapability]).
+ *  1. **Provider/model metadata** — a catalog entry's dedicated reasoning
+ *     object, with `supported_parameters` as the compatibility fallback
+ *     ([OpenRouterReasoningCapability]).
  *  2. **Provider-adapter knowledge** — official reasoning families recognized
  *     by stable id patterns ([DirectProviderReasoningKnowledge]).
  *  3. **Strong variant marker** — a provider-defined reasoning variant suffix
@@ -42,17 +43,21 @@ object ReasoningCapabilityResolver {
 
     /**
      * @param modelId the effective model id for this path.
-     * @param openRouterModelEntry the model's OpenRouter `/models` catalog
-     *   entry when the active endpoint is OpenRouter and the entry was captured;
-     *   null otherwise.
+     * @param modelCatalogEntry the model's catalog entry when the active
+     *   endpoint exposed one; null otherwise.
+     * @param providerHint optional provider label from the endpoint profile.
+     * @param endpointHost optional endpoint base URL.
      */
     fun resolve(
         modelId: String?,
-        openRouterModelEntry: JsonObject? = null
+        modelCatalogEntry: JsonObject? = null,
+        providerHint: String? = null,
+        endpointHost: String? = null
     ): ReasoningCapability {
-        OpenRouterReasoningCapability.fromModelEntry(openRouterModelEntry)?.let { return it }
-        DirectProviderReasoningKnowledge.fromModelId(modelId)?.let { return it }
-        ReasoningVariantMarkers.fromModelId(modelId)?.let { return it }
+        val requestFormat = ReasoningRequestFormat.forEndpoint(providerHint, endpointHost)
+        OpenRouterReasoningCapability.fromModelEntry(modelCatalogEntry, requestFormat)?.let { return it }
+        DirectProviderReasoningKnowledge.fromModelId(modelId, providerHint, endpointHost)?.let { return it }
+        ReasoningVariantMarkers.fromModelId(modelId, requestFormat)?.let { return it }
         return ReasoningCapability.UNKNOWN
     }
 }

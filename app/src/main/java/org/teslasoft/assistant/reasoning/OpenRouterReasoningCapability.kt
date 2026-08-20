@@ -22,12 +22,11 @@ import com.google.gson.JsonObject
  * Reads reasoning capability from an OpenRouter `/models` catalog entry
  * (chat-redesign-plan.md §7.7 tier 1 — "provider/model metadata first").
  *
- * OpenRouter advertises per-model capability in a `supported_parameters`
- * array. Two markers matter for reasoning:
+ * OpenRouter advertises per-model capability in a dedicated `reasoning` object
+ * in current catalogs. Older catalogs use a `supported_parameters` array; two
+ * markers matter there:
  *
- * - `reasoning` — the model accepts the unified `reasoning` request object,
- *   so effort is configurable (OpenRouter documents `low`/`medium`/`high`) and
- *   reasoning can be requested, disabled, or excluded from the response.
+ * - `reasoning` — the model accepts the unified `reasoning` request object.
  * - `include_reasoning` — the legacy flag: reasoning tokens can be returned,
  *   but there is no effort control.
  *
@@ -38,40 +37,128 @@ import com.google.gson.JsonObject
  */
 object OpenRouterReasoningCapability {
 
-    /** OpenRouter's documented effort ladder for the `reasoning` object. */
-    private val OPENROUTER_EFFORTS = listOf(
-        ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH
+    /** Current gateway ladder, used only when the catalog explicitly says the
+     * supported effort list is null (meaning all gateway values are accepted). */
+    private val ALL_GATEWAY_EFFORTS = listOf(
+        ReasoningEffort.MAX,
+        ReasoningEffort.XHIGH,
+        ReasoningEffort.HIGH,
+        ReasoningEffort.MEDIUM,
+        ReasoningEffort.LOW,
+        ReasoningEffort.MINIMAL
+    )
+
+    /** Compatibility ladder for older catalogs with only the legacy
+     * `reasoning` supported-parameter marker. */
+    private val LEGACY_EFFORTS = listOf(
+        ReasoningEffort.LOW,
+        ReasoningEffort.MEDIUM,
+        ReasoningEffort.HIGH
     )
 
     /**
-     * Capability for one OpenRouter catalog entry, or null when the entry's
-     * metadata does not mention reasoning at all (caller falls through). Never
-     * throws: any malformed entry yields null.
+     * Capability for one catalog entry, or null when the entry's metadata does
+     * not mention reasoning. [requestFormat] lets the same normalized
+     * capability be learned from a non-OpenRouter catalog as well.
      */
-    fun fromModelEntry(entry: JsonObject?): ReasoningCapability? {
+    fun fromModelEntry(
+        entry: JsonObject?,
+        requestFormat: ReasoningRequestFormat = ReasoningRequestFormat.OPENROUTER
+    ): ReasoningCapability? {
         entry ?: return null
-        val params = supportedParameters(entry)
-        if (params.isEmpty()) return null
+        return try {
+            val richReasoning = entry.get("reasoning")
+                ?.takeUnless { it.isJsonNull }
+                ?.takeIf { it.isJsonObject }
+                ?.asJsonObject
+            if (richReasoning != null) {
+                fromRichReasoningMetadata(entry, richReasoning, requestFormat)
+            } else {
+                fromLegacyParameters(entry, requestFormat)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
 
+    /** Parse the current catalog contract. Missing effort metadata means that
+     * this model exposes no named levels; when it is not mandatory, the UI may
+     * still offer the real Auto/Off control without inventing levels. A JSON
+     * null effort list explicitly means every current gateway effort is
+     * accepted. */
+    private fun fromRichReasoningMetadata(
+        entry: JsonObject,
+        reasoning: JsonObject,
+        requestFormat: ReasoningRequestFormat
+    ): ReasoningCapability {
+        val effortElement = reasoning.get("supported_efforts")
+        val rawEfforts = effortElement
+            ?.takeIf { it.isJsonArray }
+            ?.asJsonArray
+            ?.mapNotNull { element ->
+                if (!element.isJsonPrimitive) null else element.asString.trim().lowercase()
+            }
+            .orEmpty()
+        val efforts = when {
+            effortElement == null -> emptyList()
+            effortElement.isJsonNull -> ALL_GATEWAY_EFFORTS
+            effortElement.isJsonArray -> rawEfforts.mapNotNull { ReasoningEffort.fromSerialized(it) }
+                .filter { it.isExplicitLevel }
+            else -> emptyList()
+        }
+        // `none` is an On/Off-only capability, not an effort level. Keeping the
+        // selector enabled in that case lets the UI expose Auto/Off without
+        // inventing Low/Medium/High.
+        val mandatory = booleanOrNull(reasoning, "mandatory") == true
+        val effortConfigurable = when {
+            effortElement == null -> !mandatory
+            else -> efforts.isNotEmpty() || rawEfforts.any { it == "none" || it == "off" }
+        }
+        val canReturnVisible = booleanOrNull(reasoning, "can_return_visible")
+            ?: booleanOrNull(entry, "can_return_visible")
+            ?: DirectProviderReasoningKnowledge.fromModelId(
+                stringOrNull(entry, "id")
+            )?.canReturnVisibleReasoning
+            ?: true
+
+        return ReasoningCapability(
+            support = ReasoningSupport.KNOWN,
+            effortConfigurable = effortConfigurable,
+            supportedEfforts = efforts,
+            canDisableReasoning = !mandatory,
+            canReturnVisibleReasoning = canReturnVisible,
+            tokenBudgetSupported = booleanOrNull(reasoning, "supports_max_tokens") == true,
+            source = CapabilitySource.PROVIDER_METADATA,
+            requestFormat = requestFormat,
+            continuationStateSupported = requestFormat == ReasoningRequestFormat.OPENROUTER
+        )
+    }
+
+    /** Compatibility parser for older catalog entries with no `reasoning`
+     * object. It deliberately does not infer token-budget support from the
+     * ordinary `max_tokens` completion parameter. */
+    private fun fromLegacyParameters(
+        entry: JsonObject,
+        requestFormat: ReasoningRequestFormat
+    ): ReasoningCapability? {
+        val params = supportedParameters(entry)
         val hasReasoningObject = params.contains("reasoning")
         val hasIncludeReasoning = params.contains("include_reasoning")
         if (!hasReasoningObject && !hasIncludeReasoning) return null
 
         return if (hasReasoningObject) {
-            // Full reasoning control: effort ladder, returnable reasoning, and
-            // the documented disable signal (`reasoning.enabled = false`).
             ReasoningCapability(
                 support = ReasoningSupport.KNOWN,
                 effortConfigurable = true,
-                supportedEfforts = OPENROUTER_EFFORTS,
+                supportedEfforts = LEGACY_EFFORTS,
                 canDisableReasoning = true,
                 canReturnVisibleReasoning = true,
-                tokenBudgetSupported = true, // OpenRouter's reasoning.max_tokens
-                source = CapabilitySource.PROVIDER_METADATA
+                tokenBudgetSupported = false,
+                source = CapabilitySource.PROVIDER_METADATA,
+                requestFormat = requestFormat,
+                continuationStateSupported = requestFormat == ReasoningRequestFormat.OPENROUTER
             )
         } else {
-            // include_reasoning only: reasoning can be returned/excluded, but the
-            // model exposes no effort control and no thinking-disable signal.
             ReasoningCapability(
                 support = ReasoningSupport.KNOWN,
                 effortConfigurable = false,
@@ -79,13 +166,15 @@ object OpenRouterReasoningCapability {
                 canDisableReasoning = false,
                 canReturnVisibleReasoning = true,
                 tokenBudgetSupported = false,
-                source = CapabilitySource.PROVIDER_METADATA
+                source = CapabilitySource.PROVIDER_METADATA,
+                requestFormat = requestFormat,
+                continuationStateSupported = requestFormat == ReasoningRequestFormat.OPENROUTER
             )
         }
     }
 
     /** Lower-cased, trimmed `supported_parameters` values, or empty on any
-     *  shape mismatch. */
+     * shape mismatch. */
     private fun supportedParameters(entry: JsonObject): Set<String> {
         val array = entry.get("supported_parameters")
             ?.takeUnless { it.isJsonNull }
@@ -99,5 +188,25 @@ object OpenRouterReasoningCapability {
             }
         }
         return out
+    }
+
+    private fun booleanOrNull(obj: JsonObject, name: String): Boolean? = try {
+        obj.get(name)
+            ?.takeUnless { it.isJsonNull }
+            ?.takeIf { it.isJsonPrimitive }
+            ?.asBoolean
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun stringOrNull(obj: JsonObject, name: String): String? = try {
+        obj.get(name)
+            ?.takeUnless { it.isJsonNull }
+            ?.takeIf { it.isJsonPrimitive }
+            ?.asString
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+    } catch (_: Exception) {
+        null
     }
 }

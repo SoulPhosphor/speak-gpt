@@ -35,7 +35,10 @@ package org.teslasoft.assistant.reasoning
  */
 object ReasoningVariantMarkers {
 
-    fun fromModelId(modelId: String?): ReasoningCapability? {
+    fun fromModelId(
+        modelId: String?,
+        requestFormat: ReasoningRequestFormat = ReasoningRequestFormat.OPENAI_COMPATIBLE
+    ): ReasoningCapability? {
         val id = modelId?.trim()?.lowercase() ?: return null
         if (id.isEmpty()) return null
 
@@ -51,7 +54,9 @@ object ReasoningVariantMarkers {
             canDisableReasoning = false,
             canReturnVisibleReasoning = true,
             tokenBudgetSupported = false,
-            source = CapabilitySource.VARIANT_MARKER
+            source = CapabilitySource.VARIANT_MARKER,
+            requestFormat = requestFormat,
+            continuationStateSupported = requestFormat == ReasoningRequestFormat.OPENROUTER
         )
     }
 }

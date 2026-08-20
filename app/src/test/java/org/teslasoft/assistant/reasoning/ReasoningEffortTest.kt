@@ -40,6 +40,8 @@ class ReasoningEffortTest {
         assertEquals("low", ReasoningEffort.LOW.serialized)
         assertEquals("medium", ReasoningEffort.MEDIUM.serialized)
         assertEquals("high", ReasoningEffort.HIGH.serialized)
+        assertEquals("xhigh", ReasoningEffort.XHIGH.serialized)
+        assertEquals("max", ReasoningEffort.MAX.serialized)
     }
 
     @Test
@@ -53,7 +55,8 @@ class ReasoningEffortTest {
         assertNull(ReasoningEffort.fromSerialized(null))
         assertNull(ReasoningEffort.fromSerialized(""))
         assertNull(ReasoningEffort.fromSerialized("   "))
-        assertNull(ReasoningEffort.fromSerialized("xhigh")) // newer build value
+        assertEquals(ReasoningEffort.XHIGH, ReasoningEffort.fromSerialized("xhigh"))
+        assertEquals(ReasoningEffort.MAX, ReasoningEffort.fromSerialized(" max "))
         assertNull(ReasoningEffort.fromSerialized("garbage"))
     }
 
@@ -65,5 +68,7 @@ class ReasoningEffortTest {
         assertTrue(ReasoningEffort.MEDIUM.isExplicitLevel)
         assertTrue(ReasoningEffort.HIGH.isExplicitLevel)
         assertTrue(ReasoningEffort.MINIMAL.isExplicitLevel)
+        assertTrue(ReasoningEffort.XHIGH.isExplicitLevel)
+        assertTrue(ReasoningEffort.MAX.isExplicitLevel)
     }
 }

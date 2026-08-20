@@ -107,4 +107,16 @@ class EndpointReasoningCapabilityTest {
         )
         assertNotEquals(ReasoningCapabilityStore.EMPTY, learned)
     }
+
+    @Test
+    fun catalogLearningCanPersistAGenericProviderBoundary() {
+        val store = EndpointReasoningCapability.learnFromCatalogJson(
+            ReasoningCapabilityStore.EMPTY,
+            """{"data":[{"id":"vendor/reasoner","reasoning":{"supported_efforts":["low","high"]}}]}""",
+            ReasoningRequestFormat.OPENAI_COMPATIBLE
+        )
+        val cap = EndpointReasoningCapability.resolve(store, "vendor/reasoner")
+        assertEquals(ReasoningRequestFormat.OPENAI_COMPATIBLE, cap.requestFormat)
+        assertTrue(cap.continuationStateSupported.not())
+    }
 }

@@ -44,6 +44,8 @@ class ReasoningCapabilityStoreTest {
         assertEquals(full.canReturnVisibleReasoning, back.canReturnVisibleReasoning)
         assertEquals(full.tokenBudgetSupported, back.tokenBudgetSupported)
         assertEquals(full.source, back.source)
+        assertEquals(full.requestFormat, back.requestFormat)
+        assertEquals(full.continuationStateSupported, back.continuationStateSupported)
     }
 
     @Test
@@ -88,5 +90,13 @@ class ReasoningCapabilityStoreTest {
         json = ReasoningCapabilityStore.set(json, "b", full)
         assertTrue(ReasoningCapabilityStore.get(json, "a").isReasoningCapable)
         assertTrue(ReasoningCapabilityStore.get(json, "b").isReasoningCapable)
+    }
+
+    @Test
+    fun oldMetadataRecordsDefaultToTheOpenRouterBoundary() {
+        val oldJson = """{"x/y":{"efc":true,"eff":["low"],"dis":true,"vis":true,"tb":false,"src":"PROVIDER_METADATA"}}"""
+        val back = ReasoningCapabilityStore.get(oldJson, "x/y")
+        assertEquals(ReasoningRequestFormat.OPENROUTER, back.requestFormat)
+        assertTrue(back.continuationStateSupported)
     }
 }

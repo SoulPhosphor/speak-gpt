@@ -54,7 +54,13 @@ enum class ReasoningEffort(val serialized: String) {
 
     LOW("low"),
     MEDIUM("medium"),
-    HIGH("high");
+    HIGH("high"),
+
+    /** OpenRouter/OpenAI-style effort above high. */
+    XHIGH("xhigh"),
+
+    /** Maximum supported effort on providers that expose it. */
+    MAX("max");
 
     /**
      * True for a concrete effort the app actually sends as a level

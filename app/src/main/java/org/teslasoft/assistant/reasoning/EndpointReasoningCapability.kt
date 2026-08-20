@@ -49,10 +49,13 @@ object EndpointReasoningCapability {
     fun resolve(
         reasoningCapabilityByModel: String?,
         modelId: String?,
-        liveModelEntry: JsonObject? = null
+        liveModelEntry: JsonObject? = null,
+        providerHint: String? = null,
+        endpointHost: String? = null
     ): ReasoningCapability {
+        val requestFormat = ReasoningRequestFormat.forEndpoint(providerHint, endpointHost)
         // 1. Freshest structured metadata wins.
-        OpenRouterReasoningCapability.fromModelEntry(liveModelEntry)?.let { return it }
+        OpenRouterReasoningCapability.fromModelEntry(liveModelEntry, requestFormat)?.let { return it }
 
         // 2. Metadata previously recorded for this exact model on this endpoint.
         if (!modelId.isNullOrBlank()) {
@@ -61,7 +64,12 @@ object EndpointReasoningCapability {
         }
 
         // 3. Id-based knowledge and markers, then Unknown.
-        return ReasoningCapabilityResolver.resolve(modelId, null)
+        return ReasoningCapabilityResolver.resolve(
+            modelId = modelId,
+            modelCatalogEntry = null,
+            providerHint = providerHint,
+            endpointHost = endpointHost
+        )
     }
 
     /**
@@ -75,12 +83,13 @@ object EndpointReasoningCapability {
     fun learnFromEntry(
         reasoningCapabilityByModel: String?,
         modelId: String?,
-        modelEntry: JsonObject?
+        modelEntry: JsonObject?,
+        requestFormat: ReasoningRequestFormat = ReasoningRequestFormat.OPENROUTER
     ): String {
         val current = reasoningCapabilityByModel?.ifBlank { ReasoningCapabilityStore.EMPTY }
             ?: ReasoningCapabilityStore.EMPTY
         if (modelId.isNullOrBlank()) return current
-        val learned = OpenRouterReasoningCapability.fromModelEntry(modelEntry) ?: return current
+        val learned = OpenRouterReasoningCapability.fromModelEntry(modelEntry, requestFormat) ?: return current
         return ReasoningCapabilityStore.set(current, modelId, learned)
     }
 
@@ -93,7 +102,11 @@ object EndpointReasoningCapability {
      * later without the user re-adding it. Uncertain models are never recorded.
      * Never throws: a malformed body leaves the store unchanged.
      */
-    fun learnFromCatalogJson(reasoningCapabilityByModel: String?, catalogJson: String?): String {
+    fun learnFromCatalogJson(
+        reasoningCapabilityByModel: String?,
+        catalogJson: String?,
+        requestFormat: ReasoningRequestFormat = ReasoningRequestFormat.OPENROUTER
+    ): String {
         var current = reasoningCapabilityByModel?.ifBlank { ReasoningCapabilityStore.EMPTY }
             ?: ReasoningCapabilityStore.EMPTY
         if (catalogJson.isNullOrBlank()) return current
@@ -109,7 +122,7 @@ object EndpointReasoningCapability {
             val obj = element?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject ?: continue
             val id = obj.get("id")?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonPrimitive }?.asString
                 ?.takeIf { it.isNotBlank() } ?: continue
-            current = learnFromEntry(current, id, obj)
+            current = learnFromEntry(current, id, obj, requestFormat)
         }
         return current
     }

@@ -68,7 +68,16 @@ data class ReasoningCapability(
 
     /** Where this capability came from, so diagnostics can explain confidence
      *  and §7.8 can name the capability source in a mismatch report. */
-    val source: CapabilitySource = CapabilitySource.NONE
+    val source: CapabilitySource = CapabilitySource.NONE,
+
+    /** Wire shape used at the request boundary for this provider/model path.
+     *  Consumers use this normalized value instead of identifying OpenRouter
+     *  themselves. */
+    val requestFormat: ReasoningRequestFormat = ReasoningRequestFormat.OPENAI_COMPATIBLE,
+
+    /** Whether provider reasoning-detail state must be echoed on a tool-call
+     *  continuation. This is deliberately separate from visible reasoning. */
+    val continuationStateSupported: Boolean = false
 ) {
     /**
      * True when SpeakGPT knows this path reasons AND at least one reasoning
@@ -141,7 +150,8 @@ enum class ReasoningSupport { KNOWN, ABSENT, UNKNOWN }
  */
 enum class CapabilitySource {
     /** Structured capability metadata from the provider/model-list API
-     *  (strongest; OpenRouter's `supported_parameters`). */
+     *  (strongest; current catalogs use a dedicated reasoning object, with
+     *  legacy parameter markers as a fallback). */
     PROVIDER_METADATA,
 
     /** Current official provider capability knowledge held in a direct-provider
@@ -154,4 +164,32 @@ enum class CapabilitySource {
 
     /** No capability was established. */
     NONE
+}
+
+/** Provider-neutral request boundary formats. The UI and settings model never
+ *  need to know which provider supplied the capability. */
+enum class ReasoningRequestFormat(val serialized: String) {
+    OPENROUTER("openrouter"),
+    OPENAI_COMPATIBLE("openai_compatible");
+
+    companion object {
+        fun fromSerialized(value: String?): ReasoningRequestFormat? {
+            val normalized = value?.trim()?.lowercase() ?: return null
+            return entries.firstOrNull { it.serialized == normalized }
+        }
+
+        /** Select the request boundary for an endpoint without making the
+         *  rest of the reasoning pipeline provider-specific. */
+        fun forEndpoint(providerHint: String?, endpointHost: String?): ReasoningRequestFormat {
+            val signal = listOf(providerHint, endpointHost)
+                .filterNot { it.isNullOrBlank() }
+                .joinToString(" ")
+                .lowercase()
+            return if (signal.contains("openrouter.ai") || signal.contains("openrouter")) {
+                OPENROUTER
+            } else {
+                OPENAI_COMPATIBLE
+            }
+        }
+    }
 }

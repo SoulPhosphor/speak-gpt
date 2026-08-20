@@ -69,17 +69,28 @@ class ReasoningStreamAccumulatorTest {
     @Test
     fun reasoningDetailsSummaryMarkedAsSummary() {
         val acc = ReasoningStreamAccumulator()
-        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.summary","text":"Short summary."}]}}]}""")
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.summary","summary":"Short summary."}]}}]}""")
         val snap = acc.snapshot()
+        // This normalized text is what ChatActivity stores under the existing
+        // ChatAdapter Thinking-block key; no provider-specific field reaches
+        // the display layer.
         assertEquals("Short summary.", snap.text)
         assertTrue(snap.isSummary)
+    }
+
+    @Test
+    fun reasoningDetailsTextRemainsACompatibilityFallback() {
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.summary","text":"Legacy summary."}]}}]}""")
+        assertEquals("Legacy summary.", acc.snapshot().text)
+        assertTrue(acc.snapshot().isSummary)
     }
 
     @Test
     fun rawReasoningIsNotMarkedSummaryEvenAlongsideSummaryBlock() {
         val acc = ReasoningStreamAccumulator()
         acc.acceptLine("""data: {"choices":[{"delta":{"reasoning":"raw thought"}}]}""")
-        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.summary","text":" and summary"}]}}]}""")
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.summary","summary":" and summary"}]}}]}""")
         val snap = acc.snapshot()
         assertTrue(snap.text.contains("raw thought"))
         assertFalse(snap.isSummary)

@@ -63,6 +63,34 @@ class DirectProviderReasoningKnowledgeTest {
     }
 
     @Test
+    fun anthropicThinkingFamilyIsKnownWithoutInventingEfforts() {
+        val cap = DirectProviderReasoningKnowledge.fromModelId("claude-3-7-sonnet")!!
+        assertTrue(cap.isReasoningCapable)
+        assertTrue(cap.canReturnVisibleReasoning)
+        assertTrue(cap.canDisableReasoning)
+        assertFalse(cap.effortConfigurable)
+        assertTrue(cap.tokenBudgetSupported)
+    }
+
+    @Test
+    fun geminiThinkingFamiliesExposeOnlyKnownLevels() {
+        val gemini25 = DirectProviderReasoningKnowledge.fromModelId("gemini-2.5-flash")!!
+        assertEquals(
+            listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH),
+            gemini25.supportedEfforts
+        )
+        assertTrue(gemini25.canDisableReasoning)
+        assertTrue(gemini25.tokenBudgetSupported)
+
+        val gemini3 = DirectProviderReasoningKnowledge.fromModelId("google/gemini-3-flash")!!
+        assertEquals(
+            listOf(ReasoningEffort.MINIMAL, ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH),
+            gemini3.supportedEfforts
+        )
+        assertFalse(gemini3.canDisableReasoning)
+    }
+
+    @Test
     fun nonReasoningIdsAreNotClassifiedHere() {
         // deepseek-chat (V3) is not a reasoner; plain chat models are unknown to
         // this tier and must fall through (null), never to a false "absent".

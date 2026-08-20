@@ -51,6 +51,8 @@ object ReasoningCapabilityStore {
     private const val K_VISIBLE = "vis"
     private const val K_BUDGET = "tb"
     private const val K_SOURCE = "src"
+    private const val K_REQUEST_FORMAT = "wf"
+    private const val K_CONTINUATION = "cont"
 
     /**
      * Capability recorded for [modelId], or [ReasoningCapability.UNKNOWN] when
@@ -97,6 +99,8 @@ object ReasoningCapabilityStore {
         obj.put(K_VISIBLE, cap.canReturnVisibleReasoning)
         obj.put(K_BUDGET, cap.tokenBudgetSupported)
         obj.put(K_SOURCE, cap.source.name)
+        obj.put(K_REQUEST_FORMAT, cap.requestFormat.serialized)
+        obj.put(K_CONTINUATION, cap.continuationStateSupported)
         return obj
     }
 
@@ -114,6 +118,12 @@ object ReasoningCapabilityStore {
         } catch (_: IllegalArgumentException) {
             CapabilitySource.PROVIDER_METADATA
         }
+        // Records written before the generic boundary fields were introduced
+        // all came from OpenRouter catalog discovery. Preserve their original
+        // continuation behavior while new records carry the explicit format.
+        val requestFormat = ReasoningRequestFormat.fromSerialized(
+            entry.optString(K_REQUEST_FORMAT, "")
+        ) ?: ReasoningRequestFormat.OPENROUTER
         return ReasoningCapability(
             support = ReasoningSupport.KNOWN,
             effortConfigurable = entry.optBoolean(K_EFFORT_CONFIGURABLE, false),
@@ -121,7 +131,12 @@ object ReasoningCapabilityStore {
             canDisableReasoning = entry.optBoolean(K_CAN_DISABLE, false),
             canReturnVisibleReasoning = entry.optBoolean(K_VISIBLE, false),
             tokenBudgetSupported = entry.optBoolean(K_BUDGET, false),
-            source = source
+            source = source,
+            requestFormat = requestFormat,
+            continuationStateSupported = entry.optBoolean(
+                K_CONTINUATION,
+                requestFormat == ReasoningRequestFormat.OPENROUTER
+            )
         )
     }
 

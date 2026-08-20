@@ -37,6 +37,8 @@ object ReasoningEffortLabels {
         ReasoningEffort.LOW -> R.string.reasoning_effort_low
         ReasoningEffort.MEDIUM -> R.string.reasoning_effort_medium
         ReasoningEffort.HIGH -> R.string.reasoning_effort_high
+        ReasoningEffort.XHIGH -> R.string.reasoning_effort_xhigh
+        ReasoningEffort.MAX -> R.string.reasoning_effort_max
     }
 
     fun label(context: Context, effort: ReasoningEffort): String =
