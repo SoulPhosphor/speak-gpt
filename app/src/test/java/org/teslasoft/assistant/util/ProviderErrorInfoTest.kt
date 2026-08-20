@@ -30,6 +30,14 @@ class ProviderErrorInfoTest {
         assertEquals("rate limited upstream", parsed.message)
     }
 
+    @Test fun openRouter400PreservesUpstreamMessageVerbatim() {
+        val upstream = "Invalid reasoning.effort: expected one of low, medium, high"
+        val body = """{"error":{"code":400,"message":"Provider returned error","metadata":{"provider_name":"Stealth","raw":"$upstream"}}}"""
+        val parsed = ProviderErrorInfo.parse(body)
+        assertEquals("Stealth", parsed.providerName)
+        assertEquals(upstream, parsed.message)
+    }
+
     @Test fun openRouterBodyWithoutRawFallsBackToMessage() {
         val body = """{"error":{"code":429,"message":"Provider returned error","metadata":{"provider_name":"Together"}}}"""
         val parsed = ProviderErrorInfo.parse(body)
