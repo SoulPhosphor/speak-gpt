@@ -66,6 +66,36 @@ class EndpointReasoningCapabilityTest {
     }
 
     @Test
+    fun learnFromCatalogRecordsOnlyReasoningModels() {
+        val catalog = """
+            {"data":[
+              {"id":"x-ai/grok-4","supported_parameters":["reasoning"]},
+              {"id":"plain/model","supported_parameters":["tools"]},
+              {"id":"d/r1","supported_parameters":["include_reasoning"]}
+            ]}
+        """.trimIndent()
+        val store = EndpointReasoningCapability.learnFromCatalogJson(ReasoningCapabilityStore.EMPTY, catalog)
+
+        assertTrue(EndpointReasoningCapability.resolve(store, "x-ai/grok-4").effortConfigurable)
+        assertTrue(EndpointReasoningCapability.resolve(store, "d/r1").isReasoningCapable)
+        // A non-reasoning model is never recorded; it resolves via id tiers only,
+        // which do not know "plain/model", so it stays Unknown.
+        assertEquals(ReasoningCapability.UNKNOWN, EndpointReasoningCapability.resolve(store, "plain/model"))
+    }
+
+    @Test
+    fun learnFromCatalogLeavesStoreUnchangedOnJunk() {
+        assertEquals(
+            ReasoningCapabilityStore.EMPTY,
+            EndpointReasoningCapability.learnFromCatalogJson(ReasoningCapabilityStore.EMPTY, "not json")
+        )
+        assertEquals(
+            ReasoningCapabilityStore.EMPTY,
+            EndpointReasoningCapability.learnFromCatalogJson(ReasoningCapabilityStore.EMPTY, null)
+        )
+    }
+
+    @Test
     fun learnFromEntryOnlyChangesStoreWhenSomethingLearned() {
         val noReasoning = EndpointReasoningCapability.learnFromEntry(
             ReasoningCapabilityStore.EMPTY, "m", entry("""{"supported_parameters":["tools"]}""")

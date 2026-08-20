@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.reasoning
 
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 
 /**
  * The capability lookup every consumer uses (favorite rows, the Reasoning
@@ -81,5 +82,35 @@ object EndpointReasoningCapability {
         if (modelId.isNullOrBlank()) return current
         val learned = OpenRouterReasoningCapability.fromModelEntry(modelEntry) ?: return current
         return ReasoningCapabilityStore.set(current, modelId, learned)
+    }
+
+    /**
+     * Fold every reasoning-capable model in a `/models` catalog response into the
+     * endpoint's persisted store, returning the updated JSON (equal to the input
+     * when nothing was learned). This is how capability discovery rides normal
+     * catalog work (§7.7): a model whose metadata establishes reasoning gains its
+     * record, so a favorite created while capability was Unknown can light up
+     * later without the user re-adding it. Uncertain models are never recorded.
+     * Never throws: a malformed body leaves the store unchanged.
+     */
+    fun learnFromCatalogJson(reasoningCapabilityByModel: String?, catalogJson: String?): String {
+        var current = reasoningCapabilityByModel?.ifBlank { ReasoningCapabilityStore.EMPTY }
+            ?: ReasoningCapabilityStore.EMPTY
+        if (catalogJson.isNullOrBlank()) return current
+        val data = try {
+            JsonParser.parseString(catalogJson)
+                .takeIf { it.isJsonObject }?.asJsonObject
+                ?.get("data")?.takeIf { it.isJsonArray }?.asJsonArray
+        } catch (_: Exception) {
+            null
+        } ?: return current
+
+        for (element in data) {
+            val obj = element?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject ?: continue
+            val id = obj.get("id")?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonPrimitive }?.asString
+                ?.takeIf { it.isNotBlank() } ?: continue
+            current = learnFromEntry(current, id, obj)
+        }
+        return current
     }
 }

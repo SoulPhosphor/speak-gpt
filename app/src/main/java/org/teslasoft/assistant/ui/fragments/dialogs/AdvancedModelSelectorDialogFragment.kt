@@ -609,6 +609,48 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
         render()
         startCatalogFetch()
+        syncReasoningCapability()
+    }
+
+    /**
+     * Best-effort background capability discovery (chat-redesign-plan.md §7.7):
+     * for an OpenRouter endpoint, read the model catalog's structured
+     * `supported_parameters` and fold any reasoning models into this endpoint's
+     * persisted capability store, so favorite rows and View All can show the
+     * reasoning lightbulb and requests can send reasoning without a paid call.
+     * Independent of the visible list fetch and fully fail-safe: any error just
+     * leaves capability as it was. When it learns something new it persists the
+     * endpoint and re-renders so newly-known lightbulbs appear.
+     */
+    private fun syncReasoningCapability() {
+        val endpoint = apiEndpointObject ?: return
+        if (!endpoint.isOpenRouterRouting()) return
+        val activity = (mContext as? Activity) ?: return
+        val net = RequestNetwork(activity)
+        val authHeaders = HashMap<String, Any>()
+        val apiKey = endpoint.apiKey
+        when (endpoint.authType) {
+            ApiEndpointObject.AUTH_X_API_KEY -> authHeaders["x-api-key"] = apiKey
+            ApiEndpointObject.AUTH_API_KEY -> authHeaders["api-key"] = apiKey
+            else -> authHeaders["Authorization"] = "Bearer $apiKey"
+        }
+        net.setHeaders(authHeaders)
+        val base = endpoint.host.let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
+        net.startRequestNetwork("GET", base + "models", "reasoningCaps", object : RequestNetwork.RequestListener {
+            override fun onResponse(tag: String, message: String) {
+                if (!isAdded) return
+                val current = endpoint.reasoningCapabilityByModel
+                val updated = org.teslasoft.assistant.reasoning.EndpointReasoningCapability
+                    .learnFromCatalogJson(current, message)
+                if (updated != current) {
+                    endpoint.reasoningCapabilityByModel = updated
+                    apiEndpointPreferences?.setApiEndpoint(requireContext(), endpoint)
+                    render()
+                }
+            }
+
+            override fun onErrorResponse(tag: String, message: String) { /* capability sync is best-effort */ }
+        })
     }
 
     /** System/hardware back: from the full list return to the favorites
