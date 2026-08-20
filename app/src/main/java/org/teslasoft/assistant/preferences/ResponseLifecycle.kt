@@ -226,6 +226,8 @@ object ResponseLifecycle {
             suppliedFinish.equals("error", ignoreCase = true) && observedFinish != null -> observedFinish
             else -> suppliedFinish
         }
+        val finishReasonReceived = observedFinish != null ||
+            !suppliedFinish.equals("missing", ignoreCase = true)
 
         var finalOutcome = outcome
         var finalTermination = termination
@@ -254,7 +256,9 @@ object ResponseLifecycle {
         if (raw?.providerErrorReceived == true) {
             finalOutcome = Outcome.INCOMPLETE
             finalTermination = Termination.PROVIDER_ERROR
-            finalFinish = observedFinish ?: "error"
+            finalFinish = observedFinish
+                ?: suppliedFinish.takeUnless { it.equals("missing", ignoreCase = true) }
+                ?: "missing"
             finalStreamClosed = true
             val rawSummary = raw.providerErrorSummary ?: "provider error event received in SSE stream"
             finalError = when {
@@ -360,7 +364,7 @@ object ResponseLifecycle {
             append("HTTP Status Successful: ").append(httpSuccessful).append('\n')
             append("Outcome: ").append(finalOutcome.display).append('\n')
             append("Finish Reason: ").append(finalFinish).append('\n')
-            append("Finish Reason Received: ").append(!finalFinish.equals("missing", ignoreCase = true)).append('\n')
+            append("Finish Reason Received: ").append(finishReasonReceived).append('\n')
             append("Received Done: ").append(receivedDoneDisplay).append('\n')
             append("Protocol Terminal Marker: ")
                 .append(raw?.protocolTerminalMarker ?: if (raw == null) RECEIVED_DONE_UNAVAILABLE else "missing")

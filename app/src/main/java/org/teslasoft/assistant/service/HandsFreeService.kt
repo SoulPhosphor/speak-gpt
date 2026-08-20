@@ -76,6 +76,8 @@ class HandsFreeService : Service() {
         @Volatile
         private var activeService: HandsFreeService? = null
 
+        @Volatile private var lastWifiLockFailure: String? = null
+
         /**
          * Actual state, not the hands-free preference. Audio Health samples
          * this at transcription boundaries so a screen-off slowdown can be
@@ -88,6 +90,17 @@ class HandsFreeService : Service() {
                     serviceAgeMs = 0L,
                     wakeLockHeld = false,
                     leaseAgeMs = 0L
+                )
+
+        /** Service + CPU/Wi-Fi protection sampled before hands-free teardown. */
+        fun connectionDiagnostics(): HandsFreeConnectionDiagnostics =
+            activeService?.snapshotConnectionDiagnostics()
+                ?: HandsFreeConnectionDiagnostics(
+                    serviceRunning = false,
+                    serviceAgeMs = 0L,
+                    wakeLockHeld = false,
+                    wifiLockHeld = false,
+                    wifiLockFailure = lastWifiLockFailure
                 )
 
         private const val EXTRA_CHAT_ID = "chatId"
@@ -289,6 +302,17 @@ class HandsFreeService : Service() {
         )
     }
 
+    private fun snapshotConnectionDiagnostics(): HandsFreeConnectionDiagnostics {
+        val wake = snapshotWakeLockDiagnostics()
+        return HandsFreeConnectionDiagnostics(
+            serviceRunning = wake.serviceRunning,
+            serviceAgeMs = wake.serviceAgeMs,
+            wakeLockHeld = wake.wakeLockHeld,
+            wifiLockHeld = try { wifiLock?.isHeld == true } catch (_: Throwable) { false },
+            wifiLockFailure = lastWifiLockFailure
+        )
+    }
+
     private fun logWakeLockEvent(level: String, message: String) {
         val enabled = try {
             Preferences.getPreferences(applicationContext, "").getAudioHealthLogging()
@@ -301,19 +325,25 @@ class HandsFreeService : Service() {
 
     @Suppress("DEPRECATION")
     private fun acquireWifiLock() {
-        if (wifiLock?.isHeld == true) return
+        if (wifiLock?.isHeld == true) {
+            lastWifiLockFailure = null
+            return
+        }
         try {
             val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            // FULL_HIGH_PERF is deprecated but is the only mode that keeps
-            // Wi-Fi out of power-save while the screen is off — same choice,
-            // for the same reason, as GenerationForegroundService. Held for
-            // the whole listening session so the radio is already awake when
-            // a turn's request goes out. Cellular is unaffected either way.
             wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WAKE_LOCK_TAG).apply {
                 setReferenceCounted(false)
                 acquire()
             }
-        } catch (_: Exception) { /* no Wi-Fi service; nothing to hold */ }
+            lastWifiLockFailure = null
+        } catch (t: Throwable) {
+            val detail = "${t.javaClass.simpleName}: ${t.message}"
+            lastWifiLockFailure = detail
+            try {
+                Logger.log(applicationContext, "event", "HandsFreeService", "warning",
+                    "Wi-Fi lock acquisition failed: $detail")
+            } catch (_: Throwable) { /* diagnostics must never disturb hands-free */ }
+        }
     }
 
     private fun releaseLocks() {
@@ -400,4 +430,18 @@ class HandsFreeService : Service() {
         leaseAcquiredAtMs = 0L
         super.onDestroy()
     }
+}
+
+/** Actual hands-free keep-alive state sampled at generation failure time. */
+data class HandsFreeConnectionDiagnostics(
+    val serviceRunning: Boolean,
+    val serviceAgeMs: Long,
+    val wakeLockHeld: Boolean,
+    val wifiLockHeld: Boolean,
+    val wifiLockFailure: String?
+) {
+    fun asLogFields(): String =
+        "serviceRunning=$serviceRunning serviceAge=${serviceAgeMs}ms " +
+            "wakeLockHeld=$wakeLockHeld wifiLockHeld=$wifiLockHeld " +
+            "wifiLockFailure=${wifiLockFailure ?: "none"}"
 }

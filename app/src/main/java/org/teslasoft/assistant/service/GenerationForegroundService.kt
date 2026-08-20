@@ -28,6 +28,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
@@ -62,6 +63,21 @@ class GenerationForegroundService : Service() {
         // Generations in flight. The service stops only when this drops to 0.
         private val activeGenerations = AtomicInteger(0)
 
+        @Volatile private var activeService: GenerationForegroundService? = null
+        @Volatile private var lastKeepAliveFailure: String? = null
+
+        /** Actual state sampled before generation teardown on a failure. */
+        fun diagnostics(): GenerationKeepAliveDiagnostics =
+            activeService?.snapshotDiagnostics()
+                ?: GenerationKeepAliveDiagnostics(
+                    serviceRunning = false,
+                    activeGenerations = activeGenerations.get(),
+                    serviceAgeMs = 0L,
+                    wakeLockHeld = false,
+                    wifiLockHeld = false,
+                    lastFailure = lastKeepAliveFailure
+                )
+
         /**
          * Call when a keep-alive phase starts. Must be paired with [end].
          * [reading] = true means the phase is reading the reply aloud (TTS
@@ -84,6 +100,7 @@ class GenerationForegroundService : Service() {
                     context.startService(intent)
                 }
             } catch (e: Exception) {
+                lastKeepAliveFailure = "${e.javaClass.simpleName}: ${e.message}"
                 // Starting a foreground service can be refused (e.g. the app is
                 // already in the background under strict OEM policies). The
                 // generation itself must still proceed; it just loses the
@@ -113,6 +130,7 @@ class GenerationForegroundService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    @Volatile private var serviceStartedAtMs: Long = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -141,6 +159,7 @@ class GenerationForegroundService : Service() {
                 startForeground(NOTIFICATION_ID, notification)
             }
         } catch (e: Exception) {
+            lastKeepAliveFailure = "${e.javaClass.simpleName}: ${e.message}"
             // If startForeground fails, bail out cleanly rather than crash;
             // the generation continues without the keep-alive. Persist the
             // reason (ungated) — this used to disappear without a trace.
@@ -153,6 +172,9 @@ class GenerationForegroundService : Service() {
             return START_NOT_STICKY
         }
 
+        activeService = this
+        if (serviceStartedAtMs == 0L) serviceStartedAtMs = SystemClock.elapsedRealtime()
+        lastKeepAliveFailure = null
         acquireLocks()
         // NOT sticky: a resurrected copy with no generation in flight would
         // just hold a wake lock for nothing.
@@ -162,28 +184,48 @@ class GenerationForegroundService : Service() {
     @Suppress("DEPRECATION")
     private fun acquireLocks() {
         if (wakeLock?.isHeld != true) {
-            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
-                setReferenceCounted(false)
-                // 30 minute safety cap; a single response never takes that
-                // long. Released in onDestroy() the moment generation ends.
-                acquire(30 * 60 * 1000L)
+            try {
+                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG).apply {
+                    setReferenceCounted(false)
+                    acquire(30 * 60 * 1000L)
+                }
+            } catch (t: Throwable) {
+                recordKeepAliveFailure("CPU wake-lock acquisition failed", t)
             }
         }
         if (wifiLock?.isHeld != true) {
             try {
                 val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                // FULL_HIGH_PERF is deprecated but is the only mode that keeps
-                // Wi-Fi out of power-save while the screen is off; the
-                // suggested LOW_LATENCY replacement is only honored for
-                // foreground apps with the screen on — exactly the situation
-                // this service exists to survive.
                 wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WAKE_LOCK_TAG).apply {
                     setReferenceCounted(false)
                     acquire()
                 }
-            } catch (_: Exception) { /* no Wi-Fi service; cellular path is unaffected */ }
+            } catch (t: Throwable) {
+                recordKeepAliveFailure("Wi-Fi lock acquisition failed", t)
+            }
         }
+    }
+
+    private fun recordKeepAliveFailure(prefix: String, t: Throwable) {
+        val detail = "$prefix: ${t.javaClass.simpleName}: ${t.message}"
+        lastKeepAliveFailure = detail
+        try {
+            Logger.log(applicationContext, "event", "GenerationService", "warning", detail)
+        } catch (_: Throwable) { /* diagnostics must never disturb generation */ }
+    }
+
+    private fun snapshotDiagnostics(): GenerationKeepAliveDiagnostics {
+        val now = SystemClock.elapsedRealtime()
+        val started = serviceStartedAtMs
+        return GenerationKeepAliveDiagnostics(
+            serviceRunning = activeService === this,
+            activeGenerations = activeGenerations.get(),
+            serviceAgeMs = if (started > 0L) (now - started).coerceAtLeast(0L) else 0L,
+            wakeLockHeld = try { wakeLock?.isHeld == true } catch (_: Throwable) { false },
+            wifiLockHeld = try { wifiLock?.isHeld == true } catch (_: Throwable) { false },
+            lastFailure = lastKeepAliveFailure
+        )
     }
 
     private fun releaseLocks() {
@@ -262,6 +304,22 @@ class GenerationForegroundService : Service() {
 
     override fun onDestroy() {
         releaseLocks()
+        if (activeService === this) activeService = null
+        serviceStartedAtMs = 0L
         super.onDestroy()
     }
+}
+
+data class GenerationKeepAliveDiagnostics(
+    val serviceRunning: Boolean,
+    val activeGenerations: Int,
+    val serviceAgeMs: Long,
+    val wakeLockHeld: Boolean,
+    val wifiLockHeld: Boolean,
+    val lastFailure: String?
+) {
+    fun asLogFields(): String =
+        "serviceRunning=$serviceRunning activeGenerations=$activeGenerations " +
+            "serviceAge=${serviceAgeMs}ms wakeLockHeld=$wakeLockHeld " +
+            "wifiLockHeld=$wifiLockHeld lastFailure=${lastFailure ?: "none"}"
 }
