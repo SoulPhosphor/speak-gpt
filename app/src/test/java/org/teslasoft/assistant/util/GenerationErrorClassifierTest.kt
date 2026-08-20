@@ -26,14 +26,24 @@ import java.net.UnknownHostException
 class GenerationErrorClassifierTest {
 
     private fun code(t: Throwable) = GenerationErrorClassifier.classify(t).code
+
     private class StructuredProviderException(
         val code: String,
         message: String
     ) : RuntimeException(message)
 
-    // Deliberately named like the SDK wrapper so the classifier's class-name
-    // fallback is exercised without depending on a client-library test fixture.
-    private class RateLimitException(message: String) : RuntimeException(message)
+    private class StructuredStatusProviderException(
+        val statusCode: Int,
+        val code: String,
+        message: String
+    ) : RuntimeException(message)
+
+    // Mirrors the evidence shape exposed by openai-client 3.8.2 without taking
+    // a unit-test dependency on that concrete exception class.
+    private class RateLimitException(
+        val statusCode: Int?,
+        message: String
+    ) : RuntimeException(message)
 
     // ---- transport / network (no HTTP status) --------------------------
 
@@ -168,10 +178,30 @@ class GenerationErrorClassifierTest {
         assertEquals(GenErrorCode.S1, code(RuntimeException("404 Not Found")))
     }
 
-    @Test fun literal400ErrorRateLimitWrapperDoesNotBecomeRateLimit() {
-        // Exact regression for the client text seen in chat: "400 ERROR".
+    @Test fun explicit400StatusPreventsRateLimitClassGuess() {
         val result = GenerationErrorClassifier.classify(
-            RateLimitException("400 ERROR")
+            RateLimitException(statusCode = 400, message = "ERROR")
+        )
+        assertEquals(400, result.httpStatus)
+        assertEquals(GenErrorCode.U0, result.code)
+        assertNull(result.providerLimit)
+    }
+
+    @Test fun client429StatusBeatsUpstream400ErrorText() {
+        // OpenRouter can expose an outer HTTP status while metadata.raw names a
+        // different upstream provider error. The client's concrete status wins
+        // classification; the raw upstream detail remains separately displayable.
+        val result = GenerationErrorClassifier.classify(
+            RateLimitException(statusCode = 429, message = "400 ERROR")
+        )
+        assertEquals(429, result.httpStatus)
+        assertEquals(ProviderLimitKind.RATE_OR_THROUGHPUT, result.providerLimit)
+        assertEquals(GenErrorCode.Q1, result.code)
+    }
+
+    @Test fun literal400ErrorStillWorksAsLastResortWhenNoStatusPropertyExists() {
+        val result = GenerationErrorClassifier.classify(
+            RuntimeException("400 ERROR")
         )
         assertEquals(400, result.httpStatus)
         assertEquals(GenErrorCode.U0, result.code)
@@ -190,28 +220,21 @@ class GenerationErrorClassifierTest {
     }
 
     @Test fun structuredLimitCodeCanStillExplainHttp400() {
-        // A provider is allowed to be odd. If its structured error explicitly
-        // names a limit, that stronger evidence is preserved even with HTTP 400.
         val result = GenerationErrorClassifier.classify(
-            StructuredProviderException("context_length_exceeded", "400 Bad Request")
+            StructuredStatusProviderException(
+                statusCode = 400,
+                code = "context_length_exceeded",
+                message = "Bad Request"
+            )
         )
         assertEquals(400, result.httpStatus)
         assertEquals(ProviderLimitKind.MODEL_CONTEXT, result.providerLimit)
         assertEquals(GenErrorCode.M3, result.code)
     }
 
-    @Test fun structuredNumericStatusProtectsAgainstWrapperGuess() {
-        val result = GenerationErrorClassifier.classify(
-            StructuredProviderException("400", "ERROR")
-        )
-        assertEquals(400, result.httpStatus)
-        assertEquals(GenErrorCode.U0, result.code)
-        assertNull(result.providerLimit)
-    }
-
     @Test fun rateLimitWrapperWithoutHttpStatusRemainsFallbackEvidence() {
         val result = GenerationErrorClassifier.classify(
-            RateLimitException("request throttled by client wrapper")
+            RateLimitException(statusCode = null, message = "request throttled by client wrapper")
         )
         assertNull(result.httpStatus)
         assertEquals(ProviderLimitKind.RATE_OR_THROUGHPUT, result.providerLimit)
