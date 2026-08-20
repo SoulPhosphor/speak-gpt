@@ -46,7 +46,8 @@ internal class NetworkTransitionTrace(val initial: String, private val startedAt
 class GenerationNetworkMonitor(context: Context) : AutoCloseable {
     private val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val lock = Any()
-    private val trace = NetworkTransitionTrace(currentTransport(), SystemClock.elapsedRealtime())
+    private val startedAtMs = SystemClock.elapsedRealtime()
+    private val trace = NetworkTransitionTrace(currentTransport(), startedAtMs)
     @Volatile private var registered = false
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
@@ -77,13 +78,16 @@ class GenerationNetworkMonitor(context: Context) : AutoCloseable {
     }
 
     private fun currentTransport(): String = try {
-        val network = cm.activeNetwork ?: return "none"
-        stateFor(network)
-    } catch (_: Throwable) { "unknown" }
+        cm.activeNetwork?.let { stateFor(it) } ?: "none"
+    } catch (_: Throwable) {
+        "unknown"
+    }
 
     private fun stateFor(network: Network): String = try {
-        stateFor(cm.getNetworkCapabilities(network) ?: return "unknown")
-    } catch (_: Throwable) { "unknown" }
+        cm.getNetworkCapabilities(network)?.let { stateFor(it) } ?: "unknown"
+    } catch (_: Throwable) {
+        "unknown"
+    }
 
     private fun stateFor(caps: NetworkCapabilities): String = when {
         caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
