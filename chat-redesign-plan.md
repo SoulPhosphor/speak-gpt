@@ -237,6 +237,83 @@ Remove dead DALL-E/OpenAI presentation branches only after targeted reference ch
 
 Preserve the existing provider-neutral generation architecture and separation between image-generator configuration and current conversation configuration. A compile/static audit is not an end-to-end provider runtime test; do not claim runtime verification unless a real request has succeeded.
 
+### 6.4 Persistent Includes access on later user messages
+
+A document or image that was sent on an earlier user message may continue to affect later requests. That persistent context must remain discoverable and manageable without visually repeating the full attachment tray on every later message.
+
+The original user message where an Include entered the conversation remains the **single canonical owner** of that Include. Later messages must never receive a copied attachment record merely to make the state visible. Do not duplicate image bytes, extracted document text, summaries, artifact text, or model-facing content, and do not move the canonical Include forward through history. Preserving this ownership also preserves the stable request history/prefix rather than manufacturing repeated attachment payloads.
+
+For every **later user message** that follows one or more earlier sent Includes still represented in conversation context, add a **paperclip Message Action immediately to the right of the universal `ⓘ` action**.
+
+- The paperclip is a derived **persistent-context indicator and control surface**, not evidence that the later message itself owns or re-attached those files/images.
+- The original attachment-bearing message keeps its ordinary file/image presentation from Sections 6.1 and 6.2. A paperclip on a later message represents inherited persistent context from earlier messages.
+- If a later user message also introduces a new attachment of its own, its normal attachment/media presentation remains independent; the paperclip still represents any earlier persistent Includes.
+- AI messages do not gain this inherited-Includes paperclip.
+- If no earlier sent Include is represented in the conversation context, do not show the paperclip.
+
+Tapping the paperclip opens an anchored **Includes popup** from/above the Message Actions area. The popup is the compact replacement for permanently rendering the old Includes box on every later message. It must expose the same established Include information and post-send controls rather than inventing a second attachment-management system.
+
+The current composer also exposes the same persistent-context control whenever one or more earlier sent Includes are still represented in conversation context. In the composer's bottom control row, show a **paperclip immediately to the right of the Add (`+`) control**. This composer paperclip opens the same current-state Includes popup and supports the same post-send actions before the next message is sent. It is a management shortcut only; rendering or tapping it must not copy, move, or resend an Include.
+
+The popup shows the **current canonical state** of all applicable earlier Includes, not a snapshot copied onto the tapped message. It must make clear, using the established Includes UI vocabulary, what each item is and what form it is currently in: **Full**, **Condensed** for documents, **Reduced** for images, or **Artifact**. Show the existing filename/display name, document/image distinction, approximate token weight where meaningful, persistent truncation/size notices where applicable, and the established post-send actions for that kind/form.
+
+The Include ladder and action semantics are not redesigned by this phase. Preserve the existing `document-includes-plan.md` rules, including:
+
+- Full document → **Condense** or **Remove**;
+- Full image → **Reduce to Text Only** or **Remove**;
+- condensed/reduced text remains viewable/editable and can still be removed to an Artifact;
+- a previously sent item that is removed becomes the existing editable **Artifact** rather than silently disappearing from conversation history;
+- Condense/Reduce/Artifact generation continues to use the existing auxiliary-model workflows, fallbacks, progress/error behavior, storage deletion rules, token/size guards, and kind-specific wording;
+- nothing automatically moves down the Full → Condensed/Reduced → Artifact ladder. Those transitions remain user-initiated.
+
+An action taken from a later message's Includes popup or from the composer's Includes popup must mutate the **canonical Include on its original message**. All derived paperclip controls must then reflect the updated state. Do not create a new Include on the message or composer location where the user happened to press the action.
+
+The purpose of these controls is transparency and cost/context management: a user should be able to discover and shrink persistent documents/images from the current end of a long conversation without scrolling back to the message where they were first attached. The paperclip is intentionally less visually dominant than a repeated full Includes box, but persistent context must never become inaccessible or silently retained.
+
+### 6.5 Summarizer-safe persistent Includes projection — Phase 6.2
+
+The conversation Summarizer and the Includes ladder control different things. The Summarizer compresses **conversation history**. Includes control the model-facing form of persistent documents/images. Conversation folding must never silently transform, absorb, move, duplicate, or drop an Include.
+
+Canonical storage does not change: every Include remains owned by the original user message where it entered the chat, and the UI/history continues to present it there. Phase 6.2 changes only the **model-facing projection while Summarizer transmission is active**.
+
+When Summarizer transmission is active, derive two parallel model-facing layers from the same canonical chat state:
+
+1. **Persistent Include layer.** Each sent Include that remains represented in conversation context contributes its current model-facing payload exactly once: Full document text, Full image data, Condensed document text, Reduced image text, or Artifact text according to its current canonical form.
+2. **Conversation layer.** Conversation text is sent through the existing rolling-summary + retained-recent-message mechanism. Messages that introduced Includes contain a stable attachment reference in this layer rather than repeating the attachment payload.
+
+The split begins **immediately when Summarizer transmission becomes active**, including first enable on an already-long chat and while catch-up is still running. Do not leave payloads inline until their origin message crosses the fold bookmark and then relocate them later. That would both risk duplication/disappearance and unnecessarily change the prompt position later.
+
+The conversation Summarizer receives normal conversation text plus **minimal stable attachment references only**. A reference may identify the Include by stable ID, kind, and display/filename so discussion such as “the attached contract” remains coherent. The Summarizer must not receive Full document payloads, Full image bytes, Condensed document payloads, Reduced image descriptions, or Artifact payload text as material to summarize.
+
+The Summarizer may summarize what the user and AI said **about** an attachment. It may not become an attachment-transformation mechanism. It must never cause a Full document to become Condensed, a Full image to become Reduced, any Include to become an Artifact, or any Include payload to disappear. The Full → Condensed/Reduced → Artifact ladder remains controlled by the established explicit Include actions.
+
+#### Stable projection and cache eligibility
+
+Prompt caching is an optimization that depends on provider/model behavior; Speak GPT cannot guarantee that a routed provider will cache a particular document or image. The app's responsibility is to **preserve stable-prefix eligibility** whenever the model-facing context itself has not intentionally changed.
+
+- Keep the stable system/persona prefix before the persistent Include layer.
+- Keep persistent Include units before the rolling conversation summary and retained conversation history.
+- Preserve the existing cache-friendly placement of genuinely dynamic per-turn material near the newest turn; Phase 6.2 is not permission to move changing memory/lore or other dynamic injections ahead of otherwise stable history.
+- Keep Include units in original activation/message order. Adding a new Include appends a new unit after existing Include units.
+- A user-initiated Condense, Reduce, Remove-to-Artifact, or Edit changes that Include **in the same logical slot**. Do not move the changed Include to the end merely because its form changed.
+- Do not place a changing attachment count, mutable table of contents/manifest, timestamp, request-time metadata, nondeterministic ordering, or other volatile material ahead of stable Include payloads.
+- Reuse the stored document representation and stored image bytes. Do not re-extract documents, recompress/resize images, or regenerate Condensed/Reduced/Artifact content on every request merely to rebuild the projection.
+- Preserve deterministic serialization and the existing rule that text precedes Full image parts where the transport supports that structure.
+
+A new Include or an explicit Include state/content change is an intentional context change and may invalidate the provider cache from that point. Ordinary conversation folding, Complete Messages changes, summary catch-up, or passage of time must not move or rewrite an otherwise unchanged persistent Include.
+
+#### Authority and request truth
+
+Moving attachment payloads into a persistent model-facing layer is a transport/projection change only. **User-supplied attachment content remains user-origin content.** It must not be promoted to system/developer authority simply because its request position changes.
+
+The persistent Include layer and conversation layer must be the single truth used for both transmission and request-size decisions. Context-window/token-capacity measurement must evaluate the **same effective projection that will actually be sent**, with each Include payload counted exactly once. Do not maintain a separate approximation that can double-count an Include or fail to count one.
+
+Every regular chat path that supports Summarizer transmission must preserve the same semantics, including normal frozen Send and legacy/retry/voice paths. Implementation may share one projection builder or use equivalent paths, but no path may silently retain the old behavior of summarizing or dropping attachment payloads.
+
+When Summarizer transmission is off, preserve the existing full-history inline-Include request behavior. Turning Summarizer on or off is itself a meaningful request-shape change and may rebuild provider cache; do not redesign ordinary non-Summarizer chats solely to avoid that one intentional transition.
+
+The Phase 6.1 paperclip controls must reflect model-facing reality. An Include shown as persistent Full/Condensed/Reduced/Artifact context must not be silently omitted by Summarizer trimming. If a request cannot be sent because the actual persistent context exceeds a model/provider limit, use the existing explicit capacity/error behavior; do not silently auto-condense, auto-reduce, or auto-drop the Include as a hidden fallback.
+
 ## 7. Thinking / provider-supplied reasoning
 
 Provider-supplied reasoning or reasoning summaries belong to the specific AI message that produced them and remain visually distinct from the final answer.
@@ -272,7 +349,7 @@ The universal `ⓘ`, Model names, and Token usage behavior remains independent o
 The implementation agent, not the owner, is responsible for targeted verification when this feature is implemented:
 
 - inspect only the provider/protocol adapters actually supported by the app;
-- verify current primary API/provider documentation for those adapters;
+- verify current primary provider/API documentation for those adapters;
 - determine which supported response/stream forms expose separate reasoning or summaries;
 - normalize supported forms;
 - add focused parsing/persistence tests where the existing test architecture permits;
@@ -328,15 +405,46 @@ For fresh installs, use conservative defaults that most closely preserve the app
 
 ## 9. Composer and keyboard behavior
 
-Keep the current short-message interaction model while improving multiline drafting.
+Keep the current upward-growing multiline behavior and coherent keyboard/inset ownership from Phase 6, but change the normal composer geometry to a modern two-level surface.
 
-- At one line, the editable field occupies the available center space between the existing side controls.
-- The field never renders behind/under those controls.
-- As text wraps, the text area/composer grows **upward** while side controls remain bottom-anchored.
-- Preserve a sensible maximum height; the existing approximately **`120dp`** maximum is the reference unless device testing requires a small correction.
-- Beyond the maximum, the draft scrolls internally rather than consuming the conversation viewport.
-- Preserve existing attach/mic/send/conversation behavior, IDs/listeners, text watcher, voice-state tinting, send semantics, and hardware keyboard behavior.
-- Fix the case where the composer can sit partly beneath the software keyboard by using one coherent window-inset/keyboard mechanism. Do not stack a second competing offset hack on top of the existing system.
+### 9.1 Normal composer surface
+
+Use one rounded composer surface containing a full-width editable text region **above** a bottom control row. The first line of text is no longer squeezed horizontally between side controls.
+
+Bottom-row control order:
+
+- left side: **Add (`+`)**;
+- immediately to the right of Add, show the conditional **persistent Includes paperclip** from Section 6.4 when earlier sent Includes remain represented in conversation context;
+- right side: **Expand content**, then **Mic**, then the existing **Send / Conversation** control in its current state-dependent behavior.
+
+The Add (`+`) control replaces the paperclip as the entry point for attaching new content. Tapping Add opens the existing attachment chooser with the existing **Camera / Image / Document** behavior. This is a presentation/entry-point change only; attachment import, pending attachment state, capability checks, and send semantics remain the existing system.
+
+The persistent Includes paperclip and Add control have deliberately different meanings: **Add creates new pending context; paperclip manages already-sent persistent context.** Do not merge those actions into one menu.
+
+Pending unsent attachment presentation is not otherwise redesigned by this section. Preserve the existing pending Includes information and removal behavior unless a later approved design explicitly moves it.
+
+As text wraps, the normal composer continues to grow **upward**. Preserve a sensible normal-mode maximum height; the existing approximately **`120dp`** maximum remains the reference unless device testing requires a small correction. Beyond the normal-mode maximum, the draft scrolls internally rather than consuming the conversation viewport.
+
+All composer icons use the existing theme/semantic color system. Do not hard-code palette-specific icon colors or reintroduce low-contrast icon-on-similar-surface combinations.
+
+### 9.2 Expanded drafting mode
+
+Place an **Expand content** action immediately to the left of the Mic control in the normal bottom row.
+
+Tapping Expand enters an expanded drafting mode in which the **same composer and same live draft** expand to fill the available chat content area above the software keyboard and below the app/header/system-bar region. The keyboard remains usable. The expanded surface must use the existing coherent IME/window-inset mechanism rather than adding another keyboard-offset system.
+
+- Do not create a second editor and copy text between normal and expanded modes. Cursor position, selection, composing text/IME state, undo-relevant editing state where supported, and draft contents must remain continuous across the transition.
+- In expanded mode, the editable text region uses the available height instead of the normal approximately `120dp` cap and scrolls internally only when its expanded space is exhausted.
+- Keep the bottom composer controls available in expanded mode so Add, persistent Includes management, Mic, and Send/Conversation remain reachable while drafting.
+- Remove/hide the normal Expand action while expanded.
+- Show a **Collapse content** action in the **upper-right corner of the expanded composer surface**.
+- Tapping Collapse returns to normal composer mode and restores the normal height appropriate to the current draft. It must not truncate, clear, submit, or otherwise mutate the draft.
+- Entering or leaving expanded mode must not send a message, alter pending Includes, mutate canonical Includes, change voice state, or change the selected model/provider.
+- Hardware-keyboard behavior remains supported in both normal and expanded modes.
+
+### 9.3 Preserved behavior
+
+Preserve attach/add, mic, send/conversation behavior, load-bearing listeners, text watcher behavior, voice-state tinting, send semantics, hardware keyboard behavior, and the single coherent software-keyboard inset mechanism. Do not stack a second competing offset hack on top of the Phase 6 inset ownership.
 
 ## 10. Header and future drawer
 
@@ -386,9 +494,13 @@ The redesign delivers:
 - durable per-message model/token ownership;
 - permanent far-left `ⓘ` Message Details;
 - preserved attachment behavior and provider-neutral visual media presentation;
+- persistent paperclip access on later user messages and in the composer for managing earlier Includes without duplicating attachment ownership or payloads;
+- Summarizer-safe two-layer model projection that keeps persistent Include payloads independent of conversation folding, preserves user-origin authority, and optimizes stable-prefix cache eligibility without promising provider cache hits;
 - provider-neutral Thinking disclosure for reasoning actually supplied by providers;
 - dedicated Appearance settings with safe legacy preference migration;
-- upward-growing composer with stable controls and corrected keyboard insets;
+- one rounded composer with full-width text above a bottom control row, Add (`+`) for new attachments, and theme-safe controls;
+- optional expanded drafting mode that uses the same live draft and fills the available chat area above the keyboard;
+- upward-growing normal composer with stable controls and corrected keyboard insets;
 - compatibility with the separate app-wide style/theme system;
 - preserved existing chat behavior throughout.
 

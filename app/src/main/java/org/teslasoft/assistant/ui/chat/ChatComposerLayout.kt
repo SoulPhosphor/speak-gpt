@@ -17,11 +17,12 @@
 package org.teslasoft.assistant.ui.chat
 
 import android.content.Context
-import android.text.Editable
-import android.text.StaticLayout
-import android.text.TextWatcher
+import android.os.Parcel
+import android.os.Parcelable
 import android.util.AttributeSet
+import android.view.Gravity
 import android.view.View
+import android.view.View.BaseSavedState
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -34,10 +35,12 @@ import org.teslasoft.assistant.util.WindowInsetsUtil
 import kotlin.math.max
 
 /**
- * Keeps the chat composer compact for one-line drafts, then promotes the text
- * field above the fixed control row once the same text would wrap in the
- * compact center slot. This class owns layout only; ChatActivity keeps every
- * existing click listener, text watcher, voice state, and send semantic.
+ * Owns the geometry of the single live composer/editor.
+ *
+ * Normal mode keeps the editable region above a fixed bottom control row and
+ * lets the EditText grow upward until the existing 120dp reference cap. The
+ * expanded mode changes the constraints and cap on this same EditText; it
+ * never creates a second editor or copies the draft between views.
  */
 class ChatComposerLayout @JvmOverloads constructor(
     context: Context,
@@ -46,145 +49,96 @@ class ChatComposerLayout @JvmOverloads constructor(
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
 
     private lateinit var messageInput: EditText
-    private lateinit var btnAttach: ImageButton
-    private lateinit var btnMicro: ImageButton
-    private lateinit var btnSend: ImageButton
-    private var progressView: View? = null
+    private lateinit var btnExpand: ImageButton
+    private lateinit var btnCollapse: ImageButton
 
     private var expanded = false
-    private var updatePosted = false
+    private var expansionListener: ((Boolean) -> Unit)? = null
 
     private val edgeMargin = dp(8)
-    private val textEdgeMargin = dp(12)
-    private val controlGap = dp(8)
-    private val expandedTextBottomGap = dp(4)
-
-    private val layoutWatcher = object : TextWatcher {
-        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
-        override fun afterTextChanged(s: Editable?) = scheduleModeUpdate()
-    }
+    private val textBottomGap = dp(4)
+    private val normalTextMaxHeight = dp(120)
 
     override fun onFinishInflate() {
         super.onFinishInflate()
         messageInput = findViewById(R.id.message_input)
-        btnAttach = findViewById(R.id.btn_attach)
-        btnMicro = findViewById(R.id.btn_micro)
-        btnSend = findViewById(R.id.btn_send)
-        progressView = findViewById(R.id.progress)
+        btnExpand = findViewById(R.id.btn_expand_content)
+        btnCollapse = findViewById(R.id.btn_collapse_content)
 
-        messageInput.addTextChangedListener(layoutWatcher)
-        addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> scheduleModeUpdate() }
-        scheduleModeUpdate()
+        btnExpand.setOnClickListener { setExpanded(true) }
+        btnCollapse.setOnClickListener { setExpanded(false) }
+        applyMode()
     }
 
-    private fun scheduleModeUpdate() {
-        if (updatePosted) return
-        updatePosted = true
-        post {
-            updatePosted = false
-            if (!isAttachedToWindow || width <= 0) return@post
-            val shouldExpand = wouldWrapInCompactSlot()
-            if (shouldExpand != expanded) {
-                expanded = shouldExpand
-                applyMode()
-            }
-        }
+    /** Reports expansion state to ChatActivity so the existing bottom/inset
+     * owner can give the same composer view the available chat height. */
+    fun setExpansionListener(listener: ((Boolean) -> Unit)?) {
+        expansionListener = listener
+        listener?.invoke(expanded)
     }
 
-    /**
-     * Always measures against the compact center slot. That gives the layout a
-     * stable threshold: once the draft needs a second compact line it remains
-     * in multiline mode until it truly fits between the controls again.
-     */
-    private fun wouldWrapInCompactSlot(): Boolean {
-        val text = messageInput.text?.toString().orEmpty()
-        if (text.isEmpty()) return false
+    fun isExpanded(): Boolean = expanded
 
-        val attachWidth = btnAttach.measuredWidth.takeIf { it > 0 } ?: dp(48)
-        val micWidth = btnMicro.measuredWidth.takeIf { it > 0 } ?: dp(48)
-        val sendWidth = btnSend.measuredWidth.takeIf { it > 0 } ?: dp(48)
+    fun collapseIfExpanded(): Boolean {
+        if (!expanded) return false
+        setExpanded(false)
+        return true
+    }
 
-        val compactFieldWidth = width -
-            edgeMargin - attachWidth - controlGap -
-            controlGap - micWidth - controlGap - sendWidth - edgeMargin
-
-        val textWidth = compactFieldWidth -
-            messageInput.compoundPaddingLeft - messageInput.compoundPaddingRight
-
-        if (textWidth <= 0) return false
-
-        val layout = StaticLayout.Builder
-            .obtain(text, 0, text.length, messageInput.paint, textWidth)
-            .setIncludePad(false)
-            .setBreakStrategy(messageInput.breakStrategy)
-            .setHyphenationFrequency(messageInput.hyphenationFrequency)
-            .build()
-
-        return layout.lineCount > 1
+    private fun setExpanded(value: Boolean) {
+        if (expanded == value) return
+        expanded = value
+        applyMode()
+        expansionListener?.invoke(expanded)
+        requestLayout()
     }
 
     private fun applyMode() {
+        if (!::messageInput.isInitialized) return
+
         val set = ConstraintSet()
         set.clone(this)
 
-        configureControlRow(set, R.id.btn_attach, startToParent = true)
-        configureControlRow(set, R.id.btn_send, endToParent = true)
-        configureControlRow(set, R.id.btn_micro, endToView = R.id.btn_send)
-        if (progressView != null) {
-            configureControlRow(set, R.id.progress, endToParent = true)
-        }
-
         clearAnchors(set, R.id.message_input)
         set.constrainWidth(R.id.message_input, ConstraintSet.MATCH_CONSTRAINT)
-        set.constrainHeight(R.id.message_input, ConstraintSet.WRAP_CONTENT)
+        set.constrainHeight(
+            R.id.message_input,
+            if (expanded) ConstraintSet.MATCH_CONSTRAINT else ConstraintSet.WRAP_CONTENT
+        )
+
+        set.connect(
+            R.id.message_input,
+            ConstraintSet.START,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.START,
+            edgeMargin
+        )
+        set.connect(
+            R.id.message_input,
+            ConstraintSet.END,
+            ConstraintSet.PARENT_ID,
+            ConstraintSet.END,
+            edgeMargin
+        )
 
         if (expanded) {
             set.connect(
                 R.id.message_input,
-                ConstraintSet.START,
-                ConstraintSet.PARENT_ID,
-                ConstraintSet.START,
-                textEdgeMargin
-            )
-            set.connect(
-                R.id.message_input,
-                ConstraintSet.END,
-                ConstraintSet.PARENT_ID,
-                ConstraintSet.END,
-                textEdgeMargin
-            )
-            set.connect(
-                R.id.message_input,
                 ConstraintSet.TOP,
-                ConstraintSet.PARENT_ID,
-                ConstraintSet.TOP,
-                edgeMargin
+                R.id.btn_collapse_content,
+                ConstraintSet.BOTTOM,
+                textBottomGap
             )
             set.connect(
                 R.id.message_input,
                 ConstraintSet.BOTTOM,
-                R.id.btn_attach,
+                R.id.composer_controls,
                 ConstraintSet.TOP,
-                expandedTextBottomGap
+                textBottomGap
             )
         } else {
             set.connect(
                 R.id.message_input,
-                ConstraintSet.START,
-                R.id.btn_attach,
-                ConstraintSet.END,
-                controlGap
-            )
-            set.connect(
-                R.id.message_input,
-                ConstraintSet.END,
-                R.id.btn_micro,
-                ConstraintSet.START,
-                controlGap
-            )
-            set.connect(
-                R.id.message_input,
                 ConstraintSet.TOP,
                 ConstraintSet.PARENT_ID,
                 ConstraintSet.TOP,
@@ -193,69 +147,18 @@ class ChatComposerLayout @JvmOverloads constructor(
             set.connect(
                 R.id.message_input,
                 ConstraintSet.BOTTOM,
-                ConstraintSet.PARENT_ID,
-                ConstraintSet.BOTTOM,
-                edgeMargin
+                R.id.composer_controls,
+                ConstraintSet.TOP,
+                textBottomGap
             )
         }
 
         set.applyTo(this)
-    }
 
-    private fun configureControlRow(
-        set: ConstraintSet,
-        viewId: Int,
-        startToParent: Boolean = false,
-        endToParent: Boolean = false,
-        endToView: Int? = null
-    ) {
-        clearAnchors(set, viewId)
-        set.constrainWidth(viewId, dp(48))
-        set.constrainHeight(viewId, dp(48))
-
-        set.connect(
-            viewId,
-            ConstraintSet.BOTTOM,
-            ConstraintSet.PARENT_ID,
-            ConstraintSet.BOTTOM,
-            edgeMargin
-        )
-
-        if (!expanded) {
-            set.connect(
-                viewId,
-                ConstraintSet.TOP,
-                ConstraintSet.PARENT_ID,
-                ConstraintSet.TOP,
-                edgeMargin
-            )
-        }
-
-        when {
-            startToParent -> set.connect(
-                viewId,
-                ConstraintSet.START,
-                ConstraintSet.PARENT_ID,
-                ConstraintSet.START,
-                edgeMargin
-            )
-
-            endToParent -> set.connect(
-                viewId,
-                ConstraintSet.END,
-                ConstraintSet.PARENT_ID,
-                ConstraintSet.END,
-                edgeMargin
-            )
-
-            endToView != null -> set.connect(
-                viewId,
-                ConstraintSet.END,
-                endToView,
-                ConstraintSet.START,
-                controlGap
-            )
-        }
+        btnExpand.visibility = if (expanded) View.GONE else View.VISIBLE
+        btnCollapse.visibility = if (expanded) View.VISIBLE else View.GONE
+        messageInput.maxHeight = if (expanded) Int.MAX_VALUE else normalTextMaxHeight
+        messageInput.gravity = Gravity.TOP or Gravity.START
     }
 
     /** Clear only geometry anchors so cloned visibility/property state survives. */
@@ -268,6 +171,49 @@ class ChatComposerLayout @JvmOverloads constructor(
 
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density).toInt()
+
+    override fun onSaveInstanceState(): Parcelable {
+        val state = SavedState(super.onSaveInstanceState())
+        state.expanded = expanded
+        return state
+    }
+
+    override fun onRestoreInstanceState(state: Parcelable?) {
+        if (state is SavedState) {
+            super.onRestoreInstanceState(state.superState)
+            expanded = state.expanded
+            if (::messageInput.isInitialized) {
+                applyMode()
+                expansionListener?.invoke(expanded)
+            }
+        } else {
+            super.onRestoreInstanceState(state)
+        }
+    }
+
+    private class SavedState : BaseSavedState {
+        var expanded: Boolean = false
+
+        constructor(superState: Parcelable?) : super(superState)
+
+        private constructor(source: Parcel) : super(source) {
+            expanded = source.readInt() != 0
+        }
+
+        override fun writeToParcel(out: Parcel, flags: Int) {
+            super.writeToParcel(out, flags)
+            out.writeInt(if (expanded) 1 else 0)
+        }
+
+        companion object {
+            @JvmField
+            val CREATOR: Parcelable.Creator<SavedState> =
+                object : Parcelable.Creator<SavedState> {
+                    override fun createFromParcel(source: Parcel): SavedState = SavedState(source)
+                    override fun newArray(size: Int): Array<SavedState?> = arrayOfNulls(size)
+                }
+        }
+    }
 }
 
 /**

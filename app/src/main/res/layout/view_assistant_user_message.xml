@@ -220,6 +220,22 @@
                     android:tooltipText="@string/message_details_action"
                     app:srcCompat="@drawable/ic_info" />
 
+                <!-- Derived indicator for Includes owned by earlier user
+                     messages. ChatAdapter resets this on every bind so a
+                     recycled row cannot inherit another message's paperclip. -->
+                <ImageButton
+                    android:id="@+id/btn_persistent_includes"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@color/transparent"
+                    android:contentDescription="@string/message_includes_action"
+                    android:descendantFocusability="blocksDescendants"
+                    android:src="@drawable/ic_attach"
+                    android:tooltipText="@string/message_includes_action"
+                    android:visibility="gone"
+                    app:srcCompat="@drawable/ic_attach" />
+
                 <ImageButton
                     android:id="@+id/btn_speak"
                     android:layout_width="32dp"
