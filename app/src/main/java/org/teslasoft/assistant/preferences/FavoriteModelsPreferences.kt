@@ -89,7 +89,12 @@ class FavoriteModelsPreferences private constructor(private val sharedPreference
             "selectedProvider" to model.selectedProvider,
             "allowFallbacks" to model.allowFallbacks.toString(),
             "providerOrder" to Gson().toJson(model.providerOrder),
-            "ignoredProviders" to Gson().toJson(model.ignoredProviders)
+            "ignoredProviders" to Gson().toJson(model.ignoredProviders),
+            // Reasoning defaults ride on the favorite, independent of routing
+            // (§7.4). Missing keys on an older entry read back as the §7.9
+            // defaults (Auto / Show Reasoning On) in getFavorite below.
+            "reasoningEffort" to model.reasoningEffort,
+            "showReasoning" to model.showReasoning.toString()
         )
         if (existingIndex >= 0) {
             models[existingIndex] = entry
@@ -134,7 +139,12 @@ class FavoriteModelsPreferences private constructor(private val sharedPreference
             selectedProvider = entry["selectedProvider"] ?: "",
             allowFallbacks = entry["allowFallbacks"] != "false",
             providerOrder = parseStringList(entry["providerOrder"]),
-            ignoredProviders = parseStringList(entry["ignoredProviders"])
+            ignoredProviders = parseStringList(entry["ignoredProviders"]),
+            // Older favorites have no reasoning keys: default to Auto and Show
+            // Reasoning On (§7.9). A blank stored effort also falls to Auto.
+            reasoningEffort = entry["reasoningEffort"]?.takeIf { it.isNotBlank() }
+                ?: FavoriteModelObject.REASONING_AUTO,
+            showReasoning = entry["showReasoning"] != "false"
         )
     }
 

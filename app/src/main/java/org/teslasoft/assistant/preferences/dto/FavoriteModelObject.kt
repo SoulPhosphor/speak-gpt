@@ -46,7 +46,19 @@ class FavoriteModelObject(
      *  automatic and preferred modes; not sent in Only mode. Unavailable
      *  slugs stay stored but must be filtered out of the API ignore payload
      *  at request time. */
-    var ignoredProviders: List<String> = emptyList()
+    var ignoredProviders: List<String> = emptyList(),
+    /** This favorite's saved default reasoning effort (chat-redesign-plan.md
+     *  §7.4/§7.9). Stored independently from provider routing — a model may
+     *  support routing, reasoning, both, or neither. Default [REASONING_AUTO]:
+     *  send no explicit effort and let the provider/model default apply. A
+     *  favorite saved before reasoning existed reads back as [REASONING_AUTO].
+     *  Kept near the END of the constructor so existing positional callers stay
+     *  valid. */
+    var reasoningEffort: String = REASONING_AUTO,
+    /** This favorite's saved Show Reasoning preference (§7.4/§7.9). Controls
+     *  whether available provider-supplied reasoning is requested/returned for
+     *  display; it never disables the model's reasoning. Default On (true). */
+    var showReasoning: Boolean = true
 ) {
     companion object {
         /** Provider chooses each turn; no specific provider is remembered. The
@@ -58,5 +70,11 @@ class FavoriteModelObject(
 
         /** Only the chosen provider; no automatic fallback. */
         const val ROUTING_ONLY = "only"
+
+        /** Default saved reasoning effort: send no explicit effort and allow
+         *  the provider/model default to apply (§7.9). Matches
+         *  ReasoningEffort.AUTO.serialized; kept here as a string constant so
+         *  this DTO carries no dependency on the reasoning package. */
+        const val REASONING_AUTO = "auto"
     }
 }

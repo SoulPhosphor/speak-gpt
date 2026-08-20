@@ -66,6 +66,19 @@
         android:textSize="15sp"
         android:visibility="gone" />
 
+    <!-- Provider-reported reasoning tokens, kept separate from answer tokens
+         (chat-redesign-plan.md §7.8). Shown only when the provider reported a
+         reasoning-token count for this reply. -->
+    <TextView
+        android:id="@+id/details_value_reasoning_tokens"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:textColor="?attr/appTextColor"
+        android:textIsSelectable="true"
+        android:textSize="15sp"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/details_empty"
         android:layout_width="wrap_content"

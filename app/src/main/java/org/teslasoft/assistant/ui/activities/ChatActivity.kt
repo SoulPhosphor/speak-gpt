@@ -331,6 +331,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         private val responseLifecycleRecorderAttribute =
             AttributeKey<ResponseLifecycleRecorder>("ResponseLifecycleRecorder")
 
+        /** Pins the current turn's reasoning accumulator to a request whose
+         *  resolved settings want provider reasoning displayed (§7.2). Its
+         *  presence is what tells the response observer to split this stream for
+         *  reasoning even when lifecycle logging is off. */
+        private val reasoningObservationAttribute =
+            AttributeKey<org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator>("ReasoningObservation")
+
     }
 
     // Init UI
@@ -5617,6 +5624,134 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /**
+     * The reasoning capability of the active endpoint for [model], layering the
+     * §7.7 confidence ladder over this endpoint's persisted capability store.
+     */
+    private fun reasoningCapabilityForModel(model: String): org.teslasoft.assistant.reasoning.ReasoningCapability =
+        org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
+            apiEndpointObject?.reasoningCapabilityByModel, model
+        )
+
+    /**
+     * The effective reasoning settings for this turn (§7.5/§7.9): the
+     * conversation's own override, else this model's favorite default, else
+     * Auto — with the §7.8 clamp for an effort the active path no longer
+     * supports. Read from the same favorite/conversation storage the UI writes,
+     * so every send path (typed, voice, retry) resolves identically.
+     */
+    private fun resolveReasoningForModel(model: String): org.teslasoft.assistant.reasoning.ResolvedReasoning {
+        val capability = reasoningCapabilityForModel(model)
+        val favorite = favoriteForActiveEndpoint(model)
+        val favoriteEffort = favorite?.let {
+            org.teslasoft.assistant.reasoning.ReasoningEffort.fromSerialized(it.reasoningEffort)
+        }
+        val override = org.teslasoft.assistant.reasoning.ReasoningEffort.fromSerialized(
+            preferences?.getReasoningEffortOverride()
+        )
+        return org.teslasoft.assistant.reasoning.ReasoningSettingsResolver.resolve(
+            conversationOverride = override,
+            favoriteEffort = favoriteEffort,
+            favoriteShowReasoning = favorite?.showReasoning,
+            capability = capability
+        )
+    }
+
+    /**
+     * Just-before-send hook that merges this turn's reasoning instruction into
+     * the outgoing Chat Completions body (§7.9), using the same body-mutation
+     * approach as provider routing so no separate request transport exists. It
+     * applies to OpenRouter and generic OpenAI-compatible endpoints alike, in
+     * each provider's own field shape. Fully fail-safe: a non-chat body, a
+     * parse issue, a non-reasoning model, or Auto with reasoning returned leaves
+     * the request byte-for-byte unchanged, so ordinary chat can never break.
+     */
+    private fun augmentRequestWithReasoning(request: HttpRequestBuilder) {
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val text = content.text
+
+        var bodyHasTools = false
+        val model = try {
+            val root = com.google.gson.JsonParser.parseString(text).asJsonObject
+            // Only streamed chat generation carries reasoning. Auxiliary
+            // non-streamed calls on this same client (auto-naming, tool-name
+            // resolution, summarizer) must not inherit a reasoning instruction.
+            val streamed = root.get("stream")?.takeUnless { it.isJsonNull }?.asBoolean == true
+            if (streamed && root.has("messages")) {
+                bodyHasTools = (root.get("tools")?.takeUnless { it.isJsonNull }
+                    ?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: 0) > 0
+                root.get("model")?.takeIf { !it.isJsonNull }?.asString
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        } ?: return
+
+        val resolved = resolveReasoningForModel(model)
+        val capability = reasoningCapabilityForModel(model)
+        val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
+
+        // Split THIS stream for reasoning when either is true:
+        //  - display is wanted: the path can return visible reasoning and Show
+        //    Reasoning is on (Auto still returns reasoning by default); or
+        //  - continuation state may be needed: an OpenRouter reasoning path that
+        //    is offering tools, so any reasoning_details produced alongside a
+        //    tool call are captured to echo back on the follow-up (§7.2) — this
+        //    happens even when Show Reasoning is Off.
+        val wantDisplay = capability.isReasoningCapable && capability.canReturnVisibleReasoning && resolved.showReasoning
+        val wantContinuationState = capability.isReasoningCapable && isOpenRouter && bodyHasTools
+        currentTurnShowReasoning = wantDisplay
+        if (wantDisplay || wantContinuationState) {
+            currentTurnReasoning?.let { request.attributes.put(reasoningObservationAttribute, it) }
+            currentTurnReasoningObservationActive = true
+        }
+
+        // 1) The reasoning request fields for this turn.
+        val afterParam = org.teslasoft.assistant.reasoning.ReasoningRequestSerializer.augmentBody(
+            text, resolved, isOpenRouter, capability.isReasoningCapable
+        )
+        val paramAttached = afterParam != text
+        // 2) Reasoning-state continuation (§7.2): on an OpenRouter follow-up that
+        //    carries an assistant tool-call message, echo back the reasoning
+        //    details captured from the turn that produced the tool call. A no-op
+        //    on the primary request (no tool-call assistant message yet) and off
+        //    OpenRouter. Independent of Show Reasoning; never surfaced in the UI.
+        var newBody = afterParam
+        var continuationAttached = false
+        if (isOpenRouter) {
+            val withState = org.teslasoft.assistant.reasoning.ReasoningContinuationSerializer
+                .attachToToolCallMessage(newBody, currentTurnReasoning?.reasoningDetails())
+            if (withState != newBody) {
+                newBody = withState
+                continuationAttached = true
+            }
+        }
+
+        if (newBody != text) {
+            request.setBody(TextContent(newBody, content.contentType ?: ContentType.Application.Json))
+            lastReasoningAttachment = buildString {
+                append(
+                    if (paramAttached) {
+                        "reasoning attached (effort=${resolved.effort.serialized}, show=${resolved.showReasoning}, " +
+                            "source=${resolved.source}, capability=${capability.source})"
+                    } else {
+                        "no reasoning param (Auto / provider default)"
+                    }
+                )
+                if (continuationAttached) append("; reasoning_details echoed on tool-call continuation")
+                resolved.clampedFrom?.let { append(", dropped unsupported=${it.serialized}") }
+            }
+        } else {
+            lastReasoningAttachment = if (!capability.isReasoningCapable) {
+                "no reasoning fields (model not known to reason)"
+            } else {
+                "no reasoning fields (Auto / provider default)"
+            }
+        }
+    }
+
     /** Existing user-facing wording for a blocked routing configuration. */
     private fun providerBlockMessage(block: RoutingBlock): String = when (block) {
         RoutingBlock.ONLY_PROVIDER_NOT_SELECTED,
@@ -5639,6 +5774,47 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val favorite = favoriteForActiveEndpoint(model)
         val status = lastRoutingAttachment ?: "attachment requested (send hook did not run)"
         return "\n" + ProviderRoutingDiagnostics.describe(isOpenRouter, favorite, status)
+    }
+
+    /**
+     * The reasoning line appended to a Response Lifecycle entry (§7.8): what
+     * reasoning instruction was actually written on the outgoing body and the
+     * capability source it was resolved from. Reads the send hook's real
+     * outcome ([lastReasoningAttachment]); if the hook never ran it says so
+     * rather than implying anything was sent.
+     */
+    private fun reasoningLogLine(): String {
+        val status = lastReasoningAttachment ?: "reasoning hook did not run"
+        return "\nReasoning: $status"
+    }
+
+    /**
+     * Attach the reasoning captured from the split stream copy to the reply it
+     * belongs to (§7.1/§7.2). Runs from the response observer once the copy has
+     * drained; it is the sole writer of the reasoning fields, so it never races
+     * the typed stream's own completion/persistence for the answer text. It
+     * mutates the reply's in-memory map, so whichever save runs last (this one
+     * or the answer's completion save) keeps the reasoning. Reasoning is a
+     * separate channel and is never merged into the answer text — so it never
+     * reaches TTS and never signals completion. Fully best-effort.
+     */
+    private fun deliverObservedReasoning(acc: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator) {
+        if (!acc.hasReasoning()) return
+        val snapshot = acc.snapshot()
+        if (snapshot.text.isBlank()) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            val index = messages.indexOfLast { it["isBot"] == true }
+            if (index < 0) return@runOnUiThread
+            val msg = messages[index]
+            msg[ChatAdapter.KEY_MESSAGE_REASONING] = snapshot.text
+            msg[ChatAdapter.KEY_MESSAGE_REASONING_SUMMARY] = snapshot.isSummary.toString()
+            snapshot.reasoningTokens?.let {
+                msg[ChatAdapter.KEY_MESSAGE_REASONING_TOKENS] = it.toString()
+            }
+            adapter?.notifyItemChanged(index)
+            saveSettings()
+        }
     }
 
     private fun initAI() {
@@ -5697,20 +5873,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             if (!call.response.status.isSuccess()) {
                                 true
                             } else {
-                                // Observe successful generation streams only
-                                // while lifecycle logging owns a recorder. The
-                                // observer receives a split copy, so the normal
-                                // typed stream is neither buffered nor consumed.
+                                // Observe a successful generation stream when
+                                // lifecycle logging owns a recorder OR this turn
+                                // wants provider reasoning displayed. The observer
+                                // receives a split copy, so the normal typed
+                                // stream is neither buffered nor consumed.
                                 val recorder = if (call.request.attributes.contains(responseLifecycleRecorderAttribute)) {
                                     call.request.attributes[responseLifecycleRecorderAttribute]
                                 } else {
                                     null
                                 }
-                                if (recorder == null) {
-                                    false
-                                } else {
-                                    recorder.beginProviderObservation()
-                                    true
+                                val wantsReasoning = call.request.attributes.contains(reasoningObservationAttribute)
+                                when {
+                                    recorder != null -> {
+                                        recorder.beginProviderObservation()
+                                        true
+                                    }
+                                    wantsReasoning -> true
+                                    else -> false
                                 }
                             }
                         }
@@ -5718,23 +5898,50 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             try {
                                 if (!response.status.isSuccess()) {
                                     capturedProviderErrorBody = response.bodyAsText()
-                                } else if (response.call.request.attributes.contains(responseLifecycleRecorderAttribute)) {
-                                    val recorder = response.call.request.attributes[responseLifecycleRecorderAttribute]
-                                    try {
-                                        // Receive the observer's split copy ONCE (a second
-                                        // bodyAsChannel() throws and cancels the origin,
-                                        // killing the live stream) and drain it to end of
-                                        // stream — stopping early stalls Ktor's splitter
-                                        // and freezes the visible reply after ~4 KB; see
-                                        // consumeObservedStream.
-                                        val observedChannel = response.bodyAsChannel()
-                                        ReportedProviderParser.consumeObservedStream(observedChannel) { reported ->
-                                            // Response-derived only. Never substitute the
-                                            // configured or requested provider here.
-                                            recorder.noteActualModelProvider(reported)
+                                } else {
+                                    val attrs = response.call.request.attributes
+                                    val recorder = if (attrs.contains(responseLifecycleRecorderAttribute)) {
+                                        attrs[responseLifecycleRecorderAttribute]
+                                    } else {
+                                        null
+                                    }
+                                    val reasoningAcc = if (attrs.contains(reasoningObservationAttribute)) {
+                                        attrs[reasoningObservationAttribute]
+                                    } else {
+                                        null
+                                    }
+                                    if (recorder != null || reasoningAcc != null) {
+                                        try {
+                                            // Receive the observer's split copy ONCE (a second
+                                            // bodyAsChannel() throws and cancels the origin,
+                                            // killing the live stream) and drain it to end of
+                                            // stream — stopping early stalls Ktor's splitter
+                                            // and freezes the visible reply after ~4 KB; see
+                                            // consumeObservedStream. One drain feeds both the
+                                            // lifecycle inspector and, via lineObserver, the
+                                            // reasoning accumulator.
+                                            val observedChannel = response.bodyAsChannel()
+                                            ReportedProviderParser.consumeObservedStream(
+                                                observedChannel,
+                                                onProvider = { reported ->
+                                                    // Response-derived only. Never substitute the
+                                                    // configured or requested provider here.
+                                                    recorder?.noteActualModelProvider(reported)
+                                                },
+                                                lineObserver = reasoningAcc?.let { acc -> { line -> acc.acceptLine(line) } }
+                                            )
+                                        } finally {
+                                            recorder?.finishProviderObservation()
+                                            if (reasoningAcc != null) {
+                                                // Display only when Show Reasoning wanted it; the
+                                                // reasoning_details for a tool-call continuation are
+                                                // held in the accumulator regardless.
+                                                if (currentTurnShowReasoning) deliverObservedReasoning(reasoningAcc)
+                                                // Signal capture complete so a tool continuation can
+                                                // echo reasoning_details on its follow-up.
+                                                currentTurnReasoningObserved?.complete(Unit)
+                                            }
                                         }
-                                    } finally {
-                                        recorder.finishProviderObservation()
                                     }
                                 }
                             } catch (_: Exception) { /* best effort; never disturb the failure path */ }
@@ -5760,6 +5967,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 throw blocked
                             } catch (_: Exception) {
                                 // Any other issue is non-fatal: send unmodified.
+                            }
+                            try {
+                                // Reasoning rides the same just-before-send body
+                                // mutation; independent of routing and fully
+                                // fail-safe, so it never blocks or breaks a send.
+                                augmentRequestWithReasoning(request)
+                            } catch (_: Exception) {
+                                // Non-fatal: send without a reasoning instruction.
                             }
                             proceed(request)
                         }
@@ -6654,6 +6869,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             results.add(kotlin.Pair(call, result))
         }
 
+        // §7.2: before dispatching the follow-up, make sure this turn's
+        // reasoning state has finished being captured from the split stream, so
+        // the assistant tool-call message can echo its reasoning_details back.
+        // Bounded so a stalled observer can never hang the turn; skipped
+        // entirely when reasoning was never observed for this turn.
+        if (currentTurnReasoningObservationActive) {
+            kotlinx.coroutines.withTimeoutOrNull(1500L) {
+                currentTurnReasoningObserved?.await()
+            }
+        }
+
         var assistantCallId = 0
         val assistantToolCallMessage = ChatMessage(
             role = ChatRole.Assistant,
@@ -6873,6 +7099,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  that never runs is reported as unconfirmed rather than "attached". */
     @Volatile
     private var lastRoutingAttachment: String? = null
+    /** Diagnostic: the reasoning instruction actually written onto the outgoing
+     *  body by [augmentRequestWithReasoning] for this streamed request, or a
+     *  reason none was (§7.8). Written on the send thread, read when the
+     *  lifecycle entry finalizes. Reset with [lastRoutingAttachment]. */
+    @Volatile
+    private var lastReasoningAttachment: String? = null
     private var currentLifecycleTurnId: String = ""
     private var lifecycleTurnCounter: Int = 0
 
@@ -6897,6 +7129,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // with its own result), so the send hook's actual outcome is recorded
         // fresh and a hook that never runs never reports a stale attachment.
         lastRoutingAttachment = null
+        lastReasoningAttachment = null
         // Reset the dispatch boundary for THIS attempt regardless of whether
         // lifecycle logging is on, because the Provider Failure Log gate also
         // depends on it.
@@ -6975,7 +7208,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             receivedCharacters = r.receivedCharacters, durationMs = durationMs,
             generationId = r.generationId, errorText = errorText,
             attemptId = r.attemptId
-        ) + providerRoutingLogLine(r.model)
+        ) + providerRoutingLogLine(r.model) + reasoningLogLine()
         currentLifecycle = null
         org.teslasoft.assistant.preferences.Logger.logResponseLifecycleAsync(this, body)
     }
@@ -7670,8 +7903,42 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // whose provider reports no usage does not inherit the previous
             // turn's count.
             pendingResponseTokens = null
+            // Fresh reasoning accumulator for this turn. The send hook attaches
+            // it to reasoning-wanted requests; the response observer feeds it
+            // from the split stream copy. A turn that never wants reasoning
+            // simply never has it observed.
+            currentTurnReasoning = org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator()
+            currentTurnShowReasoning = false
+            currentTurnReasoningObservationActive = false
+            currentTurnReasoningObserved = kotlinx.coroutines.CompletableDeferred()
         }
     }
+
+    /** The current turn's reasoning accumulator (§7.2). Created when the
+     *  streamed reply begins; fed by the response observer on reasoning-wanted
+     *  turns; read once the split stream drains to stamp the reply's Thinking
+     *  content and to echo reasoning state on a tool-call continuation. Null
+     *  between turns. */
+    @Volatile
+    private var currentTurnReasoning: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator? = null
+
+    /** Whether this turn's reasoning should be DISPLAYED (Show Reasoning on and
+     *  the path returns visible reasoning). Reasoning may still be observed for
+     *  continuation state when this is false (§7.2). */
+    @Volatile
+    private var currentTurnShowReasoning: Boolean = false
+
+    /** True once the response observer has been asked to split this turn's
+     *  stream for reasoning (display and/or continuation state), so the tool
+     *  continuation knows to wait for that capture before dispatching. */
+    @Volatile
+    private var currentTurnReasoningObservationActive: Boolean = false
+
+    /** Completes when the observer finishes draining this turn's split stream,
+     *  so a tool-call continuation can await reasoning_details capture before
+     *  building the follow-up. Null between turns. */
+    @Volatile
+    private var currentTurnReasoningObserved: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
     /** Provider-reported total tokens for the reply currently streaming, taken
      *  from the usage-bearing final chunk (streamOptions.includeUsage). Null

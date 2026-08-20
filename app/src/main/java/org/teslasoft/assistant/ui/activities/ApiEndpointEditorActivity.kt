@@ -217,6 +217,11 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var currentToolCapabilityJson: String = ""
     private var btnClearToolCapability: MaterialButton? = null
 
+    /** Learned reasoning capability (chat-redesign-plan.md §7.7). Not edited on
+     *  this screen; carried through save so editing a profile never wipes the
+     *  reasoning capability discovered during catalog work. */
+    private var currentReasoningCapabilityJson: String = ""
+
     /** Snapshot of the initial field values, for the discard-changes check. */
     private var initialSnapshot: String = ""
 
@@ -403,6 +408,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         populateCapabilitySection()
         currentToolCapabilityJson = endpoint.toolCapabilityByModel
         refreshToolCapabilityReset()
+        currentReasoningCapabilityJson = endpoint.reasoningCapabilityByModel
 
         // A brand-new profile has nothing to delete yet.
         btnDelete?.visibility = if (position == -1) ImageButton.GONE else ImageButton.VISIBLE
@@ -605,6 +611,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             },
             imageCapabilityByModel = currentCapabilityJson,
             toolCapabilityByModel = currentToolCapabilityJson,
+            reasoningCapabilityByModel = currentReasoningCapabilityJson,
             // The default path is stored as blank so a future default change
             // reaches profiles that never customized it.
             providerDiscoveryPath = fieldProviderDiscoveryPath?.text.toString().trim()

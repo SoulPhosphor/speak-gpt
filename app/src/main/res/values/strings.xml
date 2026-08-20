@@ -3211,8 +3211,29 @@
          stored. -->
     <string name="message_details_action">Message Details</string>
     <string name="message_details_empty">Details Not Available</string>
+    <!-- Collapsed disclosure label for provider-supplied reasoning (chat-redesign-plan.md §7.1). -->
+    <string name="reasoning_thinking_label">Thinking</string>
+    <!-- Reasoning-effort level names for the Thinking dropdown (§7.4/§7.5). "Auto"
+         means send no explicit effort; "Off" disables reasoning where supported. -->
+    <string name="reasoning_effort_auto">Auto</string>
+    <string name="reasoning_effort_off">Off</string>
+    <string name="reasoning_effort_minimal">Minimal</string>
+    <string name="reasoning_effort_low">Low</string>
+    <string name="reasoning_effort_medium">Medium</string>
+    <string name="reasoning_effort_high">High</string>
+    <!-- Favorite Reasoning Settings screen (chat-redesign-plan.md §7.4). -->
+    <string name="reasoning_settings_title">Reasoning Settings</string>
+    <string name="reasoning_show_reasoning_label">Show Reasoning</string>
+    <string name="reasoning_settings_saved_toast">Saved</string>
+    <!-- Accessibility descriptions for the two lightbulb uses (§7.9): the
+         actionable favorite shortcut and the informational View All indicator. -->
+    <string name="reasoning_settings_bulb_desc">Reasoning settings</string>
+    <string name="reasoning_model_indicator_desc">Reasoning model</string>
     <!-- Token count shown in the compact line and the details popup, e.g. "1,234 tokens". -->
     <string name="chat_token_count">%1$s tokens</string>
+    <!-- Reasoning-token count in Message Details, kept separate from answer
+         tokens (chat-redesign-plan.md §7.8), e.g. "512 reasoning tokens". -->
+    <string name="chat_reasoning_token_count">%1$s reasoning tokens</string>
     <!-- Regenerated-response pager on an assistant message. -->
     <string name="version_nav_prev">Previous Response Version</string>
     <string name="version_nav_next">Next Response Version</string>

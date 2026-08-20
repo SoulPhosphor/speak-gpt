@@ -106,6 +106,7 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
         viewHolder.modelAction.contentDescription = context.getString(R.string.label_remove_from_favorites)
 
         bindRoutingGear(viewHolder, modelId, endpointId, rowTextColor)
+        bindReasoningLightbulb(viewHolder, modelId, endpointId, rowTextColor)
 
         viewHolder.voiceBg.setOnClickListener {
             listener?.onItemClick(modelId, endpointId)
@@ -159,6 +160,36 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
         }
     }
 
+    /**
+     * The actionable reasoning lightbulb (chat-redesign-plan.md §7.4). Shown for
+     * a favorite whose model/provider path exposes at least one reasoning
+     * setting (an effort choice and/or Show Reasoning). Tapping opens the
+     * dedicated Reasoning Settings screen. Independent of the routing gear —
+     * both may appear on the same favorite.
+     */
+    private fun bindReasoningLightbulb(viewHolder: ViewHolder, modelId: String, endpointId: String, tintColor: Int) {
+        val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
+        val capability = org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
+            endpoint.reasoningCapabilityByModel, modelId
+        )
+        if (!capability.hasConfigurableSetting) {
+            viewHolder.reasoningSettings.visibility = View.GONE
+            viewHolder.reasoningSettings.setOnClickListener(null)
+            return
+        }
+        viewHolder.reasoningSettings.imageTintList = ColorStateList.valueOf(tintColor)
+        viewHolder.reasoningSettings.alpha = 1f
+        viewHolder.reasoningSettings.isClickable = true
+        viewHolder.reasoningSettings.tooltipText = context.getString(R.string.reasoning_settings_bulb_desc)
+        viewHolder.reasoningSettings.contentDescription = context.getString(R.string.reasoning_settings_bulb_desc)
+        viewHolder.reasoningSettings.visibility = View.VISIBLE
+        viewHolder.reasoningSettings.setOnClickListener {
+            context.startActivity(
+                org.teslasoft.assistant.ui.activities.ReasoningSettingsActivity.createIntent(context, modelId, endpointId)
+            )
+        }
+    }
+
     private fun getDarkAccentDrawable(drawable: Drawable, context: Context) : Drawable {
         DrawableCompat.setTint(DrawableCompat.wrap(drawable), getSurfaceColor(context))
         return drawable
@@ -182,6 +213,7 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
         val voiceBg: ConstraintLayout = view.findViewById(R.id.voice_bg)
         val modelAction: ImageButton = view.findViewById(R.id.btn_action)
         val routingSettings: ImageButton = view.findViewById(R.id.btn_routing_settings)
+        val reasoningSettings: ImageButton = view.findViewById(R.id.btn_reasoning_settings)
         val unavailableWarning: ImageView = view.findViewById(R.id.model_unavailable_warning)
     }
 

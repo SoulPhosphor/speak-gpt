@@ -341,6 +341,7 @@ Do not hard-code model-name lists to decide whether Thinking appears.
 - Never expose hidden/internal reasoning that the provider did not return to the app.
 - Persist reasoning with the specific message so it survives reopening and is not changed by later model switches.
 - Streaming may update separately streamed reasoning while the response is in progress; persisted completed message data is the source of truth after completion.
+- **Show Reasoning controls presentation/return of user-visible reasoning only. It must not be treated as a switch that disables model reasoning.** If the provider requires opaque/encrypted reasoning state, reasoning details, thought signatures, or equivalent continuation data to be preserved across turns or tool calls, retain and resend that state as required even when Show Reasoning is Off.
 
 The universal `ⓘ`, Model names, and Token usage behavior remains independent of Thinking. Thinking is content-presence driven, not an Appearance toggle.
 
@@ -351,10 +352,124 @@ The implementation agent, not the owner, is responsible for targeted verificatio
 - inspect only the provider/protocol adapters actually supported by the app;
 - verify current primary provider/API documentation for those adapters;
 - determine which supported response/stream forms expose separate reasoning or summaries;
+- determine whether each provider requires reasoning-state preservation across turns/tool calls and preserve that state correctly;
 - normalize supported forms;
 - add focused parsing/persistence tests where the existing test architecture permits;
 - gracefully show no Thinking row when no separate reasoning is supplied;
 - document any supported provider path where upstream reasoning exists but the app cannot currently obtain it.
+
+### 7.4 Favorite-model reasoning settings
+
+Reasoning configuration is stored with the favorite model and remains independent from provider routing. Do not fold reasoning controls into `ChooseProviderActivity` or otherwise make provider routing responsible for reasoning configuration. A model may support provider routing, configurable reasoning, both, or neither.
+
+In favorite-model rows:
+
+- keep the existing **provider cog** as the direct shortcut to provider routing;
+- add a separate **lightbulb icon using the Google/Material lightbulb icon treatment** as the direct shortcut to reasoning settings;
+- show the provider cog only where provider routing is available under the existing rules;
+- show the lightbulb for any model SpeakGPT knows is reasoning-capable when at least one reasoning-related setting is available, even if effort itself is not configurable;
+- allow both icons to appear on the same favorite when both capabilities apply;
+- do not replace these two direct actions with a three-dot overflow menu at this stage. If favorite-specific actions grow beyond these two later, reconsider an overflow menu then.
+
+Tapping the lightbulb opens a dedicated **full-screen Reasoning Settings screen**. Use the app's existing full-screen header pattern with a back action on the left and a single **Save** action at the upper right.
+
+The Reasoning Settings screen contains only controls the active model/provider combination can actually support, in this order when present:
+
+1. **Thinking** — a dropdown containing only the reasoning-effort levels supported for that model/provider combination. `Auto` means SpeakGPT does not explicitly request an effort level and allows the provider/model default to apply.
+2. **Show Reasoning** — an On/Off toggle controlling whether available provider-supplied reasoning is requested/returned for display.
+
+A reasoning-capable model that does not expose configurable effort may therefore have no Thinking dropdown but may still expose Show Reasoning. A model with mandatory reasoning must not present an Off choice merely because another model supports one.
+
+These values are the favorite model's saved default reasoning behavior. They are not provider-routing settings and must not be stored inside the provider-routing configuration merely because a particular model happens to use OpenRouter.
+
+The screen uses explicit save behavior:
+
+- changing either control marks the screen dirty;
+- Save persists the favorite's reasoning settings;
+- after a successful save, briefly show the Save action in the app's existing green success state and show a `Saved` toast;
+- after saving, clear dirty state so Back exits normally;
+- if the user tries to leave with unsaved changes, use the app's existing unsaved-changes confirmation dialog behavior and wording rather than inventing a new dialog pattern.
+
+### 7.5 Quick Settings reasoning control and inheritance
+
+Reasoning effort is expected to be changed more frequently than the favorite's full reasoning configuration, so expose the current conversation's **Thinking** level near the top of Quick Settings rather than burying it with lower-frequency tuning controls.
+
+- Place the **Thinking** dropdown directly beneath **System Prompt** in Quick Settings.
+- Use the same available reasoning levels and capability rules as the favorite Reasoning Settings screen, but apply the selected value to the current conversation rather than silently rewriting the favorite.
+- Keep this control visually lightweight: **do not give the Thinking row/tile a separate card or background treatment** like the larger controls above it. It should read as a simple inline dropdown within the Quick Settings flow.
+- Show it only when the active model/provider combination exposes configurable reasoning.
+- Do **not** add **Show Reasoning** to Quick Settings at this stage. That lower-frequency preference remains in the favorite's full Reasoning Settings screen.
+
+Inheritance is explicit:
+
+- when a new conversation is created from or first uses a favorite, its reasoning effort starts from that favorite's saved default;
+- once the user changes Thinking in Quick Settings, that conversation owns and persists its override independently;
+- changing a favorite later does not retroactively rewrite existing conversations that already have their own reasoning setting;
+- if a conversation temporarily switches to a non-reasoning model, hide the Thinking control but preserve the conversation's last applicable reasoning preference so switching back does not erase it;
+- `Auto` remains a real persisted choice meaning “send no explicit effort and allow provider/model default behavior,” not an alias for Medium or any other explicit level.
+
+### 7.6 Reasoning indicator in View All models
+
+The full **Select AI model → View All** list must identify models that SpeakGPT knows support reasoning before the user favorites or selects them. Do not require the user to infer reasoning capability from the model name, because provider-visible names and variants are not consistently self-describing.
+
+- Use the same **Google/Material lightbulb** visual language as the favorite-model reasoning shortcut.
+- For a model whose reasoning capability is known, show a **small, non-clickable lightbulb indicator immediately to the left of the existing favorite/thumbs-up control**.
+- Keep the model-name text in its existing aligned column. Do not place the lightbulb before the model name and do not reserve a leading-icon column on every row merely to keep names aligned.
+- The View All lightbulb is informational only. Tapping it must not open reasoning settings; the favorite-row lightbulb remains the actionable reasoning-settings shortcut after a model is favorited.
+- Keep the capability indicator visually quieter and smaller than the favorite action so the repeated icon does not dominate the model list.
+- Unknown capability must remain unknown rather than being treated as proof that the model does not reason.
+
+The meaning of the lightbulb is consistent across surfaces: in **View All** it means “this model supports reasoning”; on a **favorite** it is the direct control for that model's saved reasoning settings.
+
+### 7.7 Reasoning-capability discovery and confidence
+
+Reasoning support must be represented internally as capability data, not as one `isThinkingModel` boolean and not as a hard-coded list of model names. At minimum distinguish:
+
+- whether reasoning support is known, absent, or unknown;
+- whether reasoning effort is configurable;
+- which effort values are supported;
+- whether reasoning is mandatory or can be disabled;
+- whether user-visible reasoning content/summaries can be returned;
+- whether token-budget reasoning is supported where relevant.
+
+Use a confidence ladder so the app is broadly compatible without pretending uncertain data is authoritative:
+
+1. **Provider/model metadata first.** Prefer structured capability metadata returned by the provider/model-list API. OpenRouter is the initial strongest path and should use its reasoning capability metadata directly.
+2. **Provider-adapter knowledge second.** For direct providers that do not expose equivalent model-list capability metadata, the provider adapter may use current official provider model capability information or stable provider-specific metadata to classify supported models and levels.
+3. **Strong variant/identifier evidence only as a fallback.** A provider-defined variant marker that unambiguously denotes a reasoning SKU may be used as lower-confidence evidence. Generic substrings such as `thinking`, `reasoning`, `r1`, `deep`, `pro`, or similar naming patterns must not become the authoritative long-term classifier by themselves.
+4. **Unknown otherwise.** If capability cannot be established confidently, preserve `Unknown` rather than converting uncertainty to `false`.
+
+Do not show a question-mark lightbulb or other extra unknown-state icon in the model list. Unknown is an internal state, not another piece of visual clutter.
+
+Capability discovery should happen as part of normal model-catalog/adapter metadata work and must not require a paid generation request merely to decide whether to show the lightbulb. If a favorite was created while capability was Unknown and later metadata establishes reasoning support, the favorite may automatically gain its reasoning lightbulb without requiring the user to remove and re-add it.
+
+### 7.8 Capability changes, failures, usage, and diagnostics
+
+Reasoning capability can change over time as providers update models. The client must fail safely and preserve useful diagnostics.
+
+- Never present an effort value that the active model/provider combination is known not to support.
+- If a saved favorite or conversation contains an effort level that is no longer supported, do not send an invalid value. Resolve to a safe supported behavior, preferring `Auto` when there is no unambiguous equivalent, and keep enough diagnostic information to explain that a previously saved choice became unavailable.
+- If reasoning is mandatory, do not expose a reasoning-Off choice.
+- If the model reasons but the provider does not return user-visible reasoning content, Show Reasoning produces no Thinking disclosure; that is not itself a generation failure.
+- If metadata says a reasoning parameter is supported but the provider rejects that parameter at request time, classify/log it as a reasoning-capability mismatch or provider-parameter error rather than collapsing it into a generic generation failure. Diagnostics should include the requested reasoning setting and the capability source used.
+- When the provider reports reasoning/thinking token usage separately, preserve that value separately from ordinary answer-token usage. Message Details and generation diagnostics may surface the provider-reported reasoning-token count where meaningful. Do not estimate missing reasoning tokens.
+- Hiding reasoning does not imply that reasoning becomes free or disabled. Cost/latency are controlled primarily by whether/how much the model reasons, while Show Reasoning controls whether available reasoning is returned/displayed.
+
+### 7.9 Resolved defaults and generation-time edge behavior
+
+These rules close the remaining ambiguity so implementation does not invent product behavior:
+
+- **Default effort is `Auto`.** A newly favorited reasoning-capable model starts with Thinking = Auto unless the user changes it.
+- **Default Show Reasoning is On.** For a newly favorited model, display provider-supplied reasoning when the provider actually returns user-visible reasoning. Do not fabricate reasoning and do not force a provider-specific reasoning-enable request solely to satisfy the display toggle.
+- **A reasoning model does not have to be favorited to work correctly.** If the user selects a reasoning-capable model directly from View All and there is no favorite reasoning configuration, use Auto for effort and display any user-visible reasoning the provider returns. The lack of a favorite must not silently disable reasoning support.
+- **Precedence is conversation override → current favorite default → Auto/provider/model default.** A persisted conversation override wins while it exists. If the conversation has no override and the user switches to another favorite, that favorite's saved default becomes effective. If there is neither an override nor a favorite-saved value, use Auto and do not send an explicit effort.
+- **Off is capability-driven.** Show an Off/None choice only when the active model/provider path explicitly supports disabling reasoning. Off means send the provider-appropriate disable signal. Never synthesize Off for a mandatory-reasoning model.
+- **Do not invent a generic reasoning-budget UI in this design.** If a provider or gateway safely maps semantic effort levels to token budgets, the adapter may perform that translation. If a direct provider exposes only a raw token budget and there is no documented, stable semantic mapping, do not guess a Low/Medium/High mapping and do not add an unplanned token slider. Omit the effort control for that path and preserve the capability for a future explicit budget UI decision.
+- **Capabilities are keyed to the effective endpoint/provider/model path, not just the visible model name.** Re-evaluate available reasoning controls when endpoint, provider routing, or model changes. Do not assume two providers serving the same model identifier expose identical reasoning controls.
+- **Retries/regenerations use the current effective reasoning setting at dispatch time.** This allows the user to raise or lower Thinking in Quick Settings and then retry intentionally. Historical messages retain their own reasoning content and metadata and are not rewritten.
+- **Persist useful per-generation reasoning metadata where available.** Keep the requested reasoning preference and any provider-reported effective effort, reasoning-token usage, or other supported reasoning metadata with the generation/message diagnostics so later inspection can explain what was requested and what actually happened. Do not invent an “actual effort” when the provider does not report one.
+- **Filtered/search View All rows use the same capability indicator rules as the unfiltered list.** Search must not accidentally remove the reasoning lightbulb from a known reasoning-capable model.
+- **Accessibility is required for both lightbulb uses.** The informational View All bulb should expose a concise accessibility description such as `Reasoning model`; the actionable favorite bulb should expose `Reasoning settings`. Do not make the informational bulb a fake button merely to give it an accessibility label.
 
 ## 8. Appearance destination and legacy settings migration
 
@@ -365,7 +480,7 @@ Visible copy:
 - Title: `Appearance`
 - Subtitle: `Customize the look of your chat.`
 
-Use the existing shared overall-app row/style system. Do not copy the general style sheet into this plan.
+Use the existing shared overall-app row/style system. Do not copy or merge the general style sheet into this plan.
 
 Appearance controls, in order:
 
@@ -497,6 +612,13 @@ The redesign delivers:
 - persistent paperclip access on later user messages and in the composer for managing earlier Includes without duplicating attachment ownership or payloads;
 - Summarizer-safe two-layer model projection that keeps persistent Include payloads independent of conversation folding, preserves user-origin authority, and optimizes stable-prefix cache eligibility without promising provider cache hits;
 - provider-neutral Thinking disclosure for reasoning actually supplied by providers;
+- reasoning-state preservation independent from Show Reasoning;
+- favorite-model reasoning defaults with a dedicated lightbulb shortcut and full-screen saved settings;
+- high-placement Quick Settings Thinking dropdown with persistent per-conversation override behavior;
+- reasoning-capability lightbulb indicators in the View All model list when capability is known;
+- provider-neutral reasoning capability discovery using structured metadata first and conservative fallbacks thereafter;
+- safe handling of capability changes, unsupported saved levels, mandatory reasoning, reasoning usage, and capability-mismatch diagnostics;
+- explicit defaults, precedence, direct-selection behavior, retry behavior, budget-only handling, and reasoning accessibility semantics;
 - dedicated Appearance settings with safe legacy preference migration;
 - one rounded composer with full-width text above a bottom control row, Add (`+`) for new attachments, and theme-safe controls;
 - optional expanded drafting mode that uses the same live draft and fills the available chat area above the keyboard;

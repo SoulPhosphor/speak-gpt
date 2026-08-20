@@ -53,6 +53,7 @@ object PerChatSettingKeys {
         "api_endpoint_id",
         "logit_biases_config_id",
         "function_calling",
+        "reasoning_effort",
 
         // Imaging
         "imageModel",

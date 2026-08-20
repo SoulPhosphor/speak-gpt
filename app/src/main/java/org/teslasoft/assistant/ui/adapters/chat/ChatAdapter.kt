@@ -227,6 +227,23 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         const val KEY_MESSAGE_TOKENS = "responseTokens"
         const val KEY_MESSAGE_TIME = "messageTime"
 
+        // Provider-supplied reasoning for this assistant reply (chat-redesign-
+        // plan.md §7). Stored as strings like the attribution keys above so they
+        // round-trip through the chat's generic Gson map and travel in a
+        // regenerated turn's version snapshot. All absent unless the provider
+        // actually returned reasoning for this reply.
+        //   KEY_MESSAGE_REASONING        — the normalized reasoning text shown
+        //                                  in the collapsed Thinking disclosure.
+        //   KEY_MESSAGE_REASONING_SUMMARY — "true" when the provider supplied a
+        //                                  summary rather than raw reasoning, so
+        //                                  it is never presented as raw thought.
+        //   KEY_MESSAGE_REASONING_TOKENS — provider-reported reasoning-token
+        //                                  count, kept separate from answer
+        //                                  tokens (§7.8).
+        const val KEY_MESSAGE_REASONING = "reasoningText"
+        const val KEY_MESSAGE_REASONING_SUMMARY = "reasoningIsSummary"
+        const val KEY_MESSAGE_REASONING_TOKENS = "reasoningTokens"
+
         // Regenerated-response history for one assistant turn (owner spec, Aug
         // 16 2026). Each turn that has been regenerated keeps every version:
         //   KEY_VARIANTS          — JSON array of version snapshots, each a
@@ -255,6 +272,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             KEY_MESSAGE_MODEL,
             KEY_MESSAGE_TOKENS,
             KEY_MESSAGE_TIME,
+            KEY_MESSAGE_REASONING,
+            KEY_MESSAGE_REASONING_SUMMARY,
+            KEY_MESSAGE_REASONING_TOKENS,
             MessageCompletionState.KEY_STATE,
             MessageCompletionState.KEY_STATE_DETAIL,
             MessageCompletionState.KEY_ERROR_TEXT
@@ -318,6 +338,15 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
      * as soon as it scrolled into that recycled slot.
      */
     private val expandedIncludeRows: MutableSet<String> = mutableSetOf()
+
+    /**
+     * Which assistant replies currently have their Thinking disclosure expanded,
+     * keyed by a content-stable key rather than position for the same recycling
+     * reason as [expandedIncludeRows]. Default collapsed (§7.1): a key is absent
+     * until the user taps to expand, and this set starts empty each time the
+     * chat is opened, so reopening always shows Thinking collapsed.
+     */
+    private val expandedReasoning: MutableSet<String> = mutableSetOf()
 
     override fun getItemViewType(position: Int): Int {
         if (dataArray[position][KEY_IMAGE_CONFIRMATION] == true) {
@@ -552,6 +581,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // Compact model/token line under the identity. Present only on the
         // assistant layout (model/tokens are AI-side), so nullable.
         private val messageMeta: TextView? = itemView.findViewById(R.id.message_meta)
+        // Provider-supplied reasoning disclosure (§7.1). Present only on the
+        // assistant layout, so nullable.
+        private val reasoningContainer: LinearLayout? = itemView.findViewById(R.id.reasoning_container)
+        private val reasoningHeader: LinearLayout? = itemView.findViewById(R.id.reasoning_header)
+        private val reasoningText: TextView? = itemView.findViewById(R.id.reasoning_text)
+        private val reasoningChevron: ImageView? = itemView.findViewById(R.id.reasoning_chevron)
         // Regenerated-response version pager, far right of the assistant action
         // bar. Present only on the assistant layout, so nullable.
         private val versionNav: View? = itemView.findViewById(R.id.version_nav)
@@ -606,6 +641,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateSpeakButton(display, position)
             updateStatusMarker(display)
             updateMessageMeta(display, isGeneratedImage)
+            updateReasoning(display, position)
             updateVersionNav(chatMessage, position)
 
             btnDetails.setOnClickListener { anchor ->
@@ -864,6 +900,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             return context.getString(R.string.chat_token_count, grouped)
         }
 
+        /** The provider-reported reasoning-token count for this turn, kept
+         *  separate from the answer-token total (§7.8), or null when this reply
+         *  stored no reasoning-token count. */
+        private fun reasoningTokenCountLabel(chatMessage: HashMap<String, Any>): String? {
+            val raw = chatMessage[KEY_MESSAGE_REASONING_TOKENS]?.toString()?.takeIf { it.isNotBlank() }
+                ?: return null
+            val count = raw.toLongOrNull() ?: return null
+            val grouped = NumberFormat.getIntegerInstance(Locale.getDefault()).format(count)
+            return context.getString(R.string.chat_reasoning_token_count, grouped)
+        }
+
         /**
          * The anchored Message Details popup (chat-redesign-plan.md §5). Always
          * reachable regardless of the compact-display toggles. Shows only the
@@ -892,6 +939,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             val tokens = if (isBot) tokenCountLabel(chatMessage) else null
             anyShown = bindDetailValue(content, R.id.details_value_tokens, tokens) || anyShown
+
+            val reasoningTokens = if (isBot) reasoningTokenCountLabel(chatMessage) else null
+            anyShown = bindDetailValue(content, R.id.details_value_reasoning_tokens, reasoningTokens) || anyShown
 
             content.findViewById<TextView>(R.id.details_empty).visibility =
                 if (anyShown) View.GONE else View.VISIBLE
@@ -1189,6 +1239,41 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * @return true when the tray is showing at least one full attachment
          * record (used by [bind] to decide whether the message is attachment-only).
          */
+        /**
+         * The collapsed Thinking disclosure for an assistant reply that carries
+         * provider-supplied reasoning (chat-redesign-plan.md §7.1). Reasoning is
+         * its own row between the identity/metadata line and the answer; tapping
+         * only expands/collapses the already-received text and never regenerates
+         * or alters the answer. Absent reasoning collapses the row to nothing.
+         * Every branch sets visibility explicitly because rows are recycled.
+         */
+        private fun updateReasoning(chatMessage: HashMap<String, Any>, position: Int) {
+            val container = reasoningContainer ?: return
+            val text = chatMessage[KEY_MESSAGE_REASONING]?.toString()?.takeIf { it.isNotBlank() }
+            if (chatMessage["isBot"] != true || text == null) {
+                container.visibility = View.GONE
+                reasoningText?.text = ""
+                reasoningHeader?.setOnClickListener(null)
+                return
+            }
+
+            container.visibility = View.VISIBLE
+            // Content-stable key (like the include tray) so the open/closed state
+            // stays with THIS reply's reasoning across recycling, not a position.
+            val key = "R" + (chatMessage[KEY_MESSAGE_TIME]?.toString() ?: "") + "" + text.hashCode()
+            val expanded = expandedReasoning.contains(key)
+
+            reasoningText?.text = text
+            reasoningText?.visibility = if (expanded) View.VISIBLE else View.GONE
+            // Chevron: right when collapsed, rotated to point down when expanded.
+            reasoningChevron?.rotation = if (expanded) 90f else 0f
+
+            reasoningHeader?.setOnClickListener {
+                if (!expandedReasoning.add(key)) expandedReasoning.remove(key)
+                notifyItemChanged(position)
+            }
+        }
+
         private fun updateIncludeSummary(chatMessage: HashMap<String, Any>, position: Int): Boolean {
             val summary = includeSummary ?: return false
             val includes = ChatInclude.listFromJson(
