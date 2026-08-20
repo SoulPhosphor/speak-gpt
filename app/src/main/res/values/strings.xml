@@ -2960,7 +2960,6 @@
     <string name="include_action_condense">Condense</string>
     <string name="include_action_reduce">Reduce to Text Only</string>
     <string name="include_action_edit">Edit</string>
-    <string name="include_popup_title">Persistent Includes</string>
     <string name="include_popup_action_desc">Manage Include</string>
     <string name="message_includes_action">Manage persistent Includes</string>
     <string name="composer_includes_action">Manage sent persistent Includes</string>

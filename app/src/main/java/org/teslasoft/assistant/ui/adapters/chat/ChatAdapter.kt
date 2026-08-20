@@ -1593,6 +1593,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          */
         private fun tintActionIcons(foreground: Int) {
             btnDetails.setColorFilter(foreground)
+            btnPersistentIncludes?.setColorFilter(foreground)
             btnShare.setColorFilter(foreground)
             btnRetry.setColorFilter(foreground)
             btnCopy.setColorFilter(foreground)

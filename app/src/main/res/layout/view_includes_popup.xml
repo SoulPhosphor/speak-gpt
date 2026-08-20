@@ -23,7 +23,7 @@
             android:paddingTop="4dp"
             android:paddingEnd="8dp"
             android:paddingBottom="6dp"
-            android:text="@string/include_popup_title"
+            android:text="@string/include_label"
             android:textColor="?attr/colorPrimary"
             android:textSize="14sp"
             android:textStyle="bold" />

@@ -3127,6 +3127,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * than by installing another keyboard or inset listener.
      */
     private fun setComposerContainerExpanded(expanded: Boolean) {
+        updateVisionActionPosition(expanded)
         val surface = composerSurface ?: return
         val params = surface.layoutParams ?: return
         if (!expanded) {
@@ -3137,6 +3138,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
         scheduleComposerHeightUpdate()
+    }
+
+    /**
+     * The existing Camera/Image/Document chooser is a root-level overlay in
+     * normal mode so it opens above the composer. When the same composer is
+     * expanded, keep that chooser inside the available keyboard-input area:
+     * start it at the input area's top instead of placing it above the area,
+     * where the expanded composer can leave it outside the usable screen.
+     */
+    private fun updateVisionActionPosition(expanded: Boolean) {
+        val actions = visionActions ?: return
+        val params = actions.layoutParams as? ConstraintLayout.LayoutParams ?: return
+        if (expanded) {
+            params.topToTop = R.id.keyboard_input
+            params.bottomToTop = ConstraintLayout.LayoutParams.UNSET
+        } else {
+            params.topToTop = ConstraintLayout.LayoutParams.UNSET
+            params.bottomToTop = R.id.include_strip
+        }
+        actions.layoutParams = params
     }
 
     private fun scheduleComposerHeightUpdate() {
