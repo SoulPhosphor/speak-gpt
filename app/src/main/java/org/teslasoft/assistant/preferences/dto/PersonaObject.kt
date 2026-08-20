@@ -66,6 +66,20 @@ class PersonaObject(
     fun lastUsedLoreBookIdList(): ArrayList<String> = splitIds(lastUsedLoreBookIds)
 
     companion object {
+        /**
+         * Brand-new companion draft for the multi-prompt editor. The editor's tab UI
+         * requires at least one variant, so creation must never use the legacy
+         * empty-variant representation. The blank Prompt 1 is intentionally unsaved
+         * until the owner saves the companion.
+         */
+        fun emptyDraft(): PersonaObject {
+            return PersonaObject(
+                label = "",
+                prompt = "",
+                promptVariants = ArrayList(CompanionPromptVariant.migrateFromSinglePrompt(""))
+            )
+        }
+
         fun splitIds(joined: String): ArrayList<String> {
             return ArrayList(joined.split(",").map { it.trim() }.filter { it.isNotEmpty() })
         }
