@@ -2961,11 +2961,11 @@
     <string name="include_action_reduce">Reduce to Text Only</string>
     <string name="include_action_edit">Edit</string>
     <string name="include_popup_action_desc">Manage Include</string>
-    <string name="message_includes_action">Manage persistent Includes</string>
-    <string name="composer_includes_action">Manage sent persistent Includes</string>
+    <string name="message_includes_action">Manage Persistent Includes</string>
+    <string name="composer_includes_action">Manage Sent Persistent Includes</string>
     <string name="btn_add_content">Add</string>
-    <string name="expand_content">Expand content</string>
-    <string name="collapse_content">Collapse content</string>
+    <string name="expand_content">Expand Content</string>
+    <string name="collapse_content">Collapse Content</string>
     <string name="include_document_pending_hint">File will be sent to AI every turn. Condensing produces a summary of the document and reduces token count.</string>
     <string name="include_image_pending_hint">Images will be sent every turn to the AI. Reducing it will produce a small text summary to save tokens.</string>
 
