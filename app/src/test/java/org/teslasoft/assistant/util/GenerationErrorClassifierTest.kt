@@ -31,6 +31,10 @@ class GenerationErrorClassifierTest {
         message: String
     ) : RuntimeException(message)
 
+    // Deliberately named like the SDK wrapper so the classifier's class-name
+    // fallback is exercised without depending on a client-library test fixture.
+    private class RateLimitException(message: String) : RuntimeException(message)
+
     // ---- transport / network (no HTTP status) --------------------------
 
     @Test fun connectionAbortIsN1() {
@@ -162,6 +166,48 @@ class GenerationErrorClassifierTest {
 
     @Test fun bare404IsS1() {
         assertEquals(GenErrorCode.S1, code(RuntimeException("404 Not Found")))
+    }
+
+    @Test fun http400RateLimitWrapperDoesNotBecomeRateLimit() {
+        // Regression: some OpenAI-compatible client paths can wrap a provider
+        // 400 in a RateLimitException. The server's concrete HTTP status wins.
+        val result = GenerationErrorClassifier.classify(
+            RateLimitException("400 Bad Request: ERROR")
+        )
+        assertEquals(400, result.httpStatus)
+        assertEquals(GenErrorCode.U0, result.code)
+        assertNull(result.providerLimit)
+    }
+
+    @Test fun http400GenericMaximumTextDoesNotBecomeProviderLimit() {
+        // "maximum" is common in actionable validation errors and is not, by
+        // itself, evidence of quota/context/rate limiting.
+        val result = GenerationErrorClassifier.classify(
+            RuntimeException("400 Bad Request: maximum value for temperature is 2")
+        )
+        assertEquals(400, result.httpStatus)
+        assertEquals(GenErrorCode.U0, result.code)
+        assertNull(result.providerLimit)
+    }
+
+    @Test fun structuredLimitCodeCanStillExplainHttp400() {
+        // A provider is allowed to be odd. If its structured error explicitly
+        // names a limit, that stronger evidence is preserved even with HTTP 400.
+        val result = GenerationErrorClassifier.classify(
+            StructuredProviderException("context_length_exceeded", "400 Bad Request")
+        )
+        assertEquals(400, result.httpStatus)
+        assertEquals(ProviderLimitKind.MODEL_CONTEXT, result.providerLimit)
+        assertEquals(GenErrorCode.M3, result.code)
+    }
+
+    @Test fun rateLimitWrapperWithoutHttpStatusRemainsFallbackEvidence() {
+        val result = GenerationErrorClassifier.classify(
+            RateLimitException("request throttled by client wrapper")
+        )
+        assertNull(result.httpStatus)
+        assertEquals(ProviderLimitKind.RATE_OR_THROUGHPUT, result.providerLimit)
+        assertEquals(GenErrorCode.Q1, result.code)
     }
 
     @Test fun streamShapeIsS2() {
