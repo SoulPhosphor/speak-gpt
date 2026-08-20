@@ -1,0 +1,129 @@
+name: Finalize Generation Diagnostics Repair
+
+on:
+  push:
+    branches:
+      - agent/generation-diagnostics-repair
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/generation-diagnostics-repair
+
+      - name: Polish diagnostics and remove temporary runners
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          CHAT = Path('app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt')
+          NET = Path('app/src/main/java/org/teslasoft/assistant/util/GenerationNetworkDiagnostics.kt')
+          TEST = Path('app/src/test/java/org/teslasoft/assistant/util/GenerationNetworkDiagnosticsTest.kt')
+
+          def replace_once(path, old, new, label):
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{label}: expected 1 match, found {count}')
+              path.write_text(text.replace(old, new, 1))
+
+          # Restore the nested text-completion indentation changed by the first patcher.
+          replace_once(
+              CHAT,
+              '                startGenerationNetworkDiagnostics()\n        providerRequestDispatched = true\n',
+              '                startGenerationNetworkDiagnostics()\n                providerRequestDispatched = true\n',
+              'nested dispatch indentation'
+          )
+
+          # If the callback could not be registered, do not falsely say that no
+          # transition was observed. Dispatch/failure point samples still work.
+          replace_once(
+              NET,
+              'data class GenerationNetworkSnapshot(\n'
+              '    val atDispatch: String,\n'
+              '    val atFailure: String,\n'
+              '    val transitions: List<NetworkTransition>\n'
+              ') {\n'
+              '    fun transitionsDisplay(): String = if (transitions.isEmpty()) "none observed" else\n'
+              '        transitions.joinToString(" | ") { "${it.from} -> ${it.to} at +${it.elapsedMs} ms" }\n'
+              '}\n',
+              'data class GenerationNetworkSnapshot(\n'
+              '    val atDispatch: String,\n'
+              '    val atFailure: String,\n'
+              '    val transitions: List<NetworkTransition>,\n'
+              '    val transitionTrackingAvailable: Boolean = true\n'
+              ') {\n'
+              '    fun transitionsDisplay(): String = when {\n'
+              '        !transitionTrackingAvailable -> "unavailable"\n'
+              '        transitions.isEmpty() -> "none observed"\n'
+              '        else -> transitions.joinToString(" | ") {\n'
+              '            "${it.from} -> ${it.to} at +${it.elapsedMs} ms"\n'
+              '        }\n'
+              '    }\n'
+              '}\n',
+              'network tracking availability'
+          )
+          replace_once(
+              NET,
+              '            return trace.snapshot(finalState)\n',
+              '            return trace.snapshot(finalState).copy(transitionTrackingAvailable = registered)\n',
+              'network monitor tracking status'
+          )
+          replace_once(
+              CHAT,
+              '                transitions = emptyList()\n'
+              '            )\n',
+              '                transitions = emptyList(),\n'
+              '                transitionTrackingAvailable = false\n'
+              '            )\n',
+              'network fallback tracking status'
+          )
+          replace_once(
+              TEST,
+              '    @Test fun capturedVoiceStateWinsAfterTeardown() {\n',
+              '    @Test fun unavailableTransitionTrackingIsExplicit() {\n'
+              '        val snapshot = GenerationNetworkSnapshot(\n'
+              '            "wifi", "wifi", emptyList(), transitionTrackingAvailable = false\n'
+              '        )\n'
+              '        assertEquals("unavailable", snapshot.transitionsDisplay())\n'
+              '    }\n\n'
+              '    @Test fun capturedVoiceStateWinsAfterTeardown() {\n',
+              'network tracking availability test'
+          )
+          PY
+
+          rm -f \
+            .github/workflows/apply-generation-diagnostics-repair.yml \
+            .github/workflows/apply-generation-diagnostics-repair-v2.yml \
+            .github/workflows/apply-generation-diagnostics-repair-v3.yml \
+            .github/workflows/finalize-generation-diagnostics-repair.yml
+
+      - name: Review and commit cleanup
+        run: |
+          git diff --check
+          git status --short
+          git diff --stat
+          test ! -e .github/workflows/apply-generation-diagnostics-repair.yml
+          test ! -e .github/workflows/apply-generation-diagnostics-repair-v2.yml
+          test ! -e .github/workflows/apply-generation-diagnostics-repair-v3.yml
+          test ! -e .github/workflows/finalize-generation-diagnostics-repair.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- \
+            .github/workflows/apply-generation-diagnostics-repair.yml \
+            .github/workflows/apply-generation-diagnostics-repair-v2.yml \
+            .github/workflows/apply-generation-diagnostics-repair-v3.yml \
+            .github/workflows/finalize-generation-diagnostics-repair.yml \
+            app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt \
+            app/src/main/java/org/teslasoft/assistant/util/GenerationNetworkDiagnostics.kt \
+            app/src/test/java/org/teslasoft/assistant/util/GenerationNetworkDiagnosticsTest.kt
+          git diff --cached --check
+          git commit -m "Polish generation diagnostics instrumentation"
+          git push origin HEAD:agent/generation-diagnostics-repair
