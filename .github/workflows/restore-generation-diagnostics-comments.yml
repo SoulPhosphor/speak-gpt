@@ -1,0 +1,96 @@
+name: Restore Generation Diagnostics Comments
+
+on:
+  push:
+    branches:
+      - agent/generation-diagnostics-repair
+
+permissions:
+  contents: write
+
+jobs:
+  restore-comments:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/generation-diagnostics-repair
+
+      - name: Restore explanatory comments
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{label}: expected one match, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          gen = 'app/src/main/java/org/teslasoft/assistant/service/GenerationForegroundService.kt'
+          hf = 'app/src/main/java/org/teslasoft/assistant/service/HandsFreeService.kt'
+
+          once(
+              gen,
+              '''                    setReferenceCounted(false)
+                    acquire(30 * 60 * 1000L)
+''',
+              '''                    setReferenceCounted(false)
+                    // 30 minute safety cap; a single response never takes that
+                    // long. Released in onDestroy() the moment generation ends.
+                    acquire(30 * 60 * 1000L)
+''',
+              'generation CPU lock rationale'
+          )
+
+          once(
+              gen,
+              '''                val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WAKE_LOCK_TAG).apply {
+''',
+              '''                val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                // FULL_HIGH_PERF is deprecated but is the only mode that keeps
+                // Wi-Fi out of power-save while the screen is off; the
+                // suggested LOW_LATENCY replacement is only honored for
+                // foreground apps with the screen on — exactly the situation
+                // this service exists to survive.
+                wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WAKE_LOCK_TAG).apply {
+''',
+              'generation Wi-Fi lock rationale'
+          )
+
+          once(
+              hf,
+              '''            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WAKE_LOCK_TAG).apply {
+''',
+              '''            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            // FULL_HIGH_PERF is deprecated but is the only mode that keeps
+            // Wi-Fi out of power-save while the screen is off — same choice,
+            // for the same reason, as GenerationForegroundService. Held for
+            // the whole listening session so the radio is already awake when
+            // a turn's request goes out. Cellular is unaffected either way.
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WAKE_LOCK_TAG).apply {
+''',
+              'hands-free Wi-Fi lock rationale'
+          )
+          PY
+
+          rm -f .github/workflows/restore-generation-diagnostics-comments.yml
+
+      - name: Commit comment restoration
+        run: |
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- \
+            .github/workflows/restore-generation-diagnostics-comments.yml \
+            app/src/main/java/org/teslasoft/assistant/service/GenerationForegroundService.kt \
+            app/src/main/java/org/teslasoft/assistant/service/HandsFreeService.kt
+          git diff --cached --check
+          git commit -m "Restore keep-alive rationale comments"
+          git push origin HEAD:agent/generation-diagnostics-repair
