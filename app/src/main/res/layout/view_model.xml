@@ -56,9 +56,27 @@
             android:textSize="16sp"
             app:layout_goneMarginStart="16dp"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/btn_routing_settings"
+            app:layout_constraintEnd_toStartOf="@+id/btn_reasoning_settings"
             app:layout_constraintStart_toEndOf="@+id/model_unavailable_warning"
             app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Reasoning lightbulb (chat-redesign-plan.md §7.4/§7.6). In the
+             favorite list it is the actionable shortcut to Reasoning Settings;
+             in View All it is a quieter, non-clickable "supports reasoning"
+             indicator immediately to the left of the favorite/thumbs control.
+             Each adapter sets visibility, clickability, and weight. -->
+        <ImageButton
+            android:id="@+id/btn_reasoning_settings"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@color/transparent"
+            android:contentDescription="@null"
+            android:padding="12dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_routing_settings"
+            app:layout_constraintTop_toTopOf="parent"
+            app:srcCompat="@drawable/ic_lightbulb" />
 
         <!-- Provider-routing gear. Shown only for OpenRouter favorites
              (FavoriteModelListAdapter); a filled gear when routing is set up,

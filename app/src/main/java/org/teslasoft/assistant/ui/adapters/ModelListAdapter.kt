@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.ui.adapters
 
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.drawable.Drawable
 import android.view.LayoutInflater
 import android.view.View
@@ -65,24 +66,29 @@ class ModelListAdapter(private val context: Context, private val items: ArrayLis
 
         val preferences: Preferences = Preferences.getPreferences(context, chatId)
 
+        val rowTextColor: Int
         if (preferences.getModel() == item) {
             viewHolder.voiceBg.background = getDarkAccentDrawableV2(
                 ContextCompat.getDrawable(context, R.drawable.btn_accent_tonal_selector_v4)!!, context)
 
-            viewHolder.textView.setTextColor(ContextCompat.getColor(context, R.color.accent_250))
+            rowTextColor = ContextCompat.getColor(context, R.color.accent_250)
+            viewHolder.textView.setTextColor(rowTextColor)
 
             viewHolder.modelAction.setImageResource(R.drawable.ic_like_item_inv)
         } else {
             viewHolder.voiceBg.background = getDarkAccentDrawable(
                 ContextCompat.getDrawable(context, R.drawable.btn_accent_tonal_selector_v3)!!, context)
 
-            viewHolder.textView.setTextColor(ContextCompat.getColor(context, R.color.text))
+            rowTextColor = ContextCompat.getColor(context, R.color.text)
+            viewHolder.textView.setTextColor(rowTextColor)
 
             viewHolder.modelAction.setImageResource(R.drawable.ic_like_item)
         }
 
         viewHolder.modelAction.tooltipText = context.getString(R.string.label_add_to_favorites)
         viewHolder.modelAction.contentDescription = context.getString(R.string.label_add_to_favorites)
+
+        bindReasoningIndicator(viewHolder, item, rowTextColor)
 
         viewHolder.voiceBg.setOnClickListener {
             listener?.onItemClick(item)
@@ -93,6 +99,44 @@ class ModelListAdapter(private val context: Context, private val items: ArrayLis
         }
 
         return view
+    }
+
+    /**
+     * The informational reasoning indicator (chat-redesign-plan.md §7.6): a
+     * small, quiet, NON-clickable lightbulb immediately to the left of the
+     * favorite/thumbs control for a model SpeakGPT knows supports reasoning.
+     * Unknown capability shows nothing (§7.7 #4). Same visual language as the
+     * favorite shortcut, but weaker and not actionable — tapping it never opens
+     * settings. Search/filtered rows use the same rule, so a known reasoning
+     * model keeps its bulb when filtered (§7.9).
+     */
+    private fun bindReasoningIndicator(viewHolder: ViewHolder, modelId: String, tintColor: Int) {
+        val capability = if (apiEndpointId.isBlank()) {
+            org.teslasoft.assistant.reasoning.ReasoningCapability.UNKNOWN
+        } else {
+            val endpoint = org.teslasoft.assistant.preferences.ApiEndpointPreferences
+                .getApiEndpointPreferences(context).getApiEndpoint(context, apiEndpointId)
+            org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
+                endpoint.reasoningCapabilityByModel, modelId
+            )
+        }
+        if (!capability.isReasoningCapable) {
+            viewHolder.reasoningIndicator.visibility = View.GONE
+            return
+        }
+        viewHolder.reasoningIndicator.imageTintList = ColorStateList.valueOf(tintColor)
+        // Quieter and smaller than the favorite action (§7.6).
+        viewHolder.reasoningIndicator.alpha = 0.55f
+        viewHolder.reasoningIndicator.scaleX = 0.82f
+        viewHolder.reasoningIndicator.scaleY = 0.82f
+        // Informational only: never a real button (§7.9). Keep the accessibility
+        // description so it still announces "Reasoning model".
+        viewHolder.reasoningIndicator.isClickable = false
+        viewHolder.reasoningIndicator.isFocusable = false
+        viewHolder.reasoningIndicator.setOnClickListener(null)
+        viewHolder.reasoningIndicator.contentDescription =
+            context.getString(R.string.reasoning_model_indicator_desc)
+        viewHolder.reasoningIndicator.visibility = View.VISIBLE
     }
 
     private fun getDarkAccentDrawable(drawable: Drawable, context: Context) : Drawable {
@@ -117,6 +161,7 @@ class ModelListAdapter(private val context: Context, private val items: ArrayLis
         val textView: TextView = view.findViewById(R.id.voice_name)
         val voiceBg: ConstraintLayout = view.findViewById(R.id.voice_bg)
         val modelAction: ImageButton = view.findViewById(R.id.btn_action)
+        val reasoningIndicator: ImageButton = view.findViewById(R.id.btn_reasoning_settings)
     }
 
     interface OnItemClickListener {
