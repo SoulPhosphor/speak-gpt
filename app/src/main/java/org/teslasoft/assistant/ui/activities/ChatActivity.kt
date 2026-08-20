@@ -5495,6 +5495,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (content.contentType?.match(ContentType.Application.Json) != true) return
         val text = content.text
 
+        var bodyHasTools = false
         val model = try {
             val root = com.google.gson.JsonParser.parseString(text).asJsonObject
             // Only streamed chat generation carries reasoning. Auxiliary
@@ -5502,6 +5503,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // resolution, summarizer) must not inherit a reasoning instruction.
             val streamed = root.get("stream")?.takeUnless { it.isJsonNull }?.asBoolean == true
             if (streamed && root.has("messages")) {
+                bodyHasTools = (root.get("tools")?.takeUnless { it.isJsonNull }
+                    ?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: 0) > 0
                 root.get("model")?.takeIf { !it.isJsonNull }?.asString
             } else {
                 null
@@ -5514,23 +5517,56 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val capability = reasoningCapabilityForModel(model)
         val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
 
-        // Ask the response observer to split THIS stream for reasoning when the
-        // path can return visible reasoning and the user wants it shown. Effort
-        // level is irrelevant here (Auto still returns reasoning by default);
-        // only capability + Show Reasoning decide whether to observe.
-        if (capability.isReasoningCapable && capability.canReturnVisibleReasoning && resolved.showReasoning) {
+        // Split THIS stream for reasoning when either is true:
+        //  - display is wanted: the path can return visible reasoning and Show
+        //    Reasoning is on (Auto still returns reasoning by default); or
+        //  - continuation state may be needed: an OpenRouter reasoning path that
+        //    is offering tools, so any reasoning_details produced alongside a
+        //    tool call are captured to echo back on the follow-up (§7.2) — this
+        //    happens even when Show Reasoning is Off.
+        val wantDisplay = capability.isReasoningCapable && capability.canReturnVisibleReasoning && resolved.showReasoning
+        val wantContinuationState = capability.isReasoningCapable && isOpenRouter && bodyHasTools
+        currentTurnShowReasoning = wantDisplay
+        if (wantDisplay || wantContinuationState) {
             currentTurnReasoning?.let { request.attributes.put(reasoningObservationAttribute, it) }
+            currentTurnReasoningObservationActive = true
         }
 
-        val augmented = org.teslasoft.assistant.reasoning.ReasoningRequestSerializer.augmentBody(
+        // 1) The reasoning request fields for this turn.
+        val afterParam = org.teslasoft.assistant.reasoning.ReasoningRequestSerializer.augmentBody(
             text, resolved, isOpenRouter, capability.isReasoningCapable
         )
-        if (augmented != text) {
-            request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
-            lastReasoningAttachment =
-                "reasoning attached (effort=${resolved.effort.serialized}, show=${resolved.showReasoning}, " +
-                    "source=${resolved.source}, capability=${capability.source})" +
-                    (resolved.clampedFrom?.let { ", dropped unsupported=${it.serialized}" } ?: "")
+        val paramAttached = afterParam != text
+        // 2) Reasoning-state continuation (§7.2): on an OpenRouter follow-up that
+        //    carries an assistant tool-call message, echo back the reasoning
+        //    details captured from the turn that produced the tool call. A no-op
+        //    on the primary request (no tool-call assistant message yet) and off
+        //    OpenRouter. Independent of Show Reasoning; never surfaced in the UI.
+        var newBody = afterParam
+        var continuationAttached = false
+        if (isOpenRouter) {
+            val withState = org.teslasoft.assistant.reasoning.ReasoningContinuationSerializer
+                .attachToToolCallMessage(newBody, currentTurnReasoning?.reasoningDetails())
+            if (withState != newBody) {
+                newBody = withState
+                continuationAttached = true
+            }
+        }
+
+        if (newBody != text) {
+            request.setBody(TextContent(newBody, content.contentType ?: ContentType.Application.Json))
+            lastReasoningAttachment = buildString {
+                append(
+                    if (paramAttached) {
+                        "reasoning attached (effort=${resolved.effort.serialized}, show=${resolved.showReasoning}, " +
+                            "source=${resolved.source}, capability=${capability.source})"
+                    } else {
+                        "no reasoning param (Auto / provider default)"
+                    }
+                )
+                if (continuationAttached) append("; reasoning_details echoed on tool-call continuation")
+                resolved.clampedFrom?.let { append(", dropped unsupported=${it.serialized}") }
+            }
         } else {
             lastReasoningAttachment = if (!capability.isReasoningCapable) {
                 "no reasoning fields (model not known to reason)"
@@ -5721,7 +5757,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                         } finally {
                                             recorder?.finishProviderObservation()
                                             if (reasoningAcc != null) {
-                                                deliverObservedReasoning(reasoningAcc)
+                                                // Display only when Show Reasoning wanted it; the
+                                                // reasoning_details for a tool-call continuation are
+                                                // held in the accumulator regardless.
+                                                if (currentTurnShowReasoning) deliverObservedReasoning(reasoningAcc)
+                                                // Signal capture complete so a tool continuation can
+                                                // echo reasoning_details on its follow-up.
+                                                currentTurnReasoningObserved?.complete(Unit)
                                             }
                                         }
                                     }
@@ -6648,6 +6690,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
             results.add(kotlin.Pair(call, result))
+        }
+
+        // §7.2: before dispatching the follow-up, make sure this turn's
+        // reasoning state has finished being captured from the split stream, so
+        // the assistant tool-call message can echo its reasoning_details back.
+        // Bounded so a stalled observer can never hang the turn; skipped
+        // entirely when reasoning was never observed for this turn.
+        if (currentTurnReasoningObservationActive) {
+            kotlinx.coroutines.withTimeoutOrNull(1500L) {
+                currentTurnReasoningObserved?.await()
+            }
         }
 
         var assistantCallId = 0
@@ -7677,15 +7730,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // from the split stream copy. A turn that never wants reasoning
             // simply never has it observed.
             currentTurnReasoning = org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator()
+            currentTurnShowReasoning = false
+            currentTurnReasoningObservationActive = false
+            currentTurnReasoningObserved = kotlinx.coroutines.CompletableDeferred()
         }
     }
 
     /** The current turn's reasoning accumulator (§7.2). Created when the
      *  streamed reply begins; fed by the response observer on reasoning-wanted
      *  turns; read once the split stream drains to stamp the reply's Thinking
-     *  content. Null between turns. */
+     *  content and to echo reasoning state on a tool-call continuation. Null
+     *  between turns. */
     @Volatile
     private var currentTurnReasoning: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator? = null
+
+    /** Whether this turn's reasoning should be DISPLAYED (Show Reasoning on and
+     *  the path returns visible reasoning). Reasoning may still be observed for
+     *  continuation state when this is false (§7.2). */
+    @Volatile
+    private var currentTurnShowReasoning: Boolean = false
+
+    /** True once the response observer has been asked to split this turn's
+     *  stream for reasoning (display and/or continuation state), so the tool
+     *  continuation knows to wait for that capture before dispatching. */
+    @Volatile
+    private var currentTurnReasoningObservationActive: Boolean = false
+
+    /** Completes when the observer finishes draining this turn's split stream,
+     *  so a tool-call continuation can await reasoning_details capture before
+     *  building the follow-up. Null between turns. */
+    @Volatile
+    private var currentTurnReasoningObserved: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
     /** Provider-reported total tokens for the reply currently streaming, taken
      *  from the usage-bearing final chunk (streamOptions.includeUsage). Null

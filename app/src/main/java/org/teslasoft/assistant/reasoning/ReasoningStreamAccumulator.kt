@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.reasoning
 
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 
@@ -47,6 +48,13 @@ class ReasoningStreamAccumulator {
     private var sawSummaryBlock = false
     private var sawRawBlock = false
     private var reasoningTokens: Int? = null
+
+    // Raw `reasoning_details` blocks collected verbatim for resend across a
+    // tool-call continuation (§7.2). Encrypted/signature blocks are preserved
+    // unmodified; streamed text fragments that share an index are merged so the
+    // resent array matches the provider's final message shape. This is
+    // continuation state, NOT display content.
+    private val reasoningDetailBlocks = ArrayList<JsonObject>()
 
     /** Feed one raw SSE line (with or without the `data:` prefix). */
     fun acceptLine(line: String) {
@@ -85,12 +93,53 @@ class ReasoningStreamAccumulator {
             ?.asJsonArray
             ?.forEach { el ->
                 val block = el.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
+                collectDetailBlock(block)
                 val type = stringOrNull(block, "type").orEmpty().lowercase()
                 if (type.contains("summary")) sawSummaryBlock = true else if (type.isNotEmpty()) sawRawBlock = true
                 // The human-readable payload is `text`; `data` blocks (encrypted
                 // continuation state) carry no display text and are skipped here.
                 stringOrNull(block, "text")?.let { reasoning.append(it) }
             }
+    }
+
+    /**
+     * Fold one streamed `reasoning_details` block into [reasoningDetailBlocks].
+     * Text fragments sharing an `index` are concatenated into the existing block
+     * so the resent array is the final shape; every other block (encrypted,
+     * signature, summary) is appended verbatim and never merged or altered.
+     */
+    private fun collectDetailBlock(block: JsonObject) {
+        val index = intOrNull(block, "index")
+        val type = stringOrNull(block, "type").orEmpty()
+        val isTextFragment = type.contains("text", ignoreCase = true) &&
+            block.get("text")?.takeUnless { it.isJsonNull }?.isJsonPrimitive == true
+        if (index != null && isTextFragment) {
+            val existing = reasoningDetailBlocks.firstOrNull {
+                intOrNull(it, "index") == index &&
+                    stringOrNull(it, "type").orEmpty() == type &&
+                    it.get("text")?.takeUnless { t -> t.isJsonNull }?.isJsonPrimitive == true
+            }
+            if (existing != null) {
+                val merged = (stringOrNull(existing, "text") ?: "") + (stringOrNull(block, "text") ?: "")
+                existing.addProperty("text", merged)
+                return
+            }
+        }
+        reasoningDetailBlocks.add(block)
+    }
+
+    /**
+     * The collected `reasoning_details` array to echo back on the assistant
+     * message of a tool-call continuation (§7.2), or null when none was
+     * supplied. Preserved as-is so encrypted/signature continuation state is
+     * resent unmodified. Independent of Show Reasoning — the state is retained
+     * for continuation whether or not it is displayed.
+     */
+    fun reasoningDetails(): JsonArray? {
+        if (reasoningDetailBlocks.isEmpty()) return null
+        val array = JsonArray()
+        reasoningDetailBlocks.forEach { array.add(it) }
+        return array
     }
 
     private fun readReasoningTokens(usage: JsonObject) {

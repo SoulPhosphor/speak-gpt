@@ -109,4 +109,41 @@ class ReasoningStreamAccumulatorTest {
         acc.acceptLine("""{"choices":[{"message":{"reasoning":"final-form reasoning"}}]}""")
         assertEquals("final-form reasoning", acc.snapshot().text)
     }
+
+    @Test
+    fun noReasoningDetailsMeansNullContinuationState() {
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning":"x"}}]}""")
+        assertNull(acc.reasoningDetails())
+    }
+
+    @Test
+    fun encryptedReasoningDetailBlockPreservedVerbatimForResend() {
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine(
+            """data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.encrypted","data":"OPAQUE==","signature":"sig123","index":0}]}}]}"""
+        )
+        val details = acc.reasoningDetails()!!
+        assertEquals(1, details.size())
+        val block = details[0].asJsonObject
+        assertEquals("reasoning.encrypted", block.get("type").asString)
+        assertEquals("OPAQUE==", block.get("data").asString)
+        assertEquals("sig123", block.get("signature").asString)
+        // An encrypted block carries no display text.
+        assertFalse(acc.hasReasoning())
+    }
+
+    @Test
+    fun streamedTextFragmentsWithSameIndexAreMergedButSignatureBlockKept() {
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":"Let me ","index":0}]}}]}""")
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":"think.","index":0}]}}]}""")
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.encrypted","data":"E==","index":1}]}}]}""")
+        val details = acc.reasoningDetails()!!
+        assertEquals(2, details.size())
+        assertEquals("Let me think.", details[0].asJsonObject.get("text").asString)
+        assertEquals("reasoning.encrypted", details[1].asJsonObject.get("type").asString)
+        // Display text also reflects the fragments.
+        assertEquals("Let me think.", acc.snapshot().text)
+    }
 }
