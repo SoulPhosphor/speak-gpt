@@ -104,6 +104,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
 import org.teslasoft.assistant.preferences.includes.IncludeKind
+import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.MessageCompletionState
@@ -112,6 +113,7 @@ import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
+import org.teslasoft.assistant.ui.util.IncludesPopupController
 import org.teslasoft.assistant.util.LegacyAvatarResolver
 import org.teslasoft.assistant.util.ProfileImageBinder
 import org.teslasoft.assistant.util.StaticAvatarParser
@@ -543,6 +545,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // Far-left Message Action on both layouts; opens the anchored Message
         // Details popup (chat-redesign-plan.md §5). Always present.
         private val btnDetails: ImageButton = itemView.findViewById(R.id.btn_details)
+        // User-only derived persistent-Includes action. It is absent from the
+        // assistant layout and is reset on every bind to survive recycling.
+        private val btnPersistentIncludes: ImageButton? =
+            itemView.findViewById(R.id.btn_persistent_includes)
         // Compact model/token line under the identity. Present only on the
         // assistant layout (model/tokens are AI-side), so nullable.
         private val messageMeta: TextView? = itemView.findViewById(R.id.message_meta)
@@ -588,6 +594,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (isGeneratedImage) btnShare.isEnabled = false
 
             val hasAttachments = updateIncludeSummary(chatMessage, position)
+            updatePersistentIncludeAction(chatMessage, position)
             // Attachment-only: no text, so nothing sits between identity and
             // the tray, and the tray moves ahead of Message Actions instead of
             // trailing them (chat-redesign-plan.md §6.1).
@@ -739,6 +746,73 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             tray.layoutParams = trayParams
             actionsRow.layoutParams = actionsParams
+        }
+
+        /**
+         * Shows the inherited-context paperclip only on a later user row.
+         * The action holds Include ids, never copied Include records; opening
+         * the popup resolves those ids against the current original-message
+         * records in [dataArray].
+         */
+        private fun updatePersistentIncludeAction(
+            chatMessage: HashMap<String, Any>,
+            position: Int
+        ) {
+            val action = btnPersistentIncludes ?: return
+            action.visibility = View.GONE
+            action.setOnClickListener(null)
+
+            if (chatMessage["isBot"] == true) return
+
+            val inheritedIds = PersistentIncludeContext
+                .earlierForUserMessage(dataArray, position)
+                .map { it.id }
+            if (inheritedIds.isEmpty()) return
+
+            action.visibility = View.VISIBLE
+            action.contentDescription = context.getString(R.string.message_includes_action)
+            action.setOnClickListener { anchor ->
+                val currentPosition = bindingAdapterPosition
+                if (currentPosition == RecyclerView.NO_POSITION) return@setOnClickListener
+                val currentIds = PersistentIncludeContext
+                    .earlierForUserMessage(dataArray, currentPosition)
+                    .map { it.id }
+                IncludesPopupController.show(
+                    anchor = anchor,
+                    includeIds = currentIds,
+                    resolveCurrent = ::canonicalIncludesForIds,
+                    callbacks = object : IncludesPopupController.Callbacks {
+                        override fun onIncludeEdit(includeId: String) {
+                            listener?.onIncludeEdit(includeId)
+                        }
+
+                        override fun onIncludeRemove(includeId: String) {
+                            listener?.onIncludeRemove(includeId)
+                        }
+
+                        override fun onIncludeCondense(includeId: String) {
+                            listener?.onIncludeCondense(includeId)
+                        }
+                    }
+                )
+            }
+        }
+
+        /** Reads current Include state from the message that canonically owns
+         * each id. This is intentionally a read-only resolver for the popup. */
+        private fun canonicalIncludesForIds(ids: Set<String>): List<ChatInclude> {
+            if (ids.isEmpty()) return emptyList()
+            val result = ArrayList<ChatInclude>()
+            val seen = HashSet<String>()
+            for (message in dataArray) {
+                if (message["isBot"] == true) continue
+                for (include in ChatInclude.listFromJson(
+                    message[ChatActivity.INCLUDES_KEY]?.toString()
+                )) {
+                    if (include.id in ids && seen.add(include.id)) result.add(include)
+                }
+            }
+            return result
         }
 
         /**

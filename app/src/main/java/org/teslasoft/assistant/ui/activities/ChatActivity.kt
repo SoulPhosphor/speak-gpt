@@ -194,9 +194,11 @@ import org.teslasoft.assistant.preferences.includes.IncludeMessageProjection
 import org.teslasoft.assistant.preferences.includes.ProjectedUserMessage
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
+import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
 import org.teslasoft.assistant.ui.util.EditChatTitleDialog
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
 import org.teslasoft.assistant.ui.util.IncludeStripController
+import org.teslasoft.assistant.ui.util.IncludesPopupController
 import org.teslasoft.assistant.util.AvatarRefreshCoordinator
 import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
@@ -218,6 +220,8 @@ import org.teslasoft.assistant.service.GenerationForegroundService
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
+import org.teslasoft.assistant.ui.chat.ChatComposerLayout
+import org.teslasoft.assistant.ui.chat.ChatImeInsetLayout
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.QuickSettingsBottomSheetDialogFragment
@@ -368,9 +372,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var knownDegradedTypes: Set<org.teslasoft.assistant.preferences.backup.BackupType> = emptySet()
     private var degradedBaselineTaken = false
     private var keyboardFrame: ConstraintLayout? = null
+    private var keyboardInput: ChatImeInsetLayout? = null
+    private var composerSurface: ChatComposerLayout? = null
+    private var composerResizePosted = false
     private var root: ConstraintLayout? = null
     private var threadLoader: LinearLayout? = null
     private var btnAttachFile: ImageButton? = null
+    private var btnPersistentIncludes: ImageButton? = null
+    private var btnExpandContent: ImageButton? = null
+    private var btnCollapseContent: ImageButton? = null
     private var visionActions: LinearLayout? = null
     // Each paperclip-menu action is a labeled row, not an icon-only button.
     private var btnVisionActionCamera: View? = null
@@ -1500,6 +1510,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     R.drawable.btn_accent_tonal_v5_amoled
                 )!!, this
             )
+            btnPersistentIncludes?.background = getAmoledAccentDrawableV2(
+                AppCompatResources.getDrawable(
+                    this,
+                    R.drawable.btn_accent_tonal_v5_amoled
+                )!!, this
+            )
+            btnExpandContent?.background = getAmoledAccentDrawableV2(
+                AppCompatResources.getDrawable(
+                    this,
+                    R.drawable.btn_accent_tonal_v5_amoled
+                )!!, this
+            )
+            btnCollapseContent?.background = getAmoledAccentDrawableV2(
+                AppCompatResources.getDrawable(
+                    this,
+                    R.drawable.btn_accent_tonal_v5_amoled
+                )!!, this
+            )
         } else {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
                 window.navigationBarColor = getColor(R.color.accent_100)
@@ -1559,6 +1587,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )!!, this
             )
             btnAttachFile?.background = getDarkAccentDrawable(
+                AppCompatResources.getDrawable(
+                    this,
+                    R.drawable.btn_accent_tonal_v5
+                )!!, this
+            )
+            btnPersistentIncludes?.background = getDarkAccentDrawable(
+                AppCompatResources.getDrawable(
+                    this,
+                    R.drawable.btn_accent_tonal_v5
+                )!!, this
+            )
+            btnExpandContent?.background = getDarkAccentDrawable(
+                AppCompatResources.getDrawable(
+                    this,
+                    R.drawable.btn_accent_tonal_v5
+                )!!, this
+            )
+            btnCollapseContent?.background = getDarkAccentDrawable(
                 AppCompatResources.getDrawable(
                     this,
                     R.drawable.btn_accent_tonal_v5
@@ -2311,6 +2357,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     " night=$night orientation=$orientation" +
                     " handsFreeService=${HandsFreeService.isRunning}"
         )
+        scheduleComposerHeightUpdate()
     }
 
     public override fun onDestroy() {
@@ -2553,14 +2600,58 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnSummarizerErrors = findViewById(R.id.btn_summarizer_errors)
         summarizerErrorBadge = findViewById(R.id.summarizer_error_badge)
         keyboardFrame = findViewById(R.id.keyboard_frame)
+        keyboardInput = findViewById(R.id.keyboard_input)
+        composerSurface = findViewById(R.id.composer_surface)
         root = findViewById(R.id.root)
         btnAttachFile = findViewById(R.id.btn_attach)
+        btnPersistentIncludes = findViewById(R.id.btn_persistent_includes)
+        btnExpandContent = findViewById(R.id.btn_expand_content)
+        btnCollapseContent = findViewById(R.id.btn_collapse_content)
         visionActions = findViewById(R.id.vision_action_selector)
         btnVisionActionCamera = findViewById(R.id.action_camera)
         btnVisionActionGallery = findViewById(R.id.action_gallery)
         btnVisionActionDocument = findViewById(R.id.action_document)
         includeStrip = findViewById(R.id.include_strip)
         initIncludeStrip()
+
+        composerSurface?.setExpansionListener { expanded ->
+            setComposerContainerExpanded(expanded)
+        }
+        root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            scheduleComposerHeightUpdate()
+        }
+        keyboardInput?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            scheduleComposerHeightUpdate()
+        }
+        chat?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            scheduleComposerHeightUpdate()
+        }
+        composerSurface?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            scheduleComposerHeightUpdate()
+        }
+
+        btnPersistentIncludes?.setOnClickListener { anchor ->
+            val ids = persistentIncludeIds()
+            IncludesPopupController.show(
+                anchor = anchor,
+                includeIds = ids,
+                resolveCurrent = ::resolvePersistentIncludes,
+                callbacks = object : IncludesPopupController.Callbacks {
+                    override fun onIncludeEdit(includeId: String) {
+                        findIncludeById(includeId)?.let(::editInclude)
+                    }
+
+                    override fun onIncludeRemove(includeId: String) {
+                        findIncludeById(includeId)?.let(::removeInclude)
+                    }
+
+                    override fun onIncludeCondense(includeId: String) {
+                        findIncludeById(includeId)?.let(::condenseInclude)
+                    }
+                }
+            )
+        }
+        refreshPersistentIncludeControls()
         bulkContainer = findViewById(R.id.bulk_container)
         btnSelectAll = findViewById(R.id.btn_select_all)
         btnDeselectAll = findViewById(R.id.btn_deselect_all)
@@ -3001,6 +3092,78 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         includeStripController?.bind(pendingIncludes)
     }
 
+    /** The composer paperclip is visible only while sent Includes remain in
+     * history. Pending unsent Includes intentionally do not activate it. */
+    private fun persistentIncludeIds(): List<String> =
+        PersistentIncludeContext
+            .allSent(messages, INCLUDES_KEY)
+            .map { it.id }
+
+    /** Resolve the requested ids from their original user-message records.
+     * This is read-only; the popup never becomes an Include owner. */
+    private fun resolvePersistentIncludes(ids: Set<String>): List<ChatInclude> {
+        if (ids.isEmpty()) return emptyList()
+        val result = ArrayList<ChatInclude>()
+        val seen = HashSet<String>()
+        for (message in messages) {
+            if (message["isBot"] == true) continue
+            for (include in includesOf(message)) {
+                if (include.id in ids && seen.add(include.id)) result.add(include)
+            }
+        }
+        return result
+    }
+
+    private fun refreshPersistentIncludeControls() {
+        val button = btnPersistentIncludes ?: return
+        val visible = persistentIncludeIds().isNotEmpty()
+        button.visibility = if (visible) View.VISIBLE else View.GONE
+        button.isEnabled = visible
+    }
+
+    /**
+     * Expanded mode uses the existing keyboard_input/ChatImeInsetLayout
+     * container. Its height is measured from the current chat viewport rather
+     * than by installing another keyboard or inset listener.
+     */
+    private fun setComposerContainerExpanded(expanded: Boolean) {
+        val surface = composerSurface ?: return
+        val params = surface.layoutParams ?: return
+        if (!expanded) {
+            if (params.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
+                params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                surface.layoutParams = params
+            }
+            return
+        }
+        scheduleComposerHeightUpdate()
+    }
+
+    private fun scheduleComposerHeightUpdate() {
+        if (composerSurface?.isExpanded() != true || composerResizePosted) return
+        composerResizePosted = true
+        composerSurface?.post {
+            composerResizePosted = false
+            updateExpandedComposerHeight()
+        }
+    }
+
+    private fun updateExpandedComposerHeight() {
+        val surface = composerSurface ?: return
+        val chatView = chat ?: return
+        val rootView = root ?: return
+        val keyboard = keyboardInput ?: return
+        if (!surface.isExpanded() || rootView.height <= 0) return
+
+        val surfaceParams = surface.layoutParams ?: return
+        val bottomMargin = (surfaceParams as? ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
+        val targetHeight = rootView.height - chatView.top - keyboard.paddingBottom - bottomMargin
+        if (targetHeight <= 0 || surfaceParams.height == targetHeight) return
+
+        surfaceParams.height = targetHeight
+        surface.layoutParams = surfaceParams
+    }
+
     private fun includesOf(message: HashMap<String, Any>): List<ChatInclude> =
         ChatInclude.listFromJson(message[INCLUDES_KEY]?.toString())
 
@@ -3055,6 +3218,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         saveSettings()
         rebuildModelProjection()
         refreshIncludeStrip()
+        refreshPersistentIncludeControls()
         adapter?.notifyDataSetChanged()
     }
 
@@ -5892,6 +6056,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     transferredPendingIncludes = true
                 }
                 refreshIncludeStrip()
+                refreshPersistentIncludeControls()
             }
             val saveOutcome = saveSettings(synchronous = transferredPendingIncludes)
             if (transferredPendingIncludes &&
@@ -7460,6 +7625,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         messages.add(map)
         adapter?.notifyItemInserted(messages.size - 1)
+        refreshPersistentIncludeControls()
 
         updateMessagesSelectionProjection()
 
@@ -10092,6 +10258,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         rebuildModelProjection()
         updateMessagesSelectionProjection()
         calculateCost()
+        refreshPersistentIncludeControls()
     }
 
     override fun onMessageEdited() {
