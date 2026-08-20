@@ -19,6 +19,7 @@ package org.teslasoft.assistant.reasoning
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -42,6 +43,57 @@ class ReasoningCapabilityResolverTest {
         val cap = ReasoningCapabilityResolver.resolve(modelId = "o3-mini")
         assertEquals(CapabilitySource.PROVIDER_ADAPTER, cap.source)
         assertEquals(ReasoningSupport.KNOWN, cap.support)
+    }
+
+    @Test
+    fun openRouterFallbackPreservesRequestFormatAndContinuationState() {
+        val o3 = ReasoningCapabilityResolver.resolve(
+            modelId = "openai/o3",
+            providerHint = "OpenRouter",
+            endpointHost = "https://openrouter.ai/api/v1"
+        )
+        assertEquals(ReasoningRequestFormat.OPENROUTER, o3.requestFormat)
+        assertTrue(o3.continuationStateSupported)
+
+        val deepSeek = ReasoningCapabilityResolver.resolve(
+            modelId = "deepseek-reasoner",
+            providerHint = "OpenRouter",
+            endpointHost = "https://openrouter.ai/api/v1"
+        )
+        assertEquals(ReasoningRequestFormat.OPENROUTER, deepSeek.requestFormat)
+        assertTrue(deepSeek.continuationStateSupported)
+    }
+
+    @Test
+    fun sameFallbackModelsUseGenericBoundaryOutsideOpenRouter() {
+        val o3 = ReasoningCapabilityResolver.resolve(
+            modelId = "openai/o3",
+            providerHint = "OpenAI",
+            endpointHost = "https://api.openai.com/v1"
+        )
+        assertEquals(ReasoningRequestFormat.OPENAI_COMPATIBLE, o3.requestFormat)
+        assertFalse(o3.continuationStateSupported)
+
+        val deepSeek = ReasoningCapabilityResolver.resolve(
+            modelId = "deepseek-reasoner",
+            providerHint = "Generic",
+            endpointHost = "https://example.test/v1"
+        )
+        assertEquals(ReasoningRequestFormat.OPENAI_COMPATIBLE, deepSeek.requestFormat)
+        assertFalse(deepSeek.continuationStateSupported)
+    }
+
+    @Test
+    fun directAnthropicFallbackDoesNotAdvertiseUnsupportedVisibleReasoning() {
+        val cap = ReasoningCapabilityResolver.resolve(
+            modelId = "claude-3-7-sonnet",
+            providerHint = "Anthropic",
+            endpointHost = "https://api.anthropic.com/v1"
+        )
+        assertEquals(ReasoningSupport.KNOWN, cap.support)
+        assertFalse(cap.canReturnVisibleReasoning)
+        assertFalse(cap.hasConfigurableSetting)
+        assertFalse(cap.tokenBudgetSupported)
     }
 
     @Test

@@ -48,14 +48,6 @@ object OpenRouterReasoningCapability {
         ReasoningEffort.MINIMAL
     )
 
-    /** Compatibility ladder for older catalogs with only the legacy
-     * `reasoning` supported-parameter marker. */
-    private val LEGACY_EFFORTS = listOf(
-        ReasoningEffort.LOW,
-        ReasoningEffort.MEDIUM,
-        ReasoningEffort.HIGH
-    )
-
     /**
      * Capability for one catalog entry, or null when the entry's metadata does
      * not mention reasoning. [requestFormat] lets the same normalized
@@ -82,10 +74,9 @@ object OpenRouterReasoningCapability {
     }
 
     /** Parse the current catalog contract. Missing effort metadata means that
-     * this model exposes no named levels; when it is not mandatory, the UI may
-     * still offer the real Auto/Off control without inventing levels. A JSON
-     * null effort list explicitly means every current gateway effort is
-     * accepted. */
+     * this model exposes no named levels, so the UI does not invent a dropdown
+     * from the absence of a list. A JSON null effort list explicitly means
+     * every current gateway effort is accepted. */
     private fun fromRichReasoningMetadata(
         entry: JsonObject,
         reasoning: JsonObject,
@@ -111,15 +102,17 @@ object OpenRouterReasoningCapability {
         // inventing Low/Medium/High.
         val mandatory = booleanOrNull(reasoning, "mandatory") == true
         val effortConfigurable = when {
-            effortElement == null -> !mandatory
+            effortElement == null -> false
             else -> efforts.isNotEmpty() || rawEfforts.any { it == "none" || it == "off" }
         }
+        val knownProviderCapability = DirectProviderReasoningKnowledge.fromModelId(
+            stringOrNull(entry, "id"),
+            requestFormat = requestFormat
+        )
         val canReturnVisible = booleanOrNull(reasoning, "can_return_visible")
             ?: booleanOrNull(entry, "can_return_visible")
-            ?: DirectProviderReasoningKnowledge.fromModelId(
-                stringOrNull(entry, "id")
-            )?.canReturnVisibleReasoning
-            ?: true
+            ?: knownProviderCapability?.canReturnVisibleReasoning
+            ?: supportedParameters(entry).contains("include_reasoning")
 
         return ReasoningCapability(
             support = ReasoningSupport.KNOWN,
@@ -149,9 +142,9 @@ object OpenRouterReasoningCapability {
         return if (hasReasoningObject) {
             ReasoningCapability(
                 support = ReasoningSupport.KNOWN,
-                effortConfigurable = true,
-                supportedEfforts = LEGACY_EFFORTS,
-                canDisableReasoning = true,
+                effortConfigurable = false,
+                supportedEfforts = emptyList(),
+                canDisableReasoning = false,
                 canReturnVisibleReasoning = true,
                 tokenBudgetSupported = false,
                 source = CapabilitySource.PROVIDER_METADATA,

@@ -56,7 +56,12 @@ object ReasoningCapabilityResolver {
     ): ReasoningCapability {
         val requestFormat = ReasoningRequestFormat.forEndpoint(providerHint, endpointHost)
         OpenRouterReasoningCapability.fromModelEntry(modelCatalogEntry, requestFormat)?.let { return it }
-        DirectProviderReasoningKnowledge.fromModelId(modelId, providerHint, endpointHost)?.let { return it }
+        DirectProviderReasoningKnowledge.fromModelId(
+            modelId = modelId,
+            providerHint = providerHint,
+            endpointHost = endpointHost,
+            requestFormat = requestFormat
+        )?.let { return it }
         ReasoningVariantMarkers.fromModelId(modelId, requestFormat)?.let { return it }
         return ReasoningCapability.UNKNOWN
     }

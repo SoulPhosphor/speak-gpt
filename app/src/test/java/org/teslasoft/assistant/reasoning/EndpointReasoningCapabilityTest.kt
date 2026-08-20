@@ -36,7 +36,7 @@ class EndpointReasoningCapabilityTest {
             liveModelEntry = entry("""{"supported_parameters":["reasoning"]}""")
         )
         assertEquals(CapabilitySource.PROVIDER_METADATA, cap.source)
-        assertTrue(cap.effortConfigurable)
+        assertFalse(cap.effortConfigurable)
     }
 
     @Test
@@ -50,7 +50,7 @@ class EndpointReasoningCapabilityTest {
         )
         val cap = EndpointReasoningCapability.resolve(stored, "x-ai/grok-4")
         assertTrue(cap.isReasoningCapable)
-        assertTrue(cap.effortConfigurable)
+        assertFalse(cap.effortConfigurable)
     }
 
     @Test
@@ -76,7 +76,7 @@ class EndpointReasoningCapabilityTest {
         """.trimIndent()
         val store = EndpointReasoningCapability.learnFromCatalogJson(ReasoningCapabilityStore.EMPTY, catalog)
 
-        assertTrue(EndpointReasoningCapability.resolve(store, "x-ai/grok-4").effortConfigurable)
+        assertFalse(EndpointReasoningCapability.resolve(store, "x-ai/grok-4").effortConfigurable)
         assertTrue(EndpointReasoningCapability.resolve(store, "d/r1").isReasoningCapable)
         // A non-reasoning model is never recorded; it resolves via id tiers only,
         // which do not know "plain/model", so it stays Unknown.
@@ -118,5 +118,17 @@ class EndpointReasoningCapabilityTest {
         val cap = EndpointReasoningCapability.resolve(store, "vendor/reasoner")
         assertEquals(ReasoningRequestFormat.OPENAI_COMPATIBLE, cap.requestFormat)
         assertTrue(cap.continuationStateSupported.not())
+    }
+
+    @Test
+    fun fallbackResolutionPreservesOpenRouterBoundaryWithoutStoredMetadata() {
+        val cap = EndpointReasoningCapability.resolve(
+            reasoningCapabilityByModel = ReasoningCapabilityStore.EMPTY,
+            modelId = "openai/o3",
+            providerHint = "OpenRouter",
+            endpointHost = "https://openrouter.ai/api/v1"
+        )
+        assertEquals(ReasoningRequestFormat.OPENROUTER, cap.requestFormat)
+        assertTrue(cap.continuationStateSupported)
     }
 }

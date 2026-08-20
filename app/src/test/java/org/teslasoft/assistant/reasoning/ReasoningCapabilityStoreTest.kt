@@ -49,6 +49,18 @@ class ReasoningCapabilityStoreTest {
     }
 
     @Test
+    fun roundTripsTheOpenRouterRequestBoundaryAndContinuationState() {
+        val openRouter = full.copy(
+            requestFormat = ReasoningRequestFormat.OPENROUTER,
+            continuationStateSupported = true
+        )
+        val json = ReasoningCapabilityStore.set(ReasoningCapabilityStore.EMPTY, "openai/o3", openRouter)
+        val back = ReasoningCapabilityStore.get(json, "openai/o3")
+        assertEquals(ReasoningRequestFormat.OPENROUTER, back.requestFormat)
+        assertTrue(back.continuationStateSupported)
+    }
+
+    @Test
     fun unrecordedModelReadsBackUnknownNotAbsent() {
         assertEquals(ReasoningCapability.UNKNOWN, ReasoningCapabilityStore.get(ReasoningCapabilityStore.EMPTY, "nope"))
         assertEquals(ReasoningCapability.UNKNOWN, ReasoningCapabilityStore.get(null, "nope"))

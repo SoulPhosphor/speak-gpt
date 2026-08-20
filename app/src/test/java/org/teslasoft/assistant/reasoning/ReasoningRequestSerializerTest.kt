@@ -65,6 +65,20 @@ class ReasoningRequestSerializerTest {
     }
 
     @Test
+    fun openRouterFallbackCapabilityStillEmitsOpenRouterShape() {
+        val capability = ReasoningCapabilityResolver.resolve(
+            modelId = "openai/o3",
+            providerHint = "OpenRouter",
+            endpointHost = "https://openrouter.ai/api/v1"
+        )
+        val fields = ReasoningRequestSerializer.requestFields(
+            resolved(ReasoningEffort.HIGH), capability
+        )!!
+        assertEquals("high", fields.getAsJsonObject("reasoning").get("effort").asString)
+        assertFalse(fields.has("reasoning_effort"))
+    }
+
+    @Test
     fun openRouterOffEmitsEnabledFalse() {
         val fields = ReasoningRequestSerializer.requestFields(
             resolved(ReasoningEffort.OFF), openRouter
@@ -107,6 +121,20 @@ class ReasoningRequestSerializerTest {
             resolved(ReasoningEffort.LOW), generic
         )!!
         assertEquals("low", fields.get("reasoning_effort").asString)
+    }
+
+    @Test
+    fun genericFallbackCapabilityEmitsGenericShape() {
+        val capability = ReasoningCapabilityResolver.resolve(
+            modelId = "openai/o3",
+            providerHint = "OpenAI",
+            endpointHost = "https://api.openai.com/v1"
+        )
+        val fields = ReasoningRequestSerializer.requestFields(
+            resolved(ReasoningEffort.HIGH), capability
+        )!!
+        assertEquals("high", fields.get("reasoning_effort").asString)
+        assertFalse(fields.has("reasoning"))
     }
 
     @Test

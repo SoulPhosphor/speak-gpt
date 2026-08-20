@@ -26,12 +26,25 @@ class ReasoningVariantMarkersTest {
 
     @Test
     fun openRouterThinkingVariantSuffixIsWeakEvidence() {
-        val cap = ReasoningVariantMarkers.fromModelId("anthropic/claude-3.7-sonnet:thinking")!!
+        val cap = ReasoningVariantMarkers.fromModelId(
+            "anthropic/claude-3.7-sonnet:thinking",
+            ReasoningRequestFormat.OPENROUTER
+        )!!
         assertEquals(ReasoningSupport.KNOWN, cap.support)
         assertTrue(cap.canReturnVisibleReasoning)
         // A marker never establishes an effort ladder.
         assertFalse(cap.effortConfigurable)
         assertEquals(CapabilitySource.VARIANT_MARKER, cap.source)
+    }
+
+    @Test
+    fun genericThinkingVariantDoesNotPromiseVisibleReasoning() {
+        val cap = ReasoningVariantMarkers.fromModelId(
+            "vendor/model:thinking",
+            ReasoningRequestFormat.OPENAI_COMPATIBLE
+        )!!
+        assertTrue(cap.isReasoningCapable)
+        assertFalse(cap.canReturnVisibleReasoning)
     }
 
     @Test

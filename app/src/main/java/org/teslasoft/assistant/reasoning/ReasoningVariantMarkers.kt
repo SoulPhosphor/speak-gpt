@@ -52,7 +52,7 @@ object ReasoningVariantMarkers {
             effortConfigurable = false,
             supportedEfforts = emptyList(),
             canDisableReasoning = false,
-            canReturnVisibleReasoning = true,
+            canReturnVisibleReasoning = requestFormat == ReasoningRequestFormat.OPENROUTER,
             tokenBudgetSupported = false,
             source = CapabilitySource.VARIANT_MARKER,
             requestFormat = requestFormat,

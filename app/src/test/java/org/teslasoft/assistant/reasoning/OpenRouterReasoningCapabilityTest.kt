@@ -31,7 +31,7 @@ class OpenRouterReasoningCapabilityTest {
     @Test
     fun currentReasoningMetadataUsesTheModelEffortList() {
         val cap = OpenRouterReasoningCapability.fromModelEntry(
-            entry("""{"id":"x/y","reasoning":{"supported_efforts":["high","medium","low"],"supports_max_tokens":false,"mandatory":false}}""")
+            entry("""{"id":"x/y","reasoning":{"supported_efforts":["high","medium","low"],"supports_max_tokens":false,"mandatory":false,"can_return_visible":true}}""")
         )!!
         assertEquals(ReasoningSupport.KNOWN, cap.support)
         assertTrue(cap.effortConfigurable)
@@ -54,6 +54,36 @@ class OpenRouterReasoningCapabilityTest {
             listOf(ReasoningEffort.XHIGH, ReasoningEffort.MEDIUM, ReasoningEffort.LOW),
             cap.supportedEfforts
         )
+    }
+
+    @Test
+    fun currentMetadataPreservesMaxHighAndLow() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry("""{"id":"x/y","reasoning":{"supported_efforts":["max","high","low"]}}""")
+        )!!
+        assertEquals(
+            listOf(ReasoningEffort.MAX, ReasoningEffort.HIGH, ReasoningEffort.LOW),
+            cap.supportedEfforts
+        )
+    }
+
+    @Test
+    fun richMetadataWithoutEffortsDoesNotInventAList() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry("""{"id":"x/y","reasoning":{},"supported_parameters":["include_reasoning"]}""")
+        )!!
+        assertTrue(cap.isReasoningCapable)
+        assertFalse(cap.effortConfigurable)
+        assertTrue(cap.supportedEfforts.isEmpty())
+        assertTrue(cap.canReturnVisibleReasoning)
+    }
+
+    @Test
+    fun richMetadataWithoutVisibleEvidenceDoesNotPromiseThinking() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry("""{"id":"unknown/model","reasoning":{"supported_efforts":["high"]}}""")
+        )!!
+        assertFalse(cap.canReturnVisibleReasoning)
     }
 
     @Test
@@ -118,12 +148,12 @@ class OpenRouterReasoningCapabilityTest {
         val cap = OpenRouterReasoningCapability.fromModelEntry(
             entry("""{"id":"x/y","supported_parameters":["max_tokens","reasoning","tools"]}""")
         )!!
-        assertEquals(
-            listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH),
-            cap.supportedEfforts
-        )
+        assertTrue(cap.isReasoningCapable)
+        assertFalse(cap.effortConfigurable)
+        assertTrue(cap.supportedEfforts.isEmpty())
         assertFalse(cap.tokenBudgetSupported)
-        assertTrue(cap.canDisableReasoning)
+        assertFalse(cap.canDisableReasoning)
+        assertTrue(cap.canReturnVisibleReasoning)
     }
 
     @Test
@@ -160,6 +190,7 @@ class OpenRouterReasoningCapabilityTest {
         val cap = OpenRouterReasoningCapability.fromModelEntry(
             entry("""{"supported_parameters":["Reasoning"]}""")
         )
-        assertTrue(cap != null && cap.effortConfigurable)
+        assertTrue(cap != null && cap.isReasoningCapable)
+        assertFalse(cap!!.effortConfigurable)
     }
 }
