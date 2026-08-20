@@ -72,12 +72,12 @@ data class GenErrorResult(
  * it is unit-tested on a plain JVM, and must not fail to load if a client
  * exception class is renamed in a dependency bump.
  *
- * It follows the hybrid strategy in ERROR_CODES.md section 7 — strongest signal
- * first: exception **type** (the `java.net` transport types are matched directly;
- * client/Ktor types by class name so no import is needed), then server **status
- * / body**, then raw error **text** as the fallback. The fixed evaluation order
- * is the priority ladder from the doc, so overlapping cases (a model-not-found
- * returned as an HTTP 404, say) always resolve the same way.
+ * It follows the hybrid strategy in ERROR_CODES.md section 7. Concrete server
+ * evidence outranks client-wrapper guesses: an explicit HTTP status and
+ * structured provider code/body are authoritative, while exception class names
+ * and prose are only fallback evidence. This matters for OpenAI-compatible
+ * clients that may wrap a 400 Bad Request in a RateLimitException even though
+ * the provider did not return HTTP 429.
  */
 object GenerationErrorClassifier {
 
@@ -131,28 +131,35 @@ object GenerationErrorClassifier {
             return GenErrorResult(GenErrorCode.N4, null)
         }
 
-        // 3. Provider limits. HTTP 413 is explicit request-body evidence.
-        // Otherwise a structured provider code/type/body wins before any
-        // fallback inspection of exception prose.
+        // 3. Provider limits. HTTP 413 and 402 are explicit protocol evidence.
         if (status == 413) {
             return providerLimitResult(ProviderLimitKind.REQUEST_BODY, status)
         }
-        // HTTP 402 Payment Required is the unambiguous "no credits" signal —
-        // kept ahead of the throttle/quota checks so an empty balance is never
-        // reported as a rate limit.
         if (status == 402) {
             return providerLimitResult(ProviderLimitKind.OUT_OF_CREDITS, status)
         }
+
+        // Structured provider codes/types/bodies are stronger evidence than the
+        // SDK wrapper type. Preserve that even when a provider chooses an odd
+        // HTTP status (for example a 400 body that explicitly says
+        // context_length_exceeded).
         providerLimitFromEvidence(structuredCodes)?.let {
             return providerLimitResult(it, status)
         }
         providerLimitFromEvidence(structuredBodies)?.let {
             return providerLimitResult(it, status)
         }
-        providerLimitFromEvidence(lower)?.let {
-            return providerLimitResult(it, status)
+
+        // A 400/422 is a request rejection unless the structured provider data
+        // above explicitly identified a limit. Do not mine generic exception
+        // prose such as "maximum" or an SDK RateLimitException class name and
+        // turn the server's Bad Request into a made-up rate/throughput failure.
+        if (status != 400 && status != 422) {
+            providerLimitFromEvidence(lower)?.let {
+                return providerLimitResult(it, status)
+            }
         }
-        if (status == 429 || hasType(chain, "RateLimitException")) {
+        if (status == 429 || (status == null && hasType(chain, "RateLimitException"))) {
             return providerLimitResult(ProviderLimitKind.RATE_OR_THROUGHPUT, status)
         }
 
@@ -178,18 +185,10 @@ object GenerationErrorClassifier {
             return GenErrorResult(GenErrorCode.S3, status,
                 isVisionRejection = looksLikeVisionRejection(lower))
         }
-        if ((status == 400 || status == 422) &&
-            containsAny(
-                "$structuredCodes\n$structuredBodies\n$lower",
-                "limit",
-                "too large",
-                "maximum",
-                "exceeded"
-            )
-        ) {
-            return providerLimitResult(ProviderLimitKind.UNIDENTIFIED, status)
-        }
-        // 7. Unknown catch-all.
+
+        // 7. Unknown catch-all. In particular, an otherwise-unidentified 400 or
+        // 422 stays unknown so the UI can show the provider's captured response
+        // verbatim instead of inventing a limit category.
         return GenErrorResult(GenErrorCode.U0, status,
             isVisionRejection = looksLikeVisionRejection(lower))
     }
