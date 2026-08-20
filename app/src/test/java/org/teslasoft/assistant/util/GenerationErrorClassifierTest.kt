@@ -31,6 +31,8 @@ class GenerationErrorClassifierTest {
         message: String
     ) : RuntimeException(message)
 
+    // Deliberately named like the SDK wrapper so the classifier's class-name
+    // fallback is exercised without depending on a client-library test fixture.
     private class RateLimitException(message: String) : RuntimeException(message)
 
     // ---- transport / network (no HTTP status) --------------------------
@@ -121,6 +123,8 @@ class GenerationErrorClassifierTest {
     }
 
     @Test fun http402IsOutOfCredits() {
+        // HTTP 402 Payment Required is the unambiguous "no credits" case and
+        // must never be reported as a rate limit or a generic quota cap.
         val result = GenerationErrorClassifier.classify(
             RuntimeException("Client request invalid: 402 Payment Required")
         )
@@ -129,6 +133,8 @@ class GenerationErrorClassifierTest {
     }
 
     @Test fun insufficientCreditsBodyIsOutOfCreditsNotRate() {
+        // OpenRouter's out-of-credits body, whose status is not cleanly scraped,
+        // is still separated from a 429 throttle by its text.
         assertEquals(
             ProviderLimitKind.OUT_OF_CREDITS,
             GenerationErrorClassifier.classify(
@@ -152,6 +158,7 @@ class GenerationErrorClassifierTest {
     }
 
     @Test fun modelNotFoundIsM2EvenWith404() {
+        // Priority ladder: a model-not-found body wins over the bare-404 rule.
         assertEquals(GenErrorCode.M2, code(RuntimeException("The model 'glm-4.7' does not exist (HTTP 404 Not Found)")))
     }
 
@@ -172,6 +179,8 @@ class GenerationErrorClassifierTest {
     }
 
     @Test fun http400GenericMaximumTextDoesNotBecomeProviderLimit() {
+        // "maximum" is common in actionable validation errors and is not, by
+        // itself, evidence of quota/context/rate limiting.
         val result = GenerationErrorClassifier.classify(
             RuntimeException("400 Bad Request: maximum value for temperature is 2")
         )
@@ -181,6 +190,8 @@ class GenerationErrorClassifierTest {
     }
 
     @Test fun structuredLimitCodeCanStillExplainHttp400() {
+        // A provider is allowed to be odd. If its structured error explicitly
+        // names a limit, that stronger evidence is preserved even with HTTP 400.
         val result = GenerationErrorClassifier.classify(
             StructuredProviderException("context_length_exceeded", "400 Bad Request")
         )
@@ -230,6 +241,7 @@ class GenerationErrorClassifierTest {
     }
 
     @Test fun wrappedCauseIsUnwrapped() {
+        // The real cause is usually buried under a wrapper exception.
         assertEquals(GenErrorCode.N1, code(RuntimeException("generation failed", IOException("Software caused connection abort"))))
     }
 }
