@@ -18,10 +18,16 @@ data class NetworkTransition(val from: String, val to: String, val elapsedMs: Lo
 data class GenerationNetworkSnapshot(
     val atDispatch: String,
     val atFailure: String,
-    val transitions: List<NetworkTransition>
+    val transitions: List<NetworkTransition>,
+    val transitionTrackingAvailable: Boolean = true
 ) {
-    fun transitionsDisplay(): String = if (transitions.isEmpty()) "none observed" else
-        transitions.joinToString(" | ") { "${it.from} -> ${it.to} at +${it.elapsedMs} ms" }
+    fun transitionsDisplay(): String = when {
+        !transitionTrackingAvailable -> "unavailable"
+        transitions.isEmpty() -> "none observed"
+        else -> transitions.joinToString(" | ") {
+            "${it.from} -> ${it.to} at +${it.elapsedMs} ms"
+        }
+    }
 }
 
 internal class NetworkTransitionTrace(val initial: String, private val startedAtMs: Long) {
@@ -62,7 +68,7 @@ class GenerationNetworkMonitor(context: Context) : AutoCloseable {
         val finalState = currentTransport()
         synchronized(lock) {
             trace.record(finalState, SystemClock.elapsedRealtime())
-            return trace.snapshot(finalState)
+            return trace.snapshot(finalState).copy(transitionTrackingAvailable = registered)
         }
     }
 

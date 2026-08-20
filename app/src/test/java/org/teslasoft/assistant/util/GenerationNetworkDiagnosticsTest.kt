@@ -25,6 +25,13 @@ class GenerationNetworkDiagnosticsTest {
         assertEquals("none observed", NetworkTransitionTrace("wifi", 0L).snapshot("wifi").transitionsDisplay())
     }
 
+    @Test fun unavailableTransitionTrackingIsExplicit() {
+        val snapshot = GenerationNetworkSnapshot(
+            "wifi", "wifi", emptyList(), transitionTrackingAvailable = false
+        )
+        assertEquals("unavailable", snapshot.transitionsDisplay())
+    }
+
     @Test fun capturedVoiceStateWinsAfterTeardown() {
         val captured = GenerationFailureSnapshot(
             true,

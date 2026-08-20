@@ -8308,7 +8308,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // Dispatch begins at collection; a failure past this point is a
                 // real provider/network end, not a pre-dispatch one.
                 startGenerationNetworkDiagnostics()
-        providerRequestDispatched = true
+                providerRequestDispatched = true
                 completions.flowOn(Dispatchers.IO).collect { v ->
                     run {
                         if (!currentCoroutineContext().isActive) throw CancellationException()
@@ -8891,7 +8891,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             ?: org.teslasoft.assistant.util.GenerationNetworkSnapshot(
                 atDispatch = "not observed",
                 atFailure = networkState(),
-                transitions = emptyList()
+                transitions = emptyList(),
+                transitionTrackingAvailable = false
             )
         return org.teslasoft.assistant.util.GenerationFailureSnapshot(
             voiceLive = isVoiceLive(),
