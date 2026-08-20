@@ -46,17 +46,26 @@ object ProviderErrorInfo {
             // back to a top-level "message" if a provider puts it there.
             val message = error?.optString("message")?.ifBlank { null }
                 ?: root.optString("message").ifBlank { null }
-            // OpenRouter's metadata.raw carries the upstream provider's own text,
-            // which is more specific than the generic "Provider returned error".
+            // OpenRouter's metadata.raw carries the upstream provider's own text.
+            // Keep it verbatim. If OpenRouter also supplied a distinct, useful
+            // outer message, keep that too instead of silently throwing it away.
             val raw = error?.optJSONObject("metadata")
                 ?.optString("raw")?.ifBlank { null }
             val provider = error?.optJSONObject("metadata")
                 ?.optString("provider_name")?.ifBlank { null }
-            Parsed(provider, raw ?: message)
+            Parsed(provider, combineMessages(raw, message))
         } catch (_: Exception) {
             // Not a JSON object (plain-text body, or a JSON array): the whole
             // body is the verbatim message.
             Parsed(null, rawBody.trim().ifBlank { null })
         }
+    }
+
+    private fun combineMessages(raw: String?, outer: String?): String? = when {
+        raw == null -> outer
+        outer == null -> raw
+        raw == outer -> raw
+        outer.trim().equals("Provider returned error", ignoreCase = true) -> raw
+        else -> "$raw\n$outer"
     }
 }
