@@ -1,0 +1,66 @@
+name: Apply Chat Title Width Fix
+
+on:
+  push:
+    branches:
+      - agent/generation-diagnostics-repair
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/generation-diagnostics-repair
+
+      - name: Apply title constraint fix
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/res/layout/activity_chat.xml')
+          text = path.read_text()
+
+          old_constraint = '                app:layout_constraintEnd_toStartOf="@+id/btn_summarizer_errors"\n'
+          new_constraint = '                app:layout_constraintEnd_toStartOf="@+id/action_buttons_start"\n'
+          if text.count(old_constraint) != 1:
+              raise RuntimeError(f'expected one title end constraint, found {text.count(old_constraint)}')
+          text = text.replace(old_constraint, new_constraint, 1)
+
+          back_anchor = '''            <ImageButton
+                android:id="@+id/btn_back"
+'''
+          barrier = '''            <!-- Let the chat title use all space up to whichever right-side
+                 action is actually the first visible button. -->
+            <androidx.constraintlayout.widget.Barrier
+                android:id="@+id/action_buttons_start"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                app:barrierAllowsGoneWidgets="false"
+                app:barrierDirection="start"
+                app:constraint_referenced_ids="btn_summarizer_errors,btn_summary,btn_debug_log,btn_quick_settings,btn_settings" />
+
+'''
+          if text.count(back_anchor) != 1:
+              raise RuntimeError(f'expected one back-button anchor, found {text.count(back_anchor)}')
+          text = text.replace(back_anchor, barrier + back_anchor, 1)
+          path.write_text(text)
+          PY
+
+          rm -f .github/workflows/apply-chat-title-width.yml
+
+      - name: Commit targeted layout fix
+        run: |
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- app/src/main/res/layout/activity_chat.xml .github/workflows/apply-chat-title-width.yml
+          git diff --cached --check
+          git diff --cached --stat
+          git commit -m "Let active chat title use available header space"
+          git push origin HEAD:agent/generation-diagnostics-repair
