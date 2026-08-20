@@ -28,33 +28,27 @@ import java.net.UnknownHostException
  * only be noise).
  */
 enum class GenErrorCode(val code: String, val includeStackTrace: Boolean) {
-    N1("N1", false), // connection dropped mid-response (transport abort)
-    N2("N2", false), // connect timeout — could not establish the connection in time
-    N3("N3", false), // host unreachable / DNS / offline
-    N4("N4", false), // response (read/socket) timeout — connected, but no reply in time
-    A1("A1", false), // API key rejected
-    M1("M1", false), // no model set on the request
-    M2("M2", false), // named model not available on the endpoint
-    M3("M3", false), // context length exceeded
-    Q1("Q1", false), // quota / usage limit reached
-    S1("S1", false), // bare HTTP 404 / Not Found
-    S2("S2", true),  // response could not be read as the expected stream
-    S3("S3", false), // request rejected as inappropriate content
-    U0("U0", true);  // anything unmatched
+    N1("N1", false),
+    N2("N2", false),
+    N3("N3", false),
+    N4("N4", false),
+    A1("A1", false),
+    M1("M1", false),
+    M2("M2", false),
+    M3("M3", false),
+    Q1("Q1", false),
+    S1("S1", false),
+    S2("S2", true),
+    S3("S3", false),
+    U0("U0", true);
 }
 
-/** Result of classifying a failure: the code, plus the HTTP status when the
- *  server actually answered (null for transport drops, which have no status). */
 enum class ProviderLimitKind {
     MODEL_CONTEXT,
     MODEL_INPUT,
     REQUEST_BODY,
     RATE_OR_THROUGHPUT,
     QUOTA_OR_SPENDING,
-    // The account has no spendable credits (HTTP 402 / "insufficient credits").
-    // Kept DISTINCT from RATE_OR_THROUGHPUT and QUOTA_OR_SPENDING so a temporary
-    // throttle, a usage cap, and an empty balance can never be confused in the
-    // message the user reads (owner ruling, July 31 2026).
     OUT_OF_CREDITS,
     UNIDENTIFIED
 }
@@ -72,12 +66,12 @@ data class GenErrorResult(
  * it is unit-tested on a plain JVM, and must not fail to load if a client
  * exception class is renamed in a dependency bump.
  *
- * It follows the hybrid strategy in ERROR_CODES.md section 7. Concrete server
- * evidence outranks client-wrapper guesses: an explicit HTTP status and
- * structured provider code/body are authoritative, while exception class names
- * and prose are only fallback evidence. This matters for OpenAI-compatible
- * clients that may wrap a 400 Bad Request in a RateLimitException even though
- * the provider did not return HTTP 429.
+ * Strongest evidence wins. A concrete status exposed by the client exception
+ * (for example openai-client's `statusCode`) outranks status-like prose in the
+ * exception message. Structured provider code/body evidence comes next; class
+ * names and raw prose are fallbacks only. This prevents a wrapper name or an
+ * upstream string such as "400 ERROR" from overriding the HTTP status the client
+ * actually received.
  */
 object GenerationErrorClassifier {
 
@@ -93,17 +87,20 @@ object GenerationErrorClassifier {
         val structured = extractStructuredEvidence(chain)
         val structuredCodes = structured.codesAndTypes.lowercase()
         val structuredBodies = structured.bodies.lowercase()
-        val status = extractHttpStatus(text) ?: extractStructuredHttpStatus(structuredCodes)
+        val status = extractStructuredHttpStatus(structured.httpStatuses)
+            ?: extractHttpStatus(text)
         val lower = text.lowercase()
 
-        // 1. Auth.
+        // 1. Auth. A typed AuthenticationException is fallback evidence only;
+        // if the exception exposes a different concrete HTTP status, trust it.
         if (status == 401 || lower.contains("incorrect api key") ||
-            hasType(chain, "AuthenticationException")
+            (status == null && hasType(chain, "AuthenticationException"))
         ) {
             return GenErrorResult(GenErrorCode.A1, status)
         }
-        // 2. Network / transport. No HTTP response exists for these, so status is
-        //    forced null even if a stray number appeared in the trace.
+
+        // 2. Network / transport. These conditions mean no usable HTTP response
+        // exists for the failed operation, so status is intentionally null.
         if (chain.any { it is UnknownHostException } || hasType(chain, "UnknownHostException") ||
             lower.contains("no address associated with hostname")) {
             return GenErrorResult(GenErrorCode.N3, null)
@@ -111,18 +108,11 @@ object GenerationErrorClassifier {
         if (lower.contains("software caused connection abort")) {
             return GenErrorResult(GenErrorCode.N1, null)
         }
-        // Connect timeout — the app could not establish the connection in time.
-        // Ktor's ConnectTimeoutException carries "Connect timeout has expired";
-        // it is NOT a java.net.SocketTimeoutException, so it is matched first and
-        // separately from the read timeout below.
         if (lower.contains("connect timeout has expired") ||
             hasType(chain, "ConnectTimeoutException")
         ) {
             return GenErrorResult(GenErrorCode.N2, null)
         }
-        // Read / response timeout — connected, but no response arrived in time.
-        // Ktor's SocketTimeoutException extends java.net's and carries "Socket
-        // timeout has expired"; a plain read timeout surfaces as either.
         if (chain.any { it is SocketTimeoutException } ||
             lower.contains("socket timeout has expired") ||
             lower.contains("sockettimeoutexception") ||
@@ -131,7 +121,7 @@ object GenerationErrorClassifier {
             return GenErrorResult(GenErrorCode.N4, null)
         }
 
-        // 3. Provider limits. HTTP 413 and 402 are explicit protocol evidence.
+        // 3. Explicit protocol statuses.
         if (status == 413) {
             return providerLimitResult(ProviderLimitKind.REQUEST_BODY, status)
         }
@@ -139,42 +129,38 @@ object GenerationErrorClassifier {
             return providerLimitResult(ProviderLimitKind.OUT_OF_CREDITS, status)
         }
 
-        // Structured provider codes/types/bodies are stronger evidence than the
-        // SDK wrapper type. Preserve that even when a provider chooses an odd
-        // HTTP status (for example a 400 body that explicitly says
-        // context_length_exceeded).
+        // Structured provider evidence outranks prose. Strong, specific text
+        // markers are still useful even on a 400/422; what is forbidden is the
+        // old generic "contains the word limit/maximum" guess.
         providerLimitFromEvidence(structuredCodes)?.let {
             return providerLimitResult(it, status)
         }
         providerLimitFromEvidence(structuredBodies)?.let {
             return providerLimitResult(it, status)
         }
-
-        // A 400/422 is a request rejection unless the structured provider data
-        // above explicitly identified a limit. Do not mine generic exception
-        // prose such as "maximum" or an SDK RateLimitException class name and
-        // turn the server's Bad Request into a made-up rate/throughput failure.
-        if (status != 400 && status != 422) {
-            providerLimitFromEvidence(lower)?.let {
-                return providerLimitResult(it, status)
-            }
+        providerLimitFromEvidence(lower)?.let {
+            return providerLimitResult(it, status)
         }
+
+        // HTTP 429 is authoritative rate-limit evidence. A RateLimitException
+        // class name is only a fallback when the client exposed no status at all.
         if (status == 429 || (status == null && hasType(chain, "RateLimitException"))) {
             return providerLimitResult(ProviderLimitKind.RATE_OR_THROUGHPUT, status)
         }
 
-        // 4. Model-specific. A model-not-found body is M2 even when the HTTP
-        //    status is 404, so this is checked before the bare-404 rule below.
+        // 4. Model-specific.
         if (lower.contains("invalid model") || lower.contains("you must provide a model")) {
             return GenErrorResult(GenErrorCode.M1, status)
         }
-        if (lower.contains("does not exist")) {
+        if (lower.contains("does not exist") || lower.contains("model not found")) {
             return GenErrorResult(GenErrorCode.M2, status)
         }
-        // 5. Bare HTTP 404 with no model-specific body.
-        if (status == 404 || lower.contains("not found")) {
-            return GenErrorResult(GenErrorCode.S1, 404)
+
+        // 5. Bare HTTP 404. Text-only "not found" is fallback evidence only.
+        if (status == 404 || (status == null && lower.contains("not found"))) {
+            return GenErrorResult(GenErrorCode.S1, status ?: 404)
         }
+
         // 6. Response-shape failure / content rejection.
         if (lower.contains("notransformationfoundexception") ||
             lower.contains("expected response body of the type")
@@ -182,19 +168,25 @@ object GenerationErrorClassifier {
             return GenErrorResult(GenErrorCode.S2, status)
         }
         if (lower.contains("your request was rejected")) {
-            return GenErrorResult(GenErrorCode.S3, status,
-                isVisionRejection = looksLikeVisionRejection(lower))
+            return GenErrorResult(
+                GenErrorCode.S3,
+                status,
+                isVisionRejection = looksLikeVisionRejection(lower)
+            )
         }
 
-        // 7. Unknown catch-all. In particular, an otherwise-unidentified 400 or
-        // 422 stays unknown so the UI can show the provider's captured response
-        // verbatim instead of inventing a limit category.
-        return GenErrorResult(GenErrorCode.U0, status,
-            isVisionRejection = looksLikeVisionRejection(lower))
+        // 7. Unknown catch-all. An otherwise-unidentified 400/422 stays unknown
+        // so the provider/client detail remains the diagnostic authority.
+        return GenErrorResult(
+            GenErrorCode.U0,
+            status,
+            isVisionRejection = looksLikeVisionRejection(lower)
+        )
     }
 
     private fun looksLikeVisionRejection(lower: String): Boolean =
-        containsAny(lower,
+        containsAny(
+            lower,
             "does not support image",
             "does not support vision",
             "image_not_supported",
@@ -213,9 +205,6 @@ object GenerationErrorClassifier {
     private fun providerLimitFromEvidence(evidence: String): ProviderLimitKind? {
         if (evidence.isBlank()) return null
         return when {
-            // Checked before the quota/spending markers: an empty balance is a
-            // distinct cause from a usage cap, and OpenRouter's 402 body reads
-            // "Insufficient credits. Add more using …".
             containsAny(
                 evidence,
                 "insufficient_credits",
@@ -225,6 +214,7 @@ object GenerationErrorClassifier {
                 "negative balance",
                 "payment required"
             ) -> ProviderLimitKind.OUT_OF_CREDITS
+
             containsAny(
                 evidence,
                 "request_body_too_large",
@@ -238,6 +228,7 @@ object GenerationErrorClassifier {
                 "maximum request size",
                 "entity too large"
             ) -> ProviderLimitKind.REQUEST_BODY
+
             containsAny(
                 evidence,
                 "context_length_exceeded",
@@ -246,6 +237,7 @@ object GenerationErrorClassifier {
                 "this model's maximum context",
                 "maximum context length"
             ) -> ProviderLimitKind.MODEL_CONTEXT
+
             containsAny(
                 evidence,
                 "max_input_tokens",
@@ -254,6 +246,7 @@ object GenerationErrorClassifier {
                 "maximum input length",
                 "input token limit"
             ) -> ProviderLimitKind.MODEL_INPUT
+
             containsAny(
                 evidence,
                 "insufficient_quota",
@@ -263,6 +256,7 @@ object GenerationErrorClassifier {
                 "current quota",
                 "account quota"
             ) -> ProviderLimitKind.QUOTA_OR_SPENDING
+
             containsAny(
                 evidence,
                 "rate_limit_exceeded",
@@ -274,6 +268,7 @@ object GenerationErrorClassifier {
                 " rpm ",
                 "too many requests"
             ) -> ProviderLimitKind.RATE_OR_THROUGHPUT
+
             else -> null
         }
     }
@@ -295,53 +290,70 @@ object GenerationErrorClassifier {
     }
 
     /**
-     * Common SDK exceptions expose provider code/type/body as no-argument
-     * accessors or fields. Read those conservatively so an explicit provider
-     * code wins even when the exception's prose is localized or generic.
+     * Common SDK exceptions expose status/code/type/body as public no-argument
+     * accessors or fields. Read them conservatively so concrete client evidence
+     * survives even when the exception message is generic.
      */
     private data class StructuredEvidence(
         val codesAndTypes: String,
-        val bodies: String
+        val bodies: String,
+        val httpStatuses: String
     )
 
     private fun extractStructuredEvidence(chain: List<Throwable>): StructuredEvidence {
         val codesAndTypes = StringBuilder()
         val bodies = StringBuilder()
+        val httpStatuses = StringBuilder()
         val codeNames = setOf("code", "errorcode", "type", "errortype")
         val bodyNames = setOf("body", "responsebody", "errorbody")
+        val statusNames = setOf(
+            "statuscode",
+            "httpstatuscode",
+            "httpstatus",
+            "responsestatuscode"
+        )
 
         fun append(name: String, value: Any?) {
             when (name) {
                 in codeNames -> codesAndTypes.append(value).append('\n')
                 in bodyNames -> bodies.append(value).append('\n')
+                in statusNames -> httpStatuses.append(value).append('\n')
             }
         }
 
         for (throwable in chain) {
             for (method in throwable.javaClass.methods) {
                 if (method.parameterCount != 0) continue
-                val normalized = method.name
-                    .removePrefix("get")
-                    .lowercase()
-                if (normalized !in codeNames && normalized !in bodyNames) continue
+                val normalized = method.name.removePrefix("get").lowercase()
+                if (normalized !in codeNames &&
+                    normalized !in bodyNames &&
+                    normalized !in statusNames
+                ) continue
                 runCatching { method.invoke(throwable) }
                     .getOrNull()
                     ?.let { append(normalized, it) }
             }
             for (field in throwable.javaClass.declaredFields) {
                 val normalized = field.name.lowercase()
-                if (normalized !in codeNames && normalized !in bodyNames) continue
+                if (normalized !in codeNames &&
+                    normalized !in bodyNames &&
+                    normalized !in statusNames
+                ) continue
                 runCatching {
                     field.isAccessible = true
                     field.get(throwable)
                 }.getOrNull()?.let { append(normalized, it) }
             }
         }
-        return StructuredEvidence(codesAndTypes.toString(), bodies.toString())
+        return StructuredEvidence(
+            codesAndTypes.toString(),
+            bodies.toString(),
+            httpStatuses.toString()
+        )
     }
 
-    private fun extractStructuredHttpStatus(codesAndTypes: String): Int? {
-        val matches = Regex("""\b([1-5]\d{2})\b""").findAll(codesAndTypes)
+    private fun extractStructuredHttpStatus(statuses: String): Int? {
+        val matches = Regex("""\b([1-5]\d{2})\b""").findAll(statuses)
         for (match in matches) {
             val code = match.groupValues[1].toIntOrNull() ?: continue
             if (code in 100..599) return code
@@ -349,11 +361,12 @@ object GenerationErrorClassifier {
         return null
     }
 
-    /** The throwable and its cause chain, guarding against a cyclic `cause`. */
     private fun causeChain(error: Throwable): List<Throwable> {
         val out = ArrayList<Throwable>()
         var cur: Throwable? = error
-        val seen = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Throwable, Boolean>())
+        val seen = java.util.Collections.newSetFromMap(
+            java.util.IdentityHashMap<Throwable, Boolean>()
+        )
         while (cur != null && seen.add(cur)) {
             out.add(cur)
             cur = cur.cause
@@ -361,16 +374,13 @@ object GenerationErrorClassifier {
         return out
     }
 
-    /** Matches a client/Ktor exception by class simple name without importing it,
-     *  so a dependency rename can never break compilation here. */
     private fun hasType(chain: List<Throwable>, simpleName: String): Boolean =
         chain.any { (it::class.simpleName ?: "").contains(simpleName) }
 
     /**
-     * Best-effort HTTP status from common phrasings ("status code 401",
-     * "HTTP/1.1 404", "429 Too Many Requests", or client-generic "400 ERROR").
-     * Conservative on purpose: a status is a bonus for the log and for
-     * disambiguation, but classification never depends on it alone.
+     * Last-resort HTTP status extraction from exception prose. This deliberately
+     * runs after structured status accessors such as `statusCode`, so an upstream
+     * message like "400 ERROR" cannot replace a concrete outer HTTP 429.
      */
     private fun extractHttpStatus(text: String): Int? {
         val patterns = listOf(
@@ -383,8 +393,8 @@ object GenerationErrorClassifier {
                     """Bad Gateway|Service Unavailable|Gateway Timeout)\b"""
             )
         )
-        for (p in patterns) {
-            val code = p.find(text)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
+        for (pattern in patterns) {
+            val code = pattern.find(text)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: continue
             if (code in 100..599) return code
         }
         return null
