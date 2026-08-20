@@ -65,7 +65,7 @@ class PersonasListActivity : FragmentActivity() {
     private var pickMode: Boolean = false
 
     private fun newEmptyPersona(): PersonaObject {
-        return PersonaObject("", "")
+        return PersonaObject.emptyDraft()
     }
 
     // Creation still returns ACTION_SAVE so the caller can add/select the new
