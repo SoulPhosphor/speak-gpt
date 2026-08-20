@@ -826,6 +826,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             return context.getString(R.string.chat_token_count, grouped)
         }
 
+        /** The provider-reported reasoning-token count for this turn, kept
+         *  separate from the answer-token total (§7.8), or null when this reply
+         *  stored no reasoning-token count. */
+        private fun reasoningTokenCountLabel(chatMessage: HashMap<String, Any>): String? {
+            val raw = chatMessage[KEY_MESSAGE_REASONING_TOKENS]?.toString()?.takeIf { it.isNotBlank() }
+                ?: return null
+            val count = raw.toLongOrNull() ?: return null
+            val grouped = NumberFormat.getIntegerInstance(Locale.getDefault()).format(count)
+            return context.getString(R.string.chat_reasoning_token_count, grouped)
+        }
+
         /**
          * The anchored Message Details popup (chat-redesign-plan.md §5). Always
          * reachable regardless of the compact-display toggles. Shows only the
@@ -854,6 +865,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             val tokens = if (isBot) tokenCountLabel(chatMessage) else null
             anyShown = bindDetailValue(content, R.id.details_value_tokens, tokens) || anyShown
+
+            val reasoningTokens = if (isBot) reasoningTokenCountLabel(chatMessage) else null
+            anyShown = bindDetailValue(content, R.id.details_value_reasoning_tokens, reasoningTokens) || anyShown
 
             content.findViewById<TextView>(R.id.details_empty).visibility =
                 if (anyShown) View.GONE else View.VISIBLE

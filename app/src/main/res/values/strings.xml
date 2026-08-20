@@ -3225,6 +3225,9 @@
     <string name="reasoning_model_indicator_desc">Reasoning model</string>
     <!-- Token count shown in the compact line and the details popup, e.g. "1,234 tokens". -->
     <string name="chat_token_count">%1$s tokens</string>
+    <!-- Reasoning-token count in Message Details, kept separate from answer
+         tokens (chat-redesign-plan.md §7.8), e.g. "512 reasoning tokens". -->
+    <string name="chat_reasoning_token_count">%1$s reasoning tokens</string>
     <!-- Regenerated-response pager on an assistant message. -->
     <string name="version_nav_prev">Previous Response Version</string>
     <string name="version_nav_next">Next Response Version</string>
