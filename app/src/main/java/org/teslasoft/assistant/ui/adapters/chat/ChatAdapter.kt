@@ -104,6 +104,7 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
+import org.teslasoft.assistant.ui.chat.ChatMarkdownRenderer
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
