@@ -111,6 +111,7 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
+import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
 import org.teslasoft.assistant.ui.util.IncludesPopupController
@@ -208,7 +209,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // a later companion switch never rewrites past labels. Absent on
         // messages written before this feature; those fall back to the chat's
         // current companion name at display time.
-        const val KEY_COMPANION_NAME = "companionName"
+        const val KEY_COMPANION_NAME = ChatSpeakerNames.COMPANION_NAME_KEY
 
         // Durable per-message attribution for the compact metadata line and the
         // Message Details popup (chat-redesign-plan.md §4, §5). All stored as
@@ -1599,7 +1600,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val nameText = if (isBot) {
                 resolveAssistantLabel(chatMessage)
             } else {
-                context.getString(R.string.chat_role_user)
+                ChatSpeakerNames.userName(context, chatMessage)
             }
             val nameStyle = if (isBot) {
                 companionNameStyle ?: ChatNameStyle.ai(preferences)
@@ -1869,11 +1870,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  for messages written before the stamp existed, else the generic
          *  "Assistant". Never the app name. */
         private fun resolveAssistantLabel(chatMessage: HashMap<String, Any>): String {
-            val stamped = chatMessage[KEY_COMPANION_NAME]?.toString()
-            if (!stamped.isNullOrBlank()) return stamped
-            val live = companionLabel
-            if (!live.isNullOrBlank()) return live
-            return context.getString(R.string.chat_role_assistant)
+            return ChatSpeakerNames.companionName(context, chatMessage, companionLabel)
         }
 
         /** Assistant-side precedence (profile-images-plan.md): Companion

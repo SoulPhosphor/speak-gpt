@@ -65,6 +65,7 @@ import android.transition.TransitionInflater
 import android.util.Base64
 import android.util.Log
 import android.view.KeyEvent
+import android.view.Menu
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -75,6 +76,7 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -195,6 +197,9 @@ import org.teslasoft.assistant.preferences.includes.ProjectedUserMessage
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
 import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
+import org.teslasoft.assistant.preferences.backup.readable.ReadableChatFormats
+import org.teslasoft.assistant.ui.util.ChatDeleteDialog
+import org.teslasoft.assistant.ui.util.ChatExportDialog
 import org.teslasoft.assistant.ui.util.EditChatTitleDialog
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
 import org.teslasoft.assistant.ui.util.IncludeStripController
@@ -221,8 +226,14 @@ import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
 import org.teslasoft.assistant.ui.chat.ChatComposerLayout
+import org.teslasoft.assistant.ui.chat.ChatExportFormat
+import org.teslasoft.assistant.ui.chat.ChatExportFormatter
+import org.teslasoft.assistant.ui.chat.ChatExportMessage
+import org.teslasoft.assistant.ui.chat.ChatExportOptions
+import org.teslasoft.assistant.ui.chat.ChatExportPdfWriter
 import org.teslasoft.assistant.ui.chat.ChatImeInsetLayout
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
+import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.QuickSettingsBottomSheetDialogFragment
 import org.teslasoft.assistant.ui.onboarding.WelcomeActivity
@@ -357,11 +368,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var btnSend: ImageButton? = null
     private var btnMicro: ImageButton? = null
     private var btnSettings: ImageButton? = null
+    private var btnChatMenu: ImageButton? = null
     private var progress: CircularProgressIndicator? = null
     private var chat: RecyclerView? = null
     private var activityTitle: TextView? = null
     private var btnQuickSettings: ImageButton? = null
     private var fileContents: ByteArray? = null
+    private var pendingChatExportBytes: ByteArray? = null
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var btnDebugLog: ImageButton? = null
@@ -476,6 +489,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var isTTSInitialized = false
     private var autoLangDetect = false
     private var cancelState = false
+    private var deletingChat = false
     // True only when the CURRENT generation was cancelled by a deliberate user
     // action (Stop / Hang Up / mic or conversation-button cancel), so the
     // cancellation funnel can tell a real user stop from an app/lifecycle or
@@ -2452,7 +2466,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // the generation deliberately survives leaving the chat and
         // recreation (§5); with no screen attached its result is written
         // straight into the stored history.
-        ImageGenerationJobRegistry.detach(chatId, this)
+        if (!deletingChat) {
+            ImageGenerationJobRegistry.detach(chatId, this)
+        }
 
         killAllProcesses()
         stopHandsFreeService()
@@ -2605,6 +2621,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun initUI() {
         btnMicro = findViewById(R.id.btn_micro)
         btnSettings = findViewById(R.id.btn_settings)
+        btnChatMenu = findViewById(R.id.btn_chat_menu)
         chat = findViewById(R.id.messages)
         messageInput = findViewById(R.id.message_input)
         btnSend = findViewById(R.id.btn_send)
@@ -2730,6 +2747,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         btnQuickSettings?.setImageResource(R.drawable.ic_history_edu)
         btnBack?.setImageResource(R.drawable.ic_back)
+        btnChatMenu?.setImageResource(R.drawable.ic_more_vert)
 
         activityTitle?.text = if (chatName.trim().contains("_autoname_")) "Untitled chat" else chatName
 
@@ -2778,6 +2796,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
 
         btnSettings?.background = getDarkAccentDrawable(
+            AppCompatResources.getDrawable(
+                this,
+                R.drawable.btn_accent_tonal_v4
+            )!!, this
+        )
+
+        btnChatMenu?.background = getDarkAccentDrawable(
             AppCompatResources.getDrawable(
                 this,
                 R.drawable.btn_accent_tonal_v4
@@ -4121,6 +4146,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
         }
 
+        btnChatMenu?.setOnClickListener { anchor ->
+            showChatOptionsMenu(anchor)
+        }
+
         btnQuickSettings?.setOnClickListener {
             openSummoningCircle()
         }
@@ -4134,6 +4163,135 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         updateDebugLogButtonVisibility()
         initSummarizer()
+    }
+
+    private fun showChatOptionsMenu(anchor: View) {
+        PopupMenu(this, anchor).apply {
+            menu.add(Menu.NONE, 1, 0, R.string.chat_menu_export)
+            menu.add(Menu.NONE, 2, 1, R.string.btn_delete)
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    1 -> {
+                        showChatExportDialog()
+                        true
+                    }
+                    2 -> {
+                        showChatDeleteDialog()
+                        true
+                    }
+                    else -> false
+                }
+            }
+            show()
+        }
+    }
+
+    private fun showChatExportDialog() {
+        ChatExportDialog.show(this) { options ->
+            exportChat(options)
+        }
+    }
+
+    private fun showChatDeleteDialog() {
+        ChatDeleteDialog.show(this) {
+            deleteCurrentChat()
+        }
+    }
+
+    private fun exportChat(options: ChatExportOptions) {
+        if (chatStorageUnavailable || deletingChat) return
+
+        val currentCompanion = currentCompanionLabel()
+        val snapshot = messages
+            .filterNot {
+                it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
+                    it[ChatAdapter.KEY_IMAGE_PROGRESS] == true
+            }
+            .map { message ->
+                val isCompanion = message["isBot"] == true ||
+                    message["isBot"]?.toString() == "true"
+                ChatExportMessage(
+                    isCompanion = isCompanion,
+                    name = if (isCompanion) {
+                        ChatSpeakerNames.companionName(this, message, currentCompanion)
+                    } else {
+                        ChatSpeakerNames.userName(this, message)
+                    },
+                    content = message["message"]?.toString().orEmpty(),
+                    timestampMillis = message[ChatAdapter.KEY_MESSAGE_TIME]
+                        ?.toString()
+                        ?.toLongOrNull(),
+                    model = if (isCompanion) {
+                        message[ChatAdapter.KEY_MESSAGE_MODEL]?.toString()
+                    } else {
+                        null
+                    }
+                )
+            }
+
+        lifecycleScope.launch {
+            val bytes = withContext(Dispatchers.Default) {
+                val tokenized = if (
+                    options.includeUserTokenCount || options.includeCompanionTokenCount
+                ) {
+                    val tokenizer = Tokenizer.of(Encoding.CL100K_BASE)
+                    snapshot.map { message ->
+                        val includeTokens = if (message.isCompanion) {
+                            options.includeCompanionTokenCount
+                        } else {
+                            options.includeUserTokenCount
+                        }
+                        if (!includeTokens) {
+                            message
+                        } else {
+                            message.copy(
+                                tokenCount = runCatching {
+                                    tokenizer.encode(message.content).size
+                                }.getOrNull()
+                            )
+                        }
+                    }
+                } else {
+                    snapshot
+                }
+
+                when (options.format) {
+                    ChatExportFormat.JSON ->
+                        ChatExportFormatter.formatJson(tokenized, options)
+                            .toByteArray(Charsets.UTF_8)
+                    ChatExportFormat.TEXT,
+                    ChatExportFormat.MARKDOWN ->
+                        ChatExportFormatter.formatText(tokenized, options)
+                            .toByteArray(Charsets.UTF_8)
+                    ChatExportFormat.PDF ->
+                        ChatExportPdfWriter.toBytes(
+                            ChatExportFormatter.formatText(tokenized, options)
+                        )
+                }
+            }
+
+            if (isFinishing || isDestroyed || deletingChat) return@launch
+            pendingChatExportBytes = bytes
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = options.format.mimeType
+                putExtra(
+                    Intent.EXTRA_TITLE,
+                    ReadableChatFormats.sanitizeTitle(chatName) +
+                        "." + options.format.extension
+                )
+            }
+            chatExportFileSaveIntentLauncher.launch(intent)
+        }
+    }
+
+    private fun deleteCurrentChat() {
+        if (chatId.isBlank() || deletingChat) return
+        deletingChat = true
+        pendingChatExportBytes = null
+        cancelAllAiActivity("chat deletion")
+        ChatPreferences.getChatPreferences().deleteChatById(this, chatId)
+        finishActivity()
     }
 
     /* ==================== Conversation summarizer ====================
@@ -4509,6 +4667,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    private val chatExportFileSaveIntentLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                result.data?.data?.also { uri ->
+                    writeChatExportToFile(uri)
+                }
+            }
+        }
+
     override fun onGeneratedImageSaveClick(dataUrl: String, mimeType: String) {
         lifecycleScope.launch {
             val prepared = withContext(Dispatchers.IO) {
@@ -4576,6 +4743,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     stream.write(
                         fileContents
                     )
+                }
+            }
+            Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
+        } catch (e: FileNotFoundException) {
+            Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+            e.printStackTrace()
+        } catch (e: IOException) {
+            Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+            e.printStackTrace()
+        }
+    }
+
+    private fun writeChatExportToFile(uri: Uri) {
+        val bytes = pendingChatExportBytes ?: return
+        pendingChatExportBytes = null
+        try {
+            val descriptor = contentResolver.openFileDescriptor(uri, "w")
+                ?: throw IOException("Could not open export destination")
+            descriptor.use {
+                FileOutputStream(it.fileDescriptor).use { stream ->
+                    stream.write(bytes)
                 }
             }
             Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
@@ -6204,6 +6392,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun saveSettings(
         synchronous: Boolean = false
     ): ChatStorageHealth.WriteOutcome {
+        if (deletingChat) return ChatStorageHealth.WriteOutcome.FAILED
         // Guarded save (Round 4): ChatPreferences refuses the write when the
         // chat's storage is locked or its stored value is preserved-corrupt —
         // this screen's in-memory list came from that unreadable read, and
@@ -6502,6 +6691,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         terminal: ImageGenerationJobRegistry.Terminal
     ) {
         if (job.chatId != chatId) return
+        if (deletingChat) {
+            ImageGenerationJobRegistry.detach(chatId, this)
+            return
+        }
         removeImageProgressCard()
         val fromImagine = job.origin == ImageGenerationJobRegistry.Origin.IMAGINE
         when (terminal) {
