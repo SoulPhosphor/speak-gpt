@@ -5629,8 +5629,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * §7.7 confidence ladder over this endpoint's persisted capability store.
      */
     private fun reasoningCapabilityForModel(model: String): org.teslasoft.assistant.reasoning.ReasoningCapability =
-        org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
-            apiEndpointObject?.reasoningCapabilityByModel, model
+        org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolveWithLearnedRejections(
+            apiEndpointObject?.reasoningCapabilityByModel,
+            apiEndpointObject?.reasoningRejectedLevelsByModel,
+            model
         )
 
     /**
@@ -5641,9 +5643,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun reasoningIndicatorTokenForModel(model: String): String? {
         val capability = reasoningCapabilityForModel(model)
-        val resolved = resolveReasoningForModel(model)
+        // A learn-and-retry sends the substituted effort, so the glyph must
+        // reflect that, not the (now-refused) saved level.
+        val effort = forcedReasoningEffortOverride ?: resolveReasoningForModel(model).effort
         return org.teslasoft.assistant.reasoning.ReasoningIndicator
-            .forGeneration(capability, resolved.effort)?.token
+            .forGeneration(capability, effort)?.token
     }
 
     /**
@@ -5702,7 +5706,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             null
         } ?: return
 
-        val resolved = resolveReasoningForModel(model)
+        val baseResolved = resolveReasoningForModel(model)
+        // A single-use substitute (learn-and-retry after a rejected extreme)
+        // replaces the resolved effort for this one request.
+        val resolved = forcedReasoningEffortOverride?.let { baseResolved.copy(effort = it) } ?: baseResolved
+        // Remember what was actually sent so the retry wrapper knows which level
+        // a provider rejection refused.
+        lastRegularRequestReasoningEffort = resolved.effort
         val capability = reasoningCapabilityForModel(model)
         val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
 
@@ -6654,6 +6664,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  tools rejection at all. */
     private var lastRegularRequestCarriedImageTools = false
 
+    /** The reasoning effort actually written onto the most recent streamed
+     *  chat request, or null when none was sent. The dynamic-learning retry
+     *  wrapper reads it to know which level a provider rejection refused. */
+    private var lastRegularRequestReasoningEffort: org.teslasoft.assistant.reasoning.ReasoningEffort? = null
+
+    /** When set, this reasoning effort replaces the resolved one on the NEXT
+     *  streamed request — the single-use substitute for a learn-and-retry after
+     *  a rejected extreme. Set immediately before the retry and cleared in its
+     *  finally, so it never leaks into a later turn. */
+    private var forcedReasoningEffortOverride: org.teslasoft.assistant.reasoning.ReasoningEffort? = null
+
     /** §8: UNKNOWN tries the tool, SUPPORTED keeps sending it, UNSUPPORTED
      *  withholds it until the endpoint editor's reset forgets the record. */
     private fun chatToolCapabilityScopeKey(selectedModel: String): String {
@@ -6767,6 +6788,83 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         ToolCapability.UNKNOWN -> "Unknown"
         ToolCapability.SUPPORTED -> "Supported"
         ToolCapability.UNSUPPORTED -> "Unsupported"
+    }
+
+    /**
+     * Whether [e] is a retryable reasoning-effort rejection (dynamic
+     * minimal/xhigh learning): the effort actually sent was an optimistically
+     * offered extreme, the reply produced no output yet (a clean pre-generation
+     * refusal), and the error positively identifies that value as unsupported.
+     * Anything short of that returns false, and the failure flows through the
+     * normal error path.
+     */
+    private fun isReasoningEffortRejectionRetryable(e: Exception): Boolean {
+        val rejected = lastRegularRequestReasoningEffort ?: return false
+        if (rejected != org.teslasoft.assistant.reasoning.ReasoningEffort.MINIMAL &&
+            rejected != org.teslasoft.assistant.reasoning.ReasoningEffort.XHIGH
+        ) return false
+        val last = messages.lastOrNull()
+        val noOutputYet = last != null && last["isBot"] == true &&
+            last["message"].toString().isBlank()
+        if (!noOutputYet) return false
+        val providerBody = ProviderErrorInfo.parse(capturedProviderErrorBody).message
+        return org.teslasoft.assistant.reasoning.ReasoningEffortSupport.isEffortRejection(e.message, rejected) ||
+            org.teslasoft.assistant.reasoning.ReasoningEffortSupport.isEffortRejection(providerBody, rejected)
+    }
+
+    /**
+     * Record that [model] refuses [rejected] on the active endpoint (so it
+     * leaves that model's menu) and drop the dead blank placeholder so the retry
+     * doesn't stack empty bubbles. Mirrors [recordChatToolCapability] /
+     * [learnToolsUnsupportedAndNotify]; learning must never break the turn.
+     */
+    private fun learnReasoningEffortUnsupported(rejected: org.teslasoft.assistant.reasoning.ReasoningEffort) {
+        try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            if (chatEndpointId.isNotEmpty() && model.isNotBlank()) {
+                val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
+                val endpoint = prefs.getApiEndpoint(this, chatEndpointId)
+                val updated = org.teslasoft.assistant.reasoning.RejectedReasoningLevelStore
+                    .add(endpoint.reasoningRejectedLevelsByModel, model, rejected)
+                if (updated != endpoint.reasoningRejectedLevelsByModel) {
+                    endpoint.reasoningRejectedLevelsByModel = updated
+                    prefs.setApiEndpoint(this, endpoint)
+                    // Keep the in-memory endpoint in sync so menus update at once.
+                    apiEndpointObject?.reasoningRejectedLevelsByModel = updated
+                }
+            }
+        } catch (_: Exception) { /* learning must never break a turn */ }
+        runOnUiThread {
+            if (messages.isNotEmpty() && messages.last()["isBot"] == true &&
+                messages.last()["message"].toString().isEmpty()
+            ) {
+                messages.removeAt(messages.size - 1)
+                adapter?.notifyItemRemoved(messages.size)
+                updateMessagesSelectionProjection()
+            }
+        }
+    }
+
+    /** The owner's post-response snackbar for a transparent effort substitution.
+     *  Best-effort: a missing notice must never break the delivered reply. */
+    private fun notifyReasoningEffortSubstituted(
+        rejected: org.teslasoft.assistant.reasoning.ReasoningEffort,
+        substitute: org.teslasoft.assistant.reasoning.ReasoningEffort?
+    ) {
+        runOnUiThread {
+            try {
+                val applied = substitute ?: org.teslasoft.assistant.reasoning.ReasoningEffort.AUTO
+                val text = getString(
+                    R.string.reasoning_effort_substituted_notice,
+                    org.teslasoft.assistant.ui.reasoning.ReasoningEffortLabels.label(this, rejected),
+                    org.teslasoft.assistant.ui.reasoning.ReasoningEffortLabels.label(this, applied)
+                )
+                com.google.android.material.snackbar.Snackbar.make(
+                    findViewById(android.R.id.content), text,
+                    com.google.android.material.snackbar.Snackbar.LENGTH_LONG
+                ).show()
+            } catch (_: Exception) { /* notice is best-effort */ }
+        }
     }
 
     /** Resolved by the inline confirmation card's Create/Cancel tap. */
@@ -7936,6 +8034,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // from the split stream copy. A turn that never wants reasoning
             // simply never has it observed.
             currentTurnReasoning = org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator()
+            // Cleared each reply so the learn-and-retry only ever acts on the
+            // effort this attempt actually sent (set by the send hook); if the
+            // request never dispatched, it stays null and no retry is attempted.
+            lastRegularRequestReasoningEffort = null
             currentTurnShowReasoning = false
             currentTurnReasoningObservationActive = false
             currentTurnReasoningObserved = kotlinx.coroutines.CompletableDeferred()
@@ -8417,6 +8519,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 recordToolCapabilityChangeEntry(
                                     previousState, toolsError.message, retrySucceeded
                                 )
+                            }
+                        } else if (toolsError !is CancellationException &&
+                            isReasoningEffortRejectionRetryable(toolsError)
+                        ) {
+                            // A positively-identified rejection of an optimistically
+                            // offered extreme (minimal/xhigh), before any output was
+                            // produced: learn it, then retry ONCE at the nearest
+                            // supported level so the answer still arrives (owner
+                            // ruling, Aug 2026). Mirrors the tools-rejection retry
+                            // above and is fully fail-safe — the retry's finally
+                            // always clears the override, and anything unexpected
+                            // rethrows to the normal error path.
+                            finalizeLifecycleTerminal(
+                                ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
+                                ResponseLifecycle.Termination.PROVIDER_ERROR, toolsError.message
+                            )
+                            val rejectedLevel = lastRegularRequestReasoningEffort!!
+                            val substitute = org.teslasoft.assistant.reasoning.ReasoningEffortSubstitution
+                                .substitute(rejectedLevel, reasoningCapabilityForModel(model).supportedEfforts)
+                            learnReasoningEffortUnsupported(rejectedLevel)
+                            forcedReasoningEffortOverride =
+                                substitute ?: org.teslasoft.assistant.reasoning.ReasoningEffort.AUTO
+                            var reasoningRetrySucceeded = false
+                            try {
+                                regularGPTResponse(shouldPronounce, preparedTurn)
+                                reasoningRetrySucceeded = true
+                            } finally {
+                                forcedReasoningEffortOverride = null
+                                if (reasoningRetrySucceeded) {
+                                    notifyReasoningEffortSubstituted(rejectedLevel, substitute)
+                                }
                             }
                         } else {
                             throw toolsError

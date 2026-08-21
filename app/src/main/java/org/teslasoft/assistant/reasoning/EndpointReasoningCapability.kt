@@ -65,6 +65,39 @@ object EndpointReasoningCapability {
     }
 
     /**
+     * [resolve] with the dynamic minimal/xhigh learning layer applied (owner
+     * ruling, Aug 2026). On a gateway-metadata path that exposes the reasoning
+     * object but not its per-level detail, the two extremes — minimal and extra
+     * high — are offered optimistically, minus any this exact model has already
+     * proven it refuses ([rejectedLevelsByModel]). Curated adapter ladders and
+     * non-configurable paths are returned exactly as [resolve] established them,
+     * so this only ever widens a metadata gateway's ladder and then subtracts
+     * what was learned.
+     */
+    fun resolveWithLearnedRejections(
+        reasoningCapabilityByModel: String?,
+        rejectedLevelsByModel: String?,
+        modelId: String?,
+        liveModelEntry: JsonObject? = null
+    ): ReasoningCapability {
+        val base = resolve(reasoningCapabilityByModel, modelId, liveModelEntry)
+        if (base.source != CapabilitySource.PROVIDER_METADATA || !base.effortConfigurable) return base
+        val rejected = RejectedReasoningLevelStore.get(rejectedLevelsByModel, modelId.orEmpty())
+        val ordered = listOf(
+            ReasoningEffort.MINIMAL,
+            ReasoningEffort.LOW,
+            ReasoningEffort.MEDIUM,
+            ReasoningEffort.HIGH,
+            ReasoningEffort.XHIGH
+        ).filter { level ->
+            val offered = level in base.supportedEfforts ||
+                level == ReasoningEffort.MINIMAL || level == ReasoningEffort.XHIGH
+            offered && level !in rejected
+        }
+        return base.copy(supportedEfforts = ordered)
+    }
+
+    /**
      * Learn capability for [modelId] from a freshly fetched catalog entry and
      * fold it into the endpoint's persisted store, returning the updated JSON.
      * Only structured metadata that establishes reasoning is recorded; anything

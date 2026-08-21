@@ -689,8 +689,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val model = preferences?.getModel().orEmpty()
         if (model.isBlank()) return org.teslasoft.assistant.reasoning.ReasoningCapability.UNKNOWN
         val endpoint = apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId)
-        return org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
-            endpoint?.reasoningCapabilityByModel, model
+        return org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolveWithLearnedRejections(
+            endpoint?.reasoningCapabilityByModel, endpoint?.reasoningRejectedLevelsByModel, model
         )
     }
 

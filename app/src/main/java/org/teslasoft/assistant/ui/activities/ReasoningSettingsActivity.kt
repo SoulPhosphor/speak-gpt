@@ -117,7 +117,9 @@ class ReasoningSettingsActivity : FragmentActivity() {
 
         val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(this)
             .getApiEndpoint(this, endpointId)
-        capability = EndpointReasoningCapability.resolve(endpoint.reasoningCapabilityByModel, modelId)
+        capability = EndpointReasoningCapability.resolveWithLearnedRejections(
+            endpoint.reasoningCapabilityByModel, endpoint.reasoningRejectedLevelsByModel, modelId
+        )
 
         // Start from the favorite's saved values; a saved effort the active path
         // no longer supports resolves to Auto for display (§7.8).

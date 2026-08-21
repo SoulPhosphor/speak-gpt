@@ -117,6 +117,7 @@ class ApiEndpointPreferences private constructor(
         val imageCapabilityByModel = getString(id + "_image_capability_by_model", "")
         val toolCapabilityByModel = getString(id + "_tool_capability_by_model", "")
         val reasoningCapabilityByModel = getString(id + "_reasoning_capability_by_model", "")
+        val reasoningRejectedLevelsByModel = getString(id + "_reasoning_rejected_levels_by_model", "")
         val providerDiscoveryPath = getString(id + "_provider_discovery_path", "")
         // Routing identity. A stored value wins (and is sticky). When absent —
         // an older profile saved before identity existed — it is derived once
@@ -139,7 +140,7 @@ class ApiEndpointPreferences private constructor(
             contextWindowTokens, storedContextModel,
             imageCapabilityByModel, toolCapabilityByModel,
             providerDiscoveryPath, identity,
-            reasoningCapabilityByModel
+            reasoningCapabilityByModel, reasoningRejectedLevelsByModel
         )
     }
 
@@ -166,6 +167,7 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_image_capability_by_model") }
         preferences.edit { remove(id + "_tool_capability_by_model") }
         preferences.edit { remove(id + "_reasoning_capability_by_model") }
+        preferences.edit { remove(id + "_reasoning_rejected_levels_by_model") }
         preferences.edit { remove(id + "_provider_discovery_path") }
         preferences.edit { remove(id + "_identity") }
         secrets.set(id + "_api_key", "null")
@@ -239,6 +241,14 @@ class ApiEndpointPreferences private constructor(
             preferences.edit { remove(id + "_reasoning_capability_by_model") }
         } else {
             putString(id + "_reasoning_capability_by_model", reasoningCapabilityJson)
+        }
+        val reasoningRejectedJson = endpoint.reasoningRejectedLevelsByModel
+        if (reasoningRejectedJson.isBlank() ||
+            reasoningRejectedJson == org.teslasoft.assistant.reasoning.RejectedReasoningLevelStore.EMPTY
+        ) {
+            preferences.edit { remove(id + "_reasoning_rejected_levels_by_model") }
+        } else {
+            putString(id + "_reasoning_rejected_levels_by_model", reasoningRejectedJson)
         }
         // Blank means "use the default discovery path" — store nothing so the
         // record doesn't accumulate an empty placeholder.

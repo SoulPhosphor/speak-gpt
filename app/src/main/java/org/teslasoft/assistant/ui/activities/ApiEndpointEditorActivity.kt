@@ -221,6 +221,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
      *  this screen; carried through save so editing a profile never wipes the
      *  reasoning capability discovered during catalog work. */
     private var currentReasoningCapabilityJson: String = ""
+    private var currentReasoningRejectedJson: String = ""
 
     /** Snapshot of the initial field values, for the discard-changes check. */
     private var initialSnapshot: String = ""
@@ -409,6 +410,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         currentToolCapabilityJson = endpoint.toolCapabilityByModel
         refreshToolCapabilityReset()
         currentReasoningCapabilityJson = endpoint.reasoningCapabilityByModel
+        currentReasoningRejectedJson = endpoint.reasoningRejectedLevelsByModel
 
         // A brand-new profile has nothing to delete yet.
         btnDelete?.visibility = if (position == -1) ImageButton.GONE else ImageButton.VISIBLE
@@ -612,6 +614,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             imageCapabilityByModel = currentCapabilityJson,
             toolCapabilityByModel = currentToolCapabilityJson,
             reasoningCapabilityByModel = currentReasoningCapabilityJson,
+            reasoningRejectedLevelsByModel = currentReasoningRejectedJson,
             // The default path is stored as blank so a future default change
             // reaches profiles that never customized it.
             providerDiscoveryPath = fieldProviderDiscoveryPath?.text.toString().trim()
