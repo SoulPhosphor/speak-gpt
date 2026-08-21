@@ -148,6 +148,7 @@ import eightbitlab.com.blurview.BlurView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -155,6 +156,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 // import kotlinx.io.files.Path
@@ -225,6 +227,15 @@ import org.teslasoft.assistant.service.GenerationForegroundService
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
+import org.teslasoft.assistant.usage.ConversationUsageSummary
+import org.teslasoft.assistant.usage.ProviderUsageAttempt
+import org.teslasoft.assistant.usage.ProviderUsageSnapshot
+import org.teslasoft.assistant.usage.TokenCounts
+import org.teslasoft.assistant.usage.TokenPricingCatalog
+import org.teslasoft.assistant.usage.TokenPricingCatalogClient
+import org.teslasoft.assistant.usage.TokenPricingSnapshot
+import org.teslasoft.assistant.usage.TokenUsageAccounting
+import org.teslasoft.assistant.usage.TurnUsageRecord
 import org.teslasoft.assistant.ui.chat.ChatComposerLayout
 import org.teslasoft.assistant.ui.chat.ChatExportFormat
 import org.teslasoft.assistant.ui.chat.ChatExportFormatter
@@ -342,6 +353,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         private val responseLifecycleRecorderAttribute =
             AttributeKey<ResponseLifecycleRecorder>("ResponseLifecycleRecorder")
 
+        /** Pins durable accounting to the exact HTTP request independently of
+         * optional diagnostics. */
+        private val providerUsageAttemptAttribute =
+            AttributeKey<ProviderUsageAttempt>("ProviderUsageAttempt")
+
         /** Marks the primary/tool-generation request when lifecycle logging is
          * off, so final outbound-field diagnostics still exclude auxiliary
          * completed requests such as auto-naming. */
@@ -456,7 +472,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  can never be overwritten by this screen's (empty) in-memory view. */
     private var chatStorageUnavailable = false
     private var messagesSelectionProjection: ArrayList<HashMap<String, Any>> = arrayListOf()
-    private var messagesUsageProjection: ArrayList<HashMap<String, Any>> = arrayListOf()
     private var adapter: ChatAdapter? = null
     private var chatMessages: ArrayList<ChatMessage> = arrayListOf()
     private var chatMessageIncludes: ArrayList<String?> = arrayListOf()
@@ -505,8 +520,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var outCost: Float = 0.0f
     private var usageIn: Int = 0
     private var usageOut: Int = 0
-    private var priceIn: Float = 0.0f
-    private var priceOut: Float = 0.0f
+    private var conversationUsageSummary = ConversationUsageSummary(emptyList())
     private var bulkSelectionMode: Boolean = false
 
     // init AI
@@ -910,87 +924,50 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    /**
-     * Token counting for the usage/cost display. BPE-encoding the ENTIRE
-     * conversation history is real CPU work that grows with every exchange —
-     * running it on the main thread (as this did, once or twice per turn,
-     * right when the readback starts) froze the whole UI for seconds in long
-     * conversations. A frozen main thread drops taps outright: the owner's
-     * "the stop button just stayed red, like I wasn't hitting it" while the
-     * voice kept talking — the TTS engine renders audio in its own process,
-     * so speech keeps flowing while the app can't respond. The encode (and
-     * the O(n²) usage summation in calculateCost) now run on a worker
-     * dispatcher over an immutable snapshot; only the field assignments
-     * happen on the main thread.
-     */
-    private suspend fun tokenizeArray() {
-        if (chatMessages == null) chatMessages = arrayListOf()
-
-        // Snapshot on the main thread: chatMessages is main-thread state and
-        // can be edited while the encode runs on the worker.
-        val snapshot = chatMessages.map { (it.role == Role.Assistant) to it.content.toString() }
-
-        messagesUsageProjection = withContext(Dispatchers.Default) {
-            // One tokenizer for the whole pass: constructing it inside the
-            // loop rebuilt the BPE tables once per message, per turn.
-            val tokenizer = Tokenizer.of(encoding = Encoding.CL100K_BASE)
-            val projection = arrayListOf<HashMap<String, Any>>()
-            for ((isBot, content) in snapshot) {
-                val tokens = tokenizer.encode(content).size
-
-                projection.add(
-                    hashMapOf(
-                        "isBot" to isBot,
-                        "tokens" to if (content.trim().startsWith("~file:")) 0 else tokens
-                    )
-                )
-            }
-            projection
-        }
+    /** Build the card from frozen per-request records. CL100K runs only for
+     * legacy assistant messages that have no durable record; a new
+     * provider-reported turn never reaches the tokenizer. */
+    private fun calculateCost() {
+        lifecycleScope.launch { refreshConversationUsageSummary() }
     }
 
-    private fun calculateCost() {
-        CoroutineScope(Dispatchers.Main).launch {
-            tokenizeArray()
-
-            val projection = messagesUsageProjection
-
-            // The summation is O(n²) over the message count — trivial for a
-            // short chat, another main-thread stall for a months-long one.
-            // Same math as always, just off the UI thread.
-            val (totalIn, totalOut) = withContext(Dispatchers.Default) {
-                var tIn = 0
-                var tOut = 0
-
-                var i = projection.size - 1
-
-                while (i > 0) {
-                    var j = 0
-                    var c = 0
-
-                    while (j < i) {
-                        c += projection[j]["tokens"] as Int
-                        j++
+    private suspend fun refreshConversationUsageSummary(): ConversationUsageSummary {
+        val snapshot = messages.map { HashMap(it) }
+        val summary = withContext(Dispatchers.Default) {
+                val legacyIndexes = snapshot.indices.filter { index ->
+                    val message = snapshot[index]
+                    message["isBot"] == true &&
+                        MessageCompletionState.isComplete(
+                            message[MessageCompletionState.KEY_STATE]?.toString()
+                        ) &&
+                        TokenUsageAccounting.decodeRecords(
+                            message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS]?.toString()
+                        ).isEmpty()
+                }.toSet()
+                val legacyCounts = HashMap<Int, TokenCounts>()
+                if (legacyIndexes.isNotEmpty()) {
+                    val tokenizer = Tokenizer.of(Encoding.CL100K_BASE)
+                    var prefixTokens = 0
+                    snapshot.forEachIndexed { index, message ->
+                        val content = message["message"]?.toString().orEmpty()
+                        val count = if (content.trim().startsWith("~file:")) 0
+                            else tokenizer.encode(content).size
+                        if (index in legacyIndexes) {
+                            legacyCounts[index] = TokenCounts(prefixTokens, count, prefixTokens + count)
+                        }
+                        prefixTokens += count
                     }
-
-                    tIn += c
-                    i--
                 }
-
-                for (m in projection) {
-                    val msgUsage = if (m["isBot"] == true) m["tokens"] as Int else 0
-
-                    tOut += msgUsage
-                }
-
-                tIn to tOut
-            }
-
-            usageIn = totalIn
-            usageOut = totalOut
-            inCost = usageIn * priceIn
-            outCost = usageOut * priceOut
+                TokenUsageAccounting.summarizeMessages(
+                    snapshot
+                ) { index -> legacyCounts[index] ?: TokenCounts(null, null, null) }
         }
+        conversationUsageSummary = summary
+        usageIn = summary.totalInputTokens
+        usageOut = summary.totalOutputTokens
+        inCost = summary.groups.sumOf { it.inputCost }.toFloat()
+        outCost = summary.groups.sumOf { it.outputCost }.toFloat()
+        return summary
     }
 
     private val speechListener = object : RecognitionListener {
@@ -5661,20 +5638,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the header's Quick Settings icon and the recovery dialogs above. */
     private fun openSummoningCircle() {
         if (isFinishing || isDestroyed) return
-        val sheet = QuickSettingsBottomSheetDialogFragment
-            .newInstance(chatId, usageIn, usageOut, priceIn, priceOut)
-        sheet.setOnUpdateListener(object : QuickSettingsBottomSheetDialogFragment.OnUpdateListener {
-            override fun onUpdate() {
-                refreshCompanionAvatar()
-                refreshUserAvatar()
-            }
+        lifecycleScope.launch {
+            val summary = refreshConversationUsageSummary()
+            if (isFinishing || isDestroyed) return@launch
+            val sheet = QuickSettingsBottomSheetDialogFragment.newInstance(
+                chatId,
+                TokenUsageAccounting.encodeSummary(summary)
+            )
+            sheet.setOnUpdateListener(object : QuickSettingsBottomSheetDialogFragment.OnUpdateListener {
+                override fun onUpdate() {
+                    refreshCompanionAvatar()
+                    refreshUserAvatar()
+                }
 
-            override fun onForceUpdate() {
-                startActivity(Intent(this@ChatActivity, ChatActivity::class.java).putExtra("chatId", chatId).putExtra("name", chatName).setAction(Intent.ACTION_VIEW))
-                finishActivity()
-            }
-        })
-        sheet.show(supportFragmentManager, "QuickSettingsBottomSheetDialogFragment")
+                override fun onForceUpdate() {
+                    startActivity(Intent(this@ChatActivity, ChatActivity::class.java).putExtra("chatId", chatId).putExtra("name", chatName).setAction(Intent.ACTION_VIEW))
+                    finishActivity()
+                }
+            })
+            sheet.show(supportFragmentManager, "QuickSettingsBottomSheetDialogFragment")
+        }
     }
 
     /** Applies a user-edited title from [EditChatTitleDialog]. Reuses the same
@@ -5780,6 +5763,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         if (isGenerationRequest) {
             recorder?.let { request.attributes.put(responseLifecycleRecorderAttribute, it) }
+            currentProviderUsageAttempt?.let {
+                request.attributes.put(providerUsageAttemptAttribute, it)
+            }
             request.attributes.put(generationRequestAttribute, true)
             request.attributes.put(streamingRequestAttribute, streamingGeneration)
         }
@@ -5787,7 +5773,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun augmentRequestWithProviderRouting(request: HttpRequestBuilder) {
         if (apiEndpointObject?.isOpenRouterRouting() != true) return
-        if (request.attributes.contains(responseLifecycleRecorderAttribute)) {
+        if (request.attributes.contains(responseLifecycleRecorderAttribute) ||
+            request.attributes.contains(providerUsageAttemptAttribute)
+        ) {
             // Official OpenRouter audit metadata, delivered on the final stream
             // chunk. This is the response authority for Automatic routing; the
             // app's requested provider settings are never substituted for it.
@@ -6105,8 +6093,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 } else {
                                     false
                                 }
+                                val usageAttempt = if (call.request.attributes.contains(providerUsageAttemptAttribute)) {
+                                    call.request.attributes[providerUsageAttemptAttribute]
+                                } else {
+                                    null
+                                }
                                 val wantsReasoning = call.request.attributes.contains(reasoningObservationAttribute)
                                 when {
+                                    usageAttempt != null -> {
+                                        usageAttempt.beginObservation()
+                                        recorder?.beginProviderObservation()
+                                        true
+                                    }
                                     recorder != null && streamed -> {
                                         recorder.beginProviderObservation()
                                         true
@@ -6127,12 +6125,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                     } else {
                                         null
                                     }
+                                    val usageAttempt = if (attrs.contains(providerUsageAttemptAttribute)) {
+                                        attrs[providerUsageAttemptAttribute]
+                                    } else {
+                                        null
+                                    }
                                     val reasoningAcc = if (attrs.contains(reasoningObservationAttribute)) {
                                         attrs[reasoningObservationAttribute]
                                     } else {
                                         null
                                     }
-                                    if (recorder != null || reasoningAcc != null) {
+                                    if (recorder != null || reasoningAcc != null || usageAttempt != null) {
                                         try {
                                             // Receive the observer's split copy ONCE (a second
                                             // bodyAsChannel() throws and cancels the origin,
@@ -6149,11 +6152,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                                     // Response-derived only. Never substitute the
                                                     // configured or requested provider here.
                                                     recorder?.noteActualModelProvider(reported)
+                                                    if (!org.teslasoft.assistant.preferences.RawStreamObservationCodec.isEncoded(reported)) {
+                                                        usageAttempt?.noteProvider(reported)
+                                                    }
+                                                },
+                                                onObservation = { observation ->
+                                                    usageAttempt?.noteRawObservation(observation)
                                                 },
                                                 lineObserver = reasoningAcc?.let { acc -> { line -> acc.acceptLine(line) } }
                                             )
                                         } finally {
                                             recorder?.finishProviderObservation()
+                                            usageAttempt?.finishObservation()
                                             if (reasoningAcc != null) {
                                                 // Display only when Show Reasoning wanted it; the
                                                 // reasoning_details for a tool-call continuation are
@@ -7059,6 +7069,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         streamingEnabled: Boolean
     ) {
         if (streamedText.isEmpty()) {
+            carryPendingUsageFromEmptyAssistant()
             if (messages.isNotEmpty() && messages.last()["isBot"] == true) {
                 messages.removeAt(messages.size - 1)
                 adapter?.notifyItemRemoved(messages.size)
@@ -7284,7 +7295,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
                     v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
                 )
-                v.usage?.totalTokens?.let { pendingResponseTokens = it }
                 choice?.delta?.toolCalls?.forEach { fragment ->
                     toolCallAssembler.accept(
                         fragment.index,
@@ -7325,7 +7335,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 completion.usage?.promptTokens, completion.usage?.completionTokens,
                 completion.usage?.totalTokens
             )
-            completion.usage?.totalTokens?.let { pendingResponseTokens = it }
             choice?.message?.toolCalls?.forEachIndexed { index, call ->
                 if (call is ToolCall.Function) {
                     toolCallAssembler.accept(
@@ -7426,6 +7435,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // lifecycle logging is on, because the Provider Failure Log gate also
         // depends on it.
         providerRequestDispatched = false
+        val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
+        currentProviderUsageAttempt = ProviderUsageAttempt(
+            requestedModel = usedModel,
+            fallbackProvider = fallbackServingProvider(),
+            apiEndpoint = apiEndpointObject?.host.orEmpty()
+        )
+        currentPricingCatalog = lifecycleScope.async(Dispatchers.IO) {
+            TokenPricingCatalogClient.load(apiEndpointObject, usedModel)
+        }
         if (preferences?.getResponseLifecycleLogging() != true) {
             currentLifecycle = null
             return
@@ -7450,6 +7468,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         finishReason: String?, id: String?, contentLength: Int,
         promptTokens: Int?, completionTokens: Int?, totalTokens: Int?
     ) {
+        currentProviderUsageAttempt?.noteTypedUsage(promptTokens, completionTokens, totalTokens)
         val r = currentLifecycle ?: return
         if (r.finalized) return
         r.noteChunk(finishReason, id, contentLength, promptTokens, completionTokens, totalTokens)
@@ -7459,6 +7478,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  reason/terminal evidence matrix; a successful completed-response call
      *  has provider-completion evidence from the client return itself. */
     private suspend fun finalizeLifecycleSuccess() {
+        currentProviderUsageAttempt?.let {
+            pendingProviderUsageSnapshot = it.snapshot()
+            pendingCompletedPricingCatalog = currentPricingCatalog
+        }
+        currentProviderUsageAttempt = null
+        currentPricingCatalog = null
         val r = currentLifecycle ?: return
         if (r.finalized) return
         val n = if (r.nonStreamingResponse) {
@@ -7475,6 +7500,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
         streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
     ) {
+        currentProviderUsageAttempt = null
+        currentPricingCatalog?.cancel()
+        currentPricingCatalog = null
+        pendingProviderUsageSnapshot = null
+        pendingCompletedPricingCatalog?.cancel()
+        pendingCompletedPricingCatalog = null
         val r = currentLifecycle ?: return
         if (r.finalized) return
         writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
@@ -8145,6 +8176,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /** Best non-response fallback for serving-provider attribution. An
+     * OpenRouter Only route cannot fall back, so a successful response came
+     * from that selected provider. Automatic/Preferred routing stays honestly
+     * Not Reported unless response metadata names the actual route. */
+    private fun fallbackServingProvider(): String {
+        val endpoint = apiEndpointObject
+        if (endpoint?.isOpenRouterRouting() == true) {
+            val favorite = favoriteForActiveEndpoint(model.ifBlank { preferences?.getModel().orEmpty() })
+            if (favorite?.routingType == FavoriteModelObject.ROUTING_ONLY) {
+                return favorite.selectedProvider.trim()
+                    .ifBlank { TokenUsageAccounting.PROVIDER_NOT_REPORTED }
+            }
+            return TokenUsageAccounting.PROVIDER_NOT_REPORTED
+        }
+        return endpoint?.provider?.trim()?.ifBlank { null }
+            ?: endpoint?.label?.trim()?.ifBlank { null }
+            ?: TokenUsageAccounting.PROVIDER_NOT_REPORTED
+    }
+
     private fun putMessage(message: String, isBot: Boolean) {
         val map: HashMap<String, Any> = HashMap()
 
@@ -8195,10 +8245,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // not — so those correctly carry no model attribution.
             val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
             if (usedModel.isNotBlank()) last[ChatAdapter.KEY_MESSAGE_MODEL] = usedModel
-            // Reset the provider token capture for this fresh reply so a turn
-            // whose provider reports no usage does not inherit the previous
-            // turn's count.
-            pendingResponseTokens = null
+            // Reset request-completion state for this fresh reply. The exact
+            // request-scoped capture is created by startLifecycle immediately
+            // before dispatch; this reset prevents a usage record from a prior
+            // reply being attached after a terminal race.
+            pendingProviderUsageSnapshot = null
+            pendingCompletedPricingCatalog = null
             // Fresh reasoning accumulator for this turn. The send hook attaches
             // it to reasoning-wanted requests; the response observer feeds it
             // from the split stream copy. A turn that never wants reasoning
@@ -8236,11 +8288,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @Volatile
     private var currentTurnReasoningObserved: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
-    /** Provider-reported total tokens for the reply currently streaming, taken
-     *  from the usage-bearing final chunk (streamOptions.includeUsage). Null
-     *  until reported and null when the provider does not report usage, so the
-     *  display omits tokens rather than inventing a value. */
-    private var pendingResponseTokens: Int? = null
+    @Volatile
+    private var currentProviderUsageAttempt: ProviderUsageAttempt? = null
+    private var currentPricingCatalog: Deferred<TokenPricingCatalog>? = null
+    private var pendingProviderUsageSnapshot: ProviderUsageSnapshot? = null
+    private var pendingCompletedPricingCatalog: Deferred<TokenPricingCatalog>? = null
 
     /** While a Retry is in flight, the versions the regenerated reply will be
      *  folded into: the prior turn's existing version list, or its single
@@ -8270,15 +8322,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     /** Mark the last assistant reply as completed normally. The caller's
      *  existing completion saveSettings() persists it alongside the final text. */
-    private fun markLastAssistantDone() {
+    private suspend fun markLastAssistantDone() {
         val last = messages.lastOrNull() ?: return
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             last.remove(MessageCompletionState.KEY_STATE_DETAIL)
-            // Stamp the provider-reported total tokens for this turn, when the
-            // provider reported them. Stored as a string like every other
-            // history key; absent when unreported.
-            pendingResponseTokens?.let { last[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
+            val records = listOfNotNull(completePendingUsageRecord())
+            attachUsageRecords(last, records)
             // A regeneration folds this finished reply into the turn's version
             // list. Runs after the metadata above so the new version captures
             // the final model, tokens, and state.
@@ -8287,6 +8337,97 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // model-and-companion snapshot may qualify for the next new chat.
             recordLastSuccessfulConfig()
         }
+    }
+
+    /** Preserve the cost of a completed tool-selection request whose assistant
+     * bubble is intentionally removed because it contains no user-visible text.
+     * Store it immediately on the initiating user message; summaries read
+     * durable records on either role, while legacy estimation remains
+     * assistant-only. */
+    private suspend fun carryPendingUsageFromEmptyAssistant() {
+        val record = completePendingUsageRecord() ?: return
+        val carrier = messages.dropLast(1).lastOrNull { it["isBot"] != true } ?: return
+        attachUsageRecords(carrier, listOf(record), mirrorCompactMetadata = false)
+    }
+
+    /** Attach only completed requests. Usage-only tool calls use the initiating
+     * user message as a durable carrier; visible completions use their assistant
+     * message and may mirror compact display metadata. */
+    private fun attachUsageRecords(
+        message: HashMap<String, Any>,
+        newRecords: List<TurnUsageRecord>,
+        mirrorCompactMetadata: Boolean = true
+    ) {
+        if (newRecords.isEmpty()) return
+        val records = TokenUsageAccounting.decodeRecords(
+            message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS]?.toString()
+        ) + newRecords
+        message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS] =
+            TokenUsageAccounting.encodeRecords(records)
+        if (!mirrorCompactMetadata) return
+        // Mirror the final completed request's response-reported attribution
+        // into the compact metadata. Unknown remains absent.
+        records.last().model.takeIf { it != TokenUsageAccounting.MODEL_NOT_REPORTED }
+            ?.let { message[ChatAdapter.KEY_MESSAGE_MODEL] = it }
+        records.last().provider.takeIf { it != TokenUsageAccounting.PROVIDER_NOT_REPORTED }
+            ?.let { message[ChatAdapter.KEY_MESSAGE_PROVIDER] = it }
+        // responseTokens remains total-token compatibility metadata. It is
+        // never an output/completion-token field and stays absent if incomplete.
+        records.mapNotNull { it.totalTokens }.takeIf { it.size == records.size }
+            ?.sum()?.let { message[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
+    }
+
+    private suspend fun completePendingUsageRecord(): TurnUsageRecord? {
+        val snapshot = pendingProviderUsageSnapshot ?: return null
+        pendingProviderUsageSnapshot = null
+        val pricingDeferred = pendingCompletedPricingCatalog
+        pendingCompletedPricingCatalog = null
+
+        val estimate = if (snapshot.counts.hasAnyValue()) {
+            null
+        } else {
+            val messageSnapshot = messages.map { HashMap(it) }
+            withContext(Dispatchers.Default) { estimateLastAssistantUsageCl100k(messageSnapshot) }
+        }
+        val (counts, source) = TokenUsageAccounting.chooseCounts(snapshot.counts) {
+            estimate ?: TokenCounts(null, null, null)
+        }
+        var catalog = kotlinx.coroutines.withTimeoutOrNull(2000L) { pricingDeferred?.await() }
+        if (catalog == null) pricingDeferred?.cancel()
+        if (catalog != null && !catalog.model.equals(snapshot.model, ignoreCase = true)) {
+            catalog = kotlinx.coroutines.withTimeoutOrNull(2000L) {
+                TokenPricingCatalogClient.load(apiEndpointObject, snapshot.model)
+            }
+        }
+        val pricing = catalog?.pricingFor(snapshot.provider)
+            ?: TokenPricingSnapshot()
+        return TokenUsageAccounting.createRecord(
+            model = snapshot.model,
+            provider = snapshot.provider,
+            apiEndpoint = snapshot.apiEndpoint,
+            counts = counts,
+            source = source,
+            pricing = pricing,
+            providerCost = snapshot.providerCost
+        )
+    }
+
+    private suspend fun estimateLastAssistantUsageCl100k(
+        messageSnapshot: List<Map<String, Any>>
+    ): TokenCounts {
+        val assistantIndex = messageSnapshot.indexOfLast { it["isBot"] == true }
+        if (assistantIndex < 0) return TokenCounts(null, null, null)
+        val tokenizer = Tokenizer.of(Encoding.CL100K_BASE)
+        var input = 0
+        messageSnapshot.forEachIndexed { index, message ->
+            if (index >= assistantIndex) return@forEachIndexed
+            val content = message["message"]?.toString().orEmpty()
+            if (!content.trim().startsWith("~file:")) input += tokenizer.encode(content).size
+        }
+        val outputText = messageSnapshot[assistantIndex]["message"]?.toString().orEmpty()
+        val output = if (outputText.trim().startsWith("~file:")) 0
+            else tokenizer.encode(outputText).size
+        return TokenCounts(input, output, input + output)
     }
 
     /** Remember the provider, model, routing, and companion that just produced
@@ -8610,7 +8751,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             (choice?.text?.takeIf { it != "null" }?.length ?: 0),
                             v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
                         )
-                        v.usage?.totalTokens?.let { pendingResponseTokens = it }
                         if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
                             response += v.choices[0].text
                             messages[messages.size - 1]["message"] = response
@@ -10145,7 +10285,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
                         v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
                     )
-                    v.usage?.totalTokens?.let { pendingResponseTokens = it }
                     choice?.delta?.toolCalls?.forEach { fragment ->
                         toolCallAssembler.accept(
                             fragment.index,
@@ -10200,7 +10339,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 completion.usage?.promptTokens, completion.usage?.completionTokens,
                 completion.usage?.totalTokens
             )
-            completion.usage?.totalTokens?.let { pendingResponseTokens = it }
             choice?.message?.toolCalls?.forEachIndexed { index, call ->
                 if (call is ToolCall.Function) {
                     toolCallAssembler.accept(

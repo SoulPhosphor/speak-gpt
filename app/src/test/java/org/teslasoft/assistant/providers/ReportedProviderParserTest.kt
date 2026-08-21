@@ -71,7 +71,7 @@ class ReportedProviderParserTest {
     @Test fun consumesObservedStreamToEndAndEmitsOneTerminalEnvelope() = runBlocking {
         val channel = ByteChannel(autoFlush = true)
         launch {
-            channel.writeStringUtf8("data: {\"id\":\"gen-1\",\"provider\":\"Open Inference\",\"choices\":[]}\n")
+            channel.writeStringUtf8("data: {\"id\":\"gen-1\",\"model\":\"actual/model\",\"provider\":\"Open Inference\",\"choices\":[]}\n")
             repeat(200) {
                 channel.writeStringUtf8("data: {\"id\":\"gen-1\",\"choices\":[{\"delta\":{\"content\":\"${"x".repeat(400)}\"}}]}\n")
             }
@@ -97,6 +97,36 @@ class ReportedProviderParserTest {
         assertTrue(raw.flowEndedNormally)
         assertTrue(channel.isClosedForRead)
         assertEquals(0, channel.availableForRead)
+    }
+
+    @Test fun capturesResponseReportedModelForDurableAttribution() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine("data: {\"id\":\"gen-model\",\"model\":\"actual/model\",\"choices\":[]}")
+        assertEquals("actual/model", inspector.finishNormally().model)
+    }
+
+    @Test fun capturesProviderReportedChargedCostWithoutInventingSplit() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "data: {\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20," +
+                "\"total_tokens\":120,\"cost\":0.00123}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(0.00123, usage.totalCost!!, 0.000000001)
+        assertNull(usage.inputCost)
+        assertNull(usage.outputCost)
+    }
+
+    @Test fun capturesExplicitProviderCostComponentsWhenReported() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"cost\":0.003,\"cost_details\":" +
+                "{\"prompt_cost\":0.001,\"completion_cost\":0.002}}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(0.001, usage.inputCost!!, 0.000000001)
+        assertEquals(0.002, usage.outputCost!!, 0.000000001)
+        assertEquals(0.003, usage.totalCost!!, 0.000000001)
     }
 
     @Test fun reportsOnlyFirstProviderPlusTerminalEnvelope() = runBlocking {

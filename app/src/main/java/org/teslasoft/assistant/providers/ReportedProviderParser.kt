@@ -51,6 +51,10 @@ object ReportedProviderParser {
          *  Declared before [onProvider] so existing trailing-lambda callers
          *  still bind their lambda to [onProvider]. */
         lineObserver: ((String) -> Unit)? = null,
+        /** Direct terminal metadata consumer used by durable usage accounting.
+         * It is separate from the compatibility String envelope consumed by
+         * Response Lifecycle diagnostics. */
+        onObservation: ((RawStreamObservation) -> Unit)? = null,
         onProvider: (String) -> Unit
     ) {
         val inspector = RawSseInspector()
@@ -69,12 +73,16 @@ object ReportedProviderParser {
                     providerNoted = true
                 }
             }
-            onProvider(RawStreamObservationCodec.encode(inspector.finishNormally()))
+            val observation = inspector.finishNormally()
+            onObservation?.invoke(observation)
+            onProvider(RawStreamObservationCodec.encode(observation))
         } catch (t: Throwable) {
             // The observer is diagnostics, not generation control. Record its
             // exception instead of converting an observer-side read failure into
             // a new app-visible generation failure. Preserve coroutine cancel.
-            onProvider(RawStreamObservationCodec.encode(inspector.finishByException(t)))
+            val observation = inspector.finishByException(t)
+            onObservation?.invoke(observation)
+            onProvider(RawStreamObservationCodec.encode(observation))
             if (t is CancellationException) throw t
         }
     }
@@ -158,6 +166,10 @@ internal class RawSseInspector {
     private var promptTokens: Int? = null
     private var completionTokens: Int? = null
     private var totalTokens: Int? = null
+    private var inputCost: Double? = null
+    private var outputCost: Double? = null
+    private var totalCost: Double? = null
+    private var model: String? = null
     private var generationId: String? = null
     private var malformedDataEvents = 0
 
@@ -186,12 +198,27 @@ internal class RawSseInspector {
         if (generationId == null) {
             generationId = root.stringOrNull("id")
         }
+        if (model == null) {
+            model = root.stringOrNull("model")
+        }
 
         root.get("usage")?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject?.let { usage ->
             usageReceived = true
             usage.intOrNull("prompt_tokens")?.let { promptTokens = it }
             usage.intOrNull("completion_tokens")?.let { completionTokens = it }
             usage.intOrNull("total_tokens")?.let { totalTokens = it }
+            usage.firstDoubleOrNull("cost", "total_cost")?.let { totalCost = it }
+            usage.firstDoubleOrNull("input_cost", "prompt_cost")?.let { inputCost = it }
+            usage.firstDoubleOrNull("output_cost", "completion_cost")?.let { outputCost = it }
+            usage.get("cost_details")?.takeUnless { it.isJsonNull }
+                ?.takeIf { it.isJsonObject }?.asJsonObject?.let { details ->
+                    if (inputCost == null) {
+                        details.firstDoubleOrNull("input_cost", "prompt_cost")?.let { inputCost = it }
+                    }
+                    if (outputCost == null) {
+                        details.firstDoubleOrNull("output_cost", "completion_cost")?.let { outputCost = it }
+                    }
+                }
         }
 
         root.stringOrNull("type")?.let { type ->
@@ -255,6 +282,10 @@ internal class RawSseInspector {
             promptTokens = promptTokens,
             completionTokens = completionTokens,
             totalTokens = totalTokens,
+            inputCost = inputCost,
+            outputCost = outputCost,
+            totalCost = totalCost,
+            model = model,
             generationId = generationId,
             malformedDataEvents = malformedDataEvents,
             flowEndedNormally = flowEndedNormally,
@@ -286,3 +317,12 @@ private fun JsonObject.intOrNull(name: String): Int? = try {
 } catch (_: Exception) {
     null
 }
+
+private fun JsonObject.doubleOrNull(name: String): Double? = try {
+    get(name)?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonPrimitive }?.asDouble
+} catch (_: Exception) {
+    null
+}
+
+private fun JsonObject.firstDoubleOrNull(vararg names: String): Double? =
+    names.firstNotNullOfOrNull { doubleOrNull(it) }

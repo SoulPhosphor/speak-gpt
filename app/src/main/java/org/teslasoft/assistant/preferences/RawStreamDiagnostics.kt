@@ -37,6 +37,14 @@ data class RawStreamObservation(
     val promptTokens: Int? = null,
     val completionTokens: Int? = null,
     val totalTokens: Int? = null,
+    /** Exact API-reported charged cost. Kept out of the legacy diagnostics
+     * envelope and delivered directly to durable accounting. */
+    val inputCost: Double? = null,
+    val outputCost: Double? = null,
+    val totalCost: Double? = null,
+    /** Response-reported model id. Kept out of the legacy diagnostic envelope;
+     * durable usage accounting receives the observation object directly. */
+    val model: String? = null,
     val generationId: String? = null,
     val malformedDataEvents: Int = 0,
     val flowEndedNormally: Boolean = false,
