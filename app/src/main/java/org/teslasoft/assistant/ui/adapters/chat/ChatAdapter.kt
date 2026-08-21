@@ -86,14 +86,7 @@ import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.util.summarizer.SummarizerController
 import com.google.android.material.elevation.SurfaceColors
 import io.noties.markwon.AbstractMarkwonPlugin
-import io.noties.markwon.Markwon
 import io.noties.markwon.core.spans.CodeBlockSpan
-import io.noties.markwon.ext.latex.JLatexMathPlugin
-import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
-import io.noties.markwon.ext.tables.TablePlugin
-import io.noties.markwon.ext.tasklist.TaskListPlugin
-import io.noties.markwon.html.HtmlPlugin
-import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -111,6 +104,8 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
+import org.teslasoft.assistant.ui.chat.ChatMarkdownRenderer
+import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
 import org.teslasoft.assistant.ui.util.IncludesPopupController
@@ -208,7 +203,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // a later companion switch never rewrites past labels. Absent on
         // messages written before this feature; those fall back to the chat's
         // current companion name at display time.
-        const val KEY_COMPANION_NAME = "companionName"
+        const val KEY_COMPANION_NAME = ChatSpeakerNames.COMPANION_NAME_KEY
 
         // Durable per-message attribution for the compact metadata line and the
         // Message Details popup (chat-redesign-plan.md §4, §5). All stored as
@@ -1599,7 +1594,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val nameText = if (isBot) {
                 resolveAssistantLabel(chatMessage)
             } else {
-                context.getString(R.string.chat_role_user)
+                ChatSpeakerNames.userName(context, chatMessage)
             }
             val nameStyle = if (isBot) {
                 companionNameStyle ?: ChatNameStyle.ai(preferences)
@@ -1869,11 +1864,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  for messages written before the stamp existed, else the generic
          *  "Assistant". Never the app name. */
         private fun resolveAssistantLabel(chatMessage: HashMap<String, Any>): String {
-            val stamped = chatMessage[KEY_COMPANION_NAME]?.toString()
-            if (!stamped.isNullOrBlank()) return stamped
-            val live = companionLabel
-            if (!live.isNullOrBlank()) return live
-            return context.getString(R.string.chat_role_assistant)
+            return ChatSpeakerNames.companionName(context, chatMessage, companionLabel)
         }
 
         /** Assistant-side precedence (profile-images-plan.md): Companion
@@ -2049,15 +2040,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private fun applyMarkdown(chatMessage: HashMap<String, Any>) {
             if (chatMessage["isBot"] == true) {
                 val src = chatMessage["message"].toString()
-                val markwon: Markwon = Markwon.builder(context)
-                    .usePlugin(HtmlPlugin.create())
-                    .usePlugin(TablePlugin.create(context))
-                    .usePlugin(TaskListPlugin.create(context))
-                    .usePlugin(StrikethroughPlugin.create())
-                    .usePlugin(MarkwonInlineParserPlugin.create())
-                    .usePlugin(JLatexMathPlugin.create(message.textSize) { builder ->
-                         builder.inlinesEnabled(true)
-                    })
+                val markwon = ChatMarkdownRenderer.builder(context, message.textSize)
                     .usePlugin(object : AbstractMarkwonPlugin() {
                         override fun beforeSetText(
                             textView: TextView,
@@ -2082,7 +2065,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     })
                     .build()
 
-                val pre = parseLatex(trimLineByLine(src))
+                val pre = ChatMarkdownRenderer.prepare(src)
                 markwon.setMarkdown(message, pre)
                 addCodeBlockCopyControls(message)
             } else {
@@ -2194,62 +2177,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // selection (handled by the TextView editor, not the movement
             // method) continues to work.
             message.movementMethod = LinkMovementMethod.getInstance()
-        }
-
-        private fun trimLineByLine(str: String) : String {
-            val lines = str.split("\n")
-            val sb = StringBuilder()
-            for (line in lines) {
-                sb.append(line.trim()).append("\n")
-            }
-            return sb.toString()
-        }
-
-        private fun parseLatex(markdown: String): String {
-            val pattern = Regex("(`[^`]*`|```[\\s\\S]*?```)|\\\\\\[|\\\\\\]|\\\\\\(|\\\\\\)")
-            // val pattern = Regex("(`[^`]*`|```[\\s\\S]*?```)|\\\\\\[|\\\\]|\\\\\\(|\\\\\\)")
-            val sb = StringBuilder()
-            var index = 0
-
-            pattern.findAll(markdown).forEach { match ->
-                if (match.groups[1] != null) { // Code block
-                    sb.append(markdown.substring(index, match.range.first))
-                    sb.append(match.value)
-                    index = match.range.last + 1
-                } else { // LaTeX \[, \], \(, or \) to be replaced
-                    sb.append(markdown.substring(index, match.range.first))
-                    when (match.value) {
-                        """\[""" -> sb.append("""$$""").append("\n").append("""\[""")
-                        """\]""" -> sb.append("""\]""").append("\n").append("""$$""")
-                        """\(""" -> sb.append("""$$\(""")
-                        """\)""" -> sb.append("""\)$$""")
-                    }
-                    index = match.range.last + 1
-                }
-            }
-            sb.append(markdown.substring(index))
-
-            val s = sb.toString()
-
-            val openMatrixPattern = "\\begin{bmatrix}"
-            val closeMatrixPattern = "\\end{bmatrix}"
-            val openedMatricesCount = s.split(openMatrixPattern).size - 1
-            val closedMatricesCount = s.split(closeMatrixPattern).size - 1
-
-            val openMathPattern = "\\["
-            val closeMathPattern = "\\]"
-            val openedMathCount = s.split(openMathPattern).size - 1
-            val closedMathCount = s.split(closeMathPattern).size - 1
-
-            if (openedMatricesCount > closedMatricesCount) {
-                sb.append("\\end{bmatrix}")
-            }
-
-            if (openedMathCount > closedMathCount) {
-                sb.append("\n\\]")
-            }
-
-            return sb.toString()
         }
 
         /** Loads a provider-neutral generated-image bubble from its

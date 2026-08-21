@@ -164,6 +164,17 @@
          chat has no companion name (a regular chat always has one). Never
          "SpeakGPT". -->
     <string name="chat_role_assistant">Assistant</string>
+    <string name="chat_options">Chat Options</string>
+    <string name="chat_menu_export">Export Chat</string>
+    <string name="chat_export_format">Format</string>
+    <string name="chat_export_include_date">Include Date</string>
+    <string name="chat_export_include_time">Include Time</string>
+    <string name="chat_export_include_model">Include Model</string>
+    <string name="chat_export_include_user_tokens">Include User Token Count</string>
+    <string name="chat_export_include_companion_tokens">Include Companion Token Count</string>
+    <string name="chat_export_cancel">Cancel Export</string>
+    <string name="chat_export_action">Export</string>
+    <string name="chat_delete_title">Delete Chat</string>
     <string name="control_center_general">General</string>
     <string name="control_center_image_generation">Image generation</string>
     <string name="control_center_appearance">Appearance</string>

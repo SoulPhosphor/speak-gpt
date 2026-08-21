@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:fillViewport="false">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp"
+        android:paddingTop="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                style="@style/Widget.App.Dropdown.CanonicalLabel"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:text="@string/chat_export_format" />
+
+            <TextView
+                android:id="@+id/chat_export_format_value"
+                style="@style/Widget.App.Dropdown.CanonicalValue"
+                android:layout_width="wrap_content" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/chat_export_row_include_date"
+            style="@style/Widget.App.Row.Toggle"
+            android:layout_marginTop="12dp">
+
+            <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                <TextView
+                    style="@style/Widget.App.Row.Title"
+                    android:text="@string/chat_export_include_date" />
+            </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/chat_export_include_date"
+                style="@style/Widget.App.Row.Switch"
+                android:checked="false" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/chat_export_row_include_time"
+            style="@style/Widget.App.Row.Toggle">
+
+            <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                <TextView
+                    style="@style/Widget.App.Row.Title"
+                    android:text="@string/chat_export_include_time" />
+            </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/chat_export_include_time"
+                style="@style/Widget.App.Row.Switch"
+                android:checked="false" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/chat_export_row_include_model"
+            style="@style/Widget.App.Row.Toggle">
+
+            <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                <TextView
+                    style="@style/Widget.App.Row.Title"
+                    android:text="@string/chat_export_include_model" />
+            </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/chat_export_include_model"
+                style="@style/Widget.App.Row.Switch"
+                android:checked="false" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/chat_export_row_include_user_tokens"
+            style="@style/Widget.App.Row.Toggle">
+
+            <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                <TextView
+                    style="@style/Widget.App.Row.Title"
+                    android:text="@string/chat_export_include_user_tokens" />
+            </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/chat_export_include_user_tokens"
+                style="@style/Widget.App.Row.Switch"
+                android:checked="false" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/chat_export_row_include_companion_tokens"
+            style="@style/Widget.App.Row.Toggle"
+            android:paddingBottom="8dp">
+
+            <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                <TextView
+                    style="@style/Widget.App.Row.Title"
+                    android:text="@string/chat_export_include_companion_tokens" />
+            </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/chat_export_include_companion_tokens"
+                style="@style/Widget.App.Row.Switch"
+                android:checked="false" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

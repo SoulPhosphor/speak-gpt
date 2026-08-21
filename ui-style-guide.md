@@ -43,7 +43,9 @@ A screen may use shared styles while retaining its own layout. It may also use a
 Labels are written in Title Caps. This applies to every label-like string:
 button and action labels, row and tile titles, dialog and screen titles,
 section headings, toggle names, log entry titles and field labels, and
-status/outcome values.
+status/outcome values, plus accessibility and control-naming strings such as
+`contentDescription` values, tooltip text, and similar labels when they name a
+control or action.
 
 Examples: Edit Prompt, Change Settings, Image Request Completed, Provider
 Request ID, Maximum Logs Saved.
@@ -180,9 +182,18 @@ This style requires a `ConstraintLayout` parent because its width is percentage-
 
 `AppButton.Destructive.DialogAction`
 
-Use for the established two-button confirmation shape with the primary action first and the destructive or cancel action second.
+Two-button dialog actions should be centered as a pair by default.
 
-Required shared layout: `layout/dialog_two_actions.xml`.
+Button order comes from the approved feature wording/spec and must not be
+changed based on semantic role. Cancel/back-out actions use the Destructive
+style; affirmative actions use the Primary style, regardless of which appears
+first.
+
+Use `layout/dialog_two_actions.xml` for the approved primary-first,
+destructive-second order. If it cannot represent the required centered order,
+use or add an appropriate shared centered variant rather than reversing the
+approved button order. For the approved cancel-first order, use
+`layout/dialog_two_actions_cancel_first.xml`.
 
 ### Inline actions
 
@@ -192,7 +203,10 @@ Required shared layout: `layout/dialog_two_actions.xml`.
 
 Use when actions should size to their labels rather than fill the available width.
 
-For the established right-aligned Cancel-then-Save dialog row, use `layout/dialog_two_actions_end.xml` with these inline styles.
+Two-button dialogs use a centered shared layout by default. The existing
+right-aligned Cancel-then-Save row uses `layout/dialog_two_actions_end.xml`
+only where that arrangement is explicitly approved by the feature spec; it is
+not the general default.
 
 A future inline secondary button should inherit `AppButton.Secondary` and change only its geometry.
 
