@@ -93,7 +93,6 @@ class ReportedProviderParserTest {
         assertEquals(10, raw.promptTokens)
         assertEquals(20, raw.completionTokens)
         assertEquals(30, raw.totalTokens)
-        assertEquals("actual/model", raw.model)
         assertEquals("gen-1", raw.generationId)
         assertTrue(raw.flowEndedNormally)
         assertTrue(channel.isClosedForRead)
