@@ -68,7 +68,8 @@ fun GenErrorResult.providerDetailBlock(
     function: String,
     rawProviderMessage: String? = null
 ): String {
-    val detail: String = if (!reachedServer()) {
+    val serverAnswered = reachedServer()
+    val detail: String = if (!serverAnswered) {
         context.getString(R.string.provider_error_no_response)
     } else {
         val message = rawProviderMessage?.trim()?.ifBlank { null }
@@ -80,11 +81,17 @@ fun GenErrorResult.providerDetailBlock(
             else -> context.getString(R.string.provider_error_none)
         }
     }
+    val outboundFields = if (serverAnswered) {
+        OutboundRequestDiagnostics.latestFieldNamesText()
+    } else {
+        null
+    }
     return context.getString(R.string.provider_error_line, detail) +
         "\n" + context.getString(R.string.provider_api_provider_line, apiProvider) +
         "\n" + context.getString(R.string.provider_model_service_line, modelServiceProvider) +
         "\n" + context.getString(R.string.provider_model_line, model) +
-        "\n" + context.getString(R.string.provider_function_line, function)
+        "\n" + context.getString(R.string.provider_function_line, function) +
+        (outboundFields?.let { "\nOutbound request fields: $it" } ?: "")
 }
 
 fun GenErrorResult.providerLimitMessage(context: Context): String? =
