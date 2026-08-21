@@ -68,7 +68,7 @@ class ChatExportFormatterTest {
         assertTrue(result.contains("User\nJan 1, 1970"))
         assertTrue(result.contains("12:00"))
         assertTrue(result.endsWith("\nhello"))
-        assertFalse(result.contains("1970 · 12:00"))
+        assertFalse(result.lines()[1].contains(" · "))
     }
 
     @Test
