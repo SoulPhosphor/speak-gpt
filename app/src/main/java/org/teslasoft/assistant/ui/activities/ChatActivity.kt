@@ -2572,7 +2572,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             updateMessagesSelectionProjection()
 
-            calculateCost()
 
             adapter = ChatAdapter(messages, messagesSelectionProjection, this, preferences!!, chatId)
             adapter?.setOnUpdateListener(this)
