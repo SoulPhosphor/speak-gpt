@@ -108,6 +108,7 @@ import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.MessageCompletionState
+import org.teslasoft.assistant.reasoning.ReasoningIndicator
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
@@ -244,6 +245,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         const val KEY_MESSAGE_REASONING_SUMMARY = "reasoningIsSummary"
         const val KEY_MESSAGE_REASONING_TOKENS = "reasoningTokens"
 
+        // The per-message reasoning indicator state (owner design, Aug 2026),
+        // stored as a stable ReasoningIndicator token ("low", "automatic",
+        // "fixed", …). Frozen when the reply begins from the same capability and
+        // effort the request used, so the action-bar glyph is what this turn was
+        // actually generated with and never shifts on a later model switch.
+        // Absent when the model is not known to reason (no glyph shown).
+        const val KEY_MESSAGE_REASONING_LEVEL = "reasoningLevel"
+
         // Regenerated-response history for one assistant turn (owner spec, Aug
         // 16 2026). Each turn that has been regenerated keeps every version:
         //   KEY_VARIANTS          — JSON array of version snapshots, each a
@@ -275,6 +284,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             KEY_MESSAGE_REASONING,
             KEY_MESSAGE_REASONING_SUMMARY,
             KEY_MESSAGE_REASONING_TOKENS,
+            KEY_MESSAGE_REASONING_LEVEL,
             MessageCompletionState.KEY_STATE,
             MessageCompletionState.KEY_STATE_DETAIL,
             MessageCompletionState.KEY_ERROR_TEXT
@@ -587,6 +597,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val reasoningHeader: LinearLayout? = itemView.findViewById(R.id.reasoning_header)
         private val reasoningText: TextView? = itemView.findViewById(R.id.reasoning_text)
         private val reasoningChevron: ImageView? = itemView.findViewById(R.id.reasoning_chevron)
+        // Per-message reasoning indicator glyph in the action bar, right of the
+        // info button (owner design, Aug 2026). Assistant layout only, so
+        // nullable; informational, never clickable.
+        private val reasoningIndicator: ImageView? = itemView.findViewById(R.id.reasoning_indicator)
         // Regenerated-response version pager, far right of the assistant action
         // bar. Present only on the assistant layout, so nullable.
         private val versionNav: View? = itemView.findViewById(R.id.version_nav)
@@ -642,6 +656,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateStatusMarker(display)
             updateMessageMeta(display, isGeneratedImage)
             updateReasoning(display, position)
+            updateReasoningIndicator(display, isGeneratedImage)
             updateVersionNav(chatMessage, position)
 
             btnDetails.setOnClickListener { anchor ->
@@ -1274,6 +1289,44 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
+        /**
+         * The per-message reasoning indicator glyph (owner design, Aug 2026):
+         * a single Material Wi-Fi-strength icon right of the info button showing
+         * the effort this reply was generated with. Shown only for an assistant
+         * reply whose persisted state names a known reasoning indicator, and
+         * never on a generated-image message. Absent state hides the view, so a
+         * non-reasoning reply (and every recycled user row) shows nothing here.
+         */
+        private fun updateReasoningIndicator(chatMessage: HashMap<String, Any>, isGeneratedImage: Boolean) {
+            val view = reasoningIndicator ?: return
+            val indicator = if (isGeneratedImage || chatMessage["isBot"] != true) {
+                null
+            } else {
+                ReasoningIndicator.fromToken(chatMessage[KEY_MESSAGE_REASONING_LEVEL]?.toString())
+            }
+            if (indicator == null) {
+                view.visibility = View.GONE
+                view.setImageDrawable(null)
+                view.contentDescription = null
+                return
+            }
+            val icon: Int
+            val desc: Int
+            when (indicator) {
+                ReasoningIndicator.OFF -> { icon = R.drawable.ic_signal_wifi_off; desc = R.string.reasoning_indicator_off_desc }
+                ReasoningIndicator.MINIMAL -> { icon = R.drawable.ic_signal_wifi_0_bar; desc = R.string.reasoning_indicator_minimal_desc }
+                ReasoningIndicator.LOW -> { icon = R.drawable.ic_network_wifi_1_bar; desc = R.string.reasoning_indicator_low_desc }
+                ReasoningIndicator.MEDIUM -> { icon = R.drawable.ic_network_wifi_2_bar; desc = R.string.reasoning_indicator_medium_desc }
+                ReasoningIndicator.HIGH -> { icon = R.drawable.ic_network_wifi_3_bar; desc = R.string.reasoning_indicator_high_desc }
+                ReasoningIndicator.XHIGH -> { icon = R.drawable.ic_signal_wifi_4_bar; desc = R.string.reasoning_indicator_xhigh_desc }
+                ReasoningIndicator.AUTOMATIC -> { icon = R.drawable.ic_network_check; desc = R.string.reasoning_indicator_automatic_desc }
+                ReasoningIndicator.FIXED -> { icon = R.drawable.ic_network_wifi_2_locked; desc = R.string.reasoning_indicator_fixed_desc }
+            }
+            view.setImageResource(icon)
+            view.contentDescription = context.getString(desc)
+            view.visibility = View.VISIBLE
+        }
+
         private fun updateIncludeSummary(chatMessage: HashMap<String, Any>, position: Int): Boolean {
             val summary = includeSummary ?: return false
             val includes = ChatInclude.listFromJson(
@@ -1689,6 +1742,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnVersionNext?.setColorFilter(foreground)
             versionCount?.setTextColor(foreground)
             btnVersionPromote?.setColorFilter(foreground)
+            // The reasoning indicator rides the same bar and follows the same
+            // bubble foreground so its glyph reads on any theme.
+            reasoningIndicator?.setColorFilter(foreground)
         }
 
         /**

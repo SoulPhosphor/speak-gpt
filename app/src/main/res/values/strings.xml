@@ -3221,10 +3221,25 @@
     <string name="reasoning_effort_low">Low</string>
     <string name="reasoning_effort_medium">Medium</string>
     <string name="reasoning_effort_high">High</string>
+    <!-- Shown in the Thinking control (favorite Reasoning Settings and Quick
+         Settings) for a model that reasons but exposes no adjustable level, so
+         there is nothing to choose (owner ruling, Aug 2026). -->
+    <string name="reasoning_effort_fixed">Fixed</string>
     <!-- Favorite Reasoning Settings screen (chat-redesign-plan.md §7.4). -->
     <string name="reasoning_settings_title">Reasoning Settings</string>
     <string name="reasoning_show_reasoning_label">Show Reasoning</string>
     <string name="reasoning_settings_saved_toast">Saved</string>
+    <!-- Accessibility descriptions for the per-message reasoning indicator
+         glyph (owner design, Aug 2026). Screen-reader only; the owner requires
+         Title Case even though they are not shown on screen. -->
+    <string name="reasoning_indicator_off_desc">Reasoning Off</string>
+    <string name="reasoning_indicator_minimal_desc">Minimal Reasoning</string>
+    <string name="reasoning_indicator_low_desc">Low Reasoning</string>
+    <string name="reasoning_indicator_medium_desc">Medium Reasoning</string>
+    <string name="reasoning_indicator_high_desc">High Reasoning</string>
+    <string name="reasoning_indicator_xhigh_desc">Extra High Reasoning</string>
+    <string name="reasoning_indicator_automatic_desc">Automatic Reasoning</string>
+    <string name="reasoning_indicator_fixed_desc">Fixed Reasoning</string>
     <!-- Accessibility descriptions for the two lightbulb uses (§7.9): the
          actionable favorite shortcut and the informational View All indicator. -->
     <string name="reasoning_settings_bulb_desc">Reasoning settings</string>

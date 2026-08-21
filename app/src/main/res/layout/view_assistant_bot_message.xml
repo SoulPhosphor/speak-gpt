@@ -294,6 +294,21 @@
                     android:tooltipText="@string/message_details_action"
                     app:srcCompat="@drawable/ic_info" />
 
+                <!-- Per-message reasoning indicator (owner design, Aug 2026):
+                     informational only, sits directly right of the info button.
+                     Icon, description, and visibility are set per message in
+                     ChatAdapter; GONE by default so a non-reasoning reply shows
+                     nothing here. -->
+                <ImageView
+                    android:id="@+id/reasoning_indicator"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginLeft="8dp"
+                    android:background="@color/transparent"
+                    android:contentDescription="@string/reasoning_indicator_automatic_desc"
+                    android:scaleType="center"
+                    android:visibility="gone" />
+
                 <ImageButton
                     android:id="@+id/btn_speak"
                     android:layout_width="32dp"

@@ -5634,6 +5634,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
 
     /**
+     * The per-message reasoning indicator token for [model] (owner design, Aug
+     * 2026), or null when the model is not known to reason. Uses the same
+     * capability and resolved effort the request itself uses, so the persisted
+     * action-bar glyph matches what this turn was actually generated with.
+     */
+    private fun reasoningIndicatorTokenForModel(model: String): String? {
+        val capability = reasoningCapabilityForModel(model)
+        val resolved = resolveReasoningForModel(model)
+        return org.teslasoft.assistant.reasoning.ReasoningIndicator
+            .forGeneration(capability, resolved.effort)?.token
+    }
+
+    /**
      * The effective reasoning settings for this turn (§7.5/§7.9): the
      * conversation's own override, else this model's favorite default, else
      * Auto — with the §7.8 clamp for an effort the active path no longer
@@ -7903,6 +7916,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // not — so those correctly carry no model attribution.
             val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
             if (usedModel.isNotBlank()) last[ChatAdapter.KEY_MESSAGE_MODEL] = usedModel
+            // Freeze the reasoning indicator for this reply from the SAME
+            // capability and effort the request uses, so the action-bar glyph
+            // shows what this turn was actually generated with (owner design,
+            // Aug 2026). Absent for a model not known to reason → no glyph.
+            val indicatorToken = usedModel.takeIf { it.isNotBlank() }
+                ?.let { reasoningIndicatorTokenForModel(it) }
+            if (indicatorToken != null) {
+                last[ChatAdapter.KEY_MESSAGE_REASONING_LEVEL] = indicatorToken
+            } else {
+                last.remove(ChatAdapter.KEY_MESSAGE_REASONING_LEVEL)
+            }
             // Reset the provider token capture for this fresh reply so a turn
             // whose provider reports no usage does not inherit the previous
             // turn's count.

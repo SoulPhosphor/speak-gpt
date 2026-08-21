@@ -704,12 +704,26 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val row = rowReasoning ?: return
         val capability = currentReasoningCapability()
         if (!capability.effortConfigurable) {
-            row.visibility = View.GONE
-            row.setOnClickListener(null)
-            textReasoningEffort?.setOnClickListener(null)
+            // A model that reasons but has no adjustable level shows a
+            // non-interactive "Fixed" rather than disappearing (owner ruling,
+            // Aug 2026); a non-reasoning path hides the tile entirely.
+            if (capability.isReasoningCapable) {
+                row.visibility = View.VISIBLE
+                textReasoningEffort?.text = getString(R.string.reasoning_effort_fixed)
+                row.isEnabled = false
+                row.alpha = 0.5f
+                row.setOnClickListener(null)
+                textReasoningEffort?.setOnClickListener(null)
+            } else {
+                row.visibility = View.GONE
+                row.setOnClickListener(null)
+                textReasoningEffort?.setOnClickListener(null)
+            }
             return
         }
         row.visibility = View.VISIBLE
+        row.isEnabled = true
+        row.alpha = 1f
         refreshReasoningEffortLabel(capability)
         row.setOnClickListener { showReasoningEffortDropdown(textReasoningEffort ?: it, capability) }
         textReasoningEffort?.setOnClickListener { showReasoningEffortDropdown(it, capability) }

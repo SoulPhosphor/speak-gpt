@@ -137,11 +137,22 @@ class ReasoningSettingsActivity : FragmentActivity() {
     }
 
     private fun configureRows() {
-        // Thinking dropdown only when the combination exposes configurable effort.
+        // Thinking dropdown when the combination exposes configurable effort;
+        // a non-interactive "Fixed" when the model reasons but has no adjustable
+        // level (owner ruling, Aug 2026); hidden only when the path is not a
+        // reasoning model at all.
         if (capability.effortConfigurable && capability.thinkingChoices().isNotEmpty()) {
             rowThinking?.visibility = View.VISIBLE
+            rowThinking?.isEnabled = true
+            rowThinking?.alpha = 1f
             refreshThinkingValue()
             rowThinking?.setOnClickListener { showThinkingDropdown() }
+        } else if (capability.isReasoningCapable) {
+            rowThinking?.visibility = View.VISIBLE
+            textThinkingValue?.text = getString(R.string.reasoning_effort_fixed)
+            rowThinking?.isEnabled = false
+            rowThinking?.alpha = 0.5f
+            rowThinking?.setOnClickListener(null)
         } else {
             rowThinking?.visibility = View.GONE
             rowThinking?.setOnClickListener(null)
