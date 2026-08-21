@@ -933,13 +933,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private suspend fun refreshConversationUsageSummary(): ConversationUsageSummary {
         val snapshot = messages.map { HashMap(it) }
-        val fallbackModel = model.ifBlank { preferences?.getModel().orEmpty() }
-        val fallbackProvider = fallbackServingProvider()
-        val endpoint = apiEndpointObject?.host
         val summary = withContext(Dispatchers.Default) {
                 val legacyIndexes = snapshot.indices.filter { index ->
                     val message = snapshot[index]
                     message["isBot"] == true &&
+                        MessageCompletionState.isComplete(
+                            message[MessageCompletionState.KEY_STATE]?.toString()
+                        ) &&
                         TokenUsageAccounting.decodeRecords(
                             message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS]?.toString()
                         ).isEmpty()
@@ -959,10 +959,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     }
                 }
                 TokenUsageAccounting.summarizeMessages(
-                    snapshot,
-                    fallbackModel,
-                    fallbackProvider,
-                    endpoint
+                    snapshot
                 ) { index -> legacyCounts[index] ?: TokenCounts(null, null, null) }
         }
         conversationUsageSummary = summary
@@ -7509,7 +7506,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         pendingProviderUsageSnapshot = null
         pendingCompletedPricingCatalog?.cancel()
         pendingCompletedPricingCatalog = null
-        carriedUsageRecords.clear()
         val r = currentLifecycle ?: return
         if (r.finalized) return
         writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
@@ -8297,7 +8293,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var currentPricingCatalog: Deferred<TokenPricingCatalog>? = null
     private var pendingProviderUsageSnapshot: ProviderUsageSnapshot? = null
     private var pendingCompletedPricingCatalog: Deferred<TokenPricingCatalog>? = null
-    private val carriedUsageRecords: MutableList<TurnUsageRecord> = mutableListOf()
 
     /** While a Retry is in flight, the versions the regenerated reply will be
      *  folded into: the prior turn's existing version list, or its single
@@ -8332,24 +8327,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (last["isBot"] == true) {
             last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             last.remove(MessageCompletionState.KEY_STATE_DETAIL)
-            val records = mutableListOf<TurnUsageRecord>()
-            records.addAll(carriedUsageRecords)
-            carriedUsageRecords.clear()
-            completePendingUsageRecord()?.let(records::add)
-            if (records.isNotEmpty()) {
-                last[ChatAdapter.KEY_TOKEN_USAGE_RECORDS] = TokenUsageAccounting.encodeRecords(records)
-                // Mirror the final request's response-reported attribution into
-                // the existing compact message metadata fields. The complete
-                // per-request history remains in KEY_TOKEN_USAGE_RECORDS.
-                records.last().model.takeIf { it != TokenUsageAccounting.MODEL_NOT_RECORDED }
-                    ?.let { last[ChatAdapter.KEY_MESSAGE_MODEL] = it }
-                records.last().provider.takeIf { it != TokenUsageAccounting.PROVIDER_NOT_REPORTED }
-                    ?.let { last[ChatAdapter.KEY_MESSAGE_PROVIDER] = it }
-                // responseTokens remains total-token compatibility metadata.
-                // It is never an output/completion-token field.
-                records.mapNotNull { it.totalTokens }.takeIf { it.size == records.size }
-                    ?.sum()?.let { last[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
-            }
+            val records = listOfNotNull(completePendingUsageRecord())
+            attachUsageRecords(last, records)
             // A regeneration folds this finished reply into the turn's version
             // list. Runs after the metadata above so the new version captures
             // the final model, tokens, and state.
@@ -8361,9 +8340,41 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /** Preserve the cost of a completed tool-selection request whose assistant
-     * bubble is intentionally removed because it contains no user-visible text. */
+     * bubble is intentionally removed because it contains no user-visible text.
+     * Store it immediately on the initiating user message; summaries read
+     * durable records on either role, while legacy estimation remains
+     * assistant-only. */
     private suspend fun carryPendingUsageFromEmptyAssistant() {
-        completePendingUsageRecord()?.let(carriedUsageRecords::add)
+        val record = completePendingUsageRecord() ?: return
+        val carrier = messages.dropLast(1).lastOrNull { it["isBot"] != true } ?: return
+        attachUsageRecords(carrier, listOf(record), mirrorCompactMetadata = false)
+    }
+
+    /** Attach only completed requests. Usage-only tool calls use the initiating
+     * user message as a durable carrier; visible completions use their assistant
+     * message and may mirror compact display metadata. */
+    private fun attachUsageRecords(
+        message: HashMap<String, Any>,
+        newRecords: List<TurnUsageRecord>,
+        mirrorCompactMetadata: Boolean = true
+    ) {
+        if (newRecords.isEmpty()) return
+        val records = TokenUsageAccounting.decodeRecords(
+            message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS]?.toString()
+        ) + newRecords
+        message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS] =
+            TokenUsageAccounting.encodeRecords(records)
+        if (!mirrorCompactMetadata) return
+        // Mirror the final completed request's response-reported attribution
+        // into the compact metadata. Unknown remains absent.
+        records.last().model.takeIf { it != TokenUsageAccounting.MODEL_NOT_REPORTED }
+            ?.let { message[ChatAdapter.KEY_MESSAGE_MODEL] = it }
+        records.last().provider.takeIf { it != TokenUsageAccounting.PROVIDER_NOT_REPORTED }
+            ?.let { message[ChatAdapter.KEY_MESSAGE_PROVIDER] = it }
+        // responseTokens remains total-token compatibility metadata. It is
+        // never an output/completion-token field and stays absent if incomplete.
+        records.mapNotNull { it.totalTokens }.takeIf { it.size == records.size }
+            ?.sum()?.let { message[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
     }
 
     private suspend fun completePendingUsageRecord(): TurnUsageRecord? {
@@ -8397,7 +8408,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             apiEndpoint = snapshot.apiEndpoint,
             counts = counts,
             source = source,
-            pricing = pricing
+            pricing = pricing,
+            providerCost = snapshot.providerCost
         )
     }
 

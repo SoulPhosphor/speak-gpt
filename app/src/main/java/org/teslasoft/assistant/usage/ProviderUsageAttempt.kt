@@ -21,6 +21,9 @@ class ProviderUsageAttempt(
     @Volatile private var promptTokens: Int? = null
     @Volatile private var completionTokens: Int? = null
     @Volatile private var totalTokens: Int? = null
+    @Volatile private var inputCost: Double? = null
+    @Volatile private var outputCost: Double? = null
+    @Volatile private var totalCost: Double? = null
     @Volatile private var observationExpected = false
     private val observationFinished = CompletableDeferred<Unit>()
 
@@ -44,6 +47,9 @@ class ProviderUsageAttempt(
         if (promptTokens == null) promptTokens = value.promptTokens
         if (completionTokens == null) completionTokens = value.completionTokens
         if (totalTokens == null) totalTokens = value.totalTokens
+        if (inputCost == null) inputCost = value.inputCost
+        if (outputCost == null) outputCost = value.outputCost
+        if (totalCost == null) totalCost = value.totalCost
     }
 
     fun finishObservation() { observationFinished.complete(Unit) }
@@ -57,7 +63,8 @@ class ProviderUsageAttempt(
                 model = responseModel ?: requestedModel,
                 provider = responseProvider ?: fallbackProvider,
                 apiEndpoint = apiEndpoint,
-                counts = TokenCounts(promptTokens, completionTokens, totalTokens)
+                counts = TokenCounts(promptTokens, completionTokens, totalTokens),
+                providerCost = ProviderReportedCost(inputCost, outputCost, totalCost)
             )
         }
     }
@@ -67,5 +74,6 @@ data class ProviderUsageSnapshot(
     val model: String,
     val provider: String,
     val apiEndpoint: String,
-    val counts: TokenCounts
+    val counts: TokenCounts,
+    val providerCost: ProviderReportedCost
 )

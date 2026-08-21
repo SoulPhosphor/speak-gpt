@@ -166,6 +166,9 @@ internal class RawSseInspector {
     private var promptTokens: Int? = null
     private var completionTokens: Int? = null
     private var totalTokens: Int? = null
+    private var inputCost: Double? = null
+    private var outputCost: Double? = null
+    private var totalCost: Double? = null
     private var model: String? = null
     private var generationId: String? = null
     private var malformedDataEvents = 0
@@ -204,6 +207,18 @@ internal class RawSseInspector {
             usage.intOrNull("prompt_tokens")?.let { promptTokens = it }
             usage.intOrNull("completion_tokens")?.let { completionTokens = it }
             usage.intOrNull("total_tokens")?.let { totalTokens = it }
+            usage.firstDoubleOrNull("cost", "total_cost")?.let { totalCost = it }
+            usage.firstDoubleOrNull("input_cost", "prompt_cost")?.let { inputCost = it }
+            usage.firstDoubleOrNull("output_cost", "completion_cost")?.let { outputCost = it }
+            usage.get("cost_details")?.takeUnless { it.isJsonNull }
+                ?.takeIf { it.isJsonObject }?.asJsonObject?.let { details ->
+                    if (inputCost == null) {
+                        details.firstDoubleOrNull("input_cost", "prompt_cost")?.let { inputCost = it }
+                    }
+                    if (outputCost == null) {
+                        details.firstDoubleOrNull("output_cost", "completion_cost")?.let { outputCost = it }
+                    }
+                }
         }
 
         root.stringOrNull("type")?.let { type ->
@@ -267,6 +282,9 @@ internal class RawSseInspector {
             promptTokens = promptTokens,
             completionTokens = completionTokens,
             totalTokens = totalTokens,
+            inputCost = inputCost,
+            outputCost = outputCost,
+            totalCost = totalCost,
             model = model,
             generationId = generationId,
             malformedDataEvents = malformedDataEvents,
@@ -299,3 +317,12 @@ private fun JsonObject.intOrNull(name: String): Int? = try {
 } catch (_: Exception) {
     null
 }
+
+private fun JsonObject.doubleOrNull(name: String): Double? = try {
+    get(name)?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonPrimitive }?.asDouble
+} catch (_: Exception) {
+    null
+}
+
+private fun JsonObject.firstDoubleOrNull(vararg names: String): Double? =
+    names.firstNotNullOfOrNull { doubleOrNull(it) }

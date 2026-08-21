@@ -12,12 +12,13 @@ class ProviderUsageAttemptTest {
         attempt.noteProvider("DeepInfra")
         attempt.noteRawObservation(
             RawStreamObservation(model = "actual-model", promptTokens = 10,
-                completionTokens = 20, totalTokens = 30)
+                completionTokens = 20, totalTokens = 30, totalCost = 0.0042)
         )
         val result = attempt.snapshot()
         assertEquals("actual-model", result.model)
         assertEquals("DeepInfra", result.provider)
         assertEquals("https://endpoint", result.apiEndpoint)
         assertEquals(TokenCounts(10, 20, 30), result.counts)
+        assertEquals(0.0042, result.providerCost.totalCost!!, 0.000000001)
     }
 }

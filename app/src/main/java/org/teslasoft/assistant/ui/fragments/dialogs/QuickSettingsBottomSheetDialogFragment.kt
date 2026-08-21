@@ -76,7 +76,9 @@ import org.teslasoft.assistant.ui.activities.TokenPricingDetailsActivity
 import org.teslasoft.assistant.usage.ConversationUsageSummary
 import org.teslasoft.assistant.usage.QuickSettingsUsagePresentation
 import org.teslasoft.assistant.usage.TokenUsageAccounting
+import org.teslasoft.assistant.usage.UsageGroup
 import org.teslasoft.assistant.usage.UsageCardMode
+import org.teslasoft.assistant.usage.UsageValueFormatter
 
 class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     companion object {
@@ -916,39 +918,41 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private fun renderUsageCard(summary: ConversationUsageSummary) {
         val presentation = QuickSettingsUsagePresentation.from(summary)
         textUsage?.text = getString(R.string.cost_counter_usage).format(
-            presentation.totalInputTokens.toString(),
-            presentation.totalOutputTokens.toString()
+            UsageValueFormatter.tokens(
+                presentation.totalInputTokens, presentation.hasUnknownInputTokens
+            ),
+            UsageValueFormatter.tokens(
+                presentation.totalOutputTokens, presentation.hasUnknownOutputTokens
+            )
         )
         when (presentation.mode) {
             UsageCardMode.EMPTY -> {
-                textCost?.text = getString(R.string.cost_template, 0.0, 0.0, 0.0, 0.0, 0.0)
+                textCost?.text = buildString {
+                    val zero = UsageValueFormatter.cost(0.0, false)
+                    append(getString(R.string.cost_values_line, zero, zero))
+                    append('\n').append(getString(R.string.cost_total_value, zero))
+                    append('\n').append(getString(
+                        R.string.cost_price_values_line,
+                        UsageValueFormatter.NOT_REPORTED,
+                        UsageValueFormatter.NOT_REPORTED
+                    ))
+                }
                 btnCostInfo?.visibility = View.GONE
             }
             UsageCardMode.SINGLE_PRICING -> {
                 val group = presentation.singleGroup!!
-                if (group.hasUnknownCost) {
-                    textCost?.text = getString(R.string.msg_cost_not_enough_data)
-                } else if (group.hasVariablePricing) {
-                    textCost?.text = String.format(
-                        getString(R.string.cost_template_variable_price),
-                        group.inputCost, group.outputCost, group.totalCost
-                    )
-                } else if (group.inputPricePerToken == null || group.outputPricePerToken == null) {
-                    textCost?.text = getString(R.string.msg_cost_not_enough_data)
-                } else {
-                    textCost?.text = String.format(
-                        getString(R.string.cost_template),
-                        group.inputCost,
-                        group.outputCost,
-                        group.totalCost,
-                        group.inputPricePerToken * 1_000_000,
-                        group.outputPricePerToken * 1_000_000
-                    )
-                }
+                textCost?.text = formatGroupCost(group)
                 btnCostInfo?.visibility = View.GONE
             }
             UsageCardMode.MULTI_PRICING -> {
-                textCost?.text = getString(R.string.cost_multi_total, presentation.totalCost)
+                textCost?.text = if (presentation.hasUnknownCost) {
+                    getString(R.string.cost_total_value, UsageValueFormatter.NOT_REPORTED)
+                } else {
+                    getString(
+                        R.string.cost_multi_total_value,
+                        UsageValueFormatter.cost(presentation.totalCost, false)
+                    )
+                }
                 btnCostInfo?.apply {
                     visibility = View.VISIBLE
                     text = getString(R.string.token_pricing_details_title)
@@ -964,6 +968,29 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 }
             }
         }
+    }
+
+    private fun formatGroupCost(group: UsageGroup): String = buildString {
+        append(getString(
+            R.string.cost_values_line,
+            UsageValueFormatter.cost(group.inputCost, group.hasUnknownInputCost),
+            UsageValueFormatter.cost(group.outputCost, group.hasUnknownOutputCost)
+        ))
+        append('\n').append(getString(
+            R.string.cost_total_value,
+            UsageValueFormatter.cost(group.totalCost, group.hasUnknownCost)
+        ))
+        append('\n').append(
+            if (group.hasVariablePricing) {
+                getString(R.string.cost_price_variable_line)
+            } else {
+                getString(
+                    R.string.cost_price_values_line,
+                    UsageValueFormatter.pricePerMillion(group.inputPricePerToken),
+                    UsageValueFormatter.pricePerMillion(group.outputPricePerToken)
+                )
+            }
+        )
     }
 
     override fun onDismiss(dialog: DialogInterface) {

@@ -18,6 +18,7 @@ import androidx.fragment.app.FragmentActivity
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.usage.TokenUsageAccounting
+import org.teslasoft.assistant.usage.UsageValueFormatter
 
 class TokenPricingDetailsActivity : FragmentActivity() {
     companion object {
@@ -41,27 +42,36 @@ class TokenPricingDetailsActivity : FragmentActivity() {
                 getString(R.string.token_pricing_group_title, group.model, group.provider)
             section.findViewById<TextView>(R.id.text_pricing_group_usage).text =
                 getString(R.string.cost_counter_usage)
-                    .format(group.inputTokens.toString(), group.outputTokens.toString())
-            section.findViewById<TextView>(R.id.text_pricing_group_cost).text =
-                if (group.hasUnknownCost) {
-                    getString(R.string.msg_cost_not_enough_data)
-                } else if (group.hasVariablePricing) {
-                    String.format(
-                        getString(R.string.cost_template_variable_price),
-                        group.inputCost, group.outputCost, group.totalCost
+                    .format(
+                        UsageValueFormatter.tokens(
+                            group.inputTokens, group.hasUnknownInputTokens
+                        ),
+                        UsageValueFormatter.tokens(
+                            group.outputTokens, group.hasUnknownOutputTokens
+                        )
                     )
-                } else if (group.inputPricePerToken == null || group.outputPricePerToken == null) {
-                    getString(R.string.msg_cost_not_enough_data)
-                } else {
-                    String.format(
-                        getString(R.string.cost_template),
-                        group.inputCost,
-                        group.outputCost,
-                        group.totalCost,
-                        group.inputPricePerToken * 1_000_000,
-                        group.outputPricePerToken * 1_000_000
-                    )
-                }
+            section.findViewById<TextView>(R.id.text_pricing_group_cost).text = buildString {
+                append(getString(
+                    R.string.cost_values_line,
+                    UsageValueFormatter.cost(group.inputCost, group.hasUnknownInputCost),
+                    UsageValueFormatter.cost(group.outputCost, group.hasUnknownOutputCost)
+                ))
+                append('\n').append(getString(
+                    R.string.cost_total_value,
+                    UsageValueFormatter.cost(group.totalCost, group.hasUnknownCost)
+                ))
+                append('\n').append(
+                    if (group.hasVariablePricing) {
+                        getString(R.string.cost_price_variable_line)
+                    } else {
+                        getString(
+                            R.string.cost_price_values_line,
+                            UsageValueFormatter.pricePerMillion(group.inputPricePerToken),
+                            UsageValueFormatter.pricePerMillion(group.outputPricePerToken)
+                        )
+                    }
+                )
+            }
             container.addView(section)
         }
     }

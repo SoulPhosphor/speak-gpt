@@ -105,6 +105,30 @@ class ReportedProviderParserTest {
         assertEquals("actual/model", inspector.finishNormally().model)
     }
 
+    @Test fun capturesProviderReportedChargedCostWithoutInventingSplit() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "data: {\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20," +
+                "\"total_tokens\":120,\"cost\":0.00123}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(0.00123, usage.totalCost!!, 0.000000001)
+        assertNull(usage.inputCost)
+        assertNull(usage.outputCost)
+    }
+
+    @Test fun capturesExplicitProviderCostComponentsWhenReported() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"cost\":0.003,\"cost_details\":" +
+                "{\"prompt_cost\":0.001,\"completion_cost\":0.002}}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(0.001, usage.inputCost!!, 0.000000001)
+        assertEquals(0.002, usage.outputCost!!, 0.000000001)
+        assertEquals(0.003, usage.totalCost!!, 0.000000001)
+    }
+
     @Test fun reportsOnlyFirstProviderPlusTerminalEnvelope() = runBlocking {
         val channel = ByteChannel(autoFlush = true)
         channel.writeStringUtf8("data: {\"provider\":\"First\",\"choices\":[]}\n")
