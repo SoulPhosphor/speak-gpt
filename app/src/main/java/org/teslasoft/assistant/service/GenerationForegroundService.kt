@@ -30,6 +30,13 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.ui.activities.ChatActivity
@@ -129,7 +136,12 @@ class GenerationForegroundService : Service() {
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
-    private var wifiLock: WifiManager.WifiLock? = null
+    @Volatile private var wifiManager: WifiManager? = null
+    @Volatile private var wifiLock: WifiManager.WifiLock? = null
+    private val wifiLockGuard = Any()
+    private val lockScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var wifiLockJob: Job? = null
+    @Volatile private var serviceDestroyed = false
     @Volatile private var serviceStartedAtMs: Long = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -194,15 +206,46 @@ class GenerationForegroundService : Service() {
                 recordKeepAliveFailure("CPU wake-lock acquisition failed", t)
             }
         }
-        if (wifiLock?.isHeld != true) {
+        acquireWifiLockAsync()
+    }
+
+    /**
+     * WifiManager construction can block on Android system services. Service lifecycle
+     * callbacks run on the main thread, so resolve it once on IO and cache it here.
+     */
+    @Suppress("DEPRECATION")
+    private fun acquireWifiLockAsync() {
+        if (serviceDestroyed || wifiLock?.isHeld == true || wifiLockJob?.isActive == true) return
+        wifiLockJob = lockScope.launch {
+            var acquiredLock: WifiManager.WifiLock? = null
             try {
-                val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-                wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, WAKE_LOCK_TAG).apply {
+                val wm = wifiManager ?: (
+                    applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                ).also { wifiManager = it }
+                if (!isActive || serviceDestroyed) return@launch
+
+                acquiredLock = wm.createWifiLock(
+                    WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+                    WAKE_LOCK_TAG
+                ).apply {
                     setReferenceCounted(false)
                     acquire()
                 }
+
+                synchronized(wifiLockGuard) {
+                    if (isActive && !serviceDestroyed) {
+                        wifiLock = acquiredLock
+                        acquiredLock = null
+                    }
+                }
             } catch (t: Throwable) {
                 recordKeepAliveFailure("Wi-Fi lock acquisition failed", t)
+            } finally {
+                acquiredLock?.let { lock ->
+                    try {
+                        if (lock.isHeld) lock.release()
+                    } catch (_: Exception) { /* service already shutting down */ }
+                }
             }
         }
     }
@@ -233,10 +276,12 @@ class GenerationForegroundService : Service() {
             if (wakeLock?.isHeld == true) wakeLock?.release()
         } catch (_: Exception) { /* ignore */ }
         wakeLock = null
+        val heldWifiLock = synchronized(wifiLockGuard) {
+            wifiLock.also { wifiLock = null }
+        }
         try {
-            if (wifiLock?.isHeld == true) wifiLock?.release()
+            if (heldWifiLock?.isHeld == true) heldWifiLock.release()
         } catch (_: Exception) { /* ignore */ }
-        wifiLock = null
     }
 
     private fun createChannelIfNeeded() {
@@ -303,6 +348,8 @@ class GenerationForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        serviceDestroyed = true
+        lockScope.cancel()
         releaseLocks()
         if (activeService === this) activeService = null
         serviceStartedAtMs = 0L
