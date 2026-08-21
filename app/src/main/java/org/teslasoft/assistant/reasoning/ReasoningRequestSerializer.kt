@@ -18,6 +18,7 @@ package org.teslasoft.assistant.reasoning
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import org.teslasoft.assistant.util.OutboundRequestDiagnostics
 
 /**
  * Translates the resolved reasoning settings for a turn into provider request
@@ -99,6 +100,12 @@ object ReasoningRequestSerializer {
      * Existing keys of the same name are overwritten (set, not appended), so a
      * request that passes through more than once (tool continuation, retry)
      * carries exactly one reasoning instruction.
+     *
+     * The existing send-side hook is also the last point where the fully
+     * serialized request body is available before dispatch. The final body is
+     * therefore passed through [OutboundRequestDiagnostics], which records only
+     * top-level field names and strips a semantically empty `logit_bias` object.
+     * This does not change reasoning capability or setting resolution.
      */
     fun augmentBody(
         body: String,
@@ -106,15 +113,20 @@ object ReasoningRequestSerializer {
         isOpenRouter: Boolean,
         reasoningCapable: Boolean
     ): String {
-        val fields = requestFields(resolved, isOpenRouter, reasoningCapable) ?: return body
-        return try {
-            val root = JsonParser.parseString(body).asJsonObject
-            for ((key, value) in fields.entrySet()) {
-                root.add(key, value)
-            }
-            root.toString()
-        } catch (_: Exception) {
+        val fields = requestFields(resolved, isOpenRouter, reasoningCapable)
+        val augmented = if (fields == null) {
             body
+        } else {
+            try {
+                val root = JsonParser.parseString(body).asJsonObject
+                for ((key, value) in fields.entrySet()) {
+                    root.add(key, value)
+                }
+                root.toString()
+            } catch (_: Exception) {
+                body
+            }
         }
+        return OutboundRequestDiagnostics.sanitizeAndCaptureSerializedChatBody(augmented)
     }
 }
