@@ -8397,10 +8397,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (catalog != null && !catalog.model.equals(snapshot.model, ignoreCase = true)) {
             catalog = kotlinx.coroutines.withTimeoutOrNull(2000L) {
                 TokenPricingCatalogClient.load(apiEndpointObject, snapshot.model)
-            } ?: catalog
+            }
         }
         val pricing = catalog?.pricingFor(snapshot.provider)
-            ?: org.teslasoft.assistant.usage.LegacyTokenPricing.forModel(snapshot.model)
             ?: TokenPricingSnapshot()
         return TokenUsageAccounting.createRecord(
             model = snapshot.model,

@@ -1,5 +1,6 @@
 package org.teslasoft.assistant.usage
 
+import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -221,6 +222,11 @@ class TokenUsageAccountingTest {
         assertEquals("\$0.00000", UsageValueFormatter.cost(group.totalCost, group.hasUnknownCost))
     }
 
+    @Test fun tinyKnownNonzeroCostNeverLooksLikeAFreeRequest() {
+        assertEquals("<\$0.00001", UsageValueFormatter.cost(0.000001, false))
+        assertEquals("\$0.00000", UsageValueFormatter.cost(0.0, false))
+    }
+
     @Test fun multiPricingConversationWithIncompleteUsageReportsUnknownComponents() {
         val complete = record("glm-5", "DeepInfra", 10, 2)
         val incomplete = TokenUsageAccounting.createRecord(
@@ -290,6 +296,82 @@ class TokenUsageAccountingTest {
         assertEquals(5, summary.totalOutputTokens)
     }
 
+    @Test fun successfulRegenerationsCountEveryCompletedVariantExactlyOnce() {
+        val first = record("glm-5", "DeepInfra", 10, 2)
+        val second = record("glm-5", "DeepInfra", 20, 3)
+        val message = regeneratedMessage(
+            variants = listOf(completedVariant("first", first), completedVariant("second", second)),
+            canonical = second
+        )
+
+        val summary = TokenUsageAccounting.summarizeMessages(listOf(message)) {
+            throw AssertionError("durable regenerated variants must not invoke legacy estimation")
+        }
+
+        assertEquals(2, summary.groups.single().recordCount)
+        assertEquals(30, summary.totalInputTokens)
+        assertEquals(5, summary.totalOutputTokens)
+    }
+
+    @Test fun promotingAnotherResponseVersionDoesNotChangeHistoricalAccounting() {
+        val first = record("glm-5", "DeepInfra", 10, 2)
+        val second = record("kimi-k2.5", "Novita", 20, 3)
+        val variants = listOf(completedVariant("first", first), completedVariant("second", second))
+
+        val before = TokenUsageAccounting.summarizeMessages(
+            listOf(regeneratedMessage(variants, canonical = second))
+        ) { throw AssertionError("variant records are already durable") }
+        val after = TokenUsageAccounting.summarizeMessages(
+            listOf(regeneratedMessage(variants, canonical = first))
+        ) { throw AssertionError("variant records are already durable") }
+
+        assertEquals(TokenUsageAccounting.encodeSummary(before), TokenUsageAccounting.encodeSummary(after))
+        assertEquals(2, before.groups.size)
+        assertEquals(30, before.totalInputTokens)
+        assertEquals(5, before.totalOutputTokens)
+    }
+
+    @Test fun failedRegenerationKeepsUsageFromEarlierCompletedVariant() {
+        val completed = record("glm-5", "DeepInfra", 10, 2)
+        val variants = listOf(
+            completedVariant("finished", completed),
+            hashMapOf("message" to "partial retry", "state" to "failed")
+        )
+        val failedTopLevel = hashMapOf<String, Any>(
+            "isBot" to true,
+            "message" to "partial retry",
+            "state" to "failed",
+            "variants" to Gson().toJson(variants)
+        )
+
+        val summary = TokenUsageAccounting.summarizeMessages(listOf(failedTopLevel)) {
+            throw AssertionError("failed retry must not erase or re-estimate completed variant usage")
+        }
+
+        assertEquals(1, summary.groups.single().recordCount)
+        assertEquals(10, summary.totalInputTokens)
+        assertEquals(2, summary.totalOutputTokens)
+    }
+
+    @Test fun mixedLegacyAndDurableVariantsDoNotPresentPartialUsageAsComplete() {
+        val completed = record("glm-5", "DeepInfra", 10, 2)
+        val variants = listOf(
+            hashMapOf("message" to "older completed response", "state" to "done"),
+            completedVariant("new completed response", completed)
+        )
+        val message = regeneratedMessage(variants, canonical = completed)
+
+        val summary = TokenUsageAccounting.summarizeMessages(listOf(message)) {
+            throw AssertionError("mixed variants are represented by durable and unknown records")
+        }
+
+        assertEquals(10, summary.totalInputTokens)
+        assertEquals(2, summary.totalOutputTokens)
+        assertTrue(summary.hasUnknownInputTokens)
+        assertTrue(summary.hasUnknownOutputTokens)
+        assertTrue(summary.hasUnknownCost)
+    }
+
     @Test fun historicalPricingIsSummedFromRecordsNotAReplacementCurrentPrice() {
         val old = TokenUsageAccounting.createRecord(
             "glm-5", "DeepInfra", null, TokenCounts(100, 10, 110),
@@ -347,4 +429,26 @@ class TokenUsageAccountingTest {
             model, provider, null, TokenCounts(input, output, input + output),
             TokenCountSource.PROVIDER_REPORTED, pricing
         )
+
+    private fun completedVariant(
+        message: String,
+        record: TurnUsageRecord
+    ): HashMap<String, String> = hashMapOf(
+        "message" to message,
+        "state" to "done",
+        TokenUsageAccounting.KEY_USAGE_RECORDS to
+            TokenUsageAccounting.encodeRecords(listOf(record))
+    )
+
+    private fun regeneratedMessage(
+        variants: List<HashMap<String, String>>,
+        canonical: TurnUsageRecord
+    ): HashMap<String, Any> = hashMapOf(
+        "isBot" to true,
+        "message" to "canonical",
+        "state" to "done",
+        "variants" to Gson().toJson(variants),
+        TokenUsageAccounting.KEY_USAGE_RECORDS to
+            TokenUsageAccounting.encodeRecords(listOf(canonical))
+    )
 }

@@ -147,12 +147,15 @@ data class ConversationUsageSummary(
 
 object TokenUsageAccounting {
     const val KEY_USAGE_RECORDS = "tokenUsageRecords"
+    private const val KEY_VARIANTS = "variants"
 
     const val PROVIDER_NOT_REPORTED = "Not Reported"
     const val MODEL_NOT_REPORTED = "Not Reported"
 
     private val gson = Gson()
     private val recordListType = object : TypeToken<ArrayList<TurnUsageRecord>>() {}.type
+    private val variantListType =
+        object : TypeToken<ArrayList<HashMap<String, String>>>() {}.type
 
     fun encodeRecords(records: List<TurnUsageRecord>): String = gson.toJson(records)
 
@@ -160,6 +163,52 @@ object TokenUsageAccounting {
         if (value.isNullOrBlank()) return emptyList()
         return try {
             gson.fromJson<ArrayList<TurnUsageRecord>>(value, recordListType) ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Regenerated replies retain every completed response as a variant while
+     * the top-level message mirrors only the canonical one. The variant list is
+     * therefore the accounting authority whenever it contains durable records;
+     * reading the top-level record as well would double-count the canonical
+     * variant, while reading only the top level would discard every alternate. */
+    private fun decodeVariantRecords(value: String?): List<TurnUsageRecord> {
+        if (value.isNullOrBlank()) return emptyList()
+        return try {
+            val variants = gson.fromJson<ArrayList<HashMap<String, String>>>(
+                value, variantListType
+            ) ?: return emptyList()
+            val storedByVariant = variants.map { variant ->
+                variant to decodeRecords(variant[KEY_USAGE_RECORDS])
+            }
+            // A wholly legacy variant list stays on the existing compatibility
+            // path. Once any variant has durable accounting, completed legacy
+            // siblings must be represented as unknown so the known subset is
+            // never presented as the complete historical total.
+            if (storedByVariant.none { (_, records) -> records.isNotEmpty() }) {
+                return emptyList()
+            }
+            storedByVariant.flatMap { (variant, records) ->
+                if (records.isNotEmpty()) {
+                    records
+                } else if (MessageCompletionState.isComplete(
+                        variant[MessageCompletionState.KEY_STATE]
+                    )
+                ) {
+                    listOf(
+                        TurnUsageRecord(
+                            model = variant["responseModel"]?.trim()?.ifBlank { null }
+                                ?: MODEL_NOT_REPORTED,
+                            provider = variant["responseProvider"]?.trim()?.ifBlank { null }
+                                ?: PROVIDER_NOT_REPORTED,
+                            source = TokenCountSource.ESTIMATED_CL100K.storedValue
+                        )
+                    )
+                } else {
+                    emptyList()
+                }
+            }
         } catch (_: Exception) {
             emptyList()
         }
@@ -280,7 +329,12 @@ object TokenUsageAccounting {
     ): ConversationUsageSummary {
         val records = mutableListOf<TurnUsageRecord>()
         messages.forEachIndexed { index, message ->
-            val stored = decodeRecords(message[KEY_USAGE_RECORDS]?.toString())
+            val variantRecords = decodeVariantRecords(message[KEY_VARIANTS]?.toString())
+            val stored = if (variantRecords.isNotEmpty()) {
+                variantRecords
+            } else {
+                decodeRecords(message[KEY_USAGE_RECORDS]?.toString())
+            }
             if (stored.isNotEmpty()) {
                 records.addAll(stored)
                 return@forEachIndexed
@@ -326,12 +380,17 @@ object UsageValueFormatter {
     fun tokens(knownSum: Int, hasUnknownPart: Boolean): String =
         if (hasUnknownPart) NOT_REPORTED else knownSum.toString()
 
-    fun cost(knownSum: Double, hasUnknownPart: Boolean): String =
-        if (hasUnknownPart) NOT_REPORTED else "\$" + String.format(Locale.US, "%.5f", knownSum)
+    fun cost(knownSum: Double, hasUnknownPart: Boolean): String = when {
+        hasUnknownPart -> NOT_REPORTED
+        knownSum > 0.0 && knownSum < MIN_DISPLAYED_COST -> "<\$0.00001"
+        else -> "\$" + String.format(Locale.US, "%.5f", knownSum)
+    }
 
     fun pricePerMillion(pricePerToken: Double?): String = pricePerToken?.let {
         "\$" + String.format(Locale.US, "%.2f", it * 1_000_000)
     } ?: NOT_REPORTED
+
+    private const val MIN_DISPLAYED_COST = 0.00001
 }
 
 enum class UsageCardMode { EMPTY, SINGLE_PRICING, MULTI_PRICING }

@@ -48,7 +48,9 @@ object TokenPricingCatalogClient {
     suspend fun load(endpoint: ApiEndpointObject?, model: String): TokenPricingCatalog =
         withContext(Dispatchers.IO) {
             if (endpoint == null || model.isBlank()) {
-                return@withContext TokenPricingCatalog(model, modelPricing = LegacyTokenPricing.forModel(model))
+                return@withContext TokenPricingCatalog(
+                    model, modelPricing = legacyPricingFor(endpoint, model)
+                )
             }
             val remote = try {
                 if (endpoint.isOpenRouterRouting()) loadOpenRouter(endpoint, model)
@@ -56,8 +58,22 @@ object TokenPricingCatalogClient {
             } catch (_: Exception) {
                 null
             }
-            remote ?: TokenPricingCatalog(model, modelPricing = LegacyTokenPricing.forModel(model))
+            remote ?: TokenPricingCatalog(
+                model, modelPricing = legacyPricingFor(endpoint, model)
+            )
         }
+
+    /** Static compatibility prices are authoritative only for the official
+     * OpenAI API host. A matching model name on OpenRouter, a proxy, or another
+     * serving provider is not evidence that OpenAI's price applies. */
+    internal fun legacyPricingFor(
+        endpoint: ApiEndpointObject?,
+        model: String
+    ): TokenPricingSnapshot? {
+        val host = endpoint?.host?.toHttpUrlOrNull()?.host ?: return null
+        if (!host.equals("api.openai.com", ignoreCase = true)) return null
+        return LegacyTokenPricing.forModel(model)
+    }
 
     private fun loadOpenRouter(endpoint: ApiEndpointObject, model: String): TokenPricingCatalog? {
         val base = endpoint.host.trimEnd('/')
@@ -107,8 +123,9 @@ object TokenPricingCatalogClient {
     }
 }
 
-/** Compatibility fallback used when a direct endpoint does not publish pricing.
- * Values are per token, matching the old Quick Settings calculation. */
+/** Compatibility fallback used only for the official OpenAI API when it does
+ * not publish pricing. Values are per token, matching the old Quick Settings
+ * calculation. */
 object LegacyTokenPricing {
     fun forModel(model: String): TokenPricingSnapshot? {
         val normalized = model.lowercase()
