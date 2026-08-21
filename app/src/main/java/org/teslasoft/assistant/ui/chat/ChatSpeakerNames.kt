@@ -25,7 +25,7 @@ object ChatSpeakerNames {
 
     fun userName(
         context: Context,
-        message: Map<String, *> = emptyMap(),
+        message: Map<String, *> = emptyMap<String, Any?>(),
         configuredName: String? = null
     ): String =
         message[USER_NAME_KEY]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
@@ -34,7 +34,7 @@ object ChatSpeakerNames {
 
     fun companionName(
         context: Context,
-        message: Map<String, *> = emptyMap(),
+        message: Map<String, *> = emptyMap<String, Any?>(),
         currentName: String? = null
     ): String =
         message[COMPANION_NAME_KEY]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
