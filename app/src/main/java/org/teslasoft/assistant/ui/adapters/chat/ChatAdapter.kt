@@ -1330,6 +1330,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 ReasoningIndicator.MEDIUM -> { icon = R.drawable.ic_network_wifi_2_bar; desc = R.string.reasoning_indicator_medium_desc }
                 ReasoningIndicator.HIGH -> { icon = R.drawable.ic_network_wifi_3_bar; desc = R.string.reasoning_indicator_high_desc }
                 ReasoningIndicator.XHIGH -> { icon = R.drawable.ic_signal_wifi_4_bar; desc = R.string.reasoning_indicator_xhigh_desc }
+                // Max shares the full-strength glyph with Extra High for now; the
+                // Wi-Fi metaphor has no state above 4 bars, and the two never
+                // appear together in one model's ladder. A distinct Max icon is
+                // an open owner decision. Accessibility text still says "Max".
+                ReasoningIndicator.MAX -> { icon = R.drawable.ic_signal_wifi_4_bar; desc = R.string.reasoning_indicator_max_desc }
                 ReasoningIndicator.AUTOMATIC -> { icon = R.drawable.ic_network_check; desc = R.string.reasoning_indicator_automatic_desc }
                 ReasoningIndicator.FIXED -> { icon = R.drawable.ic_network_wifi_2_locked; desc = R.string.reasoning_indicator_fixed_desc }
             }

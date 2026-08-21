@@ -41,6 +41,7 @@ class ReasoningEffortTest {
         assertEquals("medium", ReasoningEffort.MEDIUM.serialized)
         assertEquals("high", ReasoningEffort.HIGH.serialized)
         assertEquals("xhigh", ReasoningEffort.XHIGH.serialized)
+        assertEquals("max", ReasoningEffort.MAX.serialized)
     }
 
     @Test
@@ -66,5 +67,6 @@ class ReasoningEffortTest {
         assertTrue(ReasoningEffort.HIGH.isExplicitLevel)
         assertTrue(ReasoningEffort.MINIMAL.isExplicitLevel)
         assertTrue(ReasoningEffort.XHIGH.isExplicitLevel)
+        assertTrue(ReasoningEffort.MAX.isExplicitLevel)
     }
 }

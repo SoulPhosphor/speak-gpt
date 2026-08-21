@@ -51,6 +51,7 @@ object ReasoningCapabilityStore {
     private const val K_VISIBLE = "vis"
     private const val K_BUDGET = "tb"
     private const val K_SOURCE = "src"
+    private const val K_AUTHORITATIVE = "auth"
 
     /**
      * Capability recorded for [modelId], or [ReasoningCapability.UNKNOWN] when
@@ -97,6 +98,7 @@ object ReasoningCapabilityStore {
         obj.put(K_VISIBLE, cap.canReturnVisibleReasoning)
         obj.put(K_BUDGET, cap.tokenBudgetSupported)
         obj.put(K_SOURCE, cap.source.name)
+        obj.put(K_AUTHORITATIVE, cap.effortsAuthoritative)
         return obj
     }
 
@@ -121,7 +123,8 @@ object ReasoningCapabilityStore {
             canDisableReasoning = entry.optBoolean(K_CAN_DISABLE, false),
             canReturnVisibleReasoning = entry.optBoolean(K_VISIBLE, false),
             tokenBudgetSupported = entry.optBoolean(K_BUDGET, false),
-            source = source
+            source = source,
+            effortsAuthoritative = entry.optBoolean(K_AUTHORITATIVE, false)
         )
     }
 

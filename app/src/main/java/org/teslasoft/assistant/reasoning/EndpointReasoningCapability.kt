@@ -84,6 +84,11 @@ object EndpointReasoningCapability {
         liveModelEntry: JsonObject? = null
     ): ReasoningCapability {
         val base = resolve(reasoningCapabilityByModel, modelId, liveModelEntry)
+        // An authoritative published ladder is exact: never widen it with
+        // optimistic extremes and never subtract a level it names (fresh
+        // metadata overrides learned data). Learning only fills a gap when the
+        // provider did not publish supported_efforts.
+        if (base.effortsAuthoritative) return base
         if (base.source != CapabilitySource.PROVIDER_METADATA || !base.effortConfigurable) return base
         val rejected = RejectedReasoningLevelStore.get(rejectedLevelsByModel, modelId.orEmpty())
         val ordered = listOf(

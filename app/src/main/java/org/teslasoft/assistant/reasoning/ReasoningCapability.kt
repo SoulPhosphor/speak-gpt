@@ -68,7 +68,13 @@ data class ReasoningCapability(
 
     /** Where this capability came from, so diagnostics can explain confidence
      *  and §7.8 can name the capability source in a mismatch report. */
-    val source: CapabilitySource = CapabilitySource.NONE
+    val source: CapabilitySource = CapabilitySource.NONE,
+
+    /** True when [supportedEfforts] is the provider's own published effort list
+     *  (OpenRouter's `reasoning.supported_efforts`) rather than an assumed or
+     *  learned ladder. An authoritative list is exact — dynamic learning must
+     *  not add optimistic extremes to it or subtract a level it names. */
+    val effortsAuthoritative: Boolean = false
 ) {
     /**
      * True when SpeakGPT knows this path reasons AND at least one reasoning

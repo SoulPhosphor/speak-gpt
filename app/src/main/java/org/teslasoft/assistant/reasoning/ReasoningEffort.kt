@@ -56,10 +56,15 @@ enum class ReasoningEffort(val serialized: String) {
     MEDIUM("medium"),
     HIGH("high"),
 
-    /** Maximum reasoning, accepted only by some newer models (e.g. Grok, the
-     *  GPT-5.6 line). Not part of the universal ladder; a path is offered it
-     *  only once it is learned to be supported (dynamic minimal/xhigh learning). */
-    XHIGH("xhigh");
+    /** Extra-high reasoning, above high. Offered only where authoritative
+     *  provider metadata lists it (or, on a metadata path without a published
+     *  ladder, learned). Never guessed onto a model whose ladder is known. */
+    XHIGH("xhigh"),
+
+    /** The highest reasoning tier some current models expose, above extra high
+     *  (OpenRouter reports it in a model's supported_efforts, e.g. DeepSeek V4,
+     *  GLM). Offered only where authoritative metadata lists it. */
+    MAX("max");
 
     /**
      * True for a concrete effort the app actually sends as a level
