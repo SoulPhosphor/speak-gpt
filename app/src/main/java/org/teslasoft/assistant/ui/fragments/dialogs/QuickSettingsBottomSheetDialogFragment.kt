@@ -92,6 +92,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     private var btnSelectModel: ConstraintLayout? = null
+    private var btnSelectProvider: ConstraintLayout? = null
+    private var textProvider: TextView? = null
     private var providerModeTile: ConstraintLayout? = null
     private var dropdownProviderMode: TextView? = null
     private var btnSelectSystemPrompt: ConstraintLayout? = null
@@ -843,6 +845,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val endpoint = if (endpointId.isBlank()) null
             else apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId)
         val isOpenRouter = endpoint != null && endpoint.isOpenRouterRouting()
+        btnSelectProvider?.visibility = if (isOpenRouter) View.VISIBLE else View.GONE
         providerModeTile?.visibility = if (isOpenRouter) View.VISIBLE else View.GONE
         if (isOpenRouter) {
             refreshProviderModeDisplay()
@@ -857,6 +860,20 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val mode = favoriteModelsPreferences?.getRoutingType(model, endpointId)
             ?: FavoriteModelObject.ROUTING_AUTOMATIC
         dropdownProviderMode?.text = providerModeLabel(mode)
+        refreshProviderDisplay()
+    }
+
+    /** Show the active model's saved provider identity. The favorite store
+     * keeps provider slugs, so this row uses that exact persisted identity and
+     * does not invent a display name or make a second provider-discovery call. */
+    private fun refreshProviderDisplay() {
+        val endpointId = preferences?.getApiEndpointId() ?: return
+        val model = preferences?.getModel() ?: return
+        val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
+        textProvider?.text = QuickSettingsProviderDisplay.label(
+            favorite,
+            getString(R.string.choose_provider_routing_automatic)
+        )
     }
 
     private fun onProviderModePicked(mode: String) {
@@ -1012,6 +1029,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         systemPromptsPreferences = SystemPromptsPreferences.getSystemPromptsPreferences(requireContext())
 
         btnSelectModel = view.findViewById(R.id.btn_select_model)
+        btnSelectProvider = view.findViewById(R.id.btn_select_provider)
+        textProvider = view.findViewById(R.id.text_provider)
         providerModeTile = view.findViewById(R.id.provider_mode_tile)
         dropdownProviderMode = view.findViewById(R.id.dropdown_provider_mode)
         btnSelectSystemPrompt = view.findViewById(R.id.btn_select_system_prompt)
@@ -1098,6 +1117,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
         usageCost?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectModel?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
+        btnSelectProvider?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         providerModeTile?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectLogitBias?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
         btnSelectApiEndpoint?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
@@ -1173,6 +1193,21 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             val dialog = AdvancedModelSelectorDialogFragment.newInstance(model!!, chatId)
             dialog.setModelSelectedListener(modelSelectedListener)
             dialog.show(parentFragmentManager, "AdvancedModelSelectorDialogFragment")
+        }
+
+        btnSelectProvider?.setOnClickListener {
+            val endpointId = preferences?.getApiEndpointId() ?: return@setOnClickListener
+            val selectedModel = preferences?.getModel() ?: return@setOnClickListener
+            if (selectedModel.isBlank()) return@setOnClickListener
+            val endpointPrefs = apiEndpointPreferences ?: return@setOnClickListener
+            val favoritePrefs = favoriteModelsPreferences ?: return@setOnClickListener
+            FavoriteRoutingActions.buildRoutingIntent(
+                requireContext(),
+                endpointPrefs,
+                favoritePrefs,
+                selectedModel,
+                endpointId
+            )?.let { chooseProviderLauncher.launch(it) }
         }
 
         setupProviderModeDropdown()

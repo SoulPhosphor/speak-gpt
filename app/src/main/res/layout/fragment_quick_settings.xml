@@ -1023,6 +1023,42 @@
                         app:layout_constraintTop_toTopOf="parent" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
+                <!-- Provider: the active model's saved provider identity. This
+                     uses the selector-row family from the AI Model row, with
+                     the existing Provider Settings background. It is shown
+                     only for endpoints that support Choose Provider. -->
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/btn_select_provider"
+                    style="@style/Widget.App.Row.Selector"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginEnd="24dp"
+                    android:background="@drawable/btn_accent_center"
+                    android:backgroundTint="?attr/colorSecondaryContainer"
+                    android:visibility="gone"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/btn_select_model">
+
+                    <TextView
+                        android:id="@+id/text_provider_label"
+                        style="@style/Widget.App.Row.Selector.Label"
+                        android:text="@string/provider_col_provider"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <TextView
+                        android:id="@+id/text_provider"
+                        style="@style/Widget.App.Row.Selector.Value"
+                        android:text="@string/choose_provider_routing_automatic"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toEndOf="@+id/text_provider_label"
+                        app:layout_constraintTop_toTopOf="parent" />
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
                 <!-- Provider Mode: full-width, square-cornered tile shown ONLY
                      for OpenRouter endpoints (host-based detection in the
                      fragment, never the profile name). Title + subtext column on
@@ -1042,7 +1078,8 @@
                     android:visibility="gone"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/btn_select_model">
+                    app:layout_constraintTop_toBottomOf="@+id/btn_select_provider"
+                    app:layout_goneMarginTop="2dp">
 
                     <LinearLayout
                         android:id="@+id/provider_mode_text_col"
