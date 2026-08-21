@@ -42,7 +42,7 @@ import org.teslasoft.assistant.util.OutboundRequestDiagnostics
  * Nothing is emitted for [ReasoningEffort.AUTO] with reasoning returned (the
  * provider/model default), and nothing at all is emitted for a path not known
  * to reason — a reasoning parameter is never sent to a model that may reject
- * it. Every function is pure and fail-safe: a malformed body is returned
+ * it. Request transformation remains fail-safe: a malformed body is returned
  * unchanged rather than risking a broken request.
  */
 object ReasoningRequestSerializer {
