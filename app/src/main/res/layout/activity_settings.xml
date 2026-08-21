@@ -375,7 +375,7 @@
 
                     <TextView
                         style="@style/Widget.App.Row.Title"
-                        android:text="@string/chat_settings_title" />
+                        android:text="@string/chat_settings_tile_title" />
 
                     <TextView
                         style="@style/Widget.App.Row.Subtitle"
@@ -385,7 +385,7 @@
 
                 <ImageView
                     style="@style/Widget.App.Row.Chevron"
-                    android:contentDescription="@string/chat_settings_title" />
+                    android:contentDescription="@string/chat_settings_tile_title" />
             </LinearLayout>
 
             <LinearLayout

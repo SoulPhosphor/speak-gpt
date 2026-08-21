@@ -3195,7 +3195,7 @@
     <!-- Chat Settings destination (owner ruling, Aug 2026): a container in
          Settings, directly beneath Appearance, holding optional chat controls.
          More settings will be added here later. -->
-    <string name="chat_settings_title">Chat Settings</string>
+    <string name="chat_settings_tile_title">Chat Settings</string>
     <string name="chat_settings_subtitle">Optional chat settings</string>
     <!-- Toggle: show or hide the per-message reasoning-effort glyph. No
          subtitle, by owner ruling. -->

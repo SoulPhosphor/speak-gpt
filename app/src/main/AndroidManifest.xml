@@ -313,7 +313,7 @@
         <activity
             android:name=".ui.activities.ChatSettingsActivity"
             android:exported="false"
-            android:label="@string/chat_settings_title"
+            android:label="@string/chat_settings_tile_title"
             android:launchMode="singleTask">
         </activity>
 
