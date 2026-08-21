@@ -641,6 +641,63 @@
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@+id/textView70" />
 
+                <!-- Streaming is a per-chat option. It deliberately has no
+                     tile background: use the shared section and plain
+                     CheckOption styles even though the rest of Quick Settings
+                     is only partially converted. -->
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:id="@+id/section_streaming"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginEnd="24dp"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/linearLayout26">
+
+                    <TextView
+                        android:id="@+id/label_streaming"
+                        style="@style/Widget.App.Section.Title"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="16dp"
+                        android:text="@string/streaming_title"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+                    <TextView
+                        android:id="@+id/hint_streaming"
+                        style="@style/Widget.App.Section.Hint"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="16dp"
+                        android:text="@string/streaming_description"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@+id/label_streaming" />
+
+                    <LinearLayout
+                        android:id="@+id/row_streaming"
+                        style="@style/Widget.App.CheckOption.Row"
+                        android:layout_width="0dp"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="16dp"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@+id/hint_streaming">
+
+                        <com.google.android.material.checkbox.MaterialCheckBox
+                            android:id="@+id/check_streaming"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:clickable="false" />
+
+                        <TextView
+                            style="@style/Widget.App.CheckOption.Label"
+                            android:text="@string/streaming_title" />
+                    </LinearLayout>
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/bg_temperature"
                     android:layout_width="0dp"
@@ -652,7 +709,7 @@
                     android:backgroundTint="?attr/colorSecondaryContainer"
                     app:layout_constraintEnd_toEndOf="parent"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/linearLayout26">
+                    app:layout_constraintTop_toBottomOf="@+id/section_streaming">
 
                     <TextView
                         android:id="@+id/textView68"

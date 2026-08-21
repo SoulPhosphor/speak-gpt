@@ -36,6 +36,7 @@ import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
@@ -183,6 +184,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var sliderTopP: Slider? = null
     private var sliderFrequencyPenalty: Slider? = null
     private var sliderPresencePenalty: Slider? = null
+    private var rowStreaming: View? = null
+    private var checkStreaming: MaterialCheckBox? = null
 
     private var position: Int = -1
     /** Stable id of the profile being edited ("" for a new profile). */
@@ -190,6 +193,9 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var oldLabel: String = ""
     private var selectedAuthType: String = ApiEndpointObject.AUTH_BEARER
     private var selectedModel: String = ApiEndpointObject.DEFAULT_MODEL
+    /** Pending global/default value. It is committed with the editor's Save
+     * action, just like the other settings on this screen. */
+    private var streamingDefault: Boolean = true
 
     /** Stored provider value, preserved through the editor even though the
      *  Provider box was removed, so saving never wipes a value the profile
@@ -286,6 +292,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         sliderTopP = findViewById(R.id.slider_top_p)
         sliderFrequencyPenalty = findViewById(R.id.slider_frequency_penalty)
         sliderPresencePenalty = findViewById(R.id.slider_presence_penalty)
+        rowStreaming = findViewById(R.id.row_streaming)
+        checkStreaming = findViewById(R.id.check_streaming)
         imageCapabilityHeader = findViewById(R.id.image_capability_header)
         imageCapabilityChevron = findViewById(R.id.image_capability_chevron)
         imageCapabilityBody = findViewById(R.id.image_capability_body)
@@ -381,6 +389,9 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         sliderPresencePenalty?.value = (endpoint.presencePenalty * 10f).coerceIn(-20f, 20f)
         sliderPresencePenalty?.setLabelFormatter { "${it / 10.0}" }
 
+        streamingDefault = preferences?.getStreaming() ?: true
+        checkStreaming?.isChecked = streamingDefault
+
         fieldMaxTokens?.setText(endpoint.maxTokens.toString())
         fieldContextWindow?.setText(
             endpoint.contextWindowTokens
@@ -431,6 +442,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldAuthType?.setOnClickListener { showAuthTypeChooser() }
         fieldModel?.setOnClickListener { showModelChooser() }
         rowChooseProvider?.setOnClickListener { openChooseProvider() }
+        rowStreaming?.setOnClickListener {
+            streamingDefault = !streamingDefault
+            checkStreaming?.isChecked = streamingDefault
+        }
 
         initFloatingLabels()
 
@@ -752,6 +767,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         // record under the same id and the API key / favorites / per-chat
         // selection stay attached.
         val savedId = apiEndpointPreferences!!.setApiEndpoint(this, endpoint)
+        preferences?.setStreaming(streamingDefault)
 
         // Choose Provider choices (OpenRouter): applied only if the user visited
         // that screen and saved. Favoriting is no longer optional — saving on
@@ -860,6 +876,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             sliderTopP?.value.toString(),
             sliderFrequencyPenalty?.value.toString(),
             sliderPresencePenalty?.value.toString(),
+            streamingDefault.toString(),
             fieldMaxTokens?.text.toString(),
             fieldContextWindow?.text.toString(),
             fieldTimeout?.text.toString(),

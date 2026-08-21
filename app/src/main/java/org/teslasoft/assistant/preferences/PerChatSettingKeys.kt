@@ -50,6 +50,7 @@ object PerChatSettingKeys {
         "frequency_penalty",
         "presence_penalty",
         "seed",
+        "streaming",
         "api_endpoint_id",
         "logit_biases_config_id",
         "function_calling",

@@ -290,6 +290,7 @@ class AddChatDialogFragment : DialogFragment() {
             val topP = profile.topP
             val frequencyPenalty = profile.frequencyPenalty
             val presencePenalty = profile.presencePenalty
+            val streaming = preferences.getStreaming()
             val avatarType = if (requireArguments().getString("avatarType") != "") requireArguments().getString("avatarType") else preferences.getAvatarType()
             val avatarId = if (requireArguments().getString("avatarId") != "") requireArguments().getString("avatarId") else preferences.getAvatarId()
             val assistantName = if (requireArguments().getString("assistantName") != "") requireArguments().getString("assistantName") else preferences.getAssistantName()
@@ -318,6 +319,7 @@ class AddChatDialogFragment : DialogFragment() {
             newPreferences.setTopP(topP)
             newPreferences.setFrequencyPenalty(frequencyPenalty)
             newPreferences.setPresencePenalty(presencePenalty)
+            newPreferences.setStreaming(streaming)
             newPreferences.setAvatarType(avatarType!!)
             newPreferences.setAvatarId(avatarId!!)
             newPreferences.setAssistantName(assistantName!!)

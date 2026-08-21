@@ -21,7 +21,7 @@ import android.content.SharedPreferences
 import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
 
-class Preferences private constructor(private var preferences: SharedPreferences, private var gp: SharedPreferences, private var chatId: String) {
+class Preferences internal constructor(private var preferences: SharedPreferences, private var gp: SharedPreferences, private var chatId: String) {
     companion object {
         fun getPreferences(context: Context, xchatId: String) : Preferences {
             return Preferences(SecurePrefs.get(context, "settings.$xchatId"), context.getSharedPreferences("settings", Context.MODE_PRIVATE), xchatId)
@@ -927,6 +927,22 @@ class Preferences private constructor(private var preferences: SharedPreferences
      * */
     fun getTemperature() : Float {
         return getString("temperature", "0.7").toFloat()
+    }
+
+    /**
+     * Whether replies for this settings file use the streaming Chat Completions
+     * path. The empty-chat settings file is the default copied into new chats;
+     * an existing chat always reads its own stored value. Streaming has always
+     * been the app's behavior, so missing values remain enabled.
+     */
+    fun setStreaming(streaming: Boolean) {
+        // Persist even the ON value so every newly-created chat has an
+        // explicit value and can never fall back to a later global change.
+        preferences.edit { putBoolean("streaming", streaming) }
+    }
+
+    fun getStreaming(): Boolean {
+        return getBoolean("streaming", true)
     }
 
     /**

@@ -455,6 +455,8 @@
     <string name="provider_move_down_desc">Move %1$s down</string>
     <string name="sampling_label_temperature">Temperature</string>
     <string name="sampling_hint_temperature">Temperature controls model creativity. Low settings will create more conservative, predictable responses. High temperatures may be more creative. If settings are too high responses may become less coherent.</string>
+    <string name="streaming_title">Streaming</string>
+    <string name="streaming_description">Show replies as they’re generated. When off, display the full reply only after it finishes.</string>
     <string name="sampling_label_top_p">Top P</string>
     <string name="sampling_hint_top_p">Top-p controls how wide a pool of likely next words the model may choose from. A low value makes it stick to the safest, most predictable wording, which can become repetitive or dull; a high value admits more unusual choices, which can make writing lively but also more rambling, inconsistent, or strange.</string>
     <string name="sampling_label_frequency_penalty">Frequency Penalty</string>

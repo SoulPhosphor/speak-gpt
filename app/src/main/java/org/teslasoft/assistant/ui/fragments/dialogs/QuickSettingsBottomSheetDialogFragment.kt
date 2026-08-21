@@ -110,6 +110,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var bgTopP: ConstraintLayout? = null
     private var bgFrequencyPenalty: ConstraintLayout? = null
     private var bgPresencePenalty: ConstraintLayout? = null
+    private var rowStreaming: View? = null
+    private var checkStreaming: MaterialCheckBox? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
     private var apiEndpoint: ApiEndpointObject? = null
 
@@ -1056,6 +1058,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         bgTopP = view.findViewById(R.id.bg_top_p)
         bgFrequencyPenalty = view.findViewById(R.id.bg_frequency_penalty)
         bgPresencePenalty = view.findViewById(R.id.bg_presence_penalty)
+        rowStreaming = view.findViewById(R.id.row_streaming)
+        checkStreaming = view.findViewById(R.id.check_streaming)
 
         temperatureSeekbar = view.findViewById(R.id.temperature_slider)
         frequencyPenaltySeekbar = view.findViewById(R.id.frequency_penalty_slider)
@@ -1179,6 +1183,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         frequencyPenaltySeekbar?.value = preferences?.getFrequencyPenalty()!! * 10
         presencePenaltySeekbar?.value = preferences?.getPresencePenalty()!! * 10
         fieldSeed?.setText(preferences?.getSeed())
+        checkStreaming?.isChecked = preferences?.getStreaming() ?: true
+
+        rowStreaming?.setOnClickListener {
+            val checked = checkStreaming?.isChecked != true
+            checkStreaming?.isChecked = checked
+            preferences?.setStreaming(checked)
+        }
 
         val model = preferences?.getModel()
 
