@@ -24,10 +24,12 @@
     android:viewportWidth="960"
     android:viewportHeight="960"
     android:tint="?attr/appTextColor">
+    <!-- Outer wifi shape with the inner signal area cut out as a hole
+         (evenOdd), so "0 bar" renders as an empty outline — distinct from the
+         solid signal_wifi_4_bar. Both subpaths must live in ONE path element
+         for the hole to take effect. -->
     <path
         android:fillColor="@android:color/white"
-        android:pathData="M480,840L0,360Q95,263 219.5,211.5Q344,160 480,160Q616,160 740.5,211.5Q865,263 960,360L480,840Z" />
-    <path
-        android:fillColor="@android:color/white"
-        android:pathData="M480,726L844,362Q765,302 672,271Q579,240 480,240Q381,240 288,271Q195,302 116,362L480,726Z" />
+        android:fillType="evenOdd"
+        android:pathData="M480,840L0,360Q95,263 219.5,211.5Q344,160 480,160Q616,160 740.5,211.5Q865,263 960,360L480,840Z M480,726L844,362Q765,302 672,271Q579,240 480,240Q381,240 288,271Q195,302 116,362L480,726Z" />
 </vector>

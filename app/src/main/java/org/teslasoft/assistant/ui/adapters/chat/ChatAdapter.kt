@@ -1299,7 +1299,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          */
         private fun updateReasoningIndicator(chatMessage: HashMap<String, Any>, isGeneratedImage: Boolean) {
             val view = reasoningIndicator ?: return
-            val indicator = if (isGeneratedImage || chatMessage["isBot"] != true) {
+            // The glyph records what a reply was generated WITH, so it appears
+            // only once the reply actually produced output (answer text or
+            // reasoning). A request that dies before generating anything leaves
+            // no glyph, even though its placeholder was stamped at stream start.
+            // A stopped/partial reply that did produce text still shows it.
+            val generated = chatMessage["message"]?.toString()?.isNotBlank() == true ||
+                chatMessage[KEY_MESSAGE_REASONING]?.toString()?.isNotBlank() == true
+            val indicator = if (isGeneratedImage || chatMessage["isBot"] != true || !generated) {
                 null
             } else {
                 ReasoningIndicator.fromToken(chatMessage[KEY_MESSAGE_REASONING_LEVEL]?.toString())
