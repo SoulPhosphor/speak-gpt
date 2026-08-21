@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 134032)
-Total output lines: 11035
-
 /**************************************************************************
  * Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
  *
@@ -2007,7 +2004,7004 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             tts?.shutdown()
         } catch (_: Exception) { /* ignore */ }
         isTTSInitialized = false
-        tts = TextToSpeech(this, ttsLis…84032 tokens truncated…. */
+        tts = TextToSpeech(this, ttsListener)
+    }
+
+    // One-shot guard for the delivery-tuning retry so overlapping ttsPostInit
+    // calls (init listener + the language-detect reset path) can't stack
+    // multiple scheduled re-applications. Main thread only.
+    private var ttsTuningRetryPending = false
+
+    /**
+     * Applies the saved speech rate / pitch to the device TTS engine and
+     * checks whether the engine ACCEPTED them. The Google engine can reject a
+     * call made at the exact moment init completes (returns ERROR, throws
+     * nothing) — the old code ignored the result, so the whole session spoke
+     * at the engine's default rate, faster than the saved value, with no
+     * trace ("the readback suddenly talks faster on a new session", owner
+     * report July 11 2026). On rejection the SAME saved values are re-applied
+     * exactly once, shortly after init (never per utterance, never a loop);
+     * only rejection/fallback is logged — success is silent. The saved value,
+     * UI, defaults and playback behavior are untouched. The system-wide
+     * Android speech rate (Accessibility settings) multiplies the app's rate
+     * and is external — it cannot be seen or changed from here.
+     */
+    private fun applyTtsDeliveryTuning(isRetry: Boolean) {
+        val engine = tts ?: return
+        val prefs = preferences
+        if (prefs == null) {
+            // Settings not loaded yet — the engine would run at its default.
+            // The one-shot retry re-reads the saved values once loaded.
+            logVoiceEventAlways("TTS engine initialized before settings loaded — saved speech rate not applied" +
+                    if (isRetry) " (retry also ran too early; this session may use the engine's default rate)"
+                    else "; re-applying once shortly")
+            if (!isRetry) scheduleTtsTuningRetry()
+            return
+        }
+        val rate = prefs.getTtsSpeechRate()
+        val pitch = prefs.getTtsPitch()
+        val rateResult = try { engine.setSpeechRate(rate) } catch (_: Throwable) { TextToSpeech.ERROR }
+        val pitchResult = try { engine.setPitch(pitch) } catch (_: Throwable) { TextToSpeech.ERROR }
+        when (org.teslasoft.assistant.stt.TtsTuningPolicy.afterApply(rateResult, pitchResult, isRetry)) {
+            org.teslasoft.assistant.stt.TtsTuningPolicy.Next.DONE -> {
+                /* accepted — deliberately no successful-operation logging */
+            }
+            org.teslasoft.assistant.stt.TtsTuningPolicy.Next.RETRY_ONCE -> {
+                logVoiceEventAlways("TTS engine rejected the saved delivery tuning at init " +
+                        "(rate=$rate result=$rateResult, pitch=$pitch result=$pitchResult) — re-applying once")
+                scheduleTtsTuningRetry()
+            }
+            org.teslasoft.assistant.stt.TtsTuningPolicy.Next.GIVE_UP -> {
+                logVoiceEventAlways("TTS engine rejected the saved delivery tuning again on the retry " +
+                        "(rate=$rate result=$rateResult, pitch=$pitch result=$pitchResult) — " +
+                        "this session may speak at the engine's default rate")
+            }
+        }
+    }
+
+    private fun scheduleTtsTuningRetry() {
+        if (ttsTuningRetryPending) return
+        ttsTuningRetryPending = true
+        Handler(Looper.getMainLooper()).postDelayed({
+            ttsTuningRetryPending = false
+            if (!isFinishing && !isDestroyed) applyTtsDeliveryTuning(isRetry = true)
+        }, 750)
+    }
+
+    private fun ttsPostInit() {
+        // Delivery tuning (advanced voice settings). Device-TTS only; the
+        // OpenAI voice renders server-side and ignores these. Applied with
+        // accept/reject verification — see applyTtsDeliveryTuning.
+        applyTtsDeliveryTuning(isRetry = false)
+        if (!autoLangDetect) {
+            val result = tts!!.setLanguage(
+                LocaleParser.parse(
+                    preferences!!.getLanguage()
+                )
+            )
+
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.w("TTS", "Language missing or unsupported: ${preferences!!.getLanguage()}")
+            }
+
+            // tts.voices is declared non-null but the platform can return null
+            // (engine reports init success before voice metadata is ready, or
+            // doesn't support enumeration), which previously crashed the app
+            // with an NPE on the TTS init thread. Guard it and fail soft.
+            val voices: Set<Voice>? = try {
+                tts!!.voices
+            } catch (t: Throwable) {
+                Log.w("TTS", "Could not query voices", t)
+                null
+            }
+            if (voices != null) {
+                for (v: Voice in voices) {
+                    if (v.name == preferences!!.getVoice()) {
+                        tts!!.voice = v
+                    }
+                }
+            }
+        }
+    }
+
+    // Init permissions screen
+    private val permissionResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        run {
+            if (result.resultCode == RESULT_OK) {
+                startRecognition()
+            }
+        }
+    }
+
+    private val permissionResultLauncherV2 = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        run {
+            if (result.resultCode == RESULT_OK) {
+                startWhisper()
+            }
+        }
+    }
+
+    private val settingsLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { recreate() }
+
+    // Opened from [promptCreateFirstCompanion] when a new chat has no companion
+    // to open with because none exist yet. On a companion being created the
+    // list returns it; adopt it for this chat and mark seeding done. It becomes
+    // the default for later chats only after an assistant response succeeds.
+    private val createFirstCompanionLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            val personaId = result.data?.getStringExtra("personaId")
+            if (!personaId.isNullOrEmpty()) {
+                preferences?.setPersonaId(personaId)
+                preferences?.setPersonaActivationSeeded(true)
+                // onResume painted before this result assigned the new
+                // Companion, so resolve its picture now instead of leaving
+                // the default avatar visible until another resume.
+                refreshCompanionAvatar()
+            }
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
+            )
+        }
+
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        val transition = TransitionInflater.from(this).inflateTransition(android.R.transition.move).apply {
+            interpolator = LinearOutSlowInInterpolator()
+            duration = 300
+        }
+
+        val transition2 = TransitionInflater.from(this).inflateTransition(android.R.transition.move).apply {
+            interpolator = FastOutLinearInInterpolator()
+            duration = 200
+        }
+
+        // Set the transition as the shared element enter transition
+        window.sharedElementEnterTransition = transition
+        window.sharedElementExitTransition = transition2
+
+        super.onCreate(savedInstanceState)
+        ThemeManager.getThemeManager().applyPalette(this)
+
+        Thread {
+            // Round 4 ordering is load-bearing: resolve the storage lock before
+            // touching an encrypted API key or chat history. All Keystore-backed
+            // work stays on this worker; only the final UI branch runs on main.
+            val startupAttempt = runCatching { prepareChatStartup() }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                val startupResult = startupAttempt.getOrElse { throw it }
+
+                if (startupResult.storageLocked) {
+                    startActivity(Intent(this, ChatStorageLockedActivity::class.java).setAction(Intent.ACTION_VIEW))
+                    finish()
+                    return@runOnUiThread
+                }
+
+                initializeChatUi(startupResult.preparedChat!!, savedInstanceState)
+            }
+        }.start()
+    }
+
+    /**
+     * Cold-start storage work for a chat. The lock gate remains first so a
+     * Keystore outage can never masquerade as an empty API key or empty chat.
+     */
+    private fun prepareChatStartup(): ChatStartupResult {
+        if (SecurePrefs.isChatStorageLocked(this)) {
+            return ChatStartupResult(storageLocked = true)
+        }
+
+        val extras: Bundle? = intent.extras
+        val preparedChatId = extras?.getString("chatId", "") ?: ""
+        val preparedChatName = extras?.getString("name", "") ?: ""
+        val preparedPreferences = Preferences.getPreferences(this, preparedChatId)
+        val preparedEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
+        val preparedLogitBiasPreferences = LogitBiasPreferences(
+            this,
+            preparedPreferences.getLogitBiasesConfigId()
+        )
+        val preparedEndpoint = preparedEndpointPreferences.getApiEndpoint(
+            this,
+            preparedPreferences.getApiEndpointId()
+        )
+        val historyResult = ChatPreferences.getChatPreferences()
+            .getChatByIdResult(this, preparedChatId)
+
+        return ChatStartupResult(
+            storageLocked = false,
+            preparedChat = PreparedChatStartup(
+                preparedChatId,
+                preparedChatName,
+                preparedPreferences,
+                preparedEndpointPreferences,
+                preparedLogitBiasPreferences,
+                preparedEndpoint,
+                historyResult
+            )
+        )
+    }
+
+    /** Build the chat screen only after its encrypted startup data is ready. */
+    private fun initializeChatUi(prepared: PreparedChatStartup, savedInstanceState: Bundle?) {
+        chatId = prepared.chatId
+        chatName = prepared.chatName
+        preferences = prepared.preferences
+        apiEndpointPreferences = prepared.apiEndpointPreferences
+        logitBiasPreferences = prepared.logitBiasPreferences
+        apiEndpointObject = prepared.apiEndpointObject
+        title = chatName
+
+        // Hands-free is a live, per-session control started from the conversation
+        // button — never a persisted setting (there is no settings toggle any
+        // more). Opening a chat always starts disengaged; the flag is only ever
+        // turned on by an explicit button tap, so a value left over from a
+        // previous session (or a hard kill mid-loop) can never auto-resume a
+        // conversation the moment the chat opens.
+        preferences?.setHandsFreeMode(false)
+        handsFreeStopped = false
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT
+            ) {
+                if (includeStripController?.collapseIfExpanded() == true) {
+                    // The expanded Includes overlay consumes Back first.
+                } else if (bulkSelectionMode) {
+                    deselectAll()
+                } else {
+                    finishActivity()
+                }
+            }
+        } else {
+            onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    if (includeStripController?.collapseIfExpanded() == true) {
+                        // The expanded Includes overlay consumes Back first.
+                    } else if (bulkSelectionMode) {
+                        deselectAll()
+                    } else {
+                        finishActivity()
+                    }
+                }
+            })
+        }
+
+        setContentView(R.layout.activity_chat)
+
+        // Listen for the notification "Hang Up" action. Registered for the life of
+        // the activity (not just the foreground window) so it still fires while the
+        // chat is backgrounded with the screen off — exactly when the keep-alive
+        // bar is the only way to stop a readback. Not exported: only our own
+        // services post this package-scoped broadcast.
+        ContextCompat.registerReceiver(
+            this,
+            hangUpReceiver,
+            IntentFilter(ACTION_HANG_UP),
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+
+        preloadAmoled()
+        reloadAmoled()
+
+        mediaPlayer = MediaPlayer()
+
+        // Read-only audio output-route observer (Bluetooth / wired headset
+        // connect & disconnect). Diagnostics only; it never changes routing.
+        registerAudioRouteDiagnostics()
+
+        threadLoader = findViewById(R.id.thread_loader)
+        threadLoader?.visibility = View.VISIBLE
+
+        val chatActivityTitle: TextView = findViewById(R.id.chat_activity_title)
+        val keyboardInput: LinearLayout = findViewById(R.id.keyboard_input)
+
+        chatActivityTitle.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
+        keyboardInput.setBackgroundColor(SurfaceColors.SURFACE_5.getColor(this))
+
+        initSettings(prepared.historyResult)
+
+        // The Activity window may already be attached because startup storage
+        // now loads on a worker. Apply insets explicitly once the chat views
+        // exist; onAttachedToWindow may have run before setContentView.
+        adjustPaddings()
+
+        if (savedInstanceState != null) {
+            onRestoredState(savedInstanceState)
+        }
+
+        // §5 recovery: reattach to a generation that is still running for
+        // this chat and re-show its Creating Image row. Skipped while the
+        // blocking storage-unavailable state owns the screen.
+        if (!chatStorageUnavailable && adapter != null) {
+            restoreImageGenerationJobState()
+        }
+
+        chatStartupComplete = true
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.action == MotionEvent.ACTION_DOWN) {
+            if (includeStripController?.isExpanded() == true) {
+                val bounds = Rect()
+                val touchedInsideStrip =
+                    includeStrip?.getGlobalVisibleRect(bounds) == true &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+                if (!touchedInsideStrip) includeStripController?.collapseIfExpanded()
+            }
+
+            if (visionActions?.visibility == View.VISIBLE) {
+                val bounds = Rect()
+                val touchedInsideMenu =
+                    visionActions?.getGlobalVisibleRect(bounds) == true &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+                val touchedPaperclip =
+                    btnAttachFile?.getGlobalVisibleRect(bounds) == true &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+
+                // Leave paperclip taps for its click listener so it can still
+                // toggle the menu closed. Every other outside tap dismisses
+                // the menu before the tapped control handles its own action.
+                if (!touchedInsideMenu && !touchedPaperclip) {
+                    visionActions?.visibility = View.GONE
+                }
+            }
+        }
+        return super.dispatchTouchEvent(event)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Reached only for configuration changes listed in the manifest's
+        // configChanges — those are absorbed here WITHOUT recreating the Activity,
+        // so the live conversation, generation, and mic loop survive untouched.
+        // Logged so a screen-off reproduction can show a night-mode/orientation
+        // flip landing here (conversation preserved) rather than in onDestroy
+        // (conversation torn down). Gated on voice diagnostics: config changes
+        // (e.g. rotations) can be frequent, so this must not spam the Event log.
+        val night = (newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+                Configuration.UI_MODE_NIGHT_YES
+        val orientation = when (newConfig.orientation) {
+            Configuration.ORIENTATION_LANDSCAPE -> "landscape"
+            Configuration.ORIENTATION_PORTRAIT -> "portrait"
+            else -> "undefined"
+        }
+        logVoiceEvent(
+            "ChatActivity configuration change absorbed (no recreation):" +
+                    " night=$night orientation=$orientation" +
+                    " handsFreeService=${HandsFreeService.isRunning}"
+        )
+        scheduleComposerHeightUpdate()
+    }
+
+    public override fun onDestroy() {
+        // Tombstone for the event log: when the OS (or a navigation flow)
+        // destroys this screen while a voice conversation is live, everything
+        // below silently kills the readback and the loop. Without this line
+        // the user sees "the voice just stopped / the mic never came back"
+        // with no trace anywhere.
+        val voiceWasLive = isRecording || handsFreeReadbackExpected ||
+                (try { tts?.isSpeaking == true } catch (_: Exception) { false }) ||
+                (try { mediaPlayer?.isPlaying == true } catch (_: Exception) { false })
+        if (voiceWasLive) {
+            logVoiceEvent("chat screen destroyed while voice was active — readback and mic loop torn down" +
+                    if (isFinishing) " (screen was closed)" else " (destroyed by the system)")
+        }
+        // Decisive lifecycle record for the screen-off / route-change interruption
+        // investigation. onDestroy currently always runs the full session teardown
+        // below (killAllProcesses + stopHandsFreeService), so changingConfig=true
+        // here means a mere Android configuration recreation is being treated as a
+        // genuine conversation end — the exact condition that produced an
+        // app_cancel "screen was closed" on a turn the user never abandoned. With
+        // uiMode now handled in the manifest, a night-mode flip should no longer
+        // reach this path; if this line still reports changingConfig=true after
+        // the fix, a different configuration change is recreating the Activity and
+        // the teardown must learn to distinguish the two. Always persisted (bounded
+        // to once per destroy) so the next reproduction is conclusive.
+        val teardownAction = if (isChangingConfigurations)
+            "full teardown (configuration recreation — session state will be lost)"
+        else "full teardown (genuine destroy)"
+        logVoiceEventAlways(
+            "ChatActivity destroy: finishing=$isFinishing" +
+                    " changingConfig=$isChangingConfigurations" +
+                    " generationActive=${requestPreparationInProgress || providerRequestDispatched}" +
+                    " providerDispatched=$providerRequestDispatched" +
+                    " readbackActive=$voiceWasLive" +
+                    " readbackExpected=$handsFreeReadbackExpected" +
+                    " handsFreePref=${preferences?.getHandsFreeMode() == true}" +
+                    " handsFreeService=${HandsFreeService.isRunning}" +
+                    " turn=${currentLifecycleTurnId.ifBlank { "none" }}" +
+                    " action=$teardownAction"
+        )
+        // Route snapshot at destruction, in the separate AudioRoute family. Pairs
+        // with the "readback start" snapshot and any device add/remove lines so a
+        // destroy at the TTS/readback boundary can be matched against whatever the
+        // audio route was doing at that moment.
+        logVoiceEventAlways("AudioRoute [chat destroy]: ${describeAudioOutputRoute()}")
+        if (tts != null) {
+            tts!!.stop()
+            tts!!.shutdown()
+        }
+        // Null-safe: when the locked-storage gate finishes onCreate early,
+        // mediaPlayer was never constructed but onDestroy still runs.
+        if (mediaPlayer?.isPlaying == true) {
+            mediaPlayer!!.stop()
+            mediaPlayer!!.reset()
+        }
+
+        try { unregisterReceiver(hangUpReceiver) } catch (_: Exception) { /* not registered */ }
+        // Release the last ML Kit language-detector client (see pronounce()).
+        try { languageIdentifier?.close() } catch (_: Exception) { /* ignore */ }
+        // The read-aloud keep-alive must not outlive the activity: its poll runs on
+        // a handler tied to this instance, so without this the service could hold a
+        // wake lock with nothing to release it.
+        releaseReadbackKeepAlive()
+        readbackKeepAliveHandler.removeCallbacksAndMessages(null)
+
+        // Deliberate cancellation of any in-flight fold-in: leaving the chat
+        // is never a Summarizer Error, and the bookmark only ever advances on
+        // a completed save (errors doc §4).
+        summarizerController?.cancel()
+
+        // Detach from the image job registry WITHOUT cancelling the job:
+        // the generation deliberately survives leaving the chat and
+        // recreation (§5); with no screen attached its result is written
+        // straight into the stored history.
+        ImageGenerationJobRegistry.detach(chatId, this)
+
+        killAllProcesses()
+        stopHandsFreeService()
+
+        // Fully release the microphone when the chat is destroyed (app closed).
+        // The SpeechRecognizer holds a live binding to the system recognition
+        // service; if it's never destroyed it can keep the mic/recognizer tied
+        // up system-wide and starve other apps' voice input (keyboard voice
+        // typing, other AI voice). Releasing the whisper AudioRecord here covers
+        // the on-device path the same way. Background/screen-off hands-free is
+        // intentionally untouched — this only runs when the activity is gone.
+        try { recognizer?.cancel() } catch (_: Exception) { /* ignore */ }
+        try { recognizer?.destroy() } catch (_: Exception) { /* ignore */ }
+        recognizer = null
+        try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
+
+        // Release the read-only audio-route observer with this Activity instance.
+        unregisterAudioRouteDiagnostics()
+
+        // Cancel any in-flight image import. Its own completion handler sees
+        // isDestroyed and deletes freshly written bytes that never became a
+        // persisted include, so cancelling here just stops the work promptly.
+        for (scope in imageImportScopes.toList()) {
+            try { scope.cancel() } catch (_: Exception) { /* ignore */ }
+        }
+        imageImportScopes.clear()
+
+        super.onDestroy()
+    }
+
+    /** SYSTEM INITIALIZATION START **/
+    /** Reload path used after an in-chat image update; storage stays off main. */
+    private fun initSettings() {
+        val appContext = applicationContext
+        val currentChatId = chatId
+        Thread {
+            val historyResult = ChatPreferences.getChatPreferences()
+                .getChatByIdResult(appContext, currentChatId)
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) initSettings(historyResult)
+            }
+        }.start()
+    }
+
+    @Suppress("unchecked")
+    private fun initSettings(historyResult: ChatPreferences.ChatHistoryResult) {
+        // Brand-new chat: adopt the provider/model/routing the last conversation
+        // successfully used, before the endpoint/key below are read. Updates
+        // apiEndpointObject when it restores; otherwise records what the UI must
+        // do once it exists (a dialog, or the API Endpoints screen).
+        maybeRestoreProviderForNewChat(historyResult)
+
+        key = apiEndpointObject?.apiKey!!
+        // The auxiliary client (cloud Whisper, TTS, image generation,
+        // function calling) must follow the active chat's endpoint. It used
+        // to grab a key from any saved api.openai.com endpoint, which leaked
+        // audio and message content to OpenAI while chatting with a
+        // local/custom endpoint.
+        openAIKey = apiEndpointObject?.apiKey
+
+        endSeparator = preferences!!.getEndSeparator()
+        prefix = preferences!!.getPrefix()
+
+
+        if (key == null) {
+            startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
+            finishActivity()
+        } else {
+            autoLangDetect = preferences!!.getAutoLangDetect()
+            messages = historyResult.messages
+
+            // A LOCKED/CORRUPT/FAILED history must never render as an empty
+            // conversation the user can talk into (Round 4): the encrypted
+            // value is preserved and write-blocked in ChatPreferences; here
+            // the owner-approved blocking state covers the screen and every
+            // send/save path checks chatStorageUnavailable.
+            if (!ChatStorageHealth.isAuthoritative(historyResult.state)) {
+                chatStorageUnavailable = true
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.chat_unavailable_title)
+                    .setMessage(R.string.chat_unavailable_body)
+                    .setCancelable(false)
+                    .setPositiveButton(R.string.chat_unavailable_back) { _, _ -> finishActivity() }
+                    .show()
+            }
+
+            // R8 fix
+            if (messages == null) messages = arrayListOf()
+            if (chatMessages == null) chatMessages = arrayListOf()
+
+            // A reply still marked "streaming" on disk means the previous
+            // session died mid-generation and nothing wrote a terminal state
+            // (a hard process kill runs no code on the way out). Reconcile it
+            // to "interrupted" once so it can't masquerade as a finished reply,
+            // and persist. Idempotent; the partial text is untouched.
+            var reconciledStreaming = false
+            for (message: HashMap<String, Any> in messages) {
+                val reconciled = MessageCompletionState.reconcileOnLoad(
+                    message[MessageCompletionState.KEY_STATE]?.toString()
+                )
+                if (reconciled != null) {
+                    message[MessageCompletionState.KEY_STATE] = reconciled
+                    message[MessageCompletionState.KEY_STATE_DETAIL] = MessageCompletionState.DETAIL_PROCESS_DEATH
+                    reconciledStreaming = true
+                }
+            }
+            if (reconciledStreaming) saveSettings()
+
+            for (message: HashMap<String, Any> in messages) {
+                if (message["isBot"] == true) {
+                    chatMessages.add(
+                        ChatMessage(
+                            role = ChatRole.Assistant,
+                            content = modelFacingContent(message)
+                        )
+                    )
+                } else {
+                    chatMessages.add(
+                        ChatMessage(
+                            role = ChatRole.User,
+                            content = modelFacingContent(message)
+                        )
+                    )
+                }
+            }
+
+            loadPendingIncludes()
+            reconcileChatImages()
+
+            updateMessagesSelectionProjection()
+
+
+            adapter = ChatAdapter(messages, messagesSelectionProjection, this, preferences!!, chatId)
+            adapter?.setOnUpdateListener(this)
+
+            initUI()
+            reloadAmoled()
+            initSpeechListener()
+            initTTS()
+            initLogic()
+            initAI()
+
+            // The chat UI now exists, so a missing/absent configuration can be
+            // surfaced (a dialog + Summoning Circle, or the API Endpoints screen).
+            handleProviderRestoreOutcome()
+        }
+    }
+
+    @SuppressLint("SetTextI18n", "ClickableViewAccessibility", "NotifyDataSetChanged")
+    private fun initUI() {
+        btnMicro = findViewById(R.id.btn_micro)
+        btnSettings = findViewById(R.id.btn_settings)
+        chat = findViewById(R.id.messages)
+        messageInput = findViewById(R.id.message_input)
+        btnSend = findViewById(R.id.btn_send)
+        progress = findViewById(R.id.progress)
+        activityTitle = findViewById(R.id.chat_activity_title)
+        btnQuickSettings = findViewById(R.id.btn_quick_settings)
+        actionBar = findViewById(R.id.action_bar)
+        btnBack = findViewById(R.id.btn_back)
+        btnDebugLog = findViewById(R.id.btn_debug_log)
+        btnSummary = findViewById(R.id.btn_summary)
+        btnSummarizerErrors = findViewById(R.id.btn_summarizer_errors)
+        summarizerErrorBadge = findViewById(R.id.summarizer_error_badge)
+        keyboardFrame = findViewById(R.id.keyboard_frame)
+        keyboardInput = findViewById(R.id.keyboard_input)
+        composerSurface = findViewById(R.id.composer_surface)
+        root = findViewById(R.id.root)
+        btnAttachFile = findViewById(R.id.btn_attach)
+        btnPersistentIncludes = findViewById(R.id.btn_persistent_includes)
+        btnExpandContent = findViewById(R.id.btn_expand_content)
+        btnCollapseContent = findViewById(R.id.btn_collapse_content)
+        visionActions = findViewById(R.id.vision_action_selector)
+        btnVisionActionCamera = findViewById(R.id.action_camera)
+        btnVisionActionGallery = findViewById(R.id.action_gallery)
+        btnVisionActionDocument = findViewById(R.id.action_document)
+        includeStrip = findViewById(R.id.include_strip)
+        initIncludeStrip()
+
+        composerSurface?.setExpansionListener { expanded ->
+            setComposerContainerExpanded(expanded)
+        }
+        root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            scheduleComposerHeightUpdate()
+        }
+        keyboardInput?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            scheduleComposerHeightUpdate()
+        }
+        chat?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            scheduleComposerHeightUpdate()
+        }
+        composerSurface?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            scheduleComposerHeightUpdate()
+        }
+        includeStrip?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            scheduleComposerHeightUpdate()
+        }
+
+        btnPersistentIncludes?.setOnClickListener { anchor ->
+            val ids = persistentIncludeIds()
+            IncludesPopupController.show(
+                anchor = anchor,
+                includeIds = ids,
+                resolveCurrent = ::resolvePersistentIncludes,
+                callbacks = object : IncludesPopupController.Callbacks {
+                    override fun onIncludeEdit(includeId: String) {
+                        findIncludeById(includeId)?.let(::editInclude)
+                    }
+
+                    override fun onIncludeRemove(includeId: String) {
+                        findIncludeById(includeId)?.let(::removeInclude)
+                    }
+
+                    override fun onIncludeCondense(includeId: String) {
+                        findIncludeById(includeId)?.let(::condenseInclude)
+                    }
+                }
+            )
+        }
+        refreshPersistentIncludeControls()
+        bulkContainer = findViewById(R.id.bulk_container)
+        btnSelectAll = findViewById(R.id.btn_select_all)
+        btnDeselectAll = findViewById(R.id.btn_deselect_all)
+        btnDeleteSelected = findViewById(R.id.btn_delete_selected)
+        btnCopySelected = findViewById(R.id.btn_copy_selected)
+        btnShareSelected = findViewById(R.id.btn_share_selected)
+        selectedCount = findViewById(R.id.text_selected_count)
+        expandableWindowRoot = findViewById(R.id.expandable_window_root)
+        blurSelectorView = findViewById(R.id.attach_bg)
+
+        healthBanner = findViewById(R.id.health_banner)
+        healthBannerText = findViewById(R.id.health_banner_text)
+        healthBannerRepair = findViewById(R.id.health_banner_repair)
+        healthBannerOk = findViewById(R.id.health_banner_ok)
+        healthBannerRepair?.setOnClickListener {
+            // Repair routes to the one home of the repair flow — the Backup &
+            // Restore screen — with the affected database's A1 dialog opening
+            // immediately.
+            val degraded = org.teslasoft.assistant.preferences.backup.DatabaseHealthState.degradedTypes(this)
+            val intent = Intent(this, MemoryBackupRestoreActivity::class.java)
+            degraded.firstOrNull()?.let {
+                intent.putExtra(MemoryBackupRestoreActivity.EXTRA_START_REPAIR_FOR, it.key)
+            }
+            startActivity(intent)
+        }
+        healthBannerOk?.setOnClickListener {
+            // Acknowledged for this chat screen only; the banner returns on
+            // the next chat while the problem persists (§15.2a).
+            healthBannerDismissed = true
+            healthBanner?.visibility = View.GONE
+        }
+
+        val radius = 16f
+        val decorView = window.decorView
+        val rootView = decorView.findViewById<ViewGroup>(android.R.id.content)
+        val windowBackground = decorView.background
+        blurSelectorView?.setupWith(rootView)
+            ?.setFrameClearDrawable(windowBackground)
+            ?.setBlurRadius(radius)
+
+        blurSelectorView?.outlineProvider = ViewOutlineProvider.BACKGROUND
+        blurSelectorView?.setClipToOutline(true)
+
+        if (isDarkThemeEnabled() && GlobalPreferences.getPreferences(this).getAmoledPitchBlack()) {
+            expandableWindowRoot?.backgroundTintList = ColorStateList.valueOf(getColor(R.color.amoled_window_background))
+        } else {
+            expandableWindowRoot?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_1.getColor(this))
+        }
+
+        bulkContainer?.visibility = View.GONE
+
+        chat?.itemAnimator = null
+
+        visionActions?.visibility = View.GONE
+
+        btnQuickSettings?.setImageResource(R.drawable.ic_history_edu)
+        btnBack?.setImageResource(R.drawable.ic_back)
+
+        activityTitle?.text = if (chatName.trim().contains("_autoname_")) "Untitled chat" else chatName
+
+        activityTitle?.isSelected = true
+
+        progress?.visibility = View.GONE
+
+        micIdle()
+        // Initial resting look for the conversation/send button (empty box → the
+        // conversation waveform).
+        refreshConversationButton()
+        btnSettings?.setImageResource(R.drawable.ic_settings)
+
+        btnSelectAll?.setOnClickListener {
+            selectAll()
+        }
+
+        btnDeselectAll?.setOnClickListener {
+            deselectAll()
+        }
+
+        btnDeleteSelected?.setOnClickListener {
+            deleteSelectedMessages()
+        }
+
+        btnCopySelected?.setOnClickListener {
+            copySelectedMessages()
+        }
+
+        btnShareSelected?.setOnClickListener {
+            shareSelectedMessages()
+        }
+
+        btnQuickSettings?.background = getDarkAccentDrawable(
+            AppCompatResources.getDrawable(
+                this,
+                R.drawable.btn_accent_tonal_v4
+            )!!, this
+        )
+
+        btnBack?.background = getDarkAccentDrawable(
+            AppCompatResources.getDrawable(
+                this,
+                R.drawable.btn_accent_tonal_v4
+            )!!, this
+        )
+
+        btnSettings?.background = getDarkAccentDrawable(
+            AppCompatResources.getDrawable(
+                this,
+                R.drawable.btn_accent_tonal_v4
+            )!!, this
+        )
+
+        btnBack?.setOnClickListener {
+            finishActivity()
+        }
+
+        activityTitle?.setOnClickListener {
+            // While a chat is still waiting on its AI-generated name, chatName
+            // holds the internal "_autoname_N" placeholder — show the same
+            // "Untitled chat" fallback the header itself displays rather than
+            // leaking the placeholder into the editable field.
+            val currentTitle = if (chatName.trim().contains("_autoname_")) {
+                getString(R.string.label_untitled_chat)
+            } else {
+                chatName
+            }
+            EditChatTitleDialog.show(this, currentTitle) { newTitle ->
+                renameChatTitle(newTitle)
+            }
+        }
+
+        val linearLayoutManager = LinearLayoutManager(this)
+        // linearLayoutManager.stackFromEnd = true
+
+        chat?.setLayoutManager(linearLayoutManager)
+
+        val itemTouchHelper = ItemTouchHelper(itemTouchCallback)
+        itemTouchHelper.attachToRecyclerView(chat)
+
+        chat?.adapter = adapter
+
+        adapter?.notifyDataSetChanged()
+
+        // First paint of both avatars (resolved off-main), and the replay of
+        // any refresh requested before this adapter was attached.
+        onAvatarTargetReady()
+
+        chat?.post {
+            chat?.scrollToPosition(adapter?.itemCount!! - 1)
+        }
+
+        chat?.setOnTouchListener { _, event -> run {
+            if (event.action == MotionEvent.ACTION_SCROLL || event.action == MotionEvent.ACTION_UP) {
+                // chat?.transcriptMode = ListView.TRANSCRIPT_MODE_DISABLED
+                disableAutoScroll = true
+            }
+            return@setOnTouchListener false
+        }}
+
+        Handler(Looper.getMainLooper()).postDelayed({
+            val fadeOut: Animation = AnimationUtils.loadAnimation(this, R.anim.fade_out)
+            threadLoader?.startAnimation(fadeOut)
+
+            fadeOut.setAnimationListener(object : Animation.AnimationListener {
+                override fun onAnimationStart(animation: Animation) { /* UNUSED */ }
+                override fun onAnimationEnd(animation: Animation) {
+                    runOnUiThread {
+                        threadLoader?.visibility = View.GONE
+                        threadLoader?.elevation = 0.0f
+                        reloadAmoled()
+                    }
+                }
+
+                override fun onAnimationRepeat(animation: Animation) { /* UNUSED */ }
+            })
+        }, 50)
+    }
+
+    private val itemTouchCallback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
+        override fun onMove(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+            return false
+        }
+
+        @SuppressLint("NotifyDataSetChanged")
+        override fun onSwiped(viewHolder: RecyclerView.ViewHolder, swipeDir: Int) {
+            val position = viewHolder.bindingAdapterPosition
+
+            viewHolder.itemView.post {
+                adapter?.notifyItemChanged(position)
+                adapter?.notifyDataSetChanged() // ??? ...
+
+                if (viewHolder is ChatAdapter.ViewHolder) {
+                    viewHolder.resetView()
+                }
+
+                if (swipeDir == ItemTouchHelper.LEFT && !bulkSelectionMode) {
+                    MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)
+                        .setTitle(R.string.label_confirm_deletion)
+                        .setMessage(R.string.msg_confirm_deletion_chat)
+                        .setPositiveButton(R.string.btn_delete) { _, _ -> run {
+                            adapter?.onDelete(position)
+                        }}
+                        .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                        .show()
+                }
+            }
+        }
+
+        override fun onChildDraw(c: Canvas, recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder,
+                                 dX: Float, dY: Float, actionState: Int, isCurrentlyActive: Boolean) {
+
+            val iconDRight = if (maxX(dX.toInt() / 5) == dpToPx(-32)) {
+                ResourcesCompat.getDrawable(resources, R.drawable.ic_delete_action_active, theme)!!
+            } else {
+                ResourcesCompat.getDrawable(resources, R.drawable.ic_delete_action, theme)!!
+            }
+            val itemView = viewHolder.itemView
+            val background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(ResourcesCompat.getColor(resources, R.color.transparent, theme))
+                cornerRadius = dpToPx(128).toFloat()
+            }
+
+            if (dX < 0) { // Swiping to the left
+                val iconMargin = 48
+                val iconTop = itemView.top + (itemView.height - iconDRight.intrinsicHeight) / 2
+                val iconBottom = iconTop + iconDRight.intrinsicHeight
+                val iconLeft = itemView.right - iconMargin - iconDRight.intrinsicWidth
+                val iconRight = itemView.right - iconMargin
+                iconDRight.setBounds(iconLeft, iconTop, iconRight, iconBottom)
+                background.setColor(ResourcesCompat.getColor(resources, R.color.delete_tint, theme))
+                if (maxX(dX.toInt() / 5) == dpToPx(-32)) {
+                    background.setColor(ResourcesCompat.getColor(resources, R.color.delete_tint_active, theme))
+                }
+
+                background.setBounds(iconLeft + maxX(dX.toInt() / 5), iconTop + maxX(dX.toInt() / 5), iconRight - maxX(dX.toInt() / 5), iconBottom - maxX(dX.toInt() / 5))
+                background.draw(c)
+                iconDRight.draw(c)
+            }
+
+            if (actionState == ItemTouchHelper.ACTION_STATE_SWIPE && !isCurrentlyActive) {
+                getDefaultUIUtil().clearView(viewHolder.itemView)
+            }
+            super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
+        }
+    }
+
+    private fun dpToPx(dp: Int): Int {
+        return (dp * resources?.displayMetrics?.density!!).toInt()
+    }
+
+    private fun maxX(x: Int) : Int {
+        if (x < dpToPx(-32)) return dpToPx(-32)
+        else if (x < dpToPx(32)) return x
+        return dpToPx(32)
+    }
+
+    private fun getDarkAccentDrawable(drawable: Drawable, context: Context) : Drawable {
+        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getSurfaceColor(context))
+        return drawable
+    }
+
+    private fun getAmoledAccentDrawable(drawable: Drawable, context: Context) : Drawable {
+        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getAmoledSurfaceColor(context))
+        return drawable
+    }
+
+    private fun getAmoledAccentDrawableV2(drawable: Drawable, context: Context) : Drawable {
+        DrawableCompat.setTint(DrawableCompat.wrap(drawable), getAmoledSurfaceColorV2(context))
+        return drawable
+    }
+
+    private fun getSurfaceColor(context: Context) : Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            SurfaceColors.SURFACE_4.getColor(context)
+        } else {
+            getColor(R.color.accent_250)
+        }
+    }
+
+    private fun getAmoledSurfaceColor(context: Context) : Int {
+        return ResourcesCompat.getColor(context.resources, R.color.amoled_accent_100, null)
+    }
+
+    private fun getAmoledSurfaceColorV2(context: Context) : Int {
+        return ResourcesCompat.getColor(context.resources, R.color.amoled_accent_200, null)
+    }
+
+    /**
+     * Gallery image picker landing point. Hands the URI off to
+     * [ImageImporter] which handles JPEG/PNG/HEIC conversion, EXIF
+     * orientation, downsampling to the 2048 longest-edge cap and the copy
+     * into this chat's own images directory. Failure surfaces through the
+     * approved image-attach dialogs, never as a preview above the chat.
+     */
+    private val imageIntentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val uri = result.data?.data ?: return@registerForActivityResult
+        importPendingImage(uri, displayNameOverride = null)
+    }
+
+    // ==== Image includes ====================================================
+    // Camera and Image both flow through here so the pending Includes strip
+    // is the ONE surface that ever holds an attached picture. The image bytes
+    // live under the chat's private images dir; the ChatInclude carries just
+    // the hash reference plus dimensions and mime for the model estimate.
+
+    /** Turns a picked-or-captured image URI into a pending image include, or
+     *  raises the approved failure dialog when the file cannot be prepared.
+     *  The old preview above the chat is gone; a failure never shows a
+     *  half-attached row.
+     *
+     *  Duplicate-source protection mirrors documents: the same picked source
+     *  cannot be attached twice to one pending message, and a second tap while
+     *  the first import is still running is ignored. The import scope is
+     *  tracked so that if the screen goes away between the file write and the
+     *  include being persisted, the freshly written bytes are deleted instead
+     *  of orphaned. */
+    private fun importPendingImage(uri: Uri, displayNameOverride: String?) {
+        val fingerprint = ImageImporter.sourceFingerprint(uri.toString())
+        if (pendingIncludes.any { it.sourceFingerprint == fingerprint } ||
+            !pendingImageImports.add(fingerprint)
+        ) {
+            showImageAlreadyAttached()
+            return
+        }
+
+        val scope = CoroutineScope(Dispatchers.Main)
+        imageImportScopes.add(scope)
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    ImageImporter.import(
+                        this@ChatActivity, uri, chatId, displayNameOverride
+                    )
+                } catch (_: Exception) {
+                    ImageImporter.Result.Unknown(displayNameOverride ?: "image")
+                }
+            }
+            pendingImageImports.remove(fingerprint)
+            imageImportScopes.remove(scope)
+            if (isFinishing || isDestroyed) {
+                // The screen is gone before the include could be persisted:
+                // drop the bytes we just wrote so they never orphan.
+                if (result is ImageImporter.Result.Success) {
+                    withContext(Dispatchers.IO) {
+                        ImageImporter.deleteOrphanFile(result.onDiskFile)
+                    }
+                }
+                return@launch
+            }
+
+            when (result) {
+                is ImageImporter.Result.Success -> {
+                    pendingIncludes.add(result.include)
+                    savePendingIncludes()
+                    refreshIncludeStrip()
+                }
+                is ImageImporter.Result.Unsupported ->
+                    showImageAttachDialog(
+                        R.string.image_attach_unsupported_title,
+                        R.string.image_attach_unsupported_body
+                    )
+                is ImageImporter.Result.HeicConversionFailed ->
+                    showImageAttachDialog(
+                        R.string.image_attach_conversion_failed_title,
+                        R.string.image_attach_conversion_failed_body
+                    )
+                is ImageImporter.Result.ReadFailed ->
+                    showImageAttachDialog(
+                        R.string.image_attach_read_failed_title,
+                        R.string.image_attach_read_failed_body
+                    )
+                is ImageImporter.Result.TooLarge ->
+                    showImageAttachDialog(
+                        R.string.image_attach_too_large_title,
+                        R.string.image_attach_too_large_body
+                    )
+                is ImageImporter.Result.Unknown ->
+                    showImageAttachDialog(
+                        R.string.image_attach_read_failed_title,
+                        R.string.image_attach_read_failed_body
+                    )
+            }
+        }
+    }
+
+    private fun showImageAttachDialog(titleRes: Int, bodyRes: Int) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setMessage(bodyRes)
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
+
+    /** Camera captures name themselves after the chat plus a timestamp so a
+     *  transcript's summary rows stay readable ("Trip planning 07-27-26
+     *  14-32.jpg") instead of showing the always-`tmp.jpg` placeholder. */
+    private fun cameraCaptureDisplayName(): String {
+        val safeName = (chatName.ifBlank { "Untitled" })
+            .replace(Regex("[/\\\\:*?\"<>|]"), " ")
+            .trim()
+            .ifBlank { "Untitled" }
+        val stamp = java.text.SimpleDateFormat(
+            "MM-dd-yy HH-mm", java.util.Locale.getDefault()
+        ).format(java.util.Date())
+        return "$safeName $stamp.jpg"
+    }
+
+    // ==== Document includes ================================================
+    // See document-includes-plan.md for the current design. The short
+    // version: an attached document is extracted to text on THIS device and
+    // rides inside the user message it was attached to, so it works
+    // identically on every OpenAI-compatible endpoint (GLM, DeepSeek,
+    // OpenRouter) with no provider-specific upload anywhere, and it sits at a
+    // fixed point in history that the provider's prefix cache can cover on
+    // every later turn.
+
+    private fun initIncludeStrip() {
+        val strip = includeStrip ?: return
+        val collapsed = findViewById<View>(R.id.include_collapsed_row) ?: return
+        val scroll = findViewById<ScrollView>(R.id.include_list_scroll) ?: return
+        val list = findViewById<LinearLayout>(R.id.include_list) ?: return
+
+        includeStripController = IncludeStripController(
+            this, strip, collapsed, scroll, list,
+            object : IncludeStripController.Callbacks {
+                override fun onRemoveInclude(include: ChatInclude) = removeInclude(include)
+            }
+        )
+        refreshIncludeStrip()
+    }
+
+    private fun refreshIncludeStrip() {
+        // Sent documents belong to the transcript row under the user name.
+        // The composer only shows attachments waiting for the next Send.
+        includeStripController?.bind(pendingIncludes)
+        scheduleComposerHeightUpdate()
+    }
+
+    /** The composer paperclip is visible only while sent Includes remain in
+     * history. Pending unsent Includes intentionally do not activate it. */
+    private fun persistentIncludeIds(): List<String> =
+        PersistentIncludeContext
+            .allSent(messages, INCLUDES_KEY)
+            .map { it.id }
+
+    /** Resolve the requested ids from their original user-message records.
+     * This is read-only; the popup never becomes an Include owner. */
+    private fun resolvePersistentIncludes(ids: Set<String>): List<ChatInclude> {
+        if (ids.isEmpty()) return emptyList()
+        val result = ArrayList<ChatInclude>()
+        val seen = HashSet<String>()
+        for (message in messages) {
+            if (message["isBot"] == true) continue
+            for (include in includesOf(message)) {
+                if (include.id in ids && seen.add(include.id)) result.add(include)
+            }
+        }
+        return result
+    }
+
+    private fun refreshPersistentIncludeControls() {
+        val button = btnPersistentIncludes ?: return
+        val visible = persistentIncludeIds().isNotEmpty()
+        button.visibility = if (visible) View.VISIBLE else View.GONE
+        button.isEnabled = visible
+    }
+
+    /**
+     * Expanded mode uses the existing keyboard_input/ChatImeInsetLayout
+     * container. Its height is measured from the current chat viewport rather
+     * than by installing another keyboard or inset listener.
+     */
+    private fun setComposerContainerExpanded(expanded: Boolean) {
+        val surface = composerSurface ?: return
+        val params = surface.layoutParams ?: return
+        if (!expanded) {
+            if (params.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
+                params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                surface.layoutParams = params
+            }
+            return
+        }
+        scheduleComposerHeightUpdate()
+    }
+
+    private fun scheduleComposerHeightUpdate() {
+        if (composerSurface?.isExpanded() != true || composerResizePosted) return
+        composerResizePosted = true
+        composerSurface?.post {
+            composerResizePosted = false
+            updateExpandedComposerHeight()
+        }
+    }
+
+    private fun updateExpandedComposerHeight() {
+        val surface = composerSurface ?: return
+        val chatView = chat ?: return
+        val rootView = root ?: return
+        val keyboard = keyboardInput ?: return
+        if (!surface.isExpanded() || rootView.height <= 0) return
+
+        val surfaceParams = surface.layoutParams ?: return
+        val bottomMargin = (surfaceParams as? ViewGroup.MarginLayoutParams)?.bottomMargin ?: 0
+        val pendingStrip = includeStrip
+        val pendingHeight = if (pendingStrip?.visibility == View.VISIBLE) {
+            val pendingMargins = pendingStrip.layoutParams as? ViewGroup.MarginLayoutParams
+            pendingStrip.height + (pendingMargins?.bottomMargin ?: 0)
+        } else {
+            0
+        }
+        val targetHeight = rootView.height - chatView.top - keyboard.paddingBottom -
+            bottomMargin - pendingHeight
+        if (targetHeight <= 0 || surfaceParams.height == targetHeight) return
+
+        surfaceParams.height = targetHeight
+        surface.layoutParams = surfaceParams
+    }
+
+    private fun includesOf(message: HashMap<String, Any>): List<ChatInclude> =
+        ChatInclude.listFromJson(message[INCLUDES_KEY]?.toString())
+
+    private fun savePendingIncludes(synchronous: Boolean = false) {
+        preferences?.setPendingIncludes(
+            if (pendingIncludes.isEmpty()) "" else ChatInclude.listToJson(pendingIncludes),
+            synchronous = synchronous
+        )
+    }
+
+    private fun loadPendingIncludes() {
+        val loaded = ChatInclude.listFromJson(preferences?.getPendingIncludes())
+        val sentIds = messages
+            .flatMap(::includesOf)
+            .mapTo(HashSet()) { it.id }
+        pendingIncludes = ArrayList(
+            loaded.filter { it.form != IncludeForm.ARTIFACT && it.id !in sentIds }
+        )
+        if (pendingIncludes.size != loaded.size) {
+            // Recover safely if a process stopped after the chat-history side
+            // of a pending-to-sent transfer was committed.
+            savePendingIncludes(synchronous = true)
+        }
+    }
+
+    /**
+     * Replaces one include wherever it lives — still pending, or already
+     * carried by a sent message — and re-renders everything that depends on
+     * it. Changing an include changes what the model sees for that turn, so
+     * the model projection is rebuilt too; leaving the old projection in place
+     * would keep sending a document the user just removed.
+     */
+    private fun updateInclude(updated: ChatInclude) {
+        var changed = false
+
+        val pendingIndex = pendingIncludes.indexOfFirst { it.id == updated.id }
+        if (pendingIndex >= 0) {
+            pendingIncludes[pendingIndex] = updated
+            savePendingIncludes(synchronous = true)
+            changed = true
+        }
+
+        for (message in messages) {
+            val existing = includesOf(message)
+            if (existing.none { it.id == updated.id }) continue
+            val merged = existing.map { if (it.id == updated.id) updated else it }
+            message[INCLUDES_KEY] = ChatInclude.listToJson(merged)
+            changed = true
+        }
+
+        if (!changed) return
+        saveSettings()
+        rebuildModelProjection()
+        refreshIncludeStrip()
+        refreshPersistentIncludeControls()
+        adapter?.notifyDataSetChanged()
+    }
+
+    /**
+     * Rebuilds the model-facing projection of the whole conversation from the
+     * stored messages. Cheap (no encryption, no tokenizer) and the only way to
+     * guarantee the projection and the stored includes cannot drift apart.
+     */
+    private fun rebuildModelProjection() {
+        chatMessages = arrayListOf()
+        chatMessageIncludes = arrayListOf()
+        for (message in messages) {
+            val content = modelFacingContent(message)
+            if (content.isBlank()) continue
+            chatMessages.add(
+                ChatMessage(
+                    role = if (message["isBot"] == true) {
+                        ChatRole.Assistant
+                    } else {
+                        ChatRole.User
+                    },
+                    content = content
+                )
+            )
+            chatMessageIncludes.add(
+                if (message["isBot"] != true) message[INCLUDES_KEY]?.toString() else null
+            )
+        }
+    }
+
+    private fun openDocumentPicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            // CATEGORY_OPENABLE is deliberately NOT set. It restricts the
+            // picker to files that can be opened byte-for-byte, which hides
+            // Google Docs and Sheets entirely — those have no bytes of their
+            // own and are converted on request instead. Anything that turns
+            // up as a result and cannot be converted is refused by the
+            // importer with a specific reason.
+            //
+            // "*/*" with an EXTRA_MIME_TYPES filter, because some providers
+            // hand back documents typed as octet-stream and a strict type
+            // filter would make real .md/.csv files unpickable.
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, DocumentImporter.PICKER_MIME_TYPES)
+        }
+        documentIntentLauncher.launch(intent)
+    }
+
+    private val documentIntentLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val uri = result.data?.data ?: return@registerForActivityResult
+        val fingerprint = DocumentImporter.sourceFingerprint(uri.toString())
+        if (pendingIncludes.any { it.sourceFingerprint == fingerprint } ||
+            !pendingDocumentImports.add(fingerprint)
+        ) {
+            showDocumentAlreadyAttached()
+            return@registerForActivityResult
+        }
+        importDocument(uri, fingerprint)
+    }
+
+    /**
+     * Reads the picked file off the main thread (a large document is real I/O)
+     * and either attaches it or explains why it could not be. A failure is
+     * always stated — never a silently ignored tap.
+     */
+    private fun importDocument(uri: Uri, sourceFingerprint: String) {
+        val scope = CoroutineScope(Dispatchers.Main)
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                try {
+                    DocumentImporter.import(this@ChatActivity, uri)
+                } catch (_: Exception) {
+                    DocumentImporter.Result.Unknown("document")
+                }
+            }
+            pendingDocumentImports.remove(sourceFingerprint)
+            if (isFinishing || isDestroyed) return@launch
+
+            when (result) {
+                is DocumentImporter.Result.Success -> {
+                    pendingIncludes.add(result.include)
+                    savePendingIncludes()
+                    refreshIncludeStrip()
+                }
+                is DocumentImporter.Result.Unsupported ->
+                    showIncludeProblem(R.string.include_error_unsupported, result.fileName)
+                is DocumentImporter.Result.PermissionDenied ->
+                    showIncludeProblem(R.string.include_error_permission_denied, result.fileName)
+                is DocumentImporter.Result.SourceUnavailable ->
+                    showIncludeProblem(R.string.include_error_source_unavailable, result.fileName)
+                is DocumentImporter.Result.FileGone ->
+                    showIncludeProblem(R.string.include_error_file_gone, result.fileName)
+                is DocumentImporter.Result.InterruptedRead ->
+                    showIncludeCapacityProblem(
+                        R.string.document_attach_failed_title,
+                        R.string.document_attach_interrupted_body
+                    )
+                is DocumentImporter.Result.PasswordProtected ->
+                    showIncludeProblem(R.string.include_error_password_protected, result.fileName)
+                is DocumentImporter.Result.ContentMismatch ->
+                    showIncludeProblem(R.string.include_error_content_mismatch, result.fileName)
+                is DocumentImporter.Result.Corrupted ->
+                    showIncludeProblem(R.string.include_error_corrupted, result.fileName)
+                is DocumentImporter.Result.Empty ->
+                    showIncludeProblem(R.string.include_error_empty, result.fileName)
+                is DocumentImporter.Result.ExportUnavailable ->
+                    showIncludeProblem(R.string.include_error_export_unavailable, result.fileName)
+                is DocumentImporter.Result.ExportFailed ->
+                    showIncludeCapacityProblem(
+                        R.string.document_export_failed_title,
+                        R.string.document_export_incomplete_body
+                    )
+                is DocumentImporter.Result.DeviceMemoryLimit ->
+                    showIncludeCapacityProblem(
+                        R.string.document_attach_failed_title,
+                        R.string.document_attach_memory_body
+                    )
+                is DocumentImporter.Result.ArchiveExpansionLimit ->
+                    showIncludeCapacityProblem(
+                        R.string.document_attach_failed_title,
+                        R.string.document_attach_expansion_body
+                    )
+                is DocumentImporter.Result.StorageLimit ->
+                    showIncludeCapacityProblem(
+                        R.string.document_storage_failed_title,
+                        R.string.document_attach_storage_body
+                    )
+                is DocumentImporter.Result.Unknown ->
+                    showIncludeProblem(R.string.include_error_unknown, result.fileName)
+            }
+        }
+    }
+
+    /** A dialog, never a toast (house rule) — the user must be able to read
+     *  why their file did not attach at their own pace. */
+    private fun showIncludeProblem(messageRes: Int, fileName: String) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(fileName)
+            .setMessage(messageRes)
+            .setPositiveButton(R.string.btn_close, null)
+            .show()
+    }
+
+    private fun showIncludeCapacityProblem(titleRes: Int, messageRes: Int) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setMessage(messageRes)
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
+
+    private fun showDocumentAlreadyAttached() {
+        showAlreadyAttached(R.string.include_error_duplicate)
+    }
+
+    private fun showImageAlreadyAttached() {
+        showAlreadyAttached(R.string.include_error_duplicate_image)
+    }
+
+    private fun showAlreadyAttached(titleRes: Int) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
+
+    /**
+     * Remove drops an include to its ARTIFACT form — a tiny bookmark —
+     * rather than erasing it. Deleting outright would leave the conversation
+     * full of replies about something the model can no longer see, which is
+     * how a model starts inventing what the document said.
+     *
+     * The bookmark is written by the chat's own model; if that cannot be
+     * reached the file-name fallback stands in immediately. Removal must never
+     * block or fail on a network problem, and the line stays editable either
+     * way.
+     */
+    private fun removeInclude(include: ChatInclude) {
+        val pendingIndex = pendingIncludes.indexOfFirst { it.id == include.id }
+        if (pendingIndex >= 0) {
+            // It was never sent, so detaching it must leave no model-facing
+            // history or artifact claiming that the user shared it.
+            val removed = pendingIncludes.removeAt(pendingIndex)
+            // Persist the removal BEFORE touching bytes, so a crash mid-delete
+            // never leaves a saved include pointing at bytes that are gone.
+            savePendingIncludes(synchronous = true)
+            refreshIncludeStrip()
+            if (removed.kind.isImage()) maybeDeleteImageBytes(removed)
+            return
+        }
+
+        val fallback = IncludeTextPolicy.fallbackArtifactLine(include.fileName)
+
+        if (include.kind.isImage()) {
+            updateInclude(
+                include.copy(
+                    form = IncludeForm.ARTIFACT,
+                    artifactLine = fallback,
+                    notice = IncludeNotice.None
+                ).withoutImageBytes()
+            )
+            artifactJobs.remove(include.id)?.cancel()
+            val imageInclude = include
+            val job = CoroutineScope(Dispatchers.Main).launch {
+                val written = requestImageArtifactLine(imageInclude)
+                maybeDeleteImageBytes(imageInclude)
+                if (isFinishing || isDestroyed || written == null) return@launch
+                val latest = findIncludeById(imageInclude.id) ?: return@launch
+                if (latest.form == IncludeForm.ARTIFACT && latest.artifactLine == fallback) {
+                    updateInclude(latest.copy(artifactLine = written))
+                }
+            }
+            artifactJobs[include.id] = job
+            job.invokeOnCompletion {
+                if (artifactJobs[include.id] === job) artifactJobs.remove(include.id)
+            }
+            return
+        }
+
+        // Show the cheap form at once so the transcript responds to the tap;
+        // the model-written reminder replaces the fallback when/if it arrives.
+        updateInclude(
+            include.copy(
+                form = IncludeForm.ARTIFACT,
+                artifactLine = fallback,
+                notice = IncludeNotice.None
+            )
+        )
+
+        artifactJobs.remove(include.id)?.cancel()
+        val job = CoroutineScope(Dispatchers.Main).launch {
+            val written = requestArtifactLine(include)
+            if (isFinishing || isDestroyed || written == null) return@launch
+            val latest = findIncludeById(include.id) ?: return@launch
+            // Only replace the placeholder — never overwrite text the user
+            // has since edited by hand.
+            if (latest.form == IncludeForm.ARTIFACT && latest.artifactLine == fallback) {
+                updateInclude(latest.copy(artifactLine = written))
+            }
+        }
+        artifactJobs[include.id] = job
+        job.invokeOnCompletion {
+            if (artifactJobs[include.id] === job) artifactJobs.remove(include.id)
+        }
+    }
+
+    /**
+     * Deletes an image include's on-disk bytes, but only when no OTHER live
+     * FULL image include (pending or in any saved message) still points at the
+     * same content hash. Images dedupe by hash, so the same file can back more
+     * than one include; deleting it out from under a surviving include would
+     * break that include's send. The reference check runs on the main thread
+     * (reads in-memory lists), the delete on IO.
+     */
+    private fun maybeDeleteImageBytes(include: ChatInclude) {
+        val hash = include.imageFileHash?.takeIf { it.isNotEmpty() } ?: return
+        val referenced = imageBytesStillReferenced(hash, excludingId = include.id)
+        val chat = chatId
+        CoroutineScope(Dispatchers.IO).launch {
+            ImageImporter.deleteImageFileIfUnreferenced(
+                this@ChatActivity, chat, include, referenced
+            )
+        }
+    }
+
+    private fun imageBytesStillReferenced(hash: String, excludingId: String): Boolean {
+        if (pendingIncludes.any {
+                it.id != excludingId && it.imageFileHash == hash && it.hasLiveImageBytes()
+            }
+        ) return true
+        for (message in messages) {
+            if (includesOf(message).any {
+                    it.id != excludingId && it.imageFileHash == hash && it.hasLiveImageBytes()
+                }
+            ) return true
+        }
+        return false
+    }
+
+    /**
+     * One-shot sweep on chat load: delete any file in this chat's image
+     * directory that no live FULL image include references. Covers an import
+     * that wrote its file but never persisted its include (the screen died in
+     * the gap) and any bytes a prior rename move could not carry over.
+     */
+    private fun reconcileChatImages() {
+        val referenced = HashSet<String>()
+        for (include in pendingIncludes) {
+            if (include.hasLiveImageBytes()) include.imageFileHash?.let(referenced::add)
+        }
+        for (message in messages) {
+            for (include in includesOf(message)) {
+                if (include.hasLiveImageBytes()) include.imageFileHash?.let(referenced::add)
+            }
+        }
+        val chat = chatId
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                ImageImporter.reconcileChatImages(this@ChatActivity, chat, referenced)
+            } catch (_: Exception) { /* best-effort cleanup */ }
+        }
+    }
+
+    private fun findIncludeById(id: String): ChatInclude? {
+        pendingIncludes.firstOrNull { it.id == id }?.let { return it }
+        for (message in messages) {
+            includesOf(message).firstOrNull { it.id == id }?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * Asks the selected endpoint/model for the short bookmark that stands in
+     * for a removed attachment. The caller has already applied a usable
+     * filename fallback, so a failed request remains silent.
+     */
+    private suspend fun requestArtifactLine(include: ChatInclude): String? {
+        val client = ai ?: return null
+        val lineModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (lineModel.isBlank()) return null
+
+        return try {
+            val raw = withContext(Dispatchers.IO) {
+                val spec = IncludeAuxiliaryRequestPolicy.artifact(
+                    include = include,
+                    selectedModel = lineModel,
+                    excerptCharacters = ARTIFACT_EXCERPT_CHARS
+                )
+                val request = ChatCompletionRequest(
+                    model = ModelId(spec.model),
+                    maxTokens = spec.maxTokens,
+                    messages = listOf(
+                        ChatMessage(
+                            role = ChatRole.User,
+                            content = spec.prompt
+                        )
+                    )
+                )
+                client.chatCompletion(request).choices.firstOrNull()?.message?.content
+            }
+            IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private suspend fun requestImageArtifactLine(include: ChatInclude): String? {
+        val client = ai ?: return null
+        val lineModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (lineModel.isBlank()) return null
+
+        return try {
+            withContext(Dispatchers.IO) {
+                val file = ImageImporter.imageFile(this@ChatActivity, chatId, include)
+                if (file == null || !file.exists()) return@withContext null
+
+                val bytes = file.readBytes()
+                val mime = include.imageMimeType ?: "image/jpeg"
+                val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+
+                val parts = ArrayList<ContentPart>()
+                parts.add(TextPart(
+                    "Create a very short reminder of this image for future AI requests " +
+                    "after the image is removed. State what the image showed and its " +
+                    "general subject or purpose. Include at most one or two especially " +
+                    "important details. Use no more than three short sentences. " +
+                    "Reply with the reminder only.\n\nFile name: ${include.fileName}"
+                ))
+                parts.add(ImagePart("data:$mime;base64,$encoded"))
+
+                val request = ChatCompletionRequest(
+                    model = ModelId(lineModel),
+                    maxTokens = IncludeAuxiliaryRequestPolicy.ARTIFACT_MAX_TOKENS,
+                    messages = listOf(
+                        ChatMessage(role = ChatRole.User, content = parts)
+                    )
+                )
+                val raw = client.chatCompletion(request)
+                    .choices.firstOrNull()?.message?.content
+                IncludeTextPolicy.sanitizeArtifactLine(raw, include.fileName)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun editInclude(include: ChatInclude) {
+        val text = when (include.form) {
+            IncludeForm.ARTIFACT -> include.modelText()
+            IncludeForm.CONDENSED -> include.condensedText ?: include.fullText
+            IncludeForm.FULL -> include.fullText
+        }
+        IncludeEditDialog.show(this, include.fileName, text) { edited ->
+            val latest = findIncludeById(include.id) ?: return@show
+            updateInclude(
+                when (latest.form) {
+                    IncludeForm.ARTIFACT -> latest.copy(artifactLine = edited)
+                    else -> latest.withCondensedText(edited)
+                }
+            )
+        }
+    }
+
+    private fun ChatInclude.withCondensedText(text: String): ChatInclude {
+        return copy(
+            form = IncludeForm.CONDENSED,
+            condensedText = text
+        )
+    }
+
+    /** Condense automatically replaces the model-facing full text with Cliff Notes. */
+    private fun condenseInclude(include: ChatInclude) {
+        val latest = findIncludeById(include.id) ?: return
+        if (latest.form != IncludeForm.FULL) return
+        if (latest.kind.isImage()) {
+            reduceInclude(latest)
+            return
+        }
+        if (condenseJob?.isActive == true) return
+
+        if (preferences?.getNeverShowCondenseHint() == true) {
+            startCondensing(latest)
+        } else {
+            showCondenseHint(latest)
+        }
+    }
+
+    private fun showCondenseHint(include: ChatInclude) {
+        val view = layoutInflater.inflate(R.layout.dialog_include_condense_hint, null)
+        val condense = view.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)
+        val cancel = view.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)
+        val neverShow = view.findViewById<MaterialCheckBox>(R.id.include_condense_never_show)
+        condense?.setText(R.string.include_action_condense)
+        cancel?.setText(R.string.include_edit_cancel)
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.include_condense_title)
+            .setView(view)
+            .setCancelable(true)
+            .create()
+
+        neverShow?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setNeverShowCondenseHint(checked)
+        }
+        cancel?.setOnClickListener { dialog.dismiss() }
+        condense?.setOnClickListener {
+            dialog.dismiss()
+            val latest = findIncludeById(include.id) ?: return@setOnClickListener
+            if (latest.form == IncludeForm.FULL) startCondensing(latest)
+        }
+        dialog.show()
+    }
+
+    private fun startCondensing(include: ChatInclude) {
+        if (condenseJob?.isActive == true) return
+
+        val view = layoutInflater.inflate(R.layout.dialog_include_condense_progress, null)
+        val spinner = view.findViewById<CircularProgressIndicator>(R.id.include_condense_progress)
+        val status = view.findViewById<TextView>(R.id.include_condense_status)
+        val okay = view.findViewById<MaterialButton>(R.id.btn_dialog_action)
+        okay?.setText(R.string.okay)
+        okay?.visibility = View.GONE
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(include.fileName)
+            .setView(view)
+            .setCancelable(false)
+            .create()
+        condenseDialog = dialog
+        okay?.setOnClickListener {
+            dialog.dismiss()
+            if (condenseDialog === dialog) condenseDialog = null
+        }
+        dialog.show()
+
+        val sourceText = include.fullText
+        condenseJob = CoroutineScope(Dispatchers.Main).launch {
+            val result = requestCondensedText(include)
+            if (isFinishing || isDestroyed || condenseDialog !== dialog) return@launch
+
+            val condensed = result.getOrNull()?.trim().orEmpty()
+            val sourceTokens = IncludeTextPolicy.estimateTokens(sourceText)
+            val condensedTokens = IncludeTextPolicy.estimateTokens(condensed)
+            val latest = findIncludeById(include.id)
+            val stillCurrent = latest?.form == IncludeForm.FULL &&
+                    latest.fullText == sourceText
+
+            val completionMessage = when {
+                result.isFailure -> {
+                    result.exceptionOrNull()?.let { error ->
+                        val classified = GenerationErrorClassifier.classify(error)
+                        logGenerationError(classified, error, "document condense")
+                    }
+                    getString(R.string.include_condense_failed)
+                }
+                condensed.isBlank() || condensedTokens >= sourceTokens ->
+                    getString(R.string.include_condense_not_shorter)
+                !stillCurrent ->
+                    getString(R.string.include_condense_failed)
+                else -> {
+                    updateInclude(latest!!.withCondensedText(condensed))
+                    getString(R.string.include_condense_complete)
+                }
+            }
+
+            spinner?.visibility = View.GONE
+            status?.text = completionMessage
+            okay?.visibility = View.VISIBLE
+            condenseJob = null
+        }
+    }
+
+    /**
+     * Asks the selected endpoint/model to make the Cliff Notes. The request
+     * includes the configured output ceiling but does not invent a percentage
+     * target based on the source length.
+     */
+    private suspend fun requestCondensedText(include: ChatInclude): Result<String> {
+        val client = ai
+            ?: return Result.failure(IllegalStateException("No selected AI endpoint"))
+        val condenseModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (condenseModel.isBlank()) {
+            return Result.failure(IllegalStateException("No selected model"))
+        }
+        val outputLimit = preferences?.getMaxTokens() ?: 1500
+
+        return try {
+            val text = withContext(Dispatchers.IO) {
+                val spec = IncludeAuxiliaryRequestPolicy.condense(
+                    include = include,
+                    selectedModel = condenseModel,
+                    configuredMaxTokens = outputLimit
+                )
+                val request = ChatCompletionRequest(
+                    model = ModelId(spec.model),
+                    maxTokens = spec.maxTokens,
+                    messages = listOf(
+                        ChatMessage(
+                            role = ChatRole.User,
+                            content = spec.prompt
+                        )
+                    )
+                )
+                client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+            }
+            if (text.isNullOrBlank()) {
+                Result.failure(IllegalStateException("Condense returned no text"))
+            } else {
+                Result.success(text)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun reduceInclude(include: ChatInclude) {
+        if (reduceJob?.isActive == true) return
+
+        if (preferences?.getNeverShowReduceHint() == true) {
+            startReducing(include)
+        } else {
+            showReduceHint(include)
+        }
+    }
+
+    private fun showReduceHint(include: ChatInclude) {
+        val view = layoutInflater.inflate(R.layout.dialog_include_reduce_hint, null)
+        val reduce = view.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)
+        val cancel = view.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)
+        val neverShow = view.findViewById<MaterialCheckBox>(R.id.include_reduce_never_show)
+        reduce?.setText(R.string.include_action_reduce)
+        cancel?.setText(R.string.include_edit_cancel)
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.include_reduce_title)
+            .setView(view)
+            .setCancelable(true)
+            .create()
+
+        neverShow?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setNeverShowReduceHint(checked)
+        }
+        cancel?.setOnClickListener { dialog.dismiss() }
+        reduce?.setOnClickListener {
+            dialog.dismiss()
+            val latest = findIncludeById(include.id) ?: return@setOnClickListener
+            if (latest.form == IncludeForm.FULL && latest.kind.isImage()) startReducing(latest)
+        }
+        dialog.show()
+    }
+
+    private fun startReducing(include: ChatInclude) {
+        if (reduceJob?.isActive == true) return
+
+        val view = layoutInflater.inflate(R.layout.dialog_include_condense_progress, null)
+        val spinner = view.findViewById<CircularProgressIndicator>(R.id.include_condense_progress)
+        val status = view.findViewById<TextView>(R.id.include_condense_status)
+        val okay = view.findViewById<MaterialButton>(R.id.btn_dialog_action)
+        okay?.setText(R.string.okay)
+        okay?.visibility = View.GONE
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(include.fileName)
+            .setView(view)
+            .setCancelable(false)
+            .create()
+        reduceDialog = dialog
+        okay?.setOnClickListener {
+            dialog.dismiss()
+            if (reduceDialog === dialog) reduceDialog = null
+        }
+        status?.setText(R.string.include_reduce_working)
+        dialog.show()
+
+        reduceJob = CoroutineScope(Dispatchers.Main).launch {
+            val result = requestReducedText(include)
+            if (isFinishing || isDestroyed || reduceDialog !== dialog) return@launch
+
+            val reduced = result.getOrNull()?.trim().orEmpty()
+            val latest = findIncludeById(include.id)
+            val stillCurrent = latest?.form == IncludeForm.FULL &&
+                    latest.kind.isImage() && latest.imageFileHash == include.imageFileHash
+
+            val completionMessage = when {
+                result.isFailure -> {
+                    result.exceptionOrNull()?.let { error ->
+                        val classified = GenerationErrorClassifier.classify(error)
+                        logGenerationError(classified, error, "image reduce")
+                    }
+                    getString(R.string.include_reduce_failed)
+                }
+                reduced.isBlank() ->
+                    getString(R.string.include_reduce_failed)
+                !stillCurrent ->
+                    getString(R.string.include_reduce_failed)
+                else -> {
+                    updateInclude(
+                        latest!!.withCondensedText(reduced).withoutImageBytes()
+                    )
+                    maybeDeleteImageBytes(include)
+                    getString(R.string.include_condense_complete)
+                }
+            }
+
+            spinner?.visibility = View.GONE
+            status?.text = completionMessage
+            okay?.visibility = View.VISIBLE
+            reduceJob = null
+        }
+    }
+
+    private fun accompanyingUserMessage(includeId: String): String {
+        for (message in messages) {
+            if (message["isBot"] == true) continue
+            val includes = includesOf(message)
+            if (includes.any { it.id == includeId }) {
+                return message["message"]?.toString().orEmpty()
+            }
+        }
+        return ""
+    }
+
+    private suspend fun requestReducedText(include: ChatInclude): Result<String> {
+        val client = ai
+            ?: return Result.failure(IllegalStateException("No selected AI endpoint"))
+        val reduceModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (reduceModel.isBlank()) {
+            return Result.failure(IllegalStateException("No selected model"))
+        }
+        val outputLimit = preferences?.getMaxTokens() ?: 1500
+        val userText = accompanyingUserMessage(include.id)
+
+        return try {
+            val text = withContext(Dispatchers.IO) {
+                val spec = IncludeAuxiliaryRequestPolicy.reduceImage(
+                    include = include,
+                    accompanyingUserMessage = userText,
+                    selectedModel = reduceModel,
+                    configuredMaxTokens = outputLimit
+                )
+                val file = ImageImporter.imageFile(this@ChatActivity, chatId, include)
+                if (file == null || !file.exists()) {
+                    error("Image file missing for include ${include.id}")
+                }
+                val parts = ArrayList<ContentPart>()
+                parts.add(TextPart(spec.prompt))
+                val bytes = file.readBytes()
+                val mime = include.imageMimeType ?: "image/jpeg"
+                val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                parts.add(ImagePart("data:$mime;base64,$encoded"))
+
+                val request = ChatCompletionRequest(
+                    model = ModelId(spec.model),
+                    maxTokens = spec.maxTokens,
+                    messages = listOf(
+                        ChatMessage(role = ChatRole.User, content = parts)
+                    )
+                )
+                client.chatCompletion(request).choices.firstOrNull()?.message?.content?.trim()
+            }
+            if (text.isNullOrBlank()) {
+                Result.failure(IllegalStateException("Reduce returned no text"))
+            } else {
+                Result.success(text)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun consumePendingIncludesForSend(): List<ChatInclude> {
+        if (pendingIncludes.isEmpty()) return emptyList()
+        val sent = pendingIncludes.map { it.forSentMessage() }
+        pendingIncludes = arrayListOf()
+        return sent
+    }
+
+    /** Opens the system image picker, filtered to JPEG, PNG and HEIC. HEIC
+     *  is converted to JPEG at import time. Any other file the user
+     *  navigates to is refused by [ImageImporter] with the approved dialog. */
+    private fun openImagePicker() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, ImageImporter.PICKER_MIME_TYPES)
+        }
+        imageIntentLauncher.launch(intent)
+    }
+
+    private fun initLogic() {
+        btnMicro?.setOnClickListener {
+            if (isAiCurrentlyBusy()) {
+                cancelAllAiActivity("mic button tap on this screen")
+                return@setOnClickListener
+            }
+            // The mic is single-turn transcription ONLY now. While a hands-free
+            // conversation is running the conversation button owns everything, so
+            // the mic is inert (a tap here must not start a second capture).
+            if (isHandsFreeEngaged()) return@setOnClickListener
+            when (preferences!!.getEffectiveAudioModel()) {
+                "google" -> handleGoogleSpeechRecognition()
+                "whisper-local" -> handleLocalWhisperSpeechRecognition()
+                else -> handleWhisperSpeechRecognition()
+            }
+        }
+
+        // Touch interceptor: lets a tap during AI generation cancel everything
+        // even though the click handler is otherwise disabled by isEnabled=false
+        // in the generation/TTS code paths. OnTouchListener fires regardless of
+        // View.isEnabled, so a stop tap always lands. Excludes hands-free: during
+        // a conversation the conversation button is the stop control, not the mic.
+        btnMicro?.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_UP && isAiCurrentlyBusy() &&
+                !isRecording && !isHandsFreeEngaged()
+            ) {
+                cancelAllAiActivity("mic button touch on this screen (mid-generation)")
+                true
+            } else {
+                false
+            }
+        }
+
+        // (No long-press listener on btnMicro: View.performLongClick is gated
+        // on isEnabled, which is exactly false during generation — the only
+        // window where cancelAllAiActivity has anything to do — so this
+        // listener could never fire when it would matter. The OnTouchListener
+        // above already carries the "tap to cancel mid-generation" behaviour
+        // because OnTouchListener fires before View.onTouchEvent regardless
+        // of isEnabled.)
+
+        messageInput?.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                /* unused */
+            }
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                // Mic and the conversation/send button now sit side by side and
+                // both stay in the bar; only the conversation button's glyph
+                // flips: waveform when empty (start hands-free), up-arrow when
+                // there is text (send). No-op while a conversation is live.
+                refreshConversationButton()
+            }
+
+            override fun afterTextChanged(s: Editable?) {
+                /* unused */
+            }
+        })
+
+        // btnSend is the dual conversation/send control (see onConversationButtonTapped).
+        btnSend?.setOnClickListener {
+            onConversationButtonTapped()
+        }
+
+        // Mirror of the mic's touch interceptor: while the button is disabled
+        // (during generation/readback) a tap still lands here so the user can
+        // stop a live conversation or cancel a busy turn. When enabled, returns
+        // false so the click listener above handles the normal tap.
+        btnSend?.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_UP && btnSend?.isEnabled == false) {
+                onConversationButtonTapped()
+                true
+            } else {
+                false
+            }
+        }
+
+        btnAttachFile?.setOnClickListener {
+            visionActions?.visibility = if (visionActions?.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+
+        btnVisionActionGallery?.setOnClickListener {
+            visionActions?.visibility = View.GONE
+            openImagePicker()
+        }
+
+        btnVisionActionCamera?.setOnClickListener {
+            visionActions?.visibility = View.GONE
+            val intent = Intent(this, CameraPermissionActivity::class.java).setAction(Intent.ACTION_VIEW)
+            permissionResultLauncherCamera.launch(intent)
+        }
+
+        btnVisionActionDocument?.setOnClickListener {
+            visionActions?.visibility = View.GONE
+            openDocumentPicker()
+        }
+
+        messageInput?.setOnKeyListener { v, keyCode, event -> run {
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> {
+                    if (keyCode == KeyEvent.KEYCODE_ENTER && event.isShiftPressed && isHardKB() && preferences!!.getDesktopMode()) {
+                        (v as EditText).append("\n")
+                        return@run true
+                    }
+
+                    if (keyCode == KeyEvent.KEYCODE_ENTER && isHardKB() && preferences!!.getDesktopMode()) {
+                        prepareTypedTurn((v as EditText).text.toString())
+                        return@run true
+                    }
+
+                    if (((keyCode == KeyEvent.KEYCODE_ESCAPE && event.isShiftPressed) || keyCode == KeyEvent.KEYCODE_BACK) && preferences!!.getDesktopMode()) {
+                        finishActivity()
+                        return@run true
+                    }
+
+                    return@run false
+                }
+                else -> return@run false
+            }
+        }}
+
+        if (preferences!!.getDesktopMode()) {
+            messageInput?.requestFocus()
+        }
+
+        btnSettings?.setOnClickListener {
+            val options = ActivityOptionsCompat.makeSceneTransitionAnimation(
+                this,
+                Pair.create(btnSettings, ViewCompat.getTransitionName(btnSettings!!))
+            )
+            settingsLauncher.launch(
+                Intent(this, SettingsActivity::class.java).setAction(Intent.ACTION_VIEW).putExtra("chatId", chatId),
+                options
+            )
+        }
+
+        btnQuickSettings?.setOnClickListener {
+            openSummoningCircle()
+        }
+
+        btnDebugLog?.setOnClickListener {
+            startActivity(
+                Intent(this, LogsActivity::class.java)
+                    .putExtra("type", "event")
+                    .putExtra("chatId", chatId)
+            )
+        }
+        updateDebugLogButtonVisibility()
+        initSummarizer()
+    }
+
+    /* ==================== Conversation summarizer ====================
+     * conversation-summary-plan.md §5 + conversation-summary-errors.md.
+     * Transmission is bookmark-based (decision 15): each regular request
+     * sends the summary as its own system message plus every message after
+     * the fold-in bookmark, so a failing summarizer only ever makes requests
+     * temporarily larger — never blocks or drops content. Scope is regular
+     * chat requests only (decision 12): the Playground, image generation,
+     * and the function-calling / fine-tuned-model paths keep full history.
+     */
+
+    private fun initSummarizer() {
+        seedSummarizerToggle()
+        if (summarizerController == null) {
+            summarizerController = org.teslasoft.assistant.util.summarizer.SummarizerController(
+                applicationContext
+            ) { chatId }.also { controller ->
+                controller.listener = object :
+                    org.teslasoft.assistant.util.summarizer.SummarizerController.Listener {
+                    override fun onSummarizerStateChanged() {
+                        runOnUiThread { refreshSummarizerIcons() }
+                    }
+
+                    override fun onSummarizerErrorEpisode() {
+                        playSummarizerErrorSignal()
+                    }
+                }
+            }
+        }
+        btnSummary?.setOnClickListener { showSummaryView() }
+        btnSummarizerErrors?.setOnClickListener { showSummarizerErrorsDialog() }
+        refreshSummarizerIcons()
+        // The next eligible cycle (errors doc §3): opening the chat retries
+        // pending fold-ins and runs catch-up after a re-enable.
+        summarizerCycle()
+    }
+
+    /**
+     * Stamps the per-chat Use Summarizer value once, so flipping the global
+     * "Use Summarizer for New Chats" default later never silently changes
+     * what an EXISTING chat sends (decision 2 + §4.6). A chat is "new" here
+     * while it has no messages yet.
+     */
+    private fun seedSummarizerToggle() {
+        if (chatId.isEmpty() || chatStorageUnavailable) return
+        if (preferences?.getChatUseSummarizerRaw().orEmpty().isNotEmpty()) return
+        val enable = messages.isEmpty() &&
+            preferences?.getSummarizerOnForNewChats() == true &&
+            org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this)
+        preferences?.setChatUseSummarizerRaw(if (enable) "true" else "false")
+    }
+
+    /** data_alert (with count badge) while the error log has entries;
+     *  subject while the summarizer is on for this chat (decisions 11/16). */
+    private fun refreshSummarizerIcons() {
+        val summarizerOn = preferences?.getChatUseSummarizer() == true
+        btnSummary?.visibility = if (summarizerOn) View.VISIBLE else View.GONE
+
+        val errors = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
+            .fromJson(preferences?.getSummarizerErrors())
+        if (errors.isEmpty()) {
+            btnSummarizerErrors?.visibility = View.GONE
+            summarizerErrorBadge?.visibility = View.GONE
+        } else {
+            btnSummarizerErrors?.visibility = View.VISIBLE
+            summarizerErrorBadge?.visibility = View.VISIBLE
+            summarizerErrorBadge?.text = errors.size.toString()
+        }
+    }
+
+    /** True when this chat's requests use summarizer transmission at all —
+     *  the excluded paths (decision 12) always send full history. The old
+     *  Function Calling exclusion is gone with the feature
+     *  (image-generation-rebuild-plan.md §15): those chats now follow the
+     *  normal summarizer rules like any other chat. */
+    private fun summarizerTransmissionActive(): Boolean =
+        preferences?.getChatUseSummarizer() == true &&
+            !model.contains(":ft") && !model.contains("ft:")
+
+    /** The summary's own system message (decision 14), or null when nothing
+     *  is injected. Sent as the very last injected item before the oldest
+     *  full message; the user's stored words are never mixed with it. */
+    private fun summarizerInjectionText(): String? {
+        if (!summarizerTransmissionActive()) return null
+        val summary = preferences?.getSummarizerSummary().orEmpty()
+        if (summary.isBlank()) return null
+        return getString(R.string.summarizer_injection_header) + "\n\n" + summary
+    }
+
+    /**
+     * The model-facing history AFTER the fold-in bookmark, built from the
+     * stored messages with the same projection rules as
+     * [rebuildModelProjection] (blank-content messages skipped). Null when
+     * summarizer transmission is off or nothing is folded yet — callers then
+     * use the full projection unchanged.
+     */
+    private fun summarizerTrimmedHistory(): Pair<List<ChatMessage>, List<String?>>? {
+        if (!summarizerTransmissionActive()) return null
+        val folded = (preferences?.getSummarizerFoldedCount() ?: 0).coerceAtMost(messages.size)
+        if (folded <= 0) return null
+        val msgs = ArrayList<ChatMessage>()
+        val includes = ArrayList<String?>()
+        for (i in folded until messages.size) {
+            val message = messages[i]
+            val content = modelFacingContent(message)
+            if (content.isBlank()) continue
+            msgs.add(
+                ChatMessage(
+                    role = if (message["isBot"] == true) ChatRole.Assistant else ChatRole.User,
+                    content = content
+                )
+            )
+            includes.add(if (message["isBot"] != true) message[INCLUDES_KEY]?.toString() else null)
+        }
+        return Pair(msgs, includes)
+    }
+
+    /** One snapshot entry per stored message so indexes stay aligned with
+     *  the fold-in bookmark; blank entries advance it without being sent. */
+    private fun summarizerSnapshot(): org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? {
+        if (isFinishing || isDestroyed || chatStorageUnavailable || chatId.isEmpty()) return null
+        val entries = messages.map {
+            org.teslasoft.assistant.util.summarizer.SummarizerController.Entry(
+                isBot = it["isBot"] == true,
+                text = modelFacingContent(it)
+            )
+        }
+        return org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot(
+            entries,
+            preferences?.getChatSummarizerWindow() ?: 20
+        )
+    }
+
+    /** Image ids whose summary call is in flight, so a repeat pass (each
+     *  turn, each resume) never starts a second call for the same image. */
+    private val imageSummaryInFlight = HashSet<String>()
+
+    /**
+     * Give every completed generated image a token-saving summary, silently.
+     * Independent of the conversation-summarizer toggle: whenever a Summary
+     * Model is configured, each image whose prompt has no summary and no user
+     * edit yet is summarized once. A failure is quiet — the image keeps
+     * sending its full prompt and the next turn or resume tries again (owner
+     * request, Aug 16 2026).
+     */
+    private fun ensureImageSummaries() {
+        val controller = summarizerController ?: return
+        if (!org.teslasoft.assistant.util.summarizer.SummarizerController.isConfigured(this)) return
+        val targets = messages.mapNotNull { msg ->
+            if (msg["isBot"] != true) return@mapNotNull null
+            val meta = GeneratedImageMetadata.fromJson(msg[GeneratedImageMetadata.KEY]?.toString())
+                ?: return@mapNotNull null
+            if (meta.status != GeneratedImageMetadata.STATUS_COMPLETE) return@mapNotNull null
+            if (meta.prompt.isBlank()) return@mapNotNull null
+            if (meta.effectiveSummary() != null) return@mapNotNull null
+            if (meta.imageId in imageSummaryInFlight) return@mapNotNull null
+            meta
+        }
+        for (meta in targets) {
+            imageSummaryInFlight.add(meta.imageId)
+            lifecycleScope.launch {
+                val summary = controller.summarizeImagePrompt(meta.prompt)
+                imageSummaryInFlight.remove(meta.imageId)
+                if (!summary.isNullOrBlank()) applyImageSummary(meta.imageId, summary)
+            }
+        }
+    }
+
+    /** Store a freshly made image summary on its message, unless a user edit
+     *  or another summary landed meanwhile, then refresh the row and the
+     *  model projection. */
+    private fun applyImageSummary(imageId: String, summary: String) {
+        val index = messages.indexOfFirst {
+            GeneratedImageMetadata.fromJson(it[GeneratedImageMetadata.KEY]?.toString())?.imageId == imageId
+        }
+        if (index < 0) return
+        val meta = GeneratedImageMetadata.fromJson(messages[index][GeneratedImageMetadata.KEY]?.toString())
+            ?: return
+        if (meta.effectiveSummary() != null) return
+        messages[index][GeneratedImageMetadata.KEY] = meta.withImageSummary(summary).toJson()
+        saveSettings()
+        rebuildModelProjection()
+        adapter?.notifyItemChanged(index)
+    }
+
+    /** Runs a fold-in cycle when the summarizer is on for this chat. [force]
+     *  (Update Now) also folds the final partial batch; automatic cycles
+     *  wait for a full batch so provider prompt caching keeps applying. */
+    private fun summarizerCycle(force: Boolean = false) {
+        if (preferences?.getChatUseSummarizer() != true) return
+        summarizerController?.runCycle(force) { summarizerSnapshot() }
+    }
+
+    /** Summary view (decision 11): the editable summary and Update Now.
+     *  Edits save automatically when the view closes; Update Now saves them
+     *  first, then folds everything up to the current window edge. */
+    private fun showSummaryView() {
+        val view = layoutInflater.inflate(R.layout.dialog_summary_view, null)
+        val field = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.field_summary_text)
+        val update = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_action)
+        update?.setText(R.string.summarizer_update_now)
+        field?.setText(preferences?.getSummarizerSummary().orEmpty())
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.summarizer_summary_title)
+            .setView(view)
+            .create()
+
+        fun saveEditsIfChanged() {
+            val edited = field?.text?.toString().orEmpty()
+            if (edited != preferences?.getSummarizerSummary().orEmpty()) {
+                preferences?.commitSummarizerSummaryEdit(edited)
+            }
+        }
+        dialog.setOnDismissListener { saveEditsIfChanged() }
+        update?.setOnClickListener {
+            saveEditsIfChanged()
+            dialog.dismiss()
+            summarizerCycle(force = true)
+        }
+        dialog.show()
+    }
+
+    /** Summarizer Errors dialog (decision 16 + errors doc §1): one status
+     *  paragraph, the stored entries newest first, then Copy and Delete. */
+    private fun showSummarizerErrorsDialog() {
+        val entries = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
+            .fromJson(preferences?.getSummarizerErrors())
+        if (entries.isEmpty()) {
+            refreshSummarizerIcons()
+            return
+        }
+
+        val view = layoutInflater.inflate(R.layout.dialog_summarizer_errors, null)
+        val status = view.findViewById<TextView>(R.id.summarizer_errors_status)
+        val container = view.findViewById<LinearLayout>(R.id.summarizer_errors_container)
+        val copy = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_primary_action)
+        val delete = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_destructive_action)
+        copy?.setText(R.string.summarizer_errors_copy)
+        delete?.setText(R.string.summarizer_errors_delete)
+
+        val statusText = when {
+            preferences?.getChatUseSummarizer() != true ->
+                getString(R.string.summarizer_errors_status_off)
+            preferences?.getSummarizerEpisode().orEmpty().isNotEmpty() ->
+                getString(R.string.summarizer_errors_status_behind)
+            else ->
+                getString(R.string.summarizer_errors_status_caught_up)
+        }
+        status?.text = statusText
+
+        for (entry in entries) {
+            val row = layoutInflater.inflate(R.layout.view_summarizer_error_entry, container, false)
+            row.findViewById<TextView>(R.id.summarizer_error_entry_text).text =
+                org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages.renderEntry(this, entry)
+            container?.addView(row)
+        }
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.summarizer_errors_title)
+            .setView(view)
+            .create()
+
+        copy?.setOnClickListener {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            val text = org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages
+                .renderLog(this, statusText, entries)
+            clipboard.setPrimaryClip(ClipData.newPlainText("Summarizer Errors", text))
+        }
+        delete?.setOnClickListener {
+            preferences?.setSummarizerErrors("")
+            preferences?.setSummarizerEpisode("")
+            refreshSummarizerIcons()
+            dialog.dismiss()
+        }
+        dialog.show()
+    }
+
+    /**
+     * The dedicated summarizer error sound (decision 16): plays once at the
+     * start of a failure episode, so the user notices without looking.
+     * Distinct from every other app cue — two short mid pulses then one
+     * longer low note (C5, C5, F4) — where the database warning warbles
+     * D5/Bb4, the generation-error cadence descends three notes, no-speech
+     * is two low notes, and the done chime ascends. Same alarm-stream
+     * routing so it stays audible on silent.
+     */
+    private fun playSummarizerErrorSignal() {
+        Thread {
+            var track: AudioTrack? = null
+            try {
+                val sampleRate = 44100
+                val notes = floatArrayOf(523.25f, 523.25f, 349.23f)
+                val noteDurationsMs = intArrayOf(110, 110, 260)
+                val gapMs = 50
+                var totalSamples = 0
+                for (durationMs in noteDurationsMs) {
+                    totalSamples += sampleRate * (durationMs + gapMs) / 1000
+                }
+                val buffer = ShortArray(totalSamples)
+
+                var idx = 0
+                for (n in notes.indices) {
+                    val samplesPerNote = sampleRate * noteDurationsMs[n] / 1000
+                    val samplesPerGap = sampleRate * gapMs / 1000
+                    for (i in 0 until samplesPerNote) {
+                        val t = i.toDouble() / sampleRate
+                        val envelope = when {
+                            i < samplesPerNote * 0.1 -> i / (samplesPerNote * 0.1)
+                            i > samplesPerNote * 0.8 -> (samplesPerNote - i) / (samplesPerNote * 0.2)
+                            else -> 1.0
+                        }
+                        val sample = Math.sin(2.0 * Math.PI * notes[n] * t) * envelope * 0.45 * Short.MAX_VALUE
+                        buffer[idx++] = sample.toInt().toShort()
+                    }
+                    idx += samplesPerGap
+                }
+
+                val attributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                val format = AudioFormat.Builder()
+                    .setSampleRate(sampleRate)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+
+                track = AudioTrack(
+                    attributes,
+                    format,
+                    totalSamples * 2,
+                    AudioTrack.MODE_STATIC,
+                    AudioManager.AUDIO_SESSION_ID_GENERATE
+                )
+                track.write(buffer, 0, totalSamples)
+                track.play()
+
+                var totalMs = 150
+                for (durationMs in noteDurationsMs) totalMs += durationMs + gapMs
+                Thread.sleep(totalMs.toLong())
+                track.stop()
+            } catch (_: Exception) {
+                // The cue must never interfere with the chat or the log entry.
+            } finally {
+                try { track?.release() } catch (_: Exception) { /* ignore */ }
+            }
+        }.start()
+    }
+
+    /** The bug shortcut in the chat's top bar is a quick jump to the Event log,
+     *  shown only while there's something worth reading there — i.e. when any
+     *  voice diagnostics (the Energy/WebRTC/Silero VAD logging toggles) or Audio
+     *  Health logging is on. Re-checked in onResume so toggling a switch in
+     *  Settings and coming back updates it without reopening the chat. */
+    private fun updateDebugLogButtonVisibility() {
+        val on = voiceDiagnosticsEnabled() || preferences?.getAudioHealthLogging() == true
+        btnDebugLog?.visibility = if (on) View.VISIBLE else View.GONE
+    }
+
+    private fun isHardKB(): Boolean {
+        return resources.configuration.keyboard == KEYBOARD_QWERTY
+    }
+
+    private val fileSaveIntentLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        run {
+            if (result.resultCode == RESULT_OK) {
+                result.data?.data?.also { uri ->
+                    writeToFile(uri)
+                }
+            }
+        }
+    }
+
+    override fun onGeneratedImageSaveClick(dataUrl: String, mimeType: String) {
+        lifecycleScope.launch {
+            val prepared = withContext(Dispatchers.IO) {
+                try {
+                    val encoded = dataUrl.substringAfter(";base64,", "")
+                    if (encoded.isBlank()) return@withContext null
+                    val normalizedMime =
+                        mimeType.takeIf { it.startsWith("image/") } ?: "image/png"
+                    val extension = when (normalizedMime.substringAfter('/')) {
+                        "jpeg" -> "jpg"
+                        "webp" -> "webp"
+                        else -> "png"
+                    }
+                    Triple(
+                        Base64.decode(encoded, Base64.DEFAULT),
+                        normalizedMime,
+                        extension
+                    )
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (prepared == null) {
+                Toast.makeText(
+                    this@ChatActivity,
+                    R.string.image_gen_save_failed,
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            fileContents = prepared.first
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = prepared.second
+                putExtra(Intent.EXTRA_TITLE, "generated-image.${prepared.third}")
+                putExtra(
+                    DocumentsContract.EXTRA_INITIAL_URI,
+                    (Environment.getExternalStorageDirectory().path +
+                        "/Pictures/SpeakGPT/generated-image.${prepared.third}").toUri()
+                )
+            }
+            fileSaveIntentLauncher.launch(intent)
+        }
+    }
+
+    /** The user saved an edited image summary in the prompt box. Store it on
+     *  the message's record so it becomes both what the box shows and what the
+     *  model receives instead of the full prompt. */
+    override fun onImageSummaryEdited(position: Int, editedSummary: String?) {
+        if (position < 0 || position >= messages.size) return
+        val meta = GeneratedImageMetadata.fromJson(
+            messages[position][GeneratedImageMetadata.KEY]?.toString()
+        ) ?: return
+        messages[position][GeneratedImageMetadata.KEY] =
+            meta.withSummaryEdited(editedSummary).toJson()
+        saveSettings()
+        rebuildModelProjection()
+        adapter?.notifyItemChanged(position)
+    }
+
+    private fun writeToFile(uri: Uri) {
+        try {
+            contentResolver.openFileDescriptor(uri, "w")?.use {
+                FileOutputStream(it.fileDescriptor).use { stream ->
+                    stream.write(
+                        fileContents
+                    )
+                }
+            }
+            Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
+        } catch (e: FileNotFoundException) {
+            Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+            e.printStackTrace()
+        } catch (e: IOException) {
+            Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+            e.printStackTrace()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun startWhisper() {
+        if (openAIKey == null) {
+            openAIMissing("whisper", "")
+            return
+        }
+        // Arm-time permission check (the tap entry point checks too; this
+        // covers arms that don't come through it). Without the permission
+        // MediaRecorder just throws, which used to read as a generic failure.
+        if (!hasRecordAudioPermission()) {
+            logVoiceEventAlways("microphone permission is missing/revoked — cannot start cloud-Whisper capture")
+            micIdle()
+            isRecording = false
+            permissionResultLauncherV2.launch(
+                Intent(this, MicrophonePermissionActivity::class.java)
+                    .setAction(Intent.ACTION_VIEW)
+            )
+            return
+        }
+        if (cancelState) {
+            cancelState = false
+            micIdle()
+            isRecording = false
+            return
+        }
+        val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(this) else MediaRecorder()
+        try {
+            r.setAudioSource(MediaRecorder.AudioSource.MIC)
+            r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            r.setAudioEncoder(MediaRecorder.AudioEncoder.HE_AAC)
+            r.setAudioChannels(1)
+            r.setAudioSamplingRate(44100)
+            r.setAudioEncodingBitRate(96000)
+            r.setOutputFile("${externalCacheDir?.absolutePath}/tmp.m4a")
+            r.prepare()
+            // start() only runs when prepare() succeeded. It used to run
+            // unconditionally AFTER the prepare-failure dialog was shown,
+            // turning a handled setup failure into an IllegalStateException
+            // crash. A start() failure is the same handled class.
+            r.start()
+        } catch (e: Exception) {
+            try { r.release() } catch (_: Exception) { /* ignore */ }
+            recorder = null
+            logVoiceEventAlways("cloud-Whisper recorder setup failed: ${e.javaClass.simpleName}: ${e.message}")
+            micIdle()
+            isRecording = false
+            MaterialAlertDialogBuilder(
+                this@ChatActivity,
+                R.style.App_MaterialAlertDialog
+            )
+                .setTitle(R.string.label_audio_error)
+                .setMessage(R.string.msg_audio_error)
+                .setPositiveButton(R.string.btn_close) { _, _ -> }
+                .show()
+            return
+        }
+        recorder = r
+    }
+
+    private fun stopWhisper() {
+        recorder?.apply {
+            stop()
+            release()
+        }
+        recorder = null
+
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
+        progress?.visibility = View.VISIBLE
+
+        if (!cancelState) {
+            whisperScope = CoroutineScope(Dispatchers.Main)
+
+            whisperScope?.launch {
+                progress?.setOnClickListener {
+                    cancel()
+                    restoreUIState()
+                }
+
+                try {
+                    processRecording()
+                } catch (_: CancellationException) {
+                    restoreUIState()
+                }
+            }
+        } else {
+            cancelState = false
+            micIdle()
+            isRecording = false
+        }
+    }
+
+    private suspend fun processRecording() {
+        try {
+            val transcriptionRequest = TranscriptionRequest(
+                audio = FileSource(
+                    path = "${externalCacheDir?.absolutePath}/tmp.m4a".toPath(),
+                    fileSystem = FileSystem.SYSTEM
+                ),
+                model = ModelId("whisper-1"),
+            )
+            val transcription = openAIAI?.transcription(transcriptionRequest)!!.text
+
+            if (transcription.trim() == "") {
+                isRecording = false
+                btnMicro?.isEnabled = true
+                btnSend?.isEnabled = true
+                progress?.visibility = View.GONE
+                micIdle()
+            } else {
+                playTranscriptionDoneSignal()
+                // Sample the box BEFORE inserting (already-typed text never auto-sends).
+                val boxWasEmpty = messageInput?.text.isNullOrEmpty()
+                if (shouldAutoSendTranscription(boxWasEmpty)) {
+                    putMessage(prefix + transcription + endSeparator, false)
+
+                    chatMessages.add(
+                        ChatMessage(
+                            role = ChatRole.User,
+                            content = prefix + transcription + endSeparator
+                        )
+                    )
+
+                    saveSettings()
+
+                    btnMicro?.isEnabled = false
+                    btnSend?.isEnabled = false
+                    progress?.visibility = View.VISIBLE
+
+                    processRecordingScope = CoroutineScope(Dispatchers.Main)
+
+                    processRecordingScope?.launch {
+                        progress?.setOnClickListener {
+                            cancel()
+                            restoreUIState()
+                        }
+
+                        try {
+                            generateResponse(prefix + transcription + endSeparator, true)
+                        } catch (_: CancellationException) {
+                            restoreUIState()
+                        }
+                    }
+                } else {
+                    restoreUIState()
+                    insertTranscriptIntoBox(transcription)
+                }
+            }
+        } catch (_: Exception) {
+            Toast.makeText(this, "Failed to record audio", Toast.LENGTH_SHORT).show()
+            btnMicro?.isEnabled = true
+            btnSend?.isEnabled = true
+            progress?.visibility = View.GONE
+        }
+    }
+
+    private fun handleWhisperSpeechRecognition() {
+        if (isRecording) {
+            micIdle()
+            isRecording = false
+            stopWhisper()
+        } else {
+            micRecording()
+            isRecording = true
+
+            if (ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                startWhisper()
+            } else {
+                permissionResultLauncherV2.launch(
+                    Intent(
+                        this,
+                        MicrophonePermissionActivity::class.java
+                    ).setAction(Intent.ACTION_VIEW)
+                )
+            }
+        }
+    }
+
+    private fun handleLocalWhisperSpeechRecognition() {
+        val handsFree = preferences?.getHandsFreeMode() == true
+
+        if (isRecording) {
+            if (handsFree) {
+                // A tap during a hands-free listening turn ends the whole loop,
+                // matching how a tap ends the Google hands-free conversation.
+                logVadDiagnostics("manual-stop")
+                stopHandsFreeLoop("mic button tapped while listening (whisper)")
+                LocalWhisperEngine.get().cancel()
+            } else {
+                micIdle()
+                isRecording = false
+                stopLocalWhisper()
+            }
+            return
+        }
+
+        // Pre-A55/A75 arm64 CPUs can't run the shipped native lib (built
+        // with armv8.2 dotprod+fp16) without SIGILL. Detect early and fall
+        // back to cloud Whisper so unsupported devices get a transcript
+        // instead of silently recording into a void (or in hands-free,
+        // looping no-result turns forever).
+        if (!org.teslasoft.assistant.stt.NativeCpuSupport.isSupported()) {
+            Toast.makeText(this, R.string.local_whisper_no_model_snackbar, Toast.LENGTH_LONG).show()
+            handleWhisperSpeechRecognition()
+            return
+        }
+
+        val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
+        val installed = activeModel.isNotEmpty() &&
+                LocalWhisperModels.byId(activeModel)?.let {
+                    LocalWhisperStorage.isInstalled(this, it)
+                } == true
+        if (!installed) {
+            // Selected on-device but no model on disk yet → fall back to
+            // cloud Whisper for this utterance so the user still gets a
+            // transcript. UI-level snackbar mirrors what the plan calls for.
+            Toast.makeText(this, R.string.local_whisper_no_model_snackbar, Toast.LENGTH_LONG).show()
+            handleWhisperSpeechRecognition()
+            return
+        }
+
+        if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            if (handsFree) startLocalWhisperHandsFreeTurn(freshTurn = true)
+            else startLocalWhisper()
+        } else {
+            permissionResultLauncherV2.launch(
+                Intent(this, MicrophonePermissionActivity::class.java)
+                    .setAction(Intent.ACTION_VIEW)
+            )
+        }
+    }
+
+    /** True iff RECORD_AUDIO is granted right now. Re-checked before every arm
+     *  (not just at the tap entry points) and on returning to the screen,
+     *  because a permission revoked mid-session used to surface as ordinary
+     *  "heard nothing" instead of naming the real cause. */
+    private fun hasRecordAudioPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+
+    private fun startLocalWhisper() {
+        if (!hasRecordAudioPermission()) {
+            // Distinct state, never "no speech": say exactly what is wrong in
+            // the persistent Event log and send the user to the existing
+            // microphone-permission screen (same one the tap entry points use).
+            logVoiceEventAlways("microphone permission is missing/revoked — cannot start on-device capture")
+            isRecording = false
+            micIdle()
+            permissionResultLauncherV2.launch(
+                Intent(this, MicrophonePermissionActivity::class.java)
+                    .setAction(Intent.ACTION_VIEW)
+            )
+            return
+        }
+        micRecording()
+        isRecording = true
+        val token = ++whisperTurnToken
+        // applicationContext lets the engine route capture to a Bluetooth
+        // headset when one is connected (else the built-in mic).
+        val ok = LocalWhisperEngine.get().startRecording(
+            context = applicationContext,
+            onCaptureError = { reason, detail ->
+                runOnUiThread { if (token == whisperTurnToken) onWhisperCaptureError(reason, detail) }
+            }
+        )
+        if (!ok) {
+            isRecording = false
+            micIdle()
+            Toast.makeText(this, R.string.local_whisper_capture_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+        preloadActiveLocalWhisperModel()
+    }
+
+    /**
+     * Hands-free Whisper turn. Whisper has no end-of-speech detection, so we
+     * hand the engine a VAD config built from the same silence/no-speech
+     * timers the Google hands-free loop uses, and let it tell us when the turn
+     * is over. End-of-turn transcribes and submits (which reads the reply
+     * aloud and re-arms the next turn); no-speech ends the loop. This makes
+     * on-device Whisper behave like Google hands-free — the only difference
+     * being the local transcription step.
+     */
+    private fun startLocalWhisperHandsFreeTurn(freshTurn: Boolean) {
+        Log.i("HandsFree", "startLocalWhisperHandsFreeTurn: freshTurn=$freshTurn " +
+                "isRecording=$isRecording handsFreeStopped=$handsFreeStopped cancelState=$cancelState")
+        // Permission is re-checked on EVERY arm, not just the tap entry point:
+        // the auto re-arm after a readback used to open a doomed capture when
+        // the permission had been revoked mid-session, and the failure then
+        // masqueraded as "heard nothing". This is a distinct, always-logged
+        // stop with the give-up cue, never a no-speech timeout.
+        if (!hasRecordAudioPermission()) {
+            logVoiceEventAlways("microphone permission is missing/revoked at " +
+                    (if (freshTurn) "hands-free start" else "hands-free re-arm") +
+                    " — stopping the loop (this is a permission problem, not silence)")
+            isRecording = false
+            stopHandsFreeLoop("microphone permission revoked", notify = true)
+            return
+        }
+        if (freshTurn) {
+            handsFreeStopped = false
+            cancelState = false
+            handsFreeTurnRetries = 0
+            whisperCaptureErrorBudget.reset()
+            // Same readback-interrupt reset as startRecognition(): a mic press
+            // mid-readback must kill the readback's completion gate/watchdog and
+            // silence the playback itself before the mic opens, or the VAD
+            // listens to the assistant's own voice and stale loop state strands
+            // the new turn (open mic that never registers anything).
+            handsFreeReadbackExpected = false
+            handsFreeReadbackToken++
+            try {
+                if (mediaPlayer?.isPlaying == true) {
+                    mediaPlayer?.stop()
+                    mediaPlayer?.reset()
+                }
+            } catch (_: Exception) { /* ignore */ }
+            try { tts?.stop() } catch (_: Exception) { /* ignore */ }
+            startHandsFreeService()
+        }
+        if (handsFreeStopped) return
+
+        micHandsFreeActive(listening = true)
+        isRecording = true
+
+        val silenceMs = preferences!!.getHandsFreeSilenceSeconds().coerceAtLeast(1) * 1000L
+        val noSpeechMs = preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
+        val graceMs = if (freshTurn) 0L else 500L
+        val vadMethod = preferences!!.getVadMethod()
+        // Each detector has its own diagnostics toggle (Alert & Debug menu).
+        // Silero used to piggyback on the WebRTC toggle, so its per-frame logs
+        // couldn't be turned off independently of WebRTC.
+        val vadLog = when (vadMethod) {
+            org.teslasoft.assistant.stt.VadMethods.SILERO -> preferences!!.getVadLoggingSilero()
+            org.teslasoft.assistant.stt.VadMethods.ENERGY -> preferences!!.getVadLoggingEnergy()
+            else -> preferences!!.getVadLoggingWebrtc()
+        }
+        // The Silero session loads from assets and needs a Context; the
+        // detector factory runs deeper down without one, so make sure the
+        // runtime is resident before the turn starts. On failure the factory
+        // falls back to Energy — say so, or the user tunes the wrong knobs.
+        if (vadMethod == org.teslasoft.assistant.stt.VadMethods.SILERO &&
+            !org.teslasoft.assistant.stt.SileroVadRuntime.ensureLoaded(applicationContext)
+        ) {
+            logVoiceEvent("Silero detector failed to load; this turn will use Energy detection")
+        }
+        // User-tuned energy gate (advanced voice settings): the field showed
+        // the fixed gate discarding a quiet voice entirely, so the numbers are
+        // theirs to adjust per device/mic.
+        val tuning = org.teslasoft.assistant.stt.VadTuning(
+            gateEnabled = preferences!!.getVadEnergyGateEnabled(),
+            minSpeechRms = preferences!!.getVadMinSpeechRms().toDouble(),
+            floorFactor = preferences!!.getVadFloorFactor().toDouble(),
+            energyCeiling = preferences!!.getVadEnergyCeiling().toDouble(),
+            hysteresisEnabled = preferences!!.getVadHysteresisEnabled(),
+            hysteresisExitRatio = preferences!!.getVadHysteresisExitPercent() / 100.0,
+            hangoverMs = preferences!!.getVadHangoverMs().toLong(),
+            sileroThreshold = preferences!!.getVadSileroThreshold() / 100.0
+        )
+        // Every callback closure carries this turn's token; a late/duplicate
+        // callback from an older turn (or from a session the engine already
+        // cleaned up) compares stale and is dropped on the main thread.
+        val token = ++whisperTurnToken
+        val ok = LocalWhisperEngine.get().startRecording(
+            // applicationContext lets the engine route capture to a Bluetooth
+            // headset when one is connected (else the built-in mic), re-checked
+            // every turn so a headset connecting mid-conversation is picked up.
+            context = applicationContext,
+            vad = LocalWhisperEngine.VadConfig(
+                silenceMs, noSpeechMs, vadMethod, preferences!!.getVadWebRtcMode(), graceMs, vadLog,
+                tuning = tuning,
+                minSpeechMs = preferences!!.getVadMinSpeechMs().toLong(),
+                audioHealth = preferences!!.getAudioHealthLogging()
+            ),
+            onEndOfTurn = { runOnUiThread { if (token == whisperTurnToken) onHandsFreeWhisperEndOfTurn() } },
+            onNoSpeechTimeout = { runOnUiThread { if (token == whisperTurnToken) onHandsFreeWhisperNoSpeech() } },
+            onCaptureError = { reason, detail ->
+                runOnUiThread { if (token == whisperTurnToken) onWhisperCaptureError(reason, detail) }
+            }
+        )
+        if (!ok) {
+            isRecording = false
+            micIdle()
+            // The capture device can be briefly unavailable right after a
+            // readback (audio routing hasn't released, or the device only just
+            // woke with the screen off). Retry before tearing the whole
+            // conversation down — giving up on the first failure is the
+            // "mic never reopens after the reply" symptom.
+            if (!freshTurn && handsFreeTurnRetries < 2) {
+                handsFreeTurnRetries++
+                logVoiceEvent("whisper capture failed to start; retry $handsFreeTurnRetries")
+                handsFreeHandler.postDelayed({
+                    if (!isFinishing && !isDestroyed && !handsFreeStopped && !cancelState && !isRecording) {
+                        startLocalWhisperHandsFreeTurn(freshTurn = false)
+                    }
+                }, 600)
+                return
+            }
+            // The toast below is suppressed by the OS when the chat isn't the
+            // foreground screen (settings open over it, screen off) — the
+            // event log line above via stopHandsFreeLoop is the durable record.
+            stopHandsFreeLoop("whisper capture failed to start (after $handsFreeTurnRetries retries)", notify = true)
+            Toast.makeText(this, R.string.local_whisper_capture_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+        handsFreeTurnRetries = 0
+        logVoiceEvent(if (freshTurn) "listening turn started (mic button)" else "listening turn started (auto re-arm)")
+        logMicRoute()
+        preloadActiveLocalWhisperModel()
+    }
+
+    /** VAD said the user finished speaking — transcribe + submit this turn. */
+    private fun onHandsFreeWhisperEndOfTurn() {
+        Log.i("HandsFree", "onHandsFreeWhisperEndOfTurn: isRecording=$isRecording " +
+                "handsFreeStopped=$handsFreeStopped cancelState=$cancelState")
+        if (!isRecording || handsFreeStopped || cancelState) return
+        isRecording = false
+        // The turn made real progress — restore the mid-turn failure budget.
+        whisperCaptureErrorBudget.reset()
+        logVoiceEvent("end of turn detected; transcribing")
+        logVadDiagnostics("end-of-turn", showToast = false)
+        // stopLocalWhisper() transcribes the buffered audio and routes through
+        // processLocalWhisperTranscript → generateResponse → speak; the
+        // readback completion re-arms the next turn.
+        stopLocalWhisper()
+    }
+
+    /** VAD saw no speech within the window — end the loop like Google does. */
+    private fun onHandsFreeWhisperNoSpeech() {
+        if (handsFreeStopped) return
+        logVadDiagnostics("no-speech-timeout")
+        stopHandsFreeLoop("no speech within the no-speech window", notify = true)
+        LocalWhisperEngine.get().cancel()
+    }
+
+    /**
+     * The engine's capture loop died on its own (AudioRecord read failure, a
+     * crash inside the loop, or a wall-clock watchdog abort). This is the
+     * explicit failure path — it is NEVER delivered as silence or an empty
+     * transcript. The engine has already released the mic, the Bluetooth
+     * route and the buffer; this side owns the UI state and the loop
+     * decision: a bounded retry in hands-free (so one glitch doesn't end the
+     * conversation), then a visible-and-audible stop through the same funnel
+     * as every other loop ending. Manual push-to-talk resets to idle and
+     * tells the user with the existing audio-error dialog. Late or duplicate
+     * deliveries are filtered by the turn token before this runs.
+     */
+    private fun onWhisperCaptureError(reason: org.teslasoft.assistant.stt.CaptureErrorReason, detail: String) {
+        logVoiceEventAlways("on-device capture failed ($reason): $detail")
+        val wasHandsFreeTurn = preferences?.getHandsFreeMode() == true &&
+                !handsFreeStopped && !cancelState && isRecording
+        isRecording = false
+        if (wasHandsFreeTurn) {
+            if (whisperCaptureErrorBudget.tryConsume()) {
+                logVoiceEvent("re-arming after capture error (attempt ${whisperCaptureErrorBudget.attemptsUsed()})")
+                handsFreeHandler.postDelayed({
+                    if (!isFinishing && !isDestroyed && !handsFreeStopped && !cancelState && !isRecording) {
+                        startLocalWhisperHandsFreeTurn(freshTurn = false)
+                    }
+                }, 600)
+            } else {
+                stopHandsFreeLoop("on-device capture failed repeatedly ($reason)", notify = true)
+            }
+            return
+        }
+        // Manual push-to-talk (or the loop is already down): back to idle. The
+        // dialog matches the house persistent-message rule and reuses the
+        // existing audio-error wording; hands-free never shows it (the give-up
+        // chime + Event log are the screen-off signals there).
+        micIdle()
+        btnMicro?.isEnabled = true
+        btnSend?.isEnabled = true
+        progress?.visibility = View.GONE
+        if (preferences?.getHandsFreeMode() != true && !isFinishing && !isDestroyed) {
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.label_audio_error)
+                .setMessage(R.string.local_whisper_capture_failed)
+                .setPositiveButton(R.string.btn_close) { _, _ -> }
+                .show()
+        }
+    }
+
+    /** Surface the per-recording diagnostics when a hands-free turn ends. Two
+     *  independent sources, each behind its own toggle: the active VAD detector
+     *  ("was there speech?" — frames, RMS, gate, hysteresis) and Audio Health
+     *  ("did the mic deliver usable audio?" — levels, clipping, route). When both
+     *  are on they're written as two clearly-labelled lines in one entry so they
+     *  read cleanly together. Toast for live feedback; Event log so the user can
+     *  read it after the fact ("mic listens forever" / "never heard me").
+     *
+     *  [showToast] false for routine endings (every normal end-of-turn would
+     *  otherwise toast over the conversation); the event log gets it either way. */
+    private fun logVadDiagnostics(reason: String, showToast: Boolean = true) {
+        val engine = LocalWhisperEngine.get()
+        val vadDiag = engine.lastVadDiagnostics()
+        val audioHealthOn = preferences?.getAudioHealthLogging() == true
+        val audioDiag = if (audioHealthOn) engine.lastAudioHealthDiagnostics() else ""
+
+        // Toast = live feedback. The VAD line shows on the no-speech toast as
+        // before (so "I heard nothing, here's why" works without diagnostics
+        // mode); Audio Health adds its line only when the user enabled it.
+        if (showToast) {
+            val toastMsg = listOf(vadDiag, audioDiag).filter { it.isNotEmpty() }.joinToString("\n\n")
+            if (toastMsg.isNotEmpty()) Toast.makeText(this, toastMsg, Toast.LENGTH_LONG).show()
+        }
+
+        // Persistent write: each source follows its own toggle, so turning all
+        // of them off means no diagnostics spam in the Event log.
+        val parts = ArrayList<String>()
+        if (voiceDiagnosticsEnabled() && vadDiag.isNotEmpty()) parts.add("VAD: $vadDiag")
+        if (audioHealthOn && audioDiag.isNotEmpty()) parts.add(audioDiag)
+        if (parts.isEmpty()) return
+        try {
+            org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "VoiceDiag", "debug", "$reason\n${parts.joinToString("\n")}")
+        } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
+    }
+
+    /** Write the microphone route chosen for this turn to the Event log: the
+     *  requested device plus the actual active input before and after the mic
+     *  opened. This is what lets the user confirm which mic is really in use —
+     *  e.g. that a connected Bluetooth headset is being captured from, not the
+     *  built-in mic. Always logged to logcat; written to the persistent Event
+     *  log when Audio Health or any VAD logging is on, so it doesn't spam normal
+     *  use but is there the moment the user turns diagnostics on to investigate. */
+    private fun logMicRoute() {
+        val diag = LocalWhisperEngine.get().lastMicRouteDiagnostics()
+        if (diag.isEmpty()) return
+        Log.i("VoiceLoop", "mic route: $diag")
+        if (preferences?.getAudioHealthLogging() != true && !voiceDiagnosticsEnabled()) return
+        try {
+            org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "MicRoute", "info", diag)
+        } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
+    }
+
+    /** True when the user has switched on any VAD logging toggle (Energy,
+     *  WebRTC or Silero) — treated as "voice diagnostics mode". */
+    private fun voiceDiagnosticsEnabled(): Boolean {
+        return preferences?.getVadLoggingWebrtc() == true ||
+                preferences?.getVadLoggingEnergy() == true ||
+                preferences?.getVadLoggingSilero() == true
+    }
+
+    /**
+     * One timestamped line per meaningful voice-pipeline decision, written to
+     * the persistent Event log (Settings -> Event log) whenever a VAD logging
+     * toggle is on. The whole point of those toggles is letting the user report
+     * voice failures intelligently — but the per-frame VAD output only goes to
+     * logcat, which they can't see, and most loop decisions (re-arm, re-arm
+     * skipped and why, capture failure, loop stop and why) used to log nowhere
+     * persistent. This is the user-visible trail for "the mic never came back
+     * and the event log was empty".
+     */
+    private fun logVoiceEvent(message: String) {
+        Log.i("VoiceLoop", message)
+        if (!voiceDiagnosticsEnabled()) return
+        try {
+            org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "VoiceLoop", "info", message)
+        } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
+    }
+
+    /** Like [logVoiceEvent] but always persists to the Event log, regardless of
+     *  the VAD-logging toggles — for genuine failures (e.g. a TTS readback error)
+     *  the user needs recorded even with per-turn diagnostics off. Callers must be
+     *  bounded (e.g. the capped TTS retry path) so this can't spam the log. */
+    private fun logVoiceEventAlways(message: String) {
+        Log.w("VoiceLoop", message)
+        try {
+            org.teslasoft.assistant.preferences.Logger.logAsync(this, "event", "VoiceLoop", "warning", message)
+        } catch (_: Throwable) { /* never let diagnostics crash the loop */ }
+    }
+
+    /**
+     * Text to Speech lifecycle diagnostic (owner instruction, Aug 16 2026):
+     * one short line per TTS event — requested / onStart / onDone / onError /
+     * skipped — for every turn where readback is expected, so a completed
+     * reply that was never read aloud can be diagnosed: never reached
+     * pronounce(), requested but never started, started then failed, or
+     * completed normally (pointing at audio routing/output instead). Gated
+     * only on its own recording toggle, independent of the VAD-logging
+     * toggles [voiceDiagnosticsEnabled] gates — the point is to catch a rare,
+     * unreproducible failure, so it must not depend on a separate diagnostics
+     * setting also being on. Never includes the text being spoken.
+     */
+    private fun logTtsLifecycle(event: String) {
+        if (preferences?.getTtsLifecycleLogging() != true) return
+        val turn = currentLifecycleTurnId.ifBlank { "none" }
+        try {
+            org.teslasoft.assistant.preferences.Logger.logAsync(
+                this, "tts_lifecycle", "TTS", "info", "$event turn=$turn"
+            )
+        } catch (_: Throwable) { /* diagnostics must never disturb readback */ }
+    }
+
+    // Warm the model into RAM while the user is still talking so the
+    // (multi-second, for the mid/large models) load overlaps with recording
+    // instead of stalling on "Loading Whisper" after they stop. preload() is
+    // idempotent and serialized internally, so it's a no-op once resident.
+    private fun preloadActiveLocalWhisperModel() {
+        val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
+        if (activeModel.isNotEmpty()) {
+            val appCtx = applicationContext
+            whisperPreloadScope = CoroutineScope(Dispatchers.IO)
+            whisperPreloadScope?.launch {
+                try { LocalWhisperEngine.get().preload(appCtx, activeModel) } catch (_: Exception) { /* ignore */ }
+            }
+        }
+    }
+
+    private fun stopLocalWhisper() {
+        // This turn is being collected; any capture callback still in flight
+        // (a duplicate end-of-turn, a racing error) belongs to the past.
+        whisperTurnToken++
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
+        progress?.visibility = View.VISIBLE
+
+        if (cancelState) {
+            cancelState = false
+            LocalWhisperEngine.get().cancel()
+            micIdle()
+            isRecording = false
+            restoreUIState()
+            return
+        }
+
+        whisperScope = CoroutineScope(Dispatchers.Main)
+        whisperScope?.launch {
+            progress?.setOnClickListener {
+                cancel()
+                LocalWhisperEngine.get().cancel()
+                restoreUIState()
+            }
+
+            try {
+                val activeModel = preferences?.getActiveLocalWhisperModel().orEmpty()
+                val transcription = LocalWhisperEngine.get()
+                    .stopAndTranscribe(this@ChatActivity, activeModel) { phase ->
+                        // Surface progress in the input hint so the user can see
+                        // whether they're waiting on the model load or the actual
+                        // transcription (key for diagnosing the larger models).
+                        messageInput?.hint = when (phase) {
+                            LocalWhisperEngine.Phase.LOADING_MODEL -> getString(R.string.hint_loading_whisper)
+                            LocalWhisperEngine.Phase.TRANSCRIBING -> getString(R.string.hint_transcribing)
+                        }
+                    }
+                processLocalWhisperTranscript(transcription)
+            } catch (_: CancellationException) {
+                restoreUIState()
+            } catch (e: Exception) {
+                // Hands-free: a throwing transcription must not strand the
+                // loop. restoreUIState() alone left HandsFreeService and any
+                // Bluetooth mic route up while the mic never reopened — with
+                // the screen off the user got no cue at all. Give up through
+                // the one funnel that logs the reason, plays the give-up cue
+                // and tears the loop down properly.
+                if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) {
+                    logVoiceEventAlways("on-device transcription threw: ${e.message}")
+                    stopHandsFreeLoop("on-device transcription threw", notify = true)
+                } else {
+                    Toast.makeText(this@ChatActivity, "Failed to transcribe on device", Toast.LENGTH_SHORT).show()
+                }
+                restoreUIState()
+            }
+        }
+    }
+
+    private fun processLocalWhisperTranscript(transcription: String?) {
+        // Mirrors the downstream half of processRecording(): if auto-send
+        // is on, push the transcript as a user turn and kick generation;
+        // otherwise drop it into the message input box.
+        // Transcription phase is over either way — drop the status hint.
+        messageInput?.hint = getString(R.string.hint_message)
+        if (transcription.isNullOrBlank()) {
+            isRecording = false
+            btnMicro?.isEnabled = true
+            btnSend?.isEnabled = true
+            progress?.visibility = View.GONE
+            micIdle()
+            // Hands-free: a blank result (background noise tripped the VAD, or
+            // whisper produced nothing) shouldn't end the conversation — just
+            // re-open the mic for another turn.
+            if (preferences?.getHandsFreeMode() == true && !handsFreeStopped && !cancelState) {
+                logVoiceEvent("transcription came back empty; reopening mic")
+                startLocalWhisperHandsFreeTurn(freshTurn = false)
+            }
+            return
+        }
+        playTranscriptionDoneSignal()
+        // Sample the box BEFORE inserting (already-typed text never auto-sends).
+        val boxWasEmpty = messageInput?.text.isNullOrEmpty()
+        if (shouldAutoSendTranscription(boxWasEmpty)) {
+            putMessage(prefix + transcription + endSeparator, false)
+            chatMessages.add(
+                ChatMessage(
+                    role = ChatRole.User,
+                    content = prefix + transcription + endSeparator
+                )
+            )
+            saveSettings()
+
+            btnMicro?.isEnabled = false
+            btnSend?.isEnabled = false
+            progress?.visibility = View.VISIBLE
+
+            processRecordingScope = CoroutineScope(Dispatchers.Main)
+            processRecordingScope?.launch {
+                progress?.setOnClickListener {
+                    cancel()
+                    restoreUIState()
+                }
+                try {
+                    generateResponse(prefix + transcription + endSeparator, true)
+                } catch (_: CancellationException) {
+                    restoreUIState()
+                }
+            }
+        } else {
+            restoreUIState()
+            insertTranscriptIntoBox(transcription)
+        }
+    }
+
+    private fun handleGoogleSpeechRecognition() {
+        if (isRecording) {
+            try {
+                if (mediaPlayer!!.isPlaying) {
+                    mediaPlayer!!.stop()
+                    mediaPlayer!!.reset()
+                }
+                tts!!.stop()
+            } catch (_: java.lang.Exception) {/* unused */}
+            if (preferences?.getHandsFreeMode() == true) {
+                stopHandsFreeLoop("mic button tapped while listening (google)")
+            } else {
+                micIdle()
+                recognizer?.stopListening()
+                isRecording = false
+            }
+        } else {
+            try {
+                if (mediaPlayer!!.isPlaying) {
+                    mediaPlayer!!.stop()
+                    mediaPlayer!!.reset()
+                }
+                tts!!.stop()
+            } catch (_: java.lang.Exception) {/* unused */}
+            if (preferences?.getHandsFreeMode() == true) micHandsFreeActive(listening = true)
+            else micRecording()
+            if (ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                startRecognition()
+            } else {
+                permissionResultLauncher.launch(
+                    Intent(
+                        this,
+                        MicrophonePermissionActivity::class.java
+                    ).setAction(Intent.ACTION_VIEW)
+                )
+            }
+
+            isRecording = true
+        }
+    }
+
+    private fun initSpeechListener() {
+        recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        recognizer?.setRecognitionListener(speechListener)
+    }
+
+    private fun initTTS() {
+        tts = TextToSpeech(this, ttsListener)
+    }
+
+    /**
+     * Builds the base URL handed to the OpenAI client. The client always appends
+     * "chat/completions", so we compose the user's Base URL + Chat Endpoint and
+     * strip a trailing chat/completions, letting the client re-append it to the
+     * exact location the profile configured. Non-standard paths fall back to the
+     * Base URL (the client still appends chat/completions).
+     */
+    private fun composeChatHost(rawBase: String?, rawEndpoint: String?): String {
+        var base = (rawBase ?: "").trim()
+        if (base.isBlank()) return base
+        if (!base.endsWith("/")) base += "/"
+
+        val endpoint = (rawEndpoint ?: ApiEndpointObject.DEFAULT_CHAT_ENDPOINT).trim().trimStart('/')
+        val marker = "chat/completions"
+        val full = base + endpoint
+        return if (full.endsWith(marker)) full.removeSuffix(marker) else base
+    }
+
+    /** The saved favorite for [model] on the active endpoint, or null. */
+    private fun favoriteForActiveEndpoint(model: String): org.teslasoft.assistant.preferences.dto.FavoriteModelObject? {
+        val endpoint = apiEndpointObject ?: return null
+        return FavoriteModelsPreferences.getPreferences(this).getFavorite(model, endpoint.id)
+    }
+
+    /**
+     * Brand-new chat only: adopt the provider/model/routing that the last
+     * conversation successfully used (owner spec, Aug 8 2026). Runs at most once
+     * per chat and never touches a chat that already has messages, so a later
+     * choice always wins. When the saved local setup is gone it records an
+     * outcome for [handleProviderRestoreOutcome]; it never claims the model is
+     * unavailable — that is decided only from the provider's own response on send.
+     */
+    private fun maybeRestoreProviderForNewChat(historyResult: ChatPreferences.ChatHistoryResult) {
+        if (!historyResult.messages.isNullOrEmpty()) return
+        if (preferences?.isProviderSeeded() == true) return
+        preferences?.setProviderSeeded(true)
+
+        val endpointId = preferences?.getLastSuccessfulEndpointId().orEmpty()
+        val lastModel = preferences?.getLastSuccessfulModel().orEmpty()
+        val routing = preferences?.getLastSuccessfulRouting() ?: FavoriteModelObject.ROUTING_AUTOMATIC
+
+        // A deleted provider profile reads back with a blank host; a favorite is
+        // present only while its (model, endpoint) star exists.
+        val endpointExists = endpointId.isNotBlank() &&
+            (apiEndpointPreferences?.getApiEndpoint(this, endpointId)?.host?.isNotBlank() == true)
+        val favoriteExists = endpointId.isNotBlank() && lastModel.isNotBlank() &&
+            FavoriteModelsPreferences.getPreferences(this).getFavorite(lastModel, endpointId) != null
+
+        when (NewChatProviderRestore.decide(endpointId, lastModel, routing, endpointExists, favoriteExists)) {
+            NewChatProviderRestore.Outcome.RESTORE -> {
+                preferences?.setApiEndpointId(endpointId)
+                preferences?.setModel(lastModel)
+                apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, endpointId)
+            }
+            // Surfaced once the UI exists (initSettings tail).
+            NewChatProviderRestore.Outcome.MISSING_CONFIG ->
+                providerRestoreOutcome = NewChatProviderRestore.Outcome.MISSING_CONFIG
+            NewChatProviderRestore.Outcome.NO_CONFIG ->
+                providerRestoreOutcome = NewChatProviderRestore.Outcome.NO_CONFIG
+        }
+    }
+
+    /** Act on a brand-new chat's restore outcome now that the chat UI exists:
+     *  a missing local setup gets the configuration dialog then the Summoning
+     *  Circle; nothing ever recorded goes to the API Endpoints screen. */
+    private fun handleProviderRestoreOutcome() {
+        val outcome = providerRestoreOutcome ?: return
+        providerRestoreOutcome = null
+        when (outcome) {
+            NewChatProviderRestore.Outcome.MISSING_CONFIG -> showConfigMissingDialog()
+            NewChatProviderRestore.Outcome.NO_CONFIG -> openApiEndpointsScreen()
+            NewChatProviderRestore.Outcome.RESTORE -> { /* applied already */ }
+        }
+    }
+
+    /** Missing local configuration (provider profile deleted, or Only/Preferred
+     *  routing whose favorite is gone). Describes it as missing configuration —
+     *  never as the model being unavailable. Okay opens the Summoning Circle;
+     *  there is nothing to cancel, so the dialog has no Cancel. */
+    private fun showConfigMissingDialog() {
+        if (isFinishing || isDestroyed) return
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setMessage(R.string.new_chat_config_missing)
+            .setCancelable(false)
+            .setPositiveButton(R.string.okay) { _, _ -> openSummoningCircle() }
+            .show()
+    }
+
+    /** The provider itself returned a definite model-not-found on send. Okay
+     *  opens the Summoning Circle. */
+    private fun showModelUnavailableDialog() {
+        if (isFinishing || isDestroyed) return
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setMessage(R.string.new_chat_model_unavailable)
+            .setCancelable(false)
+            .setPositiveButton(R.string.okay) { _, _ -> openSummoningCircle() }
+            .show()
+    }
+
+    /** Open the Summoning Circle (Quick Settings) sheet for this chat. Shared by
+     *  the header's Quick Settings icon and the recovery dialogs above. */
+    private fun openSummoningCircle() {
+        if (isFinishing || isDestroyed) return
+        val sheet = QuickSettingsBottomSheetDialogFragment
+            .newInstance(chatId, usageIn, usageOut, priceIn, priceOut)
+        sheet.setOnUpdateListener(object : QuickSettingsBottomSheetDialogFragment.OnUpdateListener {
+            override fun onUpdate() {
+                refreshCompanionAvatar()
+                refreshUserAvatar()
+            }
+
+            override fun onForceUpdate() {
+                startActivity(Intent(this@ChatActivity, ChatActivity::class.java).putExtra("chatId", chatId).putExtra("name", chatName).setAction(Intent.ACTION_VIEW))
+                finishActivity()
+            }
+        })
+        sheet.show(supportFragmentManager, "QuickSettingsBottomSheetDialogFragment")
+    }
+
+    /** Applies a user-edited title from [EditChatTitleDialog]. Reuses the same
+     *  atomic rename path as auto-naming (ChatPreferences.editChat /
+     *  ChatRenameTransaction — moves history and copies every per-chat
+     *  settings key, never re-derives them) and the same [renameInProgress]
+     *  guard, so a manual rename and an in-flight auto-name rename can never
+     *  overlap. */
+    private fun renameChatTitle(newTitle: String) {
+        if (newTitle == chatName || renameInProgress) return
+
+        val chatPreferences = ChatPreferences.getChatPreferences()
+        if (chatPreferences.checkDuplicate(this, newTitle)) {
+            Toast.makeText(this, R.string.chat_error_unique, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val oldName = chatName
+        renameInProgress = true
+        lifecycleScope.launch {
+            val renamed = try {
+                withContext(Dispatchers.IO) {
+                    chatPreferences.editChat(this@ChatActivity, newTitle, oldName)
+                }
+            } catch (e: Exception) {
+                false
+            } finally {
+                renameInProgress = false
+            }
+
+            if (isFinishing || isDestroyed) return@launch
+
+            if (renamed) {
+                val previousChatId = chatId
+                chatId = Hash.hash(newTitle)
+                ImageGenerationJobRegistry.rename(previousChatId, chatId)
+                chatName = newTitle
+                preferences = Preferences.getPreferences(this@ChatActivity, chatId)
+                intent.putExtra("chatId", chatId)
+                intent.putExtra("name", chatName)
+                activityTitle?.text = newTitle
+            } else {
+                MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.title_rename_failed)
+                    .setMessage(R.string.msg_rename_failed)
+                    .setPositiveButton(R.string.btn_ok) { _, _ -> }
+                    .show()
+            }
+        }
+    }
+
+    /** Open the API Endpoints screen so the user can set up a provider + model
+     *  (used when nothing has ever produced a successful reply — never a
+     *  hardcoded default model). */
+    private fun openApiEndpointsScreen() {
+        if (isFinishing || isDestroyed) return
+        startActivity(Intent(this, ApiEndpointsListActivity::class.java).setAction(Intent.ACTION_VIEW))
+    }
+
+    /**
+     * Just-before-send hook body. For a JSON Chat Completions request on an
+     * OpenRouter-identity endpoint it either:
+     *  - throws [ProviderRoutingBlockedException] when the saved routing cannot
+     *    be satisfied (e.g. Only with no usable provider) — so the request is
+     *    never silently sent unrestricted; or
+     *  - sets the resolved `provider` object on the body, overwriting any
+     *    existing one so a re-sent request (tool continuation / retry) never
+     *    carries two.
+     * While Response Lifecycle logging is active it also opts this OpenRouter
+     * request into official response-side router metadata, which reports the
+     * endpoint actually marked selected. Every other request BODY (generic
+     * endpoint, non-chat body, parse issue, Automatic with no exclusions)
+     * remains byte-for-byte unchanged.
+     */
+    /**
+     * Bind lifecycle diagnostics to the exact Ktor request BEFORE dispatch.
+     * Auxiliary requests share this client, so request identity is attached to
+     * streamed generations and to the current chat's completed-response path,
+     * but not to unrelated completed requests such as auto-naming.
+     */
+    private fun bindLifecycleRecorderToGenerationRequest(request: HttpRequestBuilder) {
+        if (request.attributes.contains(responseLifecycleRecorderAttribute) ||
+            request.attributes.contains(generationRequestAttribute)
+        ) return
+        val recorder = currentLifecycle?.takeUnless { it.finalized }
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+
+        var streamingGeneration = false
+        val isGenerationRequest = try {
+            val root = com.google.gson.JsonParser.parseString(content.text).asJsonObject
+            streamingGeneration = root.get("stream")
+                ?.takeUnless { it.isJsonNull }
+                ?.asBoolean == true
+            val hasGenerationInput = root.has("messages") || root.has("prompt")
+            // The normal chat-completion path is identified by messages even
+            // when the client uses its completed-response API and omits the
+            // stream flag. Keep streamed legacy completion diagnostics intact.
+            root.has("model") && hasGenerationInput &&
+                (streamingGeneration || (root.has("messages") && generationRequestActive))
+        } catch (_: Exception) {
+            false
+        }
+        if (isGenerationRequest) {
+            recorder?.let { request.attributes.put(responseLifecycleRecorderAttribute, it) }
+            request.attributes.put(generationRequestAttribute, true)
+            request.attributes.put(streamingRequestAttribute, streamingGeneration)
+        }
+    }
+
+    private fun augmentRequestWithProviderRouting(request: HttpRequestBuilder) {
+        if (apiEndpointObject?.isOpenRouterRouting() != true) return
+        if (request.attributes.contains(responseLifecycleRecorderAttribute)) {
+            // Official OpenRouter audit metadata, delivered on the final stream
+            // chunk. This is the response authority for Automatic routing; the
+            // app's requested provider settings are never substituted for it.
+            request.headers.remove("X-OpenRouter-Metadata")
+            request.headers.append("X-OpenRouter-Metadata", "enabled")
+        }
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val text = content.text
+
+        // Only a chat request carries a messages array; skip anything else, and
+        // degrade to "do nothing" on any parse failure.
+        val model = try {
+            val root = com.google.gson.JsonParser.parseString(text).asJsonObject
+            if (root.has("messages")) root.get("model")?.takeIf { !it.isJsonNull }?.asString else null
+        } catch (_: Exception) {
+            null
+        } ?: return
+
+        val resolution = ProviderRoutingResolver.resolve(true, favoriteForActiveEndpoint(model))
+
+        // Block BEFORE dispatch — deliberately thrown so the send fails cleanly
+        // through the existing error path rather than going out unrestricted.
+        if (resolution.block != RoutingBlock.NONE) {
+            lastRoutingAttachment = "BLOCKED (not sent)"
+            throw ProviderRoutingBlockedException(providerBlockMessage(resolution.block))
+        }
+
+        val providerJson = resolution.providerJson
+        if (providerJson == null) {
+            // OpenRouter, but Automatic / no saved routing — nothing to attach.
+            lastRoutingAttachment = "no provider object (Automatic / no saved routing)"
+            return
+        }
+        try {
+            val augmented = ProviderRoutingSerializer.augmentBody(text, providerJson)
+            request.setBody(TextContent(augmented, content.contentType ?: ContentType.Application.Json))
+            // Recorded ONLY after the body was actually replaced.
+            lastRoutingAttachment = "provider object attached"
+        } catch (_: Exception) {
+            // Injection is best-effort; report honestly that it was not confirmed.
+            lastRoutingAttachment = "attachment requested (mutation failed)"
+        }
+    }
+
+    /**
+     * The reasoning capability of the active endpoint for [model], layering the
+     * §7.7 confidence ladder over this endpoint's persisted capability store.
+     */
+    private fun reasoningCapabilityForModel(model: String): org.teslasoft.assistant.reasoning.ReasoningCapability =
+        org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
+            apiEndpointObject?.reasoningCapabilityByModel, model
+        )
+
+    /**
+     * The effective reasoning settings for this turn (§7.5/§7.9): the
+     * conversation's own override, else this model's favorite default, else
+     * Auto — with the §7.8 clamp for an effort the active path no longer
+     * supports. Read from the same favorite/conversation storage the UI writes,
+     * so every send path (typed, voice, retry) resolves identically.
+     */
+    private fun resolveReasoningForModel(model: String): org.teslasoft.assistant.reasoning.ResolvedReasoning {
+        val capability = reasoningCapabilityForModel(model)
+        val favorite = favoriteForActiveEndpoint(model)
+        val favoriteEffort = favorite?.let {
+            org.teslasoft.assistant.reasoning.ReasoningEffort.fromSerialized(it.reasoningEffort)
+        }
+        val override = org.teslasoft.assistant.reasoning.ReasoningEffort.fromSerialized(
+            preferences?.getReasoningEffortOverride()
+        )
+        return org.teslasoft.assistant.reasoning.ReasoningSettingsResolver.resolve(
+            conversationOverride = override,
+            favoriteEffort = favoriteEffort,
+            favoriteShowReasoning = favorite?.showReasoning,
+            capability = capability
+        )
+    }
+
+    /**
+     * Just-before-send hook that merges this turn's reasoning instruction into
+     * the outgoing Chat Completions body (§7.9), using the same body-mutation
+     * approach as provider routing so no separate request transport exists. It
+     * applies to OpenRouter and generic OpenAI-compatible endpoints alike, in
+     * each provider's own field shape. Fully fail-safe: a non-chat body, a
+     * parse issue, a non-reasoning model, or Auto with reasoning returned leaves
+     * the request byte-for-byte unchanged, so ordinary chat can never break.
+     */
+    private fun augmentRequestWithReasoning(request: HttpRequestBuilder) {
+        val content = request.body as? TextContent ?: return
+        if (content.contentType?.match(ContentType.Application.Json) != true) return
+        val text = content.text
+
+        var bodyHasTools = false
+        val model = try {
+            val root = com.google.gson.JsonParser.parseString(text).asJsonObject
+            // Only visible chat generation carries reasoning. Auxiliary calls
+            // on this same client (auto-naming, tool-name resolution,
+            // summarizer) must not inherit a reasoning instruction.
+            val streamed = root.get("stream")?.takeUnless { it.isJsonNull }?.asBoolean == true
+            val generationRecorder = if (request.attributes.contains(responseLifecycleRecorderAttribute)) {
+                request.attributes[responseLifecycleRecorderAttribute]
+            } else {
+                null
+            }
+            val generationRequest = request.attributes.contains(generationRequestAttribute)
+            if (root.has("messages") &&
+                (streamed || generationRecorder != null || generationRequest)
+            ) {
+                bodyHasTools = (root.get("tools")?.takeUnless { it.isJsonNull }
+                    ?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: 0) > 0
+                root.get("model")?.takeIf { !it.isJsonNull }?.asString
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        } ?: return
+
+        val resolved = resolveReasoningForModel(model)
+        val capability = reasoningCapabilityForModel(model)
+        val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
+
+        // Split THIS stream for reasoning when either is true:
+        //  - display is wanted: the path can return visible reasoning and Show
+        //    Reasoning is on (Auto still returns reasoning by default); or
+        //  - continuation state may be needed: an OpenRouter reasoning path that
+        //    is offering tools, so any reasoning_details produced alongside a
+        //    tool call are captured to echo back on the follow-up (§7.2) — this
+        //    happens even when Show Reasoning is Off.
+        val wantDisplay = capability.isReasoningCapable && capability.canReturnVisibleReasoning && resolved.showReasoning
+        val wantContinuationState = capability.isReasoningCapable && isOpenRouter && bodyHasTools
+        currentTurnShowReasoning = wantDisplay
+        if (wantDisplay || wantContinuationState) {
+            currentTurnReasoning?.let { request.attributes.put(reasoningObservationAttribute, it) }
+            currentTurnReasoningObservationActive = true
+        }
+
+        // 1) The reasoning request fields for this turn.
+        val afterParam = org.teslasoft.assistant.reasoning.ReasoningRequestSerializer.augmentBody(
+            text, resolved, isOpenRouter, capability.isReasoningCapable
+        )
+        val paramAttached = afterParam != text
+        // 2) Reasoning-state continuation (§7.2): on an OpenRouter follow-up that
+        //    carries an assistant tool-call message, echo back the reasoning
+        //    details captured from the turn that produced the tool call. A no-op
+        //    on the primary request (no tool-call assistant message yet) and off
+        //    OpenRouter. Independent of Show Reasoning; never surfaced in the UI.
+        var newBody = afterParam
+        var continuationAttached = false
+        if (isOpenRouter) {
+            val withState = org.teslasoft.assistant.reasoning.ReasoningContinuationSerializer
+                .attachToToolCallMessage(newBody, currentTurnReasoning?.reasoningDetails())
+            if (withState != newBody) {
+                newBody = withState
+                continuationAttached = true
+            }
+        }
+
+        if (newBody != text) {
+            request.setBody(TextContent(newBody, content.contentType ?: ContentType.Application.Json))
+            lastReasoningAttachment = buildString {
+                append(
+                    if (paramAttached) {
+                        "reasoning attached (effort=${resolved.effort.serialized}, show=${resolved.showReasoning}, " +
+                            "source=${resolved.source}, capability=${capability.source})"
+                    } else {
+                        "no reasoning param (Auto / provider default)"
+                    }
+                )
+                if (continuationAttached) append("; reasoning_details echoed on tool-call continuation")
+                resolved.clampedFrom?.let { append(", dropped unsupported=${it.serialized}") }
+            }
+        } else {
+            lastReasoningAttachment = if (!capability.isReasoningCapable) {
+                "no reasoning fields (model not known to reason)"
+            } else {
+                "no reasoning fields (Auto / provider default)"
+            }
+        }
+    }
+
+    /** Existing user-facing wording for a blocked routing configuration. */
+    private fun providerBlockMessage(block: RoutingBlock): String = when (block) {
+        RoutingBlock.ONLY_PROVIDER_NOT_SELECTED,
+        RoutingBlock.ONLY_PROVIDER_UNAVAILABLE -> getString(R.string.provider_only_mode_error)
+        RoutingBlock.NO_PREFERRED_AVAILABLE -> getString(R.string.provider_no_preferred_message)
+        RoutingBlock.NONE -> ""
+    }
+
+    /**
+     * The clearly labeled provider-routing request lines appended to a Response
+     * Lifecycle entry. The
+     * attachment status is the interceptor's ACTUAL result for this request
+     * ([lastRoutingAttachment], set only after a confirmed body replacement),
+     * never re-derived from the routing decision. If the send hook never ran,
+     * it stays null and the line honestly reads "attachment requested…" rather
+     * than claiming the provider object was attached.
+     */
+    private fun providerRoutingLogLine(model: String): String {
+        val isOpenRouter = apiEndpointObject?.isOpenRouterRouting() == true
+        val favorite = favoriteForActiveEndpoint(model)
+        val status = lastRoutingAttachment ?: "attachment requested (send hook did not run)"
+        return "\n" + ProviderRoutingDiagnostics.describe(isOpenRouter, favorite, status)
+    }
+
+    /**
+     * The reasoning line appended to a Response Lifecycle entry (§7.8): what
+     * reasoning instruction was actually written on the outgoing body and the
+     * capability source it was resolved from. Reads the send hook's real
+     * outcome ([lastReasoningAttachment]); if the hook never ran it says so
+     * rather than implying anything was sent.
+     */
+    private fun reasoningLogLine(): String {
+        val status = lastReasoningAttachment ?: "reasoning hook did not run"
+        return "\nReasoning: $status"
+    }
+
+    /**
+     * Attach the reasoning captured from the split stream copy to the reply it
+     * belongs to (§7.1/§7.2). Runs from the response observer once the copy has
+     * drained; it is the sole writer of the reasoning fields, so it never races
+     * the typed stream's own completion/persistence for the answer text. It
+     * mutates the reply's in-memory map, so whichever save runs last (this one
+     * or the answer's completion save) keeps the reasoning. Reasoning is a
+     * separate channel and is never merged into the answer text — so it never
+     * reaches TTS and never signals completion. Fully best-effort.
+     */
+    private fun deliverObservedReasoning(acc: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator) {
+        if (!acc.hasReasoning()) return
+        val snapshot = acc.snapshot()
+        if (snapshot.text.isBlank()) return
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            val index = messages.indexOfLast { it["isBot"] == true }
+            if (index < 0) return@runOnUiThread
+            val msg = messages[index]
+            msg[ChatAdapter.KEY_MESSAGE_REASONING] = snapshot.text
+            msg[ChatAdapter.KEY_MESSAGE_REASONING_SUMMARY] = snapshot.isSummary.toString()
+            snapshot.reasoningTokens?.let {
+                msg[ChatAdapter.KEY_MESSAGE_REASONING_TOKENS] = it.toString()
+            }
+            adapter?.notifyItemChanged(index)
+            saveSettings()
+        }
+    }
+
+    private fun initAI() {
+        if (key == null) {
+            startActivity(Intent(this, WelcomeActivity::class.java).setAction(Intent.ACTION_VIEW))
+            finishActivity()
+        } else {
+            val isBearerAuth = apiEndpointObject?.authType == null ||
+                    apiEndpointObject?.authType == ApiEndpointObject.AUTH_BEARER
+            val extraHeaders: Map<String, String> = when (apiEndpointObject?.authType) {
+                ApiEndpointObject.AUTH_X_API_KEY -> mapOf("x-api-key" to key!!)
+                ApiEndpointObject.AUTH_API_KEY -> mapOf("api-key" to key!!)
+                else -> emptyMap()
+            }
+
+            // Per-endpoint timeouts, user-set on the endpoint profile and already
+            // clamped on save (re-coerced here so a legacy/hand-edited value can't
+            // slip through). The CONNECT timeout bounds establishing the
+            // connection (→ N2 "connection timed out"); the SOCKET timeout bounds
+            // waiting for the model's response once connected (→ N4 "response
+            // timed out"). They are separate so a slow model can be given minutes
+            // to reply without also making an unreachable server hang that long.
+            val connectTimeout = ApiEndpointObject.coerceConnectTimeoutSeconds(
+                apiEndpointObject?.connectTimeoutSeconds ?: ApiEndpointObject.DEFAULT_CONNECT_TIMEOUT_SECONDS
+            ).seconds
+            val responseTimeout = ApiEndpointObject.coerceResponseTimeoutSeconds(
+                apiEndpointObject?.responseTimeoutSeconds ?: ApiEndpointObject.DEFAULT_RESPONSE_TIMEOUT_SECONDS
+            ).seconds
+
+            val config = OpenAIConfig(
+                // OpenAIConfig.token unconditionally generates an
+                // "Authorization: Bearer <token>" header. When the user picks
+                // x-api-key or api-key as their auth mode, the key already
+                // goes through extraHeaders, and passing it as token here too
+                // sends BOTH a Bearer header and the alternate-auth header —
+                // which 4xx's at providers like Anthropic that reject the
+                // extra Authorization header. Empty token suppresses the
+                // Bearer line and lets the alternate header carry auth alone.
+                token = if (isBearerAuth) key!! else "",
+                logging = LoggingConfig(LogLevel.None, Logger.Simple),
+                timeout = Timeout(connect = connectTimeout, socket = responseTimeout),
+                organization = null,
+                headers = extraHeaders,
+                host = OpenAIHost(composeChatHost(apiEndpointObject?.host, apiEndpointObject?.chatEndpoint)),
+                proxy = null,
+                retry = RetryStrategy(maxRetries = 0),
+                // Capture failed-response detail and, while Response Lifecycle
+                // logging is active, tap a split COPY of successful generation
+                // streams for official router metadata or an API-reported
+                // top-level provider. Ktor's
+                // ResponseObserver preserves streaming: the OpenAI-compatible
+                // client receives the original channel unchanged and unbuffered.
+                httpClientConfig = {
+                    install(ResponseObserver) {
+                        filter { call ->
+                            if (!call.response.status.isSuccess()) {
+                                true
+                            } else {
+                                // Observe a successful generation stream when
+                                // lifecycle logging owns a recorder OR this turn
+                                // wants provider reasoning displayed. The observer
+                                // receives a split copy, so the normal typed
+                                // stream is neither buffered nor consumed.
+                                val recorder = if (call.request.attributes.contains(responseLifecycleRecorderAttribute)) {
+                                    call.request.attributes[responseLifecycleRecorderAttribute]
+                                } else {
+                                    null
+                                }
+                                val streamed = if (call.request.attributes.contains(streamingRequestAttribute)) {
+                                    call.request.attributes[streamingRequestAttribute]
+                                } else {
+                                    false
+                                }
+                                val wantsReasoning = call.request.attributes.contains(reasoningObservationAttribute)
+                                when {
+                                    recorder != null && streamed -> {
+                                        recorder.beginProviderObservation()
+                                        true
+                                    }
+                                    wantsReasoning -> true
+                                    else -> false
+                                }
+                            }
+                        }
+                        onResponse { response ->
+                            try {
+                                if (!response.status.isSuccess()) {
+                                    capturedProviderErrorBody = response.bodyAsText()
+                                } else {
+                                    val attrs = response.call.request.attributes
+                                    val recorder = if (attrs.contains(responseLifecycleRecorderAttribute)) {
+                                        attrs[responseLifecycleRecorderAttribute]
+                                    } else {
+                                        null
+                                    }
+                                    val reasoningAcc = if (attrs.contains(reasoningObservationAttribute)) {
+                                        attrs[reasoningObservationAttribute]
+                                    } else {
+                                        null
+                                    }
+                                    if (recorder != null || reasoningAcc != null) {
+                                        try {
+                                            // Receive the observer's split copy ONCE (a second
+                                            // bodyAsChannel() throws and cancels the origin,
+                                            // killing the live stream) and drain it to end of
+                                            // stream — stopping early stalls Ktor's splitter
+                                            // and freezes the visible reply after ~4 KB; see
+                                            // consumeObservedStream. One drain feeds both the
+                                            // lifecycle inspector and, via lineObserver, the
+                                            // reasoning accumulator.
+                                            val observedChannel = response.bodyAsChannel()
+                                            ReportedProviderParser.consumeObservedStream(
+                                                observedChannel,
+                                                onProvider = { reported ->
+                                                    // Response-derived only. Never substitute the
+                                                    // configured or requested provider here.
+                                                    recorder?.noteActualModelProvider(reported)
+                                                },
+                                                lineObserver = reasoningAcc?.let { acc -> { line -> acc.acceptLine(line) } }
+                                            )
+                                        } finally {
+                                            recorder?.finishProviderObservation()
+                                            if (reasoningAcc != null) {
+                                                // Display only when Show Reasoning wanted it; the
+                                                // reasoning_details for a tool-call continuation are
+                                                // held in the accumulator regardless.
+                                                if (currentTurnShowReasoning) deliverObservedReasoning(reasoningAcc)
+                                                // Signal capture complete so a tool continuation can
+                                                // echo reasoning_details on its follow-up.
+                                                currentTurnReasoningObserved?.complete(Unit)
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (_: Exception) { /* best effort; never disturb the failure path */ }
+                        }
+                    }
+                    // OpenRouter provider routing: structurally add the resolved
+                    // `provider` object to the outgoing Chat Completions body just
+                    // before it is sent. Applies to every request on THIS chat
+                    // client — the primary turn, tool-result continuations, and
+                    // no-tools retries — so routing carries through all of them.
+                    // Fully fail-safe: any error, a non-OpenRouter endpoint, a
+                    // non-chat body, or Automatic-with-no-exclusions leaves the
+                    // request byte-for-byte unchanged, so normal chat can never be
+                    // broken by this hook.
+                    install(createClientPlugin("OpenRouterProviderRouting") {
+                        on(Send) { request ->
+                            bindLifecycleRecorderToGenerationRequest(request)
+                            try {
+                                augmentRequestWithProviderRouting(request)
+                            } catch (blocked: ProviderRoutingBlockedException) {
+                                // Deliberate: abort dispatch for an unsatisfiable
+                                // config rather than send it unrestricted.
+                                throw blocked
+                            } catch (_: Exception) {
+                                // Any other issue is non-fatal: send unmodified.
+                            }
+                            try {
+                                // Reasoning rides the same just-before-send body
+                                // mutation; independent of routing and fully
+                                // fail-safe, so it never blocks or breaks a send.
+                                augmentRequestWithReasoning(request)
+                            } catch (_: Exception) {
+                                // Non-fatal: send without a reasoning instruction.
+                            }
+                            proceed(request)
+                        }
+                    })
+                }
+            )
+
+            ai = OpenAI(config)
+            // Auxiliary client for audio/image/function endpoints. Bound to
+            // the active chat's endpoint (base host, same auth mode) so no
+            // content is silently routed to api.openai.com.
+            val configOpenAI = OpenAIConfig(
+                token = if (isBearerAuth) openAIKey.toString() else "",
+                logging = LoggingConfig(LogLevel.None, Logger.Simple),
+                timeout = Timeout(connect = connectTimeout, socket = responseTimeout),
+                organization = null,
+                headers = extraHeaders,
+                host = OpenAIHost(apiEndpointObject?.host!!),
+                proxy = null,
+                retry = RetryStrategy(maxRetries = 0)
+            )
+            openAIAI = OpenAI(configOpenAI)
+            loadModel()
+            setup()
+        }
+    }
+
+    /**
+     * Decide which companion a brand-new chat opens with:
+     *   1. Default to the companion from the most recent chat that received a
+     *      successful assistant response.
+     *   2. If no successful companion has been recorded yet, or it was deleted,
+     *      use the companion at the top of the list.
+     *   3. If no companion exists at all, prompt the owner to create one and
+     *      open the creation screen.
+     * One-shot per chat (the persona_activation_seeded flag) and only for an
+     * empty chat, so existing conversations are never retroactively changed.
+     */
+    private fun seedPersonaAndActivationDefaults() {
+        if (preferences?.isPersonaActivationSeeded() == true) return
+
+        if (preferences?.getPersonaId().isNullOrEmpty()) {
+            val personaPrefs = PersonaPreferences.getPersonaPreferences(this)
+            val personasList = personaPrefs.getPersonasList()
+
+            if (personasList.isEmpty()) {
+                // Rule 3: no companion exists. Ask the owner to create one and
+                // open the creation screen. Do NOT mark seeding done — when
+                // they return with a companion made, this runs again and seeds
+                // it (rules 1/2).
+                promptCreateFirstCompanion()
+                return
+            }
+
+            val lastPersona = preferences?.getLastSuccessfulPersonaId().orEmpty()
+            if (lastPersona.isNotEmpty() && personaPrefs.getPersona(lastPersona).label.isNotEmpty()) {
+                // Rule 1: continue with the companion you last used.
+                preferences?.setPersonaId(lastPersona)
+            } else {
+                // Rule 2: first-ever use, or the last-used companion was since
+                // deleted — open with the companion at the top of the list. Use
+                // its stable id, never a hash of its (mutable) label.
+                preferences?.setPersonaId(personasList.first().id)
+            }
+        }
+
+        preferences?.setPersonaActivationSeeded(true)
+
+        // initUI performs the first avatar paint before initAI reaches this
+        // new-chat seeding step. Re-resolve after assigning the Companion;
+        // AvatarRefreshCoordinator drops the earlier fallback result if its
+        // storage lookup finishes later.
+        refreshCompanionAvatar()
+
+        if (preferences?.getActivationPromptId().isNullOrEmpty()) {
+            val lastActivation = preferences?.getLastUsedActivationPromptId().orEmpty()
+            if (lastActivation.isNotEmpty()) {
+                val activation = ActivationPromptPreferences
+                    .getActivationPromptPreferences(this)
+                    .getActivationPrompt(lastActivation)
+                if (activation.label.isNotEmpty()) {
+                    preferences?.setActivationPromptId(lastActivation)
+                    // Mirror the QuickSettings selection flow: the prompt text is
+                    // what setup() reads and sends as the first message.
+                    preferences?.setPrompt(activation.prompt)
+                }
+            }
+        }
+    }
+
+    /**
+     * Rule 3 of the new-chat companion logic: no companion exists yet, so a
+     * chat can't begin. Persistent dialog (never a toast) with the owner's
+     * approved wording; the positive button opens the companion creation
+     * screen. Declining leaves the chat companion-less until one is made.
+     */
+    private fun promptCreateFirstCompanion() {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setMessage(R.string.create_first_companion_message)
+            .setCancelable(false)
+            .setPositiveButton(R.string.create_first_companion_button) { _, _ ->
+                createFirstCompanionLauncher.launch(
+                    Intent(this, PersonasListActivity::class.java)
+                        .putExtra("createOnStart", true)
+                )
+            }
+            .setNegativeButton(R.string.cancel) { _, _ -> }
+            .show()
+    }
+
+    /**
+     * Seed a brand-new chat's checked additional lorebooks from the persona's
+     * last-used set — but only when the persona has opted in via its
+     * "auto-enable last-used lorebooks" toggle. One-shot per chat (same pattern
+     * as [seedPersonaAndActivationDefaults]); afterwards the chat's own Quick
+     * Settings selection always wins. Books that have since been deleted or
+     * unlinked from the persona are skipped.
+     */
+    private fun seedLoreBooksForNewChat() {
+        if (preferences?.isLoreBooksSeeded() == true) return
+        preferences?.setLoreBooksSeeded(true)
+
+        val personaId = preferences?.getPersonaId().orEmpty()
+        if (personaId.isEmpty()) return
+
+        val persona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+        if (!persona.autoLoadLastLoreBooks) return
+
+        try {
+            val linked = persona.additionalLoreBookIdList()
+            val store = LoreBookStore.getInstance(this)
+            val ids = persona.lastUsedLoreBookIdList().filter { linked.contains(it) && store.getBook(it) != null }
+            if (ids.isNotEmpty()) {
+                preferences?.setActiveLoreBookIds(ids)
+            }
+        } catch (e: Exception) {
+            // Store unavailable (SQLCipher key problem): skip seeding, keep the chat usable.
+            org.teslasoft.assistant.preferences.memory.MemoryLog.log(this, "LoreBook", "error", "Lorebook seeding skipped: ${e.message}")
+        }
+    }
+
+    /*
+    * Setup SpeakGPT with activation prompt.
+    * */
+    private fun setup() {
+        if (messages.isEmpty()) {
+            seedPersonaAndActivationDefaults()
+            seedLoreBooksForNewChat()
+            val prompt: String = preferences!!.getPrompt()
+
+            if (prompt.toString() != "" && prompt.toString() != "null" && prompt != "") {
+                putMessage(prompt, false)
+
+                chatMessages.add(
+                    ChatMessage(
+                        role = ChatRole.User,
+                        content = prompt
+                    )
+                )
+
+                btnMicro?.isEnabled = false
+                btnSend?.isEnabled = false
+                progress?.visibility = View.VISIBLE
+
+                setupScope = CoroutineScope(Dispatchers.Main)
+
+                setupScope?.launch {
+                    progress?.setOnClickListener {
+                        cancel()
+                        restoreUIState()
+                        saveSettings()
+                        syncChatProjection()
+                        calculateCost()
+                    }
+
+                    try {
+                        generateResponse(prompt, false)
+                    } catch (_: CancellationException) {
+                        restoreUIState()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun loadModel() {
+        model = preferences!!.getModel()
+        endSeparator = preferences!!.getEndSeparator()
+        prefix = preferences!!.getPrefix()
+    }
+
+    /** SYSTEM INITIALIZATION END **/
+
+    private fun saveSettings(
+        synchronous: Boolean = false
+    ): ChatStorageHealth.WriteOutcome {
+        // Guarded save (Round 4): ChatPreferences refuses the write when the
+        // chat's storage is locked or its stored value is preserved-corrupt —
+        // this screen's in-memory list came from that unreadable read, and
+        // persisting it would overwrite the only copy. The refusal is logged
+        // by the guard; the "Chat unavailable" state already blocks the UI.
+        if (chatStorageUnavailable) return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
+        // The inline image-confirmation card and the Creating Image row are
+        // transient UI rows (image-generation-rebuild-plan.md §5) — never
+        // persisted, so no unexplained empty assistant message is saved and
+        // reopening cannot show a stale copy.
+        val isTransientImageRow = { row: HashMap<String, Any> ->
+            row[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
+                row[ChatAdapter.KEY_IMAGE_PROGRESS] == true
+        }
+        val persistableMessages =
+            if (messages.any(isTransientImageRow)) {
+                ArrayList(messages.filterNot(isTransientImageRow))
+            } else {
+                messages
+            }
+        return ChatPreferences.getChatPreferences().saveChatHistory(
+            this,
+            chatId,
+            persistableMessages,
+            synchronous = synchronous
+        )
+    }
+
+    /**
+     * A manual turn — typed send or regenerate — while hands-free mode is on
+     * counts as the user deliberately continuing the conversation, so it resumes
+     * a loop that an earlier error (or a Hang Up) had stopped. Without this the
+     * reply still reads back (readback keys off the mode toggle) but the mic
+     * never reopens, because the loop-stopped flag is otherwise only cleared by a
+     * fresh mic press — leaving the user talking to a dead mic after a regenerate.
+     * Safe against error-loop spirals: it only re-arms after a successful,
+     * user-initiated turn; a turn that errors again re-stops the loop as before.
+     * No-op when the loop is already live, so a typed message mid-conversation
+     * doesn't log or change anything.
+     */
+    private fun resumeHandsFreeForManualTurn() {
+        if (preferences?.getHandsFreeMode() != true) return
+        if (!handsFreeStopped && !cancelState) return
+        handsFreeStopped = false
+        cancelState = false
+        handsFreeTurnRetries = 0
+        startHandsFreeService()
+        logVoiceEvent("manual turn restored the hands-free loop and restarted its keep-alive service after a prior error/hang-up")
+    }
+
+    private fun parseMessage(
+        message: String,
+        shouldAdd: Boolean = true,
+        preparedTurn: PreparedRegularTurn? = null
+    ) {
+        // No sends into a chat whose stored history is locked or preserved-
+        // corrupt (Round 4) — the blocking dialog owns this screen.
+        if (chatStorageUnavailable) return
+        if (preparedTurn != null) {
+            val stillExact = message == preparedTurn.rawMessage &&
+                messageInput?.text?.toString() == preparedTurn.rawMessage &&
+                pendingIncludes.toList() == preparedTurn.pendingIncludes &&
+                chatMessages.toList() == preparedTurn.historyBeforeSend &&
+                model == preparedTurn.selectedModel &&
+                preferences?.getApiEndpointId().orEmpty() == preparedTurn.selectedEndpointId
+            if (!stillExact) {
+                restoreUIState()
+                return
+            }
+        }
+        // Put timestamp to chat to sort chats by last message
+        ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
+        try {
+            if (mediaPlayer!!.isPlaying) {
+                mediaPlayer!!.stop()
+                mediaPlayer!!.reset()
+            }
+            tts!!.stop()
+        } catch (_: java.lang.Exception) {/* unused */}
+        if (message != "") {
+            messageInput?.setText("")
+
+            keyboardMode = false
+
+            // Re-engage hands-free if an earlier error/hang-up left the loop
+            // stopped: this manual turn is the user's "keep going" signal, so the
+            // mic re-arms once the reply finishes reading back.
+            resumeHandsFreeForManualTurn()
+
+            val m = preparedTurn?.storedMessage ?: (prefix + message + endSeparator)
+
+            if (shouldAdd) putMessage(m, false)
+
+            // Attachments waiting in the strip belong to THIS message: they
+            // move into its record so the document text is saved atomically
+            // with the text it accompanies, and so it holds a fixed position
+            // in history that the provider's prefix cache can cover on every
+            // later turn. Only on shouldAdd — a retry re-sends an existing
+            // message that already carries its own attachments.
+            var transferredPendingIncludes = false
+            if (shouldAdd) {
+                val attached = if (preparedTurn != null) {
+                    pendingIncludes = arrayListOf()
+                    preparedTurn.pendingIncludes.map { it.forSentMessage() }
+                } else {
+                    consumePendingIncludesForSend()
+                }
+                if (attached.isNotEmpty() && messages.isNotEmpty()) {
+                    messages[messages.size - 1][INCLUDES_KEY] = ChatInclude.listToJson(attached)
+                    transferredPendingIncludes = true
+                }
+                refreshIncludeStrip()
+                refreshPersistentIncludeControls()
+            }
+            val saveOutcome = saveSettings(synchronous = transferredPendingIncludes)
+            if (transferredPendingIncludes &&
+                saveOutcome == ChatStorageHealth.WriteOutcome.OK
+            ) {
+                // Commit the chat side first. If the process stops between
+                // these writes, loadPendingIncludes de-duplicates by include
+                // id; the document is never lost.
+                savePendingIncludes(synchronous = true)
+            }
+
+            btnMicro?.isEnabled = false
+            btnSend?.isEnabled = false
+            progress?.visibility = View.VISIBLE
+
+            // Rebuilt /imagine (image-generation-rebuild-plan.md §2.1): the
+            // RAW typed text is parsed — not the stored prefix+separator
+            // form — so the command triggers only at the start of the
+            // message, and trailing --shape / --quality options override
+            // the saved defaults for this request only (§11). The toggle is
+            // the app-wide Enable /imagine setting (§5); the legacy
+            // per-chat copy stops being read (§14).
+            val imagineParse = if (preferences!!.getImagineCommandGlobal()) {
+                ImagineCommand.parse(message)
+            } else {
+                ImagineCommand.Parse.NotImagine
+            }
+
+            if (imagineParse is ImagineCommand.Parse.Request) {
+                handleImagineRequest(imagineParse)
+            } else if (imagineParse is ImagineCommand.Parse.EmptyPrompt) {
+                putMessage("Prompt can not be empty. Use /imagine &lt;PROMPT&gt;", true)
+
+                saveSettings()
+
+                btnMicro?.isEnabled = true
+                btnSend?.isEnabled = true
+                progress?.visibility = View.GONE
+            } else if (imagineParse is ImagineCommand.Parse.InvalidOption) {
+                // §11: an unknown or invalid trailing option is a clear
+                // correctable error naming the supported options and
+                // values, and no image is generated.
+                putMessage(
+                    getString(R.string.image_gen_invalid_option, imagineParse.optionText),
+                    true
+                )
+
+                saveSettings()
+
+                btnMicro?.isEnabled = true
+                btnSend?.isEnabled = true
+                progress?.visibility = View.GONE
+            } else {
+                if (shouldAdd) {
+                    chatMessages.add(
+                        ChatMessage(
+                            role = ChatRole.User,
+                            // Not plain `m`: if this turn carried attachments
+                            // they are part of what the model receives.
+                            content = preparedTurn?.modelFacingMessage
+                                ?: messages.lastOrNull()?.let { modelFacingContent(it) }
+                                ?: m
+                        )
+                    )
+                    syncChatProjection()
+                }
+
+                parseMessageScope = CoroutineScope(Dispatchers.Main)
+                parseMessageScope?.launch {
+                    progress?.setOnClickListener {
+                        cancel()
+                        restoreUIState()
+                        saveSettings()
+                        syncChatProjection()
+                        calculateCost()
+                    }
+
+                    try {
+                        generateResponse(m, false, preparedTurn)
+                    } catch (_: CancellationException) {
+                        restoreUIState()
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * The rebuilt `/imagine` pipeline (image-generation-rebuild-plan.md
+     * §2.1/§11/§13): pre-flight configuration check with the persistent
+     * Configure dialog, §11 option resolution against the selected
+     * generator's capabilities with the never-silent unsupported-option
+     * notice, then one request through the shared generator coordinator.
+     */
+    private fun handleImagineRequest(parsed: ImagineCommand.Parse.Request) {
+        val globalPreferences = Preferences.getPreferences(this, "")
+        val endpointId = globalPreferences.getImageGeneratorEndpointId()
+        val generatorModelId = globalPreferences.getImageGeneratorModel()
+        if (endpointId.isBlank() || generatorModelId.isBlank()) {
+            saveSettings()
+            restoreUIState()
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.title_image_generation)
+                .setMessage(R.string.image_gen_configure_message)
+                .setPositiveButton(R.string.image_gen_action_configure) { _, _ ->
+                    startActivity(Intent(this, ImageGenerationSettingsActivity::class.java))
+                }
+                .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                .show()
+            return
+        }
+
+        val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
+        val capabilities = ImageProviderAdapters.forEndpoint(endpoint).capabilities
+        val resolved = ImagineCommand.resolveOptions(
+            parsed.shapeOverride,
+            parsed.qualityOverride,
+            globalPreferences.getImageGeneratorShape(),
+            globalPreferences.getImageGeneratorQuality(),
+            capabilities
+        )
+        val request = ImageGenerationRequest(
+            prompt = parsed.prompt,
+            shape = resolved.shape,
+            quality = resolved.quality,
+            endpointId = endpointId,
+            modelId = generatorModelId
+        )
+
+        if (resolved.unsupportedExplicit.isNotEmpty()) {
+            // §11: an explicitly requested option the selected generator
+            // cannot support is never silently ignored.
+            val optionLabels = resolved.unsupportedExplicit.joinToString(", ") { option ->
+                if (option == ImagineCommand.OPTION_SHAPE) {
+                    getString(R.string.image_gen_row_shape)
+                } else {
+                    getString(R.string.image_gen_row_quality)
+                }
+            }
+            saveSettings()
+            restoreUIState()
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.title_image_generation)
+                .setMessage(getString(R.string.image_gen_unsupported_option_notice, optionLabels))
+                .setPositiveButton(R.string.image_gen_action_continue) { _, _ ->
+                    sendCoordinatorImageRequest(request)
+                }
+                .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+                .show()
+            return
+        }
+
+        sendCoordinatorImageRequest(request)
+    }
+
+    /** §5 progress experience: the generation runs in the process-level
+     *  job registry — NOT an activity scope — so leaving the chat or
+     *  recreating this screen cannot kill it or double it. This screen
+     *  shows the inline Creating Image row (with its visible Cancel), and
+     *  the busy state; the single terminal state arrives through
+     *  [onImageJobFinished]. */
+    private fun sendCoordinatorImageRequest(request: ImageGenerationRequest) {
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
+        progress?.visibility = View.VISIBLE
+        progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
+        showImageProgressCard()
+        // Attach (idempotent) before starting: a chat whose id was assigned
+        // after onCreate must still receive the terminal state here.
+        ImageGenerationJobRegistry.attach(chatId, this)
+        ImageGenerationJobRegistry.start(
+            this, chatId, request, ImageGenerationJobRegistry.Origin.IMAGINE
+        )
+    }
+
+    /** The §5 single terminal state — Complete, Failed, or Cancelled —
+     *  delivered exactly once by the job registry while this screen is
+     *  attached. `/imagine` owns its whole turn, so it also restores the
+     *  busy state; a tool-call generation is mid-turn and leaves the turn
+     *  state to the surrounding tool flow. */
+    override fun onImageJobFinished(
+        job: ImageGenerationJobRegistry.ActiveJob,
+        terminal: ImageGenerationJobRegistry.Terminal
+    ) {
+        if (job.chatId != chatId) return
+        removeImageProgressCard()
+        val fromImagine = job.origin == ImageGenerationJobRegistry.Origin.IMAGINE
+        when (terminal) {
+            is ImageGenerationJobRegistry.Terminal.Complete -> {
+                putMessage("~file:" + terminal.marker, true)
+                attachGeneratedImageRecord(terminal.metadata)
+                scroll(true)
+                scroll(false)
+                saveSettings()
+                // Make the token-saving summary right after the image finishes
+                // (owner request, Aug 16 2026); silent, so chat is not disturbed.
+                ensureImageSummaries()
+                ChatPreferences.getChatPreferences()
+                    .putTimestampToChatById(this, chatId)
+                if (fromImagine) {
+                    btnMicro?.isEnabled = true
+                    btnSend?.isEnabled = true
+                    progress?.visibility = View.GONE
+                    messageInput?.requestFocus()
+                }
+            }
+            is ImageGenerationJobRegistry.Terminal.Failed -> {
+                if (fromImagine) {
+                    presentImageGenerationFailure(job.request, terminal)
+                } else {
+                    // The image cause and the provider's own sanitized detail
+                    // use the same failed-message formula as ordinary replies.
+                    appendImageGenerationFailure(terminal)
+                    saveSettings()
+                }
+            }
+            is ImageGenerationJobRegistry.Terminal.Cancelled -> {
+                putMessage(getString(R.string.image_gen_error_cancelled), true)
+                attachGeneratedImageRecord(terminal.metadata)
+                saveSettings()
+                if (fromImagine) restoreUIState()
+            }
+        }
+    }
+
+    /** §12: stamp the just-added terminal message with its structured
+     *  record. Rides the same persisted map as the message text, so the
+     *  two can never separate. */
+    private fun attachGeneratedImageRecord(metadata: GeneratedImageMetadata) {
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] == true) {
+            last[GeneratedImageMetadata.KEY] = metadata.toJson()
+        }
+    }
+
+    /** The Creating Image row's visible Cancel action (plan §5). */
+    override fun onImageProgressCancel() {
+        ImageGenerationJobRegistry.cancel(chatId)
+    }
+
+    /** Transient §5 Creating Image row — never persisted; restored on
+     *  reopen while the registry still holds the chat's job. */
+    private fun showImageProgressCard() {
+        if (messages.any { it[ChatAdapter.KEY_IMAGE_PROGRESS] == true }) return
+        val card = HashMap<String, Any>()
+        card["isBot"] = true
+        card["message"] = ""
+        card[ChatAdapter.KEY_IMAGE_PROGRESS] = true
+        messages.add(card)
+        adapter?.notifyItemInserted(messages.size - 1)
+        updateMessagesSelectionProjection()
+        scroll(true)
+    }
+
+    private fun removeImageProgressCard() {
+        val index = messages.indexOfLast { it[ChatAdapter.KEY_IMAGE_PROGRESS] == true }
+        if (index >= 0) {
+            messages.removeAt(index)
+            adapter?.notifyItemRemoved(index)
+            updateMessagesSelectionProjection()
+        }
+    }
+
+    /** §5 recovery: reopening (or recreating) the chat while its
+     *  generation is still running re-shows the Creating Image row; an
+     *  `/imagine` turn also re-enters its busy state. Never restarts the
+     *  generation — the registry holds the one running job. */
+    private fun restoreImageGenerationJobState() {
+        if (chatId == "") return
+        ImageGenerationJobRegistry.attach(chatId, this)
+        val activeJob = ImageGenerationJobRegistry.activeJob(chatId) ?: return
+        showImageProgressCard()
+        if (activeJob.origin == ImageGenerationJobRegistry.Origin.IMAGINE) {
+            btnMicro?.isEnabled = false
+            btnSend?.isEnabled = false
+            progress?.visibility = View.VISIBLE
+            progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
+        }
+    }
+
+    /** §13 failure behavior (owner ruling, 2026-07-29): a concise
+     *  cause-specific message in chat, plus the action matching the cause —
+     *  Edit Prompt for a refused prompt, Change Settings for unsupported
+     *  options and configuration or authentication failures, Retry only
+     *  for failures that may succeed unchanged. The provider's sanitized
+     *  message is also preserved beneath the app explanation, matching the
+     *  ordinary failed-reply format. */
+    private fun presentImageGenerationFailure(
+        request: ImageGenerationRequest,
+        failure: ImageGenerationJobRegistry.Terminal.Failed
+    ) {
+        playErrorSignal()
+        stopHandsFreeOnError()
+
+        val causeText = getString(imageFailureMessageRes(failure.cause))
+        appendImageGenerationFailure(failure)
+        saveSettings()
+        btnMicro?.isEnabled = true
+        btnSend?.isEnabled = true
+        progress?.visibility = View.GONE
+        messageInput?.requestFocus()
+
+        val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(causeText)
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
+        when (failureActionFor(failure.cause)) {
+            ImageFailureAction.EDIT_PROMPT -> {
+                builder.setPositiveButton(R.string.image_gen_action_edit_prompt) { _, _ ->
+                    // The exact prompt that was sent to the generator, back
+                    // in the composer as a runnable command.
+                    messageInput?.setText("/imagine " + request.prompt)
+                    messageInput?.setSelection(messageInput?.text?.length ?: 0)
+                    messageInput?.requestFocus()
+                }
+            }
+            ImageFailureAction.CHANGE_SETTINGS,
+            ImageFailureAction.OPEN_IMAGE_SETTINGS -> {
+                builder.setPositiveButton(R.string.image_gen_action_change_settings) { _, _ ->
+                    startActivity(Intent(this, ImageGenerationSettingsActivity::class.java))
+                }
+            }
+            ImageFailureAction.RETRY -> {
+                builder.setPositiveButton(R.string.btn_msg_retry) { _, _ ->
+                    sendCoordinatorImageRequest(request)
+                }
+            }
+            ImageFailureAction.NONE -> { /* cancellation shows no action */ }
+        }
+        builder.show()
+    }
+
+    /** App explanation in the message body; the provider's own sanitized
+     *  response in the separate failed-message detail field. This is the
+     *  established chat error formula, and keeping the fields separate also
+     *  prevents either string from entering later model context as AI prose. */
+    private fun appendImageGenerationFailure(
+        failure: ImageGenerationJobRegistry.Terminal.Failed
+    ) {
+        putMessage(getString(imageFailureMessageRes(failure.cause)), true)
+        attachGeneratedImageRecord(failure.metadata)
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] == true) {
+            last[MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
+            last[MessageCompletionState.KEY_STATE_DETAIL] = failure.cause.name
+            last[MessageCompletionState.KEY_ERROR_TEXT] =
+                imageFailureProviderDetailBlock(this, failure)
+            adapter?.notifyItemChanged(messages.lastIndex)
+        }
+    }
+
+    /* --------------- Model-initiated image creation (§6/§7/§8) --------------- */
+
+    /** Whether the most recent regular request carried the create_image
+     *  tool — the §8 retry wrapper's evidence that a failure could be a
+     *  tools rejection at all. */
+    private var lastRegularRequestCarriedImageTools = false
+
+    /** §8: UNKNOWN tries the tool, SUPPORTED keeps sending it, UNSUPPORTED
+     *  withholds it until the endpoint editor's reset forgets the record. */
+    private fun chatToolCapabilityScopeKey(selectedModel: String): String {
+        val endpoint = apiEndpointObject
+        val favorite = favoriteForActiveEndpoint(selectedModel)
+        return ToolCapabilityScope.key(
+            selectedModel,
+            openRouterRouting = endpoint?.isOpenRouterRouting() == true,
+            routingType = favorite?.routingType ?: FavoriteModelObject.ROUTING_AUTOMATIC,
+            selectedProvider = favorite?.selectedProvider.orEmpty(),
+            allowFallbacks = favorite?.allowFallbacks != false,
+            providerOrder = favorite?.providerOrder ?: emptyList(),
+            ignoredProviders = favorite?.ignoredProviders ?: emptyList()
+        )
+    }
+
+    private fun chatModelMayReceiveImageTool(selectedModel: String): Boolean {
+        return try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            if (chatEndpointId.isEmpty()) return true
+            val chatEndpoint =
+                apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId) ?: return true
+            ToolCapabilityStore.get(
+                chatEndpoint.toolCapabilityByModel,
+                chatToolCapabilityScopeKey(selectedModel)
+            ) !=
+                ToolCapability.UNSUPPORTED
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    /** Persist a learned tool capability for this chat's exact
+     *  endpoint/model pair — same persistence shape as vision capability.
+     *  Learning must never break a turn. */
+    private fun recordChatToolCapability(selectedModel: String, capability: ToolCapability) {
+        try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            if (chatEndpointId.isEmpty() || selectedModel.isBlank()) return
+            val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
+            val endpoint = prefs.getApiEndpoint(this, chatEndpointId)
+            val updated =
+                ToolCapabilityStore.set(
+                    endpoint.toolCapabilityByModel,
+                    chatToolCapabilityScopeKey(selectedModel),
+                    capability
+                )
+            if (updated != endpoint.toolCapabilityByModel) {
+                endpoint.toolCapabilityByModel = updated
+                prefs.setApiEndpoint(this, endpoint)
+            }
+        } catch (_: Exception) { /* capability learning must never break a turn */ }
+    }
+
+    /** The §8 UNSUPPORTED transition: record it, drop the dead streaming
+     *  placeholder so the retry doesn't stack empty bubbles, and show the
+     *  one-time notice — it appears exactly once because the learned state
+     *  prevents any further tool-bearing request to this pair. Returns the
+     *  state the pair had before, for the §13 capability-change entry. */
+    private fun learnToolsUnsupportedAndNotify(): ToolCapability {
+        val previousState = try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            if (chatEndpointId.isEmpty()) ToolCapability.UNKNOWN
+            else ToolCapabilityStore.get(
+                apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId)?.toolCapabilityByModel,
+                chatToolCapabilityScopeKey(model)
+            )
+        } catch (_: Exception) {
+            ToolCapability.UNKNOWN
+        }
+        recordChatToolCapability(model, ToolCapability.UNSUPPORTED)
+        runOnUiThread {
+            if (messages.isNotEmpty() && messages.last()["isBot"] == true &&
+                messages.last()["message"].toString().isEmpty()
+            ) {
+                messages.removeAt(messages.size - 1)
+                adapter?.notifyItemRemoved(messages.size)
+                updateMessagesSelectionProjection()
+            }
+            putMessage(getString(R.string.image_gen_tools_unsupported_notice), true)
+            saveSettings()
+        }
+        return previousState
+    }
+
+    /** §13 automatic capability-change entry, written once the without-tools
+     *  retry has finished either way. Logging must never break the retry. */
+    private fun recordToolCapabilityChangeEntry(
+        previousState: ToolCapability,
+        rawError: String?,
+        retrySucceeded: Boolean
+    ) {
+        try {
+            val chatEndpointId = preferences?.getApiEndpointId().orEmpty()
+            val endpoint = if (chatEndpointId.isEmpty()) null
+            else apiEndpointPreferences?.getApiEndpoint(this, chatEndpointId)
+            ImageGenerationEventLog.recordCapabilityChange(
+                this,
+                endpointLabel = endpoint?.label.orEmpty(),
+                modelId = model,
+                previousState = toolCapabilityLabel(previousState),
+                newState = toolCapabilityLabel(ToolCapability.UNSUPPORTED),
+                sanitizedError = ImageErrorSanitizer.sanitize(rawError, endpoint?.apiKey),
+                retriedWithoutTools = true,
+                retrySucceeded = retrySucceeded
+            )
+        } catch (_: Exception) { /* logging must never break the retry */ }
+    }
+
+    private fun toolCapabilityLabel(capability: ToolCapability): String = when (capability) {
+        ToolCapability.UNKNOWN -> "Unknown"
+        ToolCapability.SUPPORTED -> "Supported"
+        ToolCapability.UNSUPPORTED -> "Unsupported"
+    }
+
+    /** Resolved by the inline confirmation card's Create/Cancel tap. */
+    private var pendingImageConfirmation: CompletableDeferred<Boolean>? = null
+
+    override fun onImageConfirmationDecision(approved: Boolean) {
+        pendingImageConfirmation?.complete(approved)
+    }
+
+    private fun showImageConfirmationCard(prompt: String) {
+        val card = HashMap<String, Any>()
+        card["isBot"] = true
+        card["message"] = ""
+        card[ChatAdapter.KEY_IMAGE_CONFIRMATION] = true
+        card[ChatAdapter.KEY_IMAGE_CONFIRMATION_PROMPT] = prompt
+        card[ChatAdapter.KEY_IMAGE_CONFIRMATION_COMPANION] =
+            currentCompanionLabel().ifBlank { getString(R.string.chat_role_assistant) }
+        messages.add(card)
+        adapter?.notifyItemInserted(messages.size - 1)
+        updateMessagesSelectionProjection()
+        scroll(true)
+    }
+
+    private fun removeImageConfirmationCard() {
+        val index = messages.indexOfLast { it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true }
+        if (index >= 0) {
+            messages.removeAt(index)
+            adapter?.notifyItemRemoved(index)
+            updateMessagesSelectionProjection()
+        }
+    }
+
+    /** §5 confirmation: the inline card naming the companion, prompt
+     *  collapsed behind View Prompt, plus the spoken announcement over the
+     *  same read-aloud gate as replies (owner-approved wording) — in a
+     *  hands-free conversation its completed readback is what re-arms the
+     *  mic so the next utterance can answer. Skipped when Ask Before
+     *  Creating is off. Cancelling the turn (the progress tap) cancels the
+     *  await and removes the card. */
+    private suspend fun requestImageConfirmation(
+        prompt: String,
+        globalPreferences: Preferences,
+        shouldPronounce: Boolean
+    ): Boolean {
+        if (!globalPreferences.getAskBeforeAiImages()) return true
+        val decision = CompletableDeferred<Boolean>()
+        pendingImageConfirmation = decision
+        runOnUiThread { showImageConfirmationCard(prompt) }
+        pronounce(
+            shouldPronounce,
+            getString(
+                R.string.image_gen_spoken_announcement,
+                currentCompanionLabel().ifBlank { getString(R.string.chat_role_assistant) }
+            )
+        )
+        try {
+            return decision.await()
+        } finally {
+            pendingImageConfirmation = null
+            runOnUiThread { removeImageConfirmationCard() }
+        }
+    }
+
+    /** §7 image tool flow: close the streamed text bubble (or drop an
+     *  empty placeholder — §5 forbids saving an unexplained empty
+     *  assistant message), execute at most one create_image call per turn
+     *  (§6), return one tool result per call to the SAME conversation
+     *  model, and stream its final text. Unknown tool names are never
+     *  executed. Tools are not re-offered on the follow-up, so the turn
+     *  cannot loop. */
+    private suspend fun handleAssistantToolCalls(
+        calls: List<StreamedToolCallAssembler.AssembledToolCall>,
+        originalRequest: ChatCompletionRequest,
+        streamedText: String,
+        shouldPronounce: Boolean,
+        streamingEnabled: Boolean
+    ) {
+        if (streamedText.isEmpty()) {
+            if (messages.isNotEmpty() && messages.last()["isBot"] == true) {
+                messages.removeAt(messages.size - 1)
+                adapter?.notifyItemRemoved(messages.size)
+                updateMessagesSelectionProjection()
+            }
+        } else {
+            markLastAssistantDone()
+        }
+        saveSettings()
+
+        val globalPreferences = Preferences.getPreferences(this, "")
+        var executedImageCall = false
+        val results =
+            ArrayList<kotlin.Pair<StreamedToolCallAssembler.AssembledToolCall, String>>()
+        for (call in calls) {
+            val result = when {
+                call.name != CreateImageTool.NAME -> {
+                    ImageGenerationEventLog.recordToolMistake(
+                        this, "the model called unknown tool \"${call.name}\""
+                    )
+                    CreateImageTool.errorResult(
+                        "unknown tool \"${call.name}\" — it was not executed"
+                    )
+                }
+                executedImageCall -> {
+                    ImageGenerationEventLog.recordToolMistake(
+                        this, "the model attempted more than one image in a single turn"
+                    )
+                    CreateImageTool.errorResult("only one image may be created per user turn")
+                }
+                else -> {
+                    executedImageCall = true
+                    executeCreateImageCall(call, globalPreferences, shouldPronounce)
+                }
+            }
+            results.add(kotlin.Pair(call, result))
+        }
+
+        // §7.2: before dispatching the follow-up, make sure this turn's
+        // reasoning state has finished being captured from the split stream, so
+        // the assistant tool-call message can echo its reasoning_details back.
+        // Bounded so a stalled observer can never hang the turn; skipped
+        // entirely when reasoning was never observed for this turn.
+        if (currentTurnReasoningObservationActive) {
+            kotlinx.coroutines.withTimeoutOrNull(1500L) {
+                currentTurnReasoningObserved?.await()
+            }
+        }
+
+        var assistantCallId = 0
+        val assistantToolCallMessage = ChatMessage(
+            role = ChatRole.Assistant,
+            content = streamedText.ifEmpty { null },
+            toolCalls = calls.map { call ->
+                ToolCall.Function(
+                    id = ToolId(call.id ?: "call_${assistantCallId++}"),
+                    function = FunctionCall(call.name, call.arguments)
+                )
+            }
+        )
+        var resultCallId = 0
+        val toolResultMessages = results.map { pair ->
+            ChatMessage(
+                role = ChatRole.Tool,
+                content = pair.second,
+                toolCallId = ToolId(pair.first.id ?: "call_${resultCallId++}")
+            )
+        }
+        val followUpRequest = rebuildRequestWithoutTools(
+            originalRequest,
+            originalRequest.messages + assistantToolCallMessage + toolResultMessages,
+            streamingEnabled
+        )
+        streamAssistantTextResponse(followUpRequest, shouldPronounce, streamingEnabled)
+    }
+
+    /** One §6-validated create_image execution: the user's saved quality
+     *  default always applies (the tool has no quality field), §11 shape
+     *  resolution reports model-side fallbacks in the tool result instead
+     *  of interrupting the user, the §5 confirmation runs when enabled,
+     *  and the shared coordinator generates the image. Failures put the
+     *  §13 cause message in chat and return a clean tool error. */
+    private suspend fun executeCreateImageCall(
+        call: StreamedToolCallAssembler.AssembledToolCall,
+        globalPreferences: Preferences,
+        shouldPronounce: Boolean
+    ): String {
+        val validation = CreateImageTool.validate(call.arguments)
+        if (validation is CreateImageTool.Validation.Invalid) {
+            // §13: model mistakes are log entries, never chat errors.
+            ImageGenerationEventLog.recordToolMistake(this, validation.toolError)
+            return CreateImageTool.errorResult(validation.toolError)
+        }
+        val valid = validation as CreateImageTool.Validation.Valid
+
+        val endpointId = globalPreferences.getImageGeneratorEndpointId()
+        val generatorModelId = globalPreferences.getImageGeneratorModel()
+        if (endpointId.isBlank() || generatorModelId.isBlank()) {
+            return CreateImageTool.errorResult("no image generator is configured")
+        }
+
+        val endpoint = apiEndpointPreferences!!.getApiEndpoint(this, endpointId)
+        val adapter = ImageProviderAdapters.forEndpoint(endpoint)
+        val resolved = ImagineCommand.resolveOptions(
+            valid.shapeOverride,
+            null,
+            globalPreferences.getImageGeneratorShape(),
+            globalPreferences.getImageGeneratorQuality(),
+            adapter.capabilities
+        )
+        if (resolved.unsupportedExplicit.isNotEmpty() || resolved.silentFallbacks.isNotEmpty()) {
+            // §13: a model-initiated option that fell back to the provider
+            // default — the case the user cannot otherwise see.
+            ImageGenerationEventLog.recordSilentFallback(
+                this,
+                (resolved.unsupportedExplicit + resolved.silentFallbacks).joinToString(", "),
+                endpoint.provider.ifBlank { adapter.providerName },
+                generatorModelId
+            )
+        }
+        val request = ImageGenerationRequest(
+            prompt = valid.prompt,
+            shape = resolved.shape,
+            quality = resolved.quality,
+            endpointId = endpointId,
+            modelId = generatorModelId,
+            description = valid.description
+        )
+
+        if (!requestImageConfirmation(valid.prompt, globalPreferences, shouldPronounce)) {
+            return CreateImageTool.cancelledResult()
+        }
+
+        // §5: the generation itself runs in the process-level job registry
+        // so recreating this screen mid-turn cannot kill it or double it.
+        // The attached screen shows the Creating Image row and appends the
+        // single terminal chat message (and the registry records the §13
+        // entries); this flow only builds the tool result.
+        val job = withContext(Dispatchers.Main) {
+            showImageProgressCard()
+            // Attach (idempotent) before starting: a chat whose id was
+            // assigned after onCreate must still receive the terminal state.
+            ImageGenerationJobRegistry.attach(chatId, this@ChatActivity)
+            ImageGenerationJobRegistry.start(
+                this@ChatActivity, chatId, request, ImageGenerationJobRegistry.Origin.TOOL
+            )
+        }
+        return when (val terminal = job.await()) {
+            is ImageGenerationJobRegistry.Terminal.Complete -> {
+                // §11: a model-initiated unsupported option applies the
+                // fallback and reports it in the tool result instead of
+                // interrupting the user.
+                val fallbackNote = if (resolved.unsupportedExplicit.isNotEmpty() ||
+                    resolved.silentFallbacks.isNotEmpty()
+                ) {
+                    "the requested shape is not supported by the image service; " +
+                        "the provider default was used"
+                } else {
+                    null
+                }
+                CreateImageTool.successResult(terminal.marker, valid.description, fallbackNote)
+            }
+            is ImageGenerationJobRegistry.Terminal.Failed ->
+                CreateImageTool.errorResult(
+                    "image generation failed: " + terminal.cause.name.lowercase()
+                )
+            is ImageGenerationJobRegistry.Terminal.Cancelled ->
+                CreateImageTool.cancelledResult()
+        }
+    }
+
+    /** ChatCompletionRequest is not a data class, so the §7 follow-up and
+     *  the §8 without-tools retry rebuild it field-by-field, carrying the
+     *  original sampling values and deliberately no tools. */
+    @OptIn(com.aallam.openai.api.BetaOpenAI::class) // reading seed back is beta-gated
+    private fun rebuildRequestWithoutTools(
+        original: ChatCompletionRequest,
+        requestMessages: List<ChatMessage>,
+        streamingEnabled: Boolean
+    ): ChatCompletionRequest = ChatCompletionRequest(
+        model = original.model,
+        messages = requestMessages,
+        maxTokens = original.maxTokens,
+        temperature = original.temperature,
+        topP = original.topP,
+        frequencyPenalty = original.frequencyPenalty,
+        presencePenalty = original.presencePenalty,
+        seed = original.seed,
+        logitBias = original.logitBias,
+        // Ask supported providers to include token usage in the stream so the
+        // Response Lifecycle Log can record provider-reported counts. Harmless
+        // where unsupported: the field simply stays "not reported".
+        streamOptions = if (streamingEnabled) StreamOptions(includeUsage = true) else null
+    )
+
+    /** The follow-up response after tool results (§7.7): plain streamed
+     *  text into a fresh assistant bubble, then the normal turn
+     *  completion. */
+    private suspend fun streamAssistantTextResponse(
+        request: ChatCompletionRequest,
+        shouldPronounce: Boolean,
+        streamingEnabled: Boolean
+    ) {
+        var response = ""
+        putMessage("", true)
+        markLastAssistantStreaming()
+        startLifecycle(ResponseLifecycle.PHASE_TOOL_CONTINUATION, request.maxTokens)
+        scroll(true)
+        val toolCallAssembler = StreamedToolCallAssembler()
+        if (streamingEnabled) {
+            generationRequestActive = true
+            try {
+                val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(request)
+            // Dispatch begins at collection; a failure past this point is a real
+            // provider/network end, not a pre-dispatch one.
+            startGenerationNetworkDiagnostics()
+            providerRequestDispatched = true
+            completions.flowOn(Dispatchers.IO).collect { v ->
+                if (!currentCoroutineContext().isActive) throw CancellationException()
+                val choice = v.choices.firstOrNull()
+                noteLifecycleChunk(
+                    choice?.finishReason?.value, v.id,
+                    (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
+                    v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
+                )
+                v.usage?.totalTokens?.let { pendingResponseTokens = it }
+                choice?.delta?.toolCalls?.forEach { fragment ->
+                    toolCallAssembler.accept(
+                        fragment.index,
+                        fragment.id?.id,
+                        fragment.function?.nameOrNull,
+                        fragment.function?.argumentsOrNull
+                    )
+                }
+                val delta = choice?.delta?.content
+                if (delta != null && delta != "null") {
+                    response += delta
+                    messages[messages.size - 1]["message"] = response
+                    adapter?.notifyItemChanged(messages.size - 1)
+                    scroll(false)
+                }
+            }
+            } finally {
+                generationRequestActive = false
+            }
+        } else {
+            // A completed response is a real non-streaming API call. Do not
+            // collect/buffer a stream: the client uses its Chat Completion
+            // mechanism, which omits stream_options and waits for the full
+            // response before returning.
+            startGenerationNetworkDiagnostics()
+            providerRequestDispatched = true
+            val completion = try {
+                generationRequestActive = true
+                ai!!.chatCompletion(request)
+            } finally {
+                generationRequestActive = false
+            }
+            val choice = completion.choices.firstOrNull()
+            val content = choice?.message?.content?.takeIf { it != "null" }
+            response = content.orEmpty()
+            noteLifecycleChunk(
+                choice?.finishReason?.value, completion.id, response.length,
+                completion.usage?.promptTokens, completion.usage?.completionTokens,
+                completion.usage?.totalTokens
+            )
+            completion.usage?.totalTokens?.let { pendingResponseTokens = it }
+            choice?.message?.toolCalls?.forEachIndexed { index, call ->
+                if (call is ToolCall.Function) {
+                    toolCallAssembler.accept(
+                        index,
+                        call.id.id,
+                        call.function.nameOrNull,
+                        call.function.argumentsOrNull
+                    )
+                }
+            }
+            messages[messages.size - 1]["message"] = response
+            currentLifecycle?.markNonStreamingResponse()
+            adapter?.notifyItemChanged(messages.size - 1)
+        }
+        finalizeLifecycleSuccess()
+        messages[messages.size - 1]["message"] = "$response\n"
+        markLastAssistantDone()
+        adapter?.notifyItemChanged(messages.size - 1)
+        syncChatProjection()
+        pronounce(shouldPronounce, response)
+        saveSettings()
+        calculateCost()
+        summarizerCycle()
+        btnMicro?.isEnabled = true
+        btnSend?.isEnabled = true
+        progress?.visibility = View.GONE
+        messageInput?.requestFocus()
+        ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
+    }
+
+    // ===== Response Lifecycle diagnostics (opt-in, off by default) =====
+    // One record is written per VISIBLE generation request — never one
+    // combined record for a whole multi-step turn — so a completed primary
+    // stream and an interrupted continuation are two comparable entries that
+    // share [currentLifecycleTurnId]. Capture is entirely gated on the toggle:
+    // when it is off, [currentLifecycle] stays null and these helpers no-op.
+    @Volatile
+    private var currentLifecycle: ResponseLifecycleRecorder? = null
+
+    /** Network transport evidence for the currently dispatched provider request. */
+    private var generationNetworkMonitor: org.teslasoft.assistant.util.GenerationNetworkMonitor? = null
+
+    /** Whether the in-flight streamed request has actually begun dispatch/
+     *  collection. False throughout request construction; set true immediately
+     *  before the provider stream is collected, and reset per attempt in
+     *  [startLifecycle]. This — never the mere existence of a visible assistant
+     *  row — is the pre-dispatch boundary: a failure or a non-user, non-teardown
+     *  cancellation while this is false ended before anything reached the
+     *  provider, so it is recorded as request_not_sent and never written to the
+     *  Provider Failure Log. */
+    @Volatile
+    private var providerRequestDispatched: Boolean = false
+
+    /** True only while the primary or tool-continuation Chat Completions call
+     * is being serialized/dispatched. This keeps non-stream diagnostics
+     * request-scoped even when no lifecycle recorder exists. */
+    @Volatile
+    private var generationRequestActive: Boolean = false
+
+    /** The provider-routing send hook's ACTUAL result for the in-flight
+     *  request, written on the send thread and read when the lifecycle entry is
+     *  finalized. Reset to null when each streamed request begins, so a hook
+     *  that never runs is reported as unconfirmed rather than "attached". */
+    @Volatile
+    private var lastRoutingAttachment: String? = null
+    /** Diagnostic: the reasoning instruction actually written onto the outgoing
+     *  body by [augmentRequestWithReasoning] for this streamed request, or a
+     *  reason none was (§7.8). Written on the send thread, read when the
+     *  lifecycle entry finalizes. Reset with [lastRoutingAttachment]. */
+    @Volatile
+    private var lastReasoningAttachment: String? = null
+    private var currentLifecycleTurnId: String = ""
+    private var lifecycleTurnCounter: Int = 0
+
+    /** Mint the turn id shared by this turn's primary and continuation streams.
+     *  Always cheap; the actual capture is still gated in [startLifecycle]. */
+    private fun beginLifecycleTurn() {
+        lifecycleTurnCounter++
+        currentLifecycleTurnId = "T" + System.currentTimeMillis().toString() + "-" + lifecycleTurnCounter
+    }
+
+    /** Begin recording one generation request when Response Lifecycle logging is
+     *  on. A still-pending recorder (e.g. the §8 first attempt that is about to
+     *  be retried) is closed first so its record is never dropped. */
+    private suspend fun startLifecycle(phase: String, requestedMaxOutput: Int?) {
+        currentLifecycle?.let {
+            if (!it.finalized) finalizeLifecycleTerminal(
+                ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
+                ResponseLifecycle.Termination.STREAM_CLOSED, "superseded by a new request"
+            )
+        }
+        // Reset for THIS request (after any superseded entry above is written
+        // with its own result), so the send hook's actual outcome is recorded
+        // fresh and a hook that never runs never reports a stale attachment.
+        lastRoutingAttachment = null
+        lastReasoningAttachment = null
+        // Reset the dispatch boundary for THIS attempt regardless of whether
+        // lifecycle logging is on, because the Provider Failure Log gate also
+        // depends on it.
+        providerRequestDispatched = false
+        if (preferences?.getResponseLifecycleLogging() != true) {
+            currentLifecycle = null
+            return
+        }
+        if (currentLifecycleTurnId.isBlank()) beginLifecycleTurn()
+        val endpoint = apiEndpointObject
+        val apiProvider = endpoint?.provider?.trim()?.ifBlank { null }
+            ?: endpoint?.label?.trim()?.ifBlank { null }
+            ?: endpoint?.host?.trim().orEmpty()
+        currentLifecycle = ResponseLifecycleRecorder(
+            turnId = currentLifecycleTurnId,
+            phase = phase,
+            apiProvider = apiProvider,
+            apiEndpoint = endpoint?.host ?: "",
+            model = model,
+            requestedMaxOutput = requestedMaxOutput,
+            startUptimeMs = android.os.SystemClock.uptimeMillis()
+        )
+    }
+
+    private fun noteLifecycleChunk(
+        finishReason: String?, id: String?, contentLength: Int,
+        promptTokens: Int?, completionTokens: Int?, totalTokens: Int?
+    ) {
+        val r = currentLifecycle ?: return
+        if (r.finalized) return
+        r.noteChunk(finishReason, id, contentLength, promptTokens, completionTokens, totalTokens)
+    }
+
+    /** Finalize a response that ended on its own. Streaming uses the finish
+     *  reason/terminal evidence matrix; a successful completed-response call
+     *  has provider-completion evidence from the client return itself. */
+    private suspend fun finalizeLifecycleSuccess() {
+        val r = currentLifecycle ?: return
+        if (r.finalized) return
+        val n = if (r.nonStreamingResponse) {
+            ResponseLifecycle.classifyNonStreamingCompletion(r.lastFinishReason, r.receivedCharacters)
+        } else {
+            ResponseLifecycle.classifyNormalCompletion(r.lastFinishReason, r.receivedCharacters)
+        }
+        writeLifecycle(r, n.outcome, n.finishReasonDisplay, n.streamClosed, n.termination, null)
+    }
+
+    /** Finalize a response cut short by an error, a user stop, or an app cancel —
+     *  the terminal values are decided by the caller from what it caught. */
+    private suspend fun finalizeLifecycleTerminal(
+        outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
+        streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
+    ) {
+        val r = currentLifecycle ?: return
+        if (r.finalized) return
+        writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
+    }
+
+    private suspend fun writeLifecycle(
+        r: ResponseLifecycleRecorder, outcome: ResponseLifecycle.Outcome,
+        finishReasonDisplay: String, streamClosed: Boolean,
+        termination: ResponseLifecycle.Termination, errorText: String?
+    ) {
+        r.markFinalized()
+        val durationMs = android.os.SystemClock.uptimeMillis() - r.startUptimeMs
+        // The response observer usually records the provider from the first SSE
+        // chunk. This bounded wait only closes a scheduling race on extremely
+        // short replies, and applies solely while this opt-in log is active.
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            r.awaitProviderObservation(250L)
+        }
+        val body = ResponseLifecycle.format(
+            turnId = r.turnId, phase = r.phase, apiProvider = r.apiProvider,
+            apiEndpoint = r.apiEndpoint, actualModelProvider = r.actualModelProvider,
+            model = r.model,
+            outcome = outcome, finishReasonDisplay = finishReasonDisplay,
+            streamClosed = streamClosed, termination = termination,
+            requestedMaxOutput = r.requestedMaxOutput, promptTokens = r.promptTokens,
+            completionTokens = r.completionTokens, totalTokens = r.totalTokens,
+            receivedCharacters = r.receivedCharacters, durationMs = durationMs,
+            generationId = r.generationId, errorText = errorText,
+            attemptId = r.attemptId
+        ) + providerRoutingLogLine(r.model) + reasoningLogLine()
+        currentLifecycle = null
+        org.teslasoft.assistant.preferences.Logger.logResponseLifecycleAsync(this, body)
+    }
+
+    private fun startRecognition(freshTurn: Boolean = true) {
+        // Re-checked on every arm (the tap entry point checks too, but the
+        // hands-free restarts and re-arms come straight here): with the
+        // permission revoked the recognizer just errors opaquely, and the
+        // failure used to read as a recognizer problem instead of naming the
+        // permission.
+        if (!hasRecordAudioPermission()) {
+            logVoiceEventAlways("microphone permission is missing/revoked at " +
+                    (if (freshTurn) "recognition start" else "recognition re-arm") +
+                    " — not opening the mic (this is a permission problem, not silence)")
+            if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) {
+                stopHandsFreeLoop("microphone permission revoked", notify = true)
+            } else {
+                isRecording = false
+                micIdle()
+            }
+            return
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, LocaleParser.parse(preferences!!.getLanguage()))
+        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+
+        if (preferences?.getHandsFreeMode() == true) {
+            if (freshTurn) {
+                handsFreeUserSpoke = false
+                handsFreeStopped = false
+                cancelState = false
+                handsFreeTurnRetries = 0
+                // A fresh turn can start mid-readback (mic press interrupting
+                // the assistant). The interrupted readback's completion gate and
+                // watchdog must die here: left set, the no-barge-in gate in
+                // onResults() silently drops every transcript of the new turn —
+                // mic visibly open, nothing ever registered — and the watchdog
+                // can never clear the flag because it bails out while
+                // isRecording is true.
+                handsFreeReadbackExpected = false
+                handsFreeReadbackToken++
+                handsFreeListenDeadline = System.currentTimeMillis() +
+                        preferences!!.getHandsFreeNoSpeechSeconds().coerceAtLeast(1) * 1000L
+                handsFreeBuffer = ""
+                handsFreeSubmitRunnable?.let { handsFreeHandler.removeCallbacks(it) }
+                handsFreeSubmitRunnable = null
+                startHandsFreeService()
+            }
+            // Best-effort: ask the recognizer to tolerate longer pauses so the
+            // user has time to think. Some engines ignore these; the restart
+            // logic in the listener backs them up.
+            val silenceMs = preferences!!.getHandsFreeSilenceSeconds().coerceAtLeast(1) * 1000L
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silenceMs)
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1500L)
+        }
+
+        recognizer?.startListening(intent)
+    }
+
+    private fun stopHandsFreeLoop(reason: String = "unspecified", notify: Boolean = false) {
+        // The reason lands in the event log: "the mic never reopened" is only
+        // diagnosable if every loop ending says why it ended.
+        logVoiceEvent("hands-free loop stopped: $reason")
+        // notify = the loop gave up on its own (heard nothing / couldn't capture),
+        // not a user tap. Play an audible cue so a hands-free user with the screen
+        // off knows it stopped listening and is waiting for them, rather than
+        // sitting in silence assuming it's still listening.
+        if (notify) playNoSpeechSignal()
+        whisperTurnToken++ // invalidate any whisper turn callback still in flight
+        handsFreeStopped = true
+        handsFreeReadbackExpected = false
+        handsFreeReadbackToken++ // invalidate any in-flight readback watchdog
+        handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeSubmitRunnable = null
+        handsFreeBuffer = ""
+        try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
+        // Release any Bluetooth SCO routing the Whisper engine took for capture
+        // so the headset isn't left in call mode after the loop ends (no-op for
+        // the Google STT path, which never routed). End-of-turn keeps the route
+        // up between turns; only a real loop stop tears it down.
+        try { LocalWhisperEngine.get().clearMicRouting() } catch (_: Exception) { /* ignore */ }
+        isRecording = false
+        micIdle()
+        // The conversation is over: clear the engaged flag (there is no settings
+        // toggle any more — the button is the only control) and return the
+        // conversation/send button from its red "live" look to resting.
+        preferences?.setHandsFreeMode(false)
+        refreshConversationButton()
+        stopHandsFreeService()
+    }
+
+    /** A failed turn must not silently re-arm the hands-free loop. Otherwise a
+     *  single error (overloaded model, dropped connection, etc.) becomes an
+     *  endless retry cycle that keeps erroring without the user touching the
+     *  mic. Stopping the loop here means a fresh mic tap is required to resume. */
+    private fun stopHandsFreeOnError() {
+        if (preferences?.getHandsFreeMode() == true) {
+            runOnUiThread { stopHandsFreeLoop("the response failed with an error") }
+        }
+    }
+
+    /**
+     * Prepares a normal typed turn without touching the composer, attachment
+     * strip, or persisted history. Only [commitPreparedTurn] crosses that
+     * boundary, after every capacity decision has completed.
+     */
+    private fun prepareTypedTurn(rawMessage: String) {
+        if (chatStorageUnavailable || rawMessage.isEmpty() ||
+            requestPreparationInProgress
+        ) {
+            return
+        }
+
+        // Preserve the existing non-chat command and fine-tuned pipelines.
+        // They do not use the normal chat-completions request built below.
+        // The old Function Calling diversion is gone with the feature (§15).
+        val imagineAttempt = preferences?.getImagineCommandGlobal() == true &&
+            ImagineCommand.isImagineAttempt(rawMessage)
+        if (imagineAttempt ||
+            model.contains(":ft") || model.contains("ft:")
+        ) {
+            parseMessage(rawMessage)
+            return
+        }
+
+        requestPreparationInProgress = true
+        val pendingSnapshot = pendingIncludes.toList()
+        val historySnapshot = chatMessages.toList()
+        val historyIncludesSnapshot = chatMessageIncludes.toList()
+        val selectedModel = model
+        val endpointId = preferences?.getApiEndpointId().orEmpty()
+        val maximumResponseTokens = preferences?.getMaxTokens() ?: 0
+        val storedMessage = prefix + rawMessage + endSeparator
+        val sentIncludes = pendingSnapshot.map { it.forSentMessage() }
+        val sentIncludesJson = ChatInclude.listToJson(sentIncludes)
+        val modelFacingMessage = IncludeMessageProjection.userContent(
+            storedMessage,
+            sentIncludesJson
+        )
+        // Summarizer transmission (decision 15): the request carries the
+        // summary plus only the messages after the fold-in bookmark. The
+        // trimmed pair and the summary text are captured together here so a
+        // fold-in landing mid-preparation can't split them; the staleness
+        // check in parseMessage keeps comparing the FULL projection snapshot.
+        val summarizerTrim = summarizerTrimmedHistory()
+        val summaryInjection = summarizerInjectionText()
+        val requestMessages = ArrayList(summarizerTrim?.first ?: historySnapshot)
+        requestMessages.add(
+            ChatMessage(role = ChatRole.User, content = modelFacingMessage)
+        )
+        val requestIncludes = ArrayList(summarizerTrim?.second ?: historyIncludesSnapshot)
+        requestIncludes.add(sentIncludesJson)
+
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
+        progress?.visibility = View.VISIBLE
+
+        parseMessageScope = CoroutineScope(Dispatchers.Main)
+        parseMessageScope?.launch {
+            try {
+                val frozen = buildFrozenRegularRequest(
+                    requestMessages = requestMessages,
+                    requestIncludes = requestIncludes,
+                    loreQuery = storedMessage,
+                    selectedModel = selectedModel,
+                    maximumResponseTokens = maximumResponseTokens,
+                    summaryInjection = summaryInjection
+                )
+                val measurement = RequestCapacity.measure(frozen.payload)
+                if (!RequestCapacity.canAssemble(
+                        measurement,
+                        RequestHeapState.current()
+                    )
+                ) {
+                    requestPreparationInProgress = false
+                    restoreUIState()
+                    showRequestHardBlock(
+                        R.string.request_prepare_failed_title,
+                        getString(R.string.request_prepare_failed_body)
+                    )
+                    return@launch
+                }
+
+                val contextWindow = apiEndpointObject
+                    ?.takeIf {
+                        it.contextWindowModelId == selectedModel &&
+                            preferences?.getApiEndpointId().orEmpty() == endpointId
+                    }
+                    ?.contextWindowTokens
+                val decision = ModelContextCapacity.decide(
+                    contextWindow,
+                    RequestCapacity.approximateInputTokens(frozen.payload),
+                    maximumResponseTokens
+                )
+                val prepared = PreparedRegularTurn(
+                    rawMessage = rawMessage,
+                    storedMessage = storedMessage,
+                    modelFacingMessage = modelFacingMessage,
+                    pendingIncludes = pendingSnapshot,
+                    historyBeforeSend = historySnapshot,
+                    selectedModel = selectedModel,
+                    selectedEndpointId = endpointId,
+                    request = frozen.request,
+                    payload = frozen.payload,
+                    contextDecision = decision
+                )
+                val hasFullImages = conversationHasFullImages(requestIncludes)
+
+                when (decision) {
+                    ModelContextDecision.Send -> visionCheckAndCommit(prepared, hasFullImages)
+                    is ModelContextDecision.Block -> {
+                        requestPreparationInProgress = false
+                        restoreUIState()
+                        showRequestHardBlock(
+                            R.string.request_context_exceeded_title,
+                            getString(
+                                R.string.request_context_exceeded_body,
+                                formatTokenCount(decision.requiredAtLeast),
+                                formatTokenCount(decision.contextWindow)
+                            )
+                        )
+                    }
+                    is ModelContextDecision.WarnRange -> {
+                        requestPreparationInProgress = false
+                        restoreUIState()
+                        showRequestWarning(
+                            getString(
+                                R.string.request_context_range_warning_body,
+                                formatTokenCount(decision.minimumRequired),
+                                formatTokenCount(decision.maximumRequired),
+                                formatTokenCount(decision.contextWindow)
+                            ),
+                            prepared,
+                            hasFullImages
+                        )
+                    }
+                    is ModelContextDecision.WarnApproximate -> {
+                        requestPreparationInProgress = false
+                        restoreUIState()
+                        showRequestWarning(
+                            getString(
+                                R.string.request_context_approximate_warning_body,
+                                formatTokenCount(decision.approximateRequired),
+                                formatTokenCount(decision.contextWindow)
+                            ),
+                            prepared,
+                            hasFullImages
+                        )
+                    }
+                }
+            } catch (_: OutOfMemoryError) {
+                requestPreparationInProgress = false
+                restoreUIState()
+                showRequestHardBlock(
+                    R.string.request_prepare_failed_title,
+                    getString(R.string.request_prepare_failed_body)
+                )
+            } catch (e: CancellationException) {
+                requestPreparationInProgress = false
+                restoreUIState()
+                throw e
+            } catch (e: Exception) {
+                requestPreparationInProgress = false
+                restoreUIState()
+                val genError = GenerationErrorClassifier.classify(e)
+                logGenerationError(genError, e, "request preparation")
+                MaterialAlertDialogBuilder(
+                    this@ChatActivity,
+                    R.style.App_MaterialAlertDialog
+                )
+                    .setTitle(R.string.label_error)
+                    .setMessage(genError.chatMessage(this@ChatActivity))
+                    .setPositiveButton(R.string.okay, null)
+                    .show()
+            }
+        }
+    }
+
+    private fun commitPreparedTurn(prepared: PreparedRegularTurn) {
+        requestPreparationInProgress = false
+        parseMessage(prepared.rawMessage, preparedTurn = prepared)
+    }
+
+    private fun formatTokenCount(value: Int): String =
+        NumberFormat.getIntegerInstance().format(value)
+
+    private fun showRequestHardBlock(titleRes: Int, body: String) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(titleRes)
+            .setMessage(body)
+            .setPositiveButton(R.string.okay, null)
+            .show()
+    }
+
+    private fun showRequestWarning(
+        body: String,
+        prepared: PreparedRegularTurn,
+        hasFullImages: Boolean = false
+    ) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.request_context_warning_title)
+            .setMessage(body)
+            .setPositiveButton(R.string.send_anyway) { _, _ ->
+                visionCheckAndCommit(prepared, hasFullImages)
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    private fun visionCheckAndCommit(
+        prepared: PreparedRegularTurn,
+        hasFullImages: Boolean
+    ) {
+        if (!hasFullImages) {
+            commitPreparedTurn(prepared)
+            return
+        }
+        val capJson = apiEndpointObject?.imageCapabilityByModel.orEmpty()
+        when (ImageCapabilityStore.get(capJson, prepared.selectedModel)) {
+            ImageCapability.SUPPORTED -> commitPreparedTurn(prepared)
+            ImageCapability.UNSUPPORTED -> showRequestHardBlock(
+                R.string.image_model_unsupported_title,
+                getString(R.string.image_model_unsupported_body)
+            )
+            ImageCapability.UNKNOWN -> {
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.image_model_unknown_title)
+                    .setMessage(R.string.image_model_unknown_body)
+                    .setPositiveButton(R.string.send_anyway) { _, _ ->
+                        commitPreparedTurn(prepared)
+                    }
+                    .setNegativeButton(R.string.btn_cancel, null)
+                    .show()
+            }
+        }
+    }
+
+    private suspend fun awaitVisionCapabilityCheck(): Boolean {
+        if (!conversationHasFullImages(chatMessageIncludes)) return true
+        val capJson = apiEndpointObject?.imageCapabilityByModel.orEmpty()
+        return when (ImageCapabilityStore.get(capJson, model)) {
+            ImageCapability.SUPPORTED -> true
+            ImageCapability.UNSUPPORTED -> {
+                withContext(Dispatchers.Main) {
+                    showRequestHardBlock(
+                        R.string.image_model_unsupported_title,
+                        getString(R.string.image_model_unsupported_body)
+                    )
+                }
+                false
+            }
+            ImageCapability.UNKNOWN -> suspendCancellableCoroutine { cont ->
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.image_model_unknown_title)
+                    .setMessage(R.string.image_model_unknown_body)
+                    .setPositiveButton(R.string.send_anyway) { _, _ -> cont.resume(true) }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ -> cont.resume(false) }
+                    .setOnCancelListener { cont.resume(false) }
+                    .show()
+            }
+        }
+    }
+
+    private fun recordVisionCapability(capability: ImageCapability) {
+        val endpoint = apiEndpointObject ?: return
+        val currentModel = model.ifBlank { preferences?.getModel() ?: "" }
+        if (currentModel.isBlank()) return
+        val updated = ImageCapabilityStore.set(
+            endpoint.imageCapabilityByModel, currentModel, capability
+        )
+        endpoint.imageCapabilityByModel = updated
+        val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
+        prefs.setApiEndpoint(this, endpoint)
+    }
+
+    /**
+     * The conversation/send button (btnSend) was tapped. One button, three roles
+     * decided by state:
+     *   - a hands-free conversation is live  → STOP it (tap again ends it),
+     *   - the input box has text             → SEND it (the up-arrow),
+     *   - the AI is busy (generating/reading) → cancel everything,
+     *   - otherwise (idle, empty box)        → START hands-free.
+     * Reachable from both the click listener and the touch listener (the latter
+     * catches taps while the button is disabled during generation/readback).
+     */
+    private fun onConversationButtonTapped() {
+        when {
+            isHandsFreeEngaged() -> stopHandsFreeByUser()
+            !messageInput?.text.isNullOrEmpty() ->
+                prepareTypedTurn(messageInput?.text.toString())
+            isAiCurrentlyBusy() -> cancelAllAiActivity("conversation button tap on this screen")
+            else -> startHandsFreeByUser()
+        }
+    }
+
+    /** Engage hands-free from the conversation button. Flips the runtime flag the
+     *  pipeline gates on and starts the loop through the engine's existing
+     *  hands-free entry point (the handlers take their hands-free branch because
+     *  the flag is now on). Only Google STT and on-device Whisper can detect
+     *  end-of-speech and therefore loop; cloud Whisper cannot, so on that engine
+     *  the button just runs a single transcription turn (never engaging a loop
+     *  that could never re-arm and would strand the flag on). */
+    private fun startHandsFreeByUser() {
+        if (chatStorageUnavailable) return
+        if (isAiCurrentlyBusy()) {
+            cancelAllAiActivity("conversation button tap (busy) on this screen")
+            return
+        }
+        val engine = preferences!!.getEffectiveAudioModel()
+        if (engine != "google" && engine != "whisper-local") {
+            // Cloud Whisper: no end-of-speech detection → no loop. Fall back to a
+            // single capture, exactly like the mic button, without engaging
+            // hands-free.
+            handleWhisperSpeechRecognition()
+            return
+        }
+        preferences?.setHandsFreeMode(true)
+        handsFreeStopped = false
+        logVoiceEvent("hands-free engaged (conversation button)")
+        if (engine == "google") handleGoogleSpeechRecognition() else handleLocalWhisperSpeechRecognition()
+    }
+
+    /** Stop hands-free from the conversation button. cancelAllAiActivity is the
+     *  same full teardown the mic-tap stop and the notification Hang Up use
+     *  (cancels a still-streaming reply, silences readback, closes the mic, stops
+     *  the service) and already clears the engaged flag and resets this button. */
+    private fun stopHandsFreeByUser() {
+        logVoiceEvent("hands-free stopped (conversation button)")
+        cancelAllAiActivity("conversation button tap (stop hands-free)")
+    }
+
+    /** True while the AI is generating, speaking through TTS, playing back
+     *  OpenAI TTS audio, or COMMITTED to speaking (readback decided but the
+     *  audio hasn't started yet). Used so a single mic-button tap can cancel
+     *  everything.
+     *
+     *  The pending-readback signals matter: the reply prints BEFORE any sound
+     *  comes out (language detection, engine spin-up, cloud-voice fetch), and
+     *  that gap is exactly when the user taps stop. Counting the gap as
+     *  "idle" turned the stop tap into a mic-open — the loop started
+     *  listening, the readback then spoke over the open mic, and in
+     *  hands-free the app transcribed its own voice as the user's next turn.
+     *  Same for the engines' documented habit of blipping isSpeaking=false
+     *  mid-utterance: without these flags a stop tap during a blip opened
+     *  the mic instead of stopping. */
+    private fun isAiCurrentlyBusy(): Boolean {
+        val ttsSpeaking = try { tts?.isSpeaking == true } catch (_: Exception) { false }
+        val mediaPlaying = try { mediaPlayer?.isPlaying == true } catch (_: Exception) { false }
+        val progressVisible = progress?.visibility == View.VISIBLE
+        val readbackPending = handsFreeReadbackExpected ||        // loop readback in flight
+                readbackKeepAliveActive ||                        // plain read-aloud in flight
+                pendingSpeak != null ||                           // utterance parked behind a TTS init
+                (adapter?.getSpeakingPosition() ?: -1) != -1      // manual speaker-button readback
+        return ttsSpeaking || mediaPlaying || progressVisible || readbackPending
+    }
+
+    /** Cancels generation, TTS, audio playback, recognizer, and the hands-free
+     *  loop in one shot. Mirrors what long-press has always done; also reachable
+     *  from a short tap when the AI is busy.
+     *
+     *  [source] names WHICH trigger fired, verbatim, in the log line. All three
+     *  triggers used to log the identical "(stop tap)", so when a stop arrived
+     *  with the screen off and the owner nowhere near the phone (July 11 2026
+     *  report), the log claimed a tap that never happened and the real source
+     *  was unprovable. Only three paths exist: the two mic-button touch paths
+     *  (impossible with the screen off) and the notification Hang Up
+     *  PendingIntent — which any paired device or app with notification access
+     *  can fire without a human tap. */
+    private fun cancelAllAiActivity(source: String) {
+        logVoiceEvent("all AI activity cancelled ($source)")
+        cancelState = true
+        // This funnel is only ever reached from a deliberate user action (Stop
+        // spinner, notification Hang Up, mic tap, conversation button). Mark the
+        // current generation's cancellation as user-initiated so it is treated
+        // as a benign stop, not an app/lifecycle or unknown interruption.
+        userRequestedStop = true
+        // Stop is a deliberate user cancel, so it DOES end a running image
+        // generation (unlike leaving the screen, which lets it finish).
+        if (chatId != "") ImageGenerationJobRegistry.cancel(chatId)
+        whisperTurnToken++ // invalidate any whisper turn callback still in flight
+        handsFreeStopped = true
+        handsFreeReadbackExpected = false
+        handsFreeReadbackToken++ // invalidate any in-flight readback watchdog
+        handsFreeHandler.removeCallbacksAndMessages(null)
+        handsFreeSubmitRunnable = null
+        handsFreeBuffer = ""
+        // Stop must also cancel a reply that is still being GENERATED, not just
+        // the audio. pronounce() runs unconditionally when the stream completes,
+        // so an uncancelled generation meant: hit stop mid-generation, the
+        // stream quietly finishes, and the full reply is read out loud anyway —
+        // "I can't stop it from reading back to me." Cancelling the scopes takes
+        // the same path as the progress-spinner cancel always has (each launch
+        // site catches CancellationException and restores the UI; the
+        // generateResponse finally releases the foreground service).
+        killAllProcesses()
+        stopReadback()
+        try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
+        // A whisper-local capture holds the device mic (and the OS privacy
+        // indicator) independently of the Google recognizer — a stop tap must
+        // release that too, or the mic stays open with nothing consuming it.
+        try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
+        isRecording = false
+        micIdle()
+        // Any stop (in-app, notification Hang Up, mid-generation tap) also ends a
+        // hands-free conversation: clear the engaged flag and reset the
+        // conversation/send button from its red "live" look to resting.
+        preferences?.setHandsFreeMode(false)
+        refreshConversationButton()
+        stopHandsFreeService()
+    }
+
+    /**
+     * Silence any readback, current or queued, and make sure nothing can start
+     * one behind the user's back: bumps [readbackSession] (kills speak() calls
+     * still in an async hop), drops [pendingSpeak] (an utterance parked behind
+     * a TTS re-init used to survive a stop and play AFTER it), stops both audio
+     * paths, cancels an in-flight cloud-voice fetch, and releases the
+     * read-aloud keep-alive so the notification bar clears instead of a silent
+     * service holding a wake lock.
+     */
+    private fun stopReadback() {
+        readbackSession++
+        pendingSpeak = null
+        pendingSpeakSession = null
+        ttsRemainingText = ""
+        finalTtsUtteranceId = null
+        ttsUtteranceText.clear()
+        try { tts?.stop() } catch (_: Exception) { /* ignore */ }
+        try {
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.stop()
+                mediaPlayer?.reset()
+            }
+        } catch (_: Exception) { /* ignore */ }
+        try { speakScope?.coroutineContext?.cancel(CancellationException("Readback stopped by user")) } catch (_: Exception) { /* ignore */ }
+        adapter?.clearSpeakingPosition()
+        releaseReadbackKeepAlive()
+    }
+
+    /**
+     * Begin holding the process at foreground importance while the plain
+     * read-aloud plays. Idempotent: a second call while already held is a no-op.
+     * The poll watches actual playback (tts.isSpeaking / mediaPlayer.isPlaying)
+     * and releases once audio has been heard and then stayed quiet, or once a
+     * hard cap elapses with no audio (engine swallowed the utterance) — never
+     * earlier, so a slow OpenAI-voice fetch can't drop the guard before playback
+     * starts.
+     */
+    private fun acquireReadbackKeepAlive() {
+        if (readbackKeepAliveActive) return
+        readbackKeepAliveActive = true
+        GenerationForegroundService.begin(this, chatId, chatName, reading = true)
+        // A plain (non-hands-free) read-aloud is starting — the auto read-after-reply
+        // or a manual speaker re-read. Turn the mic into a STOP control so a tap
+        // stops the readback (during hands-free the mic is hidden instead, so skip).
+        if (!isHandsFreeEngaged()) runOnUiThread { micReadbackStop() }
+        val token = ++readbackKeepAliveToken
+        val startedAt = System.currentTimeMillis()
+        var everPlaying = false
+        var quietPolls = 0
+        lateinit var poll: Runnable
+        poll = Runnable {
+            if (token != readbackKeepAliveToken || !readbackKeepAliveActive) return@Runnable
+            val playing = (try { tts?.isSpeaking == true } catch (_: Exception) { false }) ||
+                          (try { mediaPlayer?.isPlaying == true } catch (_: Exception) { false })
+            if (playing) { everPlaying = true; quietPolls = 0 } else if (everPlaying) quietPolls++
+            val elapsed = System.currentTimeMillis() - startedAt
+            when {
+                everPlaying && quietPolls >= HANDS_FREE_READBACK_STOP_POLLS -> releaseReadbackKeepAlive()
+                // Audio never became audible within the hard cap: assume the
+                // utterance was lost rather than hold the wake lock forever.
+                !everPlaying && elapsed > HANDS_FREE_HARD_FALLBACK_MS -> releaseReadbackKeepAlive()
+                else -> readbackKeepAliveHandler.postDelayed(poll, HANDS_FREE_READBACK_POLL_MS)
+            }
+        }
+        readbackKeepAliveHandler.postDelayed(poll, HANDS_FREE_READBACK_POLL_MS)
+    }
+
+    /** Release the read-aloud keep-alive if held. Idempotent. */
+    private fun releaseReadbackKeepAlive() {
+        if (!readbackKeepAliveActive) return
+        readbackKeepAliveActive = false
+        readbackKeepAliveToken++ // stop any in-flight poll
+        GenerationForegroundService.end(this)
+        // The plain read-aloud is over — drop the mic's STOP look back to idle
+        // (unless a hands-free conversation is running, where the mic stays hidden).
+        if (!isHandsFreeEngaged()) runOnUiThread { micIdle() }
+    }
+
+    private val postNotificationsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* result ignored; service runs regardless */ }
+
+    private fun ensurePostNotificationsPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        ) return
+        try {
+            postNotificationsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } catch (_: Exception) { /* ignore */ }
+    }
+
+    private fun startHandsFreeService() {
+        ensurePostNotificationsPermission()
+        try {
+            HandsFreeService.start(this, chatId, chatName)
+        } catch (e: Exception) {
+            // The loop still runs without the keep-alive, but the failure used
+            // to leave no trace anywhere — screen-off protection was silently
+            // missing when the session later died. One line per fresh loop
+            // start, ungated. (On Android 14+, a revoked mic permission makes
+            // this very start throw SecurityException — the line names it.)
+            logVoiceEventAlways("HandsFreeService failed to start: ${e.javaClass.simpleName}: ${e.message} — " +
+                    "hands-free continues WITHOUT the screen-off keep-alive")
+        }
+    }
+
+    private fun stopHandsFreeService() {
+        try {
+            HandsFreeService.stop(this)
+        } catch (_: Exception) { /* ignore */ }
+    }
+
+    /** The active companion's display name for this chat, or "" when none is
+     *  set. A cheap prefs read; used to stamp each assistant reply so its label
+     *  is locked to the companion that produced it. */
+    private fun currentCompanionLabel(): String {
+        val personaId = preferences?.getPersonaId().orEmpty()
+        if (personaId.isEmpty()) return ""
+        return try {
+            PersonaPreferences.getPersonaPreferences(this).getPersona(personaId).label
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun putMessage(message: String, isBot: Boolean) {
+        val map: HashMap<String, Any> = HashMap()
+
+        map["message"] = message
+        map["isBot"] = isBot
+
+        // When this message was created, for the Message Details popup. Stored
+        // as a string so it round-trips through the generic Gson history map
+        // like every other key. Both roles get one; nothing invents a time for
+        // messages saved before this feature.
+        map[ChatAdapter.KEY_MESSAGE_TIME] = System.currentTimeMillis().toString()
+
+        // Lock this assistant reply's label to the companion active right now,
+        // so a later companion switch never rewrites past labels.
+        if (isBot) {
+            val companion = currentCompanionLabel()
+            if (companion.isNotBlank()) map[ChatAdapter.KEY_COMPANION_NAME] = companion
+        }
+
+        messages.add(map)
+        adapter?.notifyItemInserted(messages.size - 1)
+        refreshPersistentIncludeControls()
+
+        updateMessagesSelectionProjection()
+
+        scroll(true)
+    }
+
+    // ---- Streamed-reply completion state (Round 3) ------------------------
+    // A streamed assistant reply is persisted incrementally, so a partial reply
+    // on disk is otherwise indistinguishable from a finished one. These helpers
+    // stamp a persisted completion marker (see MessageCompletionState) onto the
+    // reply's own message map, so the marker travels atomically in the same JSON
+    // blob as the text — there is never a window where the text is final but the
+    // state is stale.
+
+    /** Tag the just-added assistant placeholder as actively streaming. Not
+     *  saved eagerly: the marker rides the first mid-stream save, so no
+     *  fragment ever reaches disk without it. A death before that first save
+     *  leaves nothing on disk to mislead. */
+    private fun markLastAssistantStreaming() {
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] == true) {
+            last[MessageCompletionState.KEY_STATE] = MessageCompletionState.STREAMING
+            // Freeze the producing model onto the reply the moment it begins, so
+            // a later model switch never relabels this turn (plan §4.1). Only a
+            // genuine streamed reply reaches here — error/image placeholders do
+            // not — so those correctly carry no model attribution.
+            val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
+            if (usedModel.isNotBlank()) last[ChatAdapter.KEY_MESSAGE_MODEL] = usedModel
+            // Reset the provider token capture for this fresh reply so a turn
+            // whose provider reports no usage does not inherit the previous
+            // turn's count.
+            pendingResponseTokens = null
+            // Fresh reasoning accumulator for this turn. The send hook attaches
+            // it to reasoning-wanted requests; the response observer feeds it
+            // from the split stream copy. A turn that never wants reasoning
+            // simply never has it observed.
+            currentTurnReasoning = org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator()
+            currentTurnShowReasoning = false
+            currentTurnReasoningObservationActive = false
+            currentTurnReasoningObserved = kotlinx.coroutines.CompletableDeferred()
+        }
+    }
+
+    /** The current turn's reasoning accumulator (§7.2). Created when the
+     *  streamed reply begins; fed by the response observer on reasoning-wanted
+     *  turns; read once the split stream drains to stamp the reply's Thinking
+     *  content and to echo reasoning state on a tool-call continuation. Null
+     *  between turns. */
+    @Volatile
+    private var currentTurnReasoning: org.teslasoft.assistant.reasoning.ReasoningStreamAccumulator? = null
+
+    /** Whether this turn's reasoning should be DISPLAYED (Show Reasoning on and
+     *  the path returns visible reasoning). Reasoning may still be observed for
+     *  continuation state when this is false (§7.2). */
+    @Volatile
+    private var currentTurnShowReasoning: Boolean = false
+
+    /** True once the response observer has been asked to split this turn's
+     *  stream for reasoning (display and/or continuation state), so the tool
+     *  continuation knows to wait for that capture before dispatching. */
+    @Volatile
+    private var currentTurnReasoningObservationActive: Boolean = false
+
+    /** Completes when the observer finishes draining this turn's split stream,
+     *  so a tool-call continuation can await reasoning_details capture before
+     *  building the follow-up. Null between turns. */
+    @Volatile
+    private var currentTurnReasoningObserved: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+    /** Provider-reported total tokens for the reply currently streaming, taken
+     *  from the usage-bearing final chunk (streamOptions.includeUsage). Null
+     *  until reported and null when the provider does not report usage, so the
+     *  display omits tokens rather than inventing a value. */
+    private var pendingResponseTokens: Int? = null
+
+    /** While a Retry is in flight, the versions the regenerated reply will be
+     *  folded into: the prior turn's existing version list, or its single
+     *  current reply wrapped as version one. Null for an ordinary first-time
+     *  reply, which is never versioned. */
+    private var pendingRetryVariants: MutableList<HashMap<String, String>>? = null
+
+    /**
+     * Fold the just-finished regenerated reply into its turn's version list as
+     * the newest version and make it the canonical one, preserving every prior
+     * version for browsing. No-op unless a Retry set [pendingRetryVariants].
+     * Runs on both a successful and a terminal (interrupted/failed) finish so a
+     * failed regeneration never discards the versions that came before it.
+     */
+    private fun mergePendingRetryVariants() {
+        val history = pendingRetryVariants ?: return
+        pendingRetryVariants = null
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] != true) return
+
+        history.add(ChatAdapter.snapshotVariant(last))
+        last[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(history)
+        last[ChatAdapter.KEY_CANONICAL_VARIANT] = (history.size - 1).toString()
+        last[ChatAdapter.KEY_DISPLAY_VARIANT] = (history.size - 1).toString()
+        adapter?.notifyItemChanged(messages.size - 1)
+    }
+
+    /** Mark the last assistant reply as completed normally. The caller's
+     *  existing completion saveSettings() persists it alongside the final text. */
+    private fun markLastAssistantDone() {
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] == true) {
+            last[MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
+            last.remove(MessageCompletionState.KEY_STATE_DETAIL)
+            // Stamp the provider-reported total tokens for this turn, when the
+            // provider reported them. Stored as a string like every other
+            // history key; absent when unreported.
+            pendingResponseTokens?.let { last[ChatAdapter.KEY_MESSAGE_TOKENS] = it.toString() }
+            // A regeneration folds this finished reply into the turn's version
+            // list. Runs after the metadata above so the new version captures
+            // the final model, tokens, and state.
+            mergePendingRetryVariants()
+            // This chat just produced a successful reply, so its complete
+            // model-and-companion snapshot may qualify for the next new chat.
+            recordLastSuccessfulConfig()
+        }
+    }
+
+    /** Remember the provider, model, routing, and companion that just produced
+     *  a successful reply. All values must come from this same chat; an empty or
+     *  deleted companion leaves the prior complete snapshot unchanged. */
+    private fun recordLastSuccessfulConfig() {
+        val endpointId = apiEndpointObject?.id?.takeIf { it.isNotBlank() }
+            ?: preferences?.getApiEndpointId().orEmpty()
+        val usedModel = model.ifBlank { preferences?.getModel().orEmpty() }
+        val personaId = preferences?.getPersonaId().orEmpty()
+        val personaExists = personaId.isNotBlank() &&
+            PersonaPreferences.getPersonaPreferences(this).getPersona(personaId).label.isNotBlank()
+        if (endpointId.isBlank() || usedModel.isBlank() || !personaExists) return
+        val routing = favoriteForActiveEndpoint(usedModel)?.routingType
+            ?: FavoriteModelObject.ROUTING_AUTOMATIC
+        preferences?.setLastSuccessfulConfig(endpointId, usedModel, routing, personaId)
+    }
+
+    /** Stamp a terminal state onto the last assistant message ONLY if it is
+     *  still marked streaming, and persist immediately. No-op otherwise, so it
+     *  is safe from any terminal path and never downgrades an already-final
+     *  state (e.g. a completion that raced ahead of a late cancellation). */
+    private fun finalizeStreamingMessageState(state: String, detail: String?) {
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] != true) return
+        if (last[MessageCompletionState.KEY_STATE]?.toString() != MessageCompletionState.STREAMING) return
+        last[MessageCompletionState.KEY_STATE] = state
+        if (detail != null) last[MessageCompletionState.KEY_STATE_DETAIL] = detail
+        // A regeneration that ended in a terminal state still keeps the prior
+        // versions: fold this attempt in as the newest version rather than
+        // letting the earlier good replies vanish with the failed retry.
+        mergePendingRetryVariants()
+        saveSettings()
+    }
+
+    /**
+     * Enforce the invariant that a saved user message never ends with no
+     * explanation and no Regenerate target: guarantee the turn ends with a
+     * visible, regenerate-able assistant bubble carrying a comprehensible cause,
+     * and (for a real problem, never a user stop) record it to the Error Log so
+     * a future occurrence self-identifies.
+     *
+     * If no assistant bubble was ever created (a failure before streaming
+     * began), one is created here. An already-completed reply is never
+     * downgraded — only a still-streaming reply or a freshly-created empty
+     * bubble is stamped.
+     */
+    private fun showTerminalFailure(
+        state: String,
+        detail: String,
+        reason: String?,
+        logAsError: Boolean,
+        errorTag: String,
+        errorSummary: String
+    ) {
+        if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
+            putMessage("", true)
+        }
+        val idx = messages.size - 1
+        if (idx >= 0 && messages[idx]["isBot"] == true) {
+            val existing = messages[idx][MessageCompletionState.KEY_STATE]?.toString()
+            val stampable = existing == MessageCompletionState.STREAMING ||
+                (existing.isNullOrBlank() && messages[idx]["message"]?.toString().isNullOrEmpty())
+            if (stampable) {
+                messages[idx][MessageCompletionState.KEY_STATE] = state
+                messages[idx][MessageCompletionState.KEY_STATE_DETAIL] = detail
+                if (!reason.isNullOrBlank()) {
+                    messages[idx][MessageCompletionState.KEY_ERROR_TEXT] = reason
+                }
+                if (messages.size > 2) {
+                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                } else {
+                    adapter?.notifyItemChanged(messages.size - 1)
+                }
+            }
+        }
+        saveSettings()
+        if (logAsError) {
+            try {
+                org.teslasoft.assistant.preferences.Logger.log(
+                    this, "crash", errorTag, "error",
+                    errorSummary +
+                        "\nModel: ${model.ifBlank { "unknown" }}" +
+                        "\nScreen: ${screenState()}" +
+                        "\nNetwork: ${networkState()}"
+                )
+            } catch (_: Throwable) { /* diagnostics must never crash the failure path */ }
+        }
+    }
+
+    /** Content of a message as the MODEL should see it, which is not always
+     *  what the user sees.
+     *
+     *  An unfinished assistant reply gets an internal note appended so the
+     *  model cannot mistake it for an intentionally completed reply. A user
+     *  message carrying attachments gets those attachments rendered into it,
+     *  in whatever form they are in right now — full text, a condensed
+     *  version, or a tiny bookmark once removed. Neither is ever shown in
+     *  the chat; this shapes the model projection only. */
+    private fun modelFacingContent(message: HashMap<String, Any>): String {
+        val content = message["message"].toString()
+        if (message["isBot"] == true) {
+            // A completed generated image is stored to the model as a file
+            // marker, which means nothing to the model. Replace it with a plain
+            // sentence saying an image exists here and who made it, using the
+            // token-saving summary when one exists (owner request, Aug 16 2026).
+            val meta = GeneratedImageMetadata.fromJson(message[GeneratedImageMetadata.KEY]?.toString())
+            if (meta != null && meta.status == GeneratedImageMetadata.STATUS_COMPLETE) {
+                return imageInjectionSentence(meta)
+            }
+            if (meta == null && content.trimStart().startsWith("~file:")) {
+                return getString(R.string.image_gen_injection_legacy)
+            }
+            if (content.isNotBlank() && MessageCompletionState.isIncomplete(
+                    message[MessageCompletionState.KEY_STATE]?.toString())) {
+                return content + "\n\n" + getString(R.string.message_incomplete_model_note)
+            }
+            return content
+        }
+        return IncludeMessageProjection.userContent(
+            typedText = content,
+            includesJson = message[INCLUDES_KEY]?.toString()
+        )
+    }
+
+    /** The reminder a completed generated image contributes to the model each
+     *  turn: the token-saving summary (user edit, else summarizer version) or
+     *  the full prompt when no summary exists yet, prefixed by who made it. */
+    private fun imageInjectionSentence(meta: GeneratedImageMetadata): String {
+        val text = meta.effectiveSummary() ?: meta.prompt
+        if (text.isBlank()) return getString(R.string.image_gen_injection_legacy)
+        val res = if (meta.initiatedByUser()) {
+            R.string.image_gen_injection_user
+        } else {
+            R.string.image_gen_injection_model
+        }
+        return getString(res, text)
+    }
+
+    private suspend fun resolveImagePartsForSend(
+        textMessages: List<ChatMessage>,
+        includesList: List<String?>
+    ): List<ChatMessage> = withContext(Dispatchers.IO) {
+        val cid = chatId
+        textMessages.mapIndexed { i, msg ->
+            if (msg.role != ChatRole.User) return@mapIndexed msg
+            val json = includesList.getOrNull(i) ?: return@mapIndexed msg
+            val projection = IncludeMessageProjection.userMessageParts(
+                msg.content?.toString().orEmpty(), json
+            )
+            if (projection.isTextOnly()) msg
+            else buildMultiPartUserMessage(projection, cid)
+        }
+    }
+
+    private fun buildMultiPartUserMessage(
+        projection: ProjectedUserMessage,
+        cid: String
+    ): ChatMessage {
+        val parts = ArrayList<ContentPart>()
+        if (projection.text.isNotBlank()) {
+            parts.add(TextPart(projection.text))
+        }
+        for (ref in projection.imageParts) {
+            val include = ChatInclude(
+                id = ref.includeId,
+                fileName = ref.fileName,
+                kind = if (ref.imageMimeType == "image/png") IncludeKind.PNG else IncludeKind.JPEG,
+                form = IncludeForm.FULL,
+                fullText = "",
+                imageFileHash = ref.imageFileHash,
+                imageMimeType = ref.imageMimeType
+            )
+            val file = ImageImporter.imageFile(this, cid, include) ?: continue
+            if (!file.exists()) continue
+            val bytes = try { file.readBytes() } catch (_: Exception) { continue }
+            val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            parts.add(ImagePart("data:${ref.imageMimeType};base64,$encoded"))
+        }
+        return if (parts.isEmpty()) {
+            ChatMessage(role = ChatRole.User, content = "")
+        } else if (parts.size == 1 && parts[0] is TextPart) {
+            ChatMessage(role = ChatRole.User, content = projection.text)
+        } else {
+            ChatMessage(role = ChatRole.User, content = parts)
+        }
+    }
+
+    private fun conversationHasFullImages(
+        includesList: List<String?>
+    ): Boolean = includesList.any { json ->
+        json != null && ChatInclude.listFromJson(json).any { it.hasLiveImageBytes() }
+    }
+
+    private fun scroll(mode: Boolean) {
+        if (!disableAutoScroll) {
+            val itemCount = adapter?.itemCount ?: 0
+
+            if (mode) {
+                chat?.post {
+                    if (itemCount > 0) {
+                        chat?.scrollToPosition(itemCount - 1)
+
+                        scrollX(itemCount)
+                    }
+                }
+            } else {
+                scrollX(itemCount)
+            }
+        }
+    }
+
+    private fun scrollX(itemCount: Int) {
+        chat?.post {
+            val lastView = chat?.layoutManager?.findViewByPosition(itemCount - 1)
+            lastView?.let {
+                val scrollDistance = it.bottom - (chat?.height ?: 0)
+                if (scrollDistance > 0) {
+                    chat?.scrollBy(0, scrollDistance)
+                }
+            }
+        }
+    }
+
+    @Suppress("deprecation")
+    // The raw error-response body captured by the chat client's ResponseObserver
+    // for the current turn (null on success or a transport failure that never got
+    // a response). Read in the failure handler to name the upstream provider.
+    @Volatile private var capturedProviderErrorBody: String? = null
+
+    private suspend fun generateResponse(
+        request: String,
+        shouldPronounce: Boolean,
+        preparedTurn: PreparedRegularTurn? = null
+    ) {
+        // The single generation funnel is also the single guard point: no
+        // generation into a chat whose stored history is locked or
+        // preserved-corrupt (Round 4) — typed, voice and retry paths all
+        // flow through here, and a reply that can't be saved must not be
+        // produced over the blocking "Chat unavailable" state.
+        if (chatStorageUnavailable) return
+
+        // A fresh generation: any user-stop flag left from a previous turn is
+        // cleared, so only a Stop during THIS generation counts as a user stop.
+        userRequestedStop = false
+
+        // Silent retry point: any completed image still missing its summary
+        // gets one before this turn's history is projected to the model.
+        ensureImageSummaries()
+
+        // Clear any provider error captured on a previous turn before this one
+        // makes its request, so a failure never shows a stale provider.
+        capturedProviderErrorBody = null
+
+        // Mint the turn id every streamed request in this visible turn (primary
+        // plus any tool continuation) shares in the Response Lifecycle Log.
+        beginLifecycleTurn()
+
+        if (preparedTurn == null && !awaitVisionCapabilityCheck()) {
+            restoreUIState()
+            return
+        }
+
+        disableAutoScroll = false
+
+        // Capture the user's message here, the single point every input method flows
+        // through (typing, voice recognition, and Whisper transcription), so the
+        // lorebook matches triggers regardless of how the message was entered.
+        lastUserMessageForLore = request
+
+        // Keep the app at foreground importance for the whole generation so the
+        // stream survives the screen turning off or the user switching apps
+        // (otherwise the OS freezes the process / lets Wi-Fi power-save drop the
+        // socket, and the request dies with "Software caused connection abort").
+        GenerationForegroundService.begin(this, chatId, chatName)
+
+        try {
+            var response = ""
+
+            if (model.contains(":ft") || model.contains("ft:")) {
+                putMessage("", true)
+                markLastAssistantStreaming()
+                startLifecycle(ResponseLifecycle.PHASE_PRIMARY, preferences?.getMaxTokens())
+                val completionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
+                    CompletionRequest(
+                        model = ModelId(model),
+                        maxTokens = preferences!!.getMaxTokens(),
+                        temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
+                        topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
+                        frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
+                        presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
+                        prompt = request,
+                        logitBias = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) null else logitBiasPreferences?.getLogitBiasesMap(),
+                        echo = false
+                    )
+                } else {
+                    CompletionRequest(
+                        model = ModelId(model),
+                        maxTokens = preferences!!.getMaxTokens(),
+                        temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences!!.getTemperature().toDouble() == 0.7) null else preferences!!.getTemperature().toDouble(),
+                        topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
+                        frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
+                        presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
+                        prompt = request,
+                        echo = false
+                    )
+                }
+
+                val completions: Flow<TextCompletion> = ai!!.completions(completionRequest)
+
+                // Dispatch begins at collection; a failure past this point is a
+                // real provider/network end, not a pre-dispatch one.
+                startGenerationNetworkDiagnostics()
+                providerRequestDispatched = true
+                completions.flowOn(Dispatchers.IO).collect { v ->
+                    run {
+                        if (!currentCoroutineContext().isActive) throw CancellationException()
+                        val choice = v.choices.firstOrNull()
+                        noteLifecycleChunk(
+                            choice?.finishReason?.value, v.id,
+                            (choice?.text?.takeIf { it != "null" }?.length ?: 0),
+                            v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
+                        )
+                        v.usage?.totalTokens?.let { pendingResponseTokens = it }
+                        if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
+                            response += v.choices[0].text
+                            messages[messages.size - 1]["message"] = response
+                            if (messages.size > 2) {
+                                adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                            } else {
+                                adapter?.notifyItemChanged(messages.size - 1)
+                            }
+                            saveSettings()
+                        }
+                    }
+                }
+
+                finalizeLifecycleSuccess()
+                messages[messages.size - 1]["message"] = "$response\n"
+                markLastAssistantDone()
+                if (messages.size > 2) {
+                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                } else {
+                    adapter?.notifyItemChanged(messages.size - 1)
+                }
+
+                syncChatProjection()
+
+                saveSettings()
+                calculateCost()
+
+                pronounce(shouldPronounce, response)
+
+                btnMicro?.isEnabled = true
+                btnSend?.isEnabled = true
+                progress?.visibility = View.GONE
+                messageInput?.requestFocus()
+            } else {
+                // The old Function Calling router — a hidden gpt-4o request
+                // choosing between its image and web-search functions — is
+                // removed entirely (image-generation-rebuild-plan.md §15).
+                // Every normal chat goes straight to the regular request;
+                // image creation lives in the create_image tool coordinator.
+                run {
+                    try {
+                        regularGPTResponse(shouldPronounce, preparedTurn)
+                    } catch (toolsError: Exception) {
+                        // §8: ONLY a clear tools-not-supported rejection of a
+                        // tool-bearing request learns the capability and
+                        // retries once without tools — the user's message is
+                        // neither lost nor duplicated. Anything else (or a
+                        // failing retry) falls through to the normal error
+                        // funnel below.
+                        if (toolsError !is CancellationException &&
+                            lastRegularRequestCarriedImageTools &&
+                            ToolSupportClassifier.isToolsNotSupportedError(toolsError.message)
+                        ) {
+                            // The first attempt was a real visible streamed
+                            // request that the provider rejected for carrying
+                            // tools. Close its lifecycle record before the
+                            // without-tools retry opens a fresh primary record.
+                            finalizeLifecycleTerminal(
+                                ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
+                                ResponseLifecycle.Termination.PROVIDER_ERROR, toolsError.message
+                            )
+                            val previousState = learnToolsUnsupportedAndNotify()
+                            var retrySucceeded = false
+                            try {
+                                regularGPTResponse(
+                                    shouldPronounce,
+                                    preparedTurn,
+                                    suppressImageTools = true
+                                )
+                                retrySucceeded = true
+                            } finally {
+                                recordToolCapabilityChangeEntry(
+                                    previousState, toolsError.message, retrySucceeded
+                                )
+                            }
+                        } else {
+                            throw toolsError
+                        }
+                    }
+                }
+            }
+        } catch (_: CancellationException) {
+            // The stream was cut short. A cancelled coroutine does NOT prove the
+            // user stopped it — only an actual Stop / Hang Up / cancel tap does,
+            // and that set userRequestedStop. Classify by the real cause so a
+            // benign user stop, an app/lifecycle interruption, and a genuinely
+            // unknown early end are never conflated (owner ruling, Aug 8 2026).
+            // No suspension points below, so this runs even though the coroutine
+            // is already cancelled.
+            val destroying = isFinishing || isDestroyed
+            val replyStarted = messages.isNotEmpty() &&
+                messages[messages.size - 1]["isBot"] == true
+            val (state, detail) = MessageCompletionState.classifyCancellation(
+                userRequestedStop, destroying, replyStarted
+            )
+            when (detail) {
+                MessageCompletionState.DETAIL_USER_STOP -> {
+                    // Deliberate user Stop: not an error. No chat marker and no
+                    // Error Log entry; the Response Lifecycle still records it
+                    // (kept on for now, for debugging).
+                    finalizeLifecycleTerminal(
+                        ResponseLifecycle.Outcome.STOPPED, "missing", true,
+                        ResponseLifecycle.Termination.USER_STOP, null
+                    )
+                    finalizeStreamingMessageState(state, detail)
+                }
+                MessageCompletionState.DETAIL_START_FAILED -> {
+                    // The reply never started. Include the known reason (a
+                    // teardown) when there is one.
+                    val reason = if (destroying)
+                        getString(R.string.gen_interrupt_reason_screen_closed) else null
+                    val summary = "reply could not start" + (reason?.let { ": $it" } ?: "")
+                    finalizeLifecycleTerminal(
+                        if (destroying) ResponseLifecycle.Outcome.CANCELLED
+                        else ResponseLifecycle.Outcome.INCOMPLETE,
+                        "missing", true,
+                        if (destroying) ResponseLifecycle.Termination.APP_CANCEL
+                        else ResponseLifecycle.Termination.STREAM_CLOSED,
+                        summary
+                    )
+                    showTerminalFailure(
+                        state, detail, reason, logAsError = true,
+                        errorTag = "GenStartFailed", errorSummary = summary
+                    )
+                }
+                MessageCompletionState.DETAIL_SCREEN_CLOSED -> {
+                    // The app's own lifecycle tore the screen down mid-reply.
+                    val reason = getString(R.string.gen_interrupt_reason_screen_closed)
+                    finalizeLifecycleTerminal(
+                        ResponseLifecycle.Outcome.CANCELLED, "missing", true,
+                        ResponseLifecycle.Termination.APP_CANCEL, "app interrupted: $reason"
+                    )
+                    showTerminalFailure(
+                        state, detail, reason, logAsError = true,
+                        errorTag = "GenInterrupted", errorSummary = "app interrupted the reply: $reason"
+                    )
+                }
+                else -> {
+                    // Cancelled with no user stop and no teardown. Split on the
+                    // dispatch boundary: before the provider request was sent this
+                    // is a pre-dispatch cancellation (request_not_sent), recorded
+                    // as Cancelled; once dispatched it is the existing "ended
+                    // early; cause unknown" diagnostic. The visible row's terminal
+                    // handling is unchanged either way.
+                    if (providerRequestDispatched) {
+                        finalizeLifecycleTerminal(
+                            ResponseLifecycle.Outcome.INCOMPLETE, "missing", true,
+                            ResponseLifecycle.Termination.STREAM_CLOSED, "ended early; cause unknown"
+                        )
+                    } else {
+                        finalizeLifecycleTerminal(
+                            ResponseLifecycle.Outcome.CANCELLED, "missing", true,
+                            ResponseLifecycle.Termination.REQUEST_NOT_SENT, null
+                        )
+                    }
+                    showTerminalFailure(
+                        state, detail, null, logAsError = true,
+                        errorTag = "GenUnknownEnd", errorSummary = "reply ended early; cause unknown"
+                    )
+                }
+            }
+            calculateCost()
+            runOnUiThread {
+                restoreUIState()
+            }
+        } catch (e: Exception) {
+            playErrorSignal()
+            val failureDiagnostics = captureGenerationFailureDiagnostics()
+            stopHandsFreeOnError()
+            // Single funnel: classify the failure to a stable code, always write
+            // the diagnostic Error Log entry, and show the user the short coded
+            // message (no profile/URL/model/trace — those live in the log). See
+            // ERROR_CODES.md.
+            val genError = GenerationErrorClassifier.classify(e)
+            logGenerationError(genError, e, "message", failureDiagnostics)
+
+            if (genError.isVisionRejection && conversationHasFullImages(chatMessageIncludes)) {
+                recordVisionCapability(ImageCapability.UNSUPPORTED)
+            }
+
+            // Owner ruling (July 31 2026): beneath the app's own explanation,
+            // always show the raw provider detail — the server's error and the
+            // provider name (or a truthful placeholder for each).
+            val appExplanation = genError.providerLimitMessage(this)
+                ?: genError.chatMessage(this)
+            val providerInfo = ProviderErrorInfo.parse(capturedProviderErrorBody)
+            // Error responses sometimes report the upstream provider even when
+            // no successful SSE stream began. Preserve it as actual only because
+            // it came from the response body parsed above.
+            currentLifecycle?.noteActualModelProvider(providerInfo.providerName)
+            // Expanded provider detail (owner ruling, Aug 1 2026): the connection
+            // profile's name, the upstream model service the server reported (or
+            // "Not Reported" for a direct provider that names none), the model,
+            // and the function. Resolved once so the on-screen block and the
+            // Provider Failure Log entry are identical.
+            val notReported = getString(R.string.provider_value_not_reported)
+            val apiProviderName = apiEndpointObject?.label?.trim()?.ifBlank { null }
+                ?: apiEndpointObject?.host?.trim()?.ifBlank { null } ?: notReported
+            val modelServiceProvider = providerInfo.providerName?.trim()?.ifBlank { null } ?: notReported
+            val modelName = model.trim().ifBlank { null }
+                ?: apiEndpointObject?.model?.trim()?.ifBlank { null } ?: notReported
+            val functionLabel = getString(R.string.provider_function_chat)
+            val response = appExplanation + "\n" +
+                genError.providerDetailBlock(
+                    this, e.message, apiProviderName, modelServiceProvider, modelName, functionLabel, providerInfo.message
+                )
+
+            // Lifecycle: an errored reply is Incomplete. The termination source
+            // separates a provider error (the server answered with an error)
+            // from a dropped connection, a timeout, or a parse failure. The
+            // error text is the raw server error / exception, verbatim.
+            val lifecycleTermination = if (!providerRequestDispatched) {
+                // Nothing was dispatched to the provider — the attempt ended
+                // during request construction. Record only that fact; never a
+                // provider, network, parser, or timeout category.
+                ResponseLifecycle.Termination.REQUEST_NOT_SENT
+            } else when {
+                genError.reachedServer() -> ResponseLifecycle.Termination.PROVIDER_ERROR
+                (e::class.java.name + " " + (e.message ?: "")).contains("timeout", ignoreCase = true) ->
+                    ResponseLifecycle.Termination.CLIENT_TIMEOUT
+                (e::class.java.name).contains("Serialization", ignoreCase = true) ->
+                    ResponseLifecycle.Termination.PARSER_ERROR
+                else -> ResponseLifecycle.Termination.NETWORK_ERROR
+            }
+            val lifecycleError = listOfNotNull(
+                genError.httpStatus?.toString(),
+                (providerInfo.message ?: e.message)?.trim()?.ifBlank { null }
+            ).joinToString(" ").ifBlank { e.message ?: "error" }
+            finalizeLifecycleTerminal(
+                ResponseLifecycle.Outcome.INCOMPLETE,
+                currentLifecycle?.lastFinishReason ?: "missing",
+                true,
+                lifecycleTermination, lifecycleError
+            )
+
+            // Record to the Provider Failure Log when enabled AND the server
+            // actually answered — a user stop or a request that never reached a
+            // server is not a provider fault and is never logged. The same
+            // expanded fields the user sees, plus the server's own error.
+            // A pre-dispatch failure contacted no provider, so it is never a
+            // provider fault: skip the Provider Failure Log even if a local
+            // exception happened to classify as one that "reached" a server.
+            if (preferences?.getLogChatFailures() == true && genError.reachedServer() && providerRequestDispatched) {
+                val providerErrorRaw = listOfNotNull(
+                    genError.httpStatus?.toString(),
+                    (providerInfo.message ?: e.message)?.trim()?.ifBlank { null }
+                ).joinToString(" ").ifBlank { "(no message)" }
+                org.teslasoft.assistant.preferences.Logger
+                    .logProviderFailure(this, apiProviderName, modelServiceProvider, modelName, functionLabel, providerErrorRaw)
+            }
+
+            if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
+                putMessage("", true)
+            }
+
+            // The reply failed before finishing. Mark it failed (keeping whatever
+            // partial text streamed in) and stash the coded error SEPARATELY from
+            // the reply text — the error prose is no longer appended into the
+            // message body, so the model's own words are never contaminated. The
+            // adapter always renders the error next to the failure marker: a
+            // failed reply is never hidden (owner ruling, July 31 2026).
+            val failedIndex = messages.size - 1
+            if (messages[failedIndex]["isBot"] == true) {
+                messages[failedIndex][MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
+                messages[failedIndex][MessageCompletionState.KEY_STATE_DETAIL] = genError.code.code
+                messages[failedIndex][MessageCompletionState.KEY_ERROR_TEXT] = response
+                if (messages.size > 2) {
+                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                } else {
+                    adapter?.notifyItemChanged(messages.size - 1)
+                }
+            }
+
+            saveSettings()
+            calculateCost()
+
+            // The provider gave a definite model-not-found answer — the only
+            // honest "model no longer available" signal (owner spec, Aug 8 2026,
+            // no pre-send catalog check). Guide the user to pick another in the
+            // Summoning Circle; the failure bubble above still records it.
+            if (genError.code == GenErrorCode.M2) {
+                runOnUiThread { showModelUnavailableDialog() }
+            }
+
+            runOnUiThread {
+                btnMicro?.isEnabled = true
+                btnSend?.isEnabled = true
+                progress?.visibility = View.GONE
+                messageInput?.requestFocus()
+            }
+        } finally {
+            try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
+            generationNetworkMonitor = null
+            GenerationForegroundService.end(this)
+            // Memory system transcript capture: this finally is the one place
+            // every turn (typed or voice, success or failure) passes exactly
+            // once with the user's message still in scope — the same
+            // single-funnel property the lorebook relies on.
+            recordTranscriptTurn(request)
+            calculateCost()
+            runOnUiThread {
+                restoreUIState()
+            }
+        }
+    }
+
+    /**
+     * Queue this completed turn for the memory system's Archivist (Phase 2 of
+     * memory-system-integration-plan.md). Reads the assistant's reply from the
+     * live message list, snapshots the sampling settings (quick settings are
+     * gospel — the Archivist wants to know which knobs served the turn), and
+     * hands off to TranscriptRecorder on a worker thread. Best-effort in every
+     * direction: no store, memory off, or any failure must never disturb the
+     * conversation or the voice loop.
+     */
+    // One soft notification per process when the full memory system degrades
+    // mid-conversation (enforcer spec: "user notified once, softly") — the
+    // Event/Memory log carries the details, the toast just says it happened.
+    // The flag lives on the companion object (memoryDegradedNotified below), so
+    // it is genuinely once PER PROCESS: an instance field re-armed on every
+    // ChatActivity recreation (e.g. rotation), turning "once, softly" into a
+    // repeat toast for the same degraded session.
+    private fun notifyMemoryDegradedOnce() {
+        if (!memoryDegradedNotified.compareAndSet(false, true)) return
+        runOnUiThread {
+            Toast.makeText(this, getString(R.string.memory_degraded_notice), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Short rolling context for the librarian's retrieval query (enforcer
+     *  spec: the message plus a summary of the last few turns, so
+     *  mid-conversation topics keep retrieving — not just the latest line).
+     *  The current user message is already the list's tail, so it's dropped. */
+    private fun recentTurnsContext(
+        requestMessages: List<ChatMessage> = chatMessages
+    ): String {
+        return try {
+            requestMessages.dropLast(1)
+                .takeLast(org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.RECENT_CONTEXT_TURNS)
+                .joinToString("\n") {
+                    (it.content ?: "").take(
+                        org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.RECENT_CONTEXT_CHARS_PER_TURN
+                    )
+                }
+        } catch (_: Exception) { "" }
+    }
+
+    private fun recordTranscriptTurn(request: String) {
+        try {
+            if (!MemoryStore.isProvisioned(this)) return
+            val last = messages.lastOrNull() ?: return
+            if (last["isBot"] != true) return
+            val reply = last["message"].toString()
+            if (reply.isBlank() || request.isBlank()) return
+
+            // The reply is captured either way (nothing successfully received is
+            // silently dropped), but a reply that did not finish streaming is
+            // marked incomplete so the Archivist never treats a truncated
+            // fragment as a reliable fact. Legacy/done -> complete.
+            val replyComplete = MessageCompletionState.isComplete(
+                last[MessageCompletionState.KEY_STATE]?.toString()
+            )
+
+            val appContext = applicationContext
+            val turnChatId = chatId
+            val turnPersonaId = preferences?.getPersonaId().orEmpty()
+            val turnModel = model
+            // The Archive pause is passed into capture so the turn and the
+            // bookmark's durable pause bit are reconciled atomically. The
+            // memory injection switch is independent and is not read here.
+            val excluded = preferences?.isChatExcludedFromMemory() ?: false
+            val quickSettings = try {
+                org.json.JSONObject()
+                    .put("model", turnModel)
+                    .put("temperature", preferences?.getTemperature()?.toDouble())
+                    .put("top_p", preferences?.getTopP()?.toDouble())
+                    .put("frequency_penalty", preferences?.getFrequencyPenalty()?.toDouble())
+                    .put("presence_penalty", preferences?.getPresencePenalty()?.toDouble())
+                    .put("max_tokens", preferences?.getMaxTokens())
+                    .toString()
+            } catch (_: Exception) { null }
+            // Typed scene context (counterplan §4(e)): the chat's current
+            // selections, stamped on the transcript row at capture — scene
+            // identity is not muddled into the sampling-settings JSON.
+            val turnWorldId = preferences?.getChatWorldId()?.takeIf { it.isNotBlank() }
+            val turnCampaignId = preferences?.getChatCampaignId()?.takeIf { it.isNotBlank() }
+            val turnRpCharacterId = preferences?.getChatRoleplayCharacterId()?.takeIf { it.isNotBlank() }
+            val turnUserPersonaId = preferences?.getChatUserPersonaId()?.takeIf { it.isNotBlank() }
+            val turnProjectId = preferences?.getChatProjectId()?.takeIf { it.isNotBlank() }
+
+            Thread {
+                TranscriptRecorder.recordTurn(
+                    appContext, turnChatId, turnPersonaId, request, reply,
+                    turnModel, quickSettings, excluded, replyComplete,
+                    worldId = turnWorldId,
+                    campaignId = turnCampaignId,
+                    roleplayCharacterId = turnRpCharacterId,
+                    userPersonaId = turnUserPersonaId,
+                    projectId = turnProjectId
+                )
+            }.start()
+        } catch (e: Exception) {
+            // Capture must never break a turn — but a silently swallowed error
+            // here is why a capture failure was invisible. Log it (best effort).
+            try {
+                org.teslasoft.assistant.preferences.memory.MemoryLog.log(
+                    this, "Transcript", "error", "recordTranscriptTurn threw: ${e.message}"
+                )
+            } catch (_: Exception) { /* logging is best effort */ }
+        }
+    }
+
+    /** True when this turn is part of voice interaction (hands-free mode, an
+     *  active recording, or a pending readback). Used for the `Voice` flag on the
+     *  Error Log entry (see ERROR_CODES.md). */
+    private fun isVoiceLive(): Boolean =
+        preferences?.getHandsFreeMode() == true || isRecording || handsFreeReadbackExpected
+
+    /**
+     * Write the always-on Error Log entry for a classified generation failure
+     * (ERROR_CODES.md). Unlike the chat message, this carries the diagnostic
+     * context the chat deliberately omits — profile, Base URL, model, voice flag,
+     * HTTP status — plus the exception detail, or the full stack trace for the
+     * ambiguous/unknown codes (S2/U0). Written on every error regardless of the
+     * "Show chat errors" toggle, which controls only the chat display. Never logs
+     * the API key, headers, or prompt text.
+     *
+     * The entry is written to the "crash" channel, which is the user-facing Error
+     * Log. `trigger` is which generation path failed (e.g. "message",
+     * "image-generation"); finer values (regenerate/continue) can be threaded
+     * through the funnel later. When voice is live a compact snapshot is appended,
+     * and the full last-known voice info is left in the Voice Debug Log too (see
+     * logVoiceFailureSnapshot) so a clue is there even with per-turn logging off.
+     */
+    private fun logGenerationError(
+        result: GenErrorResult,
+        e: Throwable,
+        trigger: String,
+        failureSnapshot: org.teslasoft.assistant.util.GenerationFailureSnapshot? = null
+    ) {
+        val voiceLive = org.teslasoft.assistant.util.resolveFailureVoiceState(
+            failureSnapshot,
+            isVoiceLive()
+        )
+        try {
+            val sb = StringBuilder()
+            sb.append(result.providerLimitMessage(this) ?: result.chatMessage(this)).append('\n')
+            sb.append("Profile: ${apiEndpointObject?.label ?: "unknown"}\n")
+            sb.append("Base URL: ${apiEndpointObject?.host ?: "unknown"}\n")
+            sb.append("Model: ${model.ifBlank { "unknown" }}\n")
+            sb.append("Voice: ${if (voiceLive) "active" else "inactive"}\n")
+            sb.append("Trigger: $trigger\n")
+            sb.append("Screen: ${screenState()}\n")
+            if (failureSnapshot != null) {
+                failureSnapshot.asLogLines().forEach { line ->
+                    sb.append(line).append('\n')
+                }
+            } else {
+                sb.append("Network: ${networkState()}\n")
+            }
+            sb.append("Power save: ${powerSaveState()}")
+            result.httpStatus?.let { sb.append("\nHTTP status: $it") }
+            if (voiceLive) sb.append('\n').append(compactVoiceContext())
+            if (result.code.includeStackTrace) {
+                sb.append("\n\n").append(e.stackTraceToString())
+            } else {
+                e.message?.takeIf { it.isNotBlank() }?.let { sb.append("\nDetail: $it") }
+            }
+            org.teslasoft.assistant.preferences.Logger.log(this, "crash", "GenError", "error", sb.toString())
+        } catch (_: Throwable) { /* never let diagnostics crash the error path */ }
+
+        // Failure clue into the Voice Debug Log even when per-turn voice logging is
+        // off (ERROR_CODES.md section 5). No-op when voice wasn't live.
+        logVoiceFailureSnapshot(result.code.code, voiceLive)
+    }
+
+    /** "on"/"off"/"unknown" — whether the screen was interactive at failure time.
+     *  Key signal for the screen-off/Wi-Fi-sleep hypothesis (ERROR_CODES.md E1). */
+    private fun screenState(): String = try {
+        if ((getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive) "on" else "off"
+    } catch (_: Throwable) { "unknown" }
+
+    /** "on"/"off"/"unknown" — battery power-save mode at failure time. */
+    private fun powerSaveState(): String = try {
+        if ((getSystemService(POWER_SERVICE) as android.os.PowerManager).isPowerSaveMode) "on" else "off"
+    } catch (_: Throwable) { "unknown" }
+
+    /** Short name for an AudioDeviceInfo type, for the AudioRoute diagnostics. */
+    private fun audioDeviceTypeName(type: Int): String = when (type) {
+        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "bluetooth_sco"
+        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "bluetooth_a2dp"
+        android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET -> "wired_headset"
+        android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "wired_headphones"
+        android.media.AudioDeviceInfo.TYPE_USB_HEADSET -> "usb_headset"
+        android.media.AudioDeviceInfo.TYPE_USB_DEVICE -> "usb_device"
+        android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "builtin_speaker"
+        android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "builtin_earpiece"
+        android.media.AudioDeviceInfo.TYPE_HEARING_AID -> "hearing_aid"
+        else -> "type_$type"
+    }
+
+    /** Best-effort snapshot of the current audio OUTPUT route. Read-only; any
+     *  failure is reported rather than thrown so diagnostics never break audio. */
+    private fun describeAudioOutputRoute(): String = try {
+        val am = getSystemService(AUDIO_SERVICE) as AudioManager
+        val outputs = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .map { audioDeviceTypeName(it.type) }
+            .distinct()
+            .joinToString(",")
+            .ifEmpty { "none" }
+        @Suppress("DEPRECATION")
+        val sco = try { am.isBluetoothScoOn } catch (_: Throwable) { false }
+        "outputs=$outputs btSco=$sco"
+    } catch (e: Throwable) { "unavailable (${e.javaClass.simpleName})" }
+
+    /** AudioRoute-family snapshot, gated on voice diagnostics (called per turn). */
+    private fun logAudioRoute(context: String) {
+        logVoiceEvent("AudioRoute [$context]: ${describeAudioOutputRoute()}")
+    }
+
+    /** Register the read-only output-route observer. Device add/remove are rare,
+     *  decisive events (a Bluetooth headset connecting), so they are always
+     *  persisted; the current route is included so the connect and the resulting
+     *  route land in one line. Never alters routing. */
+    private fun registerAudioRouteDiagnostics() {
+        try {
+            val am = getSystemService(AUDIO_SERVICE) as AudioManager
+            val cb = object : android.media.AudioDeviceCallback() {
+                override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                    val names = addedDevices?.map { audioDeviceTypeName(it.type) }?.distinct()
+                        ?.joinToString(",")?.ifEmpty { "none" } ?: "none"
+                    logVoiceEventAlways("AudioRoute device(s) added: $names; now ${describeAudioOutputRoute()}")
+                }
+                override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                    val names = removedDevices?.map { audioDeviceTypeName(it.type) }?.distinct()
+                        ?.joinToString(",")?.ifEmpty { "none" } ?: "none"
+                    logVoiceEventAlways("AudioRoute device(s) removed: $names; now ${describeAudioOutputRoute()}")
+                }
+            }
+            am.registerAudioDeviceCallback(cb, audioRouteHandler)
+            audioRouteCallback = cb
+        } catch (e: Throwable) {
+            logVoiceEventAlways("AudioRoute diagnostics unavailable: ${e.javaClass.simpleName}")
+        }
+    }
+
+    /** Detach the read-only output-route observer. Activity-owned, so it must be
+     *  released with the Activity instance (called from onDestroy). */
+    private fun unregisterAudioRouteDiagnostics() {
+        val cb = audioRouteCallback ?: return
+        try {
+            (getSystemService(AUDIO_SERVICE) as AudioManager).unregisterAudioDeviceCallback(cb)
+        } catch (_: Throwable) { /* already gone */ }
+        audioRouteCallback = null
+    }
+
+    /** Start a fresh trace at the exact point this provider request begins collection. */
+    private fun startGenerationNetworkDiagnostics() {
+        try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
+        generationNetworkMonitor = try {
+            org.teslasoft.assistant.util.GenerationNetworkMonitor(this)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /** Freeze failure facts before hands-free/error teardown mutates the evidence. */
+    private fun captureGenerationFailureDiagnostics(): org.teslasoft.assistant.util.GenerationFailureSnapshot {
+        val network = generationNetworkMonitor?.snapshot()
+            ?: org.teslasoft.assistant.util.GenerationNetworkSnapshot(
+                atDispatch = "not observed",
+                atFailure = networkState(),
+                transitions = emptyList(),
+                transitionTrackingAvailable = false
+            )
+        return org.teslasoft.assistant.util.GenerationFailureSnapshot(
+            voiceLive = isVoiceLive(),
+            network = network,
+            generationKeepAlive = GenerationForegroundService.diagnostics(),
+            handsFreeKeepAlive = HandsFreeService.connectionDiagnostics()
+        )
+    }
+
+    /** Active transport: wifi/cellular/ethernet/other/none/unknown. Best-effort;
+     *  any failure (e.g. missing permission) is reported as "unknown". */
     private fun networkState(): String = try {
         val cm = getSystemService(CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
         val net = cm.activeNetwork
