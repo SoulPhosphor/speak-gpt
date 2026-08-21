@@ -72,12 +72,10 @@ data class GenErrorResult(
  * it is unit-tested on a plain JVM, and must not fail to load if a client
  * exception class is renamed in a dependency bump.
  *
- * It follows the hybrid strategy in ERROR_CODES.md section 7 — strongest signal
- * first: exception **type** (the `java.net` transport types are matched directly;
- * client/Ktor types by class name so no import is needed), then server **status
- * / body**, then raw error **text** as the fallback. The fixed evaluation order
- * is the priority ladder from the doc, so overlapping cases (a model-not-found
- * returned as an HTTP 404, say) always resolve the same way.
+ * It follows the hybrid strategy in ERROR_CODES.md section 7. Concrete server
+ * evidence outranks client-wrapper guesses: a status exposed by the client
+ * exception (such as openai-client's `statusCode`) wins before status-like prose,
+ * then provider code/body evidence, then raw error text as the fallback.
  */
 object GenerationErrorClassifier {
 
@@ -90,15 +88,16 @@ object GenerationErrorClassifier {
             }
             append(error.stackTraceToString())
         }
-        val status = extractHttpStatus(text)
-        val lower = text.lowercase()
         val structured = extractStructuredEvidence(chain)
         val structuredCodes = structured.codesAndTypes.lowercase()
         val structuredBodies = structured.bodies.lowercase()
+        val status = extractStructuredHttpStatus(structured.httpStatuses)
+            ?: extractHttpStatus(text)
+        val lower = text.lowercase()
 
         // 1. Auth.
         if (status == 401 || lower.contains("incorrect api key") ||
-            hasType(chain, "AuthenticationException")
+            (status == null && hasType(chain, "AuthenticationException"))
         ) {
             return GenErrorResult(GenErrorCode.A1, status)
         }
@@ -152,7 +151,9 @@ object GenerationErrorClassifier {
         providerLimitFromEvidence(lower)?.let {
             return providerLimitResult(it, status)
         }
-        if (status == 429 || hasType(chain, "RateLimitException")) {
+        // The concrete HTTP status wins over the SDK wrapper class. A class-name
+        // match is useful only when the client exposed no status at all.
+        if (status == 429 || (status == null && hasType(chain, "RateLimitException"))) {
             return providerLimitResult(ProviderLimitKind.RATE_OR_THROUGHPUT, status)
         }
 
@@ -164,9 +165,10 @@ object GenerationErrorClassifier {
         if (lower.contains("does not exist")) {
             return GenErrorResult(GenErrorCode.M2, status)
         }
-        // 5. Bare HTTP 404 with no model-specific body.
-        if (status == 404 || lower.contains("not found")) {
-            return GenErrorResult(GenErrorCode.S1, 404)
+        // 5. Bare HTTP 404 with no model-specific body. Text is fallback evidence
+        // only when the client did not expose a concrete status.
+        if (status == 404 || (status == null && lower.contains("not found"))) {
+            return GenErrorResult(GenErrorCode.S1, status ?: 404)
         }
         // 6. Response-shape failure / content rejection.
         if (lower.contains("notransformationfoundexception") ||
@@ -178,17 +180,10 @@ object GenerationErrorClassifier {
             return GenErrorResult(GenErrorCode.S3, status,
                 isVisionRejection = looksLikeVisionRejection(lower))
         }
-        if ((status == 400 || status == 422) &&
-            containsAny(
-                "$structuredCodes\n$structuredBodies\n$lower",
-                "limit",
-                "too large",
-                "maximum",
-                "exceeded"
-            )
-        ) {
-            return providerLimitResult(ProviderLimitKind.UNIDENTIFIED, status)
-        }
+        // Do not infer a generic provider limit from vague words such as
+        // "limit" or "maximum" in a 400/422. If no specific recognized provider
+        // evidence exists, preserve the request rejection as the unknown bucket
+        // and let the raw provider/client detail explain it.
         // 7. Unknown catch-all.
         return GenErrorResult(GenErrorCode.U0, status,
             isVisionRejection = looksLikeVisionRejection(lower))
@@ -296,25 +291,34 @@ object GenerationErrorClassifier {
     }
 
     /**
-     * Common SDK exceptions expose provider code/type/body as no-argument
-     * accessors or fields. Read those conservatively so an explicit provider
-     * code wins even when the exception's prose is localized or generic.
+     * Common SDK exceptions expose provider code/type/body/status as no-argument
+     * accessors or fields. Read those conservatively so concrete client evidence
+     * wins even when the exception's prose is localized or generic.
      */
     private data class StructuredEvidence(
         val codesAndTypes: String,
-        val bodies: String
+        val bodies: String,
+        val httpStatuses: String
     )
 
     private fun extractStructuredEvidence(chain: List<Throwable>): StructuredEvidence {
         val codesAndTypes = StringBuilder()
         val bodies = StringBuilder()
+        val httpStatuses = StringBuilder()
         val codeNames = setOf("code", "errorcode", "type", "errortype")
         val bodyNames = setOf("body", "responsebody", "errorbody")
+        val statusNames = setOf(
+            "statuscode",
+            "httpstatuscode",
+            "httpstatus",
+            "responsestatuscode"
+        )
 
         fun append(name: String, value: Any?) {
             when (name) {
                 in codeNames -> codesAndTypes.append(value).append('\n')
                 in bodyNames -> bodies.append(value).append('\n')
+                in statusNames -> httpStatuses.append(value).append('\n')
             }
         }
 
@@ -324,21 +328,40 @@ object GenerationErrorClassifier {
                 val normalized = method.name
                     .removePrefix("get")
                     .lowercase()
-                if (normalized !in codeNames && normalized !in bodyNames) continue
+                if (normalized !in codeNames &&
+                    normalized !in bodyNames &&
+                    normalized !in statusNames
+                ) continue
                 runCatching { method.invoke(throwable) }
                     .getOrNull()
                     ?.let { append(normalized, it) }
             }
             for (field in throwable.javaClass.declaredFields) {
                 val normalized = field.name.lowercase()
-                if (normalized !in codeNames && normalized !in bodyNames) continue
+                if (normalized !in codeNames &&
+                    normalized !in bodyNames &&
+                    normalized !in statusNames
+                ) continue
                 runCatching {
                     field.isAccessible = true
                     field.get(throwable)
                 }.getOrNull()?.let { append(normalized, it) }
             }
         }
-        return StructuredEvidence(codesAndTypes.toString(), bodies.toString())
+        return StructuredEvidence(
+            codesAndTypes.toString(),
+            bodies.toString(),
+            httpStatuses.toString()
+        )
+    }
+
+    private fun extractStructuredHttpStatus(statuses: String): Int? {
+        val matches = Regex("""\b([1-5]\d{2})\b""").findAll(statuses)
+        for (match in matches) {
+            val code = match.groupValues[1].toIntOrNull() ?: continue
+            if (code in 100..599) return code
+        }
+        return null
     }
 
     /** The throwable and its cause chain, guarding against a cyclic `cause`. */
@@ -360,17 +383,17 @@ object GenerationErrorClassifier {
 
     /**
      * Best-effort HTTP status from common phrasings ("status code 401",
-     * "HTTP/1.1 404", "429 Too Many Requests"). Conservative on purpose: a status
-     * is a bonus for the log and for disambiguation, but classification never
-     * depends on it alone, so a missed status simply falls through to text
-     * matching rather than risking a wrong number scraped out of a stack trace.
+     * "HTTP/1.1 404", "429 Too Many Requests", or client-generic "400 ERROR").
+     * This runs only after structured status accessors such as `statusCode`, so
+     * an embedded upstream error cannot replace the HTTP status the client saw.
      */
     private fun extractHttpStatus(text: String): Int? {
         val patterns = listOf(
             Regex("""status\s*code[ =:]*\s*(\d{3})""", RegexOption.IGNORE_CASE),
             Regex("""\bHTTP/?\d?(?:\.\d)?\s+(\d{3})\b"""),
+            Regex("""\b(\d{3})\s+ERROR\b""", RegexOption.IGNORE_CASE),
             Regex(
-                """\b(\d{3})\s+(?:Unauthorized|Payment Required|Forbidden|Not Found|Bad Request|Too Many Requests|""" +
+                """\b(\d{3})\s+(?:Unauthorized|Payment Required|Forbidden|Not Found|Bad Request|Unprocessable Entity|Too Many Requests|""" +
                     """Payload Too Large|Request Entity Too Large|Internal Server Error|""" +
                     """Bad Gateway|Service Unavailable|Gateway Timeout)\b"""
             )

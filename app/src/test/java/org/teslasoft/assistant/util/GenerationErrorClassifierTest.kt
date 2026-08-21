@@ -26,8 +26,22 @@ import java.net.UnknownHostException
 class GenerationErrorClassifierTest {
 
     private fun code(t: Throwable) = GenerationErrorClassifier.classify(t).code
+
     private class StructuredProviderException(
         val code: String,
+        message: String
+    ) : RuntimeException(message)
+
+    private class StructuredStatusProviderException(
+        val statusCode: Int,
+        val code: String,
+        message: String
+    ) : RuntimeException(message)
+
+    // Mirrors the evidence shape exposed by openai-client 3.8.2 without taking
+    // a unit-test dependency on that concrete exception class.
+    private class RateLimitException(
+        val statusCode: Int?,
         message: String
     ) : RuntimeException(message)
 
@@ -162,6 +176,69 @@ class GenerationErrorClassifierTest {
 
     @Test fun bare404IsS1() {
         assertEquals(GenErrorCode.S1, code(RuntimeException("404 Not Found")))
+    }
+
+    @Test fun explicit400StatusPreventsRateLimitClassGuess() {
+        val result = GenerationErrorClassifier.classify(
+            RateLimitException(statusCode = 400, message = "ERROR")
+        )
+        assertEquals(400, result.httpStatus)
+        assertEquals(GenErrorCode.U0, result.code)
+        assertNull(result.providerLimit)
+    }
+
+    @Test fun client429StatusBeatsUpstream400ErrorText() {
+        // OpenRouter can expose an outer HTTP status while metadata.raw names a
+        // different upstream provider error. The client's concrete status wins
+        // classification; the raw upstream detail remains separately displayable.
+        val result = GenerationErrorClassifier.classify(
+            RateLimitException(statusCode = 429, message = "400 ERROR")
+        )
+        assertEquals(429, result.httpStatus)
+        assertEquals(ProviderLimitKind.RATE_OR_THROUGHPUT, result.providerLimit)
+        assertEquals(GenErrorCode.Q1, result.code)
+    }
+
+    @Test fun literal400ErrorStillWorksAsLastResortWhenNoStatusPropertyExists() {
+        val result = GenerationErrorClassifier.classify(
+            RuntimeException("400 ERROR")
+        )
+        assertEquals(400, result.httpStatus)
+        assertEquals(GenErrorCode.U0, result.code)
+        assertNull(result.providerLimit)
+    }
+
+    @Test fun http400GenericMaximumTextDoesNotBecomeProviderLimit() {
+        // "maximum" is common in actionable validation errors and is not, by
+        // itself, evidence of quota/context/rate limiting.
+        val result = GenerationErrorClassifier.classify(
+            RuntimeException("400 Bad Request: maximum value for temperature is 2")
+        )
+        assertEquals(400, result.httpStatus)
+        assertEquals(GenErrorCode.U0, result.code)
+        assertNull(result.providerLimit)
+    }
+
+    @Test fun structuredLimitCodeCanStillExplainHttp400() {
+        val result = GenerationErrorClassifier.classify(
+            StructuredStatusProviderException(
+                statusCode = 400,
+                code = "context_length_exceeded",
+                message = "Bad Request"
+            )
+        )
+        assertEquals(400, result.httpStatus)
+        assertEquals(ProviderLimitKind.MODEL_CONTEXT, result.providerLimit)
+        assertEquals(GenErrorCode.M3, result.code)
+    }
+
+    @Test fun rateLimitWrapperWithoutHttpStatusRemainsFallbackEvidence() {
+        val result = GenerationErrorClassifier.classify(
+            RateLimitException(statusCode = null, message = "request throttled by client wrapper")
+        )
+        assertNull(result.httpStatus)
+        assertEquals(ProviderLimitKind.RATE_OR_THROUGHPUT, result.providerLimit)
+        assertEquals(GenErrorCode.Q1, result.code)
     }
 
     @Test fun streamShapeIsS2() {
