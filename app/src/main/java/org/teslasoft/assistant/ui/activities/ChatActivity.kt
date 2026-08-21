@@ -331,6 +331,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         private val responseLifecycleRecorderAttribute =
             AttributeKey<ResponseLifecycleRecorder>("ResponseLifecycleRecorder")
 
+        /** Marks the primary/tool-generation request when lifecycle logging is
+         * off, so final outbound-field diagnostics still exclude auxiliary
+         * completed requests such as auto-naming. */
+        private val generationRequestAttribute =
+            AttributeKey<Boolean>("GenerationRequest")
+
         /** Pins the current turn's reasoning accumulator to a request whose
          *  resolved settings want provider reasoning displayed (§7.2). Its
          *  presence is what tells the response observer to split this stream for
@@ -5551,28 +5557,35 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     /**
      * Bind lifecycle diagnostics to the exact Ktor request BEFORE dispatch.
-     * Auxiliary non-stream requests share this client, so request identity is
-     * attached only to streamed chat/legacy-completion bodies.
+     * Auxiliary requests share this client, so request identity is attached to
+     * streamed generations and to the current chat's completed-response path,
+     * but not to unrelated completed requests such as auto-naming.
      */
     private fun bindLifecycleRecorderToGenerationRequest(request: HttpRequestBuilder) {
-        if (request.attributes.contains(responseLifecycleRecorderAttribute)) return
-        val recorder = currentLifecycle ?: return
-        if (recorder.finalized) return
+        if (request.attributes.contains(responseLifecycleRecorderAttribute) ||
+            request.attributes.contains(generationRequestAttribute)
+        ) return
+        val recorder = currentLifecycle?.takeUnless { it.finalized }
         val content = request.body as? TextContent ?: return
         if (content.contentType?.match(ContentType.Application.Json) != true) return
 
-        val isStreamedGeneration = try {
+        val isGenerationRequest = try {
             val root = com.google.gson.JsonParser.parseString(content.text).asJsonObject
             val streamed = root.get("stream")
                 ?.takeUnless { it.isJsonNull }
                 ?.asBoolean == true
             val hasGenerationInput = root.has("messages") || root.has("prompt")
-            streamed && root.has("model") && hasGenerationInput
+            // The normal chat-completion path is identified by messages even
+            // when the client uses its completed-response API and omits the
+            // stream flag. Keep streamed legacy completion diagnostics intact.
+            root.has("model") && hasGenerationInput &&
+                (streamed || (root.has("messages") && generationRequestActive))
         } catch (_: Exception) {
             false
         }
-        if (isStreamedGeneration) {
-            request.attributes.put(responseLifecycleRecorderAttribute, recorder)
+        if (isGenerationRequest) {
+            recorder?.let { request.attributes.put(responseLifecycleRecorderAttribute, it) }
+            request.attributes.put(generationRequestAttribute, true)
         }
     }
 
@@ -5674,11 +5687,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         var bodyHasTools = false
         val model = try {
             val root = com.google.gson.JsonParser.parseString(text).asJsonObject
-            // Only streamed chat generation carries reasoning. Auxiliary
-            // non-streamed calls on this same client (auto-naming, tool-name
-            // resolution, summarizer) must not inherit a reasoning instruction.
+            // Only visible chat generation carries reasoning. Auxiliary calls
+            // on this same client (auto-naming, tool-name resolution,
+            // summarizer) must not inherit a reasoning instruction.
             val streamed = root.get("stream")?.takeUnless { it.isJsonNull }?.asBoolean == true
-            if (streamed && root.has("messages")) {
+            val generationRecorder = if (request.attributes.contains(responseLifecycleRecorderAttribute)) {
+                request.attributes[responseLifecycleRecorderAttribute]
+            } else {
+                null
+            }
+            val generationRequest = request.attributes.contains(generationRequestAttribute)
+            if (root.has("messages") &&
+                (streamed || generationRecorder != null || generationRequest)
+            ) {
                 bodyHasTools = (root.get("tools")?.takeUnless { it.isJsonNull }
                     ?.takeIf { it.isJsonArray }?.asJsonArray?.size() ?: 0) > 0
                 root.get("model")?.takeIf { !it.isJsonNull }?.asString
@@ -5883,9 +5904,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 } else {
                                     null
                                 }
+                                val streamed = try {
+                                    val body = call.request.body as? TextContent
+                                    body?.let {
+                                        com.google.gson.JsonParser.parseString(it.text).asJsonObject
+                                            .get("stream")?.takeUnless { value -> value.isJsonNull }
+                                            ?.asBoolean == true
+                                    } == true
+                                } catch (_: Exception) {
+                                    false
+                                }
                                 val wantsReasoning = call.request.attributes.contains(reasoningObservationAttribute)
                                 when {
-                                    recorder != null -> {
+                                    recorder != null && streamed -> {
                                         recorder.beginProviderObservation()
                                         true
                                     }
@@ -6828,7 +6859,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         calls: List<StreamedToolCallAssembler.AssembledToolCall>,
         originalRequest: ChatCompletionRequest,
         streamedText: String,
-        shouldPronounce: Boolean
+        shouldPronounce: Boolean,
+        streamingEnabled: Boolean
     ) {
         if (streamedText.isEmpty()) {
             if (messages.isNotEmpty() && messages.last()["isBot"] == true) {
@@ -6901,9 +6933,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         val followUpRequest = rebuildRequestWithoutTools(
             originalRequest,
-            originalRequest.messages + assistantToolCallMessage + toolResultMessages
+            originalRequest.messages + assistantToolCallMessage + toolResultMessages,
+            streamingEnabled
         )
-        streamAssistantTextResponse(followUpRequest, shouldPronounce)
+        streamAssistantTextResponse(followUpRequest, shouldPronounce, streamingEnabled)
     }
 
     /** One §6-validated create_image execution: the user's saved quality
@@ -7007,7 +7040,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     @OptIn(com.aallam.openai.api.BetaOpenAI::class) // reading seed back is beta-gated
     private fun rebuildRequestWithoutTools(
         original: ChatCompletionRequest,
-        requestMessages: List<ChatMessage>
+        requestMessages: List<ChatMessage>,
+        streamingEnabled: Boolean
     ): ChatCompletionRequest = ChatCompletionRequest(
         model = original.model,
         messages = requestMessages,
@@ -7021,7 +7055,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Ask supported providers to include token usage in the stream so the
         // Response Lifecycle Log can record provider-reported counts. Harmless
         // where unsupported: the field simply stays "not reported".
-        streamOptions = StreamOptions(includeUsage = true)
+        streamOptions = if (streamingEnabled) StreamOptions(includeUsage = true) else null
     )
 
     /** The follow-up response after tool results (§7.7): plain streamed
@@ -7029,34 +7063,86 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  completion. */
     private suspend fun streamAssistantTextResponse(
         request: ChatCompletionRequest,
-        shouldPronounce: Boolean
+        shouldPronounce: Boolean,
+        streamingEnabled: Boolean
     ) {
         var response = ""
         putMessage("", true)
         markLastAssistantStreaming()
         startLifecycle(ResponseLifecycle.PHASE_TOOL_CONTINUATION, request.maxTokens)
-        val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(request)
         scroll(true)
-        // Dispatch begins at collection; a failure past this point is a real
-        // provider/network end, not a pre-dispatch one.
-        startGenerationNetworkDiagnostics()
-        providerRequestDispatched = true
-        completions.flowOn(Dispatchers.IO).collect { v ->
-            if (!currentCoroutineContext().isActive) throw CancellationException()
-            val choice = v.choices.firstOrNull()
-            noteLifecycleChunk(
-                choice?.finishReason?.value, v.id,
-                (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
-                v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
-            )
-            v.usage?.totalTokens?.let { pendingResponseTokens = it }
-            val delta = choice?.delta?.content
-            if (delta != null && delta != "null") {
-                response += delta
-                messages[messages.size - 1]["message"] = response
-                adapter?.notifyItemChanged(messages.size - 1)
-                scroll(false)
+        val toolCallAssembler = StreamedToolCallAssembler()
+        if (streamingEnabled) {
+            generationRequestActive = true
+            try {
+                val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(request)
+            // Dispatch begins at collection; a failure past this point is a real
+            // provider/network end, not a pre-dispatch one.
+            startGenerationNetworkDiagnostics()
+            providerRequestDispatched = true
+            completions.flowOn(Dispatchers.IO).collect { v ->
+                if (!currentCoroutineContext().isActive) throw CancellationException()
+                val choice = v.choices.firstOrNull()
+                noteLifecycleChunk(
+                    choice?.finishReason?.value, v.id,
+                    (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
+                    v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
+                )
+                v.usage?.totalTokens?.let { pendingResponseTokens = it }
+                choice?.delta?.toolCalls?.forEach { fragment ->
+                    toolCallAssembler.accept(
+                        fragment.index,
+                        fragment.id?.id,
+                        fragment.function?.nameOrNull,
+                        fragment.function?.argumentsOrNull
+                    )
+                }
+                val delta = choice?.delta?.content
+                if (delta != null && delta != "null") {
+                    response += delta
+                    messages[messages.size - 1]["message"] = response
+                    adapter?.notifyItemChanged(messages.size - 1)
+                    scroll(false)
+                }
             }
+            } finally {
+                generationRequestActive = false
+            }
+        } else {
+            // A completed response is a real non-streaming API call. Do not
+            // collect/buffer a stream: the client uses its Chat Completion
+            // mechanism, which omits stream_options and waits for the full
+            // response before returning.
+            startGenerationNetworkDiagnostics()
+            providerRequestDispatched = true
+            val completion = try {
+                generationRequestActive = true
+                ai!!.chatCompletion(request)
+            } finally {
+                generationRequestActive = false
+            }
+            val choice = completion.choices.firstOrNull()
+            val content = choice?.message?.content?.takeIf { it != "null" }
+            response = content.orEmpty()
+            noteLifecycleChunk(
+                choice?.finishReason?.value, completion.id, response.length,
+                completion.usage?.promptTokens, completion.usage?.completionTokens,
+                completion.usage?.totalTokens
+            )
+            completion.usage?.totalTokens?.let { pendingResponseTokens = it }
+            choice?.message?.toolCalls?.forEachIndexed { index, call ->
+                if (call is ToolCall.Function) {
+                    toolCallAssembler.accept(
+                        index,
+                        call.id.id,
+                        call.function.nameOrNull,
+                        call.function.argumentsOrNull
+                    )
+                }
+            }
+            messages[messages.size - 1]["message"] = response
+            currentLifecycle?.markNonStreamingResponse()
+            adapter?.notifyItemChanged(messages.size - 1)
         }
         finalizeLifecycleSuccess()
         messages[messages.size - 1]["message"] = "$response\n"
@@ -7075,7 +7161,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     // ===== Response Lifecycle diagnostics (opt-in, off by default) =====
-    // One record is written per streamed VISIBLE generation request — never one
+    // One record is written per VISIBLE generation request — never one
     // combined record for a whole multi-step turn — so a completed primary
     // stream and an interrupted continuation are two comparable entries that
     // share [currentLifecycleTurnId]. Capture is entirely gated on the toggle:
@@ -7096,6 +7182,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  Provider Failure Log. */
     @Volatile
     private var providerRequestDispatched: Boolean = false
+
+    /** True only while the primary or tool-continuation Chat Completions call
+     * is being serialized/dispatched. This keeps non-stream diagnostics
+     * request-scoped even when no lifecycle recorder exists. */
+    @Volatile
+    private var generationRequestActive: Boolean = false
 
     /** The provider-routing send hook's ACTUAL result for the in-flight
      *  request, written on the send thread and read when the lifecycle entry is
@@ -7119,7 +7211,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         currentLifecycleTurnId = "T" + System.currentTimeMillis().toString() + "-" + lifecycleTurnCounter
     }
 
-    /** Begin recording one streamed request when Response Lifecycle logging is
+    /** Begin recording one generation request when Response Lifecycle logging is
      *  on. A still-pending recorder (e.g. the §8 first attempt that is about to
      *  be retried) is closed first so its record is never dropped. */
     private suspend fun startLifecycle(phase: String, requestedMaxOutput: Int?) {
@@ -7167,17 +7259,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         r.noteChunk(finishReason, id, contentLength, promptTokens, completionTokens, totalTokens)
     }
 
-    /** Finalize a stream that ended on its own (the flow completed without
-     *  throwing): the outcome is decided only from the finish reason actually
-     *  seen — text having arrived is never treated as completion. */
+    /** Finalize a response that ended on its own. Streaming uses the finish
+     *  reason/terminal evidence matrix; a successful completed-response call
+     *  has provider-completion evidence from the client return itself. */
     private suspend fun finalizeLifecycleSuccess() {
         val r = currentLifecycle ?: return
         if (r.finalized) return
-        val n = ResponseLifecycle.classifyNormalCompletion(r.lastFinishReason, r.receivedCharacters)
+        val n = if (r.nonStreamingResponse) {
+            ResponseLifecycle.classifyNonStreamingCompletion(r.lastFinishReason, r.receivedCharacters)
+        } else {
+            ResponseLifecycle.classifyNormalCompletion(r.lastFinishReason, r.receivedCharacters)
+        }
         writeLifecycle(r, n.outcome, n.finishReasonDisplay, n.streamClosed, n.termination, null)
     }
 
-    /** Finalize a stream cut short by an error, a user stop, or an app cancel —
+    /** Finalize a response cut short by an error, a user stop, or an app cancel —
      *  the terminal values are decided by the caller from what it caught. */
     private suspend fun finalizeLifecycleTerminal(
         outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
@@ -9501,6 +9597,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         suppressImageTools: Boolean = false
     ) {
         disableAutoScroll = false
+        val streamingEnabled = preferences?.getStreaming() ?: true
 
         var response = ""
         putMessage("", true)
@@ -9523,7 +9620,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // committed. Do not rebuild any part of it here — the §8
             // tools-rejected retry only strips the tool definition.
             chatCompletionRequest = if (suppressImageTools) {
-                rebuildRequestWithoutTools(preparedTurn.request, preparedTurn.request.messages)
+                rebuildRequestWithoutTools(
+                    preparedTurn.request,
+                    preparedTurn.request.messages,
+                    streamingEnabled
+                )
             } else {
                 preparedTurn.request
             }
@@ -9792,7 +9893,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 tools = legacyPathImageTools,
                 // Ask supported providers to include token usage in the stream
                 // for the Response Lifecycle Log; ignored where unsupported.
-                streamOptions = StreamOptions(includeUsage = true)
+                streamOptions = if (streamingEnabled) StreamOptions(includeUsage = true) else null
             )
         } else {
             ChatCompletionRequest(
@@ -9807,7 +9908,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 tools = legacyPathImageTools,
                 // Ask supported providers to include token usage in the stream
                 // for the Response Lifecycle Log; ignored where unsupported.
-                streamOptions = StreamOptions(includeUsage = true)
+                streamOptions = if (streamingEnabled) StreamOptions(includeUsage = true) else null
             )
         }
         }
@@ -9816,66 +9917,107 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // judged as a tools rejection by the wrapper in generateResponse.
         lastRegularRequestCarriedImageTools = chatCompletionRequest.tools != null
 
-        val completions: Flow<ChatCompletionChunk> =
-            ai!!.chatCompletions(chatCompletionRequest)
-
         // §7.1: tool-call fragments accumulate until the name and JSON
         // arguments are complete. Providers stream them differently — many
-        // fragments or one complete chunk — and a stream that dies mid-call
-        // fails cleanly at validation instead of hanging the turn.
+        // fragments or one complete chunk. The same assembler also accepts a
+        // complete response's tool calls, so the tool flow is identical after
+        // either transport path returns.
         val toolCallAssembler = StreamedToolCallAssembler()
 
         scroll(true)
+        if (streamingEnabled) {
+            generationRequestActive = true
+            try {
+                val completions: Flow<ChatCompletionChunk> =
+                    ai!!.chatCompletions(chatCompletionRequest)
 
-        // The provider request begins dispatch here; from this point a failure
-        // is a genuine provider/network/stream end, not a pre-dispatch one.
-        startGenerationNetworkDiagnostics()
-        providerRequestDispatched = true
-        completions.flowOn(Dispatchers.IO).collect { v ->
-            run {
-                if (!currentCoroutineContext().isActive) throw CancellationException()
-                val choice = v.choices.firstOrNull()
-                // A usage-only final chunk (requested via streamOptions) carries
-                // an EMPTY choices list, so every choice access here must be
-                // null-safe — the old v.choices[0] would throw on that chunk.
-                noteLifecycleChunk(
-                    choice?.finishReason?.value, v.id,
-                    (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
-                    v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
-                )
-                v.usage?.totalTokens?.let { pendingResponseTokens = it }
-                choice?.delta?.toolCalls?.forEach { fragment ->
-                    toolCallAssembler.accept(
-                        fragment.index,
-                        fragment.id?.id,
-                        fragment.function?.nameOrNull,
-                        fragment.function?.argumentsOrNull
+            // The provider request begins dispatch here; from this point a
+            // failure is a genuine provider/network/stream end, not a
+            // pre-dispatch one.
+            startGenerationNetworkDiagnostics()
+            providerRequestDispatched = true
+            completions.flowOn(Dispatchers.IO).collect { v ->
+                run {
+                    if (!currentCoroutineContext().isActive) throw CancellationException()
+                    val choice = v.choices.firstOrNull()
+                    // A usage-only final chunk (requested via streamOptions)
+                    // carries an EMPTY choices list, so every choice access here
+                    // must be null-safe — the old v.choices[0] would throw on
+                    // that chunk.
+                    noteLifecycleChunk(
+                        choice?.finishReason?.value, v.id,
+                        (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
+                        v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
                     )
-                }
-                val deltaContent = choice?.delta?.content
-                if (deltaContent != null && deltaContent != "null") {
-                    response += deltaContent
-                    messages[messages.size - 1]["message"] = response
-                    if (messages.size > 2) {
-                        adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                    } else {
-                        adapter?.notifyItemChanged(messages.size - 1)
+                    v.usage?.totalTokens?.let { pendingResponseTokens = it }
+                    choice?.delta?.toolCalls?.forEach { fragment ->
+                        toolCallAssembler.accept(
+                            fragment.index,
+                            fragment.id?.id,
+                            fragment.function?.nameOrNull,
+                            fragment.function?.argumentsOrNull
+                        )
                     }
-                    scroll(false)
-                    // Persist mid-stream so a killed process doesn't lose the
-                    // partial reply — but NOT on every chunk: saveSettings()
-                    // re-serializes and re-encrypts the WHOLE history on the
-                    // main thread (flowOn only moves the upstream), so
-                    // per-chunk saves made long conversations progressively
-                    // slower with every turn. The completion save below still
-                    // persists the full reply.
-                    val nowUptime = android.os.SystemClock.uptimeMillis()
-                    if (nowUptime - lastStreamSaveUptime >= STREAM_SAVE_INTERVAL_MS) {
-                        lastStreamSaveUptime = nowUptime
-                        saveSettings()
+                    val deltaContent = choice?.delta?.content
+                    if (deltaContent != null && deltaContent != "null") {
+                        response += deltaContent
+                        messages[messages.size - 1]["message"] = response
+                        if (messages.size > 2) {
+                            adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                        } else {
+                            adapter?.notifyItemChanged(messages.size - 1)
+                        }
+                        scroll(false)
+                        // Persist mid-stream so a killed process doesn't lose
+                        // the partial reply — but NOT on every chunk:
+                        // saveSettings() re-serializes and re-encrypts the WHOLE
+                        // history on the main thread. The completion save below
+                        // still persists the full reply.
+                        val nowUptime = android.os.SystemClock.uptimeMillis()
+                        if (nowUptime - lastStreamSaveUptime >= STREAM_SAVE_INTERVAL_MS) {
+                            lastStreamSaveUptime = nowUptime
+                            saveSettings()
+                        }
                     }
                 }
             }
+            } finally {
+                generationRequestActive = false
+            }
+        } else {
+            // Use Aallam's completed-response API directly. This path does not
+            // request a streamed body and does not carry stream_options; the
+            // full assistant message is only rendered after the call returns.
+            startGenerationNetworkDiagnostics()
+            providerRequestDispatched = true
+            val completion = try {
+                generationRequestActive = true
+                ai!!.chatCompletion(chatCompletionRequest)
+            } finally {
+                generationRequestActive = false
+            }
+            val choice = completion.choices.firstOrNull()
+            val content = choice?.message?.content?.takeIf { it != "null" }
+            response = content.orEmpty()
+            noteLifecycleChunk(
+                choice?.finishReason?.value, completion.id, response.length,
+                completion.usage?.promptTokens, completion.usage?.completionTokens,
+                completion.usage?.totalTokens
+            )
+            completion.usage?.totalTokens?.let { pendingResponseTokens = it }
+            choice?.message?.toolCalls?.forEachIndexed { index, call ->
+                if (call is ToolCall.Function) {
+                    toolCallAssembler.accept(
+                        index,
+                        call.id.id,
+                        call.function.nameOrNull,
+                        call.function.argumentsOrNull
+                    )
+                }
+            }
+            messages[messages.size - 1]["message"] = response
+            currentLifecycle?.markNonStreamingResponse()
+            adapter?.notifyItemChanged(messages.size - 1)
         }
 
         // The primary stream ended on its own. Finalize its lifecycle record
@@ -9900,7 +10042,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 assembledToolCalls,
                 chatCompletionRequest,
                 response,
-                shouldPronounce
+                shouldPronounce,
+                streamingEnabled
             )
             return
         }

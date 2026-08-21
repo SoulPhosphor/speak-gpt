@@ -122,6 +122,7 @@ object RawStreamObservationCodec {
 internal data class LifecycleDiagnosticEvidence(
     var requestDispatchedObserved: Boolean? = null,
     var httpSuccessful: Boolean? = null,
+    var nonStreamingResponse: Boolean = false,
     var typedChunks: Int = 0,
     var typedContentChunks: Int = 0,
     var typedUsageReceived: Boolean = false,
@@ -182,6 +183,12 @@ internal object LifecycleDiagnosticEvidenceStore {
     fun noteSuccessfulHttpResponse(attemptId: String): Boolean = mutate(attemptId) {
         it.requestDispatchedObserved = true
         it.httpSuccessful = true
+    }
+
+    fun noteNonStreamingResponse(attemptId: String): Boolean = mutate(attemptId) {
+        it.requestDispatchedObserved = true
+        it.httpSuccessful = true
+        it.nonStreamingResponse = true
     }
 
     fun noteRawObservation(

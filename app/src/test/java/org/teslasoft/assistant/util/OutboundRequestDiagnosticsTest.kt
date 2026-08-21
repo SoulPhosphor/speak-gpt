@@ -65,14 +65,36 @@ class OutboundRequestDiagnosticsTest {
     }
 
     @Test
-    fun nonStreamedBodyIsNotRecorded() {
+    fun nonStreamedBodyIsRecordedWithOnlyFieldsActuallySerialized() {
         OutboundRequestDiagnostics.sanitizeAndCaptureSerializedChatBody(
             """{"model":"example/model","messages":[],"stream":true}"""
         )
 
-        val body = """{"model":"example/model","messages":[],"stream":false}"""
+        val body = """{
+            "model":"example/model",
+            "messages":[],
+            "stream":false
+        }"""
         assertEquals(body, OutboundRequestDiagnostics.sanitizeAndCaptureSerializedChatBody(body))
-        assertNull(OutboundRequestDiagnostics.latestFieldNames())
+        assertEquals(
+            listOf("messages", "model", "stream"),
+            OutboundRequestDiagnostics.latestFieldNames()
+        )
+        assertFalse(OutboundRequestDiagnostics.latestFieldNames()!!.contains("stream_options"))
+    }
+
+    @Test
+    fun nonStreamedBodyReportsStreamOptionsOnlyWhenSerialized() {
+        val body = """{
+            "model":"example/model",
+            "messages":[],
+            "stream":false,
+            "stream_options":{"include_usage":true}
+        }"""
+
+        OutboundRequestDiagnostics.sanitizeAndCaptureSerializedChatBody(body)
+
+        assertTrue(OutboundRequestDiagnostics.latestFieldNames()!!.contains("stream_options"))
     }
 
     @Test

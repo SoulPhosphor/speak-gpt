@@ -359,6 +359,39 @@
                     android:textColorHint="?attr/appSubtleTextColor" />
             </LinearLayout>
 
+            <!-- Streaming is a general default for new chats, not an endpoint
+                 profile field. Keep the explanation before the plain checkbox
+                 option row and use the shared CheckOption family. -->
+            <TextView
+                android:id="@+id/label_streaming"
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/streaming_title" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/streaming_description" />
+
+            <LinearLayout
+                android:id="@+id/row_streaming"
+                style="@style/Widget.App.CheckOption.Row"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp">
+
+                <com.google.android.material.checkbox.MaterialCheckBox
+                    android:id="@+id/check_streaming"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="false" />
+
+                <TextView
+                    style="@style/Widget.App.CheckOption.Label"
+                    android:text="@string/streaming_title" />
+            </LinearLayout>
+
             <!-- Temperature: shared Widget.App.Section.Title/.Hint (see
                  values/themes.xml + ui-style-guide.md), title then explanation
                  before the control, per the section-ordering rule. -->
