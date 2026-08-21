@@ -78,11 +78,11 @@ object RejectedReasoningLevelStore {
     }
 
     /**
-     * Drop every model-id entry whose id is not in [liveModelIds] (silent
-     * model-cleanup of learned data for models that no longer exist, owner
-     * ruling Aug 2026). The learned data is a self-healing cache, so a purged
-     * entry simply re-learns on next use. Returns the input unchanged (or
-     * [EMPTY]) when nothing is removed, so callers can cheaply detect a change.
+     * Drop every model-id entry whose id is not in [liveModelIds]. Supports the
+     * approved silent model-cleanup of learned data for models that no longer
+     * exist; this is a self-healing cache, so a purged entry simply re-learns on
+     * next use. Returns the input unchanged (or [EMPTY]) when nothing is
+     * removed, so callers can cheaply detect a change.
      */
     fun retainOnly(json: String?, liveModelIds: Set<String>): String {
         val root = parse(json) ?: return EMPTY

@@ -28,31 +28,30 @@ package org.teslasoft.assistant.reasoning
  */
 object ReasoningEffortSubstitution {
 
-    /** Explicit levels from least to most reasoning. */
-    private val ASCENDING = listOf(
-        ReasoningEffort.MINIMAL,
+    /** The universal middle levels a substitution may land on, low → high. Both
+     *  extremes fall back only into this middle, never to the OTHER extreme, so
+     *  a rejected minimal can never jump to xhigh (or vice versa). */
+    private val SAFE_MIDDLE = listOf(
         ReasoningEffort.LOW,
         ReasoningEffort.MEDIUM,
-        ReasoningEffort.HIGH,
-        ReasoningEffort.XHIGH
+        ReasoningEffort.HIGH
     )
 
     /**
-     * The nearest supported explicit level to retry with after [rejected] was
-     * refused, or null when none remains in the safe direction (caller uses
-     * [ReasoningEffort.AUTO]). [supported] is the model's currently offered
-     * explicit levels (AUTO/OFF are ignored here).
+     * The nearest sensible supported level to retry with after [rejected] was
+     * refused, or null when no safe middle level is supported (caller uses
+     * [ReasoningEffort.AUTO], the unambiguous safe default). [supported] is the
+     * model's currently offered explicit levels (AUTO/OFF are ignored here).
+     *
+     * Only the two optimistic extremes are ever rejected. A rejected **minimal**
+     * steps UP to the nearest supported middle level (low → medium → high); a
+     * rejected **extra high** steps DOWN (high → medium → low). The result is
+     * never the opposite extreme, so the fallback can't make an absurd jump.
      */
     fun substitute(rejected: ReasoningEffort, supported: Collection<ReasoningEffort>): ReasoningEffort? {
-        val index = ASCENDING.indexOf(rejected)
-        if (index < 0) return null
+        if (rejected != ReasoningEffort.MINIMAL && rejected != ReasoningEffort.XHIGH) return null
         val supportedSet = supported.toSet()
-        // minimal (the low extreme) falls UP toward the middle; every other
-        // rejected level — in practice only xhigh — falls DOWN.
-        return if (rejected == ReasoningEffort.MINIMAL) {
-            ASCENDING.drop(index + 1).firstOrNull { it in supportedSet }
-        } else {
-            ASCENDING.take(index).asReversed().firstOrNull { it in supportedSet }
-        }
+        val order = if (rejected == ReasoningEffort.MINIMAL) SAFE_MIDDLE else SAFE_MIDDLE.asReversed()
+        return order.firstOrNull { it in supportedSet }
     }
 }

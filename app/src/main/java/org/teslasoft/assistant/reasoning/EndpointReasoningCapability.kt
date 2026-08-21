@@ -65,14 +65,17 @@ object EndpointReasoningCapability {
     }
 
     /**
-     * [resolve] with the dynamic minimal/xhigh learning layer applied (owner
-     * ruling, Aug 2026). On a gateway-metadata path that exposes the reasoning
-     * object but not its per-level detail, the two extremes — minimal and extra
-     * high — are offered optimistically, minus any this exact model has already
-     * proven it refuses ([rejectedLevelsByModel]). Curated adapter ladders and
-     * non-configurable paths are returned exactly as [resolve] established them,
-     * so this only ever widens a metadata gateway's ladder and then subtracts
-     * what was learned.
+     * [resolve] with the dynamic minimal/xhigh learning layer applied.
+     *
+     * A gateway metadata path advertises the unified reasoning object but not
+     * which effort values a given model accepts, so — as an implementation of
+     * the approved optimistic-offer-then-learn behavior — the two extremes,
+     * minimal and extra high, are offered on such a path, minus any this exact
+     * model has already proven it refuses ([rejectedLevelsByModel]). Curated
+     * adapter ladders and non-configurable paths are returned exactly as
+     * [resolve] established them (this restriction is an implementation choice,
+     * not a product ruling): metadata stays authoritative and this only ever
+     * widens a metadata gateway's ladder and then subtracts what was learned.
      */
     fun resolveWithLearnedRejections(
         reasoningCapabilityByModel: String?,

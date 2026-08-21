@@ -52,10 +52,17 @@ class ReasoningEffortSubstitutionTest {
     }
 
     @Test
-    fun nullWhenNothingRemainsInDirection() {
-        // Minimal with no higher supported level, and xhigh with no lower one,
-        // both yield null so the caller falls back to AUTO.
+    fun nullWhenNoSafeMiddleLevelIsSupported() {
+        // No low/medium/high available → fall back to AUTO, never an extreme.
         assertNull(ReasoningEffortSubstitution.substitute(ReasoningEffort.MINIMAL, emptyList()))
         assertNull(ReasoningEffortSubstitution.substitute(ReasoningEffort.XHIGH, emptyList()))
+    }
+
+    @Test
+    fun neverSubstitutesTheOppositeExtreme() {
+        // A rejected minimal must never jump to xhigh just because it is the only
+        // other entry, and vice versa — those resolve to AUTO (null) instead.
+        assertNull(ReasoningEffortSubstitution.substitute(ReasoningEffort.MINIMAL, listOf(ReasoningEffort.XHIGH)))
+        assertNull(ReasoningEffortSubstitution.substitute(ReasoningEffort.XHIGH, listOf(ReasoningEffort.MINIMAL)))
     }
 }

@@ -126,12 +126,11 @@ object ReasoningCapabilityStore {
     }
 
     /**
-     * Drop every model-id entry whose id is not in [liveModelIds] (silent
-     * model-cleanup of learned reasoning capability for models that no longer
-     * exist, owner ruling Aug 2026). Fresh catalog metadata remains
-     * authoritative — a still-present model keeps its record and is refreshed by
-     * normal catalog learning. Returns the input unchanged (or [EMPTY]) when
-     * nothing is removed.
+     * Drop every model-id entry whose id is not in [liveModelIds]. Supports the
+     * approved silent model-cleanup of learned reasoning capability for models
+     * that no longer exist. Fresh catalog metadata remains authoritative — a
+     * still-present model keeps its record and is refreshed by normal catalog
+     * learning. Returns the input unchanged (or [EMPTY]) when nothing is removed.
      */
     fun retainOnly(json: String?, liveModelIds: Set<String>): String {
         val root = parse(json) ?: return EMPTY

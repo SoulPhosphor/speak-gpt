@@ -5636,10 +5636,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
 
     /**
-     * The per-message reasoning indicator token for [model] (owner design, Aug
-     * 2026), or null when the model is not known to reason. Uses the same
-     * capability and resolved effort the request itself uses, so the persisted
-     * action-bar glyph matches what this turn was actually generated with.
+     * The per-message reasoning indicator token for [model], or null when the
+     * model is not known to reason. This is the effort this turn REQUESTED
+     * (resolved, then substituted on a learn-and-retry) — not a provider-reported
+     * effective level, which these paths do not return. Auto therefore records
+     * as "automatic/level unknown" rather than claiming a specific level.
      */
     private fun reasoningIndicatorTokenForModel(model: String): String? {
         val capability = reasoningCapabilityForModel(model)
