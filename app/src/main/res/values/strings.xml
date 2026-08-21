@@ -164,7 +164,7 @@
          chat has no companion name (a regular chat always has one). Never
          "SpeakGPT". -->
     <string name="chat_role_assistant">Assistant</string>
-    <string name="chat_options">Chat options</string>
+    <string name="chat_options">Chat Options</string>
     <string name="chat_menu_export">Export Chat</string>
     <string name="chat_export_format">Format</string>
     <string name="chat_export_include_date">Include Date</string>

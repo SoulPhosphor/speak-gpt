@@ -9,7 +9,6 @@ package org.teslasoft.assistant.ui.util
 
 import android.content.Context
 import android.view.LayoutInflater
-import android.widget.LinearLayout
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.R
@@ -18,9 +17,9 @@ object ChatDeleteDialog {
 
     fun show(context: Context, onDelete: () -> Unit) {
         val actions = LayoutInflater.from(context)
-            .inflate(R.layout.dialog_two_actions_end, null) as LinearLayout
-        val cancel = actions.findViewById<MaterialButton>(R.id.btn_dialog_end_cancel)
-        val okay = actions.findViewById<MaterialButton>(R.id.btn_dialog_end_save)
+            .inflate(R.layout.dialog_two_actions, null)
+        val okay = actions.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)
+        val cancel = actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)
         cancel.setText(R.string.btn_cancel)
         okay.setText(R.string.okay)
 

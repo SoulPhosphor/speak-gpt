@@ -4265,7 +4265,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             .toByteArray(Charsets.UTF_8)
                     ChatExportFormat.PDF ->
                         ChatExportPdfWriter.toBytes(
-                            ChatExportFormatter.formatText(tokenized, options)
+                            this@ChatActivity,
+                            tokenized,
+                            options
                         )
                 }
             }

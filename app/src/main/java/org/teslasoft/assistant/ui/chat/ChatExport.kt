@@ -62,6 +62,30 @@ object ChatExportFormatter {
             formatMessageText(message, options, locale, timeZone)
         }
 
+    fun formatHeader(
+        message: ChatExportMessage,
+        options: ChatExportOptions,
+        locale: Locale = Locale.getDefault(),
+        timeZone: TimeZone = TimeZone.getDefault()
+    ): String {
+        val parts = metadataParts(message, options, locale, timeZone)
+        val dateAndTime = listOfNotNull(parts["date"], parts["time"])
+            .joinToString(" ")
+            .takeIf { it.isNotEmpty() }
+        val metadata = listOfNotNull(
+            dateAndTime,
+            parts["model"],
+            parts["tokens"]
+        ).joinToString(MIDDLE_DOT)
+        return buildString {
+            append(message.name)
+            if (metadata.isNotEmpty()) {
+                append('\n')
+                append(metadata)
+            }
+        }
+    }
+
     /**
      * The JSON export remains an array of message records, matching the
      * dormant chat importer’s historical top-level shape while adding only
@@ -93,21 +117,8 @@ object ChatExportFormatter {
         locale: Locale,
         timeZone: TimeZone
     ): String {
-        val parts = metadataParts(message, options, locale, timeZone)
-        val dateAndTime = listOfNotNull(parts["date"], parts["time"])
-            .joinToString(" ")
-            .takeIf { it.isNotEmpty() }
-        val metadata = listOfNotNull(
-            dateAndTime,
-            parts["model"],
-            parts["tokens"]
-        ).joinToString(MIDDLE_DOT)
         return buildString {
-            append(message.name)
-            if (metadata.isNotEmpty()) {
-                append('\n')
-                append(metadata)
-            }
+            append(formatHeader(message, options, locale, timeZone))
             append('\n')
             append(message.content)
         }

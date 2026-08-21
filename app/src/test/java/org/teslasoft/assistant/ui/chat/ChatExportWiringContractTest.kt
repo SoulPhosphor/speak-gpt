@@ -71,4 +71,32 @@ class ChatExportWiringContractTest {
         assertTrue(strings.contains("<string name=\"chat_export_action\">Export</string>"))
         assertTrue(strings.contains("<string name=\"chat_delete_title\">Delete Chat</string>"))
     }
+
+    @Test
+    fun usesTheStandardDialogFamilyAndRendersMarkdownInPdf() {
+        val exportDialog = source(
+            "src/main/java/org/teslasoft/assistant/ui/util/ChatExportDialog.kt"
+        )
+        val deleteDialog = source(
+            "src/main/java/org/teslasoft/assistant/ui/util/ChatDeleteDialog.kt"
+        )
+        val pdfWriter = source(
+            "src/main/java/org/teslasoft/assistant/ui/chat/ChatExportPdfWriter.kt"
+        )
+        val markdownRenderer = source(
+            "src/main/java/org/teslasoft/assistant/ui/chat/ChatMarkdownRenderer.kt"
+        )
+        val strings = source("src/main/res/values/strings.xml")
+
+        assertTrue(exportDialog.contains("R.layout.dialog_two_actions"))
+        assertFalse(exportDialog.contains("dialog_two_actions_end"))
+        assertTrue(deleteDialog.contains("R.layout.dialog_two_actions"))
+        assertFalse(deleteDialog.contains("dialog_two_actions_end"))
+        assertTrue(pdfWriter.contains("ChatMarkdownRenderer.prepare"))
+        assertTrue(pdfWriter.contains("markwon.toMarkdown"))
+        assertTrue(pdfWriter.contains("StaticLayout"))
+        assertTrue(markdownRenderer.contains("TablePlugin.create(context)"))
+        assertTrue(markdownRenderer.contains("JLatexMathPlugin.create"))
+        assertTrue(strings.contains("<string name=\"chat_options\">Chat Options</string>"))
+    }
 }
