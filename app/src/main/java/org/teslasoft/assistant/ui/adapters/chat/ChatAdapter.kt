@@ -219,8 +219,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         //   KEY_MESSAGE_TIME   — epoch-millis timestamp of when the message was
         //                        created (both roles).
         const val KEY_MESSAGE_MODEL = "responseModel"
+        const val KEY_MESSAGE_PROVIDER = "responseProvider"
         const val KEY_MESSAGE_TOKENS = "responseTokens"
         const val KEY_MESSAGE_TIME = "messageTime"
+
+        // Durable accounting for completed API requests. responseTokens above
+        // remains a legacy/display total-token field; it must never be read as
+        // completion/output tokens. The JSON records preserve prompt,
+        // completion and total independently, plus model/provider attribution,
+        // source and the price/cost snapshot from completion time.
+        const val KEY_TOKEN_USAGE_RECORDS =
+            org.teslasoft.assistant.usage.TokenUsageAccounting.KEY_USAGE_RECORDS
 
         // Provider-supplied reasoning for this assistant reply (chat-redesign-
         // plan.md §7). Stored as strings like the attribution keys above so they
@@ -265,7 +274,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val VARIANT_FIELDS = listOf(
             "message",
             KEY_MESSAGE_MODEL,
+            KEY_MESSAGE_PROVIDER,
             KEY_MESSAGE_TOKENS,
+            KEY_TOKEN_USAGE_RECORDS,
             KEY_MESSAGE_TIME,
             KEY_MESSAGE_REASONING,
             KEY_MESSAGE_REASONING_SUMMARY,

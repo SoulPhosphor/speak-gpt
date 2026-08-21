@@ -71,7 +71,7 @@ class ReportedProviderParserTest {
     @Test fun consumesObservedStreamToEndAndEmitsOneTerminalEnvelope() = runBlocking {
         val channel = ByteChannel(autoFlush = true)
         launch {
-            channel.writeStringUtf8("data: {\"id\":\"gen-1\",\"provider\":\"Open Inference\",\"choices\":[]}\n")
+            channel.writeStringUtf8("data: {\"id\":\"gen-1\",\"model\":\"actual/model\",\"provider\":\"Open Inference\",\"choices\":[]}\n")
             repeat(200) {
                 channel.writeStringUtf8("data: {\"id\":\"gen-1\",\"choices\":[{\"delta\":{\"content\":\"${"x".repeat(400)}\"}}]}\n")
             }
@@ -93,10 +93,17 @@ class ReportedProviderParserTest {
         assertEquals(10, raw.promptTokens)
         assertEquals(20, raw.completionTokens)
         assertEquals(30, raw.totalTokens)
+        assertEquals("actual/model", raw.model)
         assertEquals("gen-1", raw.generationId)
         assertTrue(raw.flowEndedNormally)
         assertTrue(channel.isClosedForRead)
         assertEquals(0, channel.availableForRead)
+    }
+
+    @Test fun capturesResponseReportedModelForDurableAttribution() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine("data: {\"id\":\"gen-model\",\"model\":\"actual/model\",\"choices\":[]}")
+        assertEquals("actual/model", inspector.finishNormally().model)
     }
 
     @Test fun reportsOnlyFirstProviderPlusTerminalEnvelope() = runBlocking {

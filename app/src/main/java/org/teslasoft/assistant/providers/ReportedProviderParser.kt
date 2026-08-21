@@ -51,6 +51,10 @@ object ReportedProviderParser {
          *  Declared before [onProvider] so existing trailing-lambda callers
          *  still bind their lambda to [onProvider]. */
         lineObserver: ((String) -> Unit)? = null,
+        /** Direct terminal metadata consumer used by durable usage accounting.
+         * It is separate from the compatibility String envelope consumed by
+         * Response Lifecycle diagnostics. */
+        onObservation: ((RawStreamObservation) -> Unit)? = null,
         onProvider: (String) -> Unit
     ) {
         val inspector = RawSseInspector()
@@ -69,12 +73,16 @@ object ReportedProviderParser {
                     providerNoted = true
                 }
             }
-            onProvider(RawStreamObservationCodec.encode(inspector.finishNormally()))
+            val observation = inspector.finishNormally()
+            onObservation?.invoke(observation)
+            onProvider(RawStreamObservationCodec.encode(observation))
         } catch (t: Throwable) {
             // The observer is diagnostics, not generation control. Record its
             // exception instead of converting an observer-side read failure into
             // a new app-visible generation failure. Preserve coroutine cancel.
-            onProvider(RawStreamObservationCodec.encode(inspector.finishByException(t)))
+            val observation = inspector.finishByException(t)
+            onObservation?.invoke(observation)
+            onProvider(RawStreamObservationCodec.encode(observation))
             if (t is CancellationException) throw t
         }
     }
@@ -158,6 +166,7 @@ internal class RawSseInspector {
     private var promptTokens: Int? = null
     private var completionTokens: Int? = null
     private var totalTokens: Int? = null
+    private var model: String? = null
     private var generationId: String? = null
     private var malformedDataEvents = 0
 
@@ -185,6 +194,9 @@ internal class RawSseInspector {
 
         if (generationId == null) {
             generationId = root.stringOrNull("id")
+        }
+        if (model == null) {
+            model = root.stringOrNull("model")
         }
 
         root.get("usage")?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject?.let { usage ->
@@ -255,6 +267,7 @@ internal class RawSseInspector {
             promptTokens = promptTokens,
             completionTokens = completionTokens,
             totalTokens = totalTokens,
+            model = model,
             generationId = generationId,
             malformedDataEvents = malformedDataEvents,
             flowEndedNormally = flowEndedNormally,

@@ -1010,6 +1010,10 @@
     <string name="cost_template" translatable="false">Cost: $%.5f in / $%.5f out\nTotal: $%.5f\nPrice: $%.2f (in) $%.2f (out) per 1M tokens</string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Cost: Loading...</string>
     <string formatted="false"  name="cost_counter_usage">Usage (tokens): %s in / %s out</string>
+    <string name="cost_multi_total" translatable="false">Total: $%.5f estimated</string>
+    <string name="cost_template_variable_price" translatable="false">Cost: $%.5f in / $%.5f out\nTotal: $%.5f\nPrice: Varies (Historical Rates)</string>
+    <string name="token_pricing_details_title">Token Pricing Details</string>
+    <string name="token_pricing_group_title" translatable="false">%1$s · %2$s</string>
     <string name="prompt_no_model_provided" translatable="false">No model has been provided.</string>
 
     <string name="cat_all_new">All categories</string>

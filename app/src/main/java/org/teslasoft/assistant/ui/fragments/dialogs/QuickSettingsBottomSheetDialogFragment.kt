@@ -72,10 +72,24 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.activities.PersonasListActivity
 import org.teslasoft.assistant.ui.activities.SystemPromptsListActivity
 import org.teslasoft.assistant.ui.widgets.AppDropdown
-import org.teslasoft.core.api.network.RequestNetwork
+import org.teslasoft.assistant.ui.activities.TokenPricingDetailsActivity
+import org.teslasoft.assistant.usage.ConversationUsageSummary
+import org.teslasoft.assistant.usage.QuickSettingsUsagePresentation
+import org.teslasoft.assistant.usage.TokenUsageAccounting
+import org.teslasoft.assistant.usage.UsageCardMode
 
 class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     companion object {
+        fun newInstance(chatId: String, usageSummaryJson: String): QuickSettingsBottomSheetDialogFragment {
+            return QuickSettingsBottomSheetDialogFragment().apply {
+                arguments = Bundle().apply {
+                    putString("chatId", chatId)
+                    putString("usageSummary", usageSummaryJson)
+                }
+            }
+        }
+
+        /** Playground compatibility: it has no persisted conversation usage. */
         fun newInstance(chatId: String, usageIn: Int, usageOut: Int, priceIn: Float, priceOut: Float): QuickSettingsBottomSheetDialogFragment {
             val quickSettingsBottomSheetDialogFragment = QuickSettingsBottomSheetDialogFragment()
 
@@ -194,10 +208,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var updateListener: OnUpdateListener? = null
     private var shouldForceUpdate: Boolean = false
 
-    private var priceIn = 0.0f
-    private var priceOut = 0.0f
     private var usageIn = 0
     private var usageOut = 0
+    private var usageSummary = ConversationUsageSummary(emptyList())
 
     private var isAttached = false
 
@@ -213,41 +226,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     // dormant or archived (3.6c).
     private var worldNames: Map<String, String> = emptyMap()
     private var roleplayCharacterNames: Map<String, String> = emptyMap()
-
-    private var requestNetwork: RequestNetwork? = null
-
-    private var requestListener: RequestNetwork.RequestListener = object : RequestNetwork.RequestListener {
-        override fun onResponse(tag: String, message: String) {
-            val gson = com.google.gson.Gson()
-
-            try {
-                val models: Map<String, Any> = gson.fromJson(message, Map::class.java) as Map<String, Any>
-
-                var modelsList: List<Map<String, Any>> = models["data"] as ArrayList<Map<String, Any>>
-
-                if (modelsList == null) modelsList = arrayListOf()
-
-                for (model in modelsList) {
-                    val m = model.toMap()
-                    if (preferences?.getModel() == m["id"]) {
-                        priceIn = (m["pricing"] as Map<String, Any>)["prompt"].toString().toFloat()
-                        priceOut = (m["pricing"] as Map<String, Any>)["completion"].toString().toFloat()
-                        val costIn = priceIn * usageIn
-                        val costOut = priceOut * usageOut
-                        val costTotal = costIn + costOut
-                        textCost?.text = String.format(getString(R.string.cost_template), costIn, costOut, costTotal, priceIn * 1000000, priceOut * 1000000)
-                        break
-                    }
-                }
-            } catch (_: Exception) {
-                performStaticCostParse(preferences?.getModel()!!)
-            }
-        }
-
-        override fun onErrorResponse(tag: String, message: String) {
-            textCost?.text = getString(R.string.msg_error_calculating_cost)
-        }
-    }
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -935,62 +913,57 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         dialog.show()
     }
 
-    @SuppressLint("SetTextI18n", "DefaultLocale")
-    private fun performStaticCostParse(model: String): HashMap<String, Float> {
-        var inPrice = 0.0
-        var outPrice = 0.0
-
-        when {
-
-            model.contains("gpt-4o-audio-preview") || model.contains("gpt-4o-audio-preview-2024-12-17") || model.contains("gpt-4o-audio-preview-2024-10-01") -> {
-                inPrice = 0.000025
-                outPrice = 0.0001
+    private fun renderUsageCard(summary: ConversationUsageSummary) {
+        val presentation = QuickSettingsUsagePresentation.from(summary)
+        textUsage?.text = getString(R.string.cost_counter_usage).format(
+            presentation.totalInputTokens.toString(),
+            presentation.totalOutputTokens.toString()
+        )
+        when (presentation.mode) {
+            UsageCardMode.EMPTY -> {
+                textCost?.text = getString(R.string.cost_template, 0.0, 0.0, 0.0, 0.0, 0.0)
+                btnCostInfo?.visibility = View.GONE
             }
-            model.contains("gpt-4o-realtime-preview") || model.contains("gpt-4o-realtime-preview-2024-12-17") || model.contains("gpt-4o-realtime-preview-2024-10-01") -> {
-                inPrice = 0.00005
-                outPrice = 0.0002
+            UsageCardMode.SINGLE_PRICING -> {
+                val group = presentation.singleGroup!!
+                if (group.hasUnknownCost) {
+                    textCost?.text = getString(R.string.msg_cost_not_enough_data)
+                } else if (group.hasVariablePricing) {
+                    textCost?.text = String.format(
+                        getString(R.string.cost_template_variable_price),
+                        group.inputCost, group.outputCost, group.totalCost
+                    )
+                } else if (group.inputPricePerToken == null || group.outputPricePerToken == null) {
+                    textCost?.text = getString(R.string.msg_cost_not_enough_data)
+                } else {
+                    textCost?.text = String.format(
+                        getString(R.string.cost_template),
+                        group.inputCost,
+                        group.outputCost,
+                        group.totalCost,
+                        group.inputPricePerToken * 1_000_000,
+                        group.outputPricePerToken * 1_000_000
+                    )
+                }
+                btnCostInfo?.visibility = View.GONE
             }
-            model.contains("gpt-4o-mini-audio-preview") || model.contains("gpt-4o-mini-audio-preview-2024-12-17") -> {
-                inPrice = 0.0000015
-                outPrice = 0.000006
-            }
-            model.contains("gpt-4o-mini-realtime-preview") || model.contains("gpt-4o-mini-realtime-preview-2024-12-17") -> {
-                inPrice = 0.000006
-                outPrice = 0.000024
-            }
-            model.contains("gpt-4o-mini") || model.contains("gpt-4o-mini-2024-07-18") -> {
-                inPrice = 0.0000015
-                outPrice = 0.000006
-            }
-            model.contains("gpt-4o") || model.contains("gpt-4o-2024-11-20") || model.contains("gpt-4o-2024-08-06") || model.contains("gpt-4o-2024-05-13") -> {
-                inPrice = 0.000025
-                outPrice = 0.0001
-            }
-            model.contains("o1-mini") || model.contains("o1-mini-2024-09-12") -> {
-                inPrice = 0.000011
-                outPrice = 0.000044
-            }
-            model.contains("o1") || model.contains("o1-2024-12-17") -> {
-                inPrice = 0.00015
-                outPrice = 0.0006
-            }
-            model.contains("o3-mini") || model.contains("o3-mini-2025-01-31") -> {
-                inPrice = 0.000011
-                outPrice = 0.000044
-            }
-        }
-
-        if (isAttached) {
-            if (inPrice == 0.0 && outPrice == 0.0) {
-                textCost?.text = getString(R.string.msg_cost_not_enough_data)
-            } else {
-                val costIn = inPrice * usageIn
-                val costOut = outPrice * usageOut
-                val costTotal = costIn + costOut
-                textCost?.text = String.format(getString(R.string.cost_template), costIn, costOut, costTotal, inPrice * 1000000, outPrice * 1000000)
+            UsageCardMode.MULTI_PRICING -> {
+                textCost?.text = getString(R.string.cost_multi_total, presentation.totalCost)
+                btnCostInfo?.apply {
+                    visibility = View.VISIBLE
+                    text = getString(R.string.token_pricing_details_title)
+                    setOnClickListener {
+                        startActivity(
+                            Intent(requireContext(), TokenPricingDetailsActivity::class.java)
+                                .putExtra(
+                                    TokenPricingDetailsActivity.EXTRA_USAGE_SUMMARY,
+                                    TokenUsageAccounting.encodeSummary(summary)
+                                )
+                        )
+                    }
+                }
             }
         }
-        return hashMapOf()
     }
 
     override fun onDismiss(dialog: DialogInterface) {
@@ -1158,24 +1131,26 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             getString(R.string.label_tap_to_set)
         }
 
-        // The cost-info page was hosted by the upstream Teslasoft service and
-        // is gone in this independent fork.
-        btnCostInfo?.visibility = View.GONE
-
-        usageIn = requireArguments().getInt("usageIn")
-        usageOut = requireArguments().getInt("usageOut")
-
-        textUsage?.text = getString(R.string.cost_counter_usage).format(usageIn.toString(), usageOut.toString())
-        textCost?.text = getString(R.string.cost_loading)
-
-        if (usageIn >= 0) {
-            requestNetwork = RequestNetwork(requireActivity())
-            requestNetwork?.setHeaders(hashMapOf("Authorization" to "Bearer " + apiEndpoint?.apiKey))
-            requestNetwork?.startRequestNetwork("GET", apiEndpoint?.host + "models", "A", requestListener)
+        val summaryJson = requireArguments().getString("usageSummary")
+        if (summaryJson != null) {
+            usageSummary = TokenUsageAccounting.decodeSummary(summaryJson)
+            renderUsageCard(usageSummary)
         } else {
+            usageIn = requireArguments().getInt("usageIn")
+            usageOut = requireArguments().getInt("usageOut")
+        }
+
+        if (summaryJson == null && usageIn < 0) {
             textUsage?.text = "Usage: <Usage is not available in playground>"
             textCost?.text = "Cost: <Cost is not available in playground>"
             usageCost?.visibility = View.GONE
+        } else if (summaryJson == null) {
+            // Compatibility for non-chat callers. ChatActivity always supplies
+            // the durable whole-conversation summary above.
+            textUsage?.text = getString(R.string.cost_counter_usage)
+                .format(usageIn.toString(), usageOut.toString())
+            textCost?.text = getString(R.string.msg_cost_not_enough_data)
+            btnCostInfo?.visibility = View.GONE
         }
 
         temperatureSeekbar?.value = preferences?.getTemperature()!! * 10
