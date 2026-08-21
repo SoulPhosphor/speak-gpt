@@ -40,9 +40,9 @@ object ChatExportDialog {
         }
 
         val actions = LayoutInflater.from(context)
-            .inflate(R.layout.dialog_two_actions, null)
-        val export = actions.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)
+            .inflate(R.layout.dialog_two_actions_cancel_first, null)
         val cancel = actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)
+        val export = actions.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)
         cancel.setText(R.string.chat_export_cancel)
         export.setText(R.string.chat_export_action)
 

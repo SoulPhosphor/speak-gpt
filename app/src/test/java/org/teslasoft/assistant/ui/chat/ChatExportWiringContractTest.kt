@@ -86,12 +86,60 @@ class ChatExportWiringContractTest {
         val markdownRenderer = source(
             "src/main/java/org/teslasoft/assistant/ui/chat/ChatMarkdownRenderer.kt"
         )
+        val cancelFirstLayout = source(
+            "src/main/res/layout/dialog_two_actions_cancel_first.xml"
+        )
+        val styleGuide = source("ui-style-guide.md")
         val strings = source("src/main/res/values/strings.xml")
 
-        assertTrue(exportDialog.contains("R.layout.dialog_two_actions"))
+        assertTrue(exportDialog.contains("R.layout.dialog_two_actions_cancel_first"))
         assertFalse(exportDialog.contains("dialog_two_actions_end"))
-        assertTrue(deleteDialog.contains("R.layout.dialog_two_actions"))
+        assertTrue(deleteDialog.contains("R.layout.dialog_two_actions_cancel_first"))
         assertFalse(deleteDialog.contains("dialog_two_actions_end"))
+        assertTrue(
+            exportDialog.contains(
+                "val cancel = actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)"
+            )
+        )
+        assertTrue(
+            exportDialog.contains(
+                "val export = actions.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)"
+            )
+        )
+        assertTrue(
+            deleteDialog.contains(
+                "val cancel = actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action)"
+            )
+        )
+        assertTrue(
+            deleteDialog.contains(
+                "val okay = actions.findViewById<MaterialButton>(R.id.btn_dialog_primary_action)"
+            )
+        )
+        assertTrue(
+            exportDialog.indexOf("cancel.setText(R.string.chat_export_cancel)") <
+                exportDialog.indexOf("export.setText(R.string.chat_export_action)")
+        )
+        assertTrue(
+            deleteDialog.indexOf("cancel.setText(R.string.btn_cancel)") <
+                deleteDialog.indexOf("okay.setText(R.string.okay)")
+        )
+        val destructivePosition = cancelFirstLayout.indexOf(
+            "android:id=\"@+id/btn_dialog_destructive_action\""
+        )
+        val primaryPosition = cancelFirstLayout.indexOf(
+            "android:id=\"@+id/btn_dialog_primary_action\""
+        )
+        assertTrue(destructivePosition >= 0 && destructivePosition < primaryPosition)
+        assertTrue(cancelFirstLayout.contains("style=\"@style/AppButton.Destructive.DialogAction\""))
+        assertTrue(cancelFirstLayout.contains("style=\"@style/AppButton.Primary.DialogAction\""))
+        assertTrue(cancelFirstLayout.contains("app:layout_constraintHorizontal_chainStyle=\"packed\""))
+        assertTrue(styleGuide.contains("Two-button dialog actions should be centered as a pair by default."))
+        assertTrue(styleGuide.contains("Button order comes from the approved feature wording/spec"))
+        assertTrue(styleGuide.contains("Cancel/back-out actions use the Destructive"))
+        assertTrue(styleGuide.contains("affirmative actions use the Primary"))
+        assertTrue(styleGuide.contains("not the general default"))
+        assertTrue(styleGuide.contains("`contentDescription` values, tooltip text"))
         assertTrue(pdfWriter.contains("ChatMarkdownRenderer.prepare"))
         assertTrue(pdfWriter.contains("markwon.toMarkdown"))
         assertTrue(pdfWriter.contains("StaticLayout"))
