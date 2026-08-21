@@ -337,6 +337,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         private val generationRequestAttribute =
             AttributeKey<Boolean>("GenerationRequest")
 
+        /** Records whether the generation request was serialized with
+         * `stream=true`; the response observer cannot inspect the outgoing
+         * body through Ktor's response-side request object. */
+        private val streamingRequestAttribute =
+            AttributeKey<Boolean>("StreamingRequest")
+
         /** Pins the current turn's reasoning accumulator to a request whose
          *  resolved settings want provider reasoning displayed (§7.2). Its
          *  presence is what tells the response observer to split this stream for
@@ -5569,9 +5575,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val content = request.body as? TextContent ?: return
         if (content.contentType?.match(ContentType.Application.Json) != true) return
 
+        var streamingGeneration = false
         val isGenerationRequest = try {
             val root = com.google.gson.JsonParser.parseString(content.text).asJsonObject
-            val streamed = root.get("stream")
+            streamingGeneration = root.get("stream")
                 ?.takeUnless { it.isJsonNull }
                 ?.asBoolean == true
             val hasGenerationInput = root.has("messages") || root.has("prompt")
@@ -5579,13 +5586,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // when the client uses its completed-response API and omits the
             // stream flag. Keep streamed legacy completion diagnostics intact.
             root.has("model") && hasGenerationInput &&
-                (streamed || (root.has("messages") && generationRequestActive))
+                (streamingGeneration || (root.has("messages") && generationRequestActive))
         } catch (_: Exception) {
             false
         }
         if (isGenerationRequest) {
             recorder?.let { request.attributes.put(responseLifecycleRecorderAttribute, it) }
             request.attributes.put(generationRequestAttribute, true)
+            request.attributes.put(streamingRequestAttribute, streamingGeneration)
         }
     }
 
@@ -5904,14 +5912,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 } else {
                                     null
                                 }
-                                val streamed = try {
-                                    val body = call.request.body as? TextContent
-                                    body?.let {
-                                        com.google.gson.JsonParser.parseString(it.text).asJsonObject
-                                            .get("stream")?.takeUnless { value -> value.isJsonNull }
-                                            ?.asBoolean == true
-                                    } == true
-                                } catch (_: Exception) {
+                                val streamed = if (call.request.attributes.contains(streamingRequestAttribute)) {
+                                    call.request.attributes[streamingRequestAttribute]
+                                } else {
                                     false
                                 }
                                 val wantsReasoning = call.request.attributes.contains(reasoningObservationAttribute)
