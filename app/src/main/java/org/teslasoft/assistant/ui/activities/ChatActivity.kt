@@ -4768,12 +4768,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     stream.write(bytes)
                 }
             }
-            Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
         } catch (e: FileNotFoundException) {
-            Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Save Failed", Toast.LENGTH_SHORT).show()
             e.printStackTrace()
         } catch (e: IOException) {
-            Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Save Failed", Toast.LENGTH_SHORT).show()
             e.printStackTrace()
         }
     }

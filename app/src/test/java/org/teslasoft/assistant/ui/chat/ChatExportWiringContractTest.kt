@@ -99,4 +99,18 @@ class ChatExportWiringContractTest {
         assertTrue(markdownRenderer.contains("JLatexMathPlugin.create"))
         assertTrue(strings.contains("<string name=\"chat_options\">Chat Options</string>"))
     }
+
+    @Test
+    fun exportOnlyReportsSaveFailures() {
+        val activity = source(
+            "src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt"
+        )
+        val exportWriter = activity
+            .substringAfter("private fun writeChatExportToFile(uri: Uri) {")
+            .substringBefore("\n    @Suppress(\"DEPRECATION\")")
+
+        assertFalse(exportWriter.contains("Toast.makeText(this, \"Saved\""))
+        assertFalse(exportWriter.contains("\"Save failed\""))
+        assertTrue(exportWriter.contains("Toast.makeText(this, \"Save Failed\""))
+    }
 }
