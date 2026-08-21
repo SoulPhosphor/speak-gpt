@@ -550,6 +550,16 @@ class Preferences private constructor(private var preferences: SharedPreferences
         putGlobalBoolean("chat_show_token_usage", state)
     }
 
+    /** Whether the per-message reasoning-effort glyph is shown on AI replies
+     *  (Chat Settings → Thinking Indicator). Default on. Hiding it never
+     *  touches the per-message stored level, so turning it back on restores
+     *  every glyph exactly. */
+    fun getShowThinkingIndicator(): Boolean = getGlobalBoolean("chat_show_thinking_indicator", true)
+
+    fun setShowThinkingIndicator(state: Boolean) {
+        putGlobalBoolean("chat_show_thinking_indicator", state)
+    }
+
     /** Renamed presentation of Desktop Mode; the stored key and behavior stay intact. */
     fun getHardwareKeyboardShortcuts(): Boolean = getDesktopMode()
 

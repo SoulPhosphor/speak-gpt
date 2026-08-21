@@ -3192,6 +3192,14 @@
     <!-- Chat redesign: Appearance destination and companion name-style override. -->
     <string name="appearance_title">Appearance</string>
     <string name="appearance_subtitle">Customize the look of your chat.</string>
+    <!-- Chat Settings destination (owner ruling, Aug 2026): a container in
+         Settings, directly beneath Appearance, holding optional chat controls.
+         More settings will be added here later. -->
+    <string name="chat_settings_title">Chat Settings</string>
+    <string name="chat_settings_subtitle">Optional chat settings</string>
+    <!-- Toggle: show or hide the per-message reasoning-effort glyph. No
+         subtitle, by owner ruling. -->
+    <string name="chat_settings_thinking_indicator">Thinking Indicator</string>
     <string name="appearance_section_message_display">Message Display</string>
     <string name="appearance_profile_images">Profile Images</string>
     <string name="appearance_profile_images_hint">Show speaker profile images in chat.</string>

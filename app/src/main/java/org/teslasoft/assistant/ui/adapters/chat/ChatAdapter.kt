@@ -1306,7 +1306,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // A stopped/partial reply that did produce text still shows it.
             val generated = chatMessage["message"]?.toString()?.isNotBlank() == true ||
                 chatMessage[KEY_MESSAGE_REASONING]?.toString()?.isNotBlank() == true
-            val indicator = if (isGeneratedImage || chatMessage["isBot"] != true || !generated) {
+            // Chat Settings → Thinking Indicator hides the glyph everywhere when
+            // off; the stored per-message level is untouched, so turning it back
+            // on restores every glyph exactly.
+            val indicator = if (isGeneratedImage || chatMessage["isBot"] != true ||
+                !generated || !preferences.getShowThinkingIndicator()) {
                 null
             } else {
                 ReasoningIndicator.fromToken(chatMessage[KEY_MESSAGE_REASONING_LEVEL]?.toString())

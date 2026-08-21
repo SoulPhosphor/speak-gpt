@@ -311,6 +311,13 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.ChatSettingsActivity"
+            android:exported="false"
+            android:label="@string/chat_settings_title"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.VoiceAdvancedSettingsActivity"
             android:exported="false"
             android:label="@string/title_voice_advanced"
