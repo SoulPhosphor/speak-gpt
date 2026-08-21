@@ -60,4 +60,25 @@ class RejectedReasoningLevelStoreTest {
     fun malformedJsonReadsAsEmpty() {
         assertTrue(RejectedReasoningLevelStore.get("not json", "m").isEmpty())
     }
+
+    @Test
+    fun retainOnlyDropsModelsNotInTheLiveCatalog() {
+        var json = RejectedReasoningLevelStore.add(null, "vendor/keep", ReasoningEffort.XHIGH)
+        json = RejectedReasoningLevelStore.add(json, "vendor/gone", ReasoningEffort.MINIMAL)
+        val pruned = RejectedReasoningLevelStore.retainOnly(json, setOf("vendor/keep", "vendor/other"))
+        assertTrue(RejectedReasoningLevelStore.isRejected(pruned, "vendor/keep", ReasoningEffort.XHIGH))
+        assertTrue(RejectedReasoningLevelStore.get(pruned, "vendor/gone").isEmpty())
+    }
+
+    @Test
+    fun retainOnlyIsUnchangedWhenEveryModelStillExists() {
+        val json = RejectedReasoningLevelStore.add(null, "vendor/keep", ReasoningEffort.XHIGH)
+        assertEquals(json, RejectedReasoningLevelStore.retainOnly(json, setOf("vendor/keep")))
+    }
+
+    @Test
+    fun retainOnlyEmptiesWhenNothingSurvives() {
+        val json = RejectedReasoningLevelStore.add(null, "vendor/gone", ReasoningEffort.XHIGH)
+        assertEquals(RejectedReasoningLevelStore.EMPTY, RejectedReasoningLevelStore.retainOnly(json, setOf("vendor/other")))
+    }
 }

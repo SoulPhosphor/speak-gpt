@@ -77,6 +77,29 @@ object RejectedReasoningLevelStore {
         return root.toString()
     }
 
+    /**
+     * Drop every model-id entry whose id is not in [liveModelIds] (silent
+     * model-cleanup of learned data for models that no longer exist, owner
+     * ruling Aug 2026). The learned data is a self-healing cache, so a purged
+     * entry simply re-learns on next use. Returns the input unchanged (or
+     * [EMPTY]) when nothing is removed, so callers can cheaply detect a change.
+     */
+    fun retainOnly(json: String?, liveModelIds: Set<String>): String {
+        val root = parse(json) ?: return EMPTY
+        val keys = ArrayList<String>()
+        val it = root.keys()
+        while (it.hasNext()) keys.add(it.next())
+        var changed = false
+        for (key in keys) {
+            if (key !in liveModelIds) {
+                root.remove(key)
+                changed = true
+            }
+        }
+        if (!changed) return json?.ifBlank { EMPTY } ?: EMPTY
+        return if (root.length() == 0) EMPTY else root.toString()
+    }
+
     private fun parse(json: String?): JSONObject? {
         if (json.isNullOrBlank()) return null
         return try {

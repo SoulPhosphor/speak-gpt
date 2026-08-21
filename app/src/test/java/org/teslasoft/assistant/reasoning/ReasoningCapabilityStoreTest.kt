@@ -89,4 +89,19 @@ class ReasoningCapabilityStoreTest {
         assertTrue(ReasoningCapabilityStore.get(json, "a").isReasoningCapable)
         assertTrue(ReasoningCapabilityStore.get(json, "b").isReasoningCapable)
     }
+
+    @Test
+    fun retainOnlyDropsModelsNotInTheLiveCatalog() {
+        var json = ReasoningCapabilityStore.set(ReasoningCapabilityStore.EMPTY, "keep", full)
+        json = ReasoningCapabilityStore.set(json, "gone", full)
+        val pruned = ReasoningCapabilityStore.retainOnly(json, setOf("keep", "other"))
+        assertTrue(ReasoningCapabilityStore.get(pruned, "keep").isReasoningCapable)
+        assertFalse(ReasoningCapabilityStore.get(pruned, "gone").isReasoningCapable)
+    }
+
+    @Test
+    fun retainOnlyIsUnchangedWhenEveryModelStillExists() {
+        val json = ReasoningCapabilityStore.set(ReasoningCapabilityStore.EMPTY, "keep", full)
+        assertEquals(json, ReasoningCapabilityStore.retainOnly(json, setOf("keep")))
+    }
 }

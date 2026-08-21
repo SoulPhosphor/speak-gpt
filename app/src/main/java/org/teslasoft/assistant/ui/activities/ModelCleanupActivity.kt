@@ -137,6 +137,43 @@ class ModelCleanupActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * Silent model-cleanup of hidden reasoning-learning data (owner ruling, Aug
+     * 2026): for every endpoint whose catalog was CONCLUSIVELY read this scan,
+     * drop the learned reasoning-capability and rejected-level entries for model
+     * ids no longer in that catalog. Never runs on an inconclusive (Unchecked)
+     * endpoint. It is invisible — no report, no notice — and the data
+     * self-heals, so a rare OpenRouter-alias false-drop simply re-learns. Fully
+     * best-effort: a failure here never affects the visible cleanup scan.
+     */
+    private fun purgeStaleReasoningLearning(
+        endpoints: Map<String, org.teslasoft.assistant.preferences.dto.ApiEndpointObject>,
+        checks: Map<String, EndpointCatalogCheck>
+    ) {
+        try {
+            val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
+            checks.forEach { (endpointId, check) ->
+                if (check !is EndpointCatalogCheck.Checked) return@forEach
+                val endpoint = endpoints[endpointId] ?: return@forEach
+                val live = check.modelIds
+                val prunedRejected = org.teslasoft.assistant.reasoning.RejectedReasoningLevelStore
+                    .retainOnly(endpoint.reasoningRejectedLevelsByModel, live)
+                val prunedCapability = org.teslasoft.assistant.reasoning.ReasoningCapabilityStore
+                    .retainOnly(endpoint.reasoningCapabilityByModel, live)
+                var changed = false
+                if (prunedRejected != endpoint.reasoningRejectedLevelsByModel) {
+                    endpoint.reasoningRejectedLevelsByModel = prunedRejected
+                    changed = true
+                }
+                if (prunedCapability != endpoint.reasoningCapabilityByModel) {
+                    endpoint.reasoningCapabilityByModel = prunedCapability
+                    changed = true
+                }
+                if (changed) prefs.setApiEndpoint(this, endpoint)
+            }
+        } catch (_: Exception) { /* a silent cache clean must never break the scan */ }
+    }
+
     private fun runScan() {
         if (scanning) return
         scanning = true
@@ -177,6 +214,7 @@ class ModelCleanupActivity : FragmentActivity() {
                         generatedAtMillis = System.currentTimeMillis()
                     )
                     reportStore.save(report)
+                    purgeStaleReasoningLearning(endpoints, checks)
                     ScreenData(references, report, labels)
                 }
                 screenData = data
