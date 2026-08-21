@@ -54,7 +54,12 @@ enum class ReasoningEffort(val serialized: String) {
 
     LOW("low"),
     MEDIUM("medium"),
-    HIGH("high");
+    HIGH("high"),
+
+    /** Maximum reasoning, accepted only by some newer models (e.g. Grok, the
+     *  GPT-5.6 line). Not part of the universal ladder; a path is offered it
+     *  only once it is learned to be supported (dynamic minimal/xhigh learning). */
+    XHIGH("xhigh");
 
     /**
      * True for a concrete effort the app actually sends as a level

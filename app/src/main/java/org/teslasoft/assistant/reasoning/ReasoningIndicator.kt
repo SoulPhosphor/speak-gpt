@@ -70,6 +70,7 @@ enum class ReasoningIndicator(val token: String) {
                 ReasoningEffort.LOW -> LOW
                 ReasoningEffort.MEDIUM -> MEDIUM
                 ReasoningEffort.HIGH -> HIGH
+                ReasoningEffort.XHIGH -> XHIGH
                 // Auto sends no explicit level and the provider does not report
                 // the one it served, so the app does not claim a bar count.
                 ReasoningEffort.AUTO -> AUTOMATIC

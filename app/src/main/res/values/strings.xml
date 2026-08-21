@@ -3229,6 +3229,7 @@
     <string name="reasoning_effort_low">Low</string>
     <string name="reasoning_effort_medium">Medium</string>
     <string name="reasoning_effort_high">High</string>
+    <string name="reasoning_effort_xhigh">Extra High</string>
     <!-- Shown in the Thinking control (favorite Reasoning Settings and Quick
          Settings) for a model that reasons but exposes no adjustable level, so
          there is nothing to choose (owner ruling, Aug 2026). -->
