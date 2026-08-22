@@ -8,6 +8,7 @@
 package org.teslasoft.assistant.usage
 
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import java.util.Locale
@@ -216,11 +217,32 @@ object TokenUsageAccounting {
 
     fun encodeSummary(summary: ConversationUsageSummary): String = gson.toJson(summary)
 
-    fun decodeSummary(value: String?): ConversationUsageSummary = try {
-        gson.fromJson(value, ConversationUsageSummary::class.java)
-            ?: ConversationUsageSummary(emptyList())
-    } catch (_: Exception) {
-        ConversationUsageSummary(emptyList())
+    /**
+     * Decode the transport copy handed to Quick Settings / Pricing Details.
+     * Do not ask Gson to discover List<UsageGroup> from the backing field's
+     * generic signature: R8 can erase that signature in a minified APK, which
+     * makes Gson populate the list with LinkedTreeMap and crashes the first
+     * computed summary getter. Decode each array element against the concrete
+     * UsageGroup class instead so the runtime type is stable in every build.
+     */
+    fun decodeSummary(value: String?): ConversationUsageSummary {
+        if (value.isNullOrBlank()) return ConversationUsageSummary(emptyList())
+        return try {
+            val root = JsonParser.parseString(value)
+            val groupsElement = root.takeIf { it.isJsonObject }
+                ?.asJsonObject
+                ?.get("groups")
+            if (groupsElement == null || !groupsElement.isJsonArray) {
+                ConversationUsageSummary(emptyList())
+            } else {
+                val groups = groupsElement.asJsonArray.mapNotNull { element ->
+                    gson.fromJson<UsageGroup>(element, UsageGroup::class.java)
+                }
+                ConversationUsageSummary(groups)
+            }
+        } catch (_: Exception) {
+            ConversationUsageSummary(emptyList())
+        }
     }
 
     /** Provider counts win as a unit. CL100K is invoked only when the provider
