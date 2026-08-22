@@ -5673,9 +5673,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
 
                 override fun onForceUpdate() {
-                    // Refresh this instance instead of briefly stacking a second
-                    // ChatActivity on top of it.
-                    recreate()
+                    startActivity(Intent(this@ChatActivity, ChatActivity::class.java).putExtra("chatId", chatId).putExtra("name", chatName).setAction(Intent.ACTION_VIEW))
+                    finishActivity()
                 }
             })
             sheet.show(supportFragmentManager, "QuickSettingsBottomSheetDialogFragment")
