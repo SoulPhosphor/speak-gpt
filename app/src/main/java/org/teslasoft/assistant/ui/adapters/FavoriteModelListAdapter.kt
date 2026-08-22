@@ -206,6 +206,7 @@ class FavoriteModelListAdapter(
             viewHolder.reasoningSettings.setOnClickListener(null)
             return
         }
+        viewHolder.reasoningSettings.setImageResource(R.drawable.ic_lightbulb)
         viewHolder.reasoningSettings.imageTintList = ColorStateList.valueOf(tintColor)
         viewHolder.reasoningSettings.visibility = View.VISIBLE
         if (capability.hasConfigurableSetting) {
