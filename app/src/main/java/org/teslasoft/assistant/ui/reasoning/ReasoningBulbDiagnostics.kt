@@ -28,8 +28,8 @@ import org.teslasoft.assistant.reasoning.ReasoningCapability
  * that should show a bulb does not, the question is exactly what capability
  * reached the row — was it Unknown (a resolution/data-flow miss) or Known (a
  * display problem)? This logs that answer, once per model id per adapter
- * instance, into the Voice Debug Log (the same channel other reasoning
- * capability diagnostics already use).
+ * instance, into the Response Lifecycle log — the same page the reasoning
+ * request/response diagnostics use — never the Voice Debug Log.
  *
  * It records the endpoint id and model id the row resolved against, the
  * capability facts, and the capability source, so a mismatch between what a row
@@ -62,6 +62,6 @@ object ReasoningBulbDiagnostics {
             append("authoritative=${capability.effortsAuthoritative}, ")
             append("source=${capability.source}")
         }
-        Logger.logAsync(context, "event", "ReasoningBulb", "info", message)
+        Logger.logAsync(context, "response_lifecycle", "ReasoningBulb", "info", message)
     }
 }

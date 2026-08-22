@@ -43,8 +43,8 @@ class ModelListAdapter(
 
     private var listener: OnItemClickListener? = null
     // Bind-time reasoning diagnostics are logged once per model id per adapter
-    // instance, so the Voice Debug Log shows the capability that actually reached
-    // the row without one line per getView() recycle.
+    // instance, so the Response Lifecycle log shows the capability that actually
+    // reached the row without one line per getView() recycle.
     private val loggedReasoningRows = HashSet<String>()
     private val resolvedReasoningCapabilityIndex by lazy {
         reasoningCapabilityIndex ?: if (apiEndpointId.isBlank()) {
