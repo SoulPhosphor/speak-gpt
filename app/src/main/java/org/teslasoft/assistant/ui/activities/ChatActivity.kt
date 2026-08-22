@@ -173,6 +173,7 @@ import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
+import org.teslasoft.assistant.reasoning.LegacyReasoningRepair
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.ResponseLifecycle
 import org.teslasoft.assistant.preferences.ResponseLifecycleRecorder
@@ -2208,8 +2209,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             this,
             preparedPreferences.getApiEndpointId()
         )
-        val historyResult = ChatPreferences.getChatPreferences()
-            .getChatByIdResult(this, preparedChatId)
+        val chatPreferences = ChatPreferences.getChatPreferences()
+        val historyResult = chatPreferences.getChatByIdResult(this, preparedChatId)
+        if (ChatStorageHealth.isAuthoritative(historyResult.state) &&
+            LegacyReasoningRepair.repairHistory(historyResult.messages)
+        ) {
+            // This method already runs on the startup storage worker. Update
+            // the encrypted preference before binding, but let SharedPreferences
+            // flush it to disk asynchronously so the one-time cleanup does not
+            // add a synchronous disk wait to chat opening.
+            chatPreferences.saveChatHistory(
+                this,
+                preparedChatId,
+                historyResult.messages,
+                synchronous = false
+            )
+        }
 
         return ChatStartupResult(
             storageLocked = false,
@@ -6098,6 +6113,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (index < 0) return@runOnUiThread
             val msg = messages[index]
             msg[ChatAdapter.KEY_MESSAGE_REASONING] = snapshot.text
+            msg[ChatAdapter.KEY_MESSAGE_REASONING_FORMAT] =
+                LegacyReasoningRepair.FORMAT_VERSION
             msg[ChatAdapter.KEY_MESSAGE_REASONING_SUMMARY] = snapshot.isSummary.toString()
             if (!msg.containsKey(ChatAdapter.KEY_MESSAGE_REASONING_LEVEL)) {
                 org.teslasoft.assistant.reasoning.ReasoningIndicator
@@ -7797,20 +7814,38 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         parseMessageScope = CoroutineScope(Dispatchers.Main)
         parseMessageScope?.launch {
             try {
-                val frozen = buildFrozenRegularRequest(
-                    requestMessages = requestMessages,
-                    requestIncludes = requestIncludes,
-                    loreQuery = storedMessage,
-                    selectedModel = selectedModel,
-                    maximumResponseTokens = maximumResponseTokens,
-                    summaryInjection = summaryInjection
-                )
-                val measurement = RequestCapacity.measure(frozen.payload)
-                if (!RequestCapacity.canAssemble(
+                val preparedRequest = withContext(Dispatchers.Default) {
+                    val frozen = buildFrozenRegularRequest(
+                        requestMessages = requestMessages,
+                        requestIncludes = requestIncludes,
+                        loreQuery = storedMessage,
+                        selectedModel = selectedModel,
+                        maximumResponseTokens = maximumResponseTokens,
+                        summaryInjection = summaryInjection
+                    )
+                    val measurement = RequestCapacity.measure(frozen.payload)
+                    var canAssemble = RequestCapacity.canAssemble(
                         measurement,
                         RequestHeapState.current()
                     )
-                ) {
+                    if (!canAssemble) {
+                        // A stale heap sample must not randomly reject the same
+                        // request. Retry only the would-be failure after reclaiming
+                        // unreachable request-preparation objects, off the UI thread.
+                        Runtime.getRuntime().gc()
+                        canAssemble = RequestCapacity.canAssemble(
+                            measurement,
+                            RequestHeapState.current()
+                        )
+                    }
+                    Triple(
+                        frozen,
+                        canAssemble,
+                        RequestCapacity.approximateInputTokens(frozen.payload)
+                    )
+                }
+                val frozen = preparedRequest.first
+                if (!preparedRequest.second) {
                     requestPreparationInProgress = false
                     restoreUIState()
                     showRequestHardBlock(
@@ -7828,7 +7863,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     ?.contextWindowTokens
                 val decision = ModelContextCapacity.decide(
                     contextWindow,
-                    RequestCapacity.approximateInputTokens(frozen.payload),
+                    preparedRequest.third,
                     maximumResponseTokens
                 )
                 val prepared = PreparedRegularTurn(

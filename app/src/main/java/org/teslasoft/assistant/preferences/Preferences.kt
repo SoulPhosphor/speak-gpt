@@ -21,10 +21,26 @@ import android.content.SharedPreferences
 import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
 
-class Preferences internal constructor(private var preferences: SharedPreferences, private var gp: SharedPreferences, private var chatId: String) {
+class Preferences internal constructor(
+    private var preferences: SharedPreferences,
+    private var gp: SharedPreferences,
+    private var chatId: String,
+    private var defaultPreferences: SharedPreferences? = preferences
+) {
     companion object {
         fun getPreferences(context: Context, xchatId: String) : Preferences {
-            return Preferences(SecurePrefs.get(context, "settings.$xchatId"), context.getSharedPreferences("settings", Context.MODE_PRIVATE), xchatId)
+            val globalPreferences =
+                context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+            return Preferences(
+                SecurePrefs.get(context, "settings.$xchatId"),
+                globalPreferences,
+                xchatId,
+                if (globalPreferences.contains("always_speak_mode")) {
+                    null
+                } else {
+                    SecurePrefs.get(context, "settings.")
+                }
+            )
         }
 
         /**
@@ -349,33 +365,37 @@ class Preferences internal constructor(private var preferences: SharedPreference
     }
 
     /**
-     * Retrieves the always speak mode status from the shared preferences.
+     * Retrieves the app-wide Always Speak Responses preference.
      *
-     * @return The always speak mode status, true if enabled or false otherwise.
+     * Older releases stored this inside settings.<chatId>. Until the user changes
+     * the switch again, fall back to that legacy value so the upgrade preserves
+     * their existing choice. Every new write uses the durable global store.
      */
     fun getNotSilence() : Boolean {
-        return getBoolean("always_speak_mode", false)
+        if (!gp.contains("always_speak_mode")) {
+            val legacyDefault = try {
+                defaultPreferences?.getBoolean("always_speak_mode", false) ?: false
+            } catch (_: Exception) {
+                false
+            }
+            gp.edit().putBoolean("always_speak_mode", legacyDefault).commit()
+        }
+        return getGlobalBoolean("always_speak_mode", false)
     }
 
     /**
-     * Sets always speak mode.
+     * Sets the app-wide Always Speak Responses preference.
      *
      * @param mode mode.
-     * @param commitImmediately true for a direct user toggle; false when copying
-     * settings into a new chat, where blocking startup on disk is unnecessary.
+     * @param commitImmediately true for a direct user toggle, making the choice
+     * durable before returning; false only for non-interactive initialization.
      */
     fun setNotSilence(mode: Boolean, commitImmediately: Boolean = true) {
-        if (getBoolean("always_speak_mode", false) != mode) {
-            val editor = preferences.edit().putBoolean("always_speak_mode", mode)
-            if (commitImmediately) {
-                // A direct toggle is commonly changed immediately before the app
-                // closes, so make that final user choice durable before returning.
-                editor.commit()
-            } else {
-                // New-chat initialization needs the value in process memory now,
-                // while its disk write can safely finish in the background.
-                editor.apply()
-            }
+        if (!gp.contains("always_speak_mode") ||
+            getGlobalBoolean("always_speak_mode", false) != mode
+        ) {
+            val editor = gp.edit().putBoolean("always_speak_mode", mode)
+            if (commitImmediately) editor.commit() else editor.apply()
         }
     }
 

@@ -158,7 +158,7 @@ class ChatPreferences private constructor() {
     fun deleteChat(context: Context, chatName: String) {
         if (chatWriteBlocked(context, "chat_list", "delete a chat")) return
         synchronized(CHAT_LIST_LOCK) {
-            val list = getChatList(context)
+            val list = getChatMetadataList(context)
 
             for (map: HashMap<String, String> in list) {
                 if (map["name"] == chatName) {
@@ -288,10 +288,17 @@ class ChatPreferences private constructor() {
     fun getChatList(context: Context) : ArrayList<HashMap<String, String>> =
         getChatListResult(context).chats
 
+    /**
+     * Chat-list metadata only. Mutations and id/name lookups must use this path:
+     * asking for display previews would synchronously parse every chat history.
+     */
+    private fun getChatMetadataList(context: Context): ArrayList<HashMap<String, String>> =
+        getChatListResult(context, includeFirstMessage = false).chats
+
     fun switchPinState(context: Context, chatId: String) {
         if (chatWriteBlocked(context, "chat_list", "pin or unpin a chat")) return
         synchronized(CHAT_LIST_LOCK) {
-            val list = getChatList(context)
+            val list = getChatMetadataList(context)
 
             for (map in list) {
                 if (Hash.hash(map["name"].toString()) == chatId) {
@@ -320,7 +327,7 @@ class ChatPreferences private constructor() {
     private fun putMetadataToChatById(context: Context, chatId: String, key: String, value: String) {
         if (chatWriteBlocked(context, "chat_list", "update chat metadata")) return
         synchronized(CHAT_LIST_LOCK) {
-            val list = getChatList(context)
+            val list = getChatMetadataList(context)
 
             for (map in list) {
                 if (Hash.hash(map["name"].toString()) == chatId) {
@@ -493,7 +500,7 @@ class ChatPreferences private constructor() {
     fun getAvailableChatId(context: Context) : String {
         var x = 1
 
-        val list = getChatList(context)
+        val list = getChatMetadataList(context)
 
         while (true) {
             var isFound = false
@@ -522,7 +529,7 @@ class ChatPreferences private constructor() {
     fun getAvailableChatIdByPrefix(context: Context, prefix: String) : String {
         var x = 1
 
-        val list = getChatList(context)
+        val list = getChatMetadataList(context)
 
         while (true) {
             var isFound = false
@@ -614,7 +621,7 @@ class ChatPreferences private constructor() {
     fun getAvailableChatIdForAutoname(context: Context) : String {
         var x = 1
 
-        var list = getChatList(context)
+        var list = getChatMetadataList(context)
 
         // R8 Bugfix
         if (list == null) list = arrayListOf()
@@ -648,7 +655,7 @@ class ChatPreferences private constructor() {
     fun addChat(context: Context, chatName: String) {
         if (chatWriteBlocked(context, "chat_list", "create a chat")) return
         synchronized(CHAT_LIST_LOCK) {
-            val list = getChatList(context)
+            val list = getChatMetadataList(context)
 
             val map: HashMap<String, String> = HashMap()
 
@@ -676,7 +683,7 @@ class ChatPreferences private constructor() {
      * @return True if a chat with the given name already exists in the chat list, false otherwise.
      */
     fun checkDuplicate(context: Context, chatName: String) : Boolean {
-        val list = getChatList(context)
+        val list = getChatMetadataList(context)
 
         var isFound = false
         for (map: HashMap<String, String> in list) {
@@ -690,7 +697,7 @@ class ChatPreferences private constructor() {
     }
 
     fun getChatName(context: Context, chatId: String) : String {
-        val list = getChatList(context)
+        val list = getChatMetadataList(context)
 
         var name = ""
         for (map: HashMap<String, String> in list) {
@@ -739,7 +746,7 @@ class ChatPreferences private constructor() {
 
         val outcome: ChatRenameTransaction.Outcome
         synchronized(CHAT_LIST_LOCK) {
-            val list = getChatList(context)
+            val list = getChatMetadataList(context)
             val entry = list.firstOrNull { it["id"] == oldId } ?: return false
 
             // Renaming onto an id another chat already owns would silently
@@ -876,7 +883,7 @@ class ChatPreferences private constructor() {
     fun deleteChatById(context: Context, chatId: String) {
         if (chatWriteBlocked(context, "chat_list", "delete a chat")) return
         synchronized(CHAT_LIST_LOCK) {
-            val list = getChatList(context)
+            val list = getChatMetadataList(context)
 
             for (map: HashMap<String, String> in list) {
                 if (map["id"] == chatId) {
