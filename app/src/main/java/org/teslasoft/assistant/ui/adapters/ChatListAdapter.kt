@@ -30,7 +30,6 @@ import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
 import android.net.Uri
-import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -79,12 +78,10 @@ class ChatListAdapter(
         private const val PAYLOAD_MEMORY_MARKER = "memory_marker"
         private const val PAYLOAD_CHAT_PREVIEW = "chat_preview"
         private const val EMPTY_CHAT_PREVIEW = "No messages yet."
-        private const val CHAT_LAUNCH_DEBOUNCE_MS = 750L
     }
 
     private var preferences: Preferences? = null
     private var bulkActionMode = false
-    private var lastChatLaunchAt = 0L
     private val disposed = AtomicBoolean(false)
     private val animatedChatIds = HashSet<String>()
     private val previewRequests = HashSet<String>()
@@ -426,11 +423,6 @@ class ChatListAdapter(
                 if (bulkActionMode) {
                     switchBulkActionState(projection, chatMessage, position)
                 } else {
-                    val now = SystemClock.elapsedRealtime()
-                    if (now - lastChatLaunchAt < CHAT_LAUNCH_DEBOUNCE_MS) {
-                        return@setOnClickListener
-                    }
-                    lastChatLaunchAt = now
                     val options = ActivityOptionsCompat.makeSceneTransitionAnimation(
                         mContext.requireActivity() as Activity,
                         Pair.create(root, ViewCompat.getTransitionName(root))
