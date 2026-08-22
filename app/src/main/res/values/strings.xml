@@ -164,6 +164,17 @@
          chat has no companion name (a regular chat always has one). Never
          "SpeakGPT". -->
     <string name="chat_role_assistant">Assistant</string>
+    <string name="chat_options">Chat Options</string>
+    <string name="chat_menu_export">Export Chat</string>
+    <string name="chat_export_format">Format</string>
+    <string name="chat_export_include_date">Include Date</string>
+    <string name="chat_export_include_time">Include Time</string>
+    <string name="chat_export_include_model">Include Model</string>
+    <string name="chat_export_include_user_tokens">Include User Token Count</string>
+    <string name="chat_export_include_companion_tokens">Include Companion Token Count</string>
+    <string name="chat_export_cancel">Cancel Export</string>
+    <string name="chat_export_action">Export</string>
+    <string name="chat_delete_title">Delete Chat</string>
     <string name="control_center_general">General</string>
     <string name="control_center_image_generation">Image generation</string>
     <string name="control_center_appearance">Appearance</string>
@@ -455,6 +466,8 @@
     <string name="provider_move_down_desc">Move %1$s down</string>
     <string name="sampling_label_temperature">Temperature</string>
     <string name="sampling_hint_temperature">Temperature controls model creativity. Low settings will create more conservative, predictable responses. High temperatures may be more creative. If settings are too high responses may become less coherent.</string>
+    <string name="streaming_title">Streaming</string>
+    <string name="streaming_description">Show replies as they’re generated. When off, display the full reply only after it finishes.</string>
     <string name="sampling_label_top_p">Top P</string>
     <string name="sampling_hint_top_p">Top-p controls how wide a pool of likely next words the model may choose from. A low value makes it stick to the safest, most predictable wording, which can become repetitive or dull; a high value admits more unusual choices, which can make writing lively but also more rambling, inconsistent, or strange.</string>
     <string name="sampling_label_frequency_penalty">Frequency Penalty</string>
@@ -997,6 +1010,15 @@
     <string name="cost_template" translatable="false">Cost: $%.5f in / $%.5f out\nTotal: $%.5f\nPrice: $%.2f (in) $%.2f (out) per 1M tokens</string>
     <string name="cost_loading" tools:ignore="TypographyEllipsis">Cost: Loading...</string>
     <string formatted="false"  name="cost_counter_usage">Usage (tokens): %s in / %s out</string>
+    <string name="cost_multi_total" translatable="false">Total: $%.5f estimated</string>
+    <string name="cost_template_variable_price" translatable="false">Cost: $%.5f in / $%.5f out\nTotal: $%.5f\nPrice: Varies (Historical Rates)</string>
+    <string name="cost_values_line" translatable="false">Cost: %1$s in / %2$s out</string>
+    <string name="cost_total_value" translatable="false">Total: %1$s</string>
+    <string name="cost_multi_total_value" translatable="false">Total: %1$s estimated</string>
+    <string name="cost_price_values_line" translatable="false">Price: %1$s (in) %2$s (out) per 1M tokens</string>
+    <string name="cost_price_variable_line">Price: Varies (Historical Rates)</string>
+    <string name="token_pricing_details_title">Token Pricing Details</string>
+    <string name="token_pricing_group_title" translatable="false">%1$s · %2$s</string>
     <string name="prompt_no_model_provided" translatable="false">No model has been provided.</string>
 
     <string name="cat_all_new">All categories</string>

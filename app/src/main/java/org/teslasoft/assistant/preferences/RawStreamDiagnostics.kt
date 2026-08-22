@@ -37,6 +37,14 @@ data class RawStreamObservation(
     val promptTokens: Int? = null,
     val completionTokens: Int? = null,
     val totalTokens: Int? = null,
+    /** Exact API-reported charged cost. Kept out of the legacy diagnostics
+     * envelope and delivered directly to durable accounting. */
+    val inputCost: Double? = null,
+    val outputCost: Double? = null,
+    val totalCost: Double? = null,
+    /** Response-reported model id. Kept out of the legacy diagnostic envelope;
+     * durable usage accounting receives the observation object directly. */
+    val model: String? = null,
     val generationId: String? = null,
     val malformedDataEvents: Int = 0,
     val flowEndedNormally: Boolean = false,
@@ -122,6 +130,7 @@ object RawStreamObservationCodec {
 internal data class LifecycleDiagnosticEvidence(
     var requestDispatchedObserved: Boolean? = null,
     var httpSuccessful: Boolean? = null,
+    var nonStreamingResponse: Boolean = false,
     var typedChunks: Int = 0,
     var typedContentChunks: Int = 0,
     var typedUsageReceived: Boolean = false,
@@ -182,6 +191,12 @@ internal object LifecycleDiagnosticEvidenceStore {
     fun noteSuccessfulHttpResponse(attemptId: String): Boolean = mutate(attemptId) {
         it.requestDispatchedObserved = true
         it.httpSuccessful = true
+    }
+
+    fun noteNonStreamingResponse(attemptId: String): Boolean = mutate(attemptId) {
+        it.requestDispatchedObserved = true
+        it.httpSuccessful = true
+        it.nonStreamingResponse = true
     }
 
     fun noteRawObservation(

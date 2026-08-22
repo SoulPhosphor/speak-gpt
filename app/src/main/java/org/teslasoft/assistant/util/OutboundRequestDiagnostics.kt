@@ -19,7 +19,7 @@ package org.teslasoft.assistant.util
 import com.google.gson.JsonParser
 
 /**
- * Privacy-safe diagnostics for the final serialized streamed chat request.
+ * Privacy-safe diagnostics for the final serialized chat-completions request.
  *
  * Only top-level JSON field NAMES are retained. Field values, message text,
  * prompts, tool arguments, headers, API keys, and every other request value are
@@ -34,19 +34,19 @@ object OutboundRequestDiagnostics {
     private var latestOutboundFieldNames: List<String>? = null
 
     /**
-     * Inspect a serialized streamed Chat Completions body at the final send-side
-     * augmentation seam. Non-chat / non-streamed bodies are returned unchanged
-     * and do not leave stale diagnostic state behind.
+     * Inspect a serialized Chat Completions body at the final send-side
+     * augmentation seam. Both streamed and completed requests are captured;
+     * auxiliary non-chat bodies are returned unchanged and do not leave stale
+     * diagnostic state behind. The generation hook is the caller-side boundary
+     * that keeps auto-naming and other auxiliary chat requests out of this log.
      */
     fun sanitizeAndCaptureSerializedChatBody(body: String): String {
         latestOutboundFieldNames = null
 
         return try {
             val root = JsonParser.parseString(body).asJsonObject
-            val streamed = root.get("stream")
-                ?.takeUnless { it.isJsonNull }
-                ?.asBoolean == true
-            if (!streamed || !root.has("messages")) return body
+            val isChatGeneration = root.has("model") && root.has("messages")
+            if (!isChatGeneration) return body
 
             var changed = false
             val logitBias = root.get("logit_bias")

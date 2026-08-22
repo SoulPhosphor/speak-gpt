@@ -76,6 +76,7 @@ class NewChatSettingCopyTest {
             "PresencePenalty",
             "Prompt",
             "Resolution",
+            "Streaming",
             "SystemMessage",
             "Temperature",
             "TopP",

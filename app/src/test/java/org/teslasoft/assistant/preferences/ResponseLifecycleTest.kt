@@ -52,6 +52,20 @@ class ResponseLifecycleTest {
         assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
     }
 
+    @Test fun successfulNonStreamingResponseDoesNotNeedSseTerminalEvidence() {
+        val r = ResponseLifecycle.classifyNonStreamingCompletion(null, 42)
+        assertEquals(ResponseLifecycle.Outcome.COMPLETE, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
+        assertEquals(ResponseLifecycle.NOT_REPORTED, r.finishReasonDisplay)
+        assertFalse(r.streamClosed)
+    }
+
+    @Test fun emptyNonStreamingResponseIsNotMisclassifiedAsIncomplete() {
+        val r = ResponseLifecycle.classifyNonStreamingCompletion(null, 0)
+        assertEquals(ResponseLifecycle.Outcome.EMPTY, r.outcome)
+        assertEquals(ResponseLifecycle.Termination.PROVIDER_DONE, r.termination)
+    }
+
     @Test fun lengthIsProviderDoneButIncomplete() {
         val r = ResponseLifecycle.classifyNormalCompletion("length", 42)
         assertEquals(ResponseLifecycle.Outcome.INCOMPLETE, r.outcome)
@@ -218,6 +232,54 @@ class ResponseLifecycleTest {
         assertTrue(body.contains("Outcome: Empty"))
         assertTrue(body.contains("Finish Reason: stop"))
         assertTrue(body.contains("Error: none reported"))
+    }
+
+    @Test fun formattedNonStreamingResponseMarksSseFieldsNotApplicable() {
+        val recorder = recorder("T-non-stream")
+        recorder.noteChunk("stop", "completion-1", 42, 10, 8, 18)
+        recorder.markNonStreamingResponse()
+
+        val body = ResponseLifecycle.format(
+            turnId = "T-non-stream", phase = ResponseLifecycle.PHASE_PRIMARY,
+            apiProvider = "OpenAI", apiEndpoint = "https://example.invalid/",
+            actualModelProvider = null, model = "model",
+            outcome = ResponseLifecycle.Outcome.COMPLETE, finishReasonDisplay = "stop",
+            streamClosed = false, termination = ResponseLifecycle.Termination.PROVIDER_DONE,
+            requestedMaxOutput = 100, promptTokens = recorder.promptTokens,
+            completionTokens = recorder.completionTokens, totalTokens = recorder.totalTokens,
+            receivedCharacters = recorder.receivedCharacters, durationMs = 12,
+            generationId = recorder.generationId, errorText = null,
+            attemptId = recorder.attemptId
+        )
+
+        assertTrue(body.contains("Outcome: Complete"))
+        assertTrue(body.contains("Received Done: ${ResponseLifecycle.NOT_APPLICABLE}"))
+        assertTrue(body.contains("Protocol Terminal Marker: ${ResponseLifecycle.NOT_APPLICABLE}"))
+        assertTrue(body.contains("Raw SSE Flow End: ${ResponseLifecycle.NOT_APPLICABLE}"))
+        assertFalse(body.contains("premature_stream_close"))
+    }
+
+    @Test fun nonStreamingProviderErrorKeepsSuccessfulHttpAndRawDetails() {
+        val recorder = recorder("T-non-stream-error")
+        recorder.markNonStreamingResponse()
+
+        val body = ResponseLifecycle.format(
+            turnId = "T-non-stream-error", phase = ResponseLifecycle.PHASE_PRIMARY,
+            apiProvider = "OpenAI", apiEndpoint = "https://example.invalid/",
+            actualModelProvider = null, model = "model",
+            outcome = ResponseLifecycle.Outcome.INCOMPLETE,
+            finishReasonDisplay = "missing", streamClosed = true,
+            termination = ResponseLifecycle.Termination.PROVIDER_ERROR,
+            requestedMaxOutput = 100, promptTokens = null,
+            completionTokens = null, totalTokens = null, receivedCharacters = 0,
+            durationMs = 12, generationId = null,
+            errorText = "429 raw provider detail", attemptId = recorder.attemptId
+        )
+
+        assertTrue(body.contains("HTTP Status Successful: true"))
+        assertTrue(body.contains("Termination Source: provider_error"))
+        assertTrue(body.contains("Error: 429 raw provider detail"))
+        assertTrue(body.contains("Received Done: ${ResponseLifecycle.NOT_APPLICABLE}"))
     }
 
     @Test fun rawProviderErrorOverridesTypedNormalEof() {

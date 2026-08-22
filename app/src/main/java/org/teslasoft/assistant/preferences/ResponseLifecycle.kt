@@ -36,8 +36,8 @@ class ProviderStreamTerminalException : RuntimeException(
 
 /**
  * Response Lifecycle diagnostics: an evidence record of how each user-visible
- * streamed generation ended. One entry is written per streamed generation
- * request, so retries/continuations remain separately diagnosable.
+ * generation ended. One entry is written per generation request, so
+ * retries/continuations remain separately diagnosable.
  *
  * The typed OpenAI client is not treated as the protocol authority. A typed Flow
  * completing without throwing means only that the APP-side Flow completed. Raw
@@ -54,6 +54,7 @@ object ResponseLifecycle {
     const val NOT_REPORTED = "not reported"
     const val NOT_REPORTED_BY_API = "not reported by API"
     const val NONE_REPORTED = "none reported"
+    const val NOT_APPLICABLE = "not applicable"
     private const val NOT_OBSERVED = "not observed"
     private const val NOT_CONFIRMED = "not confirmed"
 
@@ -155,6 +156,29 @@ object ResponseLifecycle {
     }
 
     /**
+     * Classify a completed Chat Completions response. A non-stream response has
+     * no SSE EOF or [DONE] marker to prove completion, so a successful client
+     * return is itself the provider-completion evidence when the API omitted a
+     * finish reason.
+     */
+    fun classifyNonStreamingCompletion(
+        lastFinishReason: String?,
+        receivedCharacters: Int
+    ): NormalResult {
+        val normalized = lastFinishReason?.trim()?.ifBlank { null }
+        return if (normalized == null) {
+            NormalResult(
+                if (receivedCharacters > 0) Outcome.COMPLETE else Outcome.EMPTY,
+                Termination.PROVIDER_DONE,
+                NOT_REPORTED,
+                streamClosed = false
+            )
+        } else {
+            classifyNormalCompletion(normalized, receivedCharacters)
+        }
+    }
+
+    /**
      * Pure failure/cancellation matrix used by regression tests and by callers
      * that have explicit terminal facts. Strong intentional/local causes win
      * before provider/transport causes; pre-dispatch is never attributed to a
@@ -226,8 +250,10 @@ object ResponseLifecycle {
             suppliedFinish.equals("error", ignoreCase = true) && observedFinish != null -> observedFinish
             else -> suppliedFinish
         }
+        val nonStreamingResponse = evidence?.nonStreamingResponse == true
         val finishReasonReceived = observedFinish != null ||
-            !suppliedFinish.equals("missing", ignoreCase = true)
+            (!suppliedFinish.equals("missing", ignoreCase = true) &&
+                !(nonStreamingResponse && suppliedFinish.equals(NOT_REPORTED, ignoreCase = true)))
 
         var finalOutcome = outcome
         var finalTermination = termination
@@ -267,7 +293,7 @@ object ResponseLifecycle {
                     "$finalError | SSE: ${raw.providerErrorSummary}"
                 else -> finalError
             }
-        } else if (finalError == null &&
+        } else if (!nonStreamingResponse && finalError == null &&
             termination in setOf(Termination.PROVIDER_DONE, Termination.STREAM_CLOSED, Termination.PREMATURE_STREAM_CLOSE)
         ) {
             // Success-path classification may have run a few scheduling ticks
@@ -283,7 +309,7 @@ object ResponseLifecycle {
             finalStreamClosed = normal.streamClosed
         }
 
-        if (finalError == null && finalTermination == Termination.PREMATURE_STREAM_CLOSE) {
+        if (!nonStreamingResponse && finalError == null && finalTermination == Termination.PREMATURE_STREAM_CLOSE) {
             finalError = when {
                 raw?.flowException != null -> raw.flowException
                 raw != null && raw.flowEndedNormally && !raw.receivedDone ->
@@ -321,18 +347,29 @@ object ResponseLifecycle {
         val anyContentChunks = typedContentChunks > 0 || rawContentChunks > 0
         val usageReceived = evidence?.typedUsageReceived == true || raw?.usageReceived == true
         val receivedDoneDisplay = when {
+            nonStreamingResponse -> NOT_APPLICABLE
             raw == null -> RECEIVED_DONE_UNAVAILABLE
             raw.receivedDone -> "true"
             else -> "false"
         }
         val rawFlowEnd = when {
+            nonStreamingResponse -> NOT_APPLICABLE
             raw == null -> NOT_OBSERVED
             raw.flowEndedNormally -> "normal"
             else -> "exception"
         }
-        val rawSseEventsDisplay = raw?.let { boolCount(rawSseEvents > 0, rawSseEvents) } ?: NOT_OBSERVED
-        val providerSseErrorDisplay = raw?.providerErrorReceived?.toString() ?: NOT_OBSERVED
+        val rawSseEventsDisplay = when {
+            nonStreamingResponse -> NOT_APPLICABLE
+            raw != null -> boolCount(rawSseEvents > 0, rawSseEvents)
+            else -> NOT_OBSERVED
+        }
+        val providerSseErrorDisplay = when {
+            nonStreamingResponse -> NOT_APPLICABLE
+            raw != null -> raw.providerErrorReceived.toString()
+            else -> NOT_OBSERVED
+        }
         val rawFlowExceptionDisplay = when {
+            nonStreamingResponse -> NOT_APPLICABLE
             raw == null -> NOT_OBSERVED
             raw.flowException != null -> raw.flowException
             else -> NONE_REPORTED
@@ -367,7 +404,10 @@ object ResponseLifecycle {
             append("Finish Reason Received: ").append(finishReasonReceived).append('\n')
             append("Received Done: ").append(receivedDoneDisplay).append('\n')
             append("Protocol Terminal Marker: ")
-                .append(raw?.protocolTerminalMarker ?: if (raw == null) RECEIVED_DONE_UNAVAILABLE else "missing")
+                .append(
+                    if (nonStreamingResponse) NOT_APPLICABLE
+                    else raw?.protocolTerminalMarker ?: if (raw == null) RECEIVED_DONE_UNAVAILABLE else "missing"
+                )
                 .append('\n')
             append("Stream Closed: ").append(finalStreamClosed).append('\n')
             append("Termination Source: ").append(finalTermination.wire).append('\n')
@@ -397,7 +437,7 @@ object ResponseLifecycle {
 }
 
 /**
- * Accumulates observable facts for one streamed generation. Typed chunk facts
+ * Accumulates observable facts for one generation. Typed chunk facts
  * are kept separately from raw-SSE facts so a parser/client loss does not erase
  * what actually arrived on the wire. [attemptId] is the request identity; turn
  * id and phase are grouping metadata only and may legitimately repeat on retry.
@@ -437,6 +477,9 @@ class ResponseLifecycleRecorder(
         private set
     var finalized: Boolean = false
         private set
+    @Volatile
+    var nonStreamingResponse: Boolean = false
+        private set
 
     fun noteChunk(
         finishReason: String?,
@@ -472,6 +515,14 @@ class ResponseLifecycleRecorder(
     fun beginProviderObservation() {
         providerObservationExpected = true
         LifecycleDiagnosticEvidenceStore.noteSuccessfulHttpResponse(attemptId)
+    }
+
+    /** Mark a successful completed-response API call. No SSE observer is
+     * attached for this path, so lifecycle formatting must not require stream
+     * terminal markers to prove completion. */
+    fun markNonStreamingResponse() {
+        nonStreamingResponse = true
+        LifecycleDiagnosticEvidenceStore.noteNonStreamingResponse(attemptId)
     }
 
     /**
