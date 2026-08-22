@@ -581,7 +581,11 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     }
 
     private fun showModelChooser() {
-        val modelDialog = AdvancedModelSelectorDialogFragment.newInstance(selectedModel, "")
+        val modelDialog = AdvancedModelSelectorDialogFragment.newInstance(
+            selectedModel,
+            "",
+            endpointId
+        )
         modelDialog.setModelSelectedListener { model ->
             if (model != selectedModel) fieldContextWindow?.setText("")
             selectedModel = model

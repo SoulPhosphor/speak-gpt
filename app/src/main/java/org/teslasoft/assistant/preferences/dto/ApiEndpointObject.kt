@@ -133,6 +133,20 @@ class ApiEndpointObject(
     /** True when this endpoint carries OpenRouter routing identity. */
     fun isOpenRouterRouting(): Boolean = identity == IDENTITY_OPENROUTER
 
+    /**
+     * True when this endpoint's model catalog can be interpreted as OpenRouter
+     * metadata. A standard OpenRouter host is authoritative even if an older
+     * profile has not persisted (or has stale) routing identity yet. The next
+     * normal endpoint save promotes that profile to [IDENTITY_OPENROUTER].
+     *
+     * Keep this separate from [isOpenRouterRouting]: routing identity remains
+     * the durable gate for serializing OpenRouter-only request fields, while
+     * catalog discovery must not throw away structured reasoning metadata from
+     * a verified OpenRouter URL merely because a migration flag is missing.
+     */
+    fun hasOpenRouterCatalogAuthority(): Boolean =
+        isOpenRouterRouting() || isRecognizedOpenRouterUrl(host)
+
     companion object {
         const val IDENTITY_GENERIC = "generic"
         const val IDENTITY_OPENROUTER = "openrouter"

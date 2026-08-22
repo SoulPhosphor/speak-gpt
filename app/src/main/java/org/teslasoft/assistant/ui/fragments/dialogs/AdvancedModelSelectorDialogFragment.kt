@@ -382,7 +382,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         override fun onResponse(tag: String, message: String) {
             try {
                 val endpoint = apiEndpointObject
-                if (endpoint?.isOpenRouterRouting() == true) {
+                if (endpoint?.hasOpenRouterCatalogAuthority() == true) {
                     val refresh = org.teslasoft.assistant.reasoning.EndpointReasoningCapability
                         .refreshFromOpenRouterCatalog(endpoint.reasoningCapabilityByModel, message)
                         ?: run {
@@ -397,7 +397,10 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                         endpoint.reasoningCapabilityByModel = refresh.capabilityJson
                         apiEndpointPreferences?.setApiEndpoint(requireContext(), endpoint)
                     }
-                    refreshReasoningCapabilityIndex()
+                    refreshReasoningCapabilityIndex(
+                        capabilityJson = refresh.capabilityJson,
+                        providerPath = org.teslasoft.assistant.reasoning.ReasoningProviderPath.OPENROUTER
+                    )
                     // Capability refresh succeeded even if a specialized picker
                     // (for example image-only) filters every model out.
                     logReasoningCatalogRefresh(success = true)
@@ -704,16 +707,19 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         }
     }
 
-    private fun refreshReasoningCapabilityIndex() {
+    private fun refreshReasoningCapabilityIndex(
+        capabilityJson: String? = apiEndpointObject?.reasoningCapabilityByModel,
+        providerPath: org.teslasoft.assistant.reasoning.ReasoningProviderPath? = null
+    ) {
         val endpoint = apiEndpointObject
         reasoningCapabilityIndex = org.teslasoft.assistant.reasoning.EndpointReasoningCapability.index(
-            endpoint?.reasoningCapabilityByModel,
-            if (endpoint == null) {
+            capabilityJson,
+            providerPath ?: if (endpoint == null) {
                 org.teslasoft.assistant.reasoning.ReasoningProviderPath.GENERIC_OPENAI_COMPATIBLE
             } else {
                 org.teslasoft.assistant.reasoning.ReasoningProviderPath.forEndpoint(
                     endpoint.host,
-                    endpoint.isOpenRouterRouting()
+                    endpoint.hasOpenRouterCatalogAuthority()
                 )
             }
         )
@@ -728,7 +734,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         // OpenRouter's raw catalog contains both ids and authoritative
         // reasoning metadata. Use it as the one shared request instead of an
         // SDK id fetch plus a disposable second capability fetch.
-        if (endpoint.isOpenRouterRouting() || imageMode || startsWithAllModels || rawModelCatalog) {
+        if (endpoint.hasOpenRouterCatalogAuthority() || imageMode || startsWithAllModels || rawModelCatalog) {
             startRawModelsRequest()
             return
         }
@@ -789,7 +795,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     private fun logReasoningCatalogRefresh(success: Boolean) {
         if (!isAdded) return
         val endpoint = apiEndpointObject ?: return
-        if (!endpoint.isOpenRouterRouting()) return
+        if (!endpoint.hasOpenRouterCatalogAuthority()) return
         val model = preferences?.getModel().orEmpty()
         val capability = org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
             endpoint.reasoningCapabilityByModel,
