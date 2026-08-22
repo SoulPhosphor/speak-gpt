@@ -17,27 +17,20 @@
 package org.teslasoft.assistant.ui.reasoning
 
 import android.content.Context
-import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.reasoning.ReasoningCapability
 
 /**
- * Bind-time reasoning-capability diagnostics for the model-row lists.
+ * Compatibility shim for the temporary model-row reasoning diagnostic.
  *
- * The reasoning lightbulb on a model row is driven entirely by the capability
- * that resolves for that row's endpoint id + model id at bind time. When a row
- * that should show a bulb does not, the question is exactly what capability
- * reached the row — was it Unknown (a resolution/data-flow miss) or Known (a
- * display problem)? This logs that answer, once per model id per adapter
- * instance, into the Response Lifecycle log — the same page the reasoning
- * request/response diagnostics use — never the Voice Debug Log.
- *
- * It records the endpoint id and model id the row resolved against, the
- * capability facts, and the capability source, so a mismatch between what a row
- * sees and what Quick Settings sees for the same model is visible side by side.
- * It never records any reasoning text — capability facts only.
+ * The bind-time diagnostic was useful while tracking missing reasoning bulbs,
+ * but logging every model row polluted user-facing debug logs whenever model
+ * lists were populated. Keep the call surface temporarily so the diagnostic can
+ * be removed without changing model-list behavior; it intentionally records
+ * nothing and performs no logging.
  */
 object ReasoningBulbDiagnostics {
 
+    @Suppress("UNUSED_PARAMETER")
     fun logResolvedOnce(
         context: Context,
         alreadyLogged: MutableSet<String>,
@@ -46,22 +39,6 @@ object ReasoningBulbDiagnostics {
         modelId: String,
         capability: ReasoningCapability
     ) {
-        if (!alreadyLogged.add(modelId)) return
-        val message = buildString {
-            append("Reasoning bulb bind — $surface\n")
-            append("Endpoint: ${endpointId.ifBlank { "(blank)" }}\n")
-            append("Model: $modelId\n")
-            append("Bulb shown: ${capability.isReasoningCapable}\n")
-            append("Actionable: ${capability.hasConfigurableSetting}\n")
-            append("support=${capability.support}, ")
-            append("effortConfigurable=${capability.effortConfigurable}, ")
-            append("canDisable=${capability.canDisableReasoning}, ")
-            append("canReturnVisible=${capability.canReturnVisibleReasoning}, ")
-            append("mandatory=${capability.reasoningMandatory}\n")
-            append("efforts=${capability.supportedEfforts.map { it.serialized }}, ")
-            append("authoritative=${capability.effortsAuthoritative}, ")
-            append("source=${capability.source}")
-        }
-        Logger.logAsync(context, "response_lifecycle", "ReasoningBulb", "info", message)
+        // Intentionally empty. Do not log model-row capability enumeration.
     }
 }
