@@ -674,7 +674,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         if (model.isBlank()) return org.teslasoft.assistant.reasoning.ReasoningCapability.UNKNOWN
         val endpoint = apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId)
         return org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolveWithLearnedRejections(
-            endpoint?.reasoningCapabilityByModel, endpoint?.reasoningRejectedLevelsByModel, model
+            endpoint?.reasoningCapabilityByModel,
+            endpoint?.reasoningRejectedLevelsByModel,
+            model,
+            providerPath = org.teslasoft.assistant.reasoning.ReasoningProviderPath.forEndpoint(
+                endpoint?.host,
+                endpoint?.isOpenRouterRouting() == true
+            )
         )
     }
 

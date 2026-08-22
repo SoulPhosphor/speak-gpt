@@ -379,6 +379,36 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     private var requestListener: RequestNetwork.RequestListener = object : RequestNetwork.RequestListener {
         override fun onResponse(tag: String, message: String) {
             try {
+                val endpoint = apiEndpointObject
+                if (endpoint?.isOpenRouterRouting() == true) {
+                    val refresh = org.teslasoft.assistant.reasoning.EndpointReasoningCapability
+                        .refreshFromOpenRouterCatalog(endpoint.reasoningCapabilityByModel, message)
+                        ?: run {
+                            logReasoningCatalogRefresh(success = false)
+                            showProviderError(message)
+                            return
+                        }
+                    val ids = refresh.models.mapNotNull { model ->
+                        if (imageMode && !catalogAllowsImageOutput(model.entry)) null else model.id
+                    }
+                    if (refresh.capabilityJson != endpoint.reasoningCapabilityByModel) {
+                        endpoint.reasoningCapabilityByModel = refresh.capabilityJson
+                        apiEndpointPreferences?.setApiEndpoint(requireContext(), endpoint)
+                    }
+                    // Capability refresh succeeded even if a specialized picker
+                    // (for example image-only) filters every model out.
+                    logReasoningCatalogRefresh(success = true)
+                    if (ids.isEmpty()) {
+                        showProviderError(message)
+                        return
+                    }
+                    availableModels.clear()
+                    availableModels.addAll(ids)
+                    catalogLoaded = true
+                    render()
+                    return
+                }
+
                 val parsed = com.google.gson.Gson().fromJson(message, com.google.gson.JsonObject::class.java)
                     ?: throw IllegalStateException("Empty response from provider.")
 
@@ -407,6 +437,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                     return
                 }
 
+                availableModels.clear()
                 availableModels.addAll(ids)
                 catalogLoaded = true
                 render()
@@ -416,6 +447,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         }
 
         override fun onErrorResponse(tag: String, message: String) {
+            logReasoningCatalogRefresh(success = false)
             showProviderError(message)
         }
     }
@@ -609,48 +641,6 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
 
         render()
         startCatalogFetch()
-        syncReasoningCapability()
-    }
-
-    /**
-     * Best-effort background capability discovery (chat-redesign-plan.md §7.7):
-     * for an OpenRouter endpoint, read the model catalog's structured
-     * `supported_parameters` and fold any reasoning models into this endpoint's
-     * persisted capability store, so favorite rows and View All can show the
-     * reasoning lightbulb and requests can send reasoning without a paid call.
-     * Independent of the visible list fetch and fully fail-safe: any error just
-     * leaves capability as it was. When it learns something new it persists the
-     * endpoint and re-renders so newly-known lightbulbs appear.
-     */
-    private fun syncReasoningCapability() {
-        val endpoint = apiEndpointObject ?: return
-        if (!endpoint.isOpenRouterRouting()) return
-        val activity = (mContext as? Activity) ?: return
-        val net = RequestNetwork(activity)
-        val authHeaders = HashMap<String, Any>()
-        val apiKey = endpoint.apiKey
-        when (endpoint.authType) {
-            ApiEndpointObject.AUTH_X_API_KEY -> authHeaders["x-api-key"] = apiKey
-            ApiEndpointObject.AUTH_API_KEY -> authHeaders["api-key"] = apiKey
-            else -> authHeaders["Authorization"] = "Bearer $apiKey"
-        }
-        net.setHeaders(authHeaders)
-        val base = endpoint.host.let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
-        net.startRequestNetwork("GET", base + "models", "reasoningCaps", object : RequestNetwork.RequestListener {
-            override fun onResponse(tag: String, message: String) {
-                if (!isAdded) return
-                val current = endpoint.reasoningCapabilityByModel
-                val updated = org.teslasoft.assistant.reasoning.EndpointReasoningCapability
-                    .learnFromCatalogJson(current, message)
-                if (updated != current) {
-                    endpoint.reasoningCapabilityByModel = updated
-                    apiEndpointPreferences?.setApiEndpoint(requireContext(), endpoint)
-                    render()
-                }
-            }
-
-            override fun onErrorResponse(tag: String, message: String) { /* capability sync is best-effort */ }
-        })
     }
 
     /** System/hardware back: from the full list return to the favorites
@@ -702,7 +692,10 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
      *  filtering, and image mode keeps the raw capability-aware path. */
     private fun startCatalogFetch() {
         val endpoint = apiEndpointObject ?: return
-        if (imageMode || startsWithAllModels || rawModelCatalog) {
+        // OpenRouter's raw catalog contains both ids and authoritative
+        // reasoning metadata. Use it as the one shared request instead of an
+        // SDK id fetch plus a disposable second capability fetch.
+        if (endpoint.isOpenRouterRouting() || imageMode || startsWithAllModels || rawModelCatalog) {
             startRawModelsRequest()
             return
         }
@@ -758,6 +751,31 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         requestNetwork?.setHeaders(authHeaders)
         val base = (apiEndpointObject?.host ?: "").let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
         requestNetwork?.startRequestNetwork("GET", base + "models", "A", requestListener)
+    }
+
+    private fun logReasoningCatalogRefresh(success: Boolean) {
+        if (!isAdded) return
+        val endpoint = apiEndpointObject ?: return
+        if (!endpoint.isOpenRouterRouting()) return
+        val model = preferences?.getModel().orEmpty()
+        val capability = org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
+            endpoint.reasoningCapabilityByModel,
+            model,
+            providerPath = org.teslasoft.assistant.reasoning.ReasoningProviderPath.OPENROUTER
+        )
+        val efforts = capability.supportedEfforts.joinToString(",") { it.serialized }
+            .ifEmpty { "unknown" }
+        org.teslasoft.assistant.preferences.Logger.logAsync(
+            requireContext().applicationContext,
+            "event",
+            "ReasoningCapability",
+            if (success) "info" else "warning",
+            "Reasoning capability source: ${capability.source}\n" +
+                "Catalog refresh: ${if (success) "success" else "unavailable; cache preserved"}\n" +
+                "Model: ${model.ifBlank { "(none selected)" }}\n" +
+                "Reasoning: ${capability.support}\n" +
+                "Supported efforts: $efforts"
+        )
     }
 
     fun interface OnModelSelectedListener {

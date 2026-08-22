@@ -27,7 +27,7 @@ class DirectProviderReasoningKnowledgeTest {
     @Test
     fun openAiOSeriesReasonsWithEffortButNoVisibleReasoningAndNoOff() {
         for (id in listOf("o1", "o1-mini", "o3", "o3-mini", "o4-mini", "openai/o3")) {
-            val cap = DirectProviderReasoningKnowledge.fromModelId(id)
+            val cap = DirectProviderReasoningKnowledge.fromModelId(id, ReasoningProviderPath.OPENAI)
             assertTrue("expected reasoning for $id", cap != null && cap.isReasoningCapable)
             assertTrue(cap!!.effortConfigurable)
             assertEquals(listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH), cap.supportedEfforts)
@@ -39,13 +39,13 @@ class DirectProviderReasoningKnowledgeTest {
 
     @Test
     fun gpt5FamilyIsReasoning() {
-        val cap = DirectProviderReasoningKnowledge.fromModelId("gpt-5")
+        val cap = DirectProviderReasoningKnowledge.fromModelId("gpt-5", ReasoningProviderPath.OPENAI)
         assertTrue(cap != null && cap.effortConfigurable)
     }
 
     @Test
     fun gpt5ProAcceptsOnlyHigh() {
-        val cap = DirectProviderReasoningKnowledge.fromModelId("gpt-5-pro")!!
+        val cap = DirectProviderReasoningKnowledge.fromModelId("gpt-5-pro", ReasoningProviderPath.OPENAI)!!
         assertEquals(listOf(ReasoningEffort.HIGH), cap.supportedEfforts)
         assertTrue(cap.supports(ReasoningEffort.HIGH))
         assertFalse(cap.supports(ReasoningEffort.MEDIUM))
@@ -54,7 +54,7 @@ class DirectProviderReasoningKnowledgeTest {
     @Test
     fun deepSeekReasonerReturnsVisibleReasoningWithoutEffortControl() {
         for (id in listOf("deepseek-reasoner", "deepseek/deepseek-r1", "deepseek-r1")) {
-            val cap = DirectProviderReasoningKnowledge.fromModelId(id)
+            val cap = DirectProviderReasoningKnowledge.fromModelId(id, ReasoningProviderPath.DEEPSEEK)
             assertTrue("expected reasoning for $id", cap != null && cap.isReasoningCapable)
             assertFalse(cap!!.effortConfigurable)
             assertTrue(cap.canReturnVisibleReasoning)
@@ -66,11 +66,11 @@ class DirectProviderReasoningKnowledgeTest {
     fun nonReasoningIdsAreNotClassifiedHere() {
         // deepseek-chat (V3) is not a reasoner; plain chat models are unknown to
         // this tier and must fall through (null), never to a false "absent".
-        assertNull(DirectProviderReasoningKnowledge.fromModelId("deepseek-chat"))
-        assertNull(DirectProviderReasoningKnowledge.fromModelId("gpt-4o"))
-        assertNull(DirectProviderReasoningKnowledge.fromModelId("claude-3.5-sonnet"))
-        assertNull(DirectProviderReasoningKnowledge.fromModelId(""))
-        assertNull(DirectProviderReasoningKnowledge.fromModelId(null))
+        assertNull(DirectProviderReasoningKnowledge.fromModelId("deepseek-chat", ReasoningProviderPath.DEEPSEEK))
+        assertNull(DirectProviderReasoningKnowledge.fromModelId("gpt-4o", ReasoningProviderPath.OPENAI))
+        assertNull(DirectProviderReasoningKnowledge.fromModelId("claude-3.5-sonnet", ReasoningProviderPath.ANTHROPIC_OPENAI_COMPATIBLE))
+        assertNull(DirectProviderReasoningKnowledge.fromModelId("", ReasoningProviderPath.OPENAI))
+        assertNull(DirectProviderReasoningKnowledge.fromModelId(null, ReasoningProviderPath.OPENAI))
     }
 
     @Test
@@ -78,7 +78,25 @@ class DirectProviderReasoningKnowledgeTest {
         // "pro" / "thinking" / "deep" as loose substrings must not classify here
         // (§7.7 forbids generic-substring authority). "gpt-4-pro-preview" has no
         // gpt-5 / o-series identity and no deepseek-reasoner identity.
-        assertNull(DirectProviderReasoningKnowledge.fromModelId("some-thinking-model"))
-        assertNull(DirectProviderReasoningKnowledge.fromModelId("deepthink-42"))
+        assertNull(DirectProviderReasoningKnowledge.fromModelId("some-thinking-model", ReasoningProviderPath.GENERIC_OPENAI_COMPATIBLE))
+        assertNull(DirectProviderReasoningKnowledge.fromModelId("deepthink-42", ReasoningProviderPath.GENERIC_OPENAI_COMPATIBLE))
+    }
+
+    @Test
+    fun officialGeminiAndAnthropicPathsUseProviderAdapters() {
+        val gemini = DirectProviderReasoningKnowledge.fromModelId(
+            "gemini-3.1-pro",
+            ReasoningProviderPath.GEMINI_OPENAI_COMPATIBLE
+        )!!
+        assertEquals(
+            listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH),
+            gemini.supportedEfforts
+        )
+        val claude = DirectProviderReasoningKnowledge.fromModelId(
+            "claude-opus-5",
+            ReasoningProviderPath.ANTHROPIC_OPENAI_COMPATIBLE
+        )!!
+        assertTrue(claude.isReasoningCapable)
+        assertFalse(claude.effortConfigurable)
     }
 }

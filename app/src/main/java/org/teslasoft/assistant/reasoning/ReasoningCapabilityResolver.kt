@@ -27,7 +27,7 @@ import com.google.gson.JsonObject
  *  1. **Provider/model metadata** — an OpenRouter catalog entry's
  *     `supported_parameters` ([OpenRouterReasoningCapability]).
  *  2. **Provider-adapter knowledge** — official reasoning families recognized
- *     by stable id patterns ([DirectProviderReasoningKnowledge]).
+ *     only after the endpoint path identifies the official provider.
  *  3. **Strong variant marker** — a provider-defined reasoning variant suffix
  *     ([ReasoningVariantMarkers]).
  *  4. **Unknown** — [ReasoningCapability.UNKNOWN].
@@ -48,11 +48,14 @@ object ReasoningCapabilityResolver {
      */
     fun resolve(
         modelId: String?,
-        openRouterModelEntry: JsonObject? = null
+        openRouterModelEntry: JsonObject? = null,
+        providerPath: ReasoningProviderPath = ReasoningProviderPath.GENERIC_OPENAI_COMPATIBLE
     ): ReasoningCapability {
         OpenRouterReasoningCapability.fromModelEntry(openRouterModelEntry)?.let { return it }
-        DirectProviderReasoningKnowledge.fromModelId(modelId)?.let { return it }
-        ReasoningVariantMarkers.fromModelId(modelId)?.let { return it }
+        DirectProviderReasoningKnowledge.fromModelId(modelId, providerPath)?.let { return it }
+        if (providerPath != ReasoningProviderPath.GENERIC_OPENAI_COMPATIBLE) {
+            ReasoningVariantMarkers.fromModelId(modelId)?.let { return it }
+        }
         return ReasoningCapability.UNKNOWN
     }
 }

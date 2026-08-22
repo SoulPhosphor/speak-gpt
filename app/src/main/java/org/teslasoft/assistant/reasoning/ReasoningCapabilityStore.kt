@@ -30,12 +30,11 @@ import org.json.JSONObject
  * catalog: capability discovery runs during normal catalog work (the model
  * picker's `/models` read) and records what structured metadata established.
  *
- * Only [ReasoningSupport.KNOWN] capabilities are stored. Absence of an entry
- * reads back as "nothing recorded", so the caller falls through to live tiers
- * (direct-provider knowledge, variant markers) and finally Unknown — an absent
- * entry never means "known not to reason" (§7.7 #4). A favorite created while
- * capability was Unknown therefore gains its lightbulb automatically the first
- * time metadata records the model here (§7.7).
+ * Established KNOWN and ABSENT classifications may be stored. Absence of an
+ * entry still means Unknown; ABSENT is persisted only when an authoritative
+ * catalog explicitly classified a live model as non-reasoning. This lets a
+ * later authoritative refresh correct a previously cached lightbulb without
+ * turning missing or failed metadata into a false negative.
  *
  * Pure functions only, so behavior is unit-tested without Android.
  */
@@ -46,6 +45,7 @@ object ReasoningCapabilityStore {
 
     // Compact per-model field keys.
     private const val K_EFFORT_CONFIGURABLE = "efc"
+    private const val K_SUPPORT = "sup"
     private const val K_EFFORTS = "eff"
     private const val K_CAN_DISABLE = "dis"
     private const val K_VISIBLE = "vis"
@@ -55,7 +55,7 @@ object ReasoningCapabilityStore {
 
     /**
      * Capability recorded for [modelId], or [ReasoningCapability.UNKNOWN] when
-     * nothing is stored. A stored entry always decodes to a KNOWN capability.
+     * nothing is stored.
      */
     fun get(json: String?, modelId: String): ReasoningCapability {
         if (json.isNullOrBlank() || modelId.isBlank()) return ReasoningCapability.UNKNOWN
@@ -65,14 +65,13 @@ object ReasoningCapabilityStore {
     }
 
     /**
-     * Return a JSON string with [modelId] recorded as [capability]. A capability
-     * that is not [ReasoningSupport.KNOWN] REMOVES any entry (uncertainty is not
-     * persisted), so the store only ever carries established reasoning models.
+     * Return a JSON string with [modelId] recorded as [capability]. UNKNOWN
+     * removes any entry; KNOWN and authoritative ABSENT are established states.
      */
     fun set(json: String?, modelId: String, capability: ReasoningCapability): String {
         if (modelId.isBlank()) return json.orEmpty().ifBlank { EMPTY }
         val root = parse(json) ?: JSONObject()
-        if (capability.support != ReasoningSupport.KNOWN) {
+        if (capability.support == ReasoningSupport.UNKNOWN) {
             root.remove(modelId)
         } else {
             root.put(modelId, encodeEntry(capability))
@@ -88,6 +87,7 @@ object ReasoningCapabilityStore {
 
     private fun encodeEntry(cap: ReasoningCapability): JSONObject {
         val obj = JSONObject()
+        obj.put(K_SUPPORT, cap.support.name)
         obj.put(K_EFFORT_CONFIGURABLE, cap.effortConfigurable)
         if (cap.supportedEfforts.isNotEmpty()) {
             val arr = JSONArray()
@@ -116,8 +116,13 @@ object ReasoningCapabilityStore {
         } catch (_: IllegalArgumentException) {
             CapabilitySource.PROVIDER_METADATA
         }
+        val support = try {
+            ReasoningSupport.valueOf(entry.optString(K_SUPPORT, ReasoningSupport.KNOWN.name))
+        } catch (_: IllegalArgumentException) {
+            ReasoningSupport.KNOWN
+        }
         return ReasoningCapability(
-            support = ReasoningSupport.KNOWN,
+            support = support,
             effortConfigurable = entry.optBoolean(K_EFFORT_CONFIGURABLE, false),
             supportedEfforts = efforts,
             canDisableReasoning = entry.optBoolean(K_CAN_DISABLE, false),

@@ -146,4 +146,47 @@ class ReasoningStreamAccumulatorTest {
         // Display text also reflects the fragments.
         assertEquals("Let me think.", acc.snapshot().text)
     }
+
+    @Test
+    fun equivalentReasoningAndStructuredTextInOneDeltaDisplaysOnce() {
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine(
+            """data: {"choices":[{"delta":{"reasoning":"We need to respond","reasoning_details":[{"type":"reasoning.text","text":"We need to respond","index":0}]}}]}"""
+        )
+        assertEquals("We need to respond", acc.snapshot().text)
+        assertEquals("We need to respond", acc.reasoningDetails()!![0].asJsonObject.get("text").asString)
+    }
+
+    @Test
+    fun equivalentReasoningContentAndStructuredTextInOneDeltaDisplaysOnce() {
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine(
+            """data: {"choices":[{"delta":{"reasoning_content":"One copy","reasoning_details":[{"type":"reasoning.summary","text":"One copy"}]}}]}"""
+        )
+        assertEquals("One copy", acc.snapshot().text)
+        // The chosen unstructured field is raw reasoning; a duplicate summary
+        // representation must not relabel the displayed content as a summary.
+        assertFalse(acc.snapshot().isSummary)
+    }
+
+    @Test
+    fun structuredEncryptedAndSignatureBlocksRemainWhileDirectTextWinsDisplay() {
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine(
+            """data: {"choices":[{"delta":{"reasoning":"Visible once","reasoning_details":[{"type":"reasoning.text","text":"Visible once","index":0},{"type":"reasoning.encrypted","data":"OPAQUE==","index":1},{"type":"reasoning.signature","signature":"sig","index":2}]}}]}"""
+        )
+        assertEquals("Visible once", acc.snapshot().text)
+        val details = acc.reasoningDetails()!!
+        assertEquals(3, details.size())
+        assertEquals("OPAQUE==", details[1].asJsonObject.get("data").asString)
+        assertEquals("sig", details[2].asJsonObject.get("signature").asString)
+    }
+
+    @Test
+    fun repeatedTextAcrossSeparateDeltasIsPreserved() {
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning":"again "}}]}""")
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning":"again"}}]}""")
+        assertEquals("again again", acc.snapshot().text)
+    }
 }

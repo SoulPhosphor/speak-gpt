@@ -71,9 +71,9 @@ data class ReasoningCapability(
     val source: CapabilitySource = CapabilitySource.NONE,
 
     /** True when [supportedEfforts] is the provider's own published effort list
-     *  (OpenRouter's `reasoning.supported_efforts`) rather than an assumed or
-     *  learned ladder. An authoritative list is exact — dynamic learning must
-     *  not add optimistic extremes to it or subtract a level it names. */
+     *  (OpenRouter's `reasoning.supported_efforts`) rather than a conservative
+     *  adapter default. An authoritative list is exact and must never be widened
+     *  or narrowed speculatively. */
     val effortsAuthoritative: Boolean = false
 ) {
     /**
@@ -153,6 +153,11 @@ enum class CapabilitySource {
     /** Current official provider capability knowledge held in a direct-provider
      *  adapter, for providers that expose no equivalent list metadata. */
     PROVIDER_ADAPTER,
+
+    /** A real response on this exact endpoint/model path returned separately
+     *  supplied reasoning text. This proves that reasoning and visible
+     *  reasoning exist, but says nothing about supported effort controls. */
+    OBSERVED_RESPONSE,
 
     /** A provider-defined variant marker that unambiguously denotes a reasoning
      *  SKU (lowest confidence; never a generic name substring). */

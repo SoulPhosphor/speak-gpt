@@ -3260,7 +3260,6 @@
     <!-- Snackbar shown after a reasoning level the model refused was learned and
          the request was transparently retried one step toward the middle
          (owner wording, Aug 2026). %1$s = refused level, %2$s = substituted. -->
-    <string name="reasoning_effort_substituted_notice">This model doesn\'t support %1$s reasoning. %2$s reasoning was substituted.</string>
     <!-- Favorite Reasoning Settings screen (chat-redesign-plan.md §7.4). -->
     <string name="reasoning_settings_title">Reasoning Settings</string>
     <string name="reasoning_show_reasoning_label">Show Reasoning</string>

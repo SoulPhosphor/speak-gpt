@@ -84,8 +84,11 @@ class ReasoningStreamAccumulator {
     }
 
     private fun readReasoningFromNode(node: JsonObject) {
-        stringOrNull(node, "reasoning")?.let { reasoning.append(it); sawRawBlock = true }
-        stringOrNull(node, "reasoning_content")?.let { reasoning.append(it); sawRawBlock = true }
+        val directReasoning = stringOrNull(node, "reasoning")
+        val compatibilityReasoning = stringOrNull(node, "reasoning_content")
+        val detailText = StringBuilder()
+        var detailHasSummary = false
+        var detailHasRaw = false
 
         node.get("reasoning_details")
             ?.takeUnless { it.isJsonNull }
@@ -95,11 +98,33 @@ class ReasoningStreamAccumulator {
                 val block = el.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
                 collectDetailBlock(block)
                 val type = stringOrNull(block, "type").orEmpty().lowercase()
-                if (type.contains("summary")) sawSummaryBlock = true else if (type.isNotEmpty()) sawRawBlock = true
+                if (type.contains("summary")) detailHasSummary = true else if (type.isNotEmpty()) detailHasRaw = true
                 // The human-readable payload is `text`; `data` blocks (encrypted
                 // continuation state) carry no display text and are skipped here.
-                stringOrNull(block, "text")?.let { reasoning.append(it) }
+                stringOrNull(block, "text")?.let { detailText.append(it) }
             }
+
+        // One provider event may expose the same display delta through several
+        // compatibility representations. Choose exactly one source for display
+        // in stable priority order while retaining every structured detail block
+        // above for continuation/tool-call state. Deduplicating here, at the
+        // field-normalization boundary, preserves legitimate repeated text that
+        // arrives in separate model deltas.
+        when {
+            directReasoning != null -> {
+                reasoning.append(directReasoning)
+                sawRawBlock = true
+            }
+            compatibilityReasoning != null -> {
+                reasoning.append(compatibilityReasoning)
+                sawRawBlock = true
+            }
+            detailText.isNotEmpty() -> {
+                reasoning.append(detailText)
+                if (detailHasSummary) sawSummaryBlock = true
+                if (detailHasRaw) sawRawBlock = true
+            }
+        }
     }
 
     /**

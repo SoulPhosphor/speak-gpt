@@ -63,6 +63,26 @@ class ReasoningCapabilityStoreTest {
     }
 
     @Test
+    fun authoritativeAbsentRoundTripsWithoutBecomingUnknown() {
+        val absent = ReasoningCapability.ABSENT.copy(source = CapabilitySource.PROVIDER_METADATA)
+        val json = ReasoningCapabilityStore.set(ReasoningCapabilityStore.EMPTY, "plain/model", absent)
+        val back = ReasoningCapabilityStore.get(json, "plain/model")
+        assertEquals(ReasoningSupport.ABSENT, back.support)
+        assertEquals(CapabilitySource.PROVIDER_METADATA, back.source)
+    }
+
+    @Test
+    fun observedResponseProvenanceRoundTrips() {
+        val observed = ReasoningCapability(
+            support = ReasoningSupport.KNOWN,
+            canReturnVisibleReasoning = true,
+            source = CapabilitySource.OBSERVED_RESPONSE
+        )
+        val json = ReasoningCapabilityStore.set(ReasoningCapabilityStore.EMPTY, "vendor/m", observed)
+        assertEquals(CapabilitySource.OBSERVED_RESPONSE, ReasoningCapabilityStore.get(json, "vendor/m").source)
+    }
+
+    @Test
     fun includeOnlyCapabilityRoundTripsWithoutEfforts() {
         val visibleOnly = ReasoningCapability(
             support = ReasoningSupport.KNOWN,

@@ -20,11 +20,10 @@ package org.teslasoft.assistant.reasoning
  * Direct-provider reasoning knowledge (chat-redesign-plan.md §7.7 tier 2 —
  * "provider-adapter knowledge second").
  *
- * A generic (non-OpenRouter) endpoint is just an OpenAI-compatible base URL and
- * key; it exposes no `supported_parameters` metadata, so the model's own
- * official identity is the signal. This classifier recognizes only well-known,
- * officially reasoning-capable model FAMILIES by their stable provider id
- * patterns — OpenAI's o-series / GPT-5 line and DeepSeek's reasoner. That is
+ * A provider adapter is selected from the exact official endpoint path before
+ * this classifier sees a model id. A generic OpenAI-compatible endpoint never
+ * reaches an official family classifier merely because its model string looks
+ * familiar. The adapter recognizes only documented reasoning families. That is
  * "current official provider model capability information", not the forbidden
  * authoritative name list (§7.7 bans a name list as the PRIMARY classifier and
  * bans generic substrings like `thinking`/`pro`/`r1`; a curated official-family
@@ -45,13 +44,21 @@ object DirectProviderReasoningKnowledge {
      * tier does not recognize the model. [modelId] is matched case-insensitively
      * against official id patterns only.
      */
-    fun fromModelId(modelId: String?): ReasoningCapability? {
+    fun fromModelId(
+        modelId: String?,
+        providerPath: ReasoningProviderPath
+    ): ReasoningCapability? {
         val id = modelId?.trim()?.lowercase() ?: return null
         if (id.isEmpty()) return null
 
-        deepSeekReasoner(id)?.let { return it }
-        openAiReasoning(id)?.let { return it }
-        return null
+        return when (providerPath) {
+            ReasoningProviderPath.OPENAI -> openAiReasoning(id)
+            ReasoningProviderPath.DEEPSEEK -> deepSeekReasoner(id)
+            ReasoningProviderPath.GEMINI_OPENAI_COMPATIBLE -> geminiReasoning(id)
+            ReasoningProviderPath.ANTHROPIC_OPENAI_COMPATIBLE -> anthropicReasoning(id)
+            ReasoningProviderPath.OPENROUTER,
+            ReasoningProviderPath.GENERIC_OPENAI_COMPATIBLE -> null
+        }
     }
 
     /**
@@ -95,6 +102,76 @@ object DirectProviderReasoningKnowledge {
             support = ReasoningSupport.KNOWN,
             effortConfigurable = true,
             supportedEfforts = efforts,
+            canDisableReasoning = false,
+            canReturnVisibleReasoning = false,
+            tokenBudgetSupported = false,
+            source = CapabilitySource.PROVIDER_ADAPTER
+        )
+    }
+
+    /** Gemini's official OpenAI-compatible endpoint accepts semantic
+     * `reasoning_effort` on the documented 2.5/3 families. Keep the ladders
+     * family-specific and conservative; unknown/future ids remain Unknown. */
+    private fun geminiReasoning(id: String): ReasoningCapability? {
+        val model = id.substringAfterLast('/')
+        val efforts: List<ReasoningEffort>
+        val canDisable: Boolean
+        when {
+            model.startsWith("gemini-3.1-pro") || model.startsWith("gemini-3.7-flash") -> {
+                efforts = listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH)
+                canDisable = false
+            }
+            model.startsWith("gemini-3-pro") -> {
+                efforts = listOf(ReasoningEffort.LOW, ReasoningEffort.HIGH)
+                canDisable = false
+            }
+            model.startsWith("gemini-3.1-flash-lite-image") -> {
+                efforts = listOf(ReasoningEffort.MINIMAL, ReasoningEffort.HIGH)
+                canDisable = false
+            }
+            model.startsWith("gemini-3.1-flash-lite") ||
+                model.startsWith("gemini-3.6-flash") ||
+                model.startsWith("gemini-3.5-flash") ||
+                model.startsWith("gemini-3-flash") -> {
+                efforts = listOf(
+                    ReasoningEffort.MINIMAL, ReasoningEffort.LOW,
+                    ReasoningEffort.MEDIUM, ReasoningEffort.HIGH
+                )
+                canDisable = false
+            }
+            model.startsWith("gemini-2.5-pro") -> {
+                efforts = listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH)
+                canDisable = false
+            }
+            model.startsWith("gemini-2.5-flash") -> {
+                efforts = listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH)
+                canDisable = true
+            }
+            else -> return null
+        }
+        return ReasoningCapability(
+            support = ReasoningSupport.KNOWN,
+            effortConfigurable = true,
+            supportedEfforts = efforts,
+            canDisableReasoning = canDisable,
+            // The compatibility API can return thought summaries only through
+            // Google-specific fields SpeakGPT does not yet normalize reliably.
+            canReturnVisibleReasoning = false,
+            tokenBudgetSupported = false,
+            source = CapabilitySource.PROVIDER_ADAPTER
+        )
+    }
+
+    /** Anthropic's OpenAI compatibility layer ignores `reasoning_effort` and
+     * does not return detailed thinking. Current Claude 5 paths still reason by
+     * default, so they are known fixed reasoning without invented controls. */
+    private fun anthropicReasoning(id: String): ReasoningCapability? {
+        val model = id.substringAfterLast('/')
+        if (!model.startsWith("claude-") || !model.contains("5")) return null
+        return ReasoningCapability(
+            support = ReasoningSupport.KNOWN,
+            effortConfigurable = false,
+            supportedEfforts = emptyList(),
             canDisableReasoning = false,
             canReturnVisibleReasoning = false,
             tokenBudgetSupported = false,

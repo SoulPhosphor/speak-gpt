@@ -57,8 +57,8 @@ enum class ReasoningEffort(val serialized: String) {
     HIGH("high"),
 
     /** Extra-high reasoning, above high. Offered only where authoritative
-     *  provider metadata lists it (or, on a metadata path without a published
-     *  ladder, learned). Never guessed onto a model whose ladder is known. */
+     *  provider metadata or an official provider adapter lists it. Never
+     *  guessed onto a model whose ladder is unknown. */
     XHIGH("xhigh"),
 
     /** The highest reasoning tier some current models expose, above extra high

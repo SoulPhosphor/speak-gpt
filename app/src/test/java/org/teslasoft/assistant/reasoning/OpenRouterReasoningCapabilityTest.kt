@@ -29,19 +29,16 @@ class OpenRouterReasoningCapabilityTest {
     private fun entry(json: String): JsonObject = JsonParser.parseString(json).asJsonObject
 
     @Test
-    fun reasoningObjectMarkerGivesFullControl() {
+    fun coarseReasoningMarkerProvesReasoningWithoutInventingControls() {
         val cap = OpenRouterReasoningCapability.fromModelEntry(
             entry("""{"id":"x/y","supported_parameters":["max_tokens","reasoning","tools"]}""")
         )!!
         assertEquals(ReasoningSupport.KNOWN, cap.support)
-        assertTrue(cap.effortConfigurable)
-        assertEquals(
-            listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH),
-            cap.supportedEfforts
-        )
-        assertTrue(cap.canDisableReasoning)
+        assertFalse(cap.effortConfigurable)
+        assertTrue(cap.supportedEfforts.isEmpty())
+        assertFalse(cap.canDisableReasoning)
         assertTrue(cap.canReturnVisibleReasoning)
-        assertTrue(cap.tokenBudgetSupported)
+        assertFalse(cap.tokenBudgetSupported)
         assertEquals(CapabilitySource.PROVIDER_METADATA, cap.source)
     }
 
@@ -58,11 +55,12 @@ class OpenRouterReasoningCapabilityTest {
     }
 
     @Test
-    fun noReasoningMarkerFallsThroughAsNull() {
-        assertNull(
+    fun explicitNonReasoningMetadataIsAbsent() {
+        assertEquals(
+            ReasoningSupport.ABSENT,
             OpenRouterReasoningCapability.fromModelEntry(
                 entry("""{"id":"x/y","supported_parameters":["max_tokens","tools","temperature"]}""")
-            )
+            )!!.support
         )
     }
 
@@ -71,7 +69,10 @@ class OpenRouterReasoningCapabilityTest {
         assertNull(OpenRouterReasoningCapability.fromModelEntry(null))
         assertNull(OpenRouterReasoningCapability.fromModelEntry(entry("""{"id":"x/y"}""")))
         assertNull(OpenRouterReasoningCapability.fromModelEntry(entry("""{"supported_parameters":"reasoning"}""")))
-        assertNull(OpenRouterReasoningCapability.fromModelEntry(entry("""{"supported_parameters":[]}""")))
+        assertEquals(
+            ReasoningSupport.ABSENT,
+            OpenRouterReasoningCapability.fromModelEntry(entry("""{"supported_parameters":[]}"""))!!.support
+        )
     }
 
     @Test
@@ -79,6 +80,7 @@ class OpenRouterReasoningCapabilityTest {
         val cap = OpenRouterReasoningCapability.fromModelEntry(
             entry("""{"supported_parameters":["Reasoning"]}""")
         )
-        assertTrue(cap != null && cap.effortConfigurable)
+        assertTrue(cap != null && cap.isReasoningCapable)
+        assertFalse(cap!!.effortConfigurable)
     }
 }

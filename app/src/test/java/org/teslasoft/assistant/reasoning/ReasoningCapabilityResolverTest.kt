@@ -38,14 +38,20 @@ class ReasoningCapabilityResolverTest {
 
     @Test
     fun adapterKnowledgeUsedWhenNoMetadataEntry() {
-        val cap = ReasoningCapabilityResolver.resolve(modelId = "o3-mini")
+        val cap = ReasoningCapabilityResolver.resolve(
+            modelId = "o3-mini",
+            providerPath = ReasoningProviderPath.OPENAI
+        )
         assertEquals(CapabilitySource.PROVIDER_ADAPTER, cap.source)
         assertEquals(ReasoningSupport.KNOWN, cap.support)
     }
 
     @Test
     fun variantMarkerUsedWhenAdapterDoesNotRecognizeModel() {
-        val cap = ReasoningCapabilityResolver.resolve(modelId = "vendor/model:thinking")
+        val cap = ReasoningCapabilityResolver.resolve(
+            modelId = "vendor/model:thinking",
+            providerPath = ReasoningProviderPath.OPENROUTER
+        )
         assertEquals(CapabilitySource.VARIANT_MARKER, cap.source)
     }
 
@@ -57,13 +63,21 @@ class ReasoningCapabilityResolverTest {
     }
 
     @Test
-    fun metadataWithoutReasoningFallsThroughToAdapter() {
-        // The entry exists but advertises no reasoning; the model id is still a
-        // known reasoning family, so the adapter tier should classify it.
+    fun authoritativeMetadataWithoutReasoningOverridesNameKnowledge() {
         val cap = ReasoningCapabilityResolver.resolve(
             modelId = "o3",
             openRouterModelEntry = entry("""{"supported_parameters":["tools","max_tokens"]}""")
         )
-        assertEquals(CapabilitySource.PROVIDER_ADAPTER, cap.source)
+        assertEquals(CapabilitySource.PROVIDER_METADATA, cap.source)
+        assertEquals(ReasoningSupport.ABSENT, cap.support)
+    }
+
+    @Test
+    fun genericEndpointDoesNotInheritOfficialCapabilityFromModelName() {
+        val cap = ReasoningCapabilityResolver.resolve(
+            modelId = "o3-mini",
+            providerPath = ReasoningProviderPath.GENERIC_OPENAI_COMPATIBLE
+        )
+        assertEquals(ReasoningCapability.UNKNOWN, cap)
     }
 }

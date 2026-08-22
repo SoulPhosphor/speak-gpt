@@ -170,23 +170,44 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
     private fun bindReasoningLightbulb(viewHolder: ViewHolder, modelId: String, endpointId: String, tintColor: Int) {
         val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
         val capability = org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
-            endpoint.reasoningCapabilityByModel, modelId
+            endpoint.reasoningCapabilityByModel,
+            modelId,
+            providerPath = org.teslasoft.assistant.reasoning.ReasoningProviderPath.forEndpoint(
+                endpoint.host,
+                endpoint.isOpenRouterRouting()
+            )
         )
-        if (!capability.hasConfigurableSetting) {
+        if (!capability.isReasoningCapable) {
             viewHolder.reasoningSettings.visibility = View.GONE
             viewHolder.reasoningSettings.setOnClickListener(null)
             return
         }
         viewHolder.reasoningSettings.imageTintList = ColorStateList.valueOf(tintColor)
-        viewHolder.reasoningSettings.alpha = 1f
-        viewHolder.reasoningSettings.isClickable = true
-        viewHolder.reasoningSettings.tooltipText = context.getString(R.string.reasoning_settings_bulb_desc)
-        viewHolder.reasoningSettings.contentDescription = context.getString(R.string.reasoning_settings_bulb_desc)
         viewHolder.reasoningSettings.visibility = View.VISIBLE
-        viewHolder.reasoningSettings.setOnClickListener {
-            context.startActivity(
-                org.teslasoft.assistant.ui.activities.ReasoningSettingsActivity.createIntent(context, modelId, endpointId)
-            )
+        if (capability.hasConfigurableSetting) {
+            viewHolder.reasoningSettings.alpha = 1f
+            viewHolder.reasoningSettings.scaleX = 1f
+            viewHolder.reasoningSettings.scaleY = 1f
+            viewHolder.reasoningSettings.isClickable = true
+            viewHolder.reasoningSettings.isFocusable = true
+            viewHolder.reasoningSettings.tooltipText = context.getString(R.string.reasoning_settings_bulb_desc)
+            viewHolder.reasoningSettings.contentDescription = context.getString(R.string.reasoning_settings_bulb_desc)
+            viewHolder.reasoningSettings.setOnClickListener {
+                context.startActivity(
+                    org.teslasoft.assistant.ui.activities.ReasoningSettingsActivity.createIntent(context, modelId, endpointId)
+                )
+            }
+        } else {
+            // A fixed reasoning model keeps the bulb's identity meaning but has
+            // no empty settings screen to open.
+            viewHolder.reasoningSettings.alpha = 0.55f
+            viewHolder.reasoningSettings.scaleX = 0.82f
+            viewHolder.reasoningSettings.scaleY = 0.82f
+            viewHolder.reasoningSettings.isClickable = false
+            viewHolder.reasoningSettings.isFocusable = false
+            viewHolder.reasoningSettings.tooltipText = null
+            viewHolder.reasoningSettings.contentDescription = context.getString(R.string.reasoning_model_indicator_desc)
+            viewHolder.reasoningSettings.setOnClickListener(null)
         }
     }
 

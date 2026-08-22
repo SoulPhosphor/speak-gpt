@@ -117,7 +117,12 @@ class ModelListAdapter(private val context: Context, private val items: ArrayLis
             val endpoint = org.teslasoft.assistant.preferences.ApiEndpointPreferences
                 .getApiEndpointPreferences(context).getApiEndpoint(context, apiEndpointId)
             org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
-                endpoint.reasoningCapabilityByModel, modelId
+                endpoint.reasoningCapabilityByModel,
+                modelId,
+                providerPath = org.teslasoft.assistant.reasoning.ReasoningProviderPath.forEndpoint(
+                    endpoint.host,
+                    endpoint.isOpenRouterRouting()
+                )
             )
         }
         if (!capability.isReasoningCapable) {

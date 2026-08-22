@@ -14,26 +14,16 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * Per-endpoint record of reasoning-effort levels a model was PROVEN not to
- * accept (dynamic minimal/xhigh learning, owner ruling Aug 2026).
- *
- * Only the two optimistically offered extremes — minimal and extra high — can
- * be learned-rejected; when a model refuses one, its token is recorded here so
- * that level is never offered for that model again. Like the capability store,
- * this is a compact `model-id -> [level, …]` JSON map kept on the endpoint
- * profile, and every function is pure so behavior is unit-tested without
- * Android.
- *
- * Absence means "nothing learned" — never "supported". The offered ladder starts
- * optimistic and this store only ever SUBTRACTS from it.
+ * Legacy rejection-learning codec retained for endpoint migration and model
+ * cleanup. Rejected levels no longer construct the user-facing effort ladder
+ * or trigger retries; supported levels now come from provider evidence.
  */
 object RejectedReasoningLevelStore {
 
     /** Canonical "nothing recorded" form. */
     const val EMPTY: String = "{}"
 
-    /** The explicit levels this store may carry — the only optimistically
-     *  offered, and therefore rejectable, levels. */
+    /** The only values encoded by the retired learning implementation. */
     private val LEARNABLE = setOf(ReasoningEffort.MINIMAL, ReasoningEffort.XHIGH)
 
     /** The set of levels [modelId] is known to reject, empty when none. */

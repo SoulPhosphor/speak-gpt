@@ -36,7 +36,7 @@ class EndpointReasoningCapabilityTest {
             liveModelEntry = entry("""{"supported_parameters":["reasoning"]}""")
         )
         assertEquals(CapabilitySource.PROVIDER_METADATA, cap.source)
-        assertTrue(cap.effortConfigurable)
+        assertFalse(cap.effortConfigurable)
     }
 
     @Test
@@ -50,12 +50,16 @@ class EndpointReasoningCapabilityTest {
         )
         val cap = EndpointReasoningCapability.resolve(stored, "x-ai/grok-4")
         assertTrue(cap.isReasoningCapable)
-        assertTrue(cap.effortConfigurable)
+        assertFalse(cap.effortConfigurable)
     }
 
     @Test
     fun fallsBackToIdKnowledgeWhenNothingStored() {
-        val cap = EndpointReasoningCapability.resolve(ReasoningCapabilityStore.EMPTY, "o3-mini")
+        val cap = EndpointReasoningCapability.resolve(
+            ReasoningCapabilityStore.EMPTY,
+            "o3-mini",
+            providerPath = ReasoningProviderPath.OPENAI
+        )
         assertEquals(CapabilitySource.PROVIDER_ADAPTER, cap.source)
     }
 
@@ -66,7 +70,7 @@ class EndpointReasoningCapabilityTest {
     }
 
     @Test
-    fun learnFromCatalogRecordsOnlyReasoningModels() {
+    fun learnFromCatalogRecordsKnownAndAuthoritativeAbsentModels() {
         val catalog = """
             {"data":[
               {"id":"x-ai/grok-4","supported_parameters":["reasoning"]},
@@ -76,11 +80,10 @@ class EndpointReasoningCapabilityTest {
         """.trimIndent()
         val store = EndpointReasoningCapability.learnFromCatalogJson(ReasoningCapabilityStore.EMPTY, catalog)
 
-        assertTrue(EndpointReasoningCapability.resolve(store, "x-ai/grok-4").effortConfigurable)
+        assertTrue(EndpointReasoningCapability.resolve(store, "x-ai/grok-4").isReasoningCapable)
+        assertFalse(EndpointReasoningCapability.resolve(store, "x-ai/grok-4").effortConfigurable)
         assertTrue(EndpointReasoningCapability.resolve(store, "d/r1").isReasoningCapable)
-        // A non-reasoning model is never recorded; it resolves via id tiers only,
-        // which do not know "plain/model", so it stays Unknown.
-        assertEquals(ReasoningCapability.UNKNOWN, EndpointReasoningCapability.resolve(store, "plain/model"))
+        assertEquals(ReasoningSupport.ABSENT, EndpointReasoningCapability.resolve(store, "plain/model").support)
     }
 
     @Test
@@ -100,7 +103,8 @@ class EndpointReasoningCapabilityTest {
         val noReasoning = EndpointReasoningCapability.learnFromEntry(
             ReasoningCapabilityStore.EMPTY, "m", entry("""{"supported_parameters":["tools"]}""")
         )
-        assertEquals(ReasoningCapabilityStore.EMPTY, noReasoning)
+        assertNotEquals(ReasoningCapabilityStore.EMPTY, noReasoning)
+        assertEquals(ReasoningSupport.ABSENT, ReasoningCapabilityStore.get(noReasoning, "m").support)
 
         val learned = EndpointReasoningCapability.learnFromEntry(
             ReasoningCapabilityStore.EMPTY, "m", entry("""{"supported_parameters":["reasoning"]}""")

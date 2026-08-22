@@ -122,11 +122,10 @@ class ApiEndpointObject(
      */
     var reasoningCapabilityByModel: String = "",
     /**
-     * Compact JSON map of `model-id -> [rejected level, …]` recording which
-     * optimistically offered reasoning extremes (minimal / extra high) a model
-     * has PROVEN it refuses (dynamic minimal/xhigh learning, owner ruling Aug
-     * 2026). Only ever subtracts from the offered ladder; absence means nothing
-     * learned. See [org.teslasoft.assistant.reasoning.RejectedReasoningLevelStore].
+     * Legacy rejection-learning JSON retained for backward-compatible endpoint
+     * decoding and cleanup. Capability resolution no longer consumes it; effort
+     * choices come from provider evidence. See
+     * [org.teslasoft.assistant.reasoning.RejectedReasoningLevelStore].
      * Kept at the END of the constructor so existing positional callers stay valid.
      */
     var reasoningRejectedLevelsByModel: String = ""

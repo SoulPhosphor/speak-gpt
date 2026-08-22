@@ -118,7 +118,13 @@ class ReasoningSettingsActivity : FragmentActivity() {
         val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(this)
             .getApiEndpoint(this, endpointId)
         capability = EndpointReasoningCapability.resolveWithLearnedRejections(
-            endpoint.reasoningCapabilityByModel, endpoint.reasoningRejectedLevelsByModel, modelId
+            endpoint.reasoningCapabilityByModel,
+            endpoint.reasoningRejectedLevelsByModel,
+            modelId,
+            providerPath = org.teslasoft.assistant.reasoning.ReasoningProviderPath.forEndpoint(
+                endpoint.host,
+                endpoint.isOpenRouterRouting()
+            )
         )
 
         // Start from the favorite's saved values; a saved effort the active path

@@ -53,8 +53,8 @@ class OpenRouterStructuredReasoningTest {
         assertFalse(cap.canDisableReasoning) // mandatory
         assertEquals(
             listOf(
-                ReasoningEffort.MINIMAL, ReasoningEffort.LOW, ReasoningEffort.MEDIUM,
-                ReasoningEffort.HIGH, ReasoningEffort.XHIGH
+                ReasoningEffort.XHIGH, ReasoningEffort.HIGH, ReasoningEffort.MEDIUM,
+                ReasoningEffort.LOW, ReasoningEffort.MINIMAL
             ),
             cap.supportedEfforts
         )
@@ -66,7 +66,7 @@ class OpenRouterStructuredReasoningTest {
             entry(listOf("max", "high", "low"), mandatory = false)
         )!!
         assertEquals(
-            listOf(ReasoningEffort.LOW, ReasoningEffort.HIGH, ReasoningEffort.MAX),
+            listOf(ReasoningEffort.MAX, ReasoningEffort.HIGH, ReasoningEffort.LOW),
             cap.supportedEfforts
         )
         assertFalse(cap.supportedEfforts.contains(ReasoningEffort.MEDIUM))
@@ -74,8 +74,8 @@ class OpenRouterStructuredReasoningTest {
         // The Thinking dropdown offers exactly Auto + the published ladder + Off.
         assertEquals(
             listOf(
-                ReasoningEffort.AUTO, ReasoningEffort.LOW, ReasoningEffort.HIGH,
-                ReasoningEffort.MAX, ReasoningEffort.OFF
+                ReasoningEffort.AUTO, ReasoningEffort.MAX, ReasoningEffort.HIGH,
+                ReasoningEffort.LOW, ReasoningEffort.OFF
             ),
             cap.thinkingChoices()
         )
@@ -87,7 +87,7 @@ class OpenRouterStructuredReasoningTest {
             entry(listOf("xhigh", "medium", "low"), mandatory = false)
         )!!
         assertEquals(
-            listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.XHIGH),
+            listOf(ReasoningEffort.XHIGH, ReasoningEffort.MEDIUM, ReasoningEffort.LOW),
             cap.supportedEfforts
         )
         assertFalse(cap.supportedEfforts.contains(ReasoningEffort.HIGH))
@@ -104,12 +104,43 @@ class OpenRouterStructuredReasoningTest {
     }
 
     @Test
-    fun singlePublishedLevelIsFixedNotAChoice() {
+    fun omittedMandatoryAndBudgetFlagsDoNotInventControls() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry(listOf("low", "high"), mandatory = null)
+        )!!
+        assertFalse(cap.canDisableReasoning)
+        assertFalse(cap.tokenBudgetSupported)
+    }
+
+    @Test
+    fun publishedTokenBudgetSupportIsPreserved() {
+        val obj = entry(listOf("low"), mandatory = true)
+        obj.getAsJsonObject("reasoning").addProperty("supports_max_tokens", true)
+        val cap = OpenRouterReasoningCapability.fromModelEntry(obj)!!
+        assertTrue(cap.tokenBudgetSupported)
+    }
+
+    @Test
+    fun publishedNoneEffortEstablishesDisableabilityWithoutInventingALevel() {
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry(listOf("low", "none"), mandatory = null)
+        )!!
+        assertEquals(listOf(ReasoningEffort.LOW), cap.supportedEfforts)
+        assertTrue(cap.canDisableReasoning)
+        assertEquals(
+            listOf(ReasoningEffort.AUTO, ReasoningEffort.LOW, ReasoningEffort.OFF),
+            cap.thinkingChoices()
+        )
+    }
+
+    @Test
+    fun singlePublishedLevelRemainsAnExactSelectableLevel() {
         val cap = OpenRouterReasoningCapability.fromModelEntry(
             entry(listOf("high"), mandatory = true)
         )!!
         assertTrue(cap.isReasoningCapable)
-        assertFalse(cap.effortConfigurable) // one level is not a choice
+        assertTrue(cap.effortConfigurable)
+        assertEquals(listOf(ReasoningEffort.AUTO, ReasoningEffort.HIGH), cap.thinkingChoices())
     }
 
     @Test
@@ -117,20 +148,17 @@ class OpenRouterStructuredReasoningTest {
         val cap = OpenRouterReasoningCapability.fromModelEntry(
             entry(supportedEfforts = null, mandatory = null, hasReasoningObject = false)
         )!!
-        assertTrue(cap.effortConfigurable)
-        assertFalse(cap.effortsAuthoritative) // fallback ladder, learning may widen
-        assertEquals(
-            listOf(ReasoningEffort.LOW, ReasoningEffort.MEDIUM, ReasoningEffort.HIGH),
-            cap.supportedEfforts
-        )
+        assertFalse(cap.effortConfigurable)
+        assertFalse(cap.effortsAuthoritative)
+        assertTrue(cap.supportedEfforts.isEmpty())
     }
 
     @Test
-    fun nonReasoningModelYieldsNull() {
+    fun nonReasoningModelIsAuthoritativelyAbsent() {
         val obj = JsonObject()
         obj.addProperty("id", "tencent/translate")
         obj.add("supported_parameters", JsonArray().apply { add("max_tokens"); add("temperature") })
-        assertEquals(null, OpenRouterReasoningCapability.fromModelEntry(obj))
+        assertEquals(ReasoningSupport.ABSENT, OpenRouterReasoningCapability.fromModelEntry(obj)!!.support)
     }
 
     @Test

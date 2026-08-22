@@ -33,15 +33,14 @@ package org.teslasoft.assistant.reasoning
  *    level cannot be chosen (e.g. a mandatory-reasoning model). The lock glyph
  *    signals "not changeable".
  *  - Otherwise the effective effort maps straight across: [OFF] for a disabled
- *    reasoning model, an explicit level ([MINIMAL]…[HIGH], and [XHIGH] once the
- *    ladder offers it), or [AUTOMATIC] when the effort was left to the provider.
+ *    reasoning model, any explicit provider-supported level, or [AUTOMATIC]
+ *    when the effort was left to the provider.
  *
  * [AUTOMATIC] means exactly "reasoning was left automatic and the app cannot
  * confirm the level the provider actually served" — never a guess at a level.
  *
- * [XHIGH] exists so the glyph set is complete and ready for the later
- * dynamic-learning of `minimal`/`xhigh`; the universal ladder does not offer it
- * yet, so [forGeneration] does not currently return it.
+ * Every explicit enum value exists so authoritative provider ladders can map
+ * directly without SpeakGPT inventing or collapsing levels.
  */
 enum class ReasoningIndicator(val token: String) {
     OFF("off"),

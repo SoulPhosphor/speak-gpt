@@ -27,24 +27,20 @@ class EndpointReasoningLearningTest {
     }
 
     @Test
-    fun gatewayMetadataOffersMinimalAndXhighOptimistically() {
+    fun coarseGatewayMetadataDoesNotInventEffortLevels() {
         val cap = EndpointReasoningCapability.resolveWithLearnedRejections(
             reasoningCapabilityByModel = null,
             rejectedLevelsByModel = null,
             modelId = "vendor/m",
             liveModelEntry = reasoningEntry("vendor/m")
         )
-        assertEquals(
-            listOf(
-                ReasoningEffort.MINIMAL, ReasoningEffort.LOW, ReasoningEffort.MEDIUM,
-                ReasoningEffort.HIGH, ReasoningEffort.XHIGH
-            ),
-            cap.supportedEfforts
-        )
+        assertTrue(cap.isReasoningCapable)
+        assertFalse(cap.effortConfigurable)
+        assertTrue(cap.supportedEfforts.isEmpty())
     }
 
     @Test
-    fun learnedRejectionsAreSubtracted() {
+    fun legacyRejectionHistoryDoesNotPopulateOrAlterTheMenu() {
         val rejected = RejectedReasoningLevelStore.add(null, "vendor/m", ReasoningEffort.XHIGH)
         val cap = EndpointReasoningCapability.resolveWithLearnedRejections(
             reasoningCapabilityByModel = null,
@@ -52,18 +48,16 @@ class EndpointReasoningLearningTest {
             modelId = "vendor/m",
             liveModelEntry = reasoningEntry("vendor/m")
         )
-        assertFalse(cap.supportedEfforts.contains(ReasoningEffort.XHIGH))
-        assertTrue(cap.supportedEfforts.contains(ReasoningEffort.MINIMAL))
-        assertTrue(cap.supportedEfforts.contains(ReasoningEffort.HIGH))
+        assertTrue(cap.supportedEfforts.isEmpty())
     }
 
     @Test
-    fun rejectionIsScopedToTheExactModel() {
+    fun legacyRejectionHistoryCannotCreateControlsForAnotherModel() {
         val rejected = RejectedReasoningLevelStore.add(null, "vendor/m", ReasoningEffort.MINIMAL)
         val other = EndpointReasoningCapability.resolveWithLearnedRejections(
             null, rejected, "vendor/other", reasoningEntry("vendor/other")
         )
-        assertTrue(other.supportedEfforts.contains(ReasoningEffort.MINIMAL))
+        assertTrue(other.supportedEfforts.isEmpty())
     }
 
     @Test
