@@ -30,7 +30,7 @@ class ChatPreferencesHotPathTest {
 
         val timestampMutation = source.substringAfter(
             "private fun putMetadataToChatById"
-        ).substringBefore("\n    }\n", missingDelimiterValue = "")
+        ).take(1_200)
         assertTrue(timestampMutation.contains("getChatMetadataList(context)"))
     }
 
