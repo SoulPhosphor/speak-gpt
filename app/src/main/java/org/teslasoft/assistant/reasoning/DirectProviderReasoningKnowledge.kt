@@ -167,7 +167,9 @@ object DirectProviderReasoningKnowledge {
      * default, so they are known fixed reasoning without invented controls. */
     private fun anthropicReasoning(id: String): ReasoningCapability? {
         val model = id.substringAfterLast('/')
-        if (!model.startsWith("claude-") || !model.contains("5")) return null
+        // Match a major-version token, not the decimal in older ids such as
+        // claude-3.5-sonnet.
+        if (!model.startsWith("claude-") || "5" !in model.split('-')) return null
         return ReasoningCapability(
             support = ReasoningSupport.KNOWN,
             effortConfigurable = false,
