@@ -246,6 +246,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         //                                  count, kept separate from answer
         //                                  tokens (§7.8).
         const val KEY_MESSAGE_REASONING = "reasoningText"
+        const val KEY_MESSAGE_REASONING_FORMAT = "reasoningTextFormat"
         const val KEY_MESSAGE_REASONING_SUMMARY = "reasoningIsSummary"
         const val KEY_MESSAGE_REASONING_TOKENS = "reasoningTokens"
 
@@ -288,6 +289,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             KEY_TOKEN_USAGE_RECORDS,
             KEY_MESSAGE_TIME,
             KEY_MESSAGE_REASONING,
+            KEY_MESSAGE_REASONING_FORMAT,
             KEY_MESSAGE_REASONING_SUMMARY,
             KEY_MESSAGE_REASONING_TOKENS,
             KEY_MESSAGE_REASONING_LEVEL,

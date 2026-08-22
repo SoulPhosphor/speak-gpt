@@ -125,4 +125,65 @@ class EndpointReasoningCapabilityTest {
         )
         assertNotEquals(ReasoningCapabilityStore.EMPTY, learned)
     }
+    @Test
+    fun viewAllUsesOpenRouterPublishedReasoningMetadataAndExactEfforts() {
+        val catalog = """
+            {"data":[
+              {
+                "id":"thinkingmachines/inkling-small",
+                "supported_parameters":["reasoning","reasoning_effort"],
+                "reasoning":{
+                  "mandatory":false,
+                  "supported_efforts":["max","high","medium","low","minimal","none"],
+                  "default_effort":"high"
+                }
+              },
+              {
+                "id":"vendor/plain-id",
+                "supported_parameters":["reasoning","reasoning_effort"],
+                "reasoning":{
+                  "mandatory":true,
+                  "supported_efforts":["high","low"],
+                  "default_effort":"high"
+                }
+              },
+              {
+                "id":"arcee-ai/trinity-large-thinking",
+                "supported_parameters":["reasoning"],
+                "reasoning":{"mandatory":true}
+              }
+            ]}
+        """.trimIndent()
+
+        val refresh = EndpointReasoningCapability.refreshFromOpenRouterCatalog(
+            ReasoningCapabilityStore.EMPTY,
+            catalog
+        )!!
+        val index = EndpointReasoningCapability.index(
+            refresh.capabilityJson,
+            ReasoningProviderPath.OPENROUTER
+        )
+
+        assertTrue(index.resolve("thinkingmachines/inkling-small").isReasoningCapable)
+        assertEquals(
+            listOf(
+                ReasoningEffort.MAX,
+                ReasoningEffort.HIGH,
+                ReasoningEffort.MEDIUM,
+                ReasoningEffort.LOW,
+                ReasoningEffort.MINIMAL
+            ),
+            index.resolve("thinkingmachines/inkling-small").supportedEfforts
+        )
+        assertTrue(index.resolve("thinkingmachines/inkling-small").canDisableReasoning)
+
+        // Capability comes from the website response, not a word in the id.
+        assertTrue(index.resolve("vendor/plain-id").isReasoningCapable)
+        assertEquals(
+            listOf(ReasoningEffort.HIGH, ReasoningEffort.LOW),
+            index.resolve("vendor/plain-id").supportedEfforts
+        )
+        assertTrue(index.resolve("arcee-ai/trinity-large-thinking").isReasoningCapable)
+    }
+
 }
