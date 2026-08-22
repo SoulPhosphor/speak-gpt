@@ -2214,14 +2214,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (ChatStorageHealth.isAuthoritative(historyResult.state) &&
             LegacyReasoningRepair.repairHistory(historyResult.messages)
         ) {
-            // This method already runs on the startup storage worker. Persist the
-            // one-time repair before binding so old duplicated Thinking blocks
-            // are fixed durably without adding any main-thread work.
+            // This method already runs on the startup storage worker. Update
+            // the encrypted preference before binding, but let SharedPreferences
+            // flush it to disk asynchronously so the one-time cleanup does not
+            // add a synchronous disk wait to chat opening.
             chatPreferences.saveChatHistory(
                 this,
                 preparedChatId,
                 historyResult.messages,
-                synchronous = true
+                synchronous = false
             )
         }
 
