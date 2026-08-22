@@ -145,6 +145,7 @@ class ModelListAdapter(
             viewHolder.reasoningIndicator.visibility = View.GONE
             return
         }
+        viewHolder.reasoningIndicator.setImageResource(R.drawable.ic_lightbulb)
         viewHolder.reasoningIndicator.imageTintList = ColorStateList.valueOf(tintColor)
         // Quieter and smaller than the favorite action (§7.6).
         viewHolder.reasoningIndicator.alpha = 0.55f
