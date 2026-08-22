@@ -32,9 +32,18 @@ class AlwaysSpeakPersistenceTest {
     fun legacyPerChatValueIsPreservedUntilTheFirstGlobalWrite() {
         val legacy = FakeSharedPreferences()
         legacy.edit().putBoolean("always_speak_mode", true).commit()
+        val activeChat = FakeSharedPreferences()
+        activeChat.edit().putBoolean("always_speak_mode", false).commit()
         val global = FakeSharedPreferences()
-        val preferences = Preferences(legacy, global, "legacy")
+        val preferences = Preferences(
+            activeChat,
+            global,
+            "legacy",
+            defaultPreferences = legacy
+        )
 
+        // The deterministic default profile wins over whichever chat happens
+        // to open first.
         assertTrue(preferences.getNotSilence())
 
         preferences.setNotSilence(false)

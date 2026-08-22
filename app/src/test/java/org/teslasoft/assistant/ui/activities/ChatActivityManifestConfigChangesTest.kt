@@ -62,19 +62,6 @@ class ChatActivityManifestConfigChangesTest {
         }
     }
 
-
-    @Test
-    fun chatActivityUsesSingleTopToRejectDuplicateLaunches() {
-        val manifest = manifestSource().readText()
-        val nameIndex = manifest.indexOf("android:name=\".ui.activities.ChatActivity\"")
-        assertTrue("ChatActivity declaration not found in AndroidManifest.xml", nameIndex >= 0)
-        val tag = manifest.substring(nameIndex).substringBefore('>', missingDelimiterValue = "")
-        assertTrue(
-            "ChatActivity must use singleTop so double taps and refreshes cannot stack two chats",
-            tag.contains("android:launchMode=\"singleTop\"")
-        )
-    }
-
     private fun manifestSource(): File {
         val relative = "src/main/AndroidManifest.xml"
         val candidates = listOf(

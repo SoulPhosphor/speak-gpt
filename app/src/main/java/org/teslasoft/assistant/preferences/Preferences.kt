@@ -21,10 +21,26 @@ import android.content.SharedPreferences
 import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
 
-class Preferences internal constructor(private var preferences: SharedPreferences, private var gp: SharedPreferences, private var chatId: String) {
+class Preferences internal constructor(
+    private var preferences: SharedPreferences,
+    private var gp: SharedPreferences,
+    private var chatId: String,
+    private var defaultPreferences: SharedPreferences? = preferences
+) {
     companion object {
         fun getPreferences(context: Context, xchatId: String) : Preferences {
-            return Preferences(SecurePrefs.get(context, "settings.$xchatId"), context.getSharedPreferences("settings", Context.MODE_PRIVATE), xchatId)
+            val globalPreferences =
+                context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+            return Preferences(
+                SecurePrefs.get(context, "settings.$xchatId"),
+                globalPreferences,
+                xchatId,
+                if (globalPreferences.contains("always_speak_mode")) {
+                    null
+                } else {
+                    SecurePrefs.get(context, "settings.")
+                }
+            )
         }
 
         /**
@@ -356,11 +372,15 @@ class Preferences internal constructor(private var preferences: SharedPreference
      * their existing choice. Every new write uses the durable global store.
      */
     fun getNotSilence() : Boolean {
-        return if (gp.contains("always_speak_mode")) {
-            getGlobalBoolean("always_speak_mode", false)
-        } else {
-            getBoolean("always_speak_mode", false)
+        if (!gp.contains("always_speak_mode")) {
+            val legacyDefault = try {
+                defaultPreferences?.getBoolean("always_speak_mode", false) ?: false
+            } catch (_: Exception) {
+                false
+            }
+            gp.edit().putBoolean("always_speak_mode", legacyDefault).commit()
         }
+        return getGlobalBoolean("always_speak_mode", false)
     }
 
     /**
