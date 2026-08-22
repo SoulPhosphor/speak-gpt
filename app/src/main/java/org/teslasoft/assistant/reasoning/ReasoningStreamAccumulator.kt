@@ -30,9 +30,13 @@ import com.google.gson.JsonParser
  *
  * - `choices[].delta.reasoning` — OpenRouter / xAI and compatibles.
  * - `choices[].delta.reasoning_content` — DeepSeek and compatibles.
- * - `choices[].delta.reasoning_details[]` — OpenRouter structured blocks, whose
- *   `text` is concatenated and whose `type` can mark a summary rather than raw
- *   reasoning (a `*.summary` type preserves it AS a summary, §7.2).
+ * - `choices[].delta.reasoning_details[]` — OpenRouter structured blocks. A
+ *   block's human-readable content is read from `text`, and, when `text` is
+ *   absent, from `summary` (the documented field for a `reasoning.summary`
+ *   block); its `type` can mark a summary rather than raw reasoning (a
+ *   `*.summary` type preserves it AS a summary, §7.2). The `text`-first order
+ *   keeps the existing raw/text path byte-identical; `summary` is a purely
+ *   additive fallback for summary-shaped blocks.
  * - reasoning token usage from `usage.completion_tokens_details.reasoning_tokens`
  *   or `usage.reasoning_tokens`, kept SEPARATE from answer tokens (§7.8).
  *
@@ -48,6 +52,14 @@ class ReasoningStreamAccumulator {
     private var sawSummaryBlock = false
     private var sawRawBlock = false
     private var reasoningTokens: Int? = null
+
+    // Which inbound reasoning representations were seen at all this turn, for
+    // diagnostics only (field presence, never the reasoning text). Distinct from
+    // sawSummaryBlock/sawRawBlock, which decide how to PRESENT collected text.
+    private var inboundReasoning = false
+    private var inboundReasoningContent = false
+    private var inboundReasoningDetails = false
+    private var inboundSummaryField = false
 
     // Raw `reasoning_details` blocks collected verbatim for resend across a
     // tool-call continuation (§7.2). Encrypted/signature blocks are preserved
@@ -86,6 +98,8 @@ class ReasoningStreamAccumulator {
     private fun readReasoningFromNode(node: JsonObject) {
         val directReasoning = stringOrNull(node, "reasoning")
         val compatibilityReasoning = stringOrNull(node, "reasoning_content")
+        if (directReasoning != null) inboundReasoning = true
+        if (compatibilityReasoning != null) inboundReasoningContent = true
         val detailText = StringBuilder()
         var detailHasSummary = false
         var detailHasRaw = false
@@ -96,12 +110,21 @@ class ReasoningStreamAccumulator {
             ?.asJsonArray
             ?.forEach { el ->
                 val block = el.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
+                inboundReasoningDetails = true
                 collectDetailBlock(block)
                 val type = stringOrNull(block, "type").orEmpty().lowercase()
                 if (type.contains("summary")) detailHasSummary = true else if (type.isNotEmpty()) detailHasRaw = true
-                // The human-readable payload is `text`; `data` blocks (encrypted
-                // continuation state) carry no display text and are skipped here.
-                stringOrNull(block, "text")?.let { detailText.append(it) }
+                // The human-readable payload is normally `text`; a summary block
+                // carries it in `summary` instead. Prefer `text` so the existing
+                // raw/text path is unchanged, and fall back to `summary` so a
+                // documented summary block is not silently dropped. `data` blocks
+                // (encrypted continuation state) carry neither and are skipped.
+                val summaryText = stringOrNull(block, "summary")
+                if (summaryText != null) {
+                    inboundSummaryField = true
+                    detailHasSummary = true
+                }
+                (stringOrNull(block, "text") ?: summaryText)?.let { detailText.append(it) }
             }
 
         // One provider event may expose the same display delta through several
@@ -179,6 +202,21 @@ class ReasoningStreamAccumulator {
     /** True when any reasoning text has been collected. */
     fun hasReasoning(): Boolean = reasoning.isNotBlank()
 
+    /**
+     * Field-presence snapshot for diagnostics (§7.8): which inbound reasoning
+     * representations this stream carried and how many characters of reasoning
+     * text were collected. Contains NO reasoning text itself, so it is safe to
+     * log. Lets a diagnostic separate "nothing was returned" from "returned but
+     * not displayed", which the outbound request intent cannot show.
+     */
+    fun inboundDiagnostics(): InboundReasoningDiagnostics = InboundReasoningDiagnostics(
+        reasoning = inboundReasoning,
+        reasoningContent = inboundReasoningContent,
+        reasoningDetails = inboundReasoningDetails,
+        summaryField = inboundSummaryField,
+        characters = reasoning.length
+    )
+
     /** Snapshot of what has accumulated so far. Safe to call repeatedly (during
      *  streaming for a live update, and once more at completion). */
     fun snapshot(): NormalizedReasoning = NormalizedReasoning(
@@ -224,3 +262,19 @@ data class NormalizedReasoning(
     val isSummary: Boolean,
     val reasoningTokens: Int?
 )
+
+/**
+ * Which inbound reasoning representations a stream carried, plus the collected
+ * reasoning character count — for diagnostics only. Field presence and a count,
+ * never the reasoning text itself (§7.8: log presence, not content).
+ */
+data class InboundReasoningDiagnostics(
+    val reasoning: Boolean,
+    val reasoningContent: Boolean,
+    val reasoningDetails: Boolean,
+    val summaryField: Boolean,
+    val characters: Int
+) {
+    /** True when the stream carried any reasoning field at all. */
+    val anyField: Boolean get() = reasoning || reasoningContent || reasoningDetails
+}

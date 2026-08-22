@@ -71,7 +71,10 @@ object OpenRouterReasoningCapability {
                 canReturnVisibleReasoning = true,
                 tokenBudgetSupported = booleanOrNull(reasoning, "supports_max_tokens") == true,
                 source = CapabilitySource.PROVIDER_METADATA,
-                effortsAuthoritative = exactEffortList
+                effortsAuthoritative = exactEffortList,
+                // "Fixed" is justified only by a published, positive mandatory
+                // flag. An omitted `mandatory` stays unknown-config, never fixed.
+                reasoningMandatory = mandatory == true
             )
         }
 

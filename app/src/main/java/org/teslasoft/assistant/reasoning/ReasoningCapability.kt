@@ -74,7 +74,18 @@ data class ReasoningCapability(
      *  (OpenRouter's `reasoning.supported_efforts`) rather than a conservative
      *  adapter default. An authoritative list is exact and must never be widened
      *  or narrowed speculatively. */
-    val effortsAuthoritative: Boolean = false
+    val effortsAuthoritative: Boolean = false,
+
+    /** True only when the app has POSITIVE evidence that reasoning on this path
+     *  is mandatory — always on and not adjustable off (published
+     *  `reasoning.mandatory == true`, or an official provider adapter that knows
+     *  the family cannot disable reasoning). It is NOT the mere absence of a
+     *  known Off signal: a path that reasons but whose controls the app has not
+     *  established leaves this false and is treated as unknown-configuration, not
+     *  as fixed (§7.7 #4 — preserve uncertainty rather than converting it to a
+     *  false "cannot be changed"). Only this fact justifies the "Fixed"
+     *  presentation. */
+    val reasoningMandatory: Boolean = false
 ) {
     /**
      * True when SpeakGPT knows this path reasons AND at least one reasoning
@@ -89,25 +100,48 @@ data class ReasoningCapability(
         get() = support == ReasoningSupport.KNOWN
 
     /**
+     * True when the user can actually adjust HOW this path reasons — either by
+     * choosing an effort level ([effortConfigurable]) or by turning reasoning
+     * On/Off ([canDisableReasoning]). On/Off is a real adjustment even with no
+     * effort ladder (e.g. a model that reasons by default but can be told not
+     * to), so it counts here on its own. When this is false the Thinking control
+     * has nothing to pick.
+     */
+    val isEffortAdjustable: Boolean
+        get() = effortConfigurable || canDisableReasoning
+
+    /**
+     * True only for the genuinely fixed case: the path reasons, offers no
+     * adjustable control, AND the app positively knows reasoning is mandatory.
+     * This — and only this — is what may be shown as "Fixed". A reasoning path
+     * with no adjustable control but no mandatory evidence is unknown-config,
+     * not fixed (§7.7 #4).
+     */
+    val isFixedReasoning: Boolean
+        get() = isReasoningCapable && !isEffortAdjustable && reasoningMandatory
+
+    /**
      * True when a favorite of this path has any reasoning setting worth a
      * dedicated Reasoning Settings screen control: a Thinking dropdown
-     * ([effortConfigurable]) and/or a Show Reasoning toggle (which exists
-     * whenever visible reasoning can be returned). A model that reasons but
-     * offers neither still shows the lightbulb (informational), but its
-     * settings screen would be empty.
+     * ([effortConfigurable]), an On/Off choice ([canDisableReasoning]), and/or a
+     * Show Reasoning toggle (which exists whenever visible reasoning can be
+     * returned). A model that reasons but offers none of these still shows the
+     * lightbulb (informational), but its settings screen would be empty.
      */
     val hasConfigurableSetting: Boolean
-        get() = isReasoningCapable && (effortConfigurable || canReturnVisibleReasoning)
+        get() = isReasoningCapable && (effortConfigurable || canDisableReasoning || canReturnVisibleReasoning)
 
     /**
      * The full ordered set of choices for the Thinking dropdown on this path:
-     * [ReasoningEffort.AUTO] first (always, when effort is configurable), then
-     * the known explicit levels, then [ReasoningEffort.OFF] last when disabling
-     * is supported. Empty when effort is not configurable — the caller then
-     * shows no dropdown (§7.4).
+     * [ReasoningEffort.AUTO] first, then the known explicit levels, then
+     * [ReasoningEffort.OFF] last when disabling is supported. On/Off is a real
+     * control on its own, so a disable-capable path with no effort ladder still
+     * offers a dropdown of [AUTO, OFF] (§7.9: reasoning On/Off must not require
+     * an effort ladder). Empty only when the path exposes neither an effort
+     * ladder nor an Off signal — the caller then shows no dropdown (§7.4).
      */
     fun thinkingChoices(): List<ReasoningEffort> {
-        if (!effortConfigurable) return emptyList()
+        if (!isEffortAdjustable) return emptyList()
         val choices = ArrayList<ReasoningEffort>()
         choices.add(ReasoningEffort.AUTO)
         choices.addAll(supportedEfforts.filter { it.isExplicitLevel })

@@ -86,6 +86,49 @@ class ReasoningStreamAccumulatorTest {
     }
 
     @Test
+    fun reasoningDetailsSummaryFieldIsExtractedWhenThereIsNoText() {
+        // Documented summary shape that carries its content in `summary`, not
+        // `text`. The block must not be silently dropped.
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.summary","summary":"A concise summary."}]}}]}""")
+        val snap = acc.snapshot()
+        assertEquals("A concise summary.", snap.text)
+        assertTrue(snap.isSummary)
+        assertTrue(acc.inboundDiagnostics().summaryField)
+    }
+
+    @Test
+    fun reasoningDetailsTextIsPreferredOverSummaryWhenBothPresent() {
+        // Keep the existing raw/text path byte-identical: when a block has both,
+        // `text` is used for display and `summary` is not appended on top.
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.text","text":"The text.","summary":"The summary."}]}}]}""")
+        assertEquals("The text.", acc.snapshot().text)
+    }
+
+    @Test
+    fun inboundDiagnosticsReportWhichFieldsWereSeenAndCharCount() {
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine("""data: {"choices":[{"delta":{"reasoning":"abc"}}]}""")
+        val d = acc.inboundDiagnostics()
+        assertTrue(d.reasoning)
+        assertFalse(d.reasoningContent)
+        assertFalse(d.reasoningDetails)
+        assertFalse(d.summaryField)
+        assertEquals(3, d.characters)
+        assertTrue(d.anyField)
+    }
+
+    @Test
+    fun inboundDiagnosticsReportNoFieldsForAContentOnlyStream() {
+        val acc = ReasoningStreamAccumulator()
+        acc.acceptLine("""data: {"choices":[{"delta":{"content":"Hello"}}]}""")
+        val d = acc.inboundDiagnostics()
+        assertFalse(d.anyField)
+        assertEquals(0, d.characters)
+    }
+
+    @Test
     fun reasoningDetailsDataBlockWithoutTextContributesNothing() {
         val acc = ReasoningStreamAccumulator()
         acc.acceptLine("""data: {"choices":[{"delta":{"reasoning_details":[{"type":"reasoning.encrypted","data":"opaque"}]}}]}""")

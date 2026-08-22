@@ -37,6 +37,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.models.ModelCleanupReportStore
 import org.teslasoft.assistant.preferences.models.ModelIdentity
+import org.teslasoft.assistant.ui.reasoning.ReasoningBulbDiagnostics
 
 /** ListView adapter to display list of voices */
 /**
@@ -53,6 +54,9 @@ class FavoriteModelListAdapter(
 ) : BaseAdapter() {
 
     private var listener: OnItemClickListener? = null
+    // Bind-time reasoning diagnostics, one line per model id per adapter instance
+    // (see ModelListAdapter for rationale).
+    private val loggedReasoningRows = HashSet<String>()
     private val unavailableTargets = ModelCleanupReportStore.get(context).load().unavailable
     private val endpointCache = HashMap<String, ApiEndpointObject>()
     private val reasoningIndexCache = HashMap(reasoningCapabilityIndexes)
@@ -194,6 +198,9 @@ class FavoriteModelListAdapter(
      */
     private fun bindReasoningLightbulb(viewHolder: ViewHolder, modelId: String, endpointId: String, tintColor: Int) {
         val capability = reasoningIndex(endpointId).resolve(modelId)
+        ReasoningBulbDiagnostics.logResolvedOnce(
+            context, loggedReasoningRows, "FavoriteModelListAdapter", endpointId, modelId, capability
+        )
         if (!capability.isReasoningCapable) {
             viewHolder.reasoningSettings.visibility = View.GONE
             viewHolder.reasoningSettings.setOnClickListener(null)

@@ -61,6 +61,36 @@ class EndpointReasoningLearningTest {
     }
 
     @Test
+    fun coarseGatewayMetadataIsUnknownConfigNotFixed() {
+        // A model known to reason only through coarse `reasoning` support has no
+        // established controls — it must not be reported as fixed.
+        val cap = EndpointReasoningCapability.resolveWithLearnedRejections(
+            reasoningCapabilityByModel = null,
+            rejectedLevelsByModel = null,
+            modelId = "vendor/m",
+            liveModelEntry = reasoningEntry("vendor/m")
+        )
+        assertFalse(cap.reasoningMandatory)
+        assertFalse(cap.isFixedReasoning)
+    }
+
+    @Test
+    fun observedResponseIsKnownButNotFixed() {
+        // Seeing reasoning once proves the model reasons; it does NOT prove the
+        // reasoning is mandatory or unconfigurable (§7.7 #4).
+        val learned = EndpointReasoningCapability.learnFromObservedResponse(null, "vendor/observed")
+        val cap = EndpointReasoningCapability.resolveWithLearnedRejections(
+            reasoningCapabilityByModel = learned,
+            rejectedLevelsByModel = null,
+            modelId = "vendor/observed"
+        )
+        assertTrue(cap.isReasoningCapable)
+        assertEquals(CapabilitySource.OBSERVED_RESPONSE, cap.source)
+        assertFalse(cap.reasoningMandatory)
+        assertFalse(cap.isFixedReasoning)
+    }
+
+    @Test
     fun nonReasoningPathIsUnchanged() {
         val cap = EndpointReasoningCapability.resolveWithLearnedRejections(
             null, null, "plain-chat-model", null

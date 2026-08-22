@@ -693,30 +693,37 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private fun setupReasoningTile() {
         val row = rowReasoning ?: return
         val capability = currentReasoningCapability()
-        if (!capability.effortConfigurable) {
-            // A model that reasons but has no adjustable level shows a
-            // non-interactive "Fixed" rather than disappearing (owner ruling,
-            // Aug 2026); a non-reasoning path hides the tile entirely.
-            if (capability.isReasoningCapable) {
-                row.visibility = View.VISIBLE
-                textReasoningEffort?.text = getString(R.string.reasoning_effort_fixed)
-                row.isEnabled = false
-                row.alpha = 0.5f
-                row.setOnClickListener(null)
-                textReasoningEffort?.setOnClickListener(null)
-            } else {
-                row.visibility = View.GONE
-                row.setOnClickListener(null)
-                textReasoningEffort?.setOnClickListener(null)
-            }
+        // Interactive whenever the path exposes any adjustable control — an
+        // effort ladder OR an On/Off choice (disable-only models included).
+        if (capability.thinkingChoices().isNotEmpty()) {
+            row.visibility = View.VISIBLE
+            row.isEnabled = true
+            row.alpha = 1f
+            refreshReasoningEffortLabel(capability)
+            row.setOnClickListener { showReasoningEffortDropdown(textReasoningEffort ?: it, capability) }
+            textReasoningEffort?.setOnClickListener { showReasoningEffortDropdown(it, capability) }
             return
         }
-        row.visibility = View.VISIBLE
-        row.isEnabled = true
-        row.alpha = 1f
-        refreshReasoningEffortLabel(capability)
-        row.setOnClickListener { showReasoningEffortDropdown(textReasoningEffort ?: it, capability) }
-        textReasoningEffort?.setOnClickListener { showReasoningEffortDropdown(it, capability) }
+        if (capability.isReasoningCapable) {
+            // Reasons but offers no adjustable control. Non-interactive, and the
+            // label tells the truth: "Fixed" only when the app positively knows
+            // reasoning is mandatory; otherwise "Auto" — reasoning is on and left
+            // automatic, its controls not established (never falsely "Fixed").
+            row.visibility = View.VISIBLE
+            textReasoningEffort?.text = getString(
+                if (capability.reasoningMandatory) R.string.reasoning_effort_fixed
+                else R.string.reasoning_effort_auto
+            )
+            row.isEnabled = false
+            row.alpha = 0.5f
+            row.setOnClickListener(null)
+            textReasoningEffort?.setOnClickListener(null)
+        } else {
+            // A non-reasoning path hides the tile entirely.
+            row.visibility = View.GONE
+            row.setOnClickListener(null)
+            textReasoningEffort?.setOnClickListener(null)
+        }
     }
 
     /** The effort this conversation would send now: its own override, else the

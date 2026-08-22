@@ -5989,10 +5989,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         if (newBody != text) {
             request.setBody(TextContent(newBody, content.contentType ?: ContentType.Application.Json))
+            // On OpenRouter, a visible summary is positively requested whenever
+            // reasoning is wanted for display and not being disabled. Report it so
+            // the request shape is explicit in the log.
+            val summaryRequested = isOpenRouter && resolved.showReasoning && !resolved.disablesReasoning
             lastReasoningAttachment = buildString {
                 append(
                     if (paramAttached) {
                         "reasoning attached (effort=${resolved.effort.serialized}, show=${resolved.showReasoning}, " +
+                            "summary_requested=$summaryRequested, " +
                             "source=${resolved.source}, capability=${capability.source})"
                     } else {
                         "no reasoning param (Auto / provider default)"
@@ -6042,8 +6047,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * rather than implying anything was sent.
      */
     private fun reasoningLogLine(): String {
-        val status = lastReasoningAttachment ?: "reasoning hook did not run"
-        return "\nReasoning: $status"
+        val outbound = lastReasoningAttachment ?: "reasoning hook did not run"
+        // Keep outbound intent and inbound evidence on separate lines: "attached"
+        // describes the request only; it never proves reasoning came back (§7.8).
+        val inbound = lastReasoningInbound
+            ?: "not observed (display off or no reasoning observation this turn)"
+        return "\nReasoning (outbound intent): $outbound" +
+            "\nReasoning (inbound observed): $inbound"
     }
 
     /**
@@ -6278,6 +6288,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                             usageAttempt?.finishObservation()
                                             if (reasoningObservation != null) {
                                                 val reasoningAcc = reasoningObservation.accumulator
+                                                // Inbound evidence for the Response Lifecycle entry:
+                                                // which reasoning fields actually came back and how
+                                                // many characters — presence and count only, never
+                                                // the reasoning text (§7.8).
+                                                val inbound = reasoningAcc.inboundDiagnostics()
+                                                lastReasoningInbound =
+                                                    "reasoning=${inbound.reasoning}, " +
+                                                        "reasoning_content=${inbound.reasoningContent}, " +
+                                                        "reasoning_details=${inbound.reasoningDetails}, " +
+                                                        "summary_field=${inbound.summaryField}, " +
+                                                        "chars=${inbound.characters}, " +
+                                                        "shown=${reasoningObservation.showReasoning}"
                                                 val learnedCapability = promoteObservedReasoning(reasoningObservation)
                                                 // Display only when Show Reasoning wanted it; the
                                                 // reasoning_details for a tool-call continuation are
@@ -7522,6 +7544,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  lifecycle entry finalizes. Reset with [lastRoutingAttachment]. */
     @Volatile
     private var lastReasoningAttachment: String? = null
+    /** Diagnostic: which reasoning fields the provider's split stream actually
+     *  returned this turn, and how many characters — the inbound counterpart of
+     *  [lastReasoningAttachment], kept SEPARATE so outbound intent is never
+     *  mistaken for inbound evidence (§7.8). Field presence and a count only,
+     *  never the reasoning text. Null until the observation drains, or when no
+     *  observation ran for this turn. Reset with [lastReasoningAttachment]. */
+    @Volatile
+    private var lastReasoningInbound: String? = null
     private var currentLifecycleTurnId: String = ""
     private var lifecycleTurnCounter: Int = 0
 
@@ -7547,6 +7577,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // fresh and a hook that never runs never reports a stale attachment.
         lastRoutingAttachment = null
         lastReasoningAttachment = null
+        lastReasoningInbound = null
         // Reset the dispatch boundary for THIS attempt regardless of whether
         // lifecycle logging is on, because the Provider Failure Log gate also
         // depends on it.
@@ -7639,6 +7670,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // short replies, and applies solely while this opt-in log is active.
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
             r.awaitProviderObservation(250L)
+            // Let this turn's reasoning observation finish draining so the entry
+            // can report inbound reasoning evidence, not just outbound intent.
+            // Bounded so a stalled observer never hangs finalization; skipped
+            // when no reasoning observation ran.
+            if (currentTurnReasoningObservationActive) {
+                kotlinx.coroutines.withTimeoutOrNull(250L) {
+                    currentTurnReasoningObserved?.await()
+                }
+            }
         }
         val body = ResponseLifecycle.format(
             turnId = r.turnId, phase = r.phase, apiProvider = r.apiProvider,

@@ -63,6 +63,37 @@ class DirectProviderReasoningKnowledgeTest {
     }
 
     @Test
+    fun adapterKnowledgeMarksMandatoryReasoningAsFixedButKeepsDisableableFamiliesUnfixed() {
+        // Claude 5: no ladder, cannot disable → genuinely fixed.
+        val claude = DirectProviderReasoningKnowledge.fromModelId(
+            "claude-opus-5", ReasoningProviderPath.ANTHROPIC_OPENAI_COMPATIBLE
+        )!!
+        assertTrue(claude.reasoningMandatory)
+        assertTrue(claude.isFixedReasoning)
+
+        // DeepSeek reasoner: no ladder, cannot disable → fixed.
+        val deepseek = DirectProviderReasoningKnowledge.fromModelId(
+            "deepseek-reasoner", ReasoningProviderPath.DEEPSEEK
+        )!!
+        assertTrue(deepseek.reasoningMandatory)
+        assertTrue(deepseek.isFixedReasoning)
+
+        // gpt-5 line: mandatory (no Off) but has an effort ladder, so it is not
+        // "Fixed" — the Thinking control still shows.
+        val gpt5 = DirectProviderReasoningKnowledge.fromModelId("gpt-5", ReasoningProviderPath.OPENAI)!!
+        assertTrue(gpt5.reasoningMandatory)
+        assertFalse(gpt5.isFixedReasoning)
+
+        // Gemini 2.5 Flash can disable reasoning → not mandatory, not fixed.
+        val flash = DirectProviderReasoningKnowledge.fromModelId(
+            "gemini-2.5-flash", ReasoningProviderPath.GEMINI_OPENAI_COMPATIBLE
+        )!!
+        assertTrue(flash.canDisableReasoning)
+        assertFalse(flash.reasoningMandatory)
+        assertFalse(flash.isFixedReasoning)
+    }
+
+    @Test
     fun nonReasoningIdsAreNotClassifiedHere() {
         // deepseek-chat (V3) is not a reasoner; plain chat models are unknown to
         // this tier and must fall through (null), never to a false "absent".

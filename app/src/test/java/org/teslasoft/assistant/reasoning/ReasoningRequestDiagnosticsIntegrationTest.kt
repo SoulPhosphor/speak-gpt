@@ -48,8 +48,13 @@ class ReasoningRequestDiagnosticsIntegrationTest {
         val root = JsonParser.parseString(out).asJsonObject
 
         assertFalse(root.has("logit_bias"))
+        // Auto with Show Reasoning On now positively requests a visible summary,
+        // so the outgoing body carries a `reasoning` object even on Auto. The
+        // final-request diagnostics still run: the empty logit_bias is stripped
+        // and the top-level field names (now including reasoning) are captured.
+        assertEquals("auto", root.getAsJsonObject("reasoning").get("summary").asString)
         assertEquals(
-            listOf("max_tokens", "messages", "model", "stream"),
+            listOf("max_tokens", "messages", "model", "reasoning", "stream"),
             OutboundRequestDiagnostics.latestFieldNames()
         )
     }

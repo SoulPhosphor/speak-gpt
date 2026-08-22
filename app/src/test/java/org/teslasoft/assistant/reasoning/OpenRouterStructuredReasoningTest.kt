@@ -104,6 +104,52 @@ class OpenRouterStructuredReasoningTest {
     }
 
     @Test
+    fun kimiLikeDisableableWithoutLadderExposesOffAndIsNotFixed() {
+        // moonshotai/kimi-k2.5 shape: reasoning object with mandatory:false and
+        // NO supported_efforts. It reasons, has no effort ladder, but reasoning
+        // can be turned off — so it must expose Auto + Off and never read Fixed.
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry(
+                supportedEfforts = null,
+                mandatory = false,
+                supportedParameters = listOf("include_reasoning", "reasoning")
+            )
+        )!!
+        assertTrue(cap.isReasoningCapable)
+        assertFalse(cap.effortConfigurable)
+        assertTrue(cap.canDisableReasoning)
+        assertFalse(cap.reasoningMandatory)
+        assertFalse(cap.isFixedReasoning)
+        assertTrue(cap.hasConfigurableSetting)
+        assertEquals(listOf(ReasoningEffort.AUTO, ReasoningEffort.OFF), cap.thinkingChoices())
+    }
+
+    @Test
+    fun publishedMandatoryTrueWithoutLadderIsFixed() {
+        // Reasoning object with mandatory:true and no ladder: genuinely fixed.
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry(supportedEfforts = null, mandatory = true)
+        )!!
+        assertTrue(cap.reasoningMandatory)
+        assertFalse(cap.canDisableReasoning)
+        assertTrue(cap.isFixedReasoning)
+        assertTrue(cap.thinkingChoices().isEmpty())
+    }
+
+    @Test
+    fun omittedMandatoryWithoutLadderIsUnknownConfigNotFixed() {
+        // mandatory omitted, no ladder: the app does not know the controls, so it
+        // is unknown-config — not fixed (§7.7 #4), even though it has no Off.
+        val cap = OpenRouterReasoningCapability.fromModelEntry(
+            entry(supportedEfforts = null, mandatory = null)
+        )!!
+        assertFalse(cap.canDisableReasoning)
+        assertFalse(cap.reasoningMandatory)
+        assertFalse(cap.isFixedReasoning)
+        assertTrue(cap.thinkingChoices().isEmpty())
+    }
+
+    @Test
     fun omittedMandatoryAndBudgetFlagsDoNotInventControls() {
         val cap = OpenRouterReasoningCapability.fromModelEntry(
             entry(listOf("low", "high"), mandatory = null)

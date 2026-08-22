@@ -79,7 +79,10 @@ object DirectProviderReasoningKnowledge {
             canDisableReasoning = false,
             canReturnVisibleReasoning = true,
             tokenBudgetSupported = false,
-            source = CapabilitySource.PROVIDER_ADAPTER
+            source = CapabilitySource.PROVIDER_ADAPTER,
+            // Adapter knowledge: the reasoner line reasons inherently and cannot
+            // be turned off — genuinely fixed, not merely unestablished.
+            reasoningMandatory = true
         )
     }
 
@@ -105,7 +108,11 @@ object DirectProviderReasoningKnowledge {
             canDisableReasoning = false,
             canReturnVisibleReasoning = false,
             tokenBudgetSupported = false,
-            source = CapabilitySource.PROVIDER_ADAPTER
+            source = CapabilitySource.PROVIDER_ADAPTER,
+            // These families accept an effort but reasoning itself is mandatory
+            // (no Off). The effort ladder means the Thinking control still shows;
+            // this only records that reasoning cannot be turned off.
+            reasoningMandatory = true
         )
     }
 
@@ -158,7 +165,10 @@ object DirectProviderReasoningKnowledge {
             // Google-specific fields SpeakGPT does not yet normalize reliably.
             canReturnVisibleReasoning = false,
             tokenBudgetSupported = false,
-            source = CapabilitySource.PROVIDER_ADAPTER
+            source = CapabilitySource.PROVIDER_ADAPTER,
+            // Families that cannot disable reasoning are mandatory by adapter
+            // knowledge; the ladder still drives the visible control.
+            reasoningMandatory = !canDisable
         )
     }
 
@@ -177,7 +187,10 @@ object DirectProviderReasoningKnowledge {
             canDisableReasoning = false,
             canReturnVisibleReasoning = false,
             tokenBudgetSupported = false,
-            source = CapabilitySource.PROVIDER_ADAPTER
+            source = CapabilitySource.PROVIDER_ADAPTER,
+            // Current Claude 5 paths reason by default with no controls over this
+            // compatibility layer — known fixed reasoning, not unestablished.
+            reasoningMandatory = true
         )
     }
 

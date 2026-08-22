@@ -47,6 +47,41 @@ class ReasoningCapabilityStoreTest {
     }
 
     @Test
+    fun roundTripsTheMandatoryFactBothWays() {
+        val mandatory = ReasoningCapability(
+            support = ReasoningSupport.KNOWN,
+            effortConfigurable = false,
+            canReturnVisibleReasoning = true,
+            source = CapabilitySource.PROVIDER_METADATA,
+            reasoningMandatory = true
+        )
+        val json = ReasoningCapabilityStore.set(ReasoningCapabilityStore.EMPTY, "m/fixed", mandatory)
+        assertTrue(ReasoningCapabilityStore.get(json, "m/fixed").reasoningMandatory)
+        assertTrue(ReasoningCapabilityStore.get(json, "m/fixed").isFixedReasoning)
+
+        // A capability that is merely known-but-unconfigured must round-trip as
+        // NOT mandatory (unknown config), so it is never shown as Fixed.
+        val unknownConfig = mandatory.copy(
+            source = CapabilitySource.OBSERVED_RESPONSE,
+            reasoningMandatory = false
+        )
+        val json2 = ReasoningCapabilityStore.set(ReasoningCapabilityStore.EMPTY, "m/unknown", unknownConfig)
+        assertFalse(ReasoningCapabilityStore.get(json2, "m/unknown").reasoningMandatory)
+        assertFalse(ReasoningCapabilityStore.get(json2, "m/unknown").isFixedReasoning)
+    }
+
+    @Test
+    fun recordWithoutMandatoryKeyDecodesAsNotMandatory() {
+        // A record written by an earlier build has no mandatory key; it must read
+        // back as not-mandatory (the safe non-"Fixed" default), not crash.
+        val legacy = """{"legacy/model":{"sup":"KNOWN","efc":false,"vis":true,"src":"OBSERVED_RESPONSE"}}"""
+        val back = ReasoningCapabilityStore.get(legacy, "legacy/model")
+        assertEquals(ReasoningSupport.KNOWN, back.support)
+        assertFalse(back.reasoningMandatory)
+        assertFalse(back.isFixedReasoning)
+    }
+
+    @Test
     fun unrecordedModelReadsBackUnknownNotAbsent() {
         assertEquals(ReasoningCapability.UNKNOWN, ReasoningCapabilityStore.get(ReasoningCapabilityStore.EMPTY, "nope"))
         assertEquals(ReasoningCapability.UNKNOWN, ReasoningCapabilityStore.get(null, "nope"))

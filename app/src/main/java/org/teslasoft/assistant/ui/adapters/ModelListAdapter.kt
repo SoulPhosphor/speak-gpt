@@ -30,6 +30,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.ui.reasoning.ReasoningBulbDiagnostics
 
 /** ListView adapter to display list of voices */
 class ModelListAdapter(
@@ -41,6 +42,10 @@ class ModelListAdapter(
 ) : BaseAdapter() {
 
     private var listener: OnItemClickListener? = null
+    // Bind-time reasoning diagnostics are logged once per model id per adapter
+    // instance, so the Voice Debug Log shows the capability that actually reached
+    // the row without one line per getView() recycle.
+    private val loggedReasoningRows = HashSet<String>()
     private val resolvedReasoningCapabilityIndex by lazy {
         reasoningCapabilityIndex ?: if (apiEndpointId.isBlank()) {
             org.teslasoft.assistant.reasoning.EndpointReasoningCapability.index(null)
@@ -133,6 +138,9 @@ class ModelListAdapter(
      */
     private fun bindReasoningIndicator(viewHolder: ViewHolder, modelId: String, tintColor: Int) {
         val capability = resolvedReasoningCapabilityIndex.resolve(modelId)
+        ReasoningBulbDiagnostics.logResolvedOnce(
+            context, loggedReasoningRows, "ModelListAdapter(View All)", apiEndpointId, modelId, capability
+        )
         if (!capability.isReasoningCapable) {
             viewHolder.reasoningIndicator.visibility = View.GONE
             return

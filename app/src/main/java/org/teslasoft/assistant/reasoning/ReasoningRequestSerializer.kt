@@ -33,7 +33,16 @@ import org.teslasoft.assistant.util.OutboundRequestDiagnostics
  * - **OpenRouter** — the unified `reasoning` object: `{ "effort": "..." }` for
  *   an explicit level, `{ "enabled": false }` to disable, and `"exclude": true`
  *   when reasoning should not be returned for display. `exclude` controls
- *   RETURN only; it never disables the model's reasoning (§7.2/§7.8).
+ *   RETURN only; it never disables the model's reasoning (§7.2/§7.8). When
+ *   reasoning is wanted for display (Show Reasoning On, not disabled), the object
+ *   also carries `"summary": "auto"` — a positive request for a provider-chosen
+ *   visible reasoning summary, rather than relying on whatever the provider
+ *   returns when no reasoning object is sent. Observed behavior motivating this:
+ *   supplying an explicit effort WITHOUT also requesting a summary correlated
+ *   with the visible reasoning disappearing, while Auto (no reasoning object)
+ *   still surfaced one; sending the summary request on both paths makes the
+ *   visible-reasoning request explicit instead of incidental. `summary` governs
+ *   the returned summary only; it never forces reasoning on or changes effort.
  * - **Generic OpenAI-compatible** — the top-level `reasoning_effort` string;
  *   `"none"` expresses the disable signal for providers that accept it. There
  *   is no standard chat-completions field to suppress returned reasoning, so
@@ -46,6 +55,10 @@ import org.teslasoft.assistant.util.OutboundRequestDiagnostics
  * unchanged rather than risking a broken request.
  */
 object ReasoningRequestSerializer {
+
+    /** Provider-chosen visible reasoning summary. "auto" lets the provider pick
+     *  an appropriate summary form rather than forcing a specific verbosity. */
+    private const val SUMMARY_AUTO = "auto"
 
     /**
      * The fields to set on the request root for this turn, or null when there
@@ -72,9 +85,18 @@ object ReasoningRequestSerializer {
             resolved.disablesReasoning -> reasoning.addProperty("enabled", false)
             resolved.sendsExplicitLevel -> reasoning.addProperty("effort", resolved.effort.serialized)
         }
-        // Show Reasoning Off → ask OpenRouter not to return reasoning content.
-        // The model still reasons; only its return/display is suppressed.
-        if (!resolved.showReasoning && !resolved.disablesReasoning) {
+        if (resolved.disablesReasoning) {
+            // Reasoning is being turned off; requesting a summary would be
+            // contradictory, and Show Reasoning is moot with no reasoning.
+        } else if (resolved.showReasoning) {
+            // Show Reasoning On → positively request a visible summary so the
+            // request for reasoning-for-display is explicit on BOTH the explicit
+            // -effort path and Auto (which otherwise sends no reasoning object).
+            reasoning.addProperty("summary", SUMMARY_AUTO)
+        } else {
+            // Show Reasoning Off → ask OpenRouter not to return reasoning
+            // content. The model still reasons; only its return/display is
+            // suppressed.
             reasoning.addProperty("exclude", true)
         }
         if (reasoning.size() == 0) return null

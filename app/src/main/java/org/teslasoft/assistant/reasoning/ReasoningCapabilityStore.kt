@@ -52,6 +52,7 @@ object ReasoningCapabilityStore {
     private const val K_BUDGET = "tb"
     private const val K_SOURCE = "src"
     private const val K_AUTHORITATIVE = "auth"
+    private const val K_MANDATORY = "man"
 
     /**
      * Capability recorded for [modelId], or [ReasoningCapability.UNKNOWN] when
@@ -115,6 +116,7 @@ object ReasoningCapabilityStore {
         obj.put(K_BUDGET, cap.tokenBudgetSupported)
         obj.put(K_SOURCE, cap.source.name)
         obj.put(K_AUTHORITATIVE, cap.effortsAuthoritative)
+        obj.put(K_MANDATORY, cap.reasoningMandatory)
         return obj
     }
 
@@ -145,7 +147,10 @@ object ReasoningCapabilityStore {
             canReturnVisibleReasoning = entry.optBoolean(K_VISIBLE, false),
             tokenBudgetSupported = entry.optBoolean(K_BUDGET, false),
             source = source,
-            effortsAuthoritative = entry.optBoolean(K_AUTHORITATIVE, false)
+            effortsAuthoritative = entry.optBoolean(K_AUTHORITATIVE, false),
+            // Absent in records written by earlier builds → false (unknown
+            // config), which is the safe non-"Fixed" reading.
+            reasoningMandatory = entry.optBoolean(K_MANDATORY, false)
         )
     }
 

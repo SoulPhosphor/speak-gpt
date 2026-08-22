@@ -70,6 +70,66 @@ class ReasoningCapabilityTest {
     }
 
     @Test
+    fun disableOnlyModelExposesAutoAndOffWithoutALadder() {
+        // Kimi-like: reasons, no effort ladder, but reasoning can be turned off.
+        val disableOnly = ReasoningCapability(
+            support = ReasoningSupport.KNOWN,
+            effortConfigurable = false,
+            supportedEfforts = emptyList(),
+            canDisableReasoning = true,
+            canReturnVisibleReasoning = true,
+            source = CapabilitySource.PROVIDER_METADATA
+        )
+        assertEquals(
+            listOf(ReasoningEffort.AUTO, ReasoningEffort.OFF),
+            disableOnly.thinkingChoices()
+        )
+        assertTrue(disableOnly.isEffortAdjustable)
+        assertTrue(disableOnly.hasConfigurableSetting)
+        assertTrue(disableOnly.supports(ReasoningEffort.OFF))
+        // On/Off with no mandatory evidence is not "Fixed".
+        assertFalse(disableOnly.isFixedReasoning)
+    }
+
+    @Test
+    fun disableOnlyIsConfigurableEvenWithoutReturnableReasoning() {
+        // The only user control is On/Off, and no visible reasoning is returned.
+        // hasConfigurableSetting must still be true (On/Off is a real setting).
+        val disableOnlyNoVisible = ReasoningCapability(
+            support = ReasoningSupport.KNOWN,
+            effortConfigurable = false,
+            canDisableReasoning = true,
+            canReturnVisibleReasoning = false,
+            source = CapabilitySource.PROVIDER_METADATA
+        )
+        assertTrue(disableOnlyNoVisible.hasConfigurableSetting)
+        assertFalse(disableOnlyNoVisible.isFixedReasoning)
+    }
+
+    @Test
+    fun fixedRequiresMandatoryEvidenceNotJustAbsentControls() {
+        // No ladder, no Off, no mandatory evidence → unknown config, NOT fixed.
+        val unknownConfig = ReasoningCapability(
+            support = ReasoningSupport.KNOWN,
+            effortConfigurable = false,
+            canDisableReasoning = false,
+            canReturnVisibleReasoning = true,
+            source = CapabilitySource.OBSERVED_RESPONSE
+        )
+        assertFalse(unknownConfig.isEffortAdjustable)
+        assertFalse(unknownConfig.isFixedReasoning)
+        assertTrue(unknownConfig.thinkingChoices().isEmpty())
+
+        // Same shape, but positively known mandatory → fixed.
+        val mandatory = unknownConfig.copy(
+            source = CapabilitySource.PROVIDER_ADAPTER,
+            reasoningMandatory = true
+        )
+        assertTrue(mandatory.isFixedReasoning)
+        assertTrue(mandatory.thinkingChoices().isEmpty())
+    }
+
+    @Test
     fun autoAlwaysSupportedEvenWithoutEffortControl() {
         assertTrue(ReasoningCapability.UNKNOWN.supports(ReasoningEffort.AUTO))
         assertTrue(ReasoningCapability.ABSENT.supports(ReasoningEffort.AUTO))

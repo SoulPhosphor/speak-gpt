@@ -37,7 +37,31 @@ class ReasoningIndicatorTest {
         supportedEfforts = emptyList(),
         canDisableReasoning = false,
         canReturnVisibleReasoning = true,
-        source = CapabilitySource.PROVIDER_ADAPTER
+        source = CapabilitySource.PROVIDER_ADAPTER,
+        // Positively known mandatory — the only case that is truly "Fixed".
+        reasoningMandatory = true
+    )
+
+    // Reasons, but the app has NOT established its controls (e.g. an observed
+    // response). Not adjustable, not known mandatory → automatic, never fixed.
+    private val unknownConfig = ReasoningCapability(
+        support = ReasoningSupport.KNOWN,
+        effortConfigurable = false,
+        supportedEfforts = emptyList(),
+        canDisableReasoning = false,
+        canReturnVisibleReasoning = true,
+        source = CapabilitySource.OBSERVED_RESPONSE,
+        reasoningMandatory = false
+    )
+
+    // Reasons with no effort ladder but reasoning can be turned On/Off.
+    private val disableOnly = ReasoningCapability(
+        support = ReasoningSupport.KNOWN,
+        effortConfigurable = false,
+        supportedEfforts = emptyList(),
+        canDisableReasoning = true,
+        canReturnVisibleReasoning = true,
+        source = CapabilitySource.PROVIDER_METADATA
     )
 
     @Test
@@ -71,12 +95,36 @@ class ReasoningIndicatorTest {
     }
 
     @Test
-    fun reasoningModelWithNoAdjustableLevelIsFixed() {
-        // Even when the requested effort is Auto, an unconfigurable reasoning
-        // model shows the fixed/locked indicator, not automatic.
+    fun mandatoryModelWithNoAdjustableLevelIsFixed() {
+        // Even when the requested effort is Auto, a POSITIVELY-KNOWN mandatory
+        // model with no controls shows the fixed/locked indicator.
         assertEquals(
             ReasoningIndicator.FIXED,
             ReasoningIndicator.forGeneration(mandatoryNoEffort, ReasoningEffort.AUTO)
+        )
+    }
+
+    @Test
+    fun unknownConfigModelIsAutomaticNotFixed() {
+        // Reasons, but the app has not established that reasoning is mandatory or
+        // unadjustable. It must NOT be reported as fixed (§7.7 #4).
+        assertEquals(
+            ReasoningIndicator.AUTOMATIC,
+            ReasoningIndicator.forGeneration(unknownConfig, ReasoningEffort.AUTO)
+        )
+    }
+
+    @Test
+    fun disableOnlyModelMapsAutoAndOffNotFixed() {
+        // A model with no ladder but an On/Off control is adjustable, so its
+        // indicator follows the effective effort rather than the locked glyph.
+        assertEquals(
+            ReasoningIndicator.AUTOMATIC,
+            ReasoningIndicator.forGeneration(disableOnly, ReasoningEffort.AUTO)
+        )
+        assertEquals(
+            ReasoningIndicator.OFF,
+            ReasoningIndicator.forGeneration(disableOnly, ReasoningEffort.OFF)
         )
     }
 

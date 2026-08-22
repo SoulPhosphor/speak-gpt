@@ -29,12 +29,18 @@ package org.teslasoft.assistant.reasoning
  *
  * The rules, in order:
  *  - A path not known to reason has NO indicator (null) — no icon at all.
- *  - A reasoning path with no adjustable level is [FIXED]: it reasons, but the
- *    level cannot be chosen (e.g. a mandatory-reasoning model). The lock glyph
- *    signals "not changeable".
- *  - Otherwise the effective effort maps straight across: [OFF] for a disabled
- *    reasoning model, any explicit provider-supported level, or [AUTOMATIC]
- *    when the effort was left to the provider.
+ *  - A reasoning path the app positively knows is mandatory AND offers no
+ *    adjustable control is [FIXED]: it reasons, the level cannot be chosen, and
+ *    reasoning cannot be turned off (e.g. a mandatory-reasoning model). The lock
+ *    glyph signals "not changeable".
+ *  - A path that reasons but exposes an adjustable control maps the effective
+ *    effort straight across: [OFF] for a disabled reasoning model, any explicit
+ *    provider-supported level, or [AUTOMATIC] when the effort was left to the
+ *    provider.
+ *  - A path that reasons but whose configuration the app has NOT established
+ *    (no ladder, no known Off, no mandatory evidence) is [AUTOMATIC], never
+ *    [FIXED]: the app does not claim the reasoning is unchangeable when it only
+ *    knows the model reasons (§7.7 #4).
  *
  * [AUTOMATIC] means exactly "reasoning was left automatic and the app cannot
  * confirm the level the provider actually served" — never a guess at a level.
@@ -61,9 +67,12 @@ enum class ReasoningIndicator(val token: String) {
          */
         fun forGeneration(capability: ReasoningCapability, effort: ReasoningEffort): ReasoningIndicator? {
             if (!capability.isReasoningCapable) return null
-            // Reasons, but the level is not the user's to set → a locked, fixed
-            // indicator rather than a bar level.
-            if (!capability.effortConfigurable) return FIXED
+            // No adjustable control: only a positively-known mandatory model is
+            // locked/fixed. An unestablished configuration is left automatic, not
+            // falsely reported as fixed.
+            if (!capability.isEffortAdjustable) {
+                return if (capability.reasoningMandatory) FIXED else AUTOMATIC
+            }
             return when (effort) {
                 ReasoningEffort.OFF -> OFF
                 ReasoningEffort.MINIMAL -> MINIMAL
