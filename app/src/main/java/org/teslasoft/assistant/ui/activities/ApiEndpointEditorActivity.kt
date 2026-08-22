@@ -47,6 +47,7 @@ import org.teslasoft.assistant.imagegen.ToolCapability
 import org.teslasoft.assistant.imagegen.ToolCapabilityScope
 import org.teslasoft.assistant.imagegen.ToolCapabilityStore
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.EndpointCapabilityCachePolicy
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
@@ -229,6 +230,12 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var currentReasoningCapabilityJson: String = ""
     private var currentReasoningRejectedJson: String = ""
 
+    /** Capability is scoped to this effective endpoint path. Editing unrelated
+     *  profile settings preserves it; moving the profile to another API path
+     *  invalidates it on Save so stale knowledge cannot leak across servers. */
+    private var originalHost: String = ""
+    private var originalChatEndpoint: String = ApiEndpointObject.DEFAULT_CHAT_ENDPOINT
+
     /** Snapshot of the initial field values, for the discard-changes check. */
     private var initialSnapshot: String = ""
 
@@ -344,6 +351,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         // The record's current label anchors the "Default" delete guard; the id
         // stays in [endpointId] and is what the record is saved/deleted under.
         oldLabel = endpoint.label
+        originalHost = endpoint.host
+        originalChatEndpoint = endpoint.chatEndpoint.ifBlank { ApiEndpointObject.DEFAULT_CHAT_ENDPOINT }
 
         // Header title: the profile's own name plus the app's fixed "API
         // Endpoint" suffix, preserving whatever capitalization the user gave
@@ -593,11 +602,20 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     }
 
     private fun buildEndpointObject(): ApiEndpointObject {
+        val host = fieldHost?.text.toString().trim()
+        val chatEndpoint = normalizedChatEndpoint()
+        val effectivePathChanged = endpointId.isNotBlank() &&
+            EndpointCapabilityCachePolicy.effectivePathChanged(
+                originalHost,
+                originalChatEndpoint,
+                host,
+                chatEndpoint
+            )
         return ApiEndpointObject(
             label = fieldLabel?.text.toString().trim(),
-            host = fieldHost?.text.toString().trim(),
+            host = host,
             apiKey = effectiveApiKey(),
-            chatEndpoint = normalizedChatEndpoint(),
+            chatEndpoint = chatEndpoint,
             authType = selectedAuthType,
             model = selectedModel,
             temperature = (sliderTemperature?.value ?: (ApiEndpointObject.DEFAULT_TEMPERATURE * 10f)) / 10f,
@@ -617,19 +635,17 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             // Rename keeps the same id; a new profile carries "" and is minted an
             // id (or the reserved Default id) on first save.
             id = endpointId,
-            contextWindowTokens = fieldContextWindow?.text.toString()
-                .trim()
-                .toIntOrNull()
-                ?.takeIf { it > 0 },
-            contextWindowModelId = if (fieldContextWindow?.text.toString().isBlank()) {
+            contextWindowTokens = if (effectivePathChanged) null else fieldContextWindow?.text.toString()
+                .trim().toIntOrNull()?.takeIf { it > 0 },
+            contextWindowModelId = if (effectivePathChanged || fieldContextWindow?.text.toString().isBlank()) {
                 ""
             } else {
                 selectedModel
             },
-            imageCapabilityByModel = currentCapabilityJson,
-            toolCapabilityByModel = currentToolCapabilityJson,
-            reasoningCapabilityByModel = currentReasoningCapabilityJson,
-            reasoningRejectedLevelsByModel = currentReasoningRejectedJson,
+            imageCapabilityByModel = if (effectivePathChanged) "" else currentCapabilityJson,
+            toolCapabilityByModel = if (effectivePathChanged) "" else currentToolCapabilityJson,
+            reasoningCapabilityByModel = if (effectivePathChanged) "" else currentReasoningCapabilityJson,
+            reasoningRejectedLevelsByModel = if (effectivePathChanged) "" else currentReasoningRejectedJson,
             // The default path is stored as blank so a future default change
             // reaches profiles that never customized it.
             providerDiscoveryPath = fieldProviderDiscoveryPath?.text.toString().trim()

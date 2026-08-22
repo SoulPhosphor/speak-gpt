@@ -19,9 +19,11 @@ class ReasoningConsumerWiringTest {
         val favorites = source("ui/adapters/FavoriteModelListAdapter.kt")
         val quickSettings = source("ui/fragments/dialogs/QuickSettingsBottomSheetDialogFragment.kt")
 
-        assertTrue(modelList.contains("EndpointReasoningCapability.resolve("))
+        assertTrue(modelList.contains("EndpointReasoningCapability.index("))
+        assertTrue(modelList.contains("resolvedReasoningCapabilityIndex.resolve(modelId)"))
         assertTrue(modelList.contains("capability.isReasoningCapable"))
-        assertTrue(favorites.contains("EndpointReasoningCapability.resolve("))
+        assertTrue(favorites.contains("EndpointReasoningCapability.index("))
+        assertTrue(favorites.contains("reasoningIndex(endpointId).resolve(modelId)"))
         assertTrue(favorites.contains("capability.isReasoningCapable"))
         assertTrue(favorites.contains("capability.hasConfigurableSetting"))
         assertTrue(quickSettings.contains("EndpointReasoningCapability.resolveWithLearnedRejections("))
@@ -33,6 +35,23 @@ class ReasoningConsumerWiringTest {
         assertTrue(chat.contains("ReasoningSupport.UNKNOWN"))
         assertTrue(chat.contains("learnFromObservedResponse"))
         assertTrue(chat.contains("KEY_MESSAGE_REASONING_LEVEL"))
+    }
+
+    @Test
+    fun quickSettingsSavePreservesEndpointCapabilityCaches() {
+        val quickSettings = source("ui/fragments/dialogs/QuickSettingsBottomSheetDialogFragment.kt")
+        assertTrue(quickSettings.contains("imageCapabilityByModel = currentProfile.imageCapabilityByModel"))
+        assertTrue(quickSettings.contains("toolCapabilityByModel = currentProfile.toolCapabilityByModel"))
+        assertTrue(quickSettings.contains("reasoningCapabilityByModel = currentProfile.reasoningCapabilityByModel"))
+        assertTrue(quickSettings.contains("reasoningRejectedLevelsByModel = currentProfile.reasoningRejectedLevelsByModel"))
+    }
+
+    @Test
+    fun endpointEditorInvalidatesCachesOnlyThroughSharedPathPolicy() {
+        val editor = source("ui/activities/ApiEndpointEditorActivity.kt")
+        assertTrue(editor.contains("EndpointCapabilityCachePolicy.effectivePathChanged("))
+        assertTrue(editor.contains("reasoningCapabilityByModel = if (effectivePathChanged) \"\""))
+        assertTrue(editor.contains("imageCapabilityByModel = if (effectivePathChanged) \"\""))
     }
 
     private fun source(relative: String): String {

@@ -39,6 +39,15 @@ import com.google.gson.JsonParser
  */
 object EndpointReasoningCapability {
 
+    /** Build a reusable, endpoint-scoped lookup for model-list rendering. */
+    fun index(
+        reasoningCapabilityByModel: String?,
+        providerPath: ReasoningProviderPath = ReasoningProviderPath.GENERIC_OPENAI_COMPATIBLE
+    ): EndpointReasoningCapabilityIndex = EndpointReasoningCapabilityIndex(
+        ReasoningCapabilityStore.snapshot(reasoningCapabilityByModel),
+        providerPath
+    )
+
     /**
      * @param reasoningCapabilityByModel the endpoint's persisted capability
      *   store JSON ([ApiEndpointObject.reasoningCapabilityByModel]).
@@ -195,6 +204,25 @@ object EndpointReasoningCapability {
             )
         }
         return ReasoningCapabilityStore.set(currentJson, modelId, observed)
+    }
+}
+
+/**
+ * Immutable capability view used by selectors and their adapters. Constructing
+ * it parses persisted JSON once; resolving a row is then only a map lookup plus
+ * the provider-adapter fallback.
+ */
+class EndpointReasoningCapabilityIndex internal constructor(
+    private val storedByModel: Map<String, ReasoningCapability>,
+    private val providerPath: ReasoningProviderPath
+) {
+    fun resolve(modelId: String?): ReasoningCapability {
+        if (!modelId.isNullOrBlank()) {
+            storedByModel[modelId]?.let { stored ->
+                if (stored.support != ReasoningSupport.UNKNOWN) return stored
+            }
+        }
+        return ReasoningCapabilityResolver.resolve(modelId, null, providerPath)
     }
 }
 

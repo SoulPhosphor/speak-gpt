@@ -152,6 +152,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
     private var favoriteModelsPreferences: FavoriteModelsPreferences? = null
 
     private var apiEndpointObject: ApiEndpointObject? = null
+    private var reasoningCapabilityIndex =
+        org.teslasoft.assistant.reasoning.EndpointReasoningCapability.index(null)
     private var listener: OnModelSelectedListener? = null
 
     /** The endpoint this picker is choosing a model for (caller override, else
@@ -395,6 +397,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                         endpoint.reasoningCapabilityByModel = refresh.capabilityJson
                         apiEndpointPreferences?.setApiEndpoint(requireContext(), endpoint)
                     }
+                    refreshReasoningCapabilityIndex()
                     // Capability refresh succeeded even if a specialized picker
                     // (for example image-only) filters every model out.
                     logReasoningCatalogRefresh(success = true)
@@ -604,6 +607,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         val endpointIdOverride = requireArguments().getString("endpointId").orEmpty()
         resolvedEndpointId = endpointIdOverride.ifEmpty { preferences?.getApiEndpointId() ?: "" }
         apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(ctx, resolvedEndpointId)
+        refreshReasoningCapabilityIndex()
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(ctx)
         checkOnlyProviderOnSelection =
             chatId.isNotBlank() && endpointIdOverride.isBlank() && !imageMode && !startsWithAllModels && !rawModelCatalog
@@ -676,14 +680,43 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 // Preserve the existing match rule (owner: keep search as it is).
                 ArrayList(availableModels.filter { item -> item == query || item.contains(query) || query.contains(item) })
             }
-            val adapter = ModelListAdapter(requireContext(), filtered, requireArguments().getString("chatId").toString(), apiEndpointObject?.id ?: "")
+            val adapter = ModelListAdapter(
+                requireContext(),
+                filtered,
+                requireArguments().getString("chatId").toString(),
+                resolvedEndpointId,
+                reasoningCapabilityIndex
+            )
             adapter.setOnItemClickListener(modelSelectedListener)
             modelList?.adapter = adapter
         } else {
-            val adapter = FavoriteModelListAdapter(requireContext(), ArrayList(favorites), requireArguments().getString("chatId").toString(), showRoutingGear = true)
+            val endpointId = resolvedEndpointId
+            val adapter = FavoriteModelListAdapter(
+                requireContext(),
+                ArrayList(favorites),
+                requireArguments().getString("chatId").toString(),
+                showRoutingGear = true,
+                reasoningCapabilityIndexes = if (endpointId.isBlank()) emptyMap()
+                    else mapOf(endpointId to reasoningCapabilityIndex)
+            )
             adapter.setOnItemClickListener(favoriteSelectedListener)
             modelList?.adapter = adapter
         }
+    }
+
+    private fun refreshReasoningCapabilityIndex() {
+        val endpoint = apiEndpointObject
+        reasoningCapabilityIndex = org.teslasoft.assistant.reasoning.EndpointReasoningCapability.index(
+            endpoint?.reasoningCapabilityByModel,
+            if (endpoint == null) {
+                org.teslasoft.assistant.reasoning.ReasoningProviderPath.GENERIC_OPENAI_COMPATIBLE
+            } else {
+                org.teslasoft.assistant.reasoning.ReasoningProviderPath.forEndpoint(
+                    endpoint.host,
+                    endpoint.isOpenRouterRouting()
+                )
+            }
+        )
     }
 
     /** Fetch the endpoint's catalog. The provider-wide purpose uses the raw

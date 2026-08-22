@@ -1731,6 +1731,13 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             connectTimeoutSeconds = currentProfile.connectTimeoutSeconds,
             responseTimeoutSeconds = currentProfile.responseTimeoutSeconds,
             providerDiscoveryPath = currentProfile.providerDiscoveryPath,
+            contextWindowTokens = currentProfile.contextWindowTokens,
+            contextWindowModelId = currentProfile.contextWindowModelId,
+            imageCapabilityByModel = currentProfile.imageCapabilityByModel,
+            toolCapabilityByModel = currentProfile.toolCapabilityByModel,
+            identity = currentProfile.identity,
+            reasoningCapabilityByModel = currentProfile.reasoningCapabilityByModel,
+            reasoningRejectedLevelsByModel = currentProfile.reasoningRejectedLevelsByModel,
             // Carry the stable id so this UPDATES the same profile in place;
             // without it setApiEndpoint would mint a new id and duplicate it.
             id = currentProfile.id

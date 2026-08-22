@@ -32,9 +32,30 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 
 /** ListView adapter to display list of voices */
-class ModelListAdapter(private val context: Context, private val items: ArrayList<String>, private var chatId: String, private var apiEndpointId: String) : BaseAdapter() {
+class ModelListAdapter(
+    private val context: Context,
+    private val items: ArrayList<String>,
+    private var chatId: String,
+    private var apiEndpointId: String,
+    private val reasoningCapabilityIndex: org.teslasoft.assistant.reasoning.EndpointReasoningCapabilityIndex? = null
+) : BaseAdapter() {
 
     private var listener: OnItemClickListener? = null
+    private val resolvedReasoningCapabilityIndex by lazy {
+        reasoningCapabilityIndex ?: if (apiEndpointId.isBlank()) {
+            org.teslasoft.assistant.reasoning.EndpointReasoningCapability.index(null)
+        } else {
+            val endpoint = org.teslasoft.assistant.preferences.ApiEndpointPreferences
+                .getApiEndpointPreferences(context).getApiEndpoint(context, apiEndpointId)
+            org.teslasoft.assistant.reasoning.EndpointReasoningCapability.index(
+                endpoint.reasoningCapabilityByModel,
+                org.teslasoft.assistant.reasoning.ReasoningProviderPath.forEndpoint(
+                    endpoint.host,
+                    endpoint.isOpenRouterRouting()
+                )
+            )
+        }
+    }
 
     override fun getCount(): Int {
         return items.size
@@ -111,20 +132,7 @@ class ModelListAdapter(private val context: Context, private val items: ArrayLis
      * model keeps its bulb when filtered (§7.9).
      */
     private fun bindReasoningIndicator(viewHolder: ViewHolder, modelId: String, tintColor: Int) {
-        val capability = if (apiEndpointId.isBlank()) {
-            org.teslasoft.assistant.reasoning.ReasoningCapability.UNKNOWN
-        } else {
-            val endpoint = org.teslasoft.assistant.preferences.ApiEndpointPreferences
-                .getApiEndpointPreferences(context).getApiEndpoint(context, apiEndpointId)
-            org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
-                endpoint.reasoningCapabilityByModel,
-                modelId,
-                providerPath = org.teslasoft.assistant.reasoning.ReasoningProviderPath.forEndpoint(
-                    endpoint.host,
-                    endpoint.isOpenRouterRouting()
-                )
-            )
-        }
+        val capability = resolvedReasoningCapabilityIndex.resolve(modelId)
         if (!capability.isReasoningCapable) {
             viewHolder.reasoningIndicator.visibility = View.GONE
             return

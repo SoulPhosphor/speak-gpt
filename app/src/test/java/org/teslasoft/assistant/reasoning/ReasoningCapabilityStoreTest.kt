@@ -111,6 +111,19 @@ class ReasoningCapabilityStoreTest {
     }
 
     @Test
+    fun snapshotDecodesEveryModelOnceForListConsumers() {
+        val absent = ReasoningCapability.ABSENT.copy(source = CapabilitySource.PROVIDER_METADATA)
+        var json = ReasoningCapabilityStore.set(ReasoningCapabilityStore.EMPTY, "reasoner", full)
+        json = ReasoningCapabilityStore.set(json, "plain", absent)
+
+        val snapshot = ReasoningCapabilityStore.snapshot(json)
+
+        assertEquals(setOf("reasoner", "plain"), snapshot.keys)
+        assertTrue(snapshot.getValue("reasoner").isReasoningCapable)
+        assertEquals(ReasoningSupport.ABSENT, snapshot.getValue("plain").support)
+    }
+
+    @Test
     fun retainOnlyDropsModelsNotInTheLiveCatalog() {
         var json = ReasoningCapabilityStore.set(ReasoningCapabilityStore.EMPTY, "keep", full)
         json = ReasoningCapabilityStore.set(json, "gone", full)

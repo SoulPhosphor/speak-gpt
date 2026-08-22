@@ -65,6 +65,22 @@ object ReasoningCapabilityStore {
     }
 
     /**
+     * Decode the endpoint store once for list rendering. Callers can reuse the
+     * returned immutable snapshot for every visible row and every local search
+     * projection instead of reparsing the same JSON in `getView`.
+     */
+    fun snapshot(json: String?): Map<String, ReasoningCapability> {
+        val root = parse(json) ?: return emptyMap()
+        val decoded = LinkedHashMap<String, ReasoningCapability>(root.length())
+        val keys = root.keys()
+        while (keys.hasNext()) {
+            val modelId = keys.next()
+            root.optJSONObject(modelId)?.let { decoded[modelId] = decodeEntry(it) }
+        }
+        return decoded.toMap()
+    }
+
+    /**
      * Return a JSON string with [modelId] recorded as [capability]. UNKNOWN
      * removes any entry; KNOWN and authoritative ABSENT are established states.
      */

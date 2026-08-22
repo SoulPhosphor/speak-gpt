@@ -33,6 +33,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.models.ModelCleanupReportStore
 import org.teslasoft.assistant.preferences.models.ModelIdentity
@@ -43,10 +44,34 @@ import org.teslasoft.assistant.preferences.models.ModelIdentity
  * favorites only). Off by default so this shared list looks unchanged wherever
  * favorites are shown; the dedicated Favorite AI Models list opts in.
  */
-class FavoriteModelListAdapter(private val context: Context, private val items: ArrayList<Map<String, String>>, private var chatId: String, private val showRoutingGear: Boolean = false) : BaseAdapter() {
+class FavoriteModelListAdapter(
+    private val context: Context,
+    private val items: ArrayList<Map<String, String>>,
+    private var chatId: String,
+    private val showRoutingGear: Boolean = false,
+    reasoningCapabilityIndexes: Map<String, org.teslasoft.assistant.reasoning.EndpointReasoningCapabilityIndex> = emptyMap()
+) : BaseAdapter() {
 
     private var listener: OnItemClickListener? = null
     private val unavailableTargets = ModelCleanupReportStore.get(context).load().unavailable
+    private val endpointCache = HashMap<String, ApiEndpointObject>()
+    private val reasoningIndexCache = HashMap(reasoningCapabilityIndexes)
+
+    private fun endpoint(endpointId: String): ApiEndpointObject = endpointCache.getOrPut(endpointId) {
+        ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
+    }
+
+    private fun reasoningIndex(endpointId: String): org.teslasoft.assistant.reasoning.EndpointReasoningCapabilityIndex =
+        reasoningIndexCache.getOrPut(endpointId) {
+            val endpoint = endpoint(endpointId)
+            org.teslasoft.assistant.reasoning.EndpointReasoningCapability.index(
+                endpoint.reasoningCapabilityByModel,
+                org.teslasoft.assistant.reasoning.ReasoningProviderPath.forEndpoint(
+                    endpoint.host,
+                    endpoint.isOpenRouterRouting()
+                )
+            )
+        }
 
     override fun getCount(): Int {
         return items.size
@@ -134,7 +159,7 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
             return
         }
 
-        val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
+        val endpoint = endpoint(endpointId)
         if (!endpoint.isOpenRouterRouting()) {
             viewHolder.routingSettings.visibility = View.GONE
             viewHolder.routingSettings.setOnClickListener(null)
@@ -168,15 +193,7 @@ class FavoriteModelListAdapter(private val context: Context, private val items: 
      * both may appear on the same favorite.
      */
     private fun bindReasoningLightbulb(viewHolder: ViewHolder, modelId: String, endpointId: String, tintColor: Int) {
-        val endpoint = ApiEndpointPreferences.getApiEndpointPreferences(context).getApiEndpoint(context, endpointId)
-        val capability = org.teslasoft.assistant.reasoning.EndpointReasoningCapability.resolve(
-            endpoint.reasoningCapabilityByModel,
-            modelId,
-            providerPath = org.teslasoft.assistant.reasoning.ReasoningProviderPath.forEndpoint(
-                endpoint.host,
-                endpoint.isOpenRouterRouting()
-            )
-        )
+        val capability = reasoningIndex(endpointId).resolve(modelId)
         if (!capability.isReasoningCapable) {
             viewHolder.reasoningSettings.visibility = View.GONE
             viewHolder.reasoningSettings.setOnClickListener(null)

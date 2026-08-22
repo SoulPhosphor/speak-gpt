@@ -70,6 +70,20 @@ class EndpointReasoningCapabilityTest {
     }
 
     @Test
+    fun reusableIndexMatchesStoredAndProviderAdapterResolution() {
+        val stored = EndpointReasoningCapability.learnFromEntry(
+            ReasoningCapabilityStore.EMPTY,
+            "vendor/reasoner",
+            entry("""{"supported_parameters":["reasoning"]}""")
+        )
+        val index = EndpointReasoningCapability.index(stored, ReasoningProviderPath.OPENAI)
+
+        assertTrue(index.resolve("vendor/reasoner").isReasoningCapable)
+        assertEquals(CapabilitySource.PROVIDER_ADAPTER, index.resolve("o3-mini").source)
+        assertEquals(ReasoningSupport.UNKNOWN, index.resolve("unrecognized-model").support)
+    }
+
+    @Test
     fun learnFromCatalogRecordsKnownAndAuthoritativeAbsentModels() {
         val catalog = """
             {"data":[

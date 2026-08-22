@@ -58,6 +58,8 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
 
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
     private var apiEndpointObject: ApiEndpointObject? = null
+    private var reasoningCapabilityIndexes:
+        Map<String, org.teslasoft.assistant.reasoning.EndpointReasoningCapabilityIndex> = emptyMap()
     private var listener: OnModelSelectedListener? = null
     private var progressBar: LoadingIndicator? = null
     private var ttsSelectorTitle: TextView? = null
@@ -163,6 +165,17 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
         val endpointIdOverride = requireArguments().getString("endpointId").orEmpty()
         resolvedEndpointId = endpointIdOverride.ifEmpty { preferences?.getApiEndpointId() ?: "" }
         apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(requireActivity(), resolvedEndpointId)
+        reasoningCapabilityIndexes = apiEndpointObject?.let { endpoint ->
+            mapOf(
+                resolvedEndpointId to org.teslasoft.assistant.reasoning.EndpointReasoningCapability.index(
+                    endpoint.reasoningCapabilityByModel,
+                    org.teslasoft.assistant.reasoning.ReasoningProviderPath.forEndpoint(
+                        endpoint.host,
+                        endpoint.isOpenRouterRouting()
+                    )
+                )
+            )
+        } ?: emptyMap()
         favoriteModelsPreferences = FavoriteModelsPreferences.getPreferences(requireActivity())
 
         reloadList()
@@ -187,11 +200,6 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
         }
 
         updateProjection("")
-
-        modelListAdapter = FavoriteModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), showRoutingGear = true)
-        modelListAdapter?.setOnItemClickListener(modelClickListener)
-        modelList?.adapter = modelListAdapter
-        modelListAdapter?.notifyDataSetChanged()
     }
 
     fun interface OnModelSelectedListener {
@@ -216,7 +224,13 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
             availableModelsProjection = availableModels.filter { item -> item["modelId"].toString() == query || item["modelId"].toString().contains(query) || query.contains(item["modelId"].toString())} as ArrayList<Map<String, String>>
         }
 
-        modelListAdapter = FavoriteModelListAdapter(requireContext(), availableModelsProjection, requireArguments().getString("chatId").toString(), showRoutingGear = true)
+        modelListAdapter = FavoriteModelListAdapter(
+            requireContext(),
+            availableModelsProjection,
+            requireArguments().getString("chatId").toString(),
+            showRoutingGear = true,
+            reasoningCapabilityIndexes = reasoningCapabilityIndexes
+        )
         modelListAdapter?.setOnItemClickListener(modelClickListener)
         modelList?.adapter = modelListAdapter
         modelListAdapter?.notifyDataSetChanged()
