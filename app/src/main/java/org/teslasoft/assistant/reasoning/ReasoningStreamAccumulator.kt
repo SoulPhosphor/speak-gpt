@@ -114,17 +114,29 @@ class ReasoningStreamAccumulator {
                 collectDetailBlock(block)
                 val type = stringOrNull(block, "type").orEmpty().lowercase()
                 if (type.contains("summary")) detailHasSummary = true else if (type.isNotEmpty()) detailHasRaw = true
-                // The human-readable payload is normally `text`; a summary block
-                // carries it in `summary` instead. Prefer `text` so the existing
-                // raw/text path is unchanged, and fall back to `summary` so a
-                // documented summary block is not silently dropped. `data` blocks
-                // (encrypted continuation state) carry neither and are skipped.
-                val summaryText = stringOrNull(block, "summary")
-                if (summaryText != null) {
-                    inboundSummaryField = true
-                    detailHasSummary = true
+                // The human-readable payload is normally a flat `text` string;
+                // prefer it so the existing raw/text path is byte-identical.
+                // When there is none, the reasoning came back structured: a
+                // `summary` string, or — as OpenAI-style summaries do when passed
+                // through OpenRouter — a `summary`/`content`/`parts` value whose
+                // parts carry the text one level down. Pull the text out of those
+                // shapes so a structured summary is not dropped as empty. `data`
+                // blocks (encrypted continuation state) hold no readable string
+                // and contribute nothing.
+                val flatText = stringOrNull(block, "text")
+                if (flatText != null) {
+                    detailText.append(flatText)
+                } else {
+                    if (block.get("summary")?.takeUnless { it.isJsonNull } != null) {
+                        inboundSummaryField = true
+                        detailHasSummary = true
+                    }
+                    val nested = StringBuilder()
+                    collectReadableText(block.get("summary"), nested)
+                    collectReadableText(block.get("content"), nested)
+                    collectReadableText(block.get("parts"), nested)
+                    if (nested.isNotEmpty()) detailText.append(nested)
                 }
-                (stringOrNull(block, "text") ?: summaryText)?.let { detailText.append(it) }
             }
 
         // One provider event may expose the same display delta through several
@@ -236,6 +248,34 @@ class ReasoningStreamAccumulator {
             else -> return null
         }
         return payload.ifBlank { null }
+    }
+
+    /**
+     * Gather readable reasoning text from a structured `reasoning_details`
+     * sub-value across the documented nested shapes. A string is appended as-is;
+     * an array is walked; an object contributes its `text` (preferred) or
+     * `summary` string, and otherwise is walked into `content`/`parts`. This is
+     * how an OpenAI-style summary — a `summary` array of parts each carrying a
+     * `text` — surfaces after passing through OpenRouter. Encrypted `data` is
+     * never a readable string here, so it is naturally skipped. Fail-safe: any
+     * unexpected shape simply contributes nothing.
+     */
+    private fun collectReadableText(element: com.google.gson.JsonElement?, out: StringBuilder) {
+        if (element == null || element.isJsonNull) return
+        when {
+            element.isJsonPrimitive && element.asJsonPrimitive.isString -> out.append(element.asString)
+            element.isJsonArray -> element.asJsonArray.forEach { collectReadableText(it, out) }
+            element.isJsonObject -> {
+                val obj = element.asJsonObject
+                val direct = stringOrNull(obj, "text") ?: stringOrNull(obj, "summary")
+                if (direct != null) {
+                    out.append(direct)
+                } else {
+                    collectReadableText(obj.get("content"), out)
+                    collectReadableText(obj.get("parts"), out)
+                }
+            }
+        }
     }
 
     private fun stringOrNull(obj: JsonObject, name: String): String? = try {
