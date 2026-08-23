@@ -11,13 +11,14 @@
 - Full width is a product requirement. Do not silently accept a narrower framework default or leave a permanent strip of the chat visible because a standard drawer component applies a default margin.
 - The **existing/approved double-chevron control at the top of the chat** opens the drawer. Do **not** replace it with a hamburger icon.
 - The drawer header contains a **right-facing double-chevron** aligned to the right. Tapping it closes the drawer and returns to the chat state that was underneath it.
+- **Do not add an edge-swipe or drag gesture to open the drawer.** Navigation between Chat and the drawer is intentionally controlled by the two double-chevron buttons plus normal system Back behavior.
 - Returning from the drawer must preserve whichever chat state the user had before opening it: an existing saved chat if one was open, or the current blank/empty chat if that was open. Closing the drawer must not create, replace, or switch chats.
 - System Back while the drawer is open should close the drawer first and return to the underlying chat state.
 - Opening or closing the drawer must not disturb mic state, voice/hands-free state, streaming state, draft text, keyboard/IME state, pending attachments, Includes, selected model/provider, or per-chat preferences.
 
 Unless the owner explicitly specifies otherwise, icons referenced by this drawer/search design come from **Google Icons / Material Symbols**.
 
-## 2. Drawer Header
+## 2. Drawer Header And Scrolling
 
 The first line of the drawer is a real header and supersedes the earlier no-header decision.
 
@@ -25,6 +26,8 @@ The first line of the drawer is a real header and supersedes the earlier no-head
 - A Google **double-chevron facing right** is right aligned on the same line.
 - The right-facing double-chevron returns to the underlying current chat as described above.
 - Header colors, typography, icon tint, and background must be theme-ready and use the shared style/theme system. Do not hard-code drawer colors.
+- The drawer must support normal **vertical scrolling** when its contents exceed the available height.
+- Recommended layout: keep the Soul Phosphor / return-chevron header fixed so the return control remains continuously reachable, and allow the content below it to scroll. This is an implementation recommendation rather than a requirement to redesign drawer content around nested scrolling if the platform structure provides an equally usable result.
 
 ## 3. Drawer Contents, Top To Bottom
 
@@ -34,16 +37,19 @@ The top-level order is:
 2. **New Chat**.
 3. **Search**.
 4. Chat list.
-5. Existing lower drawer navigation such as Characters, Playground, and Settings may remain below the chat-list area according to the broader navigation plan.
+5. **Playground** and **Settings** may remain as lower navigation destinations according to the broader navigation plan.
 
 There is **no Projects section yet**. Do not invent a Projects heading, placeholder, empty area, or project behavior. For now, the chat list begins immediately after Search.
+
+**Companions / Characters do not receive a permanent drawer row.** They remain reachable through their existing paths, including Quick Settings. Do not add them to the drawer merely because the older navigation plan listed Characters as a top-level destination.
 
 ### 3.1 New Chat
 
 - Use the Google icon named **Contract**.
 - Place the icon first, with the words **New Chat** immediately after it.
 - The visible label uses Title Caps: **New Chat**.
-- Tapping the row invokes the app's existing/new-chat flow. Do not redesign unrelated new-chat persistence or dialog behavior merely to implement the drawer.
+- Tapping **New Chat** performs the app's **existing New Chat behavior exactly as it works now**. This redesign is not an invitation to reinterpret, replace, or invent a new New Chat lifecycle or UX.
+- Preserve the current New Chat appearance, flow, persistence semantics, and any existing dialog behavior unless a separate owner-approved change explicitly modifies them.
 
 ### 3.2 Search
 
@@ -72,16 +78,16 @@ Use:
 
 The Search screen still participates in normal system Back/gesture navigation even though the visual header has no buttons.
 
-### 4.2 Search Box
+### 4.2 Search Box And Search Behavior
 
 - Place the search box directly under the header.
 - Its visual style should match the search box currently used on the Chats list/main chat-list screen, including the text field plus magnifying-glass action.
 - The current implementation reference is the Chats-list search control (`bg_search`, `field_search`, `btn_search`, and `ic_search` in `fragment_chats_list.xml`).
 - Reuse or convert that appearance through the current shared-style/theme system at implementation time. Do not copy legacy hard-coded colors into a new screen.
-- The search executes when the user presses the **magnifying-glass button** in the search box.
-- After the magnifying-glass button is pressed, matching chats appear underneath the search box.
-- Live filtering while the user types is **not required** unless separately approved later.
-- Search results use the same approved flat chat-row presentation described in Section 5 unless a later Search-specific result design is explicitly approved.
+- **Do not redesign or expand Search in this drawer phase.** Reuse the app's existing chat-search behavior and matching semantics rather than inventing full-message search, semantic search, or new filtering rules.
+- Existing search logic is the product behavior authority for what constitutes a match during this phase.
+- The new Search screen may change *where* the existing search experience lives, but not what it searches or how matches are determined unless separately approved later.
+- Search results use the same approved flat chat-row presentation described in Section 5.
 
 ## 5. Chat List Presentation
 
@@ -132,7 +138,21 @@ When **Show Companion Images in Chat List** is On:
 - Exact image size, column width, and local spacing may use implementation judgment to preserve these visual relationships.
 - Do not right-align the image and do not place it after the chat text.
 
-### 5.4 Current Chat State
+### 5.4 Pinned Chats
+
+Pinned chats remain a supported chat-list behavior.
+
+- **All pinned chats appear before all regular/unpinned chats.**
+- Within the pinned group, sort by **last used**, newest first and oldest last.
+- Do not intermix pinned and unpinned chats merely because their recent-use timestamps overlap.
+- Regular/unpinned chats keep the app's existing ordering unless a separate owner-approved change says otherwise.
+- Use the Google **Bookmark** icon as the visible pin marker for this new presentation.
+- When companion images are **Off**, show a small Bookmark icon immediately beside the pinned chat's title. It should read as subordinate metadata, not as a second large leading icon.
+- When companion images are **On**, place a **very small Bookmark icon overlapping the lower-right corner of the companion image**. The bookmark is an overlay on the image container, not an additional column that pushes the title farther right.
+- The overlay must remain legible against arbitrary companion images. Use a theme-ready treatment such as an appropriate contrasting tint/backplate if required, but keep it visually tiny and subordinate.
+- A recycled list row must never retain a bookmark from a previously bound pinned chat or lose the bookmark for a pinned chat.
+
+### 5.5 Current Chat State
 
 - The currently open saved chat still needs a visible selected state, but **do not recreate the old filled rounded chat tile** just to show selection.
 - Use a restrained, theme-ready non-card selection treatment, such as an accent/marker or text treatment, using the approved selected/drawer-selected theme role. Exact treatment may use implementation judgment as long as it is clearly visible and does not become a per-row background tile.
@@ -148,7 +168,13 @@ Ordinary app launch should immediately present a **blank chat using the same bla
 - Reuse the current blank/new-chat behavior and persistence semantics.
 - Do not invent a second chat-storage lifecycle solely to create the startup blank chat.
 
-## 7. Implementation Staging
+## 7. Lower Navigation And Parked Decisions
+
+- **Playground:** link to the current Playground destination exactly as it exists at implementation time. Do not rehost, refactor, restyle, or otherwise change Playground as part of drawer work. The owner may remove Playground entirely in a separate future decision; drawer implementation must not depend on Playground internals.
+- **Settings:** keep Settings as a drawer-accessible destination, but the future transition/animation replacing the current gear-expansion behavior is **parked**. Do not redesign that transition as an incidental part of drawer implementation unless separately approved.
+- **Companions / Characters:** no permanent drawer destination. Existing access paths remain.
+
+## 8. Implementation Staging
 
 Preserve the existing staged rollout principle rather than landing the structural navigation change all at once.
 
@@ -158,6 +184,7 @@ Preserve the existing staged rollout principle rather than landing the structura
 - Preserve load-bearing chat/root IDs and transition behavior unless a directly required navigation-control change is made deliberately and all references are updated together.
 - Wire the chat's approved **double-chevron** control to open the drawer.
 - Do **not** add a hamburger button.
+- Do **not** add edge-swipe opening.
 - Drawer opens from the left and covers the full available width.
 - Drawer right-facing double-chevron closes it and returns to the underlying chat state.
 
@@ -169,15 +196,15 @@ Preserve the existing staged rollout principle rather than landing the structura
 
 ### Step C: Retire Old Bottom Navigation
 
-- Only after Chats, Playground, Settings, and the other approved navigation destinations are reachable through the drawer should the old bottom navigation be retired.
-- Playground is only linked to its **current destination**. Do not rehost, refactor, or otherwise modify Playground as part of drawer work.
+- Only after Chats, Playground (if still present), Settings, and the other approved navigation destinations are reachable through the drawer or their approved replacement paths should the old bottom navigation be retired.
+- Playground is only linked to its **current destination** while it exists. Do not rehost, refactor, or otherwise modify Playground as part of drawer work.
 
 Ship A, then B, then C rather than combining all three into one large structural change.
 
-## 8. Existing Safety Rules That Still Bind
+## 9. Existing Safety Rules That Still Bind
 
 - Switching to a saved chat from the drawer should preserve the existing one-chat-per-ChatActivity lifecycle unless a later owner-approved architecture changes it. Do not introduce in-place live-chat swapping that risks voice, streaming, or per-chat state.
-- The drawer's chat list must refresh appropriately so auto-naming/renaming is reflected rather than caching stale chat IDs or names.
+- The drawer's chat list must refresh appropriately so auto-naming/renaming, pinned state, last-used ordering, and other existing list state are reflected rather than caching stale chat IDs or names.
 - Drawer work must not add competing IME/inset listeners to ChatActivity.
 - The drawer must handle status/system-bar insets correctly while still meeting the approved 100% visual width requirement.
 - The removed `btn_debug_log` top-bar shortcut must not be restored. Logs remains available through the current chat overflow menu.
