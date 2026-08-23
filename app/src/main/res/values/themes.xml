@@ -810,6 +810,17 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- Chat composer host: the space behind the floating composer stays transparent. -->
+    <style name="Widget.App.Chat.ComposerHost" parent="">
+        <item name="android:background">@color/transparent</item>
+    </style>
+
+    <!-- Chat composer surface: the editor and control row use the same
+         theme-resolved surface as the incoming AI bubble. -->
+    <style name="Widget.App.Chat.ComposerSurface" parent="">
+        <item name="android:background">@drawable/bubble_in</item>
+    </style>
+
     <!-- Regenerated-response pager (owner spec, Aug 16 2026): the far-right
          previous/next chevrons and the "n / m" count on an assistant message.
          Colors default to colorPrimary here but ChatAdapter recolors the glyphs
