@@ -140,7 +140,6 @@ import com.aallam.openai.client.RetryStrategy
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.checkbox.MaterialCheckBox
-import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.languageid.LanguageIdentifier
@@ -1477,10 +1476,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 window.navigationBarColor = getColor(R.color.amoled_accent_100)
             }
             progress?.setBackgroundResource(R.drawable.assistant_clear_amoled)
-            keyboardFrame?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_100, theme))
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_100, theme))
             activityTitle?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_100, theme))
-            messageInput?.setHintTextColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_900, theme))
             btnBack?.background = getAmoledAccentDrawable(
                 AppCompatResources.getDrawable(
                     this,
@@ -1499,13 +1496,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 AppCompatResources.getDrawable(
                     this,
                     R.drawable.btn_accent_tonal_v5_amoled
-                )!!, this
-            )
-
-            messageInput?.background = getAmoledAccentDrawableV2(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_selector_v6_amoled
                 )!!, this
             )
 
@@ -1553,16 +1543,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             progress?.setBackgroundResource(R.drawable.assistant_clear_v2)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                keyboardFrame?.setBackgroundColor(SurfaceColors.SURFACE_2.getColor(this))
                 actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
                 activityTitle?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
             } else {
-                keyboardFrame?.setBackgroundColor(getColor(R.color.accent_100))
                 actionBar?.setBackgroundColor(getColor(R.color.accent_250))
                 activityTitle?.setBackgroundColor(getColor(R.color.accent_250))
             }
 
-            messageInput?.setHintTextColor(ResourcesCompat.getColor(resources, R.color.accent_900, theme))
             btnBack?.background = getDarkAccentDrawable(
                 AppCompatResources.getDrawable(
                     this,
@@ -1581,13 +1568,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 AppCompatResources.getDrawable(
                     this,
                     R.drawable.btn_accent_tonal_v4
-                )!!, this
-            )
-
-            messageInput?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_selector_v6
                 )!!, this
             )
 
@@ -3210,7 +3190,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } else {
             0
         }
-        val targetHeight = rootView.height - chatView.top - keyboard.paddingBottom -
+        val topBound = maxOf(chatView.top, actionBar?.bottom ?: 0)
+        val targetHeight = rootView.height - topBound - keyboard.paddingBottom -
             bottomMargin - pendingHeight
         if (targetHeight <= 0 || surfaceParams.height == targetHeight) return
 
