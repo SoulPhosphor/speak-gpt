@@ -2,7 +2,7 @@
 
 **Status:** Owner-approved product/UI design, August 23, 2026.
 
-**Scope:** Generated-image gallery, image persistence/deletion behavior, image-safe chat deletion, and the related drawer/chat actions. This specification extends `drawer-design-spec.md` and `image-generation-rebuild-plan.md` for these areas. It does **not** redesign image generation providers, prompt generation, Playground, Companions, or unrelated chat behavior.
+**Scope:** Generated-image gallery, image persistence/deletion behavior, image-safe chat deletion, and the related drawer/chat actions. This specification extends `drawer-design-spec.md` and `image-generation-rebuild-plan.md` for these areas. It does **not** redesign image generation providers, prompt generation, Playground semantics, Companions, or unrelated chat behavior.
 
 The repository safety, shared-style, theme, lifecycle, and accessibility rules in `CLAUDE.md`, `ui-style-guide.md`, `ui-style-adoption.md`, `drawer-design-spec.md`, and `image-generation-rebuild-plan.md` still apply.
 
@@ -45,19 +45,16 @@ The gallery contains one item per stable generated-image identity.
 
 ## 2. Drawer Entry
 
-Add **Image Gallery** to the drawer navigation.
+Add **Image Gallery** to the drawer navigation according to the current hierarchy in `drawer-design-spec.md`.
 
 - Label: **Image Gallery**.
 - Use the same Images icon already used on the Settings screen (`ic_image`).
-- Place Image Gallery in the **fixed-bottom navigation area**, above Playground and Settings.
-- It must remain reachable regardless of chat-list scroll position.
-- If Playground is removed later, Image Gallery and Settings remain fixed at the bottom unless a later navigation design changes them.
+- Place Image Gallery at the **top of the scrollable middle region**, immediately below the fixed New Chat/Search row and immediately above **Folders**.
+- Image Gallery is **not** a fixed-bottom navigation item in the current drawer design.
+- **Settings** is the fixed-bottom drawer destination.
+- **Playground** is not a drawer row; its navigation placement is governed by the blank-chat Chat/Playground mode selector in `drawer-design-spec.md`.
 
-This extends the fixed-bottom section of `drawer-design-spec.md` to:
-
-1. **Image Gallery**
-2. **Playground** while it exists
-3. **Settings**
+This specification defers to `drawer-design-spec.md` for the exact drawer hierarchy while remaining the authority for what happens after Image Gallery is opened.
 
 ---
 
@@ -227,11 +224,11 @@ When an image is locked, **Delete is unavailable** rather than offering a destru
 
 ### 5.1 Compact Popup Style
 
-The gallery image menu and the drawer chat long-press menu (Section 11) use the same compact popup/menu appearance.
+The gallery image menu and the drawer chat/folder long-press menus use the same compact popup/menu appearance.
 
 The app is standardizing these small action menus. Do not independently style each `PopupMenu`/small anchored menu.
 
-If implementation begins before a named shared compact-popup style/theme exists, add one shared style/theme/behavior pattern and document it in `ui-style-guide.md`, then use it for both menus. Do not solve this with local background/tint/spacing code in individual screens.
+If implementation begins before a named shared compact-popup style/theme exists, add one shared style/theme/behavior pattern and document it in `ui-style-guide.md`, then use it for all of these compact menus. Do not solve this with local background/tint/spacing code in individual screens.
 
 ### 5.2 Go to Chat
 
@@ -263,7 +260,7 @@ Lock is a hard deletion-protection state stored with the durable gallery record.
 
 - **Lock** changes an unlocked image to locked.
 - **Unlock** changes a locked image back to ordinary deletion eligibility.
-- Lock state persists across app restarts, gallery sorting/filtering, chat deletion, and origin-chat deletion.
+- Lock state persists across app restarts, gallery sorting/filtering, chat deletion, folder deletion, and origin-chat deletion.
 - Show a small Google **Lock** indicator on a locked gallery thumbnail so the protected state is visible without requiring a long press.
 - The lock indicator is independent of Show Labels; hiding labels must not hide the protection state.
 
@@ -272,6 +269,7 @@ A locked image cannot be deleted by:
 - the single-image **Delete** action;
 - **Delete Selected** / bulk deletion;
 - **Delete All** during chat deletion;
+- a folder-level multi-chat deletion operation;
 - any cleanup path whose product meaning is to remove images because their origin chat is being deleted.
 
 Unlocking is required before an explicit gallery deletion can remove the asset.
@@ -476,11 +474,14 @@ At implementation time, audit the currently reachable deletion entry points and 
 
 - current-chat overflow Delete;
 - drawer long-press Delete;
+- **folder deletion**, which is a multi-chat delete and must use an aggregate version of the same image policy rather than looping through uncoordinated per-chat deletes;
 - the legacy Chats screen while it remains reachable during drawer migration;
 - swipe/bulk delete paths that remain active during migration;
 - any other direct `ChatPreferences.deleteChat(...)` UI path.
 
-No old swipe or bulk path may silently bypass the new image-preservation warning/choice or the Lock protection state.
+No old swipe, bulk, or folder path may silently bypass the image-preservation warning/choice or the Lock protection state.
+
+For folder deletion, `drawer-design-spec.md` owns the initial folder warning/layout. If the image setting requires an additional image choice, that choice must be resolved **before** folder/chat deletion commits. Cancelling the image step cancels the whole folder deletion. Do not delete chats first and ask about images afterward, and do not show one image-deletion dialog per contained chat.
 
 Do not weaken the low-level storage method to show UI; centralize the UI/policy above it so non-UI storage code remains deterministic.
 
@@ -488,12 +489,15 @@ Do not weaken the low-level storage method to show UI; centralize the UI/policy 
 
 ## 11. Drawer Chat Long-Press Menu
 
-Long-pressing a saved chat row in the drawer opens the shared compact action popup from Section 5.
+Long-pressing a saved chat row in the drawer opens the shared compact action popup.
 
-Menu items:
+Menu items, exact order:
 
 1. **Pin** when the chat is not pinned, or **Unpin** when it is pinned.
-2. **Delete**.
+2. **Move to Folder**.
+3. **Delete**.
+
+`drawer-design-spec.md` owns the folder chooser, folder assignment, and pin/folder interaction rules.
 
 Delete invokes the shared chat-deletion policy in Section 10.
 
@@ -545,7 +549,7 @@ A visible paging/Load More control is not required for the first version. If fut
 - The gallery's compact Show Labels control should reuse the existing Profile Images plain-label-plus-switch visual pattern rather than becoming a full settings row.
 - Selection mode should reuse the Profile Images gallery's established top-bar/selected-count/bottom-action vocabulary where practical rather than inventing a visually unrelated bulk-management mode.
 - The gallery grid may need a local layout because it is feature-specific; its colors, spacing roles, text appearances, label typography, lock badge, selection treatment, and controls still belong to shared/theme-ready resources where repeated/changeable.
-- The two compact action menus (gallery image and drawer chat) must share one compact menu appearance.
+- Gallery image, drawer chat, and drawer folder compact action menus must share one compact menu appearance.
 - Any new shared three-action dialog layout and compact popup-menu style must be documented in `ui-style-guide.md` when implemented.
 - All visible control names, dialog titles, menu items, and accessibility labels follow Title Caps; explanatory sentences remain sentence case.
 
@@ -573,7 +577,7 @@ At minimum cover:
 16. Add to Avatar Gallery opens the existing Profile Image framing/editor flow using the selected generated image as its source.
 17. Saving from the framing flow creates an ordinary avatar/profile-image gallery asset while leaving the original generated image unchanged.
 18. Lock state persists and a visible lock indicator remains present regardless of Show Labels.
-19. A locked image cannot be deleted through single Delete, selection/bulk Delete, chat Delete All, or a stale deletion request.
+19. A locked image cannot be deleted through single Delete, selection/bulk Delete, chat Delete All, folder deletion, or a stale deletion request.
 20. Unlock restores ordinary deletion eligibility.
 21. Select mode follows the Profile Images management pattern, shows a selected count and bottom **Delete Selected** action, and keeps locked images visible but unselectable.
 22. Delete Selected requires the **Delete Selected Images?** confirmation with **Cancel / Okay** in that exact order.
@@ -592,9 +596,10 @@ At minimum cover:
 35. Another chat referencing a deliberately deleted shared asset gets the placeholder rather than a crash or silent message deletion.
 36. Copied/duplicated chats do not gain destructive ownership of images created by the original chat.
 37. Legacy catalog backfill does not guess ownership from current settings/current chat, defaults backfilled lock state safely to Unlocked, and skips missing files.
-38. Every reachable chat deletion UI path observes the same image and lock policy; old swipe/bulk paths cannot bypass it.
-39. Drawer long press shows dynamic Pin/Unpin + Delete.
+38. Every reachable chat deletion UI path, including folder-level multi-chat deletion, observes the same image and lock policy; old swipe/bulk/folder paths cannot bypass it.
+39. Drawer long press shows dynamic **Pin/Unpin / Move to Folder / Delete** in that order.
 40. Current-chat overflow shows Pin/Unpin at the top only for a saved chat.
 41. Pin state stays consistent between overflow, drawer, and persisted chat list.
-42. Grid scrolling/recycling never leaks one image thumbnail, chat-name/date label, lock badge, selection state, or Show Labels state into another cell.
-43. Gallery opening and chat deletion do not block the UI thread on full-history scans or full-resolution image decoding.
+42. Image Gallery appears in the drawer's scrollable middle above Folders, not in the fixed-bottom Settings area.
+43. Grid scrolling/recycling never leaks one image thumbnail, chat-name/date label, lock badge, selection state, or Show Labels state into another cell.
+44. Gallery opening and chat/folder deletion do not block the UI thread on full-history scans or full-resolution image decoding.
