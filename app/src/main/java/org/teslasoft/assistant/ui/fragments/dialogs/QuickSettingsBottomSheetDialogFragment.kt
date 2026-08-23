@@ -1524,6 +1524,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
         switchUseSummarizer?.setOnCheckedChangeListener { _, checked ->
             preferences?.setChatUseSummarizer(checked)
+            if (checked) {
+                preferences?.setSummarizerCatchUpPending(true)
+            } else {
+                org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
+                    .cancel(arguments?.getString("chatId").orEmpty())
+            }
             rowSummarizerWindow?.visibility = if (checked) View.VISIBLE else View.GONE
             if (checked) {
                 setSummarizerWindowFieldText(preferences?.getChatSummarizerWindow()?.toString() ?: "")

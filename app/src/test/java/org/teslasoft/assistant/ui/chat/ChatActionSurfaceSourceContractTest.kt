@@ -68,6 +68,18 @@ class ChatActionSurfaceSourceContractTest {
     }
 
     @Test
+    fun composerDefersReparentingUntilHierarchyRestoreFinishes() {
+        val composer = source("main/java/org/teslasoft/assistant/ui/chat/ChatComposerLayout.kt")
+        val restore = composer.substring(
+            composer.indexOf("override fun onRestoreInstanceState"),
+            composer.indexOf("private class SavedState")
+        )
+
+        assertTrue(restore.contains("post {"))
+        assertTrue(restore.indexOf("post {") < restore.indexOf("applyMode()"))
+    }
+
+    @Test
     fun requestedSettingsRowsUseTheirExactGoogleIcons() {
         val layout = source("main/res/layout/activity_settings.xml")
         val aiSystem = sectionStartingAt(layout, "@+id/tile_ai_system_settings", 600)

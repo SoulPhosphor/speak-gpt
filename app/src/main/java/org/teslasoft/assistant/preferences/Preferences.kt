@@ -63,6 +63,8 @@ class Preferences internal constructor(
         const val LOG_MAX_DAYS_LIMIT = 30
         const val LOG_DEFAULT_MAX_ENTRIES = 50
         const val LOG_DEFAULT_MAX_DAYS = 7
+        const val CONDENSED_KIND_SUMMARY = "summary"
+        const val CONDENSED_KIND_COMPACTION = "compaction"
 
         private const val LAST_SUCCESS_ENDPOINT_ID = "last_success_endpoint_id"
         private const val LAST_SUCCESS_MODEL = "last_success_model"
@@ -2584,6 +2586,15 @@ class Preferences internal constructor(
         putGlobalString("image_summary_prompt", prompt)
     }
 
+    /** Manual compaction cancellation policy. False is the conservative,
+     * atomic default: cancelling discards every result from that operation. */
+    fun getSavePartialCompactionOnCancel(): Boolean =
+        getGlobalString("save_partial_compaction_on_cancel", "false") == "true"
+
+    fun setSavePartialCompactionOnCancel(value: Boolean) {
+        putGlobalString("save_partial_compaction_on_cancel", value.toString())
+    }
+
     /** Per-chat Use Summarizer state: "" = never stamped, else "true"/"false".
      *  Stamped once per chat (see ChatActivity) so flipping the new-chats
      *  default later never silently changes what an existing chat sends. */
@@ -2598,6 +2609,34 @@ class Preferences internal constructor(
 
     fun setChatUseSummarizer(enabled: Boolean) {
         putString("use_summarizer", if (enabled) "true" else "false")
+    }
+
+    /** Whether regular requests currently use the persisted summary/compacted
+     * projection. Turning this off sends the complete canonical transcript but
+     * deliberately preserves the summary, bookmark, and compaction marker. */
+    fun getUseSummarizedConversationProjection(): Boolean =
+        getString("use_summarized_conversation_projection", "true") != "false"
+
+    fun setUseSummarizedConversationProjection(enabled: Boolean) {
+        putString("use_summarized_conversation_projection", enabled.toString())
+    }
+
+    fun getSummarizerCatchUpPending(): Boolean =
+        getString("summarizer_catch_up_pending", "false") == "true"
+
+    fun setSummarizerCatchUpPending(value: Boolean) {
+        putString("summarizer_catch_up_pending", value.toString())
+    }
+
+    /** Last condensed form written for the summary-window action label. */
+    fun getCondensedConversationKind(): String =
+        getString("condensed_conversation_kind", CONDENSED_KIND_SUMMARY)
+
+    fun setCondensedConversationKind(kind: String) {
+        putString(
+            "condensed_conversation_kind",
+            if (kind == CONDENSED_KIND_COMPACTION) kind else CONDENSED_KIND_SUMMARY
+        )
     }
 
     /** Per-chat Complete Messages window; "" = follow the global default. */
@@ -2689,6 +2728,7 @@ class Preferences internal constructor(
                 .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
                 .putString("summarizer_over_length", if (overLength) "true" else "false")
                 .putString("summarizer_episode", "")
+                .putString("condensed_conversation_kind", CONDENSED_KIND_SUMMARY)
                 .putString(
                     "summarizer_projection_version",
                     SummarizerProjectionContract.VERSION.toString()
@@ -2697,6 +2737,29 @@ class Preferences internal constructor(
         } catch (_: Exception) {
             false
         }
+    }
+
+    /** Restores the exact pre-operation derived state after an atomic cancel. */
+    fun restoreSummarizerState(
+        summary: String,
+        foldedCount: Int,
+        overLength: Boolean,
+        episode: String,
+        condensedKind: String
+    ): Boolean = try {
+        preferences.edit()
+            .putString("summarizer_summary", summary)
+            .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
+            .putString("summarizer_over_length", overLength.toString())
+            .putString("summarizer_episode", episode)
+            .putString("condensed_conversation_kind", condensedKind)
+            .putString(
+                "summarizer_projection_version",
+                SummarizerProjectionContract.VERSION.toString()
+            )
+            .commit()
+    } catch (_: Exception) {
+        false
     }
 
     /**
@@ -2717,6 +2780,7 @@ class Preferences internal constructor(
                 .putString("summarizer_over_length", if (overLength) "true" else "false")
                 .putString("summarizer_episode", "")
                 .putString("manual_compaction_boundary", boundaryCount.coerceAtLeast(0).toString())
+                .putString("condensed_conversation_kind", CONDENSED_KIND_COMPACTION)
                 .putString(
                     "summarizer_projection_version",
                     SummarizerProjectionContract.VERSION.toString()

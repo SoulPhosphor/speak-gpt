@@ -130,7 +130,8 @@ class ChatPreferences private constructor() {
     private val summarizerContentKeys = arrayOf(
         "summarizer_summary", "summarizer_projection_version", "summarizer_folded",
         "summarizer_over_length", "summarizer_episode", "summarizer_errors",
-        "manual_compaction_boundary"
+        "manual_compaction_boundary", "use_summarized_conversation_projection",
+        "condensed_conversation_kind", "summarizer_catch_up_pending"
     )
 
     /**
