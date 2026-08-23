@@ -98,7 +98,7 @@ class SummarizerController(
         val prefs: Preferences,
         val endpoint: ApiEndpointObject,
         val model: String,
-        val providerJson: String?,
+        val providerJson: com.google.gson.JsonObject?,
         val prompt: String,
         val lengthWords: Int
     )
