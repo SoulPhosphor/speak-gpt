@@ -3092,6 +3092,7 @@
     <string name="composer_compact_action">Compact</string>
     <string name="composer_create_image_action">Create Image</string>
     <string name="manual_compaction_marker">Compacted</string>
+    <string name="summarizer_boundary_marker">──────── Summarized ────────</string>
     <string name="attach_option_image">Image</string>
 
     <!-- Save/Cancel pair on the Edit dialog, right-aligned in that order. -->

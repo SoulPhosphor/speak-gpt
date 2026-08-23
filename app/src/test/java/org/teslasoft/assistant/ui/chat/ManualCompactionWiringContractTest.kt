@@ -72,6 +72,8 @@ class ManualCompactionWiringContractTest {
         assertTrue(adapter.contains("R.drawable.ic_rule_settings"))
         assertTrue(adapter.contains("showRegenerateUnavailablePopup(anchor, lockKind)"))
         assertTrue(adapter.contains("promote.visibility = View.GONE"))
+        assertTrue(adapter.contains("position + 1 == summaryRegenerationLockBoundary"))
+        assertTrue(source("src/main/res/values/strings.xml").contains("──────── Summarized ────────"))
         assertTrue(activity.contains("if (condensedRegenerationLockKind(position) != null) return"))
     }
 

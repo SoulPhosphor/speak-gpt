@@ -697,11 +697,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val messageActionsRow: View? = itemView.findViewById(R.id.message_actions_row)
         private val compactionMarker: TextView =
             itemView.findViewById(R.id.compaction_marker)
+        private val summaryMarker: TextView =
+            itemView.findViewById(R.id.summary_marker)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
 
             compactionMarker.visibility = if (position + 1 == manualCompactionBoundary) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+            summaryMarker.visibility = if (position + 1 == summaryRegenerationLockBoundary) {
                 View.VISIBLE
             } else {
                 View.GONE
