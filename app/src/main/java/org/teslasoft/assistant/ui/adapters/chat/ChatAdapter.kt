@@ -1315,8 +1315,26 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             reasoningText?.text = text
             reasoningText?.visibility = if (expanded) View.VISIBLE else View.GONE
-            // Chevron: right when collapsed, rotated to point down when expanded.
-            reasoningChevron?.rotation = if (expanded) 90f else 0f
+            // Chevron: up (rotated 180 from the down-pointing asset) when
+            // collapsed, down (unrotated) when expanded.
+            reasoningChevron?.rotation = if (expanded) 0f else 180f
+
+            // One blank line above Thinking when the model/token line above it
+            // is showing anything (model name, token count, or both), so
+            // Thinking never sits flush against it. No gap when that line is
+            // empty — Thinking then starts immediately, same as before (owner
+            // spec, Aug 23 2026). Stays flush with the bubble's own left edge
+            // either way; it never follows the model/token line's portrait
+            // indent.
+            val metaVisible = messageMeta?.visibility == View.VISIBLE
+            val containerParams = container.layoutParams as? ViewGroup.MarginLayoutParams
+            if (containerParams != null) {
+                val desiredTopMargin = if (metaVisible) (messageMeta?.lineHeight ?: 0) else 0
+                if (containerParams.topMargin != desiredTopMargin) {
+                    containerParams.topMargin = desiredTopMargin
+                    container.layoutParams = containerParams
+                }
+            }
 
             reasoningHeader?.setOnClickListener {
                 if (!expandedReasoning.add(key)) expandedReasoning.remove(key)

@@ -112,15 +112,20 @@
                         android:layout_height="wrap_content"
                         android:text="@string/reasoning_thinking_label"
                         android:textColor="?attr/colorPrimary"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
 
+                    <!-- Outline chevron, not a filled arrow: pointing up (rotated
+                         180) while collapsed, pointing down (unrotated) while
+                         expanded (owner spec, Aug 23 2026). ChatAdapter sets the
+                         rotation per state. -->
                     <ImageView
                         android:id="@+id/reasoning_chevron"
                         android:layout_width="18dp"
                         android:layout_height="18dp"
                         android:layout_marginStart="4dp"
                         android:contentDescription="@string/reasoning_thinking_label"
-                        app:srcCompat="@drawable/ic_chevron_right"
+                        app:srcCompat="@drawable/ic_chevron_down"
                         app:tint="?attr/colorPrimary" />
                 </LinearLayout>
 
