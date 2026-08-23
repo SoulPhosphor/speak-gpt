@@ -821,6 +821,63 @@
         <item name="android:background">@drawable/bubble_in</item>
     </style>
 
+    <!-- Bare expand/collapse controls for the live chat composer. Their shared
+         style, not the layout or legacy per-screen theme code, owns the icon
+         geometry, transparent background, and theme-resolved tint. Placement
+         remains local because Expand is in the compact control row while
+         Collapse is anchored at the expanded editor's top end. -->
+    <style name="Widget.App.Chat.ComposerContentToggle" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:background">@color/transparent</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <!-- Provider-supplied Thinking disclosure. The layout owns only content,
+         ids, state, and constraints; this family owns its presentation so a
+         later appearance/theme pass can change it centrally. ChatAdapter may
+         replace label/body/chevron colors together with the resolved bubble
+         foreground for contrast, using its one shared bubble-foreground path. -->
+    <style name="Widget.App.Chat.Thinking.Container" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">6dp</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.Chat.Thinking.Header" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">32dp</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <style name="Widget.App.Chat.Thinking.Label" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Chat.Thinking.Chevron" parent="">
+        <item name="android:layout_width">18dp</item>
+        <item name="android:layout_height">18dp</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.App.Chat.Thinking.Body" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
     <!-- Regenerated-response pager (owner spec, Aug 16 2026): the far-right
          previous/next chevrons and the "n / m" count on an assistant message.
          Colors default to colorPrimary here but ChatAdapter recolors the glyphs

@@ -108,7 +108,7 @@ Do not guess its status from appearance or old documentation.
 | World Detail | `activity_world_detail.xml` | Partial | A few shared pieces | Partial | Fields largely local. |
 | Recovery Backup | `activity_recovery_backup.xml` | Unconverted | Shared button variants are present | Partial | No shared header; many local attributes remain. |
 | Profile Images | `activity_profile_images.xml` | Unconverted | A couple of shared references | Partial | Mostly local; grid and controls not audited. |
-| Chat | `activity_chat.xml` | Unconverted | Attachment strip uses the shared `Include` family | Partial | Everything else awaits the dedicated chat restyle phase (redesign plan Phase 4) with its view-ID contracts — do not restyle piecemeal. |
+| Chat | `activity_chat.xml`; assistant message `view_assistant_bot_message.xml` | Unconverted | Attachment strip uses the shared `Include` family; composer host/surface and bare Expand/Collapse controls use `Widget.App.Chat.Composer*`; the Thinking disclosure uses the complete `Widget.App.Chat.Thinking.*` family | Partial | The named components are centralized and theme-ready, but the rest of the chat screen and message presentation still await the dedicated chat restyle phase with its view-ID contracts. Do not treat this partial conversion as a whole-screen reference. |
 | Memory Browser | `activity_memory_list.xml` | Unconverted | None | Unconverted | Header and controls local. |
 | Memory Assistant | `activity_memory_assistant.xml` | Unconverted | None | Unconverted | Header, buttons, and rows local. |
 | Memory Editor | `activity_memory_editor.xml` | Unconverted | None | Unconverted | Fields and buttons local. |

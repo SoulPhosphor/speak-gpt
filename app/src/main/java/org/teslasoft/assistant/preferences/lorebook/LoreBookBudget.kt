@@ -34,7 +34,11 @@ object LoreBookBudget {
 
     data class Cut(val match: LoreBookMatch, val reason: String)
 
-    data class Selection(val kept: List<LoreBookMatch>, val cut: List<Cut>)
+    data class Selection(val kept: List<LoreBookMatch>, val cut: List<Cut>) {
+        /** Stable ids for only the entries that survived this budget walk. */
+        val injectedEntryIds: List<String>
+            get() = kept.map { it.entry.id }
+    }
 
     /**
      * Walk [matches] in order (already deduped by the caller), keeping up to

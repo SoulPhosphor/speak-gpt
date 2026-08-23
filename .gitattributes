@@ -1,1 +1,2 @@
 app/src/test/java/org/teslasoft/assistant/preferences/includes/IncludeTextPolicyTest.kt text diff
+app/src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt whitespace=cr-at-eol

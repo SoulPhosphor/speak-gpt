@@ -58,6 +58,7 @@ class ChatComposerLayout @JvmOverloads constructor(
 
     private var expanded = false
     private var active = false
+    private var movingFocusedEditor = false
     private var expansionListener: ((Boolean) -> Unit)? = null
 
     private val edgeMargin = dp(8)
@@ -74,8 +75,26 @@ class ChatComposerLayout @JvmOverloads constructor(
         active = messageInput.text?.isNotBlank() == true
 
         messageInput.setOnFocusChangeListener { _, hasFocus ->
+            if (movingFocusedEditor) return@setOnFocusChangeListener
             if (hasFocus) {
                 active = true
+                // Reparenting the EditText inside this focus callback interrupts
+                // the tap that acquired focus, so the IME may never receive the
+                // first request. Let that input event finish, then promote the
+                // same focused editor and keep the keyboard request attached to it.
+                messageInput.post {
+                    if (!messageInput.hasFocus()) return@post
+                    movingFocusedEditor = true
+                    try {
+                        applyMode()
+                        messageInput.requestFocus()
+                    } finally {
+                        movingFocusedEditor = false
+                    }
+                    ViewCompat.getWindowInsetsController(messageInput)
+                        ?.show(WindowInsetsCompat.Type.ime())
+                }
+                return@setOnFocusChangeListener
             } else if (messageInput.text.isNullOrBlank()) {
                 active = false
             }

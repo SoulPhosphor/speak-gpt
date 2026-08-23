@@ -212,6 +212,8 @@ import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.preferences.LogitBiasPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SecurePrefs
+import org.teslasoft.assistant.preferences.memory.ActiveMemoryAttribution
+import org.teslasoft.assistant.preferences.memory.ActiveMemoryReference
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.TranscriptRecorder
 import org.teslasoft.assistant.preferences.lorebook.LoreBookBudget
@@ -401,7 +403,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var pendingChatExportBytes: ByteArray? = null
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
-    private var btnDebugLog: ImageButton? = null
 
     // Conversation summarizer (conversation-summary-plan.md decisions 11 +
     // 16): data_alert first in the icon row (with the 1–5 count badge),
@@ -570,12 +571,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val selectedEndpointId: String,
         val request: ChatCompletionRequest,
         val payload: FrozenChatPayload,
+        val activeMemoryReferences: List<ActiveMemoryReference>,
         val contextDecision: ModelContextDecision
     )
 
     private data class FrozenRegularRequest(
         val request: ChatCompletionRequest,
-        val payload: FrozenChatPayload
+        val payload: FrozenChatPayload,
+        val activeMemoryReferences: List<ActiveMemoryReference>
     )
 
     // Auto-naming attempts this screen instance. Used to be a one-shot
@@ -753,9 +756,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         handsFreeBuffer = ""
     }
 
+    /**
+     * The progress ring and cancel X fully replace the conversation/send glyph
+     * while transcription or generation is busy. Keeping the underlying button
+     * invisible prevents its waveform/square from showing through the ring.
+     */
+    private fun setGenerationProgressVisible(visible: Boolean) {
+        progress?.visibility = if (visible) View.VISIBLE else View.GONE
+        btnSend?.visibility = if (visible) View.INVISIBLE else View.VISIBLE
+    }
+
     private fun restoreUIState() {
         runOnUiThread {
-            progress?.visibility = View.GONE
+            setGenerationProgressVisible(false)
             btnMicro?.isEnabled = true
             btnSend?.isEnabled = true
             isRecording = false
@@ -1054,7 +1067,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
-                progress?.visibility = View.GONE
+                setGenerationProgressVisible(false)
                 isRecording = false
                 micIdle()
                 return
@@ -1227,7 +1240,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         btnMicro?.isEnabled = false
         btnSend?.isEnabled = false
-        progress?.visibility = View.VISIBLE
+        setGenerationProgressVisible(true)
 
         onSpeechResultsScope = CoroutineScope(Dispatchers.Main)
         onSpeechResultsScope?.launch {
@@ -1256,9 +1269,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             logitBiasPreferences = LogitBiasPreferences(this, preferences?.getLogitBiasesConfigId()!!)
             apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
         }
-
-        // Diagnostics may have been toggled in Settings while we were away.
-        updateDebugLogButtonVisibility()
 
         // Summarizer Settings may have changed while we were away (endpoint
         // removed, defaults changed) — re-resolve the icons and badge.
@@ -1512,18 +1522,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     R.drawable.btn_accent_tonal_v5_amoled
                 )!!, this
             )
-            btnExpandContent?.background = getAmoledAccentDrawableV2(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5_amoled
-                )!!, this
-            )
-            btnCollapseContent?.background = getAmoledAccentDrawableV2(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5_amoled
-                )!!, this
-            )
         } else {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
                 window.navigationBarColor = getColor(R.color.accent_100)
@@ -1561,18 +1559,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
 
             btnPersistentIncludes?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5
-                )!!, this
-            )
-            btnExpandContent?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5
-                )!!, this
-            )
-            btnCollapseContent?.background = getDarkAccentDrawable(
                 AppCompatResources.getDrawable(
                     this,
                     R.drawable.btn_accent_tonal_v5
@@ -2578,7 +2564,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnQuickSettings = findViewById(R.id.btn_quick_settings)
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
-        btnDebugLog = findViewById(R.id.btn_debug_log)
         btnSummary = findViewById(R.id.btn_summary)
         btnSummarizerErrors = findViewById(R.id.btn_summarizer_errors)
         summarizerErrorBadge = findViewById(R.id.summarizer_error_badge)
@@ -2701,7 +2686,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         activityTitle?.isSelected = true
 
-        progress?.visibility = View.GONE
+        setGenerationProgressVisible(false)
 
         micIdle()
         // Initial resting look for the conversation/send button (empty box → the
@@ -4103,21 +4088,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             openSummoningCircle()
         }
 
-        btnDebugLog?.setOnClickListener {
-            startActivity(
-                Intent(this, LogsActivity::class.java)
-                    .putExtra("type", "event")
-                    .putExtra("chatId", chatId)
-            )
-        }
-        updateDebugLogButtonVisibility()
         initSummarizer()
     }
 
     private fun showChatOptionsMenu(anchor: View) {
         PopupMenu(this, anchor).apply {
             menu.add(Menu.NONE, 1, 0, R.string.chat_menu_export)
-            menu.add(Menu.NONE, 2, 1, R.string.btn_delete)
+            menu.add(Menu.NONE, 2, 1, R.string.alert_debug_section_logs)
+            menu.add(Menu.NONE, 3, 2, R.string.btn_delete)
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     1 -> {
@@ -4125,6 +4103,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         true
                     }
                     2 -> {
+                        startActivity(
+                            Intent(this@ChatActivity, LogCabinActivity::class.java)
+                                .putExtra("chatId", chatId)
+                        )
+                        true
+                    }
+                    3 -> {
                         showChatDeleteDialog()
                         true
                     }
@@ -4594,16 +4579,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }.start()
     }
 
-    /** The bug shortcut in the chat's top bar is a quick jump to the Event log,
-     *  shown only while there's something worth reading there — i.e. when any
-     *  voice diagnostics (the Energy/WebRTC/Silero VAD logging toggles) or Audio
-     *  Health logging is on. Re-checked in onResume so toggling a switch in
-     *  Settings and coming back updates it without reopening the chat. */
-    private fun updateDebugLogButtonVisibility() {
-        val on = voiceDiagnosticsEnabled() || preferences?.getAudioHealthLogging() == true
-        btnDebugLog?.visibility = if (on) View.VISIBLE else View.GONE
-    }
-
     private fun isHardKB(): Boolean {
         return resources.configuration.keyboard == KEYBOARD_QWERTY
     }
@@ -4794,7 +4769,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         btnMicro?.isEnabled = false
         btnSend?.isEnabled = false
-        progress?.visibility = View.VISIBLE
+        setGenerationProgressVisible(true)
 
         if (!cancelState) {
             whisperScope = CoroutineScope(Dispatchers.Main)
@@ -4833,7 +4808,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 isRecording = false
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
-                progress?.visibility = View.GONE
+                setGenerationProgressVisible(false)
                 micIdle()
             } else {
                 playTranscriptionDoneSignal()
@@ -4853,7 +4828,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                     btnMicro?.isEnabled = false
                     btnSend?.isEnabled = false
-                    progress?.visibility = View.VISIBLE
+                    setGenerationProgressVisible(true)
 
                     processRecordingScope = CoroutineScope(Dispatchers.Main)
 
@@ -4878,7 +4853,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             Toast.makeText(this, "Failed to record audio", Toast.LENGTH_SHORT).show()
             btnMicro?.isEnabled = true
             btnSend?.isEnabled = true
-            progress?.visibility = View.GONE
+            setGenerationProgressVisible(false)
         }
     }
 
@@ -5204,7 +5179,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         micIdle()
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
-        progress?.visibility = View.GONE
+        setGenerationProgressVisible(false)
         if (preferences?.getHandsFreeMode() != true && !isFinishing && !isDestroyed) {
             MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                 .setTitle(R.string.label_audio_error)
@@ -5346,7 +5321,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         whisperTurnToken++
         btnMicro?.isEnabled = false
         btnSend?.isEnabled = false
-        progress?.visibility = View.VISIBLE
+        setGenerationProgressVisible(true)
 
         if (cancelState) {
             cancelState = false
@@ -5408,7 +5383,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             isRecording = false
             btnMicro?.isEnabled = true
             btnSend?.isEnabled = true
-            progress?.visibility = View.GONE
+            setGenerationProgressVisible(false)
             micIdle()
             // Hands-free: a blank result (background noise tripped the VAD, or
             // whisper produced nothing) shouldn't end the conversation — just
@@ -5434,7 +5409,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             btnMicro?.isEnabled = false
             btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
+            setGenerationProgressVisible(true)
 
             processRecordingScope = CoroutineScope(Dispatchers.Main)
             processRecordingScope?.launch {
@@ -6457,7 +6432,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                 btnMicro?.isEnabled = false
                 btnSend?.isEnabled = false
-                progress?.visibility = View.VISIBLE
+                setGenerationProgressVisible(true)
 
                 setupScope = CoroutineScope(Dispatchers.Main)
 
@@ -6618,7 +6593,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             btnMicro?.isEnabled = false
             btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
+            setGenerationProgressVisible(true)
 
             // Rebuilt /imagine (image-generation-rebuild-plan.md §2.1): the
             // RAW typed text is parsed — not the stored prefix+separator
@@ -6642,7 +6617,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
-                progress?.visibility = View.GONE
+                setGenerationProgressVisible(false)
             } else if (imagineParse is ImagineCommand.Parse.InvalidOption) {
                 // §11: an unknown or invalid trailing option is a clear
                 // correctable error naming the supported options and
@@ -6656,7 +6631,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
-                progress?.visibility = View.GONE
+                setGenerationProgressVisible(false)
             } else {
                 if (shouldAdd) {
                     chatMessages.add(
@@ -6769,7 +6744,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun sendCoordinatorImageRequest(request: ImageGenerationRequest) {
         btnMicro?.isEnabled = false
         btnSend?.isEnabled = false
-        progress?.visibility = View.VISIBLE
+        setGenerationProgressVisible(true)
         progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
         showImageProgressCard()
         // Attach (idempotent) before starting: a chat whose id was assigned
@@ -6811,7 +6786,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (fromImagine) {
                     btnMicro?.isEnabled = true
                     btnSend?.isEnabled = true
-                    progress?.visibility = View.GONE
+                    setGenerationProgressVisible(false)
                     messageInput?.requestFocus()
                 }
             }
@@ -6884,7 +6859,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (activeJob.origin == ImageGenerationJobRegistry.Origin.IMAGINE) {
             btnMicro?.isEnabled = false
             btnSend?.isEnabled = false
-            progress?.visibility = View.VISIBLE
+            setGenerationProgressVisible(true)
             progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
         }
     }
@@ -6908,7 +6883,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         saveSettings()
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
-        progress?.visibility = View.GONE
+        setGenerationProgressVisible(false)
         messageInput?.requestFocus()
 
         val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
@@ -7154,7 +7129,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         originalRequest: ChatCompletionRequest,
         streamedText: String,
         shouldPronounce: Boolean,
-        streamingEnabled: Boolean
+        streamingEnabled: Boolean,
+        activeMemoryReferences: List<ActiveMemoryReference>
     ) {
         if (streamedText.isEmpty()) {
             carryPendingUsageFromEmptyAssistant()
@@ -7231,7 +7207,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             originalRequest.messages + assistantToolCallMessage + toolResultMessages,
             streamingEnabled
         )
-        streamAssistantTextResponse(followUpRequest, shouldPronounce, streamingEnabled)
+        streamAssistantTextResponse(
+            followUpRequest,
+            shouldPronounce,
+            streamingEnabled,
+            activeMemoryReferences
+        )
     }
 
     /** One §6-validated create_image execution: the user's saved quality
@@ -7359,11 +7340,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private suspend fun streamAssistantTextResponse(
         request: ChatCompletionRequest,
         shouldPronounce: Boolean,
-        streamingEnabled: Boolean
+        streamingEnabled: Boolean,
+        activeMemoryReferences: List<ActiveMemoryReference>
     ) {
         var response = ""
         putMessage("", true)
         markLastAssistantStreaming()
+        attachActiveMemoryAttribution(activeMemoryReferences)
         startLifecycle(ResponseLifecycle.PHASE_TOOL_CONTINUATION, request.maxTokens)
         scroll(true)
         val toolCallAssembler = StreamedToolCallAssembler()
@@ -7448,7 +7431,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         summarizerCycle()
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
-        progress?.visibility = View.GONE
+        setGenerationProgressVisible(false)
         messageInput?.requestFocus()
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
     }
@@ -7799,7 +7782,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         btnMicro?.isEnabled = false
         btnSend?.isEnabled = false
-        progress?.visibility = View.VISIBLE
+        setGenerationProgressVisible(true)
 
         parseMessageScope = CoroutineScope(Dispatchers.Main)
         parseMessageScope?.launch {
@@ -7866,6 +7849,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     selectedEndpointId = endpointId,
                     request = frozen.request,
                     payload = frozen.payload,
+                    activeMemoryReferences = frozen.activeMemoryReferences,
                     contextDecision = decision
                 )
                 val hasFullImages = conversationHasFullImages(requestIncludes)
@@ -8394,6 +8378,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /** Attach the final request's exact Memory/Lorebook ids to this reply. */
+    private fun attachActiveMemoryAttribution(references: List<ActiveMemoryReference>) {
+        val last = messages.lastOrNull() ?: return
+        if (last["isBot"] != true) return
+        val encoded = ActiveMemoryAttribution.encode(references)
+        if (encoded == null) {
+            last.remove(ChatAdapter.KEY_ACTIVE_MEMORY_ATTRIBUTION)
+        } else {
+            last[ChatAdapter.KEY_ACTIVE_MEMORY_ATTRIBUTION] = encoded
+        }
+        adapter?.notifyItemChanged(messages.size - 1)
+    }
+
     /** The current turn's reasoning accumulator (§7.2). Created when the
      *  streamed reply begins; fed by the response observer on relevant
      *  turns; read once the split stream drains to stamp the reply's Thinking
@@ -8908,7 +8905,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
-                progress?.visibility = View.GONE
+                setGenerationProgressVisible(false)
                 messageInput?.requestFocus()
             } else {
                 // The old Function Calling router — a hidden gpt-4o request
@@ -9164,7 +9161,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             runOnUiThread {
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
-                progress?.visibility = View.GONE
+                setGenerationProgressVisible(false)
                 messageInput?.requestFocus()
             }
         } finally {
@@ -9856,7 +9853,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val loreBooksEnabled = preferences?.getChatLoreBooksEnabled() == true
         val allLoreMatches = ArrayList<LoreBookMatch>()
         var activeLoreBookCount = -1
-        var dedupedLoreMatches: List<LoreBookMatch> = emptyList()
+        // This is the exact Lorebook list rendered into the frozen request.
+        // Attribution below reads this same variable so it cannot drift from
+        // the request if retrieval or filtering changes later.
+        var injectedLoreMatches: List<LoreBookMatch> = emptyList()
         if (loreBooksEnabled) {
             try {
                 val loreStore = LoreBookStore.getInstance(this)
@@ -9889,25 +9889,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // two active books; first occurrence (core book first) wins. This
             // path has no entry/character budget of its own, so dedup is the
             // only thing that can drop a match here.
-            dedupedLoreMatches = LoreDedup.dedup(allLoreMatches)
+            injectedLoreMatches = LoreDedup.dedup(allLoreMatches)
             LoreBookInjectionLog.record(
                 userMessage = loreQuery,
                 matched = allLoreMatches,
                 activeBooks = activeLoreBookCount,
-                injected = dedupedLoreMatches,
+                injected = injectedLoreMatches,
                 cut = LoreDedup.droppedDuplicates(allLoreMatches).map { (dup, _) ->
                     LoreBookInjectionLog.Cut(dup, "duplicate content")
                 }
             )
         }
 
-        var memoryAssembly: String? = null
+        var memoryAssemblyResult:
+            org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.AssemblyResult? = null
         if (preferences?.getChatMemoryEnabled() == true && MemoryStore.isProvisioned(this)) {
-            memoryAssembly = try {
+            memoryAssemblyResult = try {
                 withContext(Dispatchers.IO) {
                     org.teslasoft.assistant.preferences.memory.enforcer.Enforcer
                         .getInstance(this@ChatActivity)
-                        .assembleTurn(
+                        .assembleTurnWithAttribution(
                             org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.TurnInput(
                                 chatId = chatId,
                                 personaId = personaId,
@@ -9960,13 +9961,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val resolvedHistory = resolveImagePartsForSend(requestMessages, requestIncludes)
         msgs.addAll(resolvedHistory.dropLast(1))
 
-        if (memoryAssembly != null) {
-            msgs.add(ChatMessage(role = ChatRole.System, content = memoryAssembly))
+        memoryAssemblyResult?.let { assembly ->
+            msgs.add(ChatMessage(role = ChatRole.System, content = assembly.prompt))
         }
 
-        if (dedupedLoreMatches.isNotEmpty()) {
+        if (injectedLoreMatches.isNotEmpty()) {
             val loreText = StringBuilder(getString(R.string.lorebook_injection_header))
-            for (match in dedupedLoreMatches) {
+            for (match in injectedLoreMatches) {
                 loreText.append("\n- ").append(match.entry.content)
             }
             msgs.add(ChatMessage(role = ChatRole.System, content = loreText.toString()))
@@ -10046,7 +10047,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             seed = seed,
             logitBias = logitBias
         )
-        return FrozenRegularRequest(request, payload)
+        val activeMemoryReferences = ActiveMemoryAttribution.fromFinalSelection(
+            memoryAssemblyResult?.memoryIds.orEmpty(),
+            injectedLoreMatches.map { it.entry.id }
+        )
+        return FrozenRegularRequest(request, payload, activeMemoryReferences)
     }
 
     // streamOptions (include-usage) is beta-gated in the client library, like
@@ -10064,6 +10069,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         var response = ""
         putMessage("", true)
         markLastAssistantStreaming()
+        var activeMemoryReferences = preparedTurn?.activeMemoryReferences.orEmpty()
+        if (activeMemoryReferences.isNotEmpty()) {
+            attachActiveMemoryAttribution(activeMemoryReferences)
+        }
         // Begin the lifecycle record the moment the visible assistant row
         // exists — BEFORE request construction — so a failure or cancellation
         // during construction still produces a record and is classified as a
@@ -10243,14 +10252,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // is empty, so the assembly contains no lore notes — the switches stay
         // independent. ANY failure degrades to the classic lore path below:
         // never block a turn.
-        var memoryAssembly: String? = null
+        var memoryAssemblyResult:
+            org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.AssemblyResult? = null
         if (preferences?.getChatMemoryEnabled() == true &&
             MemoryStore.isProvisioned(this)
         ) {
-            memoryAssembly = try {
+            memoryAssemblyResult = try {
                 withContext(Dispatchers.IO) {
                     org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.getInstance(this@ChatActivity)
-                        .assembleTurn(
+                        .assembleTurnWithAttribution(
                             org.teslasoft.assistant.preferences.memory.enforcer.Enforcer.TurnInput(
                                 chatId = chatId,
                                 personaId = personaId,
@@ -10296,14 +10306,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
         msgs.addAll(legacyResolvedHistory.dropLast(1))
 
-        if (memoryAssembly != null) {
+        memoryAssemblyResult?.let { assembly ->
             msgs.add(
                 ChatMessage(
                     role = ChatRole.System,
-                    content = memoryAssembly
+                    content = assembly.prompt
                 )
             )
-        } else if (loreBudget.kept.isNotEmpty()) {
+        }
+        if (memoryAssemblyResult == null && loreBudget.kept.isNotEmpty()) {
             // Safety budget: a message that trips many triggers at once must not
             // flood the context. Inject at most MAX_INJECTED_ENTRIES memories /
             // MAX_INJECTED_CHARS characters, in book order (core book first).
@@ -10373,6 +10384,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 streamOptions = if (streamingEnabled) StreamOptions(includeUsage = true) else null
             )
         }
+
+        val lorebookIds = memoryAssemblyResult?.lorebookEntryIds
+            ?: loreBudget.injectedEntryIds
+        activeMemoryReferences = ActiveMemoryAttribution.fromFinalSelection(
+            memoryAssemblyResult?.memoryIds.orEmpty(),
+            lorebookIds
+        )
+        attachActiveMemoryAttribution(activeMemoryReferences)
         }
 
         // §8 retry support: remembered so a failure of THIS request can be
@@ -10503,7 +10522,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 chatCompletionRequest,
                 response,
                 shouldPronounce,
-                streamingEnabled
+                streamingEnabled,
+                activeMemoryReferences
             )
             return
         }
@@ -10535,7 +10555,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
-        progress?.visibility = View.GONE
+        setGenerationProgressVisible(false)
         messageInput?.requestFocus()
 
         // Put timestamp to chat to sort chats by last message
@@ -10548,7 +10568,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 autoNameAttempts++
                 btnMicro?.isEnabled = false
                 btnSend?.isEnabled = false
-                progress?.visibility = View.GONE
+                setGenerationProgressVisible(false)
                 messageInput?.requestFocus()
 
                 // Preserve the normal leading System prefix byte-for-byte so providers

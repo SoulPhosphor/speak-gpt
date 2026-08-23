@@ -88,32 +88,20 @@
                  supplied reasoning, so the answer keeps its position. Colors
                  follow the theme via colorPrimary; nothing is hardcoded. -->
             <LinearLayout
+                style="@style/Widget.App.Chat.Thinking.Container"
                 android:id="@+id/reasoning_container"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="6dp"
-                android:orientation="vertical"
                 android:visibility="gone"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/message_meta">
 
                 <LinearLayout
-                    android:id="@+id/reasoning_header"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:gravity="center_vertical"
-                    android:minHeight="32dp"
-                    android:orientation="horizontal">
+                    style="@style/Widget.App.Chat.Thinking.Header"
+                    android:id="@+id/reasoning_header">
 
                     <TextView
+                        style="@style/Widget.App.Chat.Thinking.Label"
                         android:id="@+id/reasoning_label"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/reasoning_thinking_label"
-                        android:textColor="?attr/colorPrimary"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
+                        android:text="@string/reasoning_thinking_label" />
 
                     <!-- Outline chevron, not a filled arrow: pointing up (rotated
                          180) while collapsed, pointing down (unrotated) while
@@ -123,22 +111,16 @@
                          static tint here — the asset's own baked-in color was
                          invisible against some bubble/theme combinations. -->
                     <ImageView
+                        style="@style/Widget.App.Chat.Thinking.Chevron"
                         android:id="@+id/reasoning_chevron"
-                        android:layout_width="18dp"
-                        android:layout_height="18dp"
-                        android:layout_marginStart="4dp"
                         android:contentDescription="@string/reasoning_thinking_label"
                         app:srcCompat="@drawable/ic_chevron_down" />
                 </LinearLayout>
 
                 <TextView
+                    style="@style/Widget.App.Chat.Thinking.Body"
                     android:id="@+id/reasoning_text"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:textColor="?attr/colorPrimary"
                     android:textIsSelectable="true"
-                    android:textSize="14sp"
                     android:visibility="gone" />
             </LinearLayout>
 
@@ -288,11 +270,26 @@
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/status_marker">
 
+                <!-- Conditional per-response context action. It stays at the
+                     far left because its presence varies by response. -->
+                <ImageButton
+                    android:id="@+id/btn_active_memories"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginLeft="8dp"
+                    android:background="@color/transparent"
+                    android:contentDescription="@string/active_memories_title"
+                    android:descendantFocusability="blocksDescendants"
+                    android:src="@drawable/ic_assistant_navigation"
+                    android:tooltipText="@string/active_memories_title"
+                    android:visibility="gone"
+                    app:srcCompat="@drawable/ic_assistant_navigation" />
+
                 <ImageButton
                     android:id="@+id/btn_details"
-                    android:layout_width="0dp"
+                    android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:layout_weight="1"
+                    android:layout_marginLeft="8dp"
                     android:background="@color/transparent"
                     android:contentDescription="@string/message_details_action"
                     android:descendantFocusability="blocksDescendants"
@@ -307,9 +304,9 @@
                      nothing here. -->
                 <ImageView
                     android:id="@+id/reasoning_indicator"
-                    android:layout_width="0dp"
+                    android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:layout_weight="1"
+                    android:layout_marginLeft="8dp"
                     android:background="@color/transparent"
                     android:contentDescription="@string/reasoning_indicator_automatic_desc"
                     android:scaleType="center"
@@ -317,9 +314,9 @@
 
                 <ImageButton
                     android:id="@+id/btn_speak"
-                    android:layout_width="0dp"
+                    android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:layout_weight="1"
+                    android:layout_marginLeft="8dp"
                     android:background="@color/transparent"
                     android:contentDescription="@string/btn_msg_speak"
                     android:descendantFocusability="blocksDescendants"
@@ -329,9 +326,9 @@
 
                 <ImageButton
                     android:id="@+id/btn_share"
-                    android:layout_width="0dp"
+                    android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:layout_weight="1"
+                    android:layout_marginLeft="8dp"
                     android:background="@color/transparent"
                     android:contentDescription="Share message"
                     android:descendantFocusability="blocksDescendants"
@@ -344,9 +341,9 @@
 
                 <ImageButton
                     android:id="@+id/btn_retry"
-                    android:layout_width="0dp"
+                    android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:layout_weight="1"
+                    android:layout_marginLeft="8dp"
                     android:background="@color/transparent"
                     android:contentDescription="@string/btn_msg_retry"
                     android:descendantFocusability="blocksDescendants"
@@ -356,9 +353,9 @@
 
                 <ImageButton
                     android:id="@+id/btn_copy"
-                    android:layout_width="0dp"
+                    android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:layout_weight="1"
+                    android:layout_marginLeft="8dp"
                     android:background="@color/transparent"
                     android:contentDescription="@string/btn_copy"
                     android:descendantFocusability="blocksDescendants"
@@ -367,9 +364,9 @@
 
                 <ImageButton
                     android:id="@+id/btn_edit"
-                    android:layout_width="0dp"
+                    android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:layout_weight="1"
+                    android:layout_marginLeft="8dp"
                     android:background="@color/transparent"
                     android:contentDescription="@string/btn_msg_edit"
                     android:descendantFocusability="blocksDescendants"
@@ -380,9 +377,9 @@
 
                 <ImageButton
                     android:id="@+id/btn_more"
-                    android:layout_width="0dp"
+                    android:layout_width="32dp"
                     android:layout_height="32dp"
-                    android:layout_weight="1"
+                    android:layout_marginLeft="8dp"
                     android:background="@color/transparent"
                     android:contentDescription="@string/message_more_actions"
                     android:descendantFocusability="blocksDescendants"

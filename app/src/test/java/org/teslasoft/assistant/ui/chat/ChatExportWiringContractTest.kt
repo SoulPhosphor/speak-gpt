@@ -23,9 +23,10 @@ class ChatExportWiringContractTest {
         assertTrue(layout.contains("app:layout_constraintEnd_toStartOf=\"@+id/btn_chat_menu\""))
         assertTrue(
             layout.contains(
-                "btn_summarizer_errors,btn_summary,btn_debug_log,btn_quick_settings,btn_settings,btn_chat_menu"
+                "btn_summarizer_errors,btn_summary,btn_quick_settings,btn_settings,btn_chat_menu"
             )
         )
+        assertFalse(layout.contains("btn_debug_log"))
     }
 
     @Test
@@ -57,7 +58,16 @@ class ChatExportWiringContractTest {
 
         assertTrue(activity.contains("PopupMenu(this, anchor)"))
         assertTrue(activity.contains("R.string.chat_menu_export"))
+        assertTrue(activity.contains("R.string.alert_debug_section_logs"))
         assertTrue(activity.contains("R.string.btn_delete"))
+        assertOrdered(
+            activity,
+            "menu.add(Menu.NONE, 1, 0, R.string.chat_menu_export)",
+            "menu.add(Menu.NONE, 2, 1, R.string.alert_debug_section_logs)",
+            "menu.add(Menu.NONE, 3, 2, R.string.btn_delete)"
+        )
+        assertTrue(activity.contains("Intent(this@ChatActivity, LogCabinActivity::class.java)"))
+        assertFalse(activity.contains("updateDebugLogButtonVisibility"))
         assertTrue(activity.contains("ChatExportDialog.show(this)"))
         assertTrue(activity.contains("ChatDeleteDialog.show(this)"))
         assertTrue(activity.contains("deleteChatById(this, chatId)"))
@@ -70,6 +80,15 @@ class ChatExportWiringContractTest {
         assertTrue(strings.contains("<string name=\"chat_export_cancel\">Cancel Export</string>"))
         assertTrue(strings.contains("<string name=\"chat_export_action\">Export</string>"))
         assertTrue(strings.contains("<string name=\"chat_delete_title\">Delete Chat</string>"))
+    }
+
+    private fun assertOrdered(source: String, vararg markers: String) {
+        val positions = markers.map(source::indexOf)
+        assertTrue("Missing marker in ${markers.toList()}", positions.all { it >= 0 })
+        assertTrue(
+            "Markers are out of order: ${markers.toList()}",
+            positions.zipWithNext().all { it.first < it.second }
+        )
     }
 
     @Test

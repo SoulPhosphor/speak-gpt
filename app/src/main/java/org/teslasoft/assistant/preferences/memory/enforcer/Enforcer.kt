@@ -120,12 +120,26 @@ class Enforcer private constructor(private val appContext: Context) {
         val projectId: String?
     )
 
+    /** The rendered prompt and the exact final entry selection behind it. */
+    data class AssemblyResult(
+        val prompt: String,
+        val memoryIds: List<String>,
+        val lorebookEntryIds: List<String>
+    )
+
     /**
      * Assemble this turn's memory system message, or null when the memory
      * system has nothing to add and the caller should run the classic lore
      * path (companion opted out, or the assembly came out empty).
      */
-    fun assembleTurn(input: TurnInput): String? {
+    fun assembleTurn(input: TurnInput): String? = assembleTurnWithAttribution(input)?.prompt
+
+    /**
+     * Assemble the prompt while retaining only entries that survive every
+     * eligibility, deduplication, cooldown, and budget gate. Callers use these
+     * ids for the per-response Active Memories viewer.
+     */
+    fun assembleTurnWithAttribution(input: TurnInput): AssemblyResult? {
         val store = MemoryStore.getInstance(appContext)
         val notes = ArrayList<String>()
 
@@ -235,9 +249,10 @@ class Enforcer private constructor(private val appContext: Context) {
         // the classic path (core-book-first order is preserved from the
         // caller) — both now share LoreBookBudget.select (counterplan Step
         // 1.6) so the two paths can never disagree on what was injected.
-        val loreKept = LoreBookBudget.select(
+        val loreSelection = LoreBookBudget.select(
             input.loreMatches, LoreBookStore.MAX_INJECTED_ENTRIES, LoreBookStore.MAX_INJECTED_CHARS
-        ).kept
+        )
+        val loreKept = loreSelection.kept
         val loreNotes = loreKept.map { LoreNote(it.entry.label, it.entry.content) }
         val loreChars = loreKept.sumOf { it.entry.content.length }
 
@@ -582,7 +597,13 @@ class Enforcer private constructor(private val appContext: Context) {
                 notes = notes
             )
         )
-        return rendered.ifBlank { null }
+        return rendered.takeIf { it.isNotBlank() }?.let {
+            AssemblyResult(
+                prompt = it,
+                memoryIds = kept.map { memory -> memory.memoryId },
+                lorebookEntryIds = loreSelection.injectedEntryIds
+            )
+        }
     }
 
     /* ------------------------------------------------------------------ */

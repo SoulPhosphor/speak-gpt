@@ -248,6 +248,14 @@
                                 android:layout_weight="1" />
 
                             <ImageButton
+                                style="@style/Widget.App.Chat.ComposerContentToggle"
+                                android:id="@+id/btn_expand_content"
+                                android:contentDescription="@string/expand_content"
+                                android:src="@drawable/ic_expand_content"
+                                android:visibility="gone"
+                                app:srcCompat="@drawable/ic_expand_content" />
+
+                            <ImageButton
                                 android:id="@+id/btn_micro"
                                 android:layout_width="48dp"
                                 android:layout_height="48dp"
@@ -282,26 +290,10 @@
                     </LinearLayout>
 
                     <ImageButton
-                        android:id="@+id/btn_expand_content"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
-                        android:layout_marginTop="8dp"
-                        android:layout_marginEnd="8dp"
-                        android:background="@drawable/btn_accent_tonal_v5"
-                        android:contentDescription="@string/expand_content"
-                        android:src="@drawable/ic_expand_content"
-                        android:visibility="gone"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintTop_toTopOf="parent"
-                        app:srcCompat="@drawable/ic_expand_content" />
-
-                    <ImageButton
+                        style="@style/Widget.App.Chat.ComposerContentToggle"
                         android:id="@+id/btn_collapse_content"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
                         android:layout_marginTop="8dp"
                         android:layout_marginEnd="8dp"
-                        android:background="@drawable/btn_accent_tonal_v5"
                         android:contentDescription="@string/collapse_content"
                         android:src="@drawable/ic_collapse_content"
                         android:visibility="gone"
@@ -361,25 +353,6 @@
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_history_edu" />
 
-            <!-- Shown only while audio/VAD diagnostics are on (see
-                 ChatActivity.updateDebugLogButtonVisibility); a one-tap jump
-                 from the chat to the Event log so the user can see what the
-                 voice pipeline is logging without digging through Settings. -->
-            <ImageButton
-                android:id="@+id/btn_debug_log"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/btn_accent_tonal_v4"
-                android:contentDescription="@string/btn_open_event_log"
-                android:tooltipText="@string/btn_open_event_log"
-                android:visibility="gone"
-                app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_quick_settings"
-                app:layout_constraintTop_toTopOf="parent"
-                app:srcCompat="@drawable/ic_bug"
-                tools:visibility="visible" />
-
             <!-- Summary view (decision 11): visible only while the
                  summarizer is on for this chat. -->
             <ImageButton
@@ -392,7 +365,7 @@
                 android:tooltipText="@string/summarizer_icon_summary_desc"
                 android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_debug_log"
+                app:layout_constraintEnd_toStartOf="@+id/btn_quick_settings"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_subject"
                 tools:visibility="visible" />
@@ -431,7 +404,7 @@
                 tools:visibility="visible" />
 
             <!-- The title takes every pixel not currently occupied by a visible
-                 right-side action. Optional summary, error, and debug icons only
+                 right-side action. Optional summary and error icons only
                  reduce the title width while they are actually shown. -->
             <androidx.constraintlayout.widget.Barrier
                 android:id="@+id/action_buttons_start"
@@ -439,7 +412,7 @@
                 android:layout_height="wrap_content"
                 app:barrierAllowsGoneWidgets="false"
                 app:barrierDirection="start"
-                app:constraint_referenced_ids="btn_summarizer_errors,btn_summary,btn_debug_log,btn_quick_settings,btn_settings,btn_chat_menu" />
+                app:constraint_referenced_ids="btn_summarizer_errors,btn_summary,btn_quick_settings,btn_settings,btn_chat_menu" />
 
             <ImageButton
                 android:id="@+id/btn_back"
