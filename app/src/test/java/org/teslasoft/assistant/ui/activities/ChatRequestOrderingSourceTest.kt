@@ -29,8 +29,8 @@ class ChatRequestOrderingSourceTest {
 
         assertOrdered(
             body,
-            "if (summaryInjection != null)",
-            "val resolvedHistory = resolveImagePartsForSend(requestMessages, requestIncludes)",
+            "if (conversationProjection.summaryInjection != null)",
+            "val resolvedHistory = conversationProjection.conversation",
             "msgs.addAll(resolvedHistory.dropLast(1))",
             "msgs.add(ChatMessage(role = ChatRole.System, content = assembly.prompt))",
             "val loreText = StringBuilder(getString(R.string.lorebook_injection_header))",
@@ -48,8 +48,8 @@ class ChatRequestOrderingSourceTest {
 
         assertOrdered(
             body,
-            "if (legacySummaryInjection != null)",
-            "val legacyResolvedHistory = resolveImagePartsForSend(",
+            "if (legacyConversationProjection?.summaryInjection != null)",
+            "val legacyResolvedHistory = legacyConversationProjection?.conversation.orEmpty()",
             "msgs.addAll(legacyResolvedHistory.dropLast(1))",
             "content = assembly.prompt",
             "for (match in loreBudget.kept)",
@@ -61,14 +61,15 @@ class ChatRequestOrderingSourceTest {
     fun attachmentResolutionPreservesOneOutgoingMessagePerLogicalTurn() {
         val body = between(
             source,
-            "private suspend fun resolveImagePartsForSend(",
+            "private suspend fun freezeConversationProjection(",
             "private fun buildMultiPartUserMessage("
         )
 
         assertTrue(
             "Attachment resolution must map one logical turn to one outgoing ChatMessage; " +
                 "changing this to flatMap would invalidate the dropLast(1) split.",
-            body.contains("textMessages.mapIndexed") && !body.contains("textMessages.flatMap")
+            body.contains("projected.conversation.map") &&
+                !body.contains("projected.conversation.flatMap")
         )
     }
 

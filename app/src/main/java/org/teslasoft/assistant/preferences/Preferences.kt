@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.teslasoft.assistant.preferences.includes.SummarizerProjectionContract
 import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
 
@@ -2613,6 +2614,37 @@ class Preferences internal constructor(
     fun getSummarizerSummary(): String =
         getString("summarizer_summary", "")
 
+    /** Projection contract that produced the persisted rolling summary. */
+    fun getSummarizerProjectionVersion(): Int =
+        getString("summarizer_projection_version", "0").toIntOrNull() ?: 0
+
+    /**
+     * Invalidates only incompatible derived Summarizer state. Canonical chat
+     * history and its Include ownership are untouched, so the next cycle
+     * safely rebuilds from conversation text plus stable Include references.
+     * A failed commit is reported to the caller, which must omit the stale
+     * summary and use a zero bookmark rather than risk duplicate payloads.
+     */
+    fun ensureSummarizerProjectionCompatibility(): Boolean {
+        if (getSummarizerProjectionVersion() == SummarizerProjectionContract.VERSION) {
+            return true
+        }
+        return try {
+            preferences.edit()
+                .putString("summarizer_summary", "")
+                .putString("summarizer_folded", "0")
+                .putString("summarizer_over_length", "false")
+                .putString("summarizer_episode", "")
+                .putString(
+                    "summarizer_projection_version",
+                    SummarizerProjectionContract.VERSION.toString()
+                )
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     /** The fold-in bookmark: how many of the chat's oldest stored messages
      *  are already folded into the summary. */
     fun getSummarizerFoldedCount(): Int =
@@ -2656,6 +2688,10 @@ class Preferences internal constructor(
                 .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
                 .putString("summarizer_over_length", if (overLength) "true" else "false")
                 .putString("summarizer_episode", "")
+                .putString(
+                    "summarizer_projection_version",
+                    SummarizerProjectionContract.VERSION.toString()
+                )
                 .commit()
         } catch (_: Exception) {
             false
@@ -2669,6 +2705,10 @@ class Preferences internal constructor(
             preferences.edit()
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_over_length", "false")
+                .putString(
+                    "summarizer_projection_version",
+                    SummarizerProjectionContract.VERSION.toString()
+                )
                 .commit()
         } catch (_: Exception) {
             false

@@ -262,6 +262,11 @@ class SummarizerController(
         if (chatId.isBlank()) return false
         val prefs = Preferences.getPreferences(appContext, chatId)
         if (!prefs.getChatUseSummarizer()) return false
+        // Phase 6.2: never fold onto or advance from a rolling summary that
+        // may already contain old inline Include payload material. A failed
+        // compatibility commit leaves canonical history intact and simply
+        // postpones this cycle.
+        if (!prefs.ensureSummarizerProjectionCompatibility()) return false
 
         val entries = snapshot.entries
         val folded = prefs.getSummarizerFoldedCount().coerceAtMost(entries.size)
