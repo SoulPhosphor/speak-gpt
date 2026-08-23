@@ -19,15 +19,17 @@ package org.teslasoft.assistant.ui.chat
 import android.content.Context
 import android.os.Parcel
 import android.os.Parcelable
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.AttributeSet
 import android.view.Gravity
 import android.view.View
 import android.view.View.BaseSavedState
+import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import org.teslasoft.assistant.R
@@ -35,12 +37,12 @@ import org.teslasoft.assistant.util.WindowInsetsUtil
 import kotlin.math.max
 
 /**
- * Owns the geometry of the single live composer/editor.
+ * Owns the geometry of the one live composer/editor.
  *
- * Normal mode keeps the editable region above a fixed bottom control row and
- * lets the EditText grow upward until the existing 120dp reference cap. The
- * expanded mode changes the constraints and cap on this same EditText; it
- * never creates a second editor or copies the draft between views.
+ * With an empty, inactive draft the editor is placed in the bottom control row
+ * between the Add side and the microphone/send side. Focusing it promotes that
+ * same editor above the controls, where it grows naturally to eight lines.
+ * Expanded mode then gives that same editor the available chat height.
  */
 class ChatComposerLayout @JvmOverloads constructor(
     context: Context,
@@ -48,22 +50,46 @@ class ChatComposerLayout @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : ConstraintLayout(context, attrs, defStyleAttr) {
 
+    private lateinit var composerContent: LinearLayout
+    private lateinit var composerControls: LinearLayout
     private lateinit var messageInput: EditText
     private lateinit var btnExpand: ImageButton
     private lateinit var btnCollapse: ImageButton
 
     private var expanded = false
+    private var active = false
     private var expansionListener: ((Boolean) -> Unit)? = null
 
     private val edgeMargin = dp(8)
     private val textBottomGap = dp(4)
-    private val normalTextMaxHeight = dp(120)
 
     override fun onFinishInflate() {
         super.onFinishInflate()
+        composerContent = findViewById(R.id.composer_content)
+        composerControls = findViewById(R.id.composer_controls)
         messageInput = findViewById(R.id.message_input)
         btnExpand = findViewById(R.id.btn_expand_content)
         btnCollapse = findViewById(R.id.btn_collapse_content)
+
+        active = messageInput.text?.isNotBlank() == true
+
+        messageInput.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                active = true
+            } else if (messageInput.text.isNullOrBlank()) {
+                active = false
+            }
+            applyMode()
+        }
+        messageInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                if (!s.isNullOrBlank()) active = true
+                if (s.isNullOrBlank() && !messageInput.hasFocus()) active = false
+                updateExpandVisibility()
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
 
         btnExpand.setOnClickListener { setExpanded(true) }
         btnCollapse.setOnClickListener { setExpanded(false) }
@@ -88,6 +114,7 @@ class ChatComposerLayout @JvmOverloads constructor(
     private fun setExpanded(value: Boolean) {
         if (expanded == value) return
         expanded = value
+        active = true
         applyMode()
         expansionListener?.invoke(expanded)
         requestLayout()
@@ -96,77 +123,73 @@ class ChatComposerLayout @JvmOverloads constructor(
     private fun applyMode() {
         if (!::messageInput.isInitialized) return
 
-        val set = ConstraintSet()
-        set.clone(this)
-
-        clearAnchors(set, R.id.message_input)
-        set.constrainWidth(R.id.message_input, ConstraintSet.MATCH_CONSTRAINT)
-        set.constrainHeight(
-            R.id.message_input,
-            if (expanded) ConstraintSet.MATCH_CONSTRAINT else ConstraintSet.WRAP_CONTENT
-        )
-
-        set.connect(
-            R.id.message_input,
-            ConstraintSet.START,
-            ConstraintSet.PARENT_ID,
-            ConstraintSet.START,
-            edgeMargin
-        )
-        set.connect(
-            R.id.message_input,
-            ConstraintSet.END,
-            ConstraintSet.PARENT_ID,
-            ConstraintSet.END,
-            edgeMargin
-        )
-
-        if (expanded) {
-            set.connect(
-                R.id.message_input,
-                ConstraintSet.TOP,
-                R.id.btn_collapse_content,
-                ConstraintSet.BOTTOM,
-                textBottomGap
-            )
-            set.connect(
-                R.id.message_input,
-                ConstraintSet.BOTTOM,
-                R.id.composer_controls,
-                ConstraintSet.TOP,
-                textBottomGap
-            )
+        if (expanded || active) {
+            moveEditorToContent()
         } else {
-            set.connect(
-                R.id.message_input,
-                ConstraintSet.TOP,
-                ConstraintSet.PARENT_ID,
-                ConstraintSet.TOP,
-                edgeMargin
-            )
-            set.connect(
-                R.id.message_input,
-                ConstraintSet.BOTTOM,
-                R.id.composer_controls,
-                ConstraintSet.TOP,
-                textBottomGap
-            )
+            moveEditorToControls()
         }
 
-        set.applyTo(this)
+        val contentParams = composerContent.layoutParams
+        contentParams.height = if (expanded) 0 else ViewGroup.LayoutParams.WRAP_CONTENT
+        composerContent.layoutParams = contentParams
 
-        btnExpand.visibility = if (expanded) View.GONE else View.VISIBLE
+        messageInput.gravity = if (expanded || active) {
+            Gravity.TOP or Gravity.START
+        } else {
+            Gravity.CENTER_VERTICAL or Gravity.START
+        }
+        messageInput.maxLines = when {
+            expanded -> Int.MAX_VALUE
+            active -> 8
+            else -> 1
+        }
+        messageInput.isScrollContainer = expanded || active
         btnCollapse.visibility = if (expanded) View.VISIBLE else View.GONE
-        messageInput.maxHeight = if (expanded) Int.MAX_VALUE else normalTextMaxHeight
-        messageInput.gravity = Gravity.TOP or Gravity.START
+        updateExpandVisibility()
     }
 
-    /** Clear only geometry anchors so cloned visibility/property state survives. */
-    private fun clearAnchors(set: ConstraintSet, viewId: Int) {
-        set.clear(viewId, ConstraintSet.START)
-        set.clear(viewId, ConstraintSet.END)
-        set.clear(viewId, ConstraintSet.TOP)
-        set.clear(viewId, ConstraintSet.BOTTOM)
+    private fun moveEditorToContent() {
+        if (messageInput.parent !== composerContent) {
+            (messageInput.parent as? ViewGroup)?.removeView(messageInput)
+            composerContent.addView(messageInput, 0)
+        }
+        val params = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            if (expanded) 0 else ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply {
+            weight = if (expanded) 1f else 0f
+            gravity = Gravity.TOP
+            setMargins(edgeMargin, 0, edgeMargin, textBottomGap)
+        }
+        messageInput.layoutParams = params
+    }
+
+    private fun moveEditorToControls() {
+        if (messageInput.parent !== composerControls) {
+            (messageInput.parent as? ViewGroup)?.removeView(messageInput)
+            val persistent = composerControls.findViewById<View>(R.id.btn_persistent_includes)
+            val insertionIndex = if (persistent != null) {
+                composerControls.indexOfChild(persistent) + 1
+            } else {
+                1
+            }
+            composerControls.addView(messageInput, insertionIndex)
+        }
+        val params = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            weight = 1f
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        messageInput.layoutParams = params
+    }
+
+    private fun updateExpandVisibility() {
+        if (!::messageInput.isInitialized) return
+        btnExpand.visibility =
+            if (!expanded && active && messageInput.text?.isNotBlank() == true) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
     }
 
     private fun dp(value: Int): Int =
@@ -175,6 +198,7 @@ class ChatComposerLayout @JvmOverloads constructor(
     override fun onSaveInstanceState(): Parcelable {
         val state = SavedState(super.onSaveInstanceState())
         state.expanded = expanded
+        state.active = active
         return state
     }
 
@@ -182,6 +206,7 @@ class ChatComposerLayout @JvmOverloads constructor(
         if (state is SavedState) {
             super.onRestoreInstanceState(state.superState)
             expanded = state.expanded
+            active = state.active
             if (::messageInput.isInitialized) {
                 applyMode()
                 expansionListener?.invoke(expanded)
@@ -193,16 +218,19 @@ class ChatComposerLayout @JvmOverloads constructor(
 
     private class SavedState : BaseSavedState {
         var expanded: Boolean = false
+        var active: Boolean = false
 
         constructor(superState: Parcelable?) : super(superState)
 
         private constructor(source: Parcel) : super(source) {
             expanded = source.readInt() != 0
+            active = source.readInt() != 0
         }
 
         override fun writeToParcel(out: Parcel, flags: Int) {
             super.writeToParcel(out, flags)
             out.writeInt(if (expanded) 1 else 0)
+            out.writeInt(if (active) 1 else 0)
         }
 
         companion object {
