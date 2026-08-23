@@ -32,7 +32,7 @@ Conceptually:
 
 ```text
 Soul Phosphor                                      >>
-[ Contract  New Chat                         ] [ 🔍 ]
+[ Contract  New Chat                         ] [ Search Icon ]
 
 Image Gallery
 Folders >
@@ -42,7 +42,7 @@ Pinned Chats
 Settings
 ```
 
-The visual example communicates hierarchy, not literal text glyph sizing. Use the approved Google/Material icons rather than emoji in the actual app.
+The visual example communicates hierarchy, not literal text glyph sizing. Use the approved Google/Material icons in the actual app.
 
 ### 2.1 Fixed Top: App Name / Return Row
 
@@ -247,7 +247,7 @@ Validation:
 - if validation fails, keep the dialog open and present the error through the shared input/error treatment rather than silently closing;
 - do not invent an unnecessarily small arbitrary name limit; display long folder names as one line with end ellipsis in the drawer.
 
-Newly created folders are **unlocked?** Not applicable. Folder creation has no image or memory semantics. Newly created folders are simply **unpinned** and empty.
+Newly created folders are **unpinned** and empty.
 
 Empty folders remain visible in the expanded Folders accordion until the user explicitly deletes them.
 
