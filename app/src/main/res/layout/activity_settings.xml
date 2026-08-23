@@ -147,7 +147,7 @@
                 <ImageView
                     style="@style/Widget.App.Row.Icon"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_chat"
+                    android:src="@drawable/ic_desktop_cloud"
                     android:tint="?attr/colorPrimary" />
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
@@ -337,7 +337,7 @@
                 <ImageView
                     style="@style/Widget.App.Row.Icon"
                     android:contentDescription="@null"
-                    android:src="@drawable/ic_chat"
+                    android:src="@drawable/ic_forum"
                     android:tint="?attr/colorPrimary" />
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">

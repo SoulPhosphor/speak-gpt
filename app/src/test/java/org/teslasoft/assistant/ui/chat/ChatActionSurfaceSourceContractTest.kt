@@ -58,6 +58,25 @@ class ChatActionSurfaceSourceContractTest {
     }
 
     @Test
+    fun composerPromotesAfterTheFocusTapAndKeepsTheImeRequest() {
+        val composer = source("main/java/org/teslasoft/assistant/ui/chat/ChatComposerLayout.kt")
+        assertTrue(composer.contains("if (movingFocusedEditor) return@setOnFocusChangeListener"))
+        assertTrue(composer.contains("messageInput.post {"))
+        assertTrue(composer.contains("applyMode()\n                        messageInput.requestFocus()"))
+        assertTrue(composer.contains("?.show(WindowInsetsCompat.Type.ime())"))
+    }
+
+    @Test
+    fun requestedSettingsRowsUseTheirExactGoogleIcons() {
+        val layout = source("main/res/layout/activity_settings.xml")
+        val aiSystem = sectionStartingAt(layout, "@+id/tile_ai_system_settings", 500)
+        val appearance = sectionStartingAt(layout, "@+id/tile_appearance", 500)
+
+        assertTrue(aiSystem.contains("android:src=\"@drawable/ic_desktop_cloud\""))
+        assertTrue(appearance.contains("android:src=\"@drawable/ic_forum\""))
+    }
+
+    @Test
     fun processingRingReplacesInsteadOfOverlaysConversationIcon() {
         val activity = source("main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
         assertTrue(activity.contains("btnSend?.visibility = if (visible) View.INVISIBLE else View.VISIBLE"))
@@ -77,6 +96,12 @@ class ChatActionSurfaceSourceContractTest {
         val positions = markers.map(source::indexOf)
         assertTrue("Missing marker in $markers", positions.all { it >= 0 })
         assertTrue("Markers are out of order: $markers", positions.zipWithNext().all { it.first < it.second })
+    }
+
+    private fun sectionStartingAt(source: String, marker: String, length: Int): String {
+        val start = source.indexOf(marker)
+        check(start >= 0) { "Missing $marker" }
+        return source.substring(start, (start + length).coerceAtMost(source.length))
     }
 
     private fun source(relative: String): String {

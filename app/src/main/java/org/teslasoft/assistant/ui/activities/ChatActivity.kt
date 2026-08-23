@@ -403,7 +403,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var pendingChatExportBytes: ByteArray? = null
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
-    private var btnDebugLog: ImageButton? = null
 
     // Conversation summarizer (conversation-summary-plan.md decisions 11 +
     // 16): data_alert first in the icon row (with the 1–5 count badge),
@@ -1270,9 +1269,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             logitBiasPreferences = LogitBiasPreferences(this, preferences?.getLogitBiasesConfigId()!!)
             apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
         }
-
-        // Diagnostics may have been toggled in Settings while we were away.
-        updateDebugLogButtonVisibility()
 
         // Summarizer Settings may have changed while we were away (endpoint
         // removed, defaults changed) — re-resolve the icons and badge.
@@ -2592,7 +2588,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnQuickSettings = findViewById(R.id.btn_quick_settings)
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
-        btnDebugLog = findViewById(R.id.btn_debug_log)
         btnSummary = findViewById(R.id.btn_summary)
         btnSummarizerErrors = findViewById(R.id.btn_summarizer_errors)
         summarizerErrorBadge = findViewById(R.id.summarizer_error_badge)
@@ -4117,21 +4112,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             openSummoningCircle()
         }
 
-        btnDebugLog?.setOnClickListener {
-            startActivity(
-                Intent(this, LogsActivity::class.java)
-                    .putExtra("type", "event")
-                    .putExtra("chatId", chatId)
-            )
-        }
-        updateDebugLogButtonVisibility()
         initSummarizer()
     }
 
     private fun showChatOptionsMenu(anchor: View) {
         PopupMenu(this, anchor).apply {
             menu.add(Menu.NONE, 1, 0, R.string.chat_menu_export)
-            menu.add(Menu.NONE, 2, 1, R.string.btn_delete)
+            menu.add(Menu.NONE, 2, 1, R.string.alert_debug_section_logs)
+            menu.add(Menu.NONE, 3, 2, R.string.btn_delete)
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     1 -> {
@@ -4139,6 +4127,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         true
                     }
                     2 -> {
+                        startActivity(
+                            Intent(this@ChatActivity, LogCabinActivity::class.java)
+                                .putExtra("chatId", chatId)
+                        )
+                        true
+                    }
+                    3 -> {
                         showChatDeleteDialog()
                         true
                     }
@@ -4606,16 +4601,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 try { track?.release() } catch (_: Exception) { /* ignore */ }
             }
         }.start()
-    }
-
-    /** The bug shortcut in the chat's top bar is a quick jump to the Event log,
-     *  shown only while there's something worth reading there — i.e. when any
-     *  voice diagnostics (the Energy/WebRTC/Silero VAD logging toggles) or Audio
-     *  Health logging is on. Re-checked in onResume so toggling a switch in
-     *  Settings and coming back updates it without reopening the chat. */
-    private fun updateDebugLogButtonVisibility() {
-        val on = voiceDiagnosticsEnabled() || preferences?.getAudioHealthLogging() == true
-        btnDebugLog?.visibility = if (on) View.VISIBLE else View.GONE
     }
 
     private fun isHardKB(): Boolean {
