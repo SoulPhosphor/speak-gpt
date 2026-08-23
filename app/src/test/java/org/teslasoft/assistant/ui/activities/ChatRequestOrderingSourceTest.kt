@@ -32,7 +32,7 @@ class ChatRequestOrderingSourceTest {
             "if (summaryInjection != null)",
             "val resolvedHistory = resolveImagePartsForSend(requestMessages, requestIncludes)",
             "msgs.addAll(resolvedHistory.dropLast(1))",
-            "msgs.add(ChatMessage(role = ChatRole.System, content = memoryAssemblyResult.prompt))",
+            "msgs.add(ChatMessage(role = ChatRole.System, content = assembly.prompt))",
             "val loreText = StringBuilder(getString(R.string.lorebook_injection_header))",
             "resolvedHistory.lastOrNull()?.let { msgs.add(it) }"
         )
@@ -51,7 +51,7 @@ class ChatRequestOrderingSourceTest {
             "if (legacySummaryInjection != null)",
             "val legacyResolvedHistory = resolveImagePartsForSend(",
             "msgs.addAll(legacyResolvedHistory.dropLast(1))",
-            "content = memoryAssemblyResult.prompt",
+            "content = assembly.prompt",
             "for (match in loreBudget.kept)",
             "legacyResolvedHistory.lastOrNull()?.let { msgs.add(it) }"
         )
