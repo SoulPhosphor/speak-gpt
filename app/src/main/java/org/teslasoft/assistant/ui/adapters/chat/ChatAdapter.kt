@@ -188,6 +188,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val MENU_INCLUDE_REMOVE = 101
         private const val MENU_INCLUDE_CONDENSE = 102
         private const val MENU_INCLUDE_EDIT = 103
+        private const val MENU_MESSAGE_EDIT = 104
+        private const val MENU_MESSAGE_SHARE = 105
 
         // Transient inline image-confirmation card row
         // (image-generation-rebuild-plan.md §5). These rows live only in
@@ -586,6 +588,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private var boundGeneratedImagePath: String? = null
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btn_edit)
+        private val btnMore: ImageButton? = itemView.findViewById(R.id.btn_more)
         private val btnRetry: ImageButton = itemView.findViewById(R.id.btn_retry)
         private val btnShare: ImageButton = itemView.findViewById(R.id.btn_share)
         private val btnSpeak: ImageButton = itemView.findViewById(R.id.btn_speak)
@@ -647,7 +650,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val display = displayVariantMap(chatMessage)
 
             val isGeneratedImage = display["message"].toString().startsWith("~file:")
-            btnEdit.visibility = if (isGeneratedImage) View.GONE else View.VISIBLE
+            btnEdit.visibility = if (chatMessage["isBot"] == true) View.GONE else View.VISIBLE
+            btnMore?.visibility = if (chatMessage["isBot"] == true) View.VISIBLE else View.GONE
             if (isGeneratedImage) btnShare.isEnabled = false
 
             val hasAttachments = updateIncludeSummary(chatMessage, position)
@@ -669,6 +673,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             btnDetails.setOnClickListener { anchor ->
                 if (!bulkActionMode) showMessageDetailsPopup(anchor, display)
+            }
+
+            btnMore?.setOnClickListener { anchor ->
+                if (!bulkActionMode && chatMessage["isBot"] == true) {
+                    showMessageActionsPopup(anchor, chatMessage, position, display)
+                }
             }
 
             if (selectorProjection[position]["selected"].toString() == "true") {
@@ -1760,6 +1770,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnRetry.setColorFilter(foreground)
             btnCopy.setColorFilter(foreground)
             btnEdit.setColorFilter(foreground)
+            btnMore?.setColorFilter(foreground)
             // The version pager sits on the same bar and follows the same
             // bubble foreground so its glyphs and count read on any theme.
             btnVersionPrev?.setColorFilter(foreground)
@@ -1894,12 +1905,39 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
-        private fun updateShareButton(chatMessage: HashMap<String, Any>) {
-            if (chatMessage["isBot"] == true) {
-                btnShare.visibility = View.VISIBLE
-            } else {
-                btnShare.visibility = View.GONE
+        private fun showMessageActionsPopup(
+            anchor: View,
+            chatMessage: HashMap<String, Any>,
+            position: Int,
+            display: HashMap<String, Any>
+        ) {
+            val popup = PopupMenu(context, anchor, Gravity.END)
+            val isGeneratedImage = display["message"].toString().startsWith("~file:")
+            if (!isGeneratedImage) {
+                popup.menu.add(0, MENU_MESSAGE_EDIT, 0, R.string.btn_msg_edit)
             }
+            popup.menu.add(0, MENU_MESSAGE_SHARE, 1, R.string.message_share_action)
+            popup.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    MENU_MESSAGE_EDIT -> {
+                        openEditDialog(chatMessage, position)
+                        true
+                    }
+                    MENU_MESSAGE_SHARE -> {
+                        btnShare.callOnClick()
+                        true
+                    }
+                    else -> false
+                }
+            }
+            popup.show()
+        }
+
+        private fun updateShareButton(chatMessage: HashMap<String, Any>) {
+            // Share is exposed from the AI message overflow menu. Keep the
+            // existing hidden callback view so text/image sharing behavior
+            // remains exactly the same without leaving an icon in the bar.
+            btnShare.visibility = View.GONE
         }
 
         private fun updateSpeakButton(chatMessage: HashMap<String, Any>, position: Int) {
