@@ -316,6 +316,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.ActiveMemoriesActivity"
+            android:exported="false"
+            android:label="@string/active_memories_title">
+        </activity>
+
+        <activity
             android:name=".ui.activities.ChatSettingsActivity"
             android:exported="false"
             android:label="@string/chat_settings_tile_title"

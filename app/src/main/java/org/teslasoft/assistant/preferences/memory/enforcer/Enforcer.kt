@@ -120,12 +120,26 @@ class Enforcer private constructor(private val appContext: Context) {
         val projectId: String?
     )
 
+    /** The rendered prompt and the exact final entry selection behind it. */
+    data class AssemblyResult(
+        val prompt: String,
+        val memoryIds: List<String>,
+        val lorebookEntryIds: List<String>
+    )
+
     /**
      * Assemble this turn's memory system message, or null when the memory
      * system has nothing to add and the caller should run the classic lore
      * path (companion opted out, or the assembly came out empty).
      */
-    fun assembleTurn(input: TurnInput): String? {
+    fun assembleTurn(input: TurnInput): String? = assembleTurnWithAttribution(input)?.prompt
+
+    /**
+     * Assemble the prompt while retaining only entries that survive every
+     * eligibility, deduplication, cooldown, and budget gate. Callers use these
+     * ids for the per-response Active Memories viewer.
+     */
+    fun assembleTurnWithAttribution(input: TurnInput): AssemblyResult? {
         val store = MemoryStore.getInstance(appContext)
         val notes = ArrayList<String>()
 
@@ -582,7 +596,13 @@ class Enforcer private constructor(private val appContext: Context) {
                 notes = notes
             )
         )
-        return rendered.ifBlank { null }
+        return rendered.takeIf { it.isNotBlank() }?.let {
+            AssemblyResult(
+                prompt = it,
+                memoryIds = kept.map { memory -> memory.memoryId },
+                lorebookEntryIds = loreKept.map { match -> match.entry.id }
+            )
+        }
     }
 
     /* ------------------------------------------------------------------ */

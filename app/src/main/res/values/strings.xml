@@ -2990,6 +2990,10 @@
     <string name="btn_add_content">Add</string>
     <string name="expand_content">Expand Content</string>
     <string name="collapse_content">Collapse Content</string>
+    <string name="active_memories_title">Active Memories</string>
+    <string name="active_memories_section_memories">Memories</string>
+    <string name="active_memories_section_lorebook">Lorebook</string>
+    <string name="active_memories_not_available">Not Available</string>
     <string name="include_document_pending_hint">File will be sent to AI every turn. Condensing produces a summary of the document and reduces token count.</string>
     <string name="include_image_pending_hint">Images will be sent every turn to the AI. Reducing it will produce a small text summary to save tokens.</string>
 
