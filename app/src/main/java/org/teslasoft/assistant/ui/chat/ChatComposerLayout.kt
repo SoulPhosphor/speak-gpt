@@ -185,7 +185,7 @@ class ChatComposerLayout @JvmOverloads constructor(
     private fun updateExpandVisibility() {
         if (!::messageInput.isInitialized) return
         btnExpand.visibility =
-            if (!expanded && active && messageInput.text?.isNotBlank() == true) {
+            if (!expanded && active) {
                 View.VISIBLE
             } else {
                 View.GONE

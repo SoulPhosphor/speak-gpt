@@ -835,6 +835,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun micIdle() {
         btnMicro?.apply {
             setImageResource(R.drawable.ic_microphone)
+            background = null
             clearColorFilter()
             backgroundTintList = null
             // Hidden while a hands-free conversation is live so it can't be tapped
@@ -851,6 +852,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnMicro?.apply {
             visibility = View.VISIBLE
             setImageResource(R.drawable.ic_stop_recording)
+            background = null
             setColorFilter(ResourcesCompat.getColor(resources, R.color.mic_listening_green, theme))
             backgroundTintList = null
         }
@@ -869,6 +871,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnMicro?.apply {
             visibility = View.VISIBLE
             setImageResource(R.drawable.ic_stop_recording)
+            background = null
             setColorFilter(ResourcesCompat.getColor(resources, R.color.hands_free_active_red, theme))
             backgroundTintList = null
         }
@@ -892,6 +895,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun micHandsFreeActive(listening: Boolean) {
         btnSend?.apply {
             setImageResource(R.drawable.ic_stop_recording)
+            setBackgroundResource(R.drawable.btn_accent_tonal_v5)
             setColorFilter(ResourcesCompat.getColor(resources, R.color.white, theme))
             backgroundTintList = ColorStateList.valueOf(
                 ResourcesCompat.getColor(resources, R.color.hands_free_active_red, theme)
@@ -923,6 +927,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun refreshConversationButton() {
         if (isHandsFreeEngaged()) return
         btnSend?.apply {
+            background = null
             clearColorFilter()
             backgroundTintList = null
             setImageResource(
@@ -1476,7 +1481,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S) {
                 window.navigationBarColor = getColor(R.color.amoled_accent_100)
             }
-            progress?.setBackgroundResource(R.drawable.assistant_clear_amoled)
+            progress?.setBackgroundResource(R.drawable.assistant_clear_x)
             actionBar?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_100, theme))
             activityTitle?.setBackgroundColor(ResourcesCompat.getColor(resources, R.color.amoled_accent_100, theme))
             btnBack?.background = getAmoledAccentDrawable(
@@ -1500,25 +1505,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )!!, this
             )
 
-            btnMicro?.background = getAmoledAccentDrawableV2(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5_amoled
-                )!!, this
-            )
 
-            btnSend?.background = getAmoledAccentDrawableV2(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5_amoled
-                )!!, this
-            )
-            btnAttachFile?.background = getAmoledAccentDrawableV2(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5_amoled
-                )!!, this
-            )
             btnPersistentIncludes?.background = getAmoledAccentDrawableV2(
                 AppCompatResources.getDrawable(
                     this,
@@ -1541,7 +1528,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
                 window.navigationBarColor = getColor(R.color.accent_100)
             }
-            progress?.setBackgroundResource(R.drawable.assistant_clear_v2)
+            progress?.setBackgroundResource(R.drawable.assistant_clear_x)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
@@ -1572,25 +1559,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )!!, this
             )
 
-            btnMicro?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5
-                )!!, this
-            )
 
-            btnSend?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5
-                )!!, this
-            )
-            btnAttachFile?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5
-                )!!, this
-            )
             btnPersistentIncludes?.background = getDarkAccentDrawable(
                 AppCompatResources.getDrawable(
                     this,
@@ -2296,7 +2265,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val keyboardInput: LinearLayout = findViewById(R.id.keyboard_input)
 
         chatActivityTitle.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-        keyboardInput.setBackgroundColor(SurfaceColors.SURFACE_5.getColor(this))
 
         initSettings(prepared.historyResult)
 

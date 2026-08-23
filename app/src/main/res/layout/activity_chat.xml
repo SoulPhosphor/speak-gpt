@@ -227,7 +227,7 @@
                                 android:id="@+id/btn_attach"
                                 android:layout_width="48dp"
                                 android:layout_height="48dp"
-                                android:background="@drawable/btn_accent_tonal_v5"
+                                android:background="@color/transparent"
                                 android:contentDescription="@string/btn_add_content"
                                 android:src="@drawable/ic_add_2"
                                 app:srcCompat="@drawable/ic_add_2" />
@@ -248,20 +248,10 @@
                                 android:layout_weight="1" />
 
                             <ImageButton
-                                android:id="@+id/btn_expand_content"
-                                android:layout_width="48dp"
-                                android:layout_height="48dp"
-                                android:background="@drawable/btn_accent_tonal_v5"
-                                android:contentDescription="@string/expand_content"
-                                android:src="@drawable/ic_expand_content"
-                                android:visibility="gone"
-                                app:srcCompat="@drawable/ic_expand_content" />
-
-                            <ImageButton
                                 android:id="@+id/btn_micro"
                                 android:layout_width="48dp"
                                 android:layout_height="48dp"
-                                android:background="@drawable/btn_accent_tonal_v5"
+                                android:background="@color/transparent"
                                 android:clickable="true"
                                 android:contentDescription="@string/btn_speak"
                                 app:srcCompat="@drawable/ic_microphone" />
@@ -274,7 +264,7 @@
                                     android:id="@+id/btn_send"
                                     android:layout_width="48dp"
                                     android:layout_height="48dp"
-                                    android:background="@drawable/btn_accent_tonal_v5"
+                                    android:background="@color/transparent"
                                     android:contentDescription="@string/btn_send"
                                     android:src="@drawable/ic_conversation" />
 
@@ -283,13 +273,27 @@
                                     style="@style/Widget.Material3.CircularProgressIndicator"
                                     android:layout_width="48dp"
                                     android:layout_height="48dp"
-                                    android:background="@drawable/assistant_clear_v2"
+                                    android:background="@drawable/assistant_clear_x"
                                     android:elevation="0.02dip"
                                     android:indeterminate="true"
                                     android:visibility="gone" />
                             </FrameLayout>
                         </LinearLayout>
                     </LinearLayout>
+
+                    <ImageButton
+                        android:id="@+id/btn_expand_content"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:background="@drawable/btn_accent_tonal_v5"
+                        android:contentDescription="@string/expand_content"
+                        android:src="@drawable/ic_expand_content"
+                        android:visibility="gone"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:srcCompat="@drawable/ic_expand_content" />
 
                     <ImageButton
                         android:id="@+id/btn_collapse_content"
