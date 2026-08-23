@@ -22,12 +22,25 @@ class ChatActionSurfaceSourceContractTest {
     }
 
     @Test
-    fun hiddenShareAndEditLeaveNoWeightedSlotsAndMoreUsesTheOldEditSlot() {
+    fun everyAssistantActionUsesTheSameFixedSpacingAndNoWeights() {
         val layout = source("main/res/layout/view_assistant_bot_message.xml")
         assertOrdered(layout, "@+id/btn_retry", "@+id/btn_copy", "@+id/btn_edit", "@+id/btn_more")
-        for (id in listOf("btn_retry", "btn_copy", "btn_edit", "btn_more")) {
-            assertTrue(view(layout, id).contains("android:layout_width=\"32dp\""))
-            assertTrue(!view(layout, id).contains("android:layout_weight"))
+        val actionIds = listOf(
+            "btn_active_memories",
+            "btn_details",
+            "reasoning_indicator",
+            "btn_speak",
+            "btn_share",
+            "btn_retry",
+            "btn_copy",
+            "btn_edit",
+            "btn_more"
+        )
+        for (id in actionIds) {
+            val action = view(layout, id)
+            assertTrue("$id must remain 32dp wide", action.contains("android:layout_width=\"32dp\""))
+            assertTrue("$id must have the shared 8dp gap", action.contains("android:layout_marginLeft=\"8dp\""))
+            assertTrue("$id must not redistribute the row", !action.contains("android:layout_weight"))
         }
         assertTrue(view(layout, "btn_share").contains("android:visibility=\"gone\""))
         assertTrue(view(layout, "btn_edit").contains("android:visibility=\"gone\""))

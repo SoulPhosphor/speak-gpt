@@ -249,9 +249,10 @@ class Enforcer private constructor(private val appContext: Context) {
         // the classic path (core-book-first order is preserved from the
         // caller) — both now share LoreBookBudget.select (counterplan Step
         // 1.6) so the two paths can never disagree on what was injected.
-        val loreKept = LoreBookBudget.select(
+        val loreSelection = LoreBookBudget.select(
             input.loreMatches, LoreBookStore.MAX_INJECTED_ENTRIES, LoreBookStore.MAX_INJECTED_CHARS
-        ).kept
+        )
+        val loreKept = loreSelection.kept
         val loreNotes = loreKept.map { LoreNote(it.entry.label, it.entry.content) }
         val loreChars = loreKept.sumOf { it.entry.content.length }
 
@@ -600,7 +601,7 @@ class Enforcer private constructor(private val appContext: Context) {
             AssemblyResult(
                 prompt = it,
                 memoryIds = kept.map { memory -> memory.memoryId },
-                lorebookEntryIds = loreKept.map { match -> match.entry.id }
+                lorebookEntryIds = loreSelection.injectedEntryIds
             )
         }
     }

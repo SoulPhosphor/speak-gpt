@@ -24,12 +24,36 @@ class ActiveMemoriesSourceContractTest {
     }
 
     @Test
-    fun requestPathsPersistOnlyTheirFinalSelections() {
+    fun frozenRequestAttributesTheExactListRenderedIntoItsPrompt() {
         val source = source("ui/activities/ChatActivity.kt")
-        assertTrue(source.contains("memoryAssemblyResult?.memoryIds.orEmpty()"))
-        assertTrue(source.contains("dedupedLoreMatches.map { it.entry.id }"))
-        assertTrue(source.contains("loreBudget.kept.map { it.entry.id }"))
+        assertTrue(source.contains("for (match in injectedLoreMatches)"))
+        assertTrue(source.contains("injectedLoreMatches.map { it.entry.id }"))
+        assertFalse(source.contains("dedupedLoreMatches.map { it.entry.id }"))
         assertFalse(source.contains("allLoreMatches.map { it.entry.id }"))
+    }
+
+    @Test
+    fun memoryAndFallbackPathsAttributeOnlyPostBudgetLorebookIds() {
+        val chat = source("ui/activities/ChatActivity.kt")
+        val enforcer = source("preferences/memory/enforcer/Enforcer.kt")
+        assertTrue(chat.contains("memoryAssemblyResult?.lorebookEntryIds"))
+        assertTrue(chat.contains("?: loreBudget.injectedEntryIds"))
+        assertTrue(enforcer.contains("lorebookEntryIds = loreSelection.injectedEntryIds"))
+    }
+
+    @Test
+    fun viewerDistinguishesDeletionFromReadErrorsAndPreservesBlankLabelContent() {
+        val viewer = source("ui/activities/ActiveMemoriesActivity.kt")
+        assertTrue(viewer.contains("data object Deleted"))
+        assertTrue(viewer.contains("data object ReadError"))
+        assertTrue(viewer.contains("logReadError(\"Memory\""))
+        assertTrue(viewer.contains("logReadError(\"Lorebook Entry\""))
+        assertTrue(
+            viewer.contains(
+                "entry.label.ifBlank { getString(R.string.active_memories_unnamed_lorebook_entry) }"
+            )
+        )
+        assertFalse(viewer.contains("active_memories_not_available"))
     }
 
     private fun source(relative: String): String {

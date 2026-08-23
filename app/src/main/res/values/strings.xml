@@ -2993,7 +2993,15 @@
     <string name="active_memories_title">Active Memories</string>
     <string name="active_memories_section_memories">Memories</string>
     <string name="active_memories_section_lorebook">Lorebook</string>
-    <string name="active_memories_not_available">Not Available</string>
+    <string name="active_memories_unnamed_lorebook_entry">Unnamed Lorebook Entry</string>
+    <string name="active_memories_memory_deleted">Memory Deleted</string>
+    <string name="active_memories_memory_deleted_detail">This referenced Memory no longer exists.</string>
+    <string name="active_memories_lorebook_entry_deleted">Lorebook Entry Deleted</string>
+    <string name="active_memories_lorebook_entry_deleted_detail">This referenced Lorebook entry no longer exists.</string>
+    <string name="active_memories_memory_read_error">Memory Read Error</string>
+    <string name="active_memories_memory_read_error_detail">This Memory could not be read. Check the Memory database and Memory Log.</string>
+    <string name="active_memories_lorebook_read_error">Lorebook Read Error</string>
+    <string name="active_memories_lorebook_read_error_detail">This Lorebook entry could not be read. Check the Lorebook database and Memory Log.</string>
     <string name="include_document_pending_hint">File will be sent to AI every turn. Condensing produces a summary of the document and reduces token count.</string>
     <string name="include_image_pending_hint">Images will be sent every turn to the AI. Reducing it will produce a small text summary to save tokens.</string>
 

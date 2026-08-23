@@ -9892,7 +9892,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val loreBooksEnabled = preferences?.getChatLoreBooksEnabled() == true
         val allLoreMatches = ArrayList<LoreBookMatch>()
         var activeLoreBookCount = -1
-        var dedupedLoreMatches: List<LoreBookMatch> = emptyList()
+        // This is the exact Lorebook list rendered into the frozen request.
+        // Attribution below reads this same variable so it cannot drift from
+        // the request if retrieval or filtering changes later.
+        var injectedLoreMatches: List<LoreBookMatch> = emptyList()
         if (loreBooksEnabled) {
             try {
                 val loreStore = LoreBookStore.getInstance(this)
@@ -9925,12 +9928,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // two active books; first occurrence (core book first) wins. This
             // path has no entry/character budget of its own, so dedup is the
             // only thing that can drop a match here.
-            dedupedLoreMatches = LoreDedup.dedup(allLoreMatches)
+            injectedLoreMatches = LoreDedup.dedup(allLoreMatches)
             LoreBookInjectionLog.record(
                 userMessage = loreQuery,
                 matched = allLoreMatches,
                 activeBooks = activeLoreBookCount,
-                injected = dedupedLoreMatches,
+                injected = injectedLoreMatches,
                 cut = LoreDedup.droppedDuplicates(allLoreMatches).map { (dup, _) ->
                     LoreBookInjectionLog.Cut(dup, "duplicate content")
                 }
@@ -10001,9 +10004,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             msgs.add(ChatMessage(role = ChatRole.System, content = assembly.prompt))
         }
 
-        if (dedupedLoreMatches.isNotEmpty()) {
+        if (injectedLoreMatches.isNotEmpty()) {
             val loreText = StringBuilder(getString(R.string.lorebook_injection_header))
-            for (match in dedupedLoreMatches) {
+            for (match in injectedLoreMatches) {
                 loreText.append("\n- ").append(match.entry.content)
             }
             msgs.add(ChatMessage(role = ChatRole.System, content = loreText.toString()))
@@ -10085,7 +10088,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
         val activeMemoryReferences = ActiveMemoryAttribution.fromFinalSelection(
             memoryAssemblyResult?.memoryIds.orEmpty(),
-            dedupedLoreMatches.map { it.entry.id }
+            injectedLoreMatches.map { it.entry.id }
         )
         return FrozenRegularRequest(request, payload, activeMemoryReferences)
     }
@@ -10422,7 +10425,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         val lorebookIds = memoryAssemblyResult?.lorebookEntryIds
-            ?: loreBudget.kept.map { it.entry.id }
+            ?: loreBudget.injectedEntryIds
         activeMemoryReferences = ActiveMemoryAttribution.fromFinalSelection(
             memoryAssemblyResult?.memoryIds.orEmpty(),
             lorebookIds
