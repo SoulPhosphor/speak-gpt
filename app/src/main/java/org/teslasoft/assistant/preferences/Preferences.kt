@@ -577,7 +577,7 @@ class Preferences internal constructor(
     fun getShowThinkingIndicator(): Boolean = getGlobalBoolean("chat_show_thinking_indicator", true)
 
     fun setShowThinkingIndicator(state: Boolean) {
-        putGlobalBoolean("chat_show_thinking_indicator", state)
+        putGlobalBoolean("chat_show_thinking_indicator", state, true)
     }
 
     /** Whether the Thinking disclosure (the collapsible reasoning block under
@@ -588,7 +588,7 @@ class Preferences internal constructor(
     fun getShowThinking(): Boolean = getGlobalBoolean("chat_show_thinking", true)
 
     fun setShowThinking(state: Boolean) {
-        putGlobalBoolean("chat_show_thinking", state)
+        putGlobalBoolean("chat_show_thinking", state, true)
     }
 
     /** Renamed presentation of Desktop Mode; the stored key and behavior stay intact. */
