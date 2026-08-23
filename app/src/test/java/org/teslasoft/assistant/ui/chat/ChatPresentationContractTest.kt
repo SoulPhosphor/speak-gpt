@@ -25,6 +25,15 @@ class ChatPresentationContractTest {
         "src/main/res/layout/view_assistant_user_message.xml"
     )
 
+    private fun elementWithId(xml: String, id: String): String {
+        val idIndex = xml.indexOf("@+id/$id")
+        if (idIndex < 0) throw AssertionError("@+id/$id not found")
+        val start = xml.lastIndexOf('<', idIndex)
+        val end = xml.indexOf('>', idIndex)
+        if (start < 0 || end < 0) throw AssertionError("@+id/$id element is malformed")
+        return xml.substring(start, end + 1)
+    }
+
     @Test
     fun classicRendererAndChatReportActionAreRetired() {
         val adapter = source(
@@ -82,7 +91,10 @@ class ChatPresentationContractTest {
         assertTrue(appearance.contains("@+id/switch_bold_user_name"))
         assertTrue(appearance.contains("@+id/switch_bold_companion_name"))
         for (path in messageLayouts) {
-            assertFalse(path, source(path).contains("android:textStyle=\"bold\""))
+            assertFalse(
+                "$path hard-codes the configurable speaker name weight",
+                elementWithId(source(path), "username").contains("android:textStyle=\"bold\"")
+            )
         }
     }
 
