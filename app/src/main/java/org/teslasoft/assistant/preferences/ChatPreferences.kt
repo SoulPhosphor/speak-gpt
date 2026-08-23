@@ -124,12 +124,12 @@ class ChatPreferences private constructor() {
 
     /**
      * Summarizer state keys inside `settings.<chatId>`: the rolling summary,
-     * its fold-in bookmark, the over-length marker, the failure episode, and
-     * the per-chat error log.
+     * its projection contract, fold-in bookmark, over-length marker, failure
+     * episode, and per-chat error log.
      */
     private val summarizerContentKeys = arrayOf(
-        "summarizer_summary", "summarizer_folded", "summarizer_over_length",
-        "summarizer_episode", "summarizer_errors"
+        "summarizer_summary", "summarizer_projection_version", "summarizer_folded",
+        "summarizer_over_length", "summarizer_episode", "summarizer_errors"
     )
 
     /**
