@@ -23,5 +23,5 @@
         android:overScrollMode="always"
         android:scrollbars="vertical" />
 
-    <include layout="@layout/dialog_single_action" />
+    <include layout="@layout/dialog_two_actions" />
 </LinearLayout>

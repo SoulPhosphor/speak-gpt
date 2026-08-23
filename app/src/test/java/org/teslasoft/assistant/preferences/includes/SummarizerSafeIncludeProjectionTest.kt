@@ -391,20 +391,23 @@ class SummarizerSafeIncludeProjectionTest {
     }
 
     @Test
-    fun summarizerConversationKeepsBookmarkAlignmentWithoutPayloads() {
+    fun summarizerConversationKeepsAlignmentAndIsCompletelyAttachmentBlind() {
         val source = include("reference", full = "NEVER SUMMARIZE THIS BODY")
         val entries = SummarizerSafeIncludeProjectionBuilder.summarizerConversation(
             listOf(
                 CanonicalConversationMessage(false, "", emptyList()),
                 CanonicalConversationMessage(false, "attached", listOf(source)),
-                CanonicalConversationMessage(true, "")
+                CanonicalConversationMessage(true, "~file:/private/generated.png"),
+                CanonicalConversationMessage(true, "reply")
             )
         )
 
-        assertEquals(3, entries.size)
+        assertEquals(4, entries.size)
         assertEquals("", entries.first().text)
-        assertTrue(entries[1].text.contains("\"id\":\"reference\""))
+        assertEquals("attached", entries[1].text)
+        assertFalse(entries[1].text.contains("\"id\":\"reference\""))
         assertFalse(entries[1].text.contains("NEVER SUMMARIZE THIS BODY"))
-        assertEquals("", entries.last().text)
+        assertEquals("", entries[2].text)
+        assertEquals("reply", entries.last().text)
     }
 }

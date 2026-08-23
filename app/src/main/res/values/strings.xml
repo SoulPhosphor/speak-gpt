@@ -3092,6 +3092,7 @@
     <string name="composer_compact_action">Compact</string>
     <string name="composer_create_image_action">Create Image</string>
     <string name="manual_compaction_marker">Compacted</string>
+    <string name="summarizer_boundary_marker">──────── Summarized ────────</string>
     <string name="attach_option_image">Image</string>
 
     <!-- Save/Cancel pair on the Edit dialog, right-aligned in that order. -->
@@ -3153,6 +3154,9 @@
 
     <string name="summarizer_complete_messages">Complete Messages</string>
     <string name="summarizer_complete_messages_hint">Last number of complete messages sent to the model before summarizing.</string>
+    <string name="compacting_cancel_behavior_title">Compacting Cancel Behavior</string>
+    <string name="compacting_cancel_discard">Don’t Save Already Summarized Messages</string>
+    <string name="compacting_cancel_save">Save Already Summarized Messages</string>
     <string name="summarizer_new_chats_toggle">Use Summarizer for New Chats</string>
     <string name="summarizer_length">Summary Length</string>
     <string name="summarizer_length_hint">Maximum amount of words the summary can become.</string>
@@ -3176,6 +3180,40 @@
     <!-- Summary view (decision 11; wording owner-approved July 29 2026). -->
     <string name="summarizer_summary_title">Summary</string>
     <string name="summarizer_update_now">Update Now</string>
+    <string name="summarizer_send_entire_chat">Send Entire Chat</string>
+    <string name="summarizer_use_summary">Use Summary</string>
+    <string name="summarizer_use_compacted">Use Compacted Conversation</string>
+    <string name="summarizer_status_running">Summarizing conversation…</string>
+    <string name="compaction_status_running">Compacting messages…</string>
+    <string name="summarizer_status_complete">Summary updated</string>
+    <string name="compaction_status_complete">Compaction complete</string>
+    <string name="summarizer_status_timeout">Summarization model took too long to respond</string>
+    <string name="compaction_status_timeout">Compaction model took too long to respond</string>
+    <string name="summarizer_status_unreachable">Couldn’t reach the summarization model</string>
+    <string name="compaction_status_unreachable">Couldn’t reach the compaction model</string>
+    <string name="summarizer_status_too_large">Conversation was too large to summarize</string>
+    <string name="compaction_status_too_large">Conversation was too large to compact</string>
+    <string name="summarizer_status_save_failed">Couldn’t save the conversation summary</string>
+    <string name="compaction_status_save_failed">Couldn’t save the compacted conversation</string>
+    <string name="summarizer_status_failed">Summarization failed unexpectedly</string>
+    <string name="compaction_status_failed">Compaction failed unexpectedly</string>
+    <string name="summarizer_notification_channel">Summarization and Compaction</string>
+    <string name="summarizer_notification_text">Summarizing “%1$s”…</string>
+    <string name="compaction_notification_text">Compacting “%1$s”…</string>
+    <string name="summarizer_app_status_running">Summarizing “%1$s”…</string>
+    <string name="compaction_app_status_running">Compacting “%1$s”…</string>
+    <string name="summarizer_now_entire_chat">Now sending entire chat to the AI</string>
+    <string name="summarizer_now_compacted">Now sending the compacted chat version</string>
+    <string name="summarizer_now_summary">Now sending the summary. Summarizer will catch up to the current conversation.</string>
+    <string name="large_summarization_title">Large Summarization</string>
+    <string name="large_summarization_body">This operation is unusually large and is estimated to send about %1$s input tokens to the summarization model. It may require multiple requests and use significantly more API credits than usual.</string>
+    <string name="summarize_anyway">Summarize Anyway</string>
+    <string name="large_compaction_title">Large Compaction</string>
+    <string name="large_compaction_body">This operation is unusually large and is estimated to send about %1$s input tokens to the compaction model. It may require multiple requests and use significantly more API credits than usual.</string>
+    <string name="compact_anyway">Compact Anyway</string>
+    <string name="regenerate_unavailable_title">Regenerate Unavailable</string>
+    <string name="regenerate_unavailable_summary">This message is already part of the summary.</string>
+    <string name="regenerate_unavailable_compaction">This message is already part of the compacted conversation.</string>
     <string name="summarizer_icon_summary_desc">Summary</string>
     <string name="summarizer_icon_errors_desc">Summarizer Errors</string>
 

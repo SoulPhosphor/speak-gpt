@@ -305,6 +305,61 @@
             </androidx.constraintlayout.widget.ConstraintLayout>
         </org.teslasoft.assistant.ui.chat.ChatImeInsetLayout>
 
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/summarizer_operation_chip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginBottom="6dp"
+            android:elevation="4dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+            app:cardCornerRadius="20dp"
+            app:layout_constraintBottom_toTopOf="@+id/keyboard_input"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingEnd="4dp">
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/summarizer_operation_spinner"
+                    style="@style/Widget.Material3.CircularProgressIndicator"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:indeterminate="true" />
+
+                <ImageView
+                    android:id="@+id/summarizer_operation_success"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_check_circle"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/summarizer_operation_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:maxWidth="260dp"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/summarizer_operation_cancel"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:minWidth="0dp"
+                    android:text="@string/btn_cancel" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
         <androidx.constraintlayout.widget.ConstraintLayout
             android:id="@+id/action_bar"
             android:layout_width="match_parent"
@@ -509,7 +564,7 @@
             android:paddingBottom="12dp"
             android:scrollbars="none"
             android:stackFromBottom="true"
-            app:layout_constraintBottom_toTopOf="@+id/keyboard_input"
+            app:layout_constraintBottom_toTopOf="@+id/summarizer_operation_chip"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@+id/health_banner"
@@ -534,7 +589,7 @@
             android:elevation="10dp"
             android:orientation="vertical"
             android:visibility="gone"
-            app:layout_constraintBottom_toTopOf="@+id/keyboard_input"
+            app:layout_constraintBottom_toTopOf="@+id/summarizer_operation_chip"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             tools:visibility="visible">

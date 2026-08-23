@@ -281,8 +281,16 @@ class ChatComposerLayout @JvmOverloads constructor(
             expanded = state.expanded
             active = state.active
             if (::messageInput.isInitialized) {
-                applyMode()
-                expansionListener?.invoke(expanded)
+                // ViewGroup is still walking the saved child hierarchy while this
+                // callback runs. Moving the editor to its restored mode here can
+                // race that traversal and make addView() see the editor's previous
+                // parent even after removeView(), crashing activity recreation.
+                // Run the reparenting after the complete hierarchy restore instead.
+                post {
+                    if (!::messageInput.isInitialized) return@post
+                    applyMode()
+                    expansionListener?.invoke(expanded)
+                }
             }
         } else {
             super.onRestoreInstanceState(state)

@@ -294,6 +294,7 @@ import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.util.providerLimitMessage
 import org.teslasoft.assistant.util.reachedServer
 import org.teslasoft.assistant.util.ProviderErrorInfo
+import org.teslasoft.assistant.util.summarizer.CondensedRegenerationLock
 import io.ktor.client.plugins.observer.ResponseObserver
 import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
@@ -420,6 +421,36 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var btnSummarizerErrors: ImageButton? = null
     private var summarizerErrorBadge: TextView? = null
     private var summarizerController: org.teslasoft.assistant.util.summarizer.SummarizerController? = null
+    private var summarizerOperationChip: com.google.android.material.card.MaterialCardView? = null
+    private var summarizerOperationSpinner: CircularProgressIndicator? = null
+    private var summarizerOperationSuccess: ImageView? = null
+    private var summarizerOperationText: TextView? = null
+    private var summarizerOperationCancel: com.google.android.material.button.MaterialButton? = null
+    private val summarizerStatusHandler = Handler(Looper.getMainLooper())
+    private var projectionStatusVisible = false
+    private val hideSummarizerStatus = Runnable {
+        projectionStatusVisible = false
+        summarizerOperationChip?.visibility = View.GONE
+    }
+    private val summarizerListener = object :
+        org.teslasoft.assistant.util.summarizer.SummarizerController.Listener {
+        override fun onSummarizerStateChanged() {
+            runOnUiThread {
+                refreshSummarizerIcons()
+                refreshManualCompactionMarker()
+            }
+        }
+
+        override fun onSummarizerErrorEpisode() {
+            playSummarizerErrorSignal()
+        }
+
+        override fun onSummarizerOperationChanged(
+            state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
+        ) {
+            runOnUiThread { renderSummarizerOperation(state) }
+        }
+    }
 
     // Database Health A2 banner (§15.2a): persistent + dismissible per chat
     // screen — OK hides it for THIS instance only, so each new chat re-shows
@@ -2442,10 +2473,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         releaseReadbackKeepAlive()
         readbackKeepAliveHandler.removeCallbacksAndMessages(null)
 
-        // Deliberate cancellation of any in-flight fold-in: leaving the chat
-        // is never a Summarizer Error, and the bookmark only ever advances on
-        // a completed save (errors doc §4).
-        summarizerController?.cancel()
+        // Navigation only detaches this screen. The process-wide controller
+        // keeps summarizing/compacting until it completes or the user cancels.
+        org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
+            .detach(chatId, summarizerListener)
+        summarizerStatusHandler.removeCallbacksAndMessages(null)
 
         // Detach from the image job registry WITHOUT cancelling the job:
         // the generation deliberately survives leaving the chat and
@@ -2621,6 +2653,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnSummary = findViewById(R.id.btn_summary)
         btnSummarizerErrors = findViewById(R.id.btn_summarizer_errors)
         summarizerErrorBadge = findViewById(R.id.summarizer_error_badge)
+        summarizerOperationChip = findViewById(R.id.summarizer_operation_chip)
+        summarizerOperationSpinner = findViewById(R.id.summarizer_operation_spinner)
+        summarizerOperationSuccess = findViewById(R.id.summarizer_operation_success)
+        summarizerOperationText = findViewById(R.id.summarizer_operation_text)
+        summarizerOperationCancel = findViewById(R.id.summarizer_operation_cancel)
         keyboardFrame = findViewById(R.id.keyboard_frame)
         keyboardInput = findViewById(R.id.keyboard_input)
         composerSurface = findViewById(R.id.composer_surface)
@@ -4397,28 +4434,71 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun initSummarizer() {
         seedSummarizerToggle()
-        if (summarizerController == null) {
-            summarizerController = org.teslasoft.assistant.util.summarizer.SummarizerController(
-                applicationContext
-            ) { chatId }.also { controller ->
-                controller.listener = object :
-                    org.teslasoft.assistant.util.summarizer.SummarizerController.Listener {
-                    override fun onSummarizerStateChanged() {
-                        runOnUiThread { refreshSummarizerIcons() }
-                    }
-
-                    override fun onSummarizerErrorEpisode() {
-                        playSummarizerErrorSignal()
-                    }
-                }
-            }
+        summarizerController =
+            org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
+                .controller(applicationContext, chatId)
+        org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
+            .attach(chatId, summarizerListener)
+        summarizerOperationCancel?.setOnClickListener {
+            org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry.cancel(chatId)
         }
         btnSummary?.setOnClickListener { showSummaryView() }
         btnSummarizerErrors?.setOnClickListener { showSummarizerErrorsDialog() }
         refreshSummarizerIcons()
         // The next eligible cycle (errors doc §3): opening the chat retries
         // pending fold-ins and runs catch-up after a re-enable.
-        summarizerCycle()
+        summarizerCycle(force = preferences?.getSummarizerCatchUpPending() == true)
+    }
+
+    private fun renderSummarizerOperation(
+        state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
+    ) {
+        val preserveProjectionNotice = projectionStatusVisible &&
+            (state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Idle ||
+                state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Cancelled)
+        if (!preserveProjectionNotice) {
+            projectionStatusVisible = false
+            summarizerStatusHandler.removeCallbacks(hideSummarizerStatus)
+        }
+        when (state) {
+            org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Idle ->
+                if (!projectionStatusVisible) summarizerOperationChip?.visibility = View.GONE
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running -> {
+                summarizerOperationChip?.visibility = View.VISIBLE
+                summarizerOperationSpinner?.visibility = View.VISIBLE
+                summarizerOperationSuccess?.visibility = View.GONE
+                summarizerOperationCancel?.visibility = View.VISIBLE
+                summarizerOperationText?.setText(
+                    if (state.kind == org.teslasoft.assistant.util.summarizer.SummarizerController.OperationKind.COMPACTING) {
+                        R.string.compaction_status_running
+                    } else R.string.summarizer_status_running
+                )
+            }
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Succeeded -> {
+                summarizerOperationChip?.visibility = View.VISIBLE
+                summarizerOperationSpinner?.visibility = View.GONE
+                summarizerOperationSuccess?.visibility = View.VISIBLE
+                summarizerOperationCancel?.visibility = View.GONE
+                summarizerOperationText?.setText(
+                    if (state.kind == org.teslasoft.assistant.util.summarizer.SummarizerController.OperationKind.COMPACTING) {
+                        R.string.compaction_status_complete
+                    } else R.string.summarizer_status_complete
+                )
+                summarizerStatusHandler.postDelayed(hideSummarizerStatus, 3000L)
+            }
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed -> {
+                summarizerOperationChip?.visibility = View.VISIBLE
+                summarizerOperationSpinner?.visibility = View.GONE
+                summarizerOperationSuccess?.visibility = View.GONE
+                summarizerOperationCancel?.visibility = View.GONE
+                summarizerOperationText?.setText(
+                    org.teslasoft.assistant.util.summarizer.SummarizerOperationMessages
+                        .failureMessageRes(state.kind, state.category)
+                )
+            }
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Cancelled ->
+                if (!projectionStatusVisible) summarizerOperationChip?.visibility = View.GONE
+        }
     }
 
     /**
@@ -4439,8 +4519,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** data_alert (with count badge) while the error log has entries;
      *  subject while the summarizer is on for this chat (decisions 11/16). */
     private fun refreshSummarizerIcons() {
+        refreshCondensedRegenerationLocks()
         val summarizerOn = preferences?.getChatUseSummarizer() == true
-        btnSummary?.visibility = if (summarizerOn) View.VISIBLE else View.GONE
+        val hasCondensedConversation =
+            (preferences?.getManualCompactionBoundary() ?: 0) > 0 ||
+                preferences?.getSummarizerSummary().orEmpty().isNotBlank()
+        btnSummary?.visibility =
+            if (summarizerOn || hasCondensedConversation) View.VISIBLE else View.GONE
 
         val errors = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
             .fromJson(preferences?.getSummarizerErrors())
@@ -4453,6 +4538,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             summarizerErrorBadge?.text = errors.size.toString()
         }
     }
+
+    private fun refreshCondensedRegenerationLocks() {
+        adapter?.setCondensedRegenerationLockBoundaries(
+            preferences?.getSummaryRegenerationLockBoundary() ?: 0,
+            preferences?.getCompactionRegenerationLockBoundary() ?: 0
+        )
+    }
+
+    private fun condensedRegenerationLockKind(position: Int): CondensedRegenerationLock.Kind? =
+        CondensedRegenerationLock.kindAt(
+            position,
+            preferences?.getSummaryRegenerationLockBoundary() ?: 0,
+            preferences?.getCompactionRegenerationLockBoundary() ?: 0
+        )
 
     /** A usable image generator requires both a live endpoint profile and a model. */
     private fun imageGeneratorConfigured(): Boolean = try {
@@ -4514,7 +4613,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     /** Freeze one reference-only conversation prefix and compact it atomically. */
-    private fun startManualCompaction() {
+    private fun startManualCompaction(requestedSnapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? = null) {
         if (!org.teslasoft.assistant.util.summarizer.SummarizerController
                 .isConfigured(this)
         ) {
@@ -4523,25 +4622,77 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         val controller = summarizerController ?: return
         if (controller.isManualCompactionRunning()) return
-        val snapshot = summarizerSnapshot() ?: return
+        val snapshot = requestedSnapshot ?: summarizerSnapshot() ?: return
         if (snapshot.entries.isEmpty()) return
+        // The persisted summary already represents the folded prefix. Count
+        // that text once, then only the raw messages that compaction will
+        // actually send after its existing bookmark; otherwise a partially
+        // condensed long chat can produce a wildly inflated cost warning.
+        val alreadyFolded = (preferences?.getSummarizerFoldedCount() ?: 0)
+            .coerceIn(0, snapshot.entries.size)
+        val estimatedTokens = org.teslasoft.assistant.util.summarizer
+            .LargeSummarizerOperationPolicy.estimateInputTokens(
+                preferences?.getSummarizerSummary().orEmpty(),
+                snapshot.entries.drop(alreadyFolded)
+            )
+        if (org.teslasoft.assistant.util.summarizer.LargeSummarizerOperationPolicy
+                .needsConfirmation(estimatedTokens)
+        ) {
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.large_compaction_title)
+                .setMessage(
+                    getString(
+                        R.string.large_compaction_body,
+                        NumberFormat.getIntegerInstance().format(estimatedTokens)
+                    )
+                )
+                .setNegativeButton(R.string.btn_cancel, null)
+                .setPositiveButton(R.string.compact_anyway) { _, _ ->
+                    startManualCompactionConfirmed(snapshot)
+                }
+                .show()
+            return
+        }
+        startManualCompactionConfirmed(snapshot)
+    }
+
+    private fun startManualCompactionConfirmed(
+        snapshot: org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot
+    ) {
+        val controller = summarizerController ?: return
         val frozenEntries = snapshot.entries.toList()
         val frozen = snapshot.copy(entries = frozenEntries)
+        val frozenChatId = chatId
+        val frozenRows = org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard
+            .rows(messages)
+            .take(frozenEntries.size)
+        val app = applicationContext
         controller.runManualCompaction(
             snapshot = frozen,
+            chatName = chatName,
+            savePartialOnCancel = preferences?.getSavePartialCompactionOnCancel() == true,
             stillCurrent = {
-                val current = summarizerSnapshot()?.entries
-                current != null &&
-                    org.teslasoft.assistant.util.summarizer.ManualCompactionSnapshot
-                        .prefixStillCurrent(frozenEntries, current)
+                val stored = org.teslasoft.assistant.preferences.ChatPreferences
+                    .getChatPreferences().getChatById(app, frozenChatId)
+                org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard
+                    .prefixStillCurrent(
+                        frozenRows,
+                        org.teslasoft.assistant.util.summarizer.ManualCompactionStorageGuard.rows(stored)
+                    )
             },
-            onFinished = {
-                if (!isFinishing && !isDestroyed) {
-                    refreshManualCompactionMarker()
-                    refreshComposerTools()
-                    refreshSummarizerIcons()
-                }
-            }
+            onFinished = { /* registry listener refreshes any attached screen */ }
+        )
+    }
+
+    /** `/compact` deliberately ends at the preceding assistant response. The
+     * command itself is never stored or transmitted, and any trailing user text
+     * belongs to the new, uncompacted portion of the conversation. */
+    private fun compactThroughLastAssistantResponse() {
+        val snapshot = summarizerSnapshot() ?: return
+        val lastAssistant = snapshot.entries.indexOfLast { it.isBot }
+        if (lastAssistant < 0) return
+        startManualCompaction(
+            snapshot.copy(entries = snapshot.entries.take(lastAssistant + 1))
         )
     }
 
@@ -4553,6 +4704,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun summarizerTransmissionActive(): Boolean =
         (preferences?.getChatUseSummarizer() == true ||
             (preferences?.getManualCompactionBoundary() ?: 0) > 0) &&
+            preferences?.getUseSummarizedConversationProjection() != false &&
             !model.contains(":ft") && !model.contains("ft:")
 
     private data class FrozenSummarizerState(
@@ -4681,9 +4833,47 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Runs a fold-in cycle when the summarizer is on for this chat. [force]
      *  (Update Now) also folds the final partial batch; automatic cycles
      *  wait for a full batch so provider prompt caching keeps applying. */
-    private fun summarizerCycle(force: Boolean = false) {
+    private fun summarizerCycle(force: Boolean = false, allowLarge: Boolean = false) {
         if (preferences?.getChatUseSummarizer() != true) return
-        summarizerController?.runCycle(force) { summarizerSnapshot() }
+        if (preferences?.getUseSummarizedConversationProjection() == false) return
+        val frozen = summarizerSnapshot() ?: return
+        val folded = preferences?.getSummarizerFoldedCount() ?: 0
+        val edge = (frozen.entries.size - frozen.window.coerceAtLeast(1)).coerceAtLeast(0)
+        val pending = if (edge > folded) frozen.entries.subList(folded, edge) else emptyList()
+        if (pending.isEmpty()) {
+            preferences?.setSummarizerCatchUpPending(false)
+            return
+        }
+        val estimatedTokens = org.teslasoft.assistant.util.summarizer
+            .LargeSummarizerOperationPolicy.estimateInputTokens(
+                preferences?.getSummarizerSummary().orEmpty(),
+                pending
+            )
+        val wouldRun = pending.isNotEmpty() &&
+            (force || pending.size >= org.teslasoft.assistant.util.summarizer.SummarizerController.BATCH_SIZE)
+        if (!allowLarge && wouldRun &&
+            org.teslasoft.assistant.util.summarizer.LargeSummarizerOperationPolicy
+                .needsConfirmation(estimatedTokens)
+        ) {
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.large_summarization_title)
+                .setMessage(
+                    getString(
+                        R.string.large_summarization_body,
+                        NumberFormat.getIntegerInstance().format(estimatedTokens)
+                    )
+                )
+                .setNegativeButton(R.string.btn_cancel, null)
+                .setPositiveButton(R.string.summarize_anyway) { _, _ ->
+                    summarizerCycle(force, allowLarge = true)
+                }
+                .show()
+            return
+        }
+        val cyclePreferences = preferences
+        summarizerController?.runCycle(force, chatName, { frozen }) { succeeded ->
+            if (succeeded) cyclePreferences?.setSummarizerCatchUpPending(false)
+        }
     }
 
     /** Summary view (decision 11): the editable summary and Update Now.
@@ -4692,8 +4882,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun showSummaryView() {
         val view = layoutInflater.inflate(R.layout.dialog_summary_view, null)
         val field = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.field_summary_text)
-        val update = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_action)
+        val update = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_primary_action)
+        val projection = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_destructive_action)
         update?.setText(R.string.summarizer_update_now)
+        val usingCondensed = preferences?.getUseSummarizedConversationProjection() != false
+        projection?.setText(
+            if (usingCondensed) R.string.summarizer_send_entire_chat
+            else if (preferences?.getCondensedConversationKind() ==
+                org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
+            ) R.string.summarizer_use_compacted
+            else R.string.summarizer_use_summary
+        )
         val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true
         field?.setText(if (compatible) preferences?.getSummarizerSummary().orEmpty() else "")
 
@@ -4714,7 +4913,52 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             dialog.dismiss()
             summarizerCycle(force = true)
         }
+        projection?.setOnClickListener {
+            saveEditsIfChanged()
+            val enableCondensed = preferences?.getUseSummarizedConversationProjection() == false
+            preferences?.setUseSummarizedConversationProjection(enableCondensed)
+            if (!enableCondensed) {
+                // Entire-chat transmission is also a true pause for automatic
+                // summarization. Preserve the already committed summary and
+                // bookmark, and remember to catch up when condensed mode is
+                // deliberately restored. Manual compaction is a separate,
+                // explicit operation and is allowed to keep running.
+                preferences?.setSummarizerCatchUpPending(true)
+                val state = summarizerController?.currentOperationState()
+                if (state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running &&
+                    state.kind == org.teslasoft.assistant.util.summarizer.SummarizerController.OperationKind.SUMMARIZING
+                ) {
+                    summarizerController?.cancel()
+                }
+            }
+            showProjectionStatus(enableCondensed)
+            dialog.dismiss()
+            if (enableCondensed) {
+                if (preferences?.getCondensedConversationKind() !=
+                    org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
+                ) {
+                    summarizerCycle(force = true)
+                }
+            }
+        }
         dialog.show()
+    }
+
+    private fun showProjectionStatus(enableCondensed: Boolean) {
+        projectionStatusVisible = true
+        summarizerOperationChip?.visibility = View.VISIBLE
+        summarizerOperationSpinner?.visibility = View.GONE
+        summarizerOperationSuccess?.visibility = View.VISIBLE
+        summarizerOperationCancel?.visibility = View.GONE
+        summarizerOperationText?.setText(
+            if (!enableCondensed) R.string.summarizer_now_entire_chat
+            else if (preferences?.getCondensedConversationKind() ==
+                org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
+            ) R.string.summarizer_now_compacted
+            else R.string.summarizer_now_summary
+        )
+        summarizerStatusHandler.removeCallbacks(hideSummarizerStatus)
+        summarizerStatusHandler.postDelayed(hideSummarizerStatus, 4000L)
     }
 
     /** Summarizer Errors dialog (decision 16 + errors doc §1): one status
@@ -5906,6 +6150,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val previousChatId = chatId
                 chatId = Hash.hash(newTitle)
                 ImageGenerationJobRegistry.rename(previousChatId, chatId)
+                org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
+                    .rename(previousChatId, chatId)
                 chatName = newTitle
                 preferences = Preferences.getPreferences(this@ChatActivity, chatId)
                 intent.putExtra("chatId", chatId)
@@ -8015,16 +8261,32 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
 
+        val compactCommand = org.teslasoft.assistant.util.summarizer.CompactCommand.parse(rawMessage)
+        val effectiveMessage = when (compactCommand) {
+            org.teslasoft.assistant.util.summarizer.CompactCommand.Parse.NotCompact -> rawMessage
+            org.teslasoft.assistant.util.summarizer.CompactCommand.Parse.CompactOnly -> {
+                messageInput?.setText("")
+                compactThroughLastAssistantResponse()
+                return
+            }
+            is org.teslasoft.assistant.util.summarizer.CompactCommand.Parse.CompactAndSend -> {
+                compactThroughLastAssistantResponse()
+                messageInput?.setText(compactCommand.message)
+                messageInput?.setSelection(compactCommand.message.length)
+                compactCommand.message
+            }
+        }
+
         // Preserve the existing non-chat command and fine-tuned pipelines.
         // They do not use the normal chat-completions request built below.
         // The old Function Calling diversion is gone with the feature (§15).
         val imagineAttempt =
             (preferences?.getImagineCommandGlobal() == true || explicitImagineDraft) &&
-                ImagineCommand.isImagineAttempt(rawMessage)
+                ImagineCommand.isImagineAttempt(effectiveMessage)
         if (imagineAttempt ||
             model.contains(":ft") || model.contains("ft:")
         ) {
-            parseMessage(rawMessage)
+            parseMessage(effectiveMessage)
             return
         }
 
@@ -8033,7 +8295,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val selectedModel = model
         val endpointId = preferences?.getApiEndpointId().orEmpty()
         val maximumResponseTokens = preferences?.getMaxTokens() ?: 0
-        val storedMessage = prefix + rawMessage + endSeparator
+        val storedMessage = prefix + effectiveMessage + endSeparator
         val sentIncludes = pendingSnapshot.map { it.forSentMessage() }
         val sentIncludesJson = ChatInclude.listToJson(sentIncludes)
         val modelFacingMessage = IncludeMessageProjection.userContent(
@@ -8117,7 +8379,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     maximumResponseTokens
                 )
                 val prepared = PreparedRegularTurn(
-                    rawMessage = rawMessage,
+                    rawMessage = effectiveMessage,
                     storedMessage = storedMessage,
                     modelFacingMessage = modelFacingMessage,
                     pendingIncludes = pendingSnapshot,
@@ -11033,6 +11295,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         // so its terminal state cannot land in the deleted
                         // placeholder chat.
                         ImageGenerationJobRegistry.rename(previousChatId, chatId)
+                        org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
+                            .rename(previousChatId, chatId)
 
                         // Adopt the renamed chat in place. This used to relaunch
                         // ChatActivity (startActivity + finish) to pick up the new
@@ -11464,6 +11728,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     override fun onRegenerate(position: Int) {
         if (position < 0 || position >= messages.size) return
         if (messages[position]["isBot"] != true) return
+        // Adapter rows explain this with an anchored popup. Keep this guard so
+        // stale/recycled UI or any future caller can never bypass the history lock.
+        if (condensedRegenerationLockKind(position) != null) return
 
         // The latest turn just adds a version (Stage 1) — nothing follows it, so
         // there is nothing to discard and no warning is needed.
@@ -11521,6 +11788,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     override fun onMakeVersionCurrent(position: Int) {
         if (position < 0 || position >= messages.size) return
+        if (condensedRegenerationLockKind(position) != null) return
         val msg = messages[position]
         if (msg["isBot"] != true) return
         val variants = ChatAdapter.parseVariants(msg[ChatAdapter.KEY_VARIANTS]?.toString())
@@ -11577,6 +11845,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         calculateCost()
         refreshPersistentIncludeControls()
         refreshManualCompactionMarker()
+        refreshCondensedRegenerationLocks()
     }
 
     override fun onMessageEdited() {
@@ -11769,6 +12038,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
                 val manualBoundaryBefore =
                     preferences?.getManualCompactionBoundary() ?: 0
+                val summaryLockBefore =
+                    preferences?.getSummaryRegenerationLockBoundary() ?: 0
+                val compactionLockBefore =
+                    preferences?.getCompactionRegenerationLockBoundary() ?: 0
                 // §12 cleanup: note the generated-image files the selected
                 // messages reference before they are removed.
                 val deletedImageHashes = GeneratedImageFiles.referencedHashes(
@@ -11779,6 +12052,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
                 var removedBeforeBookmark = 0
                 var removedBeforeManualBoundary = 0
+                var removedBeforeSummaryLock = 0
+                var removedBeforeCompactionLock = 0
                 var pos = 0
                 var p = 0
                 while (pos < messagesSelectionProjection.size) {
@@ -11790,6 +12065,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         if (pos < manualBoundaryBefore) {
                             removedBeforeManualBoundary++
                         }
+                        if (pos < summaryLockBefore) removedBeforeSummaryLock++
+                        if (pos < compactionLockBefore) removedBeforeCompactionLock++
                         messages.removeAt(pos - p)
                         p++
                     }
@@ -11802,6 +12079,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (removedBeforeManualBoundary > 0) {
                     preferences?.setManualCompactionBoundary(
                         manualBoundaryBefore - removedBeforeManualBoundary
+                    )
+                }
+                if (removedBeforeSummaryLock > 0) {
+                    preferences?.setSummaryRegenerationLockBoundary(
+                        summaryLockBefore - removedBeforeSummaryLock
+                    )
+                }
+                if (removedBeforeCompactionLock > 0) {
+                    preferences?.setCompactionRegenerationLockBoundary(
+                        compactionLockBefore - removedBeforeCompactionLock
                     )
                 }
 

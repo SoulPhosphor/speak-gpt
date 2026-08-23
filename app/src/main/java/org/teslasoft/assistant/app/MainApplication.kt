@@ -56,6 +56,7 @@ import java.security.Security
  * @see [DynamicColors.applyToActivitiesIfAvailable]
  */
 class MainApplication : Application() {
+    private val summarizerStatusOverlay = org.teslasoft.assistant.ui.SummarizerAppStatusOverlay()
 
     // Opt-in app-wide memory heartbeat (Memory usage logging, off by default).
     // A dedicated background thread so the sample — which reads /proc and PSS —
@@ -78,6 +79,7 @@ class MainApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        summarizerStatusOverlay.register(this)
 
         // Anchor the process-uptime clock to app start so every memory sample's
         // "sessionMin/uptime" field measures from here (touches the lazy init).

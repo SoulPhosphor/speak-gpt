@@ -130,7 +130,10 @@ class ChatPreferences private constructor() {
     private val summarizerContentKeys = arrayOf(
         "summarizer_summary", "summarizer_projection_version", "summarizer_folded",
         "summarizer_over_length", "summarizer_episode", "summarizer_errors",
-        "manual_compaction_boundary"
+        "manual_compaction_boundary", "use_summarized_conversation_projection",
+        "condensed_conversation_kind", "summarizer_catch_up_pending",
+        "summary_regeneration_lock_boundary", "compaction_regeneration_lock_boundary",
+        "condensed_regeneration_lock_migrated"
     )
 
     /**
@@ -607,8 +610,16 @@ class ChatPreferences private constructor() {
             val folded = chatSettings.getString("summarizer_folded", "0")?.toIntOrNull() ?: 0
             val manualBoundary = chatSettings
                 .getString("manual_compaction_boundary", "0")?.toIntOrNull() ?: 0
+            val summaryLock = chatSettings
+                .getString("summary_regeneration_lock_boundary", null)?.toIntOrNull()
+                ?: folded
+            val compactionLock = chatSettings
+                .getString("compaction_regeneration_lock_boundary", null)?.toIntOrNull()
+                ?: manualBoundary
             if ((position < folded && folded > 0) ||
-                (position < manualBoundary && manualBoundary > 0)
+                (position < manualBoundary && manualBoundary > 0) ||
+                (position < summaryLock && summaryLock > 0) ||
+                (position < compactionLock && compactionLock > 0)
             ) {
                 chatSettings.edit(commit = true) {
                     if (position < folded && folded > 0) {
@@ -620,6 +631,19 @@ class ChatPreferences private constructor() {
                             (manualBoundary - 1).toString()
                         )
                     }
+                    if (position < summaryLock && summaryLock > 0) {
+                        putString(
+                            "summary_regeneration_lock_boundary",
+                            (summaryLock - 1).toString()
+                        )
+                    }
+                    if (position < compactionLock && compactionLock > 0) {
+                        putString(
+                            "compaction_regeneration_lock_boundary",
+                            (compactionLock - 1).toString()
+                        )
+                    }
+                    putString("condensed_regeneration_lock_migrated", "true")
                 }
             }
         } catch (_: Exception) { /* clamped at read time as a backstop */ }

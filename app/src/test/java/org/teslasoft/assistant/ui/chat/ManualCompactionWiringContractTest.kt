@@ -7,6 +7,7 @@
 package org.teslasoft.assistant.ui.chat
 
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,11 +36,12 @@ class ManualCompactionWiringContractTest {
     }
 
     @Test
-    fun manualCompactionUsesReferenceOnlySnapshotAndActivatesTransmission() {
+    fun manualCompactionUsesAttachmentBlindSnapshotAndActivatesTransmission() {
         assertTrue(activity.contains(".summarizerConversation(storedCanonical)"))
         assertTrue(activity.contains("controller.runManualCompaction("))
         assertTrue(activity.contains("getManualCompactionBoundary()"))
-        assertTrue(activity.contains("ManualCompactionSnapshot"))
+        assertTrue(activity.contains("ManualCompactionStorageGuard"))
+        assertTrue(activity.contains("snapshot.entries.drop(alreadyFolded)"))
 
         val controller = source(
             "src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt"
@@ -50,6 +52,29 @@ class ManualCompactionWiringContractTest {
         )
         assertTrue(manual.contains("prefs.commitManualCompaction("))
         assertFalse(manual.contains("prefs.commitSummarizerFoldIn("))
+    }
+
+    @Test
+    fun successfullyCondensedRepliesBecomeImmutableHistory() {
+        val controller = source(
+            "src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt"
+        )
+        val adapter = source(
+            "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
+        )
+        val preferences = source(
+            "src/main/java/org/teslasoft/assistant/preferences/Preferences.kt"
+        )
+
+        assertTrue(controller.contains("advanceSummaryRegenerationLockBoundary("))
+        assertTrue(controller.contains("advanceCompactionRegenerationLockBoundary("))
+        assertTrue(preferences.contains("ensureCondensedRegenerationLockMigration()"))
+        assertTrue(adapter.contains("R.drawable.ic_rule_settings"))
+        assertTrue(adapter.contains("showRegenerateUnavailablePopup(anchor, lockKind)"))
+        assertTrue(adapter.contains("promote.visibility = View.GONE"))
+        assertTrue(adapter.contains("position + 1 == summaryRegenerationLockBoundary"))
+        assertTrue(source("src/main/res/values/strings.xml").contains("──────── Summarized ────────"))
+        assertTrue(activity.contains("if (condensedRegenerationLockKind(position) != null) return"))
     }
 
     @Test
@@ -73,5 +98,18 @@ class ManualCompactionWiringContractTest {
         assertTrue(dimensions.contains("chat_action_menu_blur_radius"))
         assertTrue(activity.contains("R.dimen.chat_action_menu_blur_radius"))
         assertFalse(activity.contains("val radius = 16f"))
+    }
+
+    @Test
+    fun projectionSwitchClosesTheSummaryWindowInBothDirections() {
+        val summaryView = activity.substring(
+            activity.indexOf("private fun showSummaryView()"),
+            activity.indexOf("private fun showProjectionStatus")
+        )
+        assertTrue(summaryView.contains("showProjectionStatus(enableCondensed)\n            dialog.dismiss()"))
+        assertTrue(summaryView.contains("setSummarizerCatchUpPending(true)"))
+        assertTrue(summaryView.contains("OperationKind.SUMMARIZING"))
+        assertTrue(summaryView.contains("summarizerController?.cancel()"))
+        assertEquals(1, Regex("dialog\\.show\\(\\)").findAll(summaryView).count())
     }
 }

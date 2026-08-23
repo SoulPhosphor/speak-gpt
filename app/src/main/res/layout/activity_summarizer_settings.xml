@@ -120,6 +120,29 @@
                     android:singleLine="true" />
             </LinearLayout>
 
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/compacting_cancel_behavior_title" />
+
+            <RadioGroup
+                android:id="@+id/radio_compacting_cancel_behavior"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <com.google.android.material.radiobutton.MaterialRadioButton
+                    android:id="@+id/radio_compacting_cancel_discard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/compacting_cancel_discard" />
+
+                <com.google.android.material.radiobutton.MaterialRadioButton
+                    android:id="@+id/radio_compacting_cancel_save"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/compacting_cancel_save" />
+            </RadioGroup>
+
             <!-- ============ Complete Messages (default for new chats) ============
                  NumberBlank belongs inline with its label (its own style
                  contract, matched by every other use in the app) — the
