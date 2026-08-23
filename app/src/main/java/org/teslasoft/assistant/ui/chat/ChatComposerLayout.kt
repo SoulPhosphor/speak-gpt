@@ -64,6 +64,14 @@ class ChatComposerLayout @JvmOverloads constructor(
     private val edgeMargin = dp(8)
     private val textBottomGap = dp(4)
 
+    /** The editor's own bottom padding while it sits above the control row,
+     * captured from the layout's authored value and restored when the
+     * editor returns to the single-line control row. Trimmed relative to
+     * that authored value so the gap above the icon row is tighter once the
+     * editor is promoted. */
+    private var controlsBottomPadding = 0
+    private var contentBottomPadding = 0
+
     override fun onFinishInflate() {
         super.onFinishInflate()
         composerContent = findViewById(R.id.composer_content)
@@ -73,6 +81,8 @@ class ChatComposerLayout @JvmOverloads constructor(
         btnCollapse = findViewById(R.id.btn_collapse_content)
 
         active = messageInput.text?.isNotBlank() == true
+        controlsBottomPadding = messageInput.paddingBottom
+        contentBottomPadding = dp(4)
 
         messageInput.setOnFocusChangeListener { _, hasFocus ->
             if (movingFocusedEditor) return@setOnFocusChangeListener
@@ -130,6 +140,20 @@ class ChatComposerLayout @JvmOverloads constructor(
         return true
     }
 
+    /** A tap outside the composer while its draft is blank should return it
+     * to the single-line control row instead of leaving an empty, promoted
+     * editor focused. Expanded mode keeps its own explicit Collapse control
+     * and is left alone here. */
+    fun collapseIfEmptyOutsideTap(): Boolean {
+        if (!::messageInput.isInitialized) return false
+        if (expanded) return false
+        if (!messageInput.hasFocus()) return false
+        if (!messageInput.text.isNullOrBlank()) return false
+        messageInput.clearFocus()
+        ViewCompat.getWindowInsetsController(messageInput)?.hide(WindowInsetsCompat.Type.ime())
+        return true
+    }
+
     private fun setExpanded(value: Boolean) {
         if (expanded == value) return
         expanded = value
@@ -181,6 +205,12 @@ class ChatComposerLayout @JvmOverloads constructor(
             setMargins(edgeMargin, 0, edgeMargin, textBottomGap)
         }
         messageInput.layoutParams = params
+        messageInput.setPadding(
+            messageInput.paddingLeft,
+            messageInput.paddingTop,
+            messageInput.paddingRight,
+            contentBottomPadding
+        )
     }
 
     private fun moveEditorToControls() {
@@ -199,6 +229,12 @@ class ChatComposerLayout @JvmOverloads constructor(
             gravity = Gravity.CENTER_VERTICAL
         }
         messageInput.layoutParams = params
+        messageInput.setPadding(
+            messageInput.paddingLeft,
+            messageInput.paddingTop,
+            messageInput.paddingRight,
+            controlsBottomPadding
+        )
     }
 
     private fun updateExpandVisibility() {

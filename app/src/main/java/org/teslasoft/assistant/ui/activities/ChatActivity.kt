@@ -2316,6 +2316,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     visionActions?.visibility = View.GONE
                 }
             }
+
+            composerSurface?.let { surface ->
+                val bounds = Rect()
+                val touchedInsideComposer =
+                    surface.getGlobalVisibleRect(bounds) &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+                if (!touchedInsideComposer) surface.collapseIfEmptyOutsideTap()
+            }
         }
         return super.dispatchTouchEvent(event)
     }
