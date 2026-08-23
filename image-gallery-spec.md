@@ -57,7 +57,7 @@ Use the current shared header styles rather than inventing a local header appear
 
 ### 3.2 Gallery Controls
 
-Keep the first version deliberately small. The gallery has two controls at the top:
+Keep the first version deliberately small. The gallery has compact controls at the top for sort order, column count, and optional labels.
 
 #### Sort
 
@@ -70,24 +70,58 @@ Sort by the generated image's stored creation time (`createdAt`), not by a files
 
 #### Columns
 
-Choices:
+Use a compact dropdown containing only these numeric choices:
 
 - **2**
-- **3**
-- **4** — default
+- **3** — default
+- **4**
 
-Do not offer 5 columns in the first implementation. Four is already the dense phone layout; 2/3/4 provides a useful large/medium/dense range without reducing phone thumbnails to tiny postage stamps. A later wide-screen/tablet design may add other counts without changing this contract.
+Do not offer 5 columns in the first implementation. **Four is the maximum.** Three-across is the intended default phone density and should use the existing Profile Images gallery's roughly three-across phone presentation as the visual size reference. The generated-image gallery still uses the explicit 2/3/4 user-selected dropdown rather than copying the Profile Images gallery's automatic span-count calculation.
 
-Persist both gallery choices app-wide so reopening Image Gallery keeps the user's selected order and column count.
+#### Show Labels
 
-Use the canonical shared dropdown/selector system from `ui-style-guide.md`; do not create one-off picker styling for this screen.
+Add the compact **Show Labels** control using the same small presentation already approved in the Profile Images gallery:
+
+- plain **Show Labels** text;
+- a small `MaterialSwitch` immediately beside it;
+- not a tile, card, chip, or full-size settings row;
+- tapping the text may toggle the switch, matching the existing Profile Images behavior;
+- default: **On**, matching the existing Profile Images Show Labels preference behavior;
+- persist the choice app-wide across gallery visits.
+
+When **Show Labels** is On, each gallery cell displays a small two-line label block **above the image**:
+
+1. origin **chat name**;
+2. the image's **creation date** underneath it.
+
+Chat-name rules:
+
+- one line only;
+- end-ellipsize/truncate when the name does not fit;
+- never expand to a second title line;
+- use quiet gallery typography so the image remains the dominant element.
+
+Date rules:
+
+- derive it from the generated image's stored `createdAt` value;
+- show the date the image was created, using the app's normal locale-aware date formatting rather than a filesystem timestamp;
+- place it directly under the chat name using subordinate text styling.
+
+When **Show Labels** is Off, remove the entire label block and reclaim its vertical space; do not leave empty label placeholders above thumbnails.
+
+Persist sort order, column count, and Show Labels app-wide so reopening Image Gallery keeps the user's selected presentation.
+
+Use the canonical shared dropdown/selector system from `ui-style-guide.md` for Sort and Columns. Reuse the Profile Images gallery's compact Show Labels interaction pattern rather than inventing a second toggle presentation.
 
 ### 3.3 Grid
 
 - Use a virtualized grid (`RecyclerView`/`GridLayoutManager` or the repository's equivalent established mechanism), not a container that inflates every image at once.
+- The selected Columns value directly controls the grid span count: 2, 3, or 4.
+- Keep the thumbnail itself visually square/consistent within its column. When labels are enabled, the label block sits above the thumbnail rather than consuming or overlaying part of the image.
+- Three columns should be visually comparable in thumbnail size/density to the existing Profile Images gallery's normal three-across phone presentation.
 - Load/decode thumbnail-sized representations for visible/nearby cells. Do not decode every full-resolution image simply to populate the gallery.
 - Opening the full image is the point where full-resolution content is needed.
-- Recycled grid cells must clear stale images/listeners/state before rebinding.
+- Recycled grid cells must clear stale images, chat-name/date labels, listeners, and visibility state before rebinding.
 - Missing/deleted files are not valid gallery thumbnails; a deliberately deleted image leaves the gallery but may remain represented by a placeholder inside chat history as defined in Section 7.
 
 ---
@@ -198,10 +232,19 @@ At minimum each completed gallery image needs durable identity/linkage sufficien
 - MIME type and dimensions where already known;
 - `createdAt`;
 - **origin chat ID**;
+- **origin/last-known chat name** for the optional gallery label;
 - origin message/image identity when available, so **Go to Chat** can locate it precisely;
 - enough existing generated-image metadata to render/manage the gallery without opening every full chat history.
 
 The existing `GeneratedImageMetadata` stored with a message remains valid conversation provenance; do not replace it with a gallery-only record. The catalog is an index/ownership layer so gallery existence is not hostage to chat existence.
+
+### Gallery Chat-Name Label
+
+The gallery needs a durable display name even when its origin chat is later deleted.
+
+- While the origin chat exists, keep the gallery catalog's stored chat name synchronized with normal chat renames so Show Labels reflects the current name.
+- If the origin chat is deleted while the image is kept, retain the **last-known chat name** in the gallery catalog for display.
+- Do not replace a deleted chat's retained name with a generic current-chat name or another guessed value.
 
 ### Ownership Rule
 
@@ -214,7 +257,8 @@ This distinction matters because copied/duplicated chats can legitimately share 
 When introducing the catalog, backfill existing completed generated images conservatively from stored chat metadata/history.
 
 - Prefer existing stable `imageId`, `fileHash`, and `createdAt` values.
-- Do not manufacture origin ownership from the currently-open chat or another unrelated setting.
+- Capture the source chat's name as the gallery label when that source can be established safely.
+- Do not manufacture origin ownership or a chat-name label from the currently-open chat or another unrelated setting.
 - Skip files that do not actually exist rather than resurrecting intentionally deleted assets into the gallery.
 - If legacy data cannot establish an origin safely, keep the image accessible where possible but do not guess destructive ownership.
 
@@ -258,7 +302,7 @@ Keep the existing approved delete-chat actions unless another current product sp
 
 If the chat owns **no** generated images, no image-specific message is necessary. Keep the ordinary delete-chat confirmation uncluttered.
 
-Deleting the chat removes the chat but leaves its gallery images and catalog entries intact. Their origin-chat link becomes unavailable, so **Go to Chat** is no longer offered for those gallery items.
+Deleting the chat removes the chat but leaves its gallery images and catalog entries intact. Their origin-chat link becomes unavailable, so **Go to Chat** is no longer offered for those gallery items. The catalog retains the last-known chat name for Show Labels.
 
 ### 10.2 Delete Images with Chat? = On
 
@@ -354,9 +398,10 @@ The gallery must be designed for collections larger than the current one.
 - Grid cells use thumbnail-sized image loads.
 - Full-resolution decode belongs to the viewer, not every grid bind.
 - File/catalog reads and deletion work that may block belong off the main thread.
-- Sorting by creation time should operate on catalog metadata.
+- Sorting and displayed dates use catalog `createdAt` metadata.
+- Chat-name labels use lightweight catalog metadata rather than opening full chat histories during grid binding.
 - Do not make a missing/deleted origin chat block gallery startup.
-- RecyclerView recycling must not display the wrong thumbnail after fast scrolling.
+- RecyclerView recycling must not display the wrong thumbnail, chat name, date, or Show Labels visibility after fast scrolling.
 
 A visible paging/Load More control is not required for the first version. If future scale requires storage-level paging, preserve global sort correctness and do not make older images disappear from the user's conceptual gallery merely because they are not currently loaded.
 
@@ -366,7 +411,8 @@ A visible paging/Load More control is not required for the first version. If fut
 
 - New Gallery UI uses shared styles/theme attributes. No hard-coded gallery palette.
 - Use `Widget.App.ActionBar*`, canonical dropdowns/selectors, shared typography, shared row/toggle styles, and the standard dialog theme where appropriate.
-- The gallery grid may need a local layout because it is feature-specific; its colors, spacing roles, text appearances, and controls still belong to shared/theme-ready resources where repeated/changeable.
+- The gallery's compact Show Labels control should reuse the existing Profile Images plain-label-plus-switch visual pattern rather than becoming a full settings row.
+- The gallery grid may need a local layout because it is feature-specific; its colors, spacing roles, text appearances, label typography, and controls still belong to shared/theme-ready resources where repeated/changeable.
 - The two compact action menus (gallery image and drawer chat) must share one compact menu appearance.
 - Any new shared three-action dialog layout and compact popup-menu style must be documented in `ui-style-guide.md` when implemented.
 - All visible control names, dialog titles, menu items, and accessibility labels follow Title Caps; explanatory sentences remain sentence case.
@@ -377,28 +423,34 @@ A visible paging/Load More control is not required for the first version. If fut
 
 At minimum cover:
 
-1. Gallery defaults to **Newest to Oldest** and 4 columns.
-2. User can switch 2/3/4 columns and the choice persists.
-3. Oldest/Newest sorting uses `createdAt` deterministically.
-4. Short press opens the correct image; Save launches choose-destination behavior.
-5. Long press shows **Go to Chat** + **Delete** in the shared compact menu.
-6. Go to Chat opens the correct origin chat when it still exists and is unavailable when that chat is gone.
-7. Gallery Delete requires `Delete This Image?` confirmation.
-8. Gallery Delete removes the asset/catalog item without deleting the historical chat message.
-9. A chat referencing a deleted image renders the X-circle placeholder and does not crash.
-10. The placeholder does not erase stored prompt/summary/provenance metadata.
-11. `Delete Images with Chat?` defaults Off and persists app-wide.
-12. Setting Off + chat with images warns that images remain in Image Gallery.
-13. Setting Off + chat without images does not add pointless image warning text.
-14. Setting On + chat with images offers **Cancel / Delete Chat Only / Delete All** in that exact order.
-15. **Delete Chat Only** keeps gallery images.
-16. **Delete All** removes only images owned/originated by that chat, not unrelated/shared references merely present in the chat.
-17. Another chat referencing a deliberately deleted shared asset gets the placeholder rather than a crash or silent message deletion.
-18. Copied/duplicated chats do not gain destructive ownership of images created by the original chat.
-19. Legacy catalog backfill does not guess ownership from current settings/current chat and skips missing files.
-20. Every reachable chat deletion UI path observes the same image policy; old swipe/bulk paths cannot bypass it.
-21. Drawer long press shows dynamic Pin/Unpin + Delete.
-22. Current-chat overflow shows Pin/Unpin at the top only for a saved chat.
-23. Pin state stays consistent between overflow, drawer, and persisted chat list.
-24. Grid scrolling/recycling never leaks one image thumbnail into another cell.
-25. Gallery opening and chat deletion do not block the UI thread on full-history scans or full-resolution image decoding.
+1. Gallery defaults to **Newest to Oldest**, **3 columns**, and **Show Labels On**.
+2. User can switch the Columns dropdown among **2 / 3 / 4**, 4 is the maximum, and the choice persists.
+3. Three-column default thumbnail sizing is visually comparable to the existing Profile Images gallery's normal three-across phone presentation.
+4. Show Labels uses the compact plain-text + switch presentation and persists app-wide.
+5. Show Labels On renders the one-line origin chat name above each image with the localized creation date beneath it.
+6. Long chat names truncate/ellipsize to one line and never increase the label block to a second title line.
+7. Show Labels Off removes both chat name and date and reclaims their vertical space.
+8. Chat rename updates the catalog/display name; keeping an image after chat deletion retains the last-known chat name.
+9. Oldest/Newest sorting uses `createdAt` deterministically.
+10. Short press opens the correct image; Save launches choose-destination behavior.
+11. Long press shows **Go to Chat** + **Delete** in the shared compact menu.
+12. Go to Chat opens the correct origin chat when it still exists and is unavailable when that chat is gone.
+13. Gallery Delete requires `Delete This Image?` confirmation.
+14. Gallery Delete removes the asset/catalog item without deleting the historical chat message.
+15. A chat referencing a deleted image renders the X-circle placeholder and does not crash.
+16. The placeholder does not erase stored prompt/summary/provenance metadata.
+17. `Delete Images with Chat?` defaults Off and persists app-wide.
+18. Setting Off + chat with images warns that images remain in Image Gallery.
+19. Setting Off + chat without images does not add pointless image warning text.
+20. Setting On + chat with images offers **Cancel / Delete Chat Only / Delete All** in that exact order.
+21. **Delete Chat Only** keeps gallery images.
+22. **Delete All** removes only images owned/originated by that chat, not unrelated/shared references merely present in the chat.
+23. Another chat referencing a deliberately deleted shared asset gets the placeholder rather than a crash or silent message deletion.
+24. Copied/duplicated chats do not gain destructive ownership of images created by the original chat.
+25. Legacy catalog backfill does not guess ownership from current settings/current chat and skips missing files.
+26. Every reachable chat deletion UI path observes the same image policy; old swipe/bulk paths cannot bypass it.
+27. Drawer long press shows dynamic Pin/Unpin + Delete.
+28. Current-chat overflow shows Pin/Unpin at the top only for a saved chat.
+29. Pin state stays consistent between overflow, drawer, and persisted chat list.
+30. Grid scrolling/recycling never leaks one image thumbnail, chat-name/date label, or Show Labels state into another cell.
+31. Gallery opening and chat deletion do not block the UI thread on full-history scans or full-resolution image decoding.
