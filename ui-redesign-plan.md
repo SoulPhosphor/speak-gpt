@@ -14,9 +14,7 @@ specification for the "UI overhaul" referenced in CLAUDE.md's roadmap.
 > instruction below is therefore **obsolete** — there is exactly one of
 > everything now. References to the assistant are kept struck-through or noted
 > only so an agent reading an old commit isn't confused; do not try to restore
-> it. Also recorded in this revision: the chat top bar now has a **bug-icon
-> shortcut to the Event log** (`btn_debug_log`) that is a real feature to
-> preserve — see Sections 7.1 and 9.1.
+> it.
 
 > **July 29, 2026 revision:** This plan is reconciled with the verified state
 > of the app and with owner rulings made after June 17. The corrections:
@@ -58,11 +56,8 @@ specification for the "UI overhaul" referenced in CLAUDE.md's roadmap.
 >   ~70 activities (memory system, summarizer, profile images, local Whisper,
 >   and more). `ui-style-adoption.md` is the living per-screen tracker;
 >   Section 7 remains useful only for its risk notes and contracts.
-> - **Open owner decisions — do not assume:** what the drawer header shows
->   (the app's name may **not** appear in user-facing text per the July 28
->   2026 naming ruling, and the owner has not decided what replaces it), and
->   when the drawer phase is scheduled relative to the ongoing style
->   conversion.
+> - **Open owner decision — do not assume:** when the drawer phase is
+>   scheduled relative to the ongoing style conversion.
 
 > **July 30, 2026 revision (owner ruling):** user-created custom themes are a
 > **future product goal**, not a hypothetical. The first shipped theming is
@@ -71,6 +66,14 @@ specification for the "UI overhaul" referenced in CLAUDE.md's roadmap.
 > canonical palette contract, and the compatibility requirements that bind
 > all migration work from now on. This ruling does **not** reinstate the
 > paused theme work and does **not** authorize building the editor.
+
+> **August 23, 2026 drawer/navigation revision (owner ruling):** the drawer
+> has no separate header/name area. Its first item is **New Chat**. The former
+> chat top-bar `btn_debug_log` shortcut has been removed and must **not** be
+> preserved or restored; Logs is reached through the current chat overflow
+> menu. The drawer's **Playground** item only links to the current Playground
+> destination; drawer work must not rehost, refactor, or otherwise change the
+> Playground implementation.
 
 **Audience:** AI agents implementing the redesign. Read `CLAUDE.md` in full
 before this document — every rule there still applies. This plan was written
@@ -125,7 +128,7 @@ These were decided explicitly by the owner. Do not re-litigate them.
 | Decision | Choice |
 |---|---|
 | UI technology | **Stay on classic Views/XML + Material 3 (MDC-Android).** No Jetpack Compose, not even for new screens. |
-| Navigation | **Left slide-out drawer** containing the chat list (new chat, search) plus quick navigation (Characters hub, Playground, Settings). The chat screen becomes the effective home screen, like the ChatGPT/Claude apps. No right-side panel. |
+| Navigation | **Left slide-out drawer** containing the chat list (New Chat, search) plus quick navigation (Characters hub, Playground, Settings). The chat screen becomes the effective home screen, like the ChatGPT/Claude apps. No right-side panel. |
 | Theming | **Preset hand-designed color palettes** in light and dark variants, selectable in settings. Material You / wallpaper-dynamic color was explicitly **not** chosen. The existing AMOLED pitch-black mode must keep working. |
 | Style target | Clean, elegant, modern Material 3 — rounded surfaces, proper spacing, M3 type scale. |
 
@@ -530,26 +533,27 @@ Binding rules:
 
 ### 5.1 What the drawer contains (top to bottom)
 
-1. **Header** — content is an **open owner decision** (July 29 2026): the
-   app's name may not appear in user-facing text (July 28 2026 ruling), and
-   the owner has not chosen what the header shows instead. Ask before
-   building it.
-2. **"New chat" row** (replaces the chats-tab FAB; opens the existing
-   `AddChatDialogFragment`).
-3. **Search field** filtering the chat list (reuse the filter logic from
+1. **New Chat** row (replaces the chats-tab FAB; opens the existing
+   `AddChatDialogFragment`). There is no separate drawer header or app-name
+   area above it.
+2. **Search field** filtering the chat list (reuse the filter logic from
    `ChatsListFragment`'s `search_input`).
-4. **Chat list** — RecyclerView, reusing `ChatPreferences` as the data
-   source and the visual style of `view_chat_name_min.xml` rows (name +
-   snippet; model labels stay out of the drawer for cleanliness). Current
-   chat highlighted with a `colorSecondaryContainer` pill.
-5. **Divider**, then static nav rows: **Characters** (→ `CharactersActivity`
+3. **Chat list** — RecyclerView, reusing `ChatPreferences` as the data
+   source. Reuse the existing chat-list behavior/data, but follow the current
+   `ui-style-guide.md` / `ui-style-adoption.md` for presentation rather than
+   copying an unconverted row wholesale. Show name + snippet; model labels
+   stay out of the drawer. Highlight the current chat using the approved
+   selected/drawer-selected theme role.
+4. **Divider**, then static nav rows: **Characters** (→ `CharactersActivity`
    hub: personas / activation prompts / system message / lorebooks),
-   **Playground** (→ the existing `PlaygroundFragment` rehosted or its own
-   activity), **Settings** (→ `SettingsActivity`).
+   **Playground** (→ link to the current Playground destination only; do not
+   rehost, refactor, or otherwise change Playground as part of drawer work),
+   **Settings** (→ `SettingsActivity`).
 
 Implement as a `DrawerLayout` whose drawer pane is a **custom layout**
-(header + RecyclerView + rows). Do **not** use `NavigationView` menu items —
-the chat list is dynamic and menu-item hacks fight the framework.
+(New Chat + search + RecyclerView + static navigation rows). Do **not** use
+`NavigationView` menu items — the chat list is dynamic and menu-item hacks
+fight the framework.
 
 ### 5.2 Where the drawer lives, and the migration path
 
@@ -679,9 +683,9 @@ attributes (Phase 1), then visual restyle (its listed phase).
 
 | Screen | Files | What changes | Risk / watch-outs |
 |---|---|---|---|
-| Chat | `ChatActivity.kt`, `activity_chat.xml`, `view_assistant_bot_message.xml`, `view_assistant_user_message.xml`, `view_message.xml`, `ChatAdapter.kt` | Drawer (5.2), pill input bar, restyled bubbles, top bar polish, bulk-select bar restyle | **Highest.** Honor the ID contract (9.1, 9.2). Don't touch mic/keyboard/streaming logic. **Keep the `btn_debug_log` bug shortcut** in the top bar (toggled by diagnostics — see 9.1). `Theme.Transparent` + `adjustPan` stay. |
+| Chat | `ChatActivity.kt`, `activity_chat.xml`, `view_assistant_bot_message.xml`, `view_assistant_user_message.xml`, `view_message.xml`, `ChatAdapter.kt` | Drawer (5.2), pill input bar, restyled bubbles, top bar polish, bulk-select bar restyle | **Highest.** Honor the current ID contract (9.1, 9.2). Don't touch mic/keyboard/streaming logic. The former `btn_debug_log` top-bar shortcut was removed and must not be restored; Logs is reached through the current overflow menu. `Theme.Transparent` + `adjustPan` stay. |
 | ~~Floating assistant~~ | ~~`AssistantFragment.kt`, `fragment_assistant.xml`~~ | **Removed (June 2026)** — the floating assistant overlay no longer exists. No work here. | — |
-| Chats list (until Step C retires it) | `ChatsListFragment.kt`, `fragment_chats_list.xml`, `view_chat_name(_min).xml`, `ChatListAdapter.kt` | Restyle rows/FABs; row design is reused by the drawer | Medium. Avatar/initials logic in adapter. |
+| Chats list (until Step C retires it) | `ChatsListFragment.kt`, `fragment_chats_list.xml`, `view_chat_name(_min).xml`, `ChatListAdapter.kt` | Reuse chat-list behavior/data for the drawer; convert the drawer presentation with current shared styles rather than treating these unconverted rows as a whole-screen visual template | Medium. Avatar/initials logic in adapter. |
 | Quick Settings sheet | `QuickSettingsBottomSheetDialogFragment.kt`, `fragment_quick_settings.xml` | M3 list rows, slider restyle, lorebook checklist polish | Medium-high: ~1k lines wiring `btnSelect*` ConstraintLayout ids — keep all ids/types. Canary for palette inheritance in sheets. |
 | Main/home | `MainActivity.kt`, `activity_main.xml`, `bottom_menu.xml` | Step B forwarding; Step C removes bottom nav | Medium. Debug overlay (BlurView) must keep working until removed deliberately. |
 
@@ -716,8 +720,8 @@ acceptance criterion.
 
 **Symptoms (owner-observed, intermittent, in long conversations):**
 
-- The top chat bar/header (`action_bar` — chat title + back/export/settings/
-  bug icons) **sometimes disappears**, and can reappear later on its own.
+- The top chat bar/header (`action_bar` — chat title + current header actions)
+  **sometimes disappears**, and can reappear later on its own.
 - Message rows / per-message action buttons sometimes render incomplete.
 - The bottom input area can look cramped or mis-laid-out.
 - Closing and reopening the chat does **not** reliably reset the state.
@@ -749,31 +753,26 @@ re-layout one (the tilt). Phase 4 should reproduce and close *both*.
 `restoreTopBarVisibility()` (`ChatActivity.kt:709`), already exists precisely
 because the `action_bar` can get **stuck `INVISIBLE`** when the settings-cog
 **shared-element scene transition is interrupted** (app backgrounded / screen
-killed mid-animation). It force-sets `actionBar`, `btn_back`,
-`chat_activity_title`, `btn_export`, `btn_settings` back to
+killed mid-animation). It force-sets the known top-bar views back to
 `VISIBLE`/`alpha=1`, and is called from `restoreUIState()` and ~500ms into
 `onResume`. The owner's bug looks like a **case this heal does not catch**
 (e.g. it fires too early/late, doesn't run on the path that hid the bar, or
-the bar is being *covered/pushed* rather than set invisible). Two concrete
-gaps worth checking during Phase 4:
+the bar is being *covered/pushed* rather than set invisible).
 
-1. `restoreTopBarVisibility()`'s list **omits `btn_debug_log`** (the bug
-   shortcut, see 9.1) and the input-bar/message controls — so even when it
-   fires it only heals five of the views the owner reports as missing.
-2. The heal is reactive (transition-interruption focused). The "long
-   conversation" angle suggests also auditing **scroll + IME/status-bar inset
-   handling** around `keyboard_frame` / `action_bar` (Section 6.6) — a layout
-   that lets the RecyclerView or keyboard frame overlap/push the top bar would
-   produce the same "header gone, then back" symptom without any visibility
-   flag being toggled.
+The heal is reactive (transition-interruption focused). The "long
+conversation" angle suggests also auditing **scroll + IME/status-bar inset
+handling** around `keyboard_frame` / `action_bar` (Section 6.6) — a layout
+that lets the RecyclerView or keyboard frame overlap/push the top bar would
+produce the same "header gone, then back" symptom without any visibility
+flag being toggled.
 
 **What the redesigned chat screen must guarantee (Phase 4 acceptance):**
 
 1. A **stable top bar/header** that does not vanish during long conversations
    or after generation/backgrounding (don't *remove* the existing heal — make
    it sufficient, or make the new layout not need it; if the hand-rolled
-   `action_bar` is kept per 6.4, extend the heal to every top-bar view incl.
-   `btn_debug_log`).
+   `action_bar` is kept per 6.4, keep the heal aligned with the current
+   top-bar views).
 2. Message action buttons consistently present/laid out as designed (honor the
    adapter contract 9.2 — hide via `gone`, never delete).
 3. Long conversations never push or cover the header (scroll/inset behavior).
@@ -820,9 +819,13 @@ gaps worth checking during Phase 4:
 - **Phase 3 — Drawer** (not started; scheduling relative to Phase 1.5 is an
   open owner decision): Step A (drawer in ChatActivity), then Step B
   (launch into last chat), then Step C (retire bottom nav) — three PRs.
-  Drawer header content is undecided — see Section 5.1.
-- **Phase 4 — Chat restyle**: input pill, bubbles, top bar (preserving the
-  `btn_debug_log` shortcut). Single UI now — no `AssistantFragment` to mirror.
+  Drawer starts directly with **New Chat**; there is no separate header/name
+  area. Playground is linked as its current destination without rehosting or
+  refactoring it.
+- **Phase 4 — Chat restyle**: input pill, bubbles, top bar. Single UI now —
+  no `AssistantFragment` to mirror. The former `btn_debug_log` top-bar
+  shortcut is removed and must not be restored; Logs is accessed through the
+  current overflow menu.
   **Must also resolve the standing intermittent top-bar/header-vanishing bug —
   see Section 7.4 (it is a Phase 4 acceptance criterion, not a separate PR).**
 - **Phase 5 — Settings & Characters restyle** (tiles → rows/cards).
@@ -838,17 +841,24 @@ gaps worth checking during Phase 4:
 
 This is the section the owner asked for explicitly. **Read before every PR.**
 
-### 9.1 ChatActivity view-ID contract (verified at `ChatActivity.kt:1370-1397`)
+### 9.1 ChatActivity view-ID contract
 
-`activity_chat.xml` MUST keep these ids with these widget types (Kotlin
-casts them; renaming or retyping = crash or silent breakage):
+Before drawer or chat-header work, re-verify this contract against current
+`ChatActivity` and `activity_chat.xml`; the original June snapshot predates
+later chat changes. The former `btn_debug_log` top-bar shortcut has been
+removed and is **not** part of the contract. Do not restore that view or its
+old visibility/click wiring. Logs is reached through the current chat overflow
+menu.
+
+The load-bearing chat IDs that remain must keep their current widget types;
+renaming or retyping a Kotlin-cast view can crash or silently break behavior.
+At the time of the original audit these included:
 
 `btn_micro` (ImageButton), `btn_settings` (ImageButton), `messages`
 (RecyclerView), `message_input` (EditText), `btn_send` (ImageButton),
 `progress` (CircularProgressIndicator), `chat_activity_title` (TextView),
 `btn_export` (ImageButton), `action_bar` (ConstraintLayout), `btn_back`
-(ImageButton), `btn_debug_log` (ImageButton — the bug-icon Event-log
-shortcut; see note below), `keyboard_frame` (ConstraintLayout), `root`
+(ImageButton), `keyboard_frame` (ConstraintLayout), `root`
 (ConstraintLayout), `thread_loader` (LinearLayout), `keyboard_input`
 (LinearLayout), `btn_attach` (ImageButton), `attachedImage` (LinearLayout),
 `selectedImage` (ImageView), `btnRemoveImage` (ImageButton),
@@ -858,20 +868,6 @@ shortcut; see note below), `keyboard_frame` (ConstraintLayout), `root`
 `btn_share_selected` (ImageButtons), `text_selected_count` (TextView),
 `expandable_window_root` (CoordinatorLayout, keeps
 `transitionName="chat_expand"`), `attach_bg` (BlurView).
-
-**`btn_debug_log` is a real feature, not decoration — do not drop it when
-restyling the top bar.** It is a bug-icon `ImageButton` in the chat action bar
-that jumps straight to the Event log (`LogsActivity`, `type=event`). It is
-shown/hidden at runtime by `ChatActivity.updateDebugLogButtonVisibility()`
-(re-checked in `onResume`): visible only when any voice diagnostic
-(`voiceDiagnosticsEnabled()` — the Energy/WebRTC/Silero VAD logging toggles)
-or Audio Health logging is on, `GONE` otherwise. So in normal use it is
-invisible; a restyle that deletes the view, hard-codes its visibility, or
-removes the `updateDebugLogButtonVisibility` calls breaks the diagnostics
-shortcut. Keep the id, the click handler, and both visibility-refresh call
-sites. (This is the chat-side half of a two-way debug loop: the Event log's
-own `btn_voice_advanced` terminal icon jumps back to
-`VoiceAdvancedSettingsActivity` — see CLAUDE.md.)
 
 ### 9.2 ChatAdapter item-layout contract (verified at `ChatAdapter.kt:210-221`)
 
@@ -920,9 +916,9 @@ errors here are silent or crash at the worst moment (mid-conversation).
    the `try/finally`. The top-bar heal exists because an interrupted
    shared-element transition leaves `action_bar` invisible — keep the heal
    if you restyle the top bar. **Note: this heal is the prime suspect for the
-   standing header-vanishing bug in Section 7.4 — Phase 4 must make it
-   sufficient (it currently omits `btn_debug_log` and the input/message
-   controls), not merely preserve it.**
+   standing header-vanishing bug in Section 7.4 — Phase 4 must keep it aligned
+   with the current top-bar controls and layout rather than restoring removed
+   controls.**
 3. **Auto-naming copy block**: any *new per-chat preference* (e.g. nothing
    in this plan should need one, but if one appears) must be added to the
    preference-copy block in ChatActivity, and auto-naming must never
