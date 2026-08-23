@@ -18,31 +18,50 @@
 
 Unless the owner explicitly specifies otherwise, icons referenced by this drawer/search design come from **Google Icons / Material Symbols**.
 
-## 2. Fixed Top Controls And Scrolling
+## 2. Fixed Top, Scrollable Middle, Fixed Bottom
 
-The drawer has a fixed top control block. **All three rows below remain locked at the top while the rest of the drawer scrolls beneath them:**
+The drawer has three vertical zones. This structure is a product requirement.
+
+### 2.1 Fixed Top Control Block
+
+All three rows below remain locked at the top while the chat list scrolls beneath them:
 
 1. **Soul Phosphor** left aligned + Google double-chevron facing right aligned to the right.
 2. **New Chat**.
 3. **Search**.
 
-The fixed block is a product requirement, not an optional implementation preference.
-
 - The right-facing double-chevron returns to the underlying current chat as described above.
 - Header colors, typography, icon tint, and background must be theme-ready and use the shared style/theme system. Do not hard-code drawer colors.
 - **Soul Phosphor, New Chat, and Search do not scroll away.** They remain visible and interactive even when the user has scrolled deep into a long chat list.
-- The content beneath the fixed block, beginning with the chat list and including lower navigation destinations, uses normal vertical scrolling when it exceeds the available height.
 - Scrolling must not cause chat rows to draw over the fixed top controls or make those controls disappear.
 
-## 3. Drawer Contents, Top To Bottom
+### 2.2 Scrollable Middle
 
-The top-level order is:
+- The **chat list is the scrolling middle region**.
+- It scrolls vertically between the fixed top controls and the fixed bottom navigation.
+- The scrollable region must remain usable with long histories, including hundreds of chats.
+- The list must not push either fixed region off-screen.
 
-1. Fixed top block: **Soul Phosphor** + right-facing double-chevron.
-2. Fixed top block: **New Chat**.
-3. Fixed top block: **Search**.
-4. Scrollable chat list.
-5. Scrollable **Playground** and **Settings** lower navigation destinations according to the broader navigation plan.
+### 2.3 Fixed Bottom Navigation
+
+The lower navigation stays locked to the bottom of the drawer rather than appearing after the final chat row.
+
+- **Playground** remains fixed at the bottom while it exists.
+- **Settings** remains fixed at the bottom.
+- Users must never have to scroll through their chat history to reach Playground or Settings.
+- Playground and Settings do not participate in the chat-list scroll position.
+- If Playground is removed in a later owner-approved change, Settings remains fixed at the bottom by itself unless a later navigation design replaces it.
+- Fixed-bottom styling, spacing, icon tint, and background must use shared/theme-ready styles rather than hard-coded colors.
+
+## 3. Drawer Contents And Navigation
+
+The visual hierarchy is:
+
+1. Fixed top: **Soul Phosphor** + right-facing double-chevron.
+2. Fixed top: **New Chat**.
+3. Fixed top: **Search**.
+4. Scrollable middle: chat list.
+5. Fixed bottom: **Playground** (while it exists) and **Settings**.
 
 There is **no Projects section yet**. Do not invent a Projects heading, placeholder, empty area, or project behavior. For now, the chat list begins immediately after the fixed Search row.
 
@@ -164,7 +183,37 @@ Pinned chats remain a supported chat-list behavior.
 - A blank startup chat has no saved chat row to highlight until it becomes a saved/current chat according to the app's existing behavior.
 - Drawer chat rows must remain palette/theme ready. Use shared typography, theme attributes, and drawer zones rather than hard-coded colors.
 
-## 6. App Launch Behavior
+## 6. Chat List Loading And Performance
+
+The drawer must remain responsive with long chat histories. This phase does **not** require a visible pagination or "Load More" UX for ordinary histories such as hundreds of chats.
+
+### 6.1 Lightweight Index, Not Full Conversations
+
+- Build the drawer from the lightweight data required to identify, order, and display chats, such as chat ID/name, pinned state, last-used ordering data, optional model/provider display data, companion-image reference, and memory-status display state when enabled.
+- **Do not load or parse complete conversation histories merely to populate the drawer.**
+- Do not perform full-message tokenization, transcript parsing, summarization, attachment loading, or other conversation-heavy work as part of opening or scrolling the drawer.
+- Loading the drawer must not block ChatActivity startup or the UI thread on expensive per-chat work.
+
+### 6.2 RecyclerView / Visible-Row Work
+
+- Keep the chat list virtualized with RecyclerView or an equivalent existing list mechanism that only creates/binds visible and nearby rows. Do not inflate hundreds of chat row views at once.
+- Companion images should be loaded through the existing image-loading approach for bound/visible rows rather than eagerly decoding every companion image in the history.
+- Row recycling must correctly reset companion image, bookmark, selected state, model/provider line, memory-status line, and all visibility/tint state on every bind.
+- Scrolling quickly through a long list must not cause a recycled row to inherit another chat's image or metadata.
+
+### 6.3 Expensive Optional Metadata
+
+- Preserve the existing rule that memory-status work happens off the main thread and only when **Show Memory Status on Chat List** is enabled. Do not move SQLCipher/database work into row binding or the UI thread.
+- If optional metadata is not immediately available, the UI may populate/update that metadata asynchronously using the app's established behavior, but it must not reorder the wrong chat or attach stale results to a recycled row.
+- Turning an optional display setting Off should avoid doing work whose sole purpose was rendering that hidden metadata where practical.
+
+### 6.4 No Arbitrary Partial Truth
+
+- For the currently approved scale, prefer knowing the lightweight index for the whole chat list so pinned ordering and the existing Search behavior operate over the full set of chats.
+- Do **not** silently show only the first arbitrary page of chats if that would make older chats invisible to Search, produce incomplete pinned ordering, or imply that missing chats do not exist.
+- If future real-world scale proves that storage-level paging is necessary, it may be added as an implementation optimization only if global pinned ordering, existing Search semantics, chat accessibility, and the fixed navigation structure remain correct. That future optimization does not require a visible "Load More" button unless separately approved.
+
+## 7. App Launch Behavior
 
 Ordinary app launch should immediately present a **blank chat using the same blank-chat presentation the app has now**.
 
@@ -173,13 +222,13 @@ Ordinary app launch should immediately present a **blank chat using the same bla
 - Reuse the current blank/new-chat behavior and persistence semantics.
 - Do not invent a second chat-storage lifecycle solely to create the startup blank chat.
 
-## 7. Lower Navigation And Parked Decisions
+## 8. Lower Navigation And Parked Decisions
 
-- **Playground:** link to the current Playground destination exactly as it exists at implementation time. Do not rehost, refactor, restyle, or otherwise change Playground as part of drawer work. The owner may remove Playground entirely in a separate future decision; drawer implementation must not depend on Playground internals.
-- **Settings:** keep Settings as a drawer-accessible destination, but the future transition/animation replacing the current gear-expansion behavior is **parked**. Do not redesign that transition as an incidental part of drawer implementation unless separately approved.
+- **Playground:** keep a fixed-bottom link to the current Playground destination exactly as it exists at implementation time. Do not rehost, refactor, restyle, or otherwise change Playground as part of drawer work. The owner may remove Playground entirely in a separate future decision; drawer implementation must not depend on Playground internals.
+- **Settings:** keep Settings fixed at the bottom and drawer-accessible, but the future transition/animation replacing the current gear-expansion behavior is **parked**. Do not redesign that transition as an incidental part of drawer implementation unless separately approved.
 - **Companions / Characters:** no permanent drawer destination. Existing access paths remain.
 
-## 8. Implementation Staging
+## 9. Implementation Staging
 
 Preserve the existing staged rollout principle rather than landing the structural navigation change all at once.
 
@@ -190,7 +239,9 @@ Preserve the existing staged rollout principle rather than landing the structura
 - Wire the chat's approved **double-chevron** control to open the drawer.
 - Do **not** add a hamburger button.
 - Do **not** add edge-swipe opening.
-- Keep the entire top control block (Soul Phosphor + return chevron, New Chat, Search) fixed while the chat list/lower navigation scroll beneath it.
+- Keep the entire top control block (Soul Phosphor + return chevron, New Chat, Search) fixed.
+- Keep Playground (while it exists) and Settings fixed at the bottom.
+- Only the middle chat-list region scrolls.
 - Drawer opens from the left and covers the full available width.
 - Drawer right-facing double-chevron closes it and returns to the underlying chat state.
 
@@ -207,7 +258,7 @@ Preserve the existing staged rollout principle rather than landing the structura
 
 Ship A, then B, then C rather than combining all three into one large structural change.
 
-## 9. Existing Safety Rules That Still Bind
+## 10. Existing Safety Rules That Still Bind
 
 - Switching to a saved chat from the drawer should preserve the existing one-chat-per-ChatActivity lifecycle unless a later owner-approved architecture changes it. Do not introduce in-place live-chat swapping that risks voice, streaming, or per-chat state.
 - The drawer's chat list must refresh appropriately so auto-naming/renaming, pinned state, last-used ordering, and other existing list state are reflected rather than caching stale chat IDs or names.
