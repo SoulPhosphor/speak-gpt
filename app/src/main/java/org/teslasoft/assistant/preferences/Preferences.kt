@@ -1690,7 +1690,7 @@ class Preferences internal constructor(
 
     /**
      * The persistent "Use Importance Ratings" master toggle (canonical recovery
-     * plan §7.1). Off by default: while Off, importance controls are hidden,
+     * plan §7.1). On by default: while Off, importance controls are hidden,
      * retrieval ignores every importance value, and new memories store the
      * neutral 0 — but stored values are never erased, so turning it back On
      * restores them. Enforcement lands in later phases; Phase 1 only persists
@@ -1701,7 +1701,7 @@ class Preferences internal constructor(
     }
 
     fun setUseImportanceRatings(enabled: Boolean) {
-        putGlobalBoolean("use_importance_ratings", enabled, false)
+        putGlobalBoolean("use_importance_ratings", enabled, true)
     }
 
     /**
