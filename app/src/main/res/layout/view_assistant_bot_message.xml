@@ -332,7 +332,8 @@
                     android:contentDescription="Share message"
                     android:descendantFocusability="blocksDescendants"
                     android:src="@drawable/ic_share"
-                    android:tooltipText="Share message"
+                    android:tooltipText="@string/message_share_action"
+                    android:visibility="gone"
                     app:layout_constraintEnd_toStartOf="@+id/btn_retry"
                     app:layout_constraintTop_toTopOf="@+id/username"
                     app:srcCompat="@drawable/ic_share" />
@@ -367,7 +368,20 @@
                     android:descendantFocusability="blocksDescendants"
                     android:src="@drawable/ic_edit"
                     android:tooltipText="@string/btn_msg_edit"
+                    android:visibility="gone"
                     app:srcCompat="@drawable/ic_edit" />
+
+                <ImageButton
+                    android:id="@+id/btn_more"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@color/transparent"
+                    android:contentDescription="@string/message_more_actions"
+                    android:descendantFocusability="blocksDescendants"
+                    android:src="@drawable/ic_more_vert"
+                    android:tooltipText="@string/message_more_actions"
+                    app:srcCompat="@drawable/ic_more_vert" />
 
                 <!-- Regenerated-response pager (owner spec, Aug 16 2026), far
                      right of the assistant action bar. GONE until a turn has
