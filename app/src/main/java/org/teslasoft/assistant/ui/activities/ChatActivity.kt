@@ -188,6 +188,7 @@ import org.teslasoft.assistant.providers.ReportedProviderParser
 import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.includes.ChatInclude
+import org.teslasoft.assistant.preferences.includes.CanonicalConversationMessage
 import org.teslasoft.assistant.preferences.includes.DocumentImporter
 import org.teslasoft.assistant.preferences.includes.ImageCapability
 import org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
@@ -196,10 +197,13 @@ import org.teslasoft.assistant.preferences.includes.IncludeAuxiliaryRequestPolic
 import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.preferences.includes.IncludeMessageProjection
+import org.teslasoft.assistant.preferences.includes.IncludeRenderer
 import org.teslasoft.assistant.preferences.includes.ProjectedUserMessage
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import org.teslasoft.assistant.preferences.includes.IncludeTextPolicy
 import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
+import org.teslasoft.assistant.preferences.includes.SummarizerSafeIncludeProjectionBuilder
+import org.teslasoft.assistant.preferences.includes.StableAttachmentReference
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatFormats
 import org.teslasoft.assistant.ui.util.ChatDeleteDialog
 import org.teslasoft.assistant.ui.util.ChatExportDialog
@@ -566,7 +570,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val storedMessage: String,
         val modelFacingMessage: String,
         val pendingIncludes: List<ChatInclude>,
-        val historyBeforeSend: List<ChatMessage>,
         val selectedModel: String,
         val selectedEndpointId: String,
         val request: ChatCompletionRequest,
@@ -579,6 +582,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val request: ChatCompletionRequest,
         val payload: FrozenChatPayload,
         val activeMemoryReferences: List<ActiveMemoryReference>
+    )
+
+    /** One fully resolved conversation snapshot shared by measurement/send. */
+    private data class FrozenConversationProjection(
+        val persistentIncludes: List<ChatMessage>,
+        val conversation: List<ChatMessage>,
+        val summaryInjection: String?,
+        val hasFullImages: Boolean
     )
 
     // Auto-naming attempts this screen instance. Used to be a one-shot
@@ -729,6 +740,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // generation path.
     private var parseMessageScope: CoroutineScope? = null
     private var requestPreparationInProgress = false
+    /** FULL-image files held until their current request has copied bytes into
+     *  its immutable projection. Include edits still update canonical state;
+     *  only physical deletion is deferred for snapshot consistency. */
+    private val protectedRequestImageHashes = HashSet<String>()
+    private val deferredRequestImageDeletes = LinkedHashMap<String, ChatInclude>()
 
     private fun killAllProcesses() {
         onSpeechResultsScope?.coroutineContext?.cancel(CancellationException("Killed"))
@@ -749,6 +765,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         artifactJobs.values.toList().forEach { it.cancel(CancellationException("Killed")) }
         artifactJobs.clear()
         requestPreparationInProgress = false
+        releaseRequestImagePayloads()
         handsFreeStopped = true
         handsFreeReadbackExpected = false
         handsFreeHandler.removeCallbacksAndMessages(null)
@@ -3467,6 +3484,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun maybeDeleteImageBytes(include: ChatInclude) {
         val hash = include.imageFileHash?.takeIf { it.isNotEmpty() } ?: return
+        if (hash in protectedRequestImageHashes) {
+            deferredRequestImageDeletes.putIfAbsent(hash, include)
+            return
+        }
         val referenced = imageBytesStillReferenced(hash, excludingId = include.id)
         val chat = chatId
         CoroutineScope(Dispatchers.IO).launch {
@@ -3474,6 +3495,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 this@ChatActivity, chat, include, referenced
             )
         }
+    }
+
+    private fun protectRequestImagePayloads(messages: List<CanonicalConversationMessage>) {
+        protectedRequestImageHashes.clear()
+        for (message in messages) {
+            for (include in message.includes) {
+                if (include.hasLiveImageBytes()) {
+                    include.imageFileHash?.let(protectedRequestImageHashes::add)
+                }
+            }
+        }
+    }
+
+    /** Release files only after the request owns encoded image payloads. */
+    private fun releaseRequestImagePayloads() {
+        protectedRequestImageHashes.clear()
+        if (deferredRequestImageDeletes.isEmpty()) return
+        val deferred = deferredRequestImageDeletes.values.toList()
+        deferredRequestImageDeletes.clear()
+        deferred.forEach(::maybeDeleteImageBytes)
     }
 
     private fun imageBytesStillReferenced(hash: String, excludingId: String): Boolean {
@@ -4308,52 +4349,53 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         preferences?.getChatUseSummarizer() == true &&
             !model.contains(":ft") && !model.contains("ft:")
 
-    /** The summary's own system message (decision 14), or null when nothing
-     *  is injected. Sent as the very last injected item before the oldest
-     *  full message; the user's stored words are never mixed with it. */
-    private fun summarizerInjectionText(): String? {
-        if (!summarizerTransmissionActive()) return null
-        val summary = preferences?.getSummarizerSummary().orEmpty()
-        if (summary.isBlank()) return null
-        return getString(R.string.summarizer_injection_header) + "\n\n" + summary
-    }
+    private data class FrozenSummarizerState(
+        val active: Boolean,
+        val foldedCount: Int,
+        val summaryInjection: String?
+    )
 
     /**
-     * The model-facing history AFTER the fold-in bookmark, built from the
-     * stored messages with the same projection rules as
-     * [rebuildModelProjection] (blank-content messages skipped). Null when
-     * summarizer transmission is off or nothing is folded yet — callers then
-     * use the full projection unchanged.
+     * Reads one compatible summary/bookmark pair on the main thread. If the
+     * pre-6.2 state cannot be invalidated, stale summary text is omitted and
+     * the full conversation-reference layer is used; attachment payloads can
+     * therefore never appear through both layers.
      */
-    private fun summarizerTrimmedHistory(): Pair<List<ChatMessage>, List<String?>>? {
-        if (!summarizerTransmissionActive()) return null
-        val folded = (preferences?.getSummarizerFoldedCount() ?: 0).coerceAtMost(messages.size)
-        if (folded <= 0) return null
-        val msgs = ArrayList<ChatMessage>()
-        val includes = ArrayList<String?>()
-        for (i in folded until messages.size) {
-            val message = messages[i]
-            val content = modelFacingContent(message)
-            if (content.isBlank()) continue
-            msgs.add(
-                ChatMessage(
-                    role = if (message["isBot"] == true) ChatRole.Assistant else ChatRole.User,
-                    content = content
-                )
-            )
-            includes.add(if (message["isBot"] != true) message[INCLUDES_KEY]?.toString() else null)
+    private fun frozenSummarizerState(): FrozenSummarizerState {
+        if (!summarizerTransmissionActive()) {
+            return FrozenSummarizerState(false, 0, null)
         }
-        return Pair(msgs, includes)
+        val prefs = preferences ?: return FrozenSummarizerState(true, 0, null)
+        if (!prefs.ensureSummarizerProjectionCompatibility()) {
+            return FrozenSummarizerState(true, 0, null)
+        }
+        val folded = prefs.getSummarizerFoldedCount()
+        val summary = prefs.getSummarizerSummary()
+        val injection = summary.takeIf { it.isNotBlank() }?.let {
+            getString(R.string.summarizer_injection_header) + "\n\n" + it
+        }
+        return FrozenSummarizerState(true, folded, injection)
     }
+
+    private fun canonicalConversationSnapshot(): List<CanonicalConversationMessage> =
+        messages.map { message ->
+            CanonicalConversationMessage(
+                isBot = message["isBot"] == true,
+                text = conversationTextWithoutIncludePayloads(message),
+                includes = if (message["isBot"] == true) emptyList() else includesOf(message)
+            )
+        }
 
     /** One snapshot entry per stored message so indexes stay aligned with
      *  the fold-in bookmark; blank entries advance it without being sent. */
     private fun summarizerSnapshot(): org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? {
         if (isFinishing || isDestroyed || chatStorageUnavailable || chatId.isEmpty()) return null
-        val entries = messages.map {
+        val entries = SummarizerSafeIncludeProjectionBuilder
+            .summarizerConversation(canonicalConversationSnapshot())
+            .map {
             org.teslasoft.assistant.util.summarizer.SummarizerController.Entry(
-                isBot = it["isBot"] == true,
-                text = modelFacingContent(it)
+                isBot = it.isBot,
+                text = it.text
             )
         }
         return org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot(
@@ -4430,7 +4472,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val field = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.field_summary_text)
         val update = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_action)
         update?.setText(R.string.summarizer_update_now)
-        field?.setText(preferences?.getSummarizerSummary().orEmpty())
+        val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true
+        field?.setText(if (compatible) preferences?.getSummarizerSummary().orEmpty() else "")
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.summarizer_summary_title)
@@ -6526,10 +6569,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // corrupt (Round 4) — the blocking dialog owns this screen.
         if (chatStorageUnavailable) return
         if (preparedTurn != null) {
+            // Intentionally do not re-read historical Include state here.
+            // Phase 6.2 freezes that state for this dispatch; an edit/reduce/
+            // remove after projection creation belongs to the next request.
+            // Composer-owned pending Includes remain exact until committed.
             val stillExact = message == preparedTurn.rawMessage &&
                 messageInput?.text?.toString() == preparedTurn.rawMessage &&
                 pendingIncludes.toList() == preparedTurn.pendingIncludes &&
-                chatMessages.toList() == preparedTurn.historyBeforeSend &&
                 model == preparedTurn.selectedModel &&
                 preferences?.getApiEndpointId().orEmpty() == preparedTurn.selectedEndpointId
             if (!stillExact) {
@@ -7754,8 +7800,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         requestPreparationInProgress = true
         val pendingSnapshot = pendingIncludes.toList()
-        val historySnapshot = chatMessages.toList()
-        val historyIncludesSnapshot = chatMessageIncludes.toList()
         val selectedModel = model
         val endpointId = preferences?.getApiEndpointId().orEmpty()
         val maximumResponseTokens = preferences?.getMaxTokens() ?: 0
@@ -7766,19 +7810,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             storedMessage,
             sentIncludesJson
         )
-        // Summarizer transmission (decision 15): the request carries the
-        // summary plus only the messages after the fold-in bookmark. The
-        // trimmed pair and the summary text are captured together here so a
-        // fold-in landing mid-preparation can't split them; the staleness
-        // check in parseMessage keeps comparing the FULL projection snapshot.
-        val summarizerTrim = summarizerTrimmedHistory()
-        val summaryInjection = summarizerInjectionText()
-        val requestMessages = ArrayList(summarizerTrim?.first ?: historySnapshot)
-        requestMessages.add(
-            ChatMessage(role = ChatRole.User, content = modelFacingMessage)
+        val canonical = ArrayList(canonicalConversationSnapshot())
+        canonical.add(
+            CanonicalConversationMessage(
+                isBot = false,
+                text = storedMessage,
+                includes = sentIncludes
+            )
         )
-        val requestIncludes = ArrayList(summarizerTrim?.second ?: historyIncludesSnapshot)
-        requestIncludes.add(sentIncludesJson)
+        val summarizerState = frozenSummarizerState()
+        protectRequestImagePayloads(canonical)
 
         btnMicro?.isEnabled = false
         btnSend?.isEnabled = false
@@ -7787,37 +7828,43 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         parseMessageScope = CoroutineScope(Dispatchers.Main)
         parseMessageScope?.launch {
             try {
-                val preparedRequest = withContext(Dispatchers.Default) {
-                    val frozen = buildFrozenRegularRequest(
-                        requestMessages = requestMessages,
-                        requestIncludes = requestIncludes,
-                        loreQuery = storedMessage,
-                        selectedModel = selectedModel,
-                        maximumResponseTokens = maximumResponseTokens,
-                        summaryInjection = summaryInjection
-                    )
-                    val measurement = RequestCapacity.measure(frozen.payload)
-                    var canAssemble = RequestCapacity.canAssemble(
-                        measurement,
-                        RequestHeapState.current()
-                    )
-                    if (!canAssemble) {
-                        // A stale heap sample must not randomly reject the same
-                        // request. Retry only the would-be failure after reclaiming
-                        // unreachable request-preparation objects, off the UI thread.
-                        Runtime.getRuntime().gc()
-                        canAssemble = RequestCapacity.canAssemble(
+                val preparedRequest = try {
+                    withContext(Dispatchers.Default) {
+                        val conversationProjection = freezeConversationProjection(
+                            canonical,
+                            summarizerState
+                        )
+                        val frozen = buildFrozenRegularRequest(
+                            conversationProjection = conversationProjection,
+                            loreQuery = storedMessage,
+                            selectedModel = selectedModel,
+                            maximumResponseTokens = maximumResponseTokens
+                        )
+                        val measurement = RequestCapacity.measure(frozen.payload)
+                        var canAssemble = RequestCapacity.canAssemble(
                             measurement,
                             RequestHeapState.current()
                         )
+                        if (!canAssemble) {
+                            // A stale heap sample must not randomly reject the same
+                            // request. Retry only the would-be failure after reclaiming
+                            // unreachable request-preparation objects, off the UI thread.
+                            Runtime.getRuntime().gc()
+                            canAssemble = RequestCapacity.canAssemble(
+                                measurement,
+                                RequestHeapState.current()
+                            )
+                        }
+                        Triple(
+                            Pair(frozen, conversationProjection.hasFullImages),
+                            canAssemble,
+                            RequestCapacity.approximateInputTokens(frozen.payload)
+                        )
                     }
-                    Triple(
-                        frozen,
-                        canAssemble,
-                        RequestCapacity.approximateInputTokens(frozen.payload)
-                    )
+                } finally {
+                    releaseRequestImagePayloads()
                 }
-                val frozen = preparedRequest.first
+                val frozen = preparedRequest.first.first
                 if (!preparedRequest.second) {
                     requestPreparationInProgress = false
                     restoreUIState()
@@ -7844,7 +7891,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     storedMessage = storedMessage,
                     modelFacingMessage = modelFacingMessage,
                     pendingIncludes = pendingSnapshot,
-                    historyBeforeSend = historySnapshot,
                     selectedModel = selectedModel,
                     selectedEndpointId = endpointId,
                     request = frozen.request,
@@ -7852,7 +7898,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     activeMemoryReferences = frozen.activeMemoryReferences,
                     contextDecision = decision
                 )
-                val hasFullImages = conversationHasFullImages(requestIncludes)
+                val hasFullImages = preparedRequest.first.second
 
                 when (decision) {
                     ModelContextDecision.Send -> visionCheckAndCommit(prepared, hasFullImages)
@@ -8651,6 +8697,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  version, or a tiny bookmark once removed. Neither is ever shown in
      *  the chat; this shapes the model projection only. */
     private fun modelFacingContent(message: HashMap<String, Any>): String {
+        val content = conversationTextWithoutIncludePayloads(message)
+        if (message["isBot"] == true) return content
+        return IncludeMessageProjection.userContent(
+            typedText = content,
+            includesJson = message[INCLUDES_KEY]?.toString()
+        )
+    }
+
+    /** Canonical conversation text before either Include projection is added. */
+    private fun conversationTextWithoutIncludePayloads(
+        message: HashMap<String, Any>
+    ): String {
         val content = message["message"].toString()
         if (message["isBot"] == true) {
             // A completed generated image is stored to the model as a file
@@ -8670,10 +8728,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             return content
         }
-        return IncludeMessageProjection.userContent(
-            typedText = content,
-            includesJson = message[INCLUDES_KEY]?.toString()
-        )
+        return content
     }
 
     /** The reminder a completed generated image contributes to the model each
@@ -8690,20 +8745,48 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         return getString(res, text)
     }
 
-    private suspend fun resolveImagePartsForSend(
-        textMessages: List<ChatMessage>,
-        includesList: List<String?>
-    ): List<ChatMessage> = withContext(Dispatchers.IO) {
+    /**
+     * Resolves every text/image payload immediately from one canonical
+     * snapshot. The returned ChatMessages own their encoded image bytes, so
+     * later Include edits can only affect a later request.
+     */
+    private suspend fun freezeConversationProjection(
+        canonical: List<CanonicalConversationMessage>,
+        summarizerState: FrozenSummarizerState
+    ): FrozenConversationProjection = withContext(Dispatchers.IO) {
+        val projected = SummarizerSafeIncludeProjectionBuilder.build(
+            messages = canonical,
+            summarizerActive = summarizerState.active,
+            foldedCount = summarizerState.foldedCount
+        )
         val cid = chatId
-        textMessages.mapIndexed { i, msg ->
-            if (msg.role != ChatRole.User) return@mapIndexed msg
-            val json = includesList.getOrNull(i) ?: return@mapIndexed msg
-            val projection = IncludeMessageProjection.userMessageParts(
-                msg.content?.toString().orEmpty(), json
+        val persistent = projected.persistentIncludes.map { unit ->
+            val include = unit.include
+            val content = ProjectedUserMessage(
+                text = StableAttachmentReference.renderPersistentPayload(include),
+                imageParts = IncludeRenderer.imagePartsFor(listOf(include))
             )
-            if (projection.isTextOnly()) msg
-            else buildMultiPartUserMessage(projection, cid)
+            buildMultiPartUserMessage(content, cid)
         }
+        val conversation = projected.conversation.map { message ->
+            if (message.isBot) {
+                ChatMessage(role = ChatRole.Assistant, content = message.text)
+            } else {
+                val content = ProjectedUserMessage(
+                    text = message.text,
+                    imageParts = IncludeRenderer.imagePartsFor(message.inlineIncludes)
+                )
+                buildMultiPartUserMessage(content, cid)
+            }
+        }
+        FrozenConversationProjection(
+            persistentIncludes = persistent.toList(),
+            conversation = conversation.toList(),
+            summaryInjection = summarizerState.summaryInjection,
+            hasFullImages = canonical.any { message ->
+                message.includes.any { it.hasLiveImageBytes() }
+            }
+        )
     }
 
     private fun buildMultiPartUserMessage(
@@ -8724,9 +8807,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 imageFileHash = ref.imageFileHash,
                 imageMimeType = ref.imageMimeType
             )
-            val file = ImageImporter.imageFile(this, cid, include) ?: continue
-            if (!file.exists()) continue
-            val bytes = try { file.readBytes() } catch (_: Exception) { continue }
+            val file = ImageImporter.imageFile(this, cid, include)
+                ?: throw IllegalStateException(
+                    "Include ${ref.includeId} is visible but has no outbound image file"
+                )
+            if (!file.exists()) {
+                throw IllegalStateException(
+                    "Include ${ref.includeId} is visible but its outbound image file is missing"
+                )
+            }
+            val bytes = try {
+                file.readBytes()
+            } catch (error: Exception) {
+                throw IllegalStateException(
+                    "Include ${ref.includeId} is visible but its outbound image file is unreadable",
+                    error
+                )
+            }
             val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
             parts.add(ImagePart("data:${ref.imageMimeType};base64,$encoded"))
         }
@@ -9795,12 +9892,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * snapshots; callers must send [FrozenRegularRequest.request] directly.
      */
     private suspend fun buildFrozenRegularRequest(
-        requestMessages: List<ChatMessage>,
-        requestIncludes: List<String?>,
+        conversationProjection: FrozenConversationProjection,
         loreQuery: String,
         selectedModel: String,
-        maximumResponseTokens: Int,
-        summaryInjection: String? = null
+        maximumResponseTokens: Int
     ): FrozenRegularRequest {
         val msgs = ArrayList<ChatMessage>()
 
@@ -9849,6 +9944,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 msgs.add(ChatMessage(role = ChatRole.System, content = it))
             }
         }
+
+        // Phase 6.2: one user-authority payload unit per active Include, in
+        // original activation order. These immutable messages were resolved
+        // from the same snapshot measured and transmitted below.
+        msgs.addAll(conversationProjection.persistentIncludes)
 
         val loreBooksEnabled = preferences?.getChatLoreBooksEnabled() == true
         val allLoreMatches = ArrayList<LoreBookMatch>()
@@ -9913,7 +10013,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 chatId = chatId,
                                 personaId = personaId,
                                 userMessage = loreQuery,
-                                recentContext = recentTurnsContext(requestMessages),
+                                recentContext = recentTurnsContext(
+                                    conversationProjection.conversation
+                                ),
                                 modelTag = selectedModel,
                                 // Lore is frozen as its own complete request
                                 // layer immediately after memory below. Passing
@@ -9944,8 +10046,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Summary injection (decision 14): before the retained history, since
         // it stands in for earlier turns that were folded away and belongs in
         // chronological position ahead of them.
-        if (summaryInjection != null) {
-            msgs.add(ChatMessage(role = ChatRole.System, content = summaryInjection))
+        if (conversationProjection.summaryInjection != null) {
+            msgs.add(
+                ChatMessage(
+                    role = ChatRole.System,
+                    content = conversationProjection.summaryInjection
+                )
+            )
         }
 
         // Conversation history, all active attachments embedded in their user
@@ -9958,7 +10065,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // regenerated every turn (owner ruling, Aug 15 2026 — memory and lore
         // used to sit ahead of the whole history and broke prefix caching for
         // it on every single turn).
-        val resolvedHistory = resolveImagePartsForSend(requestMessages, requestIncludes)
+        val resolvedHistory = conversationProjection.conversation
         msgs.addAll(resolvedHistory.dropLast(1))
 
         memoryAssemblyResult?.let { assembly ->
@@ -10065,6 +10172,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ) {
         disableAutoScroll = false
         val streamingEnabled = preferences?.getStreaming() ?: true
+        val legacyCanonical = if (preparedTurn == null) {
+            canonicalConversationSnapshot()
+        } else {
+            null
+        }
+        val legacySummarizerState = if (preparedTurn == null) {
+            frozenSummarizerState()
+        } else {
+            null
+        }
+        legacyCanonical?.let(::protectRequestImagePayloads)
 
         var response = ""
         putMessage("", true)
@@ -10086,6 +10204,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         val msgs: ArrayList<ChatMessage>
         val chatCompletionRequest: ChatCompletionRequest
+        val legacyConversationProjection: FrozenConversationProjection?
         if (preparedTurn != null) {
             // This is the object that was measured before the composer was
             // committed. Do not rebuild any part of it here — the §8
@@ -10100,8 +10219,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 preparedTurn.request
             }
             msgs = ArrayList(preparedTurn.request.messages)
+            legacyConversationProjection = null
         } else {
             msgs = arrayListOf()
+            legacyConversationProjection = try {
+                freezeConversationProjection(
+                    legacyCanonical.orEmpty(),
+                    legacySummarizerState ?: FrozenSummarizerState(false, 0, null)
+                )
+            } finally {
+                releaseRequestImagePayloads()
+            }
 
         // Merge the selected persona prompt (first) with the always-on system message
         // into a single, stable System message. Keeping it identical and first on every
@@ -10169,6 +10297,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
             }
         }
+
+        legacyConversationProjection?.persistentIncludes?.let(msgs::addAll)
 
         // QUICK SETTINGS IS AUTHORITATIVE (owner ruling, July 10 2026): the
         // per-chat "Use lore books" and "Use memory" switches decide, each on
@@ -10285,14 +10415,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
-        // Summarizer transmission on the legacy in-line path (retry/voice):
-        // same summary injection (decision 14) and bookmark trim (decision
-        // 15) as the frozen path. Both values are read back-to-back so a
-        // fold-in commit can't split the summary/bookmark pair.
-        val legacySummaryInjection = summarizerInjectionText()
-        val legacySummarizerTrim = summarizerTrimmedHistory()
-        if (legacySummaryInjection != null) {
-            msgs.add(ChatMessage(role = ChatRole.System, content = legacySummaryInjection))
+        // Retry/voice uses the same immutable Phase 6.2 conversation snapshot
+        // as typed Send: persistent user-authority Includes are already above;
+        // only the summary and reference-only conversation remain here.
+        if (legacyConversationProjection?.summaryInjection != null) {
+            msgs.add(
+                ChatMessage(
+                    role = ChatRole.System,
+                    content = legacyConversationProjection.summaryInjection
+                )
+            )
         }
 
         // Resolved as one ordered list, then split so memory/lore land right
@@ -10300,10 +10432,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // stays a stable, cacheable prefix turn to turn instead of trailing
         // content that's regenerated every turn (owner ruling, Aug 15 2026 —
         // same fix as the frozen path above).
-        val legacyResolvedHistory = resolveImagePartsForSend(
-            legacySummarizerTrim?.first ?: chatMessages,
-            legacySummarizerTrim?.second ?: chatMessageIncludes
-        )
+        val legacyResolvedHistory = legacyConversationProjection?.conversation.orEmpty()
         msgs.addAll(legacyResolvedHistory.dropLast(1))
 
         memoryAssemblyResult?.let { assembly ->

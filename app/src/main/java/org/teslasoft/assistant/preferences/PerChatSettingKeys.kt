@@ -120,6 +120,7 @@ object PerChatSettingKeys {
         "use_summarizer",
         "summarizer_window",
         "summarizer_summary",
+        "summarizer_projection_version",
         "summarizer_folded",
         "summarizer_over_length",
         "summarizer_episode",
