@@ -523,6 +523,8 @@
     <string name="btn_start_a_chat">Start a chat</string>
     <string name="btn_msg_retry">Retry</string>
     <string name="btn_msg_edit">Edit</string>
+    <string name="message_more_actions">More options</string>
+    <string name="message_share_action">Share</string>
     <string name="btn_edit_logit_biases">Edit logit biases</string>
     <string name="btn_delete_logit_bias">Delete logit bias</string>
     <string name="title_thank_you_for_your_support">Thank you for your support!</string>
