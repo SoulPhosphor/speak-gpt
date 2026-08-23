@@ -616,6 +616,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // assistant layout, so nullable.
         private val reasoningContainer: LinearLayout? = itemView.findViewById(R.id.reasoning_container)
         private val reasoningHeader: LinearLayout? = itemView.findViewById(R.id.reasoning_header)
+        private val reasoningLabel: TextView? = itemView.findViewById(R.id.reasoning_label)
         private val reasoningText: TextView? = itemView.findViewById(R.id.reasoning_text)
         private val reasoningChevron: ImageView? = itemView.findViewById(R.id.reasoning_chevron)
         // Per-message reasoning indicator glyph in the action bar, right of the
@@ -899,7 +900,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * The compact metadata line beneath the identity (chat-redesign-plan.md
          * §4.3). Present only on the assistant layout. Shows the producing model
          * when Model Names is on, the provider token total when Token Usage is
-         * on, joined by a centered dot when both are present and both enabled.
+         * on, joined by a centered dot when both are present and both enabled
+         * and the two fit on one line. When a long model name would otherwise
+         * push the token count past the row's edge, the token count drops to
+         * its own line directly beneath the model name instead (owner spec,
+         * Aug 23 2026), still starting at the same edge as the model name.
          * Anything not enabled or not stored on this turn is simply omitted; the
          * whole line is GONE when nothing remains. Never invents a value.
          */
@@ -915,20 +920,33 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 return
             }
 
-            val parts = mutableListOf<String>()
-            if (preferences.getShowModelNames()) {
+            val modelPart = if (preferences.getShowModelNames()) {
                 chatMessage[KEY_MESSAGE_MODEL]?.toString()?.takeIf { it.isNotBlank() }
-                    ?.let { parts.add(it) }
-            }
-            if (preferences.getShowTokenUsage()) {
-                tokenCountLabel(chatMessage)?.let { parts.add(it) }
+            } else null
+            val tokenPart = if (preferences.getShowTokenUsage()) tokenCountLabel(chatMessage) else null
+
+            val text = when {
+                modelPart != null && tokenPart != null -> {
+                    val combined = "$modelPart  ·  $tokenPart"
+                    val nameBesidePortrait = preferences.getShowChatProfileImages() &&
+                        preferences.getShowChatNames()
+                    val available = availableMetaWidthPx(nameBesidePortrait)
+                    if (available > 0 && meta.paint.measureText(combined) <= available) {
+                        combined
+                    } else {
+                        "$modelPart\n$tokenPart"
+                    }
+                }
+                modelPart != null -> modelPart
+                tokenPart != null -> tokenPart
+                else -> null
             }
 
-            if (parts.isEmpty()) {
+            if (text == null) {
                 meta.visibility = View.GONE
                 meta.text = ""
             } else {
-                meta.text = parts.joinToString("  ·  ")
+                meta.text = text
                 meta.visibility = View.VISIBLE
             }
         }
@@ -1289,12 +1307,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * its own row between the identity/metadata line and the answer; tapping
          * only expands/collapses the already-received text and never regenerates
          * or alters the answer. Absent reasoning collapses the row to nothing.
-         * Every branch sets visibility explicitly because rows are recycled.
+         * Chat Settings → Show Thinking (owner spec, Aug 23 2026) gates only
+         * this display: turning it off hides the row on every reply, current
+         * and past alike, but never touches the stored reasoning text — the
+         * app still requests and stores it exactly as before, and turning the
+         * setting back on shows it again. Every branch sets visibility
+         * explicitly because rows are recycled.
          */
         private fun updateReasoning(chatMessage: HashMap<String, Any>, position: Int) {
             val container = reasoningContainer ?: return
             val text = chatMessage[KEY_MESSAGE_REASONING]?.toString()?.takeIf { it.isNotBlank() }
-            if (chatMessage["isBot"] != true || text == null) {
+            if (chatMessage["isBot"] != true || text == null || !preferences.getShowThinking()) {
                 container.visibility = View.GONE
                 reasoningText?.text = ""
                 reasoningHeader?.setOnClickListener(null)
@@ -1309,8 +1332,26 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             reasoningText?.text = text
             reasoningText?.visibility = if (expanded) View.VISIBLE else View.GONE
-            // Chevron: right when collapsed, rotated to point down when expanded.
-            reasoningChevron?.rotation = if (expanded) 90f else 0f
+            // Chevron: up (rotated 180 from the down-pointing asset) when
+            // collapsed, down (unrotated) when expanded.
+            reasoningChevron?.rotation = if (expanded) 0f else 180f
+
+            // One blank line above Thinking when the model/token line above it
+            // is showing anything (model name, token count, or both), so
+            // Thinking never sits flush against it. No gap when that line is
+            // empty — Thinking then starts immediately, same as before (owner
+            // spec, Aug 23 2026). Stays flush with the bubble's own left edge
+            // either way; it never follows the model/token line's portrait
+            // indent.
+            val metaVisible = messageMeta?.visibility == View.VISIBLE
+            val containerParams = container.layoutParams as? ViewGroup.MarginLayoutParams
+            if (containerParams != null) {
+                val desiredTopMargin = if (metaVisible) (messageMeta?.lineHeight ?: 0) else 0
+                if (containerParams.topMargin != desiredTopMargin) {
+                    containerParams.topMargin = desiredTopMargin
+                    container.layoutParams = containerParams
+                }
+            }
 
             reasoningHeader?.setOnClickListener {
                 if (!expandedReasoning.add(key)) expandedReasoning.remove(key)
@@ -1792,6 +1833,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // The reasoning indicator rides the same bar and follows the same
             // bubble foreground so its glyph reads on any theme.
             reasoningIndicator?.setColorFilter(foreground)
+            // The Thinking chevron was only ever tinted by its authored XML
+            // ?attr/colorPrimary, the same bug class described above — against
+            // some bubble/theme combinations that left it the same color as
+            // its background, effectively invisible. It now follows the same
+            // live bubble foreground as every other glyph here. The complete
+            // Thinking disclosure uses the same resolved foreground so its
+            // label, chevron, and revealed body move together across themes.
+            reasoningChevron?.setColorFilter(foreground)
+            reasoningLabel?.setTextColor(foreground)
+            reasoningText?.setTextColor(foreground)
         }
 
         /** Bind the response-version-local Active Memories action. */
@@ -1912,6 +1963,21 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
             username.layoutParams = nameParams
 
+            // The compact metadata line lives inside the bubble and normally
+            // starts at the bubble's own content edge, which already lines up
+            // with the name when there is no portrait (both are inset by the
+            // same speaker margin). With a portrait, the name is pushed right
+            // to clear it while the bubble is not, so the metadata line needs
+            // its own extra start margin to keep lining up under the name
+            // (owner spec, Aug 23 2026). Only applies when the name is
+            // actually shown beside the portrait; otherwise the metadata line
+            // keeps its default bubble-edge position.
+            messageMeta?.let { meta ->
+                val metaParams = meta.layoutParams as ConstraintLayout.LayoutParams
+                metaParams.marginStart = if (showPortrait && showName) metaPortraitExtraStartPx() else 0
+                meta.layoutParams = metaParams
+            }
+
             // When there is no portrait, reserve the same name-to-body gap as a
             // normal response before the image begins. With a portrait the whole
             // image bubble is already pushed below the portrait and adjacent name.
@@ -2000,6 +2066,28 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
         private fun dimensionPixelSize(resource: Int): Int =
             context.resources.getDimensionPixelSize(resource)
+
+        /** How far past the bubble's own content edge the metadata line must
+         *  shift to line up with the name when the name sits beside a
+         *  portrait, in pixels. Never negative. */
+        private fun metaPortraitExtraStartPx(): Int {
+            val nameStart = dimensionPixelSize(R.dimen.chat_name_portrait_edge_inset)
+            val bubbleContentStart = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
+                dimensionPixelSize(R.dimen.chat_message_content_padding)
+            return (nameStart - bubbleContentStart).coerceAtLeast(0)
+        }
+
+        /** The pixel width available to the metadata line before it would run
+         *  past the row's right edge, used to decide whether the model name
+         *  and token count still fit on one line. */
+        private fun availableMetaWidthPx(nameBesidePortrait: Boolean): Int {
+            val screenWidth = context.resources.displayMetrics.widthPixels
+            val insets = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
+                dimensionPixelSize(R.dimen.chat_message_ai_right_inset) +
+                dimensionPixelSize(R.dimen.chat_message_content_padding) * 2
+            val portraitExtra = if (nameBesidePortrait) metaPortraitExtraStartPx() else 0
+            return screenWidth - insets - portraitExtra
+        }
 
         private fun resolveThemeColor(attribute: Int): Int {
             val value = TypedValue()

@@ -59,7 +59,6 @@ object PerChatSettingKeys {
         // Imaging
         "imageModel",
         "resolution",
-        "imagine_command",
 
         // Voice & speech
         "audio",

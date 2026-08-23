@@ -248,10 +248,8 @@
                                 android:layout_weight="1" />
 
                             <ImageButton
+                                style="@style/Widget.App.Chat.ComposerContentToggle"
                                 android:id="@+id/btn_expand_content"
-                                android:layout_width="48dp"
-                                android:layout_height="48dp"
-                                android:background="@color/transparent"
                                 android:contentDescription="@string/expand_content"
                                 android:src="@drawable/ic_expand_content"
                                 android:visibility="gone"
@@ -292,12 +290,10 @@
                     </LinearLayout>
 
                     <ImageButton
+                        style="@style/Widget.App.Chat.ComposerContentToggle"
                         android:id="@+id/btn_collapse_content"
-                        android:layout_width="48dp"
-                        android:layout_height="48dp"
                         android:layout_marginTop="8dp"
                         android:layout_marginEnd="8dp"
-                        android:background="@color/transparent"
                         android:contentDescription="@string/collapse_content"
                         android:src="@drawable/ic_collapse_content"
                         android:visibility="gone"

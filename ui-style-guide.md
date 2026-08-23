@@ -692,10 +692,23 @@ Use:
 
 - `Widget.App.Chat.ComposerHost` on the outer bottom composer host. It keeps the space behind the floating oblong transparent.
 - `Widget.App.Chat.ComposerSurface` on the live composer surface. It uses `@drawable/bubble_in`, so the editor and its controls resolve the same app-owned theme surface as the incoming AI bubble.
+- `Widget.App.Chat.ComposerContentToggle` on both Expand Content and Collapse Content. It owns their 48dp icon-button geometry, transparent background, centered icon, and theme-resolved tint. The layout owns only their different placement and visibility. Do not replace this background in Kotlin, including legacy theme handling.
 
 The initial empty composer keeps the one-row editor between the bottom controls. Focusing it moves that same editor above the controls and allows natural growth up to eight lines. The expand control is shown only for an active non-empty draft; expanded mode uses the bounded space below the app header and the collapse control restores the previous mode. Keep the controls in this order: Add, conditional persistent Includes, Expand content, microphone, Send.
 
 Do not assign phone/dynamic-system colors or a second local composer palette in XML or Kotlin. The host remains transparent and the surface resolves through the shared drawable/theme roles.
+
+## Chat Thinking disclosure
+
+Use the complete `Widget.App.Chat.Thinking.*` family for the provider-supplied Thinking disclosure on assistant replies:
+
+- `Container` for the disclosure block;
+- `Header` for the tappable label/chevron row;
+- `Label` for the bold Thinking label;
+- `Chevron` for its outline expand/collapse glyph;
+- `Body` for the selectable reasoning text.
+
+The family owns the component's size, spacing, typography, default theme colors, and borderless header interaction. Message layouts must not repeat those attributes inline. `ChatAdapter` may recolor the label, body, and chevron together through its single bubble-foreground path so they retain contrast when bubble appearance changes; that path resolves semantic theme attributes rather than fixed palette colors. Expanded/collapsed rotation and visibility remain behavior owned by `ChatAdapter`.
 
 ## Attached-document strip
 

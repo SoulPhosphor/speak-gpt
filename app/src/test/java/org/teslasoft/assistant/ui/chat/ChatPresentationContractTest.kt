@@ -87,6 +87,45 @@ class ChatPresentationContractTest {
     }
 
     @Test
+    fun thinkingAndComposerTogglesUseCentralThemeReadyStyles() {
+        val themes = source("src/main/res/values/themes.xml")
+        val assistantLayout = source("src/main/res/layout/view_assistant_bot_message.xml")
+        val chatLayout = source("src/main/res/layout/activity_chat.xml")
+        val chatActivity = source(
+            "src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt"
+        )
+        val expandIcon = source("src/main/res/drawable/ic_expand_content.xml")
+        val collapseIcon = source("src/main/res/drawable/ic_collapse_content.xml")
+
+        listOf("Container", "Header", "Label", "Chevron", "Body").forEach { part ->
+            assertTrue(
+                "Thinking $part style is missing",
+                themes.contains("name=\"Widget.App.Chat.Thinking.$part\"")
+            )
+            assertTrue(
+                "Thinking $part is not using its shared style",
+                assistantLayout.contains("style=\"@style/Widget.App.Chat.Thinking.$part\"")
+            )
+        }
+        assertTrue(
+            themes.contains("name=\"Widget.App.Chat.ComposerContentToggle\"")
+        )
+        assertTrue(
+            chatLayout.split("style=\"@style/Widget.App.Chat.ComposerContentToggle\"").size - 1 == 2
+        )
+        assertFalse(chatActivity.contains("btnExpandContent?.background"))
+        assertFalse(chatActivity.contains("btnCollapseContent?.background"))
+        assertFalse(expandIcon.contains("android:tint="))
+        assertFalse(collapseIcon.contains("android:tint="))
+        val adapter = source(
+            "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
+        )
+        assertTrue(adapter.contains("reasoningChevron?.setColorFilter(foreground)"))
+        assertTrue(adapter.contains("reasoningLabel?.setTextColor(foreground)"))
+        assertTrue(adapter.contains("reasoningText?.setTextColor(foreground)"))
+    }
+
+    @Test
     fun layoutsUseApprovedGeometryResourcesAndKeepExistingActions() {
         val dimens = source("src/main/res/values/dimens.xml")
         assertTrue(dimens.contains("name=\"chat_message_speaker_inset\">25dp"))

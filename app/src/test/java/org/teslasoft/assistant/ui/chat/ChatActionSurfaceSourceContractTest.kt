@@ -47,11 +47,12 @@ class ChatActionSurfaceSourceContractTest {
     }
 
     @Test
-    fun expandIsBesideMicrophoneAndCollapseHasNoTonalBackground() {
+    fun expandIsBesideMicrophoneAndContentTogglesUseTheBareSharedStyle() {
         val layout = source("main/res/layout/activity_chat.xml")
         assertOrdered(layout, "@+id/btn_expand_content", "@+id/btn_micro")
-        assertTrue(view(layout, "btn_expand_content").contains("android:background=\"@color/transparent\""))
-        assertTrue(view(layout, "btn_collapse_content").contains("android:background=\"@color/transparent\""))
+        val sharedStyle = "style=\"@style/Widget.App.Chat.ComposerContentToggle\""
+        assertTrue(view(layout, "btn_expand_content").contains(sharedStyle))
+        assertTrue(view(layout, "btn_collapse_content").contains(sharedStyle))
 
         val composer = source("main/java/org/teslasoft/assistant/ui/chat/ChatComposerLayout.kt")
         assertTrue(composer.contains("if (!expanded && active)"))

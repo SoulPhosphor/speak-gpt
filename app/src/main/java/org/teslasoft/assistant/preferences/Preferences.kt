@@ -429,24 +429,6 @@ class Preferences internal constructor(
     }
 
     /**
-     * Retrieves the imagine command status from the shared preferences.
-     *
-     * @return The imagine command status, true if enabled or false otherwise.
-     */
-    fun getImagineCommand() : Boolean {
-        return getBoolean("imagine_command", true)
-    }
-
-    /**
-     * Enable/disable imagine command.
-     *
-     * @param mode mode.
-     */
-    fun setImagineCommand(mode: Boolean) {
-        putBoolean("imagine_command", mode)
-    }
-
-    /**
      * Retrieves the auto language detection status in the shared preferences.
      *
      * @return uto language detection status to be stored (true for enabled, false otherwise).
@@ -577,7 +559,18 @@ class Preferences internal constructor(
     fun getShowThinkingIndicator(): Boolean = getGlobalBoolean("chat_show_thinking_indicator", true)
 
     fun setShowThinkingIndicator(state: Boolean) {
-        putGlobalBoolean("chat_show_thinking_indicator", state)
+        putGlobalBoolean("chat_show_thinking_indicator", state, true)
+    }
+
+    /** Whether the Thinking disclosure (the collapsible reasoning block under
+     *  an AI reply) is shown at all, on current and past chats alike (Chat
+     *  Settings → Show Thinking). Default on. This gates display only — the
+     *  reasoning text itself is still requested and stored exactly as before,
+     *  so turning this back on restores it everywhere unchanged. */
+    fun getShowThinking(): Boolean = getGlobalBoolean("chat_show_thinking", true)
+
+    fun setShowThinking(state: Boolean) {
+        putGlobalBoolean("chat_show_thinking", state, true)
     }
 
     /** Renamed presentation of Desktop Mode; the stored key and behavior stay intact. */
@@ -1679,7 +1672,7 @@ class Preferences internal constructor(
 
     /**
      * The persistent "Use Importance Ratings" master toggle (canonical recovery
-     * plan §7.1). Off by default: while Off, importance controls are hidden,
+     * plan §7.1). On by default: while Off, importance controls are hidden,
      * retrieval ignores every importance value, and new memories store the
      * neutral 0 — but stored values are never erased, so turning it back On
      * restores them. Enforcement lands in later phases; Phase 1 only persists
@@ -1690,7 +1683,7 @@ class Preferences internal constructor(
     }
 
     fun setUseImportanceRatings(enabled: Boolean) {
-        putGlobalBoolean("use_importance_ratings", enabled, false)
+        putGlobalBoolean("use_importance_ratings", enabled, true)
     }
 
     /**
@@ -2343,9 +2336,10 @@ class Preferences internal constructor(
      * like the Summarizer settings: one configuration for the whole app.
      * ImageGenerationMigration seeds these once from the default settings
      * profile; the legacy per-chat copies (imageModel, resolution,
-     * imagine_command, function_calling) stop being read
-     * as the rebuild rewires each path, and are removed only after
-     * migration tests plus a stable release (§14).
+     * function_calling) stop being read as the rebuild rewires each path,
+     * and are removed only after migration tests plus a stable release
+     * (§14). The legacy imagine_command copy was removed outright — it had
+     * no remaining reader anywhere in the app.
      * ------------------------------------------------------------------ */
 
     /** Let the AI Create Images: whether the create_image tool is offered
@@ -2403,8 +2397,8 @@ class Preferences internal constructor(
         putGlobalString("image_gen_default_quality", quality.storedValue, "automatic")
     }
 
-    /** App-wide Enable `/imagine` (default on). Replaces the per-chat
-     *  imagine_command once the rebuild rewires the command path. */
+    /** App-wide Enable `/imagine` (default on). The only reader of this
+     *  feature's on/off state; the old per-chat copy is gone. */
     fun getImagineCommandGlobal(): Boolean =
         getGlobalBoolean("image_gen_imagine_command", true)
 

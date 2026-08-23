@@ -66,7 +66,9 @@ class NewChatSettingCopyTest {
             // FunctionCalling was removed from the copy list with the whole
             // feature (image-generation-rebuild-plan.md §15) — a deliberate
             // migration-era change, not drift.
-            "ImagineCommand",
+            // ImagineCommand was removed from the copy list once its
+            // per-chat value had no remaining reader anywhere in the app —
+            // likewise deliberate, not drift.
             "LogitBiasesConfigId",
             "MaxTokens",
             "Model",

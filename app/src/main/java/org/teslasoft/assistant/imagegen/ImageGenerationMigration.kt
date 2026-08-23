@@ -37,7 +37,6 @@ object ImageGenerationMigration {
         val model: String,
         val shape: ImageShape,
         val quality: ImageQuality,
-        val imagineCommand: Boolean,
         val aiCreateImages: Boolean
     )
 
@@ -45,23 +44,22 @@ object ImageGenerationMigration {
      * §14 seeding rules, in order: the generator endpoint and model come
      * from the default profile so behavior does not abruptly change; the
      * shape is the legacy resolution mapped to the closest shape; quality
-     * is a new setting with no legacy value, so it starts AUTOMATIC; the
-     * `/imagine` toggle keeps the default profile's value; and Let the AI
-     * Create Images follows the old Function Calling state only to
-     * preserve the user's current choice — afterwards it is independent.
+     * is a new setting with no legacy value, so it starts AUTOMATIC; and
+     * Let the AI Create Images follows the old Function Calling state only
+     * to preserve the user's current choice — afterwards it is
+     * independent. The `/imagine` toggle has no legacy source any more —
+     * it keeps its own default (on) instead of being seeded.
      */
     fun seedFromLegacy(
         legacyEndpointId: String,
         legacyImageModel: String,
         legacyResolution: String,
-        legacyImagineCommand: Boolean,
         legacyFunctionCalling: Boolean
     ): Seed = Seed(
         endpointId = legacyEndpointId,
         model = legacyImageModel,
         shape = shapeFromLegacyResolution(legacyResolution),
         quality = ImageQuality.AUTOMATIC,
-        imagineCommand = legacyImagineCommand,
         aiCreateImages = legacyFunctionCalling
     )
 
@@ -97,7 +95,6 @@ object ImageGenerationMigration {
             legacyEndpointId = preferences.getApiEndpointId(),
             legacyImageModel = preferences.getImageModel(),
             legacyResolution = preferences.getResolution(),
-            legacyImagineCommand = preferences.getImagineCommand(),
             legacyFunctionCalling = preferences.getLegacyFunctionCallingForMigration()
         )
 
@@ -105,7 +102,6 @@ object ImageGenerationMigration {
         preferences.setImageGeneratorModel(seed.model)
         preferences.setImageGeneratorShape(seed.shape)
         preferences.setImageGeneratorQuality(seed.quality)
-        preferences.setImagineCommandGlobal(seed.imagineCommand)
         preferences.setAiCreateImagesEnabled(seed.aiCreateImages)
         preferences.setImageGenerationSeeded()
     }

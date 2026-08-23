@@ -1522,18 +1522,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     R.drawable.btn_accent_tonal_v5_amoled
                 )!!, this
             )
-            btnExpandContent?.background = getAmoledAccentDrawableV2(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5_amoled
-                )!!, this
-            )
-            btnCollapseContent?.background = getAmoledAccentDrawableV2(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5_amoled
-                )!!, this
-            )
         } else {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
                 window.navigationBarColor = getColor(R.color.accent_100)
@@ -1571,18 +1559,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
 
             btnPersistentIncludes?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5
-                )!!, this
-            )
-            btnExpandContent?.background = getDarkAccentDrawable(
-                AppCompatResources.getDrawable(
-                    this,
-                    R.drawable.btn_accent_tonal_v5
-                )!!, this
-            )
-            btnCollapseContent?.background = getDarkAccentDrawable(
                 AppCompatResources.getDrawable(
                     this,
                     R.drawable.btn_accent_tonal_v5
