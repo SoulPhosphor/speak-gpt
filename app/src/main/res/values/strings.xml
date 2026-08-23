@@ -3210,6 +3210,9 @@
     <string name="large_compaction_title">Large Compaction</string>
     <string name="large_compaction_body">This operation is unusually large and is estimated to send about %1$s input tokens to the compaction model. It may require multiple requests and use significantly more API credits than usual.</string>
     <string name="compact_anyway">Compact Anyway</string>
+    <string name="regenerate_unavailable_title">Regenerate Unavailable</string>
+    <string name="regenerate_unavailable_summary">This message is already part of the summary.</string>
+    <string name="regenerate_unavailable_compaction">This message is already part of the compacted conversation.</string>
     <string name="summarizer_icon_summary_desc">Summary</string>
     <string name="summarizer_icon_errors_desc">Summarizer Errors</string>
 

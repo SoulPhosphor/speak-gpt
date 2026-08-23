@@ -36,7 +36,7 @@ class ManualCompactionWiringContractTest {
     }
 
     @Test
-    fun manualCompactionUsesReferenceOnlySnapshotAndActivatesTransmission() {
+    fun manualCompactionUsesAttachmentBlindSnapshotAndActivatesTransmission() {
         assertTrue(activity.contains(".summarizerConversation(storedCanonical)"))
         assertTrue(activity.contains("controller.runManualCompaction("))
         assertTrue(activity.contains("getManualCompactionBoundary()"))
@@ -52,6 +52,27 @@ class ManualCompactionWiringContractTest {
         )
         assertTrue(manual.contains("prefs.commitManualCompaction("))
         assertFalse(manual.contains("prefs.commitSummarizerFoldIn("))
+    }
+
+    @Test
+    fun successfullyCondensedRepliesBecomeImmutableHistory() {
+        val controller = source(
+            "src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt"
+        )
+        val adapter = source(
+            "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
+        )
+        val preferences = source(
+            "src/main/java/org/teslasoft/assistant/preferences/Preferences.kt"
+        )
+
+        assertTrue(controller.contains("advanceSummaryRegenerationLockBoundary("))
+        assertTrue(controller.contains("advanceCompactionRegenerationLockBoundary("))
+        assertTrue(preferences.contains("ensureCondensedRegenerationLockMigration()"))
+        assertTrue(adapter.contains("R.drawable.ic_rule_settings"))
+        assertTrue(adapter.contains("showRegenerateUnavailablePopup(anchor, lockKind)"))
+        assertTrue(adapter.contains("promote.visibility = View.GONE"))
+        assertTrue(activity.contains("if (condensedRegenerationLockKind(position) != null) return"))
     }
 
     @Test

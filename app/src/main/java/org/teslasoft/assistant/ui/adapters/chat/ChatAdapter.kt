@@ -84,6 +84,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.util.summarizer.SummarizerController
+import org.teslasoft.assistant.util.summarizer.CondensedRegenerationLock
 import com.google.android.material.elevation.SurfaceColors
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.core.spans.CodeBlockSpan
@@ -132,6 +133,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private var listener: OnUpdateListener? = null
     private var bulkActionMode = false
     private var manualCompactionBoundary = 0
+    private var summaryRegenerationLockBoundary = 0
+    private var compactionRegenerationLockBoundary = 0
 
     // Assistant-side picture, already cascaded by ChatActivity off the main
     // thread (the active Companion's own picture, else the Default AI Avatar).
@@ -375,6 +378,32 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             notifyItemChanged(manualCompactionBoundary - 1)
         }
     }
+
+    /**
+     * Regeneration locks are durable history, separate from the currently used
+     * summary/compaction projection. Rebinding keeps recycled rows honest when
+     * a background batch advances either prefix.
+     */
+    fun setCondensedRegenerationLockBoundaries(
+        summaryBoundary: Int,
+        compactionBoundary: Int
+    ) {
+        val nextSummary = summaryBoundary.coerceAtLeast(0)
+        val nextCompaction = compactionBoundary.coerceAtLeast(0)
+        if (summaryRegenerationLockBoundary == nextSummary &&
+            compactionRegenerationLockBoundary == nextCompaction
+        ) return
+        summaryRegenerationLockBoundary = nextSummary
+        compactionRegenerationLockBoundary = nextCompaction
+        notifyDataSetChanged()
+    }
+
+    private fun regenerationLockKind(position: Int): CondensedRegenerationLock.Kind? =
+        CondensedRegenerationLock.kindAt(
+            position,
+            summaryRegenerationLockBoundary,
+            compactionRegenerationLockBoundary
+        )
 
     /**
      * Which messages currently have their "Includes" record opened. Held on
@@ -1147,6 +1176,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // shown version is already canonical; resume when it is not, tapping
             // which makes the shown version the canonical response.
             btnVersionPromote?.let { promote ->
+                if (regenerationLockKind(position) != null) {
+                    promote.visibility = View.GONE
+                    promote.setOnClickListener(null)
+                    promote.isClickable = false
+                    return@let
+                }
+                promote.visibility = View.VISIBLE
                 if (current == canonical) {
                     promote.setImageResource(R.drawable.ic_check_circle)
                     promote.contentDescription = context.getString(R.string.version_current_desc)
@@ -1731,15 +1767,68 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val isLast = position == dataArray.size - 1
             if (isBot && (!isImage || isLast)) {
                 btnRetry.visibility = View.VISIBLE
-                btnRetry.setOnClickListener {
-                    if (!bulkActionMode) {
-                        val pos = bindingAdapterPosition
-                        listener?.onRegenerate(if (pos != RecyclerView.NO_POSITION) pos else position)
+                val lockKind = regenerationLockKind(position)
+                if (lockKind != null) {
+                    btnRetry.setImageResource(R.drawable.ic_rule_settings)
+                    btnRetry.contentDescription =
+                        context.getString(R.string.regenerate_unavailable_title)
+                    btnRetry.tooltipText = context.getString(R.string.regenerate_unavailable_title)
+                    btnRetry.setOnClickListener { anchor ->
+                        if (!bulkActionMode) showRegenerateUnavailablePopup(anchor, lockKind)
+                    }
+                } else {
+                    btnRetry.setImageResource(R.drawable.ic_retry)
+                    btnRetry.contentDescription = context.getString(R.string.btn_msg_retry)
+                    btnRetry.tooltipText = context.getString(R.string.btn_msg_retry)
+                    btnRetry.setOnClickListener {
+                        if (!bulkActionMode) {
+                            val pos = bindingAdapterPosition
+                            listener?.onRegenerate(
+                                if (pos != RecyclerView.NO_POSITION) pos else position
+                            )
+                        }
                     }
                 }
             } else {
                 btnRetry.visibility = View.GONE
+                btnRetry.setOnClickListener(null)
             }
+        }
+
+        /** Small anchored, outside-dismissed explanation for immutable history. */
+        private fun showRegenerateUnavailablePopup(
+            anchor: View,
+            kind: CondensedRegenerationLock.Kind
+        ) {
+            val content = LayoutInflater.from(context)
+                .inflate(R.layout.view_regenerate_unavailable_popup, null)
+            content.findViewById<TextView>(R.id.regenerate_unavailable_body).setText(
+                when (kind) {
+                    CondensedRegenerationLock.Kind.SUMMARY ->
+                        R.string.regenerate_unavailable_summary
+                    CondensedRegenerationLock.Kind.COMPACTION ->
+                        R.string.regenerate_unavailable_compaction
+                }
+            )
+            val popup = PopupWindow(
+                content,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true
+            )
+            popup.isOutsideTouchable = true
+            popup.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            popup.elevation = anchor.resources.displayMetrics.density * 8f
+            content.measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            popup.showAsDropDown(
+                anchor,
+                0,
+                -(anchor.height + content.measuredHeight),
+                Gravity.START
+            )
         }
 
         /**

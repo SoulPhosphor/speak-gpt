@@ -2658,13 +2658,92 @@ class Preferences internal constructor(
         getString("summarizer_projection_version", "0").toIntOrNull() ?: 0
 
     /**
+     * One-time bridge for conversations condensed before regeneration locks
+     * existed. Capture the live summary/compaction bookmarks before a future
+     * projection migration is allowed to clear them.
+     */
+    private fun ensureCondensedRegenerationLockMigration(): Boolean {
+        if (getString("condensed_regeneration_lock_migrated", "false") == "true") {
+            return true
+        }
+        val summaryBoundary = maxOf(
+            getString("summary_regeneration_lock_boundary", "0").toIntOrNull() ?: 0,
+            getSummarizerFoldedCount()
+        )
+        val compactionBoundary = maxOf(
+            getString("compaction_regeneration_lock_boundary", "0").toIntOrNull() ?: 0,
+            getManualCompactionBoundary()
+        )
+        return try {
+            preferences.edit()
+                .putString("summary_regeneration_lock_boundary", summaryBoundary.toString())
+                .putString("compaction_regeneration_lock_boundary", compactionBoundary.toString())
+                .putString("condensed_regeneration_lock_migrated", "true")
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun getSummaryRegenerationLockBoundary(): Int {
+        ensureCondensedRegenerationLockMigration()
+        return getString("summary_regeneration_lock_boundary", "0")
+            .toIntOrNull()?.coerceAtLeast(0) ?: 0
+    }
+
+    fun getCompactionRegenerationLockBoundary(): Int {
+        ensureCondensedRegenerationLockMigration()
+        return getString("compaction_regeneration_lock_boundary", "0")
+            .toIntOrNull()?.coerceAtLeast(0) ?: 0
+    }
+
+    /** A usable batch permanently fixes its processed prefix into history. */
+    fun advanceSummaryRegenerationLockBoundary(value: Int): Boolean =
+        advanceCondensedRegenerationLockBoundary(
+            "summary_regeneration_lock_boundary", value
+        )
+
+    /** A usable manual batch permanently fixes its processed prefix. */
+    fun advanceCompactionRegenerationLockBoundary(value: Int): Boolean =
+        advanceCondensedRegenerationLockBoundary(
+            "compaction_regeneration_lock_boundary", value
+        )
+
+    private fun advanceCondensedRegenerationLockBoundary(key: String, value: Int): Boolean {
+        if (!ensureCondensedRegenerationLockMigration()) return false
+        val current = getString(key, "0").toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val next = maxOf(current, value.coerceAtLeast(0))
+        if (next == current) return true
+        return try {
+            preferences.edit().putString(key, next.toString()).commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Direct realignment after canonical messages inside a locked prefix are deleted. */
+    fun setSummaryRegenerationLockBoundary(value: Int) {
+        ensureCondensedRegenerationLockMigration()
+        putString("summary_regeneration_lock_boundary", value.coerceAtLeast(0).toString())
+    }
+
+    fun setCompactionRegenerationLockBoundary(value: Int) {
+        ensureCondensedRegenerationLockMigration()
+        putString("compaction_regeneration_lock_boundary", value.coerceAtLeast(0).toString())
+    }
+
+    /**
      * Invalidates only incompatible derived Summarizer state. Canonical chat
      * history and its Include ownership are untouched, so the next cycle
-     * safely rebuilds from conversation text plus stable Include references.
+     * safely rebuilds from conversation text alone. The independently projected
+     * Include layer and its user-selected forms remain untouched.
      * A failed commit is reported to the caller, which must omit the stale
      * summary and use a zero bookmark rather than risk duplicate payloads.
      */
     fun ensureSummarizerProjectionCompatibility(): Boolean {
+        // VERSION 3 makes summary/compaction completely attachment-blind. Lock
+        // the already-condensed history before invalidating older derived text.
+        if (!ensureCondensedRegenerationLockMigration()) return false
         if (getSummarizerProjectionVersion() == SummarizerProjectionContract.VERSION) {
             return true
         }

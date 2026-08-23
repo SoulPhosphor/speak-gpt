@@ -481,6 +481,18 @@ class SummarizerController(
                             summary = result.summary
                             folded = result.foldedCount
                             overLength = result.overLength
+                            if (!prefs.advanceCompactionRegenerationLockBoundary(folded)) {
+                                recordFailure(
+                                    prefs,
+                                    SummarizerErrorCategory.SAVE_FAILED,
+                                    runtime.endpoint.label,
+                                    runtime.model,
+                                    null,
+                                    "The compacted batch was usable, but its permanent regeneration lock could not be saved."
+                                )
+                                return false
+                            }
+                            notifyStateChanged()
                             setOperationState(
                                 OperationState.Running(
                                     OperationKind.COMPACTING,
@@ -595,6 +607,19 @@ class SummarizerController(
             priorOverLength = prefs.getSummarizerOverLength()
         )
         if (result !is FoldBatchResult.Advanced) return false
+        // A usable batch permanently fixes the processed prefix even if the
+        // user later discards, pauses, or otherwise undoes its derived summary.
+        if (!prefs.advanceSummaryRegenerationLockBoundary(result.foldedCount)) {
+            recordFailure(
+                prefs,
+                SummarizerErrorCategory.SAVE_FAILED,
+                runtime.endpoint.label,
+                runtime.model,
+                null,
+                "The summary batch was usable, but its permanent regeneration lock could not be saved."
+            )
+            return false
+        }
         if (!prefs.commitSummarizerFoldIn(
                 result.summary,
                 result.foldedCount,

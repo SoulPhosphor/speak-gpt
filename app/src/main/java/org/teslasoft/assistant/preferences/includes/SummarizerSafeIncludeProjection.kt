@@ -22,7 +22,7 @@ package org.teslasoft.assistant.preferences.includes
  * incompatible with the separate persistent-Include layer.
  */
 object SummarizerProjectionContract {
-    const val VERSION = 2
+    const val VERSION = 3
 }
 
 /** One canonical stored conversation message before request projection. */
@@ -95,7 +95,17 @@ object SummarizerSafeIncludeProjectionBuilder {
      */
     fun summarizerConversation(
         messages: List<CanonicalConversationMessage>
-    ): List<ProjectedConversationMessage> = referenceConversation(messages, owners(messages))
+    ): List<ProjectedConversationMessage> = messages.map { message ->
+        // Attachments remain exclusively in the independently projected,
+        // user-controlled Include layer. Neither their payload nor even an
+        // attachment reference is material for summary/compaction.
+        ProjectedConversationMessage(
+            isBot = message.isBot,
+            // Generated-image rows are attachment references too. Retain the
+            // blank slot for bookmark alignment without exposing the local file.
+            text = message.text.takeUnless { it.startsWith("~file:") }.orEmpty()
+        )
+    }
 
     private fun owners(
         messages: List<CanonicalConversationMessage>

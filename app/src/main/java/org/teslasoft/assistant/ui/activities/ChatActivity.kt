@@ -294,6 +294,7 @@ import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.util.providerLimitMessage
 import org.teslasoft.assistant.util.reachedServer
 import org.teslasoft.assistant.util.ProviderErrorInfo
+import org.teslasoft.assistant.util.summarizer.CondensedRegenerationLock
 import io.ktor.client.plugins.observer.ResponseObserver
 import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
@@ -4518,6 +4519,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** data_alert (with count badge) while the error log has entries;
      *  subject while the summarizer is on for this chat (decisions 11/16). */
     private fun refreshSummarizerIcons() {
+        refreshCondensedRegenerationLocks()
         val summarizerOn = preferences?.getChatUseSummarizer() == true
         val hasCondensedConversation =
             (preferences?.getManualCompactionBoundary() ?: 0) > 0 ||
@@ -4536,6 +4538,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             summarizerErrorBadge?.text = errors.size.toString()
         }
     }
+
+    private fun refreshCondensedRegenerationLocks() {
+        adapter?.setCondensedRegenerationLockBoundaries(
+            preferences?.getSummaryRegenerationLockBoundary() ?: 0,
+            preferences?.getCompactionRegenerationLockBoundary() ?: 0
+        )
+    }
+
+    private fun condensedRegenerationLockKind(position: Int): CondensedRegenerationLock.Kind? =
+        CondensedRegenerationLock.kindAt(
+            position,
+            preferences?.getSummaryRegenerationLockBoundary() ?: 0,
+            preferences?.getCompactionRegenerationLockBoundary() ?: 0
+        )
 
     /** A usable image generator requires both a live endpoint profile and a model. */
     private fun imageGeneratorConfigured(): Boolean = try {
@@ -11712,6 +11728,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     override fun onRegenerate(position: Int) {
         if (position < 0 || position >= messages.size) return
         if (messages[position]["isBot"] != true) return
+        // Adapter rows explain this with an anchored popup. Keep this guard so
+        // stale/recycled UI or any future caller can never bypass the history lock.
+        if (condensedRegenerationLockKind(position) != null) return
 
         // The latest turn just adds a version (Stage 1) — nothing follows it, so
         // there is nothing to discard and no warning is needed.
@@ -11769,6 +11788,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     override fun onMakeVersionCurrent(position: Int) {
         if (position < 0 || position >= messages.size) return
+        if (condensedRegenerationLockKind(position) != null) return
         val msg = messages[position]
         if (msg["isBot"] != true) return
         val variants = ChatAdapter.parseVariants(msg[ChatAdapter.KEY_VARIANTS]?.toString())
@@ -11825,6 +11845,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         calculateCost()
         refreshPersistentIncludeControls()
         refreshManualCompactionMarker()
+        refreshCondensedRegenerationLocks()
     }
 
     override fun onMessageEdited() {
@@ -12017,6 +12038,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
                 val manualBoundaryBefore =
                     preferences?.getManualCompactionBoundary() ?: 0
+                val summaryLockBefore =
+                    preferences?.getSummaryRegenerationLockBoundary() ?: 0
+                val compactionLockBefore =
+                    preferences?.getCompactionRegenerationLockBoundary() ?: 0
                 // §12 cleanup: note the generated-image files the selected
                 // messages reference before they are removed.
                 val deletedImageHashes = GeneratedImageFiles.referencedHashes(
@@ -12027,6 +12052,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
                 var removedBeforeBookmark = 0
                 var removedBeforeManualBoundary = 0
+                var removedBeforeSummaryLock = 0
+                var removedBeforeCompactionLock = 0
                 var pos = 0
                 var p = 0
                 while (pos < messagesSelectionProjection.size) {
@@ -12038,6 +12065,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         if (pos < manualBoundaryBefore) {
                             removedBeforeManualBoundary++
                         }
+                        if (pos < summaryLockBefore) removedBeforeSummaryLock++
+                        if (pos < compactionLockBefore) removedBeforeCompactionLock++
                         messages.removeAt(pos - p)
                         p++
                     }
@@ -12050,6 +12079,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (removedBeforeManualBoundary > 0) {
                     preferences?.setManualCompactionBoundary(
                         manualBoundaryBefore - removedBeforeManualBoundary
+                    )
+                }
+                if (removedBeforeSummaryLock > 0) {
+                    preferences?.setSummaryRegenerationLockBoundary(
+                        summaryLockBefore - removedBeforeSummaryLock
+                    )
+                }
+                if (removedBeforeCompactionLock > 0) {
+                    preferences?.setCompactionRegenerationLockBoundary(
+                        compactionLockBefore - removedBeforeCompactionLock
                     )
                 }
 
