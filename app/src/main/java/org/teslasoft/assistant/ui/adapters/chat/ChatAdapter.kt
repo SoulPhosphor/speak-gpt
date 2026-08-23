@@ -1815,6 +1815,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // The reasoning indicator rides the same bar and follows the same
             // bubble foreground so its glyph reads on any theme.
             reasoningIndicator?.setColorFilter(foreground)
+            // The Thinking chevron was only ever tinted by its authored XML
+            // ?attr/colorPrimary, the same bug class described above — against
+            // some bubble/theme combinations that left it the same color as
+            // its background, effectively invisible. It now follows the same
+            // live bubble foreground as every other glyph here.
+            reasoningChevron?.setColorFilter(foreground)
         }
 
         /**
