@@ -60,6 +60,8 @@ class ChatComposerLayout @JvmOverloads constructor(
     private var active = false
     private var movingFocusedEditor = false
     private var expansionListener: ((Boolean) -> Unit)? = null
+    private var beforeResize: (() -> Unit)? = null
+    private var afterResize: (() -> Unit)? = null
 
     private val edgeMargin = dp(8)
     private val textBottomGap = dp(4)
@@ -132,6 +134,17 @@ class ChatComposerLayout @JvmOverloads constructor(
         listener?.invoke(expanded)
     }
 
+    /** Lets ChatActivity pin the transcript's current scroll anchor around a
+     * composer mode change. The composer resizing (promoting, collapsing,
+     * expanding) should never itself move already-visible transcript
+     * content — only the keyboard's own arrival/departure should. `before`
+     * runs synchronously right before this composer's geometry changes;
+     * `after` runs once the resulting layout pass has settled. */
+    fun setResizeAnchorListener(before: (() -> Unit)?, after: (() -> Unit)?) {
+        beforeResize = before
+        afterResize = after
+    }
+
     fun isExpanded(): Boolean = expanded
 
     fun collapseIfExpanded(): Boolean {
@@ -165,7 +178,12 @@ class ChatComposerLayout @JvmOverloads constructor(
 
     private fun applyMode() {
         if (!::messageInput.isInitialized) return
+        beforeResize?.invoke()
+        applyModeInternal()
+        afterResize?.let { after -> post { after.invoke() } }
+    }
 
+    private fun applyModeInternal() {
         if (expanded || active) {
             moveEditorToContent()
         } else {

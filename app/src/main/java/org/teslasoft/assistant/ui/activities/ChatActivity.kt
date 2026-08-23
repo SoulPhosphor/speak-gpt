@@ -2610,6 +2610,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         composerSurface?.setExpansionListener { expanded ->
             setComposerContainerExpanded(expanded)
         }
+        composerSurface?.setResizeAnchorListener(
+            before = ::captureTranscriptAnchor,
+            after = ::restoreTranscriptAnchor
+        )
         root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
@@ -3124,6 +3128,42 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val visible = persistentIncludeIds().isNotEmpty()
         button.visibility = if (visible) View.VISIBLE else View.GONE
         button.isEnabled = visible
+    }
+
+    /** Position (and its on-screen offset) of the transcript row that sat at
+     * the top of the visible viewport just before the composer's own
+     * geometry changed. RecyclerView.NO_POSITION when there was nothing to
+     * anchor to (e.g. an empty chat). */
+    private var transcriptAnchorPosition = RecyclerView.NO_POSITION
+    private var transcriptAnchorOffset = 0
+
+    /**
+     * Composer promotion/collapse/expand must never itself move
+     * already-visible transcript content — only the keyboard's own
+     * arrival/departure should change what is on screen. Captured right
+     * before the composer's layout params change and restored once that
+     * resize's layout pass has settled (see ChatComposerLayout's
+     * setResizeAnchorListener), this keeps the row that was at the top of
+     * the viewport pinned there: content the composer no longer leaves room
+     * for is simply covered from the bottom instead of the whole transcript
+     * sliding to keep the newest message glued above the composer.
+     */
+    private fun captureTranscriptAnchor() {
+        val layoutManager = chat?.layoutManager as? LinearLayoutManager ?: return
+        val position = layoutManager.findFirstVisibleItemPosition()
+        if (position == RecyclerView.NO_POSITION) {
+            transcriptAnchorPosition = RecyclerView.NO_POSITION
+            return
+        }
+        transcriptAnchorPosition = position
+        transcriptAnchorOffset = layoutManager.findViewByPosition(position)?.top ?: 0
+    }
+
+    private fun restoreTranscriptAnchor() {
+        val position = transcriptAnchorPosition
+        if (position == RecyclerView.NO_POSITION) return
+        val layoutManager = chat?.layoutManager as? LinearLayoutManager ?: return
+        layoutManager.scrollToPositionWithOffset(position, transcriptAnchorOffset)
     }
 
     /**
