@@ -25,7 +25,8 @@ import org.teslasoft.assistant.theme.ThemeManager
 /**
  * Chat Settings (owner ruling, Aug 2026): a container in Settings, directly
  * beneath Appearance, for optional chat controls. It currently holds the
- * Thinking Indicator toggle; more controls will be added here later.
+ * Thinking Indicator and Show Thinking toggles; more controls will be added
+ * here later.
  */
 class ChatSettingsActivity : FragmentActivity() {
 
@@ -65,6 +66,11 @@ class ChatSettingsActivity : FragmentActivity() {
         findViewById<MaterialSwitch>(R.id.switch_thinking_indicator)?.apply {
             isChecked = preferences.getShowThinkingIndicator()
             setOnCheckedChangeListener { _, value -> preferences.setShowThinkingIndicator(value) }
+        }
+
+        findViewById<MaterialSwitch>(R.id.switch_show_thinking)?.apply {
+            isChecked = preferences.getShowThinking()
+            setOnCheckedChangeListener { _, value -> preferences.setShowThinking(value) }
         }
     }
 

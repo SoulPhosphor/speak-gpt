@@ -580,6 +580,17 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_show_thinking_indicator", state)
     }
 
+    /** Whether the Thinking disclosure (the collapsible reasoning block under
+     *  an AI reply) is shown at all, on current and past chats alike (Chat
+     *  Settings → Show Thinking). Default on. This gates display only — the
+     *  reasoning text itself is still requested and stored exactly as before,
+     *  so turning this back on restores it everywhere unchanged. */
+    fun getShowThinking(): Boolean = getGlobalBoolean("chat_show_thinking", true)
+
+    fun setShowThinking(state: Boolean) {
+        putGlobalBoolean("chat_show_thinking", state)
+    }
+
     /** Renamed presentation of Desktop Mode; the stored key and behavior stay intact. */
     fun getHardwareKeyboardShortcuts(): Boolean = getDesktopMode()
 

@@ -606,6 +606,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // assistant layout, so nullable.
         private val reasoningContainer: LinearLayout? = itemView.findViewById(R.id.reasoning_container)
         private val reasoningHeader: LinearLayout? = itemView.findViewById(R.id.reasoning_header)
+        private val reasoningLabel: TextView? = itemView.findViewById(R.id.reasoning_label)
         private val reasoningText: TextView? = itemView.findViewById(R.id.reasoning_text)
         private val reasoningChevron: ImageView? = itemView.findViewById(R.id.reasoning_chevron)
         // Per-message reasoning indicator glyph in the action bar, right of the
@@ -1295,12 +1296,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * its own row between the identity/metadata line and the answer; tapping
          * only expands/collapses the already-received text and never regenerates
          * or alters the answer. Absent reasoning collapses the row to nothing.
-         * Every branch sets visibility explicitly because rows are recycled.
+         * Chat Settings → Show Thinking (owner spec, Aug 23 2026) gates only
+         * this display: turning it off hides the row on every reply, current
+         * and past alike, but never touches the stored reasoning text — the
+         * app still requests and stores it exactly as before, and turning the
+         * setting back on shows it again. Every branch sets visibility
+         * explicitly because rows are recycled.
          */
         private fun updateReasoning(chatMessage: HashMap<String, Any>, position: Int) {
             val container = reasoningContainer ?: return
             val text = chatMessage[KEY_MESSAGE_REASONING]?.toString()?.takeIf { it.isNotBlank() }
-            if (chatMessage["isBot"] != true || text == null) {
+            if (chatMessage["isBot"] != true || text == null || !preferences.getShowThinking()) {
                 container.visibility = View.GONE
                 reasoningText?.text = ""
                 reasoningHeader?.setOnClickListener(null)
@@ -1819,8 +1825,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // ?attr/colorPrimary, the same bug class described above — against
             // some bubble/theme combinations that left it the same color as
             // its background, effectively invisible. It now follows the same
-            // live bubble foreground as every other glyph here.
+            // live bubble foreground as every other glyph here, and the
+            // Thinking label is kept the same color as its chevron (owner
+            // spec, Aug 23 2026) so both move together across themes.
             reasoningChevron?.setColorFilter(foreground)
+            reasoningLabel?.setTextColor(foreground)
         }
 
         /**

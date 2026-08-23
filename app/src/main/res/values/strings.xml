@@ -3224,6 +3224,10 @@
     <!-- Toggle: show or hide the per-message reasoning-effort glyph. No
          subtitle, by owner ruling. -->
     <string name="chat_settings_thinking_indicator">Thinking Indicator</string>
+    <!-- Toggle: show or hide the Thinking disclosure block on AI replies.
+         Display-only — reasoning is still requested and stored either way
+         (owner ruling, Aug 23 2026). No subtitle, matching the row above. -->
+    <string name="chat_settings_show_thinking">Show Thinking</string>
     <string name="appearance_section_message_display">Message Display</string>
     <string name="appearance_profile_images">Profile Images</string>
     <string name="appearance_profile_images_hint">Show speaker profile images in chat.</string>
