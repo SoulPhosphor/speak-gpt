@@ -821,6 +821,81 @@
         <item name="android:background">@drawable/bubble_in</item>
     </style>
 
+    <!-- Bare primary actions in the composer control row. Geometry, icon
+         tint, and the absence of a background remain centrally themeable. -->
+    <style name="Widget.App.Chat.ComposerAction" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:background">@color/transparent</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <!-- Shared camera/image/document and conversation-tools pop-up family. -->
+    <style name="Widget.App.Chat.ActionMenu.Popup" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">12dp</item>
+        <item name="android:layout_marginBottom">12dp</item>
+        <item name="android:elevation">12dp</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Card" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="cardBackgroundColor">@color/transparent</item>
+        <item name="cardCornerRadius">24dp</item>
+        <item name="strokeWidth">0dp</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Surface" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="blurOverlayColor">@color/blur_background</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Content" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingVertical">6dp</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingHorizontal">16dp</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Icon" parent="">
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:layout_marginEnd">12dp</item>
+        <item name="android:importantForAccessibility">no</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Label" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <!-- One manual-compaction boundary, centered between message units. -->
+    <style name="Widget.App.Chat.CompactionMarker" parent="Widget.App.Section.Title">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
+    </style>
+
     <!-- Bare expand/collapse controls for the live chat composer. Their shared
          style, not the layout or legacy per-screen theme code, owns the icon
          geometry, transparent background, and theme-resolved tint. Placement

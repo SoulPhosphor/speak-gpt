@@ -692,11 +692,29 @@ Use:
 
 - `Widget.App.Chat.ComposerHost` on the outer bottom composer host. It keeps the space behind the floating oblong transparent.
 - `Widget.App.Chat.ComposerSurface` on the live composer surface. It uses `@drawable/bubble_in`, so the editor and its controls resolve the same app-owned theme surface as the incoming AI bubble.
+- `Widget.App.Chat.ComposerAction` on bare primary composer actions such as Add and the conditional conversation-tools gear. It owns their 48dp geometry, transparent background, centered icon, and theme-resolved tint.
 - `Widget.App.Chat.ComposerContentToggle` on both Expand Content and Collapse Content. It owns their 48dp icon-button geometry, transparent background, centered icon, and theme-resolved tint. The layout owns only their different placement and visibility. Do not replace this background in Kotlin, including legacy theme handling.
 
-The initial empty composer keeps the one-row editor between the bottom controls. Focusing it moves that same editor above the controls and allows natural growth up to eight lines. The expand control is shown only for an active non-empty draft; expanded mode uses the bounded space below the app header and the collapse control restores the previous mode. Keep the controls in this order: Add, conditional persistent Includes, Expand content, microphone, Send.
+The initial empty composer keeps the one-row editor between the bottom controls. Focusing it moves that same editor above the controls and allows natural growth up to eight lines. The expand control is shown only for an active non-empty draft; expanded mode uses the bounded space below the app header and the collapse control restores the previous mode. Keep the controls in this order: Add, conditional conversation tools, conditional persistent Includes, Expand content, microphone, Send.
 
 Do not assign phone/dynamic-system colors or a second local composer palette in XML or Kotlin. The host remains transparent and the surface resolves through the shared drawable/theme roles.
+
+### Chat action pop-ups
+
+Use the complete `Widget.App.Chat.ActionMenu.*` family for the labeled action pop-ups above the composer:
+
+- `Popup` for placement and elevation;
+- `Card` and `Surface` for the rounded transparent/blurred container;
+- `Content` for the vertical action stack;
+- `Row`, `Icon`, and `Label` for every available action.
+
+Camera/Image/Document and the conditional Compact/Create Image menu share this family. Availability and click behavior remain in the owning chat screen; appearance must not be restated or recolored there.
+
+Their shared runtime blur radius is `@dimen/chat_action_menu_blur_radius`; keep it centralized with this family rather than placing a numeric radius in `ChatActivity`.
+
+### Manual compaction marker
+
+`Widget.App.Chat.CompactionMarker` is the centered **Compacted** title between message units. It inherits the shared section-title typography and owns its spacing and alignment. Both user and assistant row layouts carry the same normally hidden marker slot; the adapter shows exactly one slot at the persisted manual boundary without inserting a synthetic conversation message.
 
 ## Chat Thinking disclosure
 

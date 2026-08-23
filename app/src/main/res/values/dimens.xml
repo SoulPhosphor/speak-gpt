@@ -34,6 +34,10 @@
     <!-- Widget.App.Row.ProfileImage's leading preview size (profile-images-plan.md). -->
     <dimen name="row_profile_image_size">48dp</dimen>
 
+    <!-- Shared BlurView radius for the composer action pop-ups. Kept outside
+         ChatActivity so appearance work can tune both menus centrally. -->
+    <dimen name="chat_action_menu_blur_radius">16dp</dimen>
+
     <!-- Current adaptable chat presentation geometry. These values match the
          owner-approved visual target tuned on Aug 13 2026. -->
     <dimen name="chat_message_speaker_inset">25dp</dimen>
