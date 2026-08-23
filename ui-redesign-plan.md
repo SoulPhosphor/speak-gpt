@@ -73,7 +73,11 @@ specification for the "UI overhaul" referenced in CLAUDE.md's roadmap.
 > preserved or restored; Logs is reached through the current chat overflow
 > menu. The drawer's **Playground** item only links to the current Playground
 > destination; drawer work must not rehost, refactor, or otherwise change the
-> Playground implementation.
+> Playground implementation. Chat rows use a new drawer presentation rather
+> than copying the old chat-list appearance. **Show Companion Images in Chat
+> List** is a temporary Chat Settings toggle and defaults Off. App launch goes
+> directly to a blank chat using the current blank-chat presentation rather
+> than reopening the previously viewed conversation.
 
 **Audience:** AI agents implementing the redesign. Read `CLAUDE.md` in full
 before this document — every rule there still applies. This plan was written
@@ -128,7 +132,7 @@ These were decided explicitly by the owner. Do not re-litigate them.
 | Decision | Choice |
 |---|---|
 | UI technology | **Stay on classic Views/XML + Material 3 (MDC-Android).** No Jetpack Compose, not even for new screens. |
-| Navigation | **Left slide-out drawer** containing the chat list (New Chat, search) plus quick navigation (Characters hub, Playground, Settings). The chat screen becomes the effective home screen, like the ChatGPT/Claude apps. No right-side panel. |
+| Navigation | **Left slide-out drawer** containing the chat list (New Chat, search) plus quick navigation (Characters hub, Playground, Settings). The chat screen becomes the effective home screen, like the ChatGPT/Claude apps. App launch opens a blank chat rather than reopening the last conversation. No right-side panel. |
 | Theming | **Preset hand-designed color palettes** in light and dark variants, selectable in settings. Material You / wallpaper-dynamic color was explicitly **not** chosen. The existing AMOLED pitch-black mode must keep working. |
 | Style target | Clean, elegant, modern Material 3 — rounded surfaces, proper spacing, M3 type scale. |
 
@@ -539,11 +543,38 @@ Binding rules:
 2. **Search field** filtering the chat list (reuse the filter logic from
    `ChatsListFragment`'s `search_input`).
 3. **Chat list** — RecyclerView, reusing `ChatPreferences` as the data
-   source. Reuse the existing chat-list behavior/data, but follow the current
-   `ui-style-guide.md` / `ui-style-adoption.md` for presentation rather than
-   copying an unconverted row wholesale. Show name + snippet; model labels
-   stay out of the drawer. Highlight the current chat using the approved
-   selected/drawer-selected theme role.
+   source and existing chat-list behavior, but **not** its old visual design.
+   The drawer list has its own approved presentation:
+
+   - Add a temporary Chat Settings toggle labeled **Show Companion Images in
+     Chat List**. Default: **Off**. Chat Settings is only the current home for
+     this preference; it may be moved later without changing the behavior.
+   - With the toggle **Off**, each entry shows **only the chat name**. Do not
+     show the old snippet/model-label treatment and do not reserve an empty
+     icon/image column. The name may occupy up to **two lines** and should be
+     slightly larger than ordinary body/message text. Keep the exact text size
+     in the shared style system rather than hardcoding a one-off value.
+   - Text-only entries have generous vertical rhythm: leave approximately one
+     full text-line of empty vertical space between neighboring chat names,
+     visually equivalent to a blank paragraph line rather than a tight list
+     margin.
+   - With **Show Companion Images in Chat List** On, use a simple two-column
+     row: companion/profile image on the **left**, chat name on the right. The
+     name still uses up to two lines. Vertically center the image against the
+     one-to-two-line text area.
+   - The image should be approximately the visual height of two chat-name
+     lines and must not be smaller than the companion image currently shown in
+     the existing main chat list. Exact image size, column width, and local
+     spacing may use implementation judgment to achieve that relationship.
+   - The image sits along the **left side of the row**. Do not right-align it
+     or place it after the chat name.
+   - Highlight the currently open saved chat using the approved
+     selected/drawer-selected theme role. A blank startup chat has no saved
+     chat row to highlight until it becomes one under the app's existing chat
+     behavior.
+   - Follow `ui-style-guide.md` / `ui-style-adoption.md` for shared typography,
+     colors, and theme readiness. Do not copy the old unconverted chat-list
+     row styling wholesale.
 4. **Divider**, then static nav rows: **Characters** (→ `CharactersActivity`
    hub: personas / activation prompts / system message / lorebooks),
    **Playground** (→ link to the current Playground destination only; do not
@@ -558,24 +589,28 @@ fight the framework.
 ### 5.2 Where the drawer lives, and the migration path
 
 Today: `MainActivity` (bottom tabs: Chats / Playground) → tap a chat →
-`ChatActivity`. The target: open the app, land in your last chat, drawer on
-the left. Get there in three separately-shippable steps:
+`ChatActivity`. The target: **opening the app immediately presents a blank
+chat using the same blank-chat presentation the app has now**, with the drawer
+available on the left. Do not reopen the previously viewed conversation on
+startup. Get there in three separately-shippable steps:
 
 - **Step A — drawer inside ChatActivity.** Wrap the root of
   `activity_chat.xml` in a `DrawerLayout` (the existing
   `expandable_window_root` CoordinatorLayout becomes the main pane —
   preserve its ID and the `chat_expand` transitionName). Add a hamburger
   button to the chat top bar. Keep `btn_back` working as today.
-- **Step B — launch into the last chat.** Record the last-opened chat id in
-  `GlobalPreferences`; `MainActivity` forwards straight into `ChatActivity`
-  for that chat when it exists (first-run/no-chats still shows the current
-  chats screen). When ChatActivity is the task root, `btn_back` shows the
-  hamburger icon and opens the drawer instead of finishing.
+- **Step B — launch directly into a blank chat.** On ordinary app launch,
+  route immediately to the app's existing blank/new-chat presentation rather
+  than opening the Chats tab or remembering/reopening the last chat. Reuse the
+  current blank-chat behavior and persistence semantics; do not invent a new
+  chat-storage lifecycle solely for startup. When ChatActivity is the task
+  root, its upper-left navigation control opens the drawer instead of
+  finishing the activity.
 - **Step C — retire the bottom tab bar.** Once the drawer covers everything
   (chats, Playground, settings), remove `BottomNavigationView` from
-  `MainActivity` and slim it down to a router + first-run host. (The dead
-  Tips/Tools fragments were already removed with owner approval, July 2026 —
-  only Chats and Playground remain to rehome.)
+  `MainActivity` and slim it down to a router + any still-required startup
+  host behavior. (The dead Tips/Tools fragments were already removed with
+  owner approval, July 2026 — only Chats and Playground remain to rehome.)
 
 Ship A, then B, then C — never as one PR.
 
@@ -685,9 +720,9 @@ attributes (Phase 1), then visual restyle (its listed phase).
 |---|---|---|---|
 | Chat | `ChatActivity.kt`, `activity_chat.xml`, `view_assistant_bot_message.xml`, `view_assistant_user_message.xml`, `view_message.xml`, `ChatAdapter.kt` | Drawer (5.2), pill input bar, restyled bubbles, top bar polish, bulk-select bar restyle | **Highest.** Honor the current ID contract (9.1, 9.2). Don't touch mic/keyboard/streaming logic. The former `btn_debug_log` top-bar shortcut was removed and must not be restored; Logs is reached through the current overflow menu. `Theme.Transparent` + `adjustPan` stay. |
 | ~~Floating assistant~~ | ~~`AssistantFragment.kt`, `fragment_assistant.xml`~~ | **Removed (June 2026)** — the floating assistant overlay no longer exists. No work here. | — |
-| Chats list (until Step C retires it) | `ChatsListFragment.kt`, `fragment_chats_list.xml`, `view_chat_name(_min).xml`, `ChatListAdapter.kt` | Reuse chat-list behavior/data for the drawer; convert the drawer presentation with current shared styles rather than treating these unconverted rows as a whole-screen visual template | Medium. Avatar/initials logic in adapter. |
+| Chats list (until Step C retires it) | `ChatsListFragment.kt`, `fragment_chats_list.xml`, `view_chat_name(_min).xml`, `ChatListAdapter.kt` | Reuse chat-list behavior/data for the drawer; drawer rows use the Section 5.1 text-only / optional companion-image presentation instead of the old row look | Medium. Avatar/initials logic in adapter may be reused for the optional image, but old row styling is not the target. |
 | Quick Settings sheet | `QuickSettingsBottomSheetDialogFragment.kt`, `fragment_quick_settings.xml` | M3 list rows, slider restyle, lorebook checklist polish | Medium-high: ~1k lines wiring `btnSelect*` ConstraintLayout ids — keep all ids/types. Canary for palette inheritance in sheets. |
-| Main/home | `MainActivity.kt`, `activity_main.xml`, `bottom_menu.xml` | Step B forwarding; Step C removes bottom nav | Medium. Debug overlay (BlurView) must keep working until removed deliberately. |
+| Main/home | `MainActivity.kt`, `activity_main.xml`, `bottom_menu.xml` | Step B forwards ordinary launch to a blank chat; Step C removes bottom nav | Medium. Debug overlay (BlurView) must keep working until removed deliberately. |
 
 ### 7.2 Settings & management screens (medium care)
 
@@ -818,10 +853,11 @@ flag being toggled.
   **Paused** with all AMOLED work (owner ruling, July 26 2026).
 - **Phase 3 — Drawer** (not started; scheduling relative to Phase 1.5 is an
   open owner decision): Step A (drawer in ChatActivity), then Step B
-  (launch into last chat), then Step C (retire bottom nav) — three PRs.
+  (**launch into a blank chat**), then Step C (retire bottom nav) — three PRs.
   Drawer starts directly with **New Chat**; there is no separate header/name
-  area. Playground is linked as its current destination without rehosting or
-  refactoring it.
+  area. Chat rows follow the Section 5.1 text-only / optional companion-image
+  design. Playground is linked as its current destination without rehosting
+  or refactoring it.
 - **Phase 4 — Chat restyle**: input pill, bubbles, top bar. Single UI now —
   no `AssistantFragment` to mirror. The former `btn_debug_log` top-bar
   shortcut is removed and must not be restored; Logs is accessed through the
