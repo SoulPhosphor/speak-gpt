@@ -4608,10 +4608,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (controller.isManualCompactionRunning()) return
         val snapshot = requestedSnapshot ?: summarizerSnapshot() ?: return
         if (snapshot.entries.isEmpty()) return
+        // The persisted summary already represents the folded prefix. Count
+        // that text once, then only the raw messages that compaction will
+        // actually send after its existing bookmark; otherwise a partially
+        // condensed long chat can produce a wildly inflated cost warning.
+        val alreadyFolded = (preferences?.getSummarizerFoldedCount() ?: 0)
+            .coerceIn(0, snapshot.entries.size)
         val estimatedTokens = org.teslasoft.assistant.util.summarizer
             .LargeSummarizerOperationPolicy.estimateInputTokens(
                 preferences?.getSummarizerSummary().orEmpty(),
-                snapshot.entries
+                snapshot.entries.drop(alreadyFolded)
             )
         if (org.teslasoft.assistant.util.summarizer.LargeSummarizerOperationPolicy
                 .needsConfirmation(estimatedTokens)

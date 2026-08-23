@@ -41,6 +41,7 @@ class ManualCompactionWiringContractTest {
         assertTrue(activity.contains("controller.runManualCompaction("))
         assertTrue(activity.contains("getManualCompactionBoundary()"))
         assertTrue(activity.contains("ManualCompactionStorageGuard"))
+        assertTrue(activity.contains("snapshot.entries.drop(alreadyFolded)"))
 
         val controller = source(
             "src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt"
