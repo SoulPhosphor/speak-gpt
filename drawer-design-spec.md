@@ -18,28 +18,33 @@
 
 Unless the owner explicitly specifies otherwise, icons referenced by this drawer/search design come from **Google Icons / Material Symbols**.
 
-## 2. Drawer Header And Scrolling
+## 2. Fixed Top Controls And Scrolling
 
-The first line of the drawer is a real header and supersedes the earlier no-header decision.
+The drawer has a fixed top control block. **All three rows below remain locked at the top while the rest of the drawer scrolls beneath them:**
 
-- **Soul Phosphor** is left aligned.
-- A Google **double-chevron facing right** is right aligned on the same line.
+1. **Soul Phosphor** left aligned + Google double-chevron facing right aligned to the right.
+2. **New Chat**.
+3. **Search**.
+
+The fixed block is a product requirement, not an optional implementation preference.
+
 - The right-facing double-chevron returns to the underlying current chat as described above.
 - Header colors, typography, icon tint, and background must be theme-ready and use the shared style/theme system. Do not hard-code drawer colors.
-- The drawer must support normal **vertical scrolling** when its contents exceed the available height.
-- Recommended layout: keep the Soul Phosphor / return-chevron header fixed so the return control remains continuously reachable, and allow the content below it to scroll. This is an implementation recommendation rather than a requirement to redesign drawer content around nested scrolling if the platform structure provides an equally usable result.
+- **Soul Phosphor, New Chat, and Search do not scroll away.** They remain visible and interactive even when the user has scrolled deep into a long chat list.
+- The content beneath the fixed block, beginning with the chat list and including lower navigation destinations, uses normal vertical scrolling when it exceeds the available height.
+- Scrolling must not cause chat rows to draw over the fixed top controls or make those controls disappear.
 
 ## 3. Drawer Contents, Top To Bottom
 
 The top-level order is:
 
-1. Drawer header: **Soul Phosphor** + right-facing double-chevron.
-2. **New Chat**.
-3. **Search**.
-4. Chat list.
-5. **Playground** and **Settings** may remain as lower navigation destinations according to the broader navigation plan.
+1. Fixed top block: **Soul Phosphor** + right-facing double-chevron.
+2. Fixed top block: **New Chat**.
+3. Fixed top block: **Search**.
+4. Scrollable chat list.
+5. Scrollable **Playground** and **Settings** lower navigation destinations according to the broader navigation plan.
 
-There is **no Projects section yet**. Do not invent a Projects heading, placeholder, empty area, or project behavior. For now, the chat list begins immediately after Search.
+There is **no Projects section yet**. Do not invent a Projects heading, placeholder, empty area, or project behavior. For now, the chat list begins immediately after the fixed Search row.
 
 **Companions / Characters do not receive a permanent drawer row.** They remain reachable through their existing paths, including Quick Settings. Do not add them to the drawer merely because the older navigation plan listed Characters as a top-level destination.
 
@@ -185,6 +190,7 @@ Preserve the existing staged rollout principle rather than landing the structura
 - Wire the chat's approved **double-chevron** control to open the drawer.
 - Do **not** add a hamburger button.
 - Do **not** add edge-swipe opening.
+- Keep the entire top control block (Soul Phosphor + return chevron, New Chat, Search) fixed while the chat list/lower navigation scroll beneath it.
 - Drawer opens from the left and covers the full available width.
 - Drawer right-facing double-chevron closes it and returns to the underlying chat state.
 
