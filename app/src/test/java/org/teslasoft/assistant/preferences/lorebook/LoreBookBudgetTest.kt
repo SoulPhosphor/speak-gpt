@@ -17,9 +17,11 @@
 package org.teslasoft.assistant.preferences.lorebook
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.dto.LoreBookEntry
+import org.teslasoft.assistant.preferences.memory.ActiveMemoryAttribution
 
 class LoreBookBudgetTest {
 
@@ -52,6 +54,24 @@ class LoreBookBudgetTest {
         assertEquals(listOf("small"), result.kept.map { it.entry.id })
         assertEquals(listOf("big", "tiny"), result.cut.map { it.match.entry.id })
         assertTrue(result.cut.all { it.reason.contains("character budget") })
+    }
+
+    @Test fun budgetTrimmedLorebookEntryNeverAppearsInAttribution() {
+        val kept = match("kept", "k".repeat(10))
+        val trimmed = match("trimmed", "t".repeat(60))
+        val selection = LoreBookBudget.select(
+            listOf(kept, trimmed),
+            maxEntries = 20,
+            maxChars = 50
+        )
+
+        val attribution = ActiveMemoryAttribution.fromFinalSelection(
+            memoryIds = emptyList(),
+            lorebookIds = selection.injectedEntryIds
+        )
+
+        assertEquals(listOf("kept"), attribution.map { it.id })
+        assertFalse(attribution.any { it.id == "trimmed" })
     }
 
     @Test fun aSingleOversizedFirstEntryStillGetsIn() {

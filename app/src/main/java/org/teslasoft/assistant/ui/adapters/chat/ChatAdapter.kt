@@ -98,6 +98,8 @@ import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
+import org.teslasoft.assistant.preferences.memory.ActiveMemoryAttribution
+import org.teslasoft.assistant.ui.activities.ActiveMemoriesActivity
 import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.MessageCompletionState
@@ -260,6 +262,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // Absent when the model is not known to reason (no glyph shown).
         const val KEY_MESSAGE_REASONING_LEVEL = "reasoningLevel"
 
+        // Ordered UUID references to Memory/Lorebook entries that reached this
+        // exact response version's final request. Absent means unknown/none;
+        // historical rows are never reconstructed from current state.
+        const val KEY_ACTIVE_MEMORY_ATTRIBUTION = "activeMemoryAttribution"
+
         // Regenerated-response history for one assistant turn (owner spec, Aug
         // 16 2026). Each turn that has been regenerated keeps every version:
         //   KEY_VARIANTS          — JSON array of version snapshots, each a
@@ -295,6 +302,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             KEY_MESSAGE_REASONING_SUMMARY,
             KEY_MESSAGE_REASONING_TOKENS,
             KEY_MESSAGE_REASONING_LEVEL,
+            KEY_ACTIVE_MEMORY_ATTRIBUTION,
             MessageCompletionState.KEY_STATE,
             MessageCompletionState.KEY_STATE_DETAIL,
             MessageCompletionState.KEY_ERROR_TEXT
@@ -592,8 +600,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val btnRetry: ImageButton = itemView.findViewById(R.id.btn_retry)
         private val btnShare: ImageButton = itemView.findViewById(R.id.btn_share)
         private val btnSpeak: ImageButton = itemView.findViewById(R.id.btn_speak)
-        // Far-left Message Action on both layouts; opens the anchored Message
-        // Details popup (chat-redesign-plan.md §5). Always present.
+        private val btnActiveMemories: ImageButton? =
+            itemView.findViewById(R.id.btn_active_memories)
+        // Message Details action on both layouts. Active Memories may precede
+        // it on assistant responses whose request carried memory context.
         private val btnDetails: ImageButton = itemView.findViewById(R.id.btn_details)
         // User-only derived persistent-Includes action. It is absent from the
         // assistant layout and is reset on every bind to survive recycling.
@@ -669,6 +679,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             updateMessageMeta(display, isGeneratedImage)
             updateReasoning(display, position)
             updateReasoningIndicator(display, isGeneratedImage)
+            updateActiveMemories(display)
             updateVersionNav(chatMessage, position)
 
             btnDetails.setOnClickListener { anchor ->
@@ -1764,6 +1775,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * updateSpeakButton, which owns its speaking-state color.
          */
         private fun tintActionIcons(foreground: Int) {
+            btnActiveMemories?.setColorFilter(foreground)
             btnDetails.setColorFilter(foreground)
             btnPersistentIncludes?.setColorFilter(foreground)
             btnShare.setColorFilter(foreground)
@@ -1780,6 +1792,26 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // The reasoning indicator rides the same bar and follows the same
             // bubble foreground so its glyph reads on any theme.
             reasoningIndicator?.setColorFilter(foreground)
+        }
+
+        /** Bind the response-version-local Active Memories action. */
+        private fun updateActiveMemories(display: HashMap<String, Any>) {
+            val button = btnActiveMemories ?: return
+            val attribution = display[KEY_ACTIVE_MEMORY_ATTRIBUTION]?.toString()
+            if (ActiveMemoryAttribution.decode(attribution).isEmpty()) {
+                button.visibility = View.GONE
+                button.setOnClickListener(null)
+                return
+            }
+            button.visibility = View.VISIBLE
+            button.setOnClickListener {
+                if (!bulkActionMode) {
+                    context.startActivity(
+                        Intent(context, ActiveMemoriesActivity::class.java)
+                            .putExtra(ActiveMemoriesActivity.EXTRA_ATTRIBUTION, attribution)
+                    )
+                }
+            }
         }
 
         /**
