@@ -3089,6 +3089,9 @@
     <string name="include_artifact_bookmark_desc">Edit removed document bookmarks</string>
     <string name="include_icon_desc">Attached file</string>
     <string name="btn_attach_document">Document</string>
+    <string name="composer_compact_action">Compact</string>
+    <string name="composer_create_image_action">Create Image</string>
+    <string name="manual_compaction_marker">Compacted</string>
     <string name="attach_option_image">Image</string>
 
     <!-- Save/Cancel pair on the Edit dialog, right-aligned in that order. -->

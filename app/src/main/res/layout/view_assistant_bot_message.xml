@@ -33,7 +33,6 @@
         android:layout_marginStart="@dimen/chat_message_speaker_inset"
         android:layout_marginEnd="@dimen/chat_message_ai_right_inset"
         android:orientation="horizontal"
-        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -438,6 +437,16 @@
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/compaction_marker"
+        style="@style/Widget.App.Chat.CompactionMarker"
+        android:text="@string/manual_compaction_marker"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/linearLayout3" />
 
     <TextView
         android:id="@+id/username"

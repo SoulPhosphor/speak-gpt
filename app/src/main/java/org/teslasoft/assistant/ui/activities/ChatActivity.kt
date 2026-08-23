@@ -352,6 +352,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
          */
         const val INCLUDES_KEY = "includes"
 
+        private const val STATE_EXPLICIT_IMAGINE_DRAFT =
+            "state_explicit_imagine_draft"
+
         /** How much of a document the bookmark-writing request sees. Enough
          *  to say what the file IS, without paying to send it all again. */
         private const val ARTIFACT_EXCERPT_CHARS = 2000
@@ -439,14 +442,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var root: ConstraintLayout? = null
     private var threadLoader: LinearLayout? = null
     private var btnAttachFile: ImageButton? = null
+    private var btnChatTools: ImageButton? = null
     private var btnPersistentIncludes: ImageButton? = null
     private var btnExpandContent: ImageButton? = null
     private var btnCollapseContent: ImageButton? = null
     private var visionActions: LinearLayout? = null
+    private var toolActions: LinearLayout? = null
     // Each paperclip-menu action is a labeled row, not an icon-only button.
     private var btnVisionActionCamera: View? = null
     private var btnVisionActionGallery: View? = null
     private var btnVisionActionDocument: View? = null
+    private var btnToolCompact: View? = null
+    private var btnToolCreateImage: View? = null
+    private var explicitImagineDraft = false
 
     // ---- Document includes (document-includes-plan.md) --------------------
     // Attachments the user has picked but not yet sent. Once a message goes
@@ -475,6 +483,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var selectedCount: TextView? = null
     private var expandableWindowRoot: CoordinatorLayout? = null
     private var blurSelectorView: BlurView? = null
+    private var blurToolView: BlurView? = null
 
     // Init chat
     private var messages: ArrayList<HashMap<String, Any>> = arrayListOf()
@@ -1289,7 +1298,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         // Summarizer Settings may have changed while we were away (endpoint
         // removed, defaults changed) — re-resolve the icons and badge.
-        if (chatStartupComplete && chatId != "") refreshSummarizerIcons()
+        if (chatStartupComplete && chatId != "") {
+            refreshSummarizerIcons()
+            refreshComposerTools()
+        }
 
         // Catch images that finished while the screen was detached, and retry
         // any summary that failed earlier — silently, without touching chat.
@@ -2324,6 +2336,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         bounds.contains(event.rawX.toInt(), event.rawY.toInt())
                 if (!touchedInsideComposer) surface.collapseIfEmptyOutsideTap()
             }
+
+            if (toolActions?.visibility == View.VISIBLE) {
+                val bounds = Rect()
+                val touchedInsideMenu =
+                    toolActions?.getGlobalVisibleRect(bounds) == true &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+                val touchedGear =
+                    btnChatTools?.getGlobalVisibleRect(bounds) == true &&
+                        bounds.contains(event.rawX.toInt(), event.rawY.toInt())
+
+                if (!touchedInsideMenu && !touchedGear) {
+                    toolActions?.visibility = View.GONE
+                }
+            }
         }
         return super.dispatchTouchEvent(event)
     }
@@ -2561,6 +2587,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
 
             adapter = ChatAdapter(messages, messagesSelectionProjection, this, preferences!!, chatId)
+            adapter?.setManualCompactionBoundary(
+                preferences?.getManualCompactionBoundary() ?: 0
+            )
             adapter?.setOnUpdateListener(this)
 
             initUI()
@@ -2597,13 +2626,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         composerSurface = findViewById(R.id.composer_surface)
         root = findViewById(R.id.root)
         btnAttachFile = findViewById(R.id.btn_attach)
+        btnChatTools = findViewById(R.id.btn_chat_tools)
         btnPersistentIncludes = findViewById(R.id.btn_persistent_includes)
         btnExpandContent = findViewById(R.id.btn_expand_content)
         btnCollapseContent = findViewById(R.id.btn_collapse_content)
         visionActions = findViewById(R.id.vision_action_selector)
+        toolActions = findViewById(R.id.tool_action_selector)
         btnVisionActionCamera = findViewById(R.id.action_camera)
         btnVisionActionGallery = findViewById(R.id.action_gallery)
         btnVisionActionDocument = findViewById(R.id.action_document)
+        btnToolCompact = findViewById(R.id.action_compact)
+        btnToolCreateImage = findViewById(R.id.action_create_image)
         includeStrip = findViewById(R.id.include_strip)
         initIncludeStrip()
 
@@ -2661,6 +2694,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         selectedCount = findViewById(R.id.text_selected_count)
         expandableWindowRoot = findViewById(R.id.expandable_window_root)
         blurSelectorView = findViewById(R.id.attach_bg)
+        blurToolView = findViewById(R.id.tool_bg)
 
         healthBanner = findViewById(R.id.health_banner)
         healthBannerText = findViewById(R.id.health_banner_text)
@@ -2684,16 +2718,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             healthBanner?.visibility = View.GONE
         }
 
-        val radius = 16f
+        val radius = resources.getDimension(R.dimen.chat_action_menu_blur_radius)
         val decorView = window.decorView
         val rootView = decorView.findViewById<ViewGroup>(android.R.id.content)
         val windowBackground = decorView.background
         blurSelectorView?.setupWith(rootView)
             ?.setFrameClearDrawable(windowBackground)
             ?.setBlurRadius(radius)
+        blurToolView?.setupWith(rootView)
+            ?.setFrameClearDrawable(windowBackground)
+            ?.setBlurRadius(radius)
 
         blurSelectorView?.outlineProvider = ViewOutlineProvider.BACKGROUND
         blurSelectorView?.setClipToOutline(true)
+        blurToolView?.outlineProvider = ViewOutlineProvider.BACKGROUND
+        blurToolView?.setClipToOutline(true)
 
         if (isDarkThemeEnabled() && GlobalPreferences.getPreferences(this).getAmoledPitchBlack()) {
             expandableWindowRoot?.backgroundTintList = ColorStateList.valueOf(getColor(R.color.amoled_window_background))
@@ -2706,6 +2745,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         chat?.itemAnimator = null
 
         visionActions?.visibility = View.GONE
+        toolActions?.visibility = View.GONE
 
         btnQuickSettings?.setImageResource(R.drawable.ic_history_edu)
         btnBack?.setImageResource(R.drawable.ic_back)
@@ -4085,6 +4125,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // flips: waveform when empty (start hands-free), up-arrow when
                 // there is text (send). No-op while a conversation is live.
                 refreshConversationButton()
+                if (explicitImagineDraft &&
+                    !ImagineCommand.isImagineAttempt(s?.toString().orEmpty())
+                ) {
+                    explicitImagineDraft = false
+                }
             }
 
             override fun afterTextChanged(s: Editable?) {
@@ -4111,7 +4156,26 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         btnAttachFile?.setOnClickListener {
+            toolActions?.visibility = View.GONE
             visionActions?.visibility = if (visionActions?.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+
+        btnChatTools?.setOnClickListener {
+            visionActions?.visibility = View.GONE
+            refreshComposerTools()
+            if (btnChatTools?.visibility != View.VISIBLE) return@setOnClickListener
+            toolActions?.visibility =
+                if (toolActions?.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+
+        btnToolCompact?.setOnClickListener {
+            toolActions?.visibility = View.GONE
+            startManualCompaction()
+        }
+
+        btnToolCreateImage?.setOnClickListener {
+            toolActions?.visibility = View.GONE
+            insertExplicitImagineDraft()
         }
 
         btnVisionActionGallery?.setOnClickListener {
@@ -4129,6 +4193,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             visionActions?.visibility = View.GONE
             openDocumentPicker()
         }
+
+        refreshComposerTools()
 
         messageInput?.setOnKeyListener { v, keyCode, event -> run {
             when (event.action) {
@@ -4388,13 +4454,105 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /** A usable image generator requires both a live endpoint profile and a model. */
+    private fun imageGeneratorConfigured(): Boolean = try {
+        val global = Preferences.getPreferences(this, "")
+        val endpointId = global.getImageGeneratorEndpointId()
+        val imageModel = global.getImageGeneratorModel()
+        if (endpointId.isBlank() || imageModel.isBlank()) {
+            false
+        } else {
+            ApiEndpointPreferences.getApiEndpointPreferences(this)
+                .getApiEndpoint(this, endpointId).host.isNotBlank()
+        }
+    } catch (_: Exception) {
+        false
+    }
+
+    /** Show only configured composer tools; hide the gear when none are usable. */
+    private fun refreshComposerTools() {
+        val compactAvailable =
+            org.teslasoft.assistant.util.summarizer.SummarizerController
+                .isConfigured(this)
+        val imageAvailable = imageGeneratorConfigured()
+        btnToolCompact?.visibility = if (compactAvailable) View.VISIBLE else View.GONE
+        btnToolCreateImage?.visibility = if (imageAvailable) View.VISIBLE else View.GONE
+        btnChatTools?.visibility =
+            if (compactAvailable || imageAvailable) View.VISIBLE else View.GONE
+        if (!compactAvailable && !imageAvailable) {
+            toolActions?.visibility = View.GONE
+        }
+    }
+
+    /**
+     * Prefix the current draft without destroying it. This explicit UI action
+     * arms only this draft to use the existing /imagine parser even when the
+     * global slash-command toggle is off.
+     */
+    private fun insertExplicitImagineDraft() {
+        if (!imageGeneratorConfigured()) {
+            refreshComposerTools()
+            return
+        }
+        val field = messageInput ?: return
+        val existing = field.text?.toString().orEmpty()
+        val draft = when {
+            ImagineCommand.isImagineAttempt(existing) -> existing
+            existing.isBlank() -> "/imagine "
+            else -> "/imagine $existing"
+        }
+        explicitImagineDraft = true
+        field.setText(draft)
+        field.setSelection(draft.length)
+        field.requestFocus()
+    }
+
+    private fun refreshManualCompactionMarker() {
+        adapter?.setManualCompactionBoundary(
+            preferences?.getManualCompactionBoundary() ?: 0
+        )
+    }
+
+    /** Freeze one reference-only conversation prefix and compact it atomically. */
+    private fun startManualCompaction() {
+        if (!org.teslasoft.assistant.util.summarizer.SummarizerController
+                .isConfigured(this)
+        ) {
+            refreshComposerTools()
+            return
+        }
+        val controller = summarizerController ?: return
+        if (controller.isManualCompactionRunning()) return
+        val snapshot = summarizerSnapshot() ?: return
+        if (snapshot.entries.isEmpty()) return
+        val frozenEntries = snapshot.entries.toList()
+        val frozen = snapshot.copy(entries = frozenEntries)
+        controller.runManualCompaction(
+            snapshot = frozen,
+            stillCurrent = {
+                val current = summarizerSnapshot()?.entries
+                current != null &&
+                    org.teslasoft.assistant.util.summarizer.ManualCompactionSnapshot
+                        .prefixStillCurrent(frozenEntries, current)
+            },
+            onFinished = {
+                if (!isFinishing && !isDestroyed) {
+                    refreshManualCompactionMarker()
+                    refreshComposerTools()
+                    refreshSummarizerIcons()
+                }
+            }
+        )
+    }
+
     /** True when this chat's requests use summarizer transmission at all —
      *  the excluded paths (decision 12) always send full history. The old
      *  Function Calling exclusion is gone with the feature
      *  (image-generation-rebuild-plan.md §15): those chats now follow the
      *  normal summarizer rules like any other chat. */
     private fun summarizerTransmissionActive(): Boolean =
-        preferences?.getChatUseSummarizer() == true &&
+        (preferences?.getChatUseSummarizer() == true ||
+            (preferences?.getManualCompactionBoundary() ?: 0) > 0) &&
             !model.contains(":ft") && !model.contains("ft:")
 
     private data class FrozenSummarizerState(
@@ -4438,8 +4596,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the fold-in bookmark; blank entries advance it without being sent. */
     private fun summarizerSnapshot(): org.teslasoft.assistant.util.summarizer.SummarizerController.Snapshot? {
         if (isFinishing || isDestroyed || chatStorageUnavailable || chatId.isEmpty()) return null
+        val storedCanonical = messages
+            .filterNot {
+                it[ChatAdapter.KEY_IMAGE_CONFIRMATION] == true ||
+                    it[ChatAdapter.KEY_IMAGE_PROGRESS] == true
+            }
+            .map { message ->
+                CanonicalConversationMessage(
+                    isBot = message["isBot"] == true,
+                    text = conversationTextWithoutIncludePayloads(message),
+                    includes = if (message["isBot"] == true) {
+                        emptyList()
+                    } else {
+                        includesOf(message)
+                    }
+                )
+            }
         val entries = SummarizerSafeIncludeProjectionBuilder
-            .summarizerConversation(canonicalConversationSnapshot())
+            .summarizerConversation(storedCanonical)
             .map {
             org.teslasoft.assistant.util.summarizer.SummarizerController.Entry(
                 isBot = it.isBot,
@@ -6641,7 +6815,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             tts!!.stop()
         } catch (_: java.lang.Exception) {/* unused */}
         if (message != "") {
+            val explicitlyArmedImagine = explicitImagineDraft &&
+                ImagineCommand.isImagineAttempt(message)
             messageInput?.setText("")
+            explicitImagineDraft = false
 
             keyboardMode = false
 
@@ -6696,7 +6873,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // the saved defaults for this request only (§11). The toggle is
             // the app-wide Enable /imagine setting (§5); the legacy
             // per-chat copy stops being read (§14).
-            val imagineParse = if (preferences!!.getImagineCommandGlobal()) {
+            val imagineParse = if (
+                preferences!!.getImagineCommandGlobal() || explicitlyArmedImagine
+            ) {
                 ImagineCommand.parse(message)
             } else {
                 ImagineCommand.Parse.NotImagine
@@ -6988,6 +7167,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 builder.setPositiveButton(R.string.image_gen_action_edit_prompt) { _, _ ->
                     // The exact prompt that was sent to the generator, back
                     // in the composer as a runnable command.
+                    explicitImagineDraft =
+                        preferences?.getImagineCommandGlobal() != true
                     messageInput?.setText("/imagine " + request.prompt)
                     messageInput?.setSelection(messageInput?.text?.length ?: 0)
                     messageInput?.requestFocus()
@@ -7837,8 +8018,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Preserve the existing non-chat command and fine-tuned pipelines.
         // They do not use the normal chat-completions request built below.
         // The old Function Calling diversion is gone with the feature (§15).
-        val imagineAttempt = preferences?.getImagineCommandGlobal() == true &&
-            ImagineCommand.isImagineAttempt(rawMessage)
+        val imagineAttempt =
+            (preferences?.getImagineCommandGlobal() == true || explicitImagineDraft) &&
+                ImagineCommand.isImagineAttempt(rawMessage)
         if (imagineAttempt ||
             model.contains(":ft") || model.contains("ft:")
         ) {
@@ -11319,6 +11501,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         while (messages.size > index + 1) {
             messages.removeAt(messages.size - 1)
         }
+        val manualBoundary = preferences?.getManualCompactionBoundary() ?: 0
+        if (manualBoundary > messages.size) {
+            preferences?.setManualCompactionBoundary(messages.size)
+        }
         // Rebuild the projections to the shortened thread before rebinding so
         // the adapter never reads a selection slot that no longer exists.
         syncChatProjection()
@@ -11390,6 +11576,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         updateMessagesSelectionProjection()
         calculateCost()
         refreshPersistentIncludeControls()
+        refreshManualCompactionMarker()
     }
 
     override fun onMessageEdited() {
@@ -11458,14 +11645,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // per-chat pending_includes preference (loadPendingIncludes), not
         // through the instance-state bundle, so there is nothing image-side
         // to write here anymore.
+        outState.putBoolean(STATE_EXPLICIT_IMAGINE_DRAFT, explicitImagineDraft)
         super.onSaveInstanceState(outState)
     }
 
     private fun onRestoredState(savedInstanceState: Bundle?) {
-        // Left as a no-op after the vision path was retired; pending image
-        // includes rehydrate from preferences on load, not from the instance
-        // state bundle. Kept as a hook in case a future piece of state needs
-        // the same lifecycle place.
+        explicitImagineDraft =
+            savedInstanceState?.getBoolean(STATE_EXPLICIT_IMAGINE_DRAFT, false) == true
     }
 
     private fun requestAddApiEndpoint(feature: String, prompt: String) {
@@ -11581,6 +11767,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .setMessage("Are you sure you want to delete selected messages?")
             .setPositiveButton("Delete") { _, _ ->
                 val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
+                val manualBoundaryBefore =
+                    preferences?.getManualCompactionBoundary() ?: 0
                 // §12 cleanup: note the generated-image files the selected
                 // messages reference before they are removed.
                 val deletedImageHashes = GeneratedImageFiles.referencedHashes(
@@ -11590,6 +11778,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     }
                 )
                 var removedBeforeBookmark = 0
+                var removedBeforeManualBoundary = 0
                 var pos = 0
                 var p = 0
                 while (pos < messagesSelectionProjection.size) {
@@ -11598,6 +11787,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         // so the fold-in bookmark is realigned here the same
                         // way: one step per removed already-folded message.
                         if (pos < foldedBefore) removedBeforeBookmark++
+                        if (pos < manualBoundaryBefore) {
+                            removedBeforeManualBoundary++
+                        }
                         messages.removeAt(pos - p)
                         p++
                     }
@@ -11606,6 +11798,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
                 if (removedBeforeBookmark > 0) {
                     preferences?.setSummarizerFoldedCount(foldedBefore - removedBeforeBookmark)
+                }
+                if (removedBeforeManualBoundary > 0) {
+                    preferences?.setManualCompactionBoundary(
+                        manualBoundaryBefore - removedBeforeManualBoundary
+                    )
                 }
 
                 syncChatProjection()
