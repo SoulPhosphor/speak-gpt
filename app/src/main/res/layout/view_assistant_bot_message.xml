@@ -283,9 +283,8 @@
 
                 <ImageButton
                     android:id="@+id/btn_details"
-                    android:layout_width="32dp"
+                    android:layout_width="0dp"
                     android:layout_height="32dp"
-                    android:layout_marginLeft="8dp"
                     android:layout_weight="1"
                     android:background="@color/transparent"
                     android:contentDescription="@string/message_details_action"
@@ -301,9 +300,9 @@
                      nothing here. -->
                 <ImageView
                     android:id="@+id/reasoning_indicator"
-                    android:layout_width="32dp"
+                    android:layout_width="0dp"
                     android:layout_height="32dp"
-                    android:layout_marginLeft="8dp"
+                    android:layout_weight="1"
                     android:background="@color/transparent"
                     android:contentDescription="@string/reasoning_indicator_automatic_desc"
                     android:scaleType="center"
@@ -311,9 +310,8 @@
 
                 <ImageButton
                     android:id="@+id/btn_speak"
-                    android:layout_width="32dp"
+                    android:layout_width="0dp"
                     android:layout_height="32dp"
-                    android:layout_marginLeft="8dp"
                     android:layout_weight="1"
                     android:background="@color/transparent"
                     android:contentDescription="@string/btn_msg_speak"
@@ -324,9 +322,8 @@
 
                 <ImageButton
                     android:id="@+id/btn_share"
-                    android:layout_width="32dp"
+                    android:layout_width="0dp"
                     android:layout_height="32dp"
-                    android:layout_marginLeft="8dp"
                     android:layout_weight="1"
                     android:background="@color/transparent"
                     android:contentDescription="Share message"
@@ -340,8 +337,9 @@
 
                 <ImageButton
                     android:id="@+id/btn_retry"
-                    android:layout_width="32dp"
+                    android:layout_width="0dp"
                     android:layout_height="32dp"
+                    android:layout_weight="1"
                     android:background="@color/transparent"
                     android:contentDescription="@string/btn_msg_retry"
                     android:descendantFocusability="blocksDescendants"
@@ -351,8 +349,9 @@
 
                 <ImageButton
                     android:id="@+id/btn_copy"
-                    android:layout_width="32dp"
+                    android:layout_width="0dp"
                     android:layout_height="32dp"
+                    android:layout_weight="1"
                     android:background="@color/transparent"
                     android:contentDescription="@string/btn_copy"
                     android:descendantFocusability="blocksDescendants"
@@ -361,8 +360,9 @@
 
                 <ImageButton
                     android:id="@+id/btn_edit"
-                    android:layout_width="32dp"
+                    android:layout_width="0dp"
                     android:layout_height="32dp"
+                    android:layout_weight="1"
                     android:background="@color/transparent"
                     android:contentDescription="@string/btn_msg_edit"
                     android:descendantFocusability="blocksDescendants"
@@ -373,9 +373,9 @@
 
                 <ImageButton
                     android:id="@+id/btn_more"
-                    android:layout_width="32dp"
+                    android:layout_width="0dp"
                     android:layout_height="32dp"
-                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
                     android:background="@color/transparent"
                     android:contentDescription="@string/message_more_actions"
                     android:descendantFocusability="blocksDescendants"
