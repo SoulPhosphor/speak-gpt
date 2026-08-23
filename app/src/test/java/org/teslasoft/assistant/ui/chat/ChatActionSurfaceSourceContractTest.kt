@@ -69,8 +69,8 @@ class ChatActionSurfaceSourceContractTest {
     @Test
     fun requestedSettingsRowsUseTheirExactGoogleIcons() {
         val layout = source("main/res/layout/activity_settings.xml")
-        val aiSystem = sectionStartingAt(layout, "@+id/tile_ai_system_settings", 500)
-        val appearance = sectionStartingAt(layout, "@+id/tile_appearance", 500)
+        val aiSystem = sectionStartingAt(layout, "@+id/tile_ai_system_settings", 600)
+        val appearance = sectionStartingAt(layout, "@+id/tile_appearance", 600)
 
         assertTrue(aiSystem.contains("android:src=\"@drawable/ic_desktop_cloud\""))
         assertTrue(appearance.contains("android:src=\"@drawable/ic_forum\""))
