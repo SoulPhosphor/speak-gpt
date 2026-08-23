@@ -224,13 +224,19 @@
                             android:orientation="horizontal">
 
                             <ImageButton
+                                style="@style/Widget.App.Chat.ComposerAction"
                                 android:id="@+id/btn_attach"
-                                android:layout_width="48dp"
-                                android:layout_height="48dp"
-                                android:background="@color/transparent"
                                 android:contentDescription="@string/btn_add_content"
                                 android:src="@drawable/ic_add_2"
                                 app:srcCompat="@drawable/ic_add_2" />
+
+                            <ImageButton
+                                style="@style/Widget.App.Chat.ComposerAction"
+                                android:id="@+id/btn_chat_tools"
+                                android:contentDescription="@string/chat_options"
+                                android:src="@drawable/ic_settings_outline"
+                                android:visibility="gone"
+                                app:srcCompat="@drawable/ic_settings_outline" />
 
                             <ImageButton
                                 android:id="@+id/btn_persistent_includes"
@@ -578,12 +584,7 @@
 
         <LinearLayout
             android:id="@+id/vision_action_selector"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_marginBottom="12dp"
-            android:elevation="12dp"
-            android:orientation="vertical"
+            style="@style/Widget.App.Chat.ActionMenu.Popup"
             android:visibility="gone"
             app:layout_constraintBottom_toTopOf="@+id/include_strip"
             app:layout_constraintStart_toStartOf="parent"
@@ -591,103 +592,57 @@
 
             <!-- Paperclip popup: a vertical stack of labeled actions. -->
             <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                app:cardBackgroundColor="@color/transparent"
-                app:cardCornerRadius="24dp"
-                app:strokeWidth="0dp">
+                style="@style/Widget.App.Chat.ActionMenu.Card">
 
                 <eightbitlab.com.blurview.BlurView
+                    style="@style/Widget.App.Chat.ActionMenu.Surface"
                     android:id="@+id/attach_bg"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    app:blurOverlayColor="@color/blur_background">
+                    >
 
                     <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:paddingVertical="6dp">
+                        style="@style/Widget.App.Chat.ActionMenu.Content">
 
                         <LinearLayout
+                            style="@style/Widget.App.Chat.ActionMenu.Row"
                             android:id="@+id/action_camera"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:background="?attr/selectableItemBackground"
-                            android:gravity="center_vertical"
-                            android:minHeight="48dp"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="16dp">
+                            >
 
                             <ImageView
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:layout_marginEnd="12dp"
-                                android:importantForAccessibility="no"
+                                style="@style/Widget.App.Chat.ActionMenu.Icon"
                                 android:src="@drawable/ic_camera"
-                                android:tint="?attr/colorPrimary" />
+                                />
 
                             <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:paddingEnd="8dp"
-                                android:text="@string/btn_camera"
-                                android:textColor="@color/text"
-                                android:textSize="16sp" />
+                                style="@style/Widget.App.Chat.ActionMenu.Label"
+                                android:text="@string/btn_camera" />
                         </LinearLayout>
 
                         <LinearLayout
+                            style="@style/Widget.App.Chat.ActionMenu.Row"
                             android:id="@+id/action_gallery"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:background="?attr/selectableItemBackground"
-                            android:gravity="center_vertical"
-                            android:minHeight="48dp"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="16dp">
+                            >
 
                             <ImageView
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:layout_marginEnd="12dp"
-                                android:importantForAccessibility="no"
-                                android:src="@drawable/ic_image"
-                                android:tint="?attr/colorPrimary" />
+                                style="@style/Widget.App.Chat.ActionMenu.Icon"
+                                android:src="@drawable/ic_image" />
 
                             <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:paddingEnd="8dp"
-                                android:text="@string/attach_option_image"
-                                android:textColor="@color/text"
-                                android:textSize="16sp" />
+                                style="@style/Widget.App.Chat.ActionMenu.Label"
+                                android:text="@string/attach_option_image" />
                         </LinearLayout>
 
                         <LinearLayout
+                            style="@style/Widget.App.Chat.ActionMenu.Row"
                             android:id="@+id/action_document"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:background="?attr/selectableItemBackground"
-                            android:gravity="center_vertical"
-                            android:minHeight="48dp"
-                            android:orientation="horizontal"
-                            android:paddingHorizontal="16dp">
+                            >
 
                             <ImageView
-                                android:layout_width="24dp"
-                                android:layout_height="24dp"
-                                android:layout_marginEnd="12dp"
-                                android:importantForAccessibility="no"
-                                android:src="@drawable/ic_file"
-                                android:tint="?attr/colorPrimary" />
+                                style="@style/Widget.App.Chat.ActionMenu.Icon"
+                                android:src="@drawable/ic_file" />
 
                             <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:paddingEnd="8dp"
-                                android:text="@string/btn_attach_document"
-                                android:textColor="@color/text"
-                                android:textSize="16sp" />
+                                style="@style/Widget.App.Chat.ActionMenu.Label"
+                                android:text="@string/btn_attach_document" />
                         </LinearLayout>
 
                         <!-- Pre-existing hidden legacy action. -->
@@ -701,6 +656,53 @@
                             android:tooltipText="Data Sources"
                             android:visibility="gone"
                             app:srcCompat="@drawable/ic_book" />
+                    </LinearLayout>
+                </eightbitlab.com.blurview.BlurView>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/tool_action_selector"
+            style="@style/Widget.App.Chat.ActionMenu.Popup"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@+id/include_strip"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.App.Chat.ActionMenu.Card">
+
+                <eightbitlab.com.blurview.BlurView
+                    android:id="@+id/tool_bg"
+                    style="@style/Widget.App.Chat.ActionMenu.Surface">
+
+                    <LinearLayout
+                        style="@style/Widget.App.Chat.ActionMenu.Content">
+
+                        <LinearLayout
+                            android:id="@+id/action_compact"
+                            style="@style/Widget.App.Chat.ActionMenu.Row">
+
+                            <ImageView
+                                style="@style/Widget.App.Chat.ActionMenu.Icon"
+                                android:src="@drawable/ic_subject" />
+
+                            <TextView
+                                style="@style/Widget.App.Chat.ActionMenu.Label"
+                                android:text="@string/composer_compact_action" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:id="@+id/action_create_image"
+                            style="@style/Widget.App.Chat.ActionMenu.Row">
+
+                            <ImageView
+                                style="@style/Widget.App.Chat.ActionMenu.Icon"
+                                android:src="@drawable/ic_image" />
+
+                            <TextView
+                                style="@style/Widget.App.Chat.ActionMenu.Label"
+                                android:text="@string/composer_create_image_action" />
+                        </LinearLayout>
                     </LinearLayout>
                 </eightbitlab.com.blurview.BlurView>
             </com.google.android.material.card.MaterialCardView>

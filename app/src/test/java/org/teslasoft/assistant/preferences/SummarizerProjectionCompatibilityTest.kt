@@ -35,6 +35,7 @@ class SummarizerProjectionCompatibilityTest {
             .putString("summarizer_folded", "30")
             .putString("summarizer_over_length", "true")
             .putString("summarizer_episode", "NETWORK")
+            .putString("manual_compaction_boundary", "30")
             .putString("unrelated_chat_value", "preserved")
             .commit()
         val prefs = preferences(store)
@@ -44,6 +45,7 @@ class SummarizerProjectionCompatibilityTest {
         assertEquals(0, prefs.getSummarizerFoldedCount())
         assertFalse(prefs.getSummarizerOverLength())
         assertEquals("", prefs.getSummarizerEpisode())
+        assertEquals(0, prefs.getManualCompactionBoundary())
         assertEquals("preserved", store.getString("unrelated_chat_value", ""))
         assertEquals(
             SummarizerProjectionContract.VERSION,
@@ -99,5 +101,32 @@ class SummarizerProjectionCompatibilityTest {
             SummarizerProjectionContract.VERSION,
             prefs.getSummarizerProjectionVersion()
         )
+    }
+
+    @Test
+    fun manualCompactionCommitsSummaryBookmarkAndMarkerTogether() {
+        val store = FakeSharedPreferences()
+        val prefs = preferences(store)
+        assertTrue(prefs.ensureSummarizerProjectionCompatibility())
+
+        assertTrue(prefs.commitManualCompaction("compact", 18, true, 18))
+
+        assertEquals("compact", prefs.getSummarizerSummary())
+        assertEquals(18, prefs.getSummarizerFoldedCount())
+        assertTrue(prefs.getSummarizerOverLength())
+        assertEquals(18, prefs.getManualCompactionBoundary())
+        assertEquals("", prefs.getSummarizerEpisode())
+    }
+
+    @Test
+    fun automaticFoldInDoesNotMoveManualMarker() {
+        val store = FakeSharedPreferences()
+        val prefs = preferences(store)
+        assertTrue(prefs.commitManualCompaction("manual", 10, false, 10))
+
+        assertTrue(prefs.commitSummarizerFoldIn("automatic", 20, false))
+
+        assertEquals(20, prefs.getSummarizerFoldedCount())
+        assertEquals(10, prefs.getManualCompactionBoundary())
     }
 }

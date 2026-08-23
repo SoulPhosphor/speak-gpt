@@ -131,6 +131,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private val generatedImageDataUrls = HashMap<String, String>()
     private var listener: OnUpdateListener? = null
     private var bulkActionMode = false
+    private var manualCompactionBoundary = 0
 
     // Assistant-side picture, already cascaded by ChatActivity off the main
     // thread (the active Companion's own picture, else the Default AI Avatar).
@@ -357,6 +358,22 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
     fun setChatId(chatId: String) {
         this.chatId = chatId
+    }
+
+    /**
+     * Places the one manual Compact marker after the message at
+     * [boundaryCount] - 1. This is display-only; canonical messages and adapter
+     * positions remain unchanged.
+     */
+    fun setManualCompactionBoundary(boundaryCount: Int) {
+        val previous = manualCompactionBoundary
+        val next = boundaryCount.coerceAtLeast(0)
+        if (previous == next) return
+        manualCompactionBoundary = next
+        if (previous > 0 && previous <= itemCount) notifyItemChanged(previous - 1)
+        if (manualCompactionBoundary > 0 && manualCompactionBoundary <= itemCount) {
+            notifyItemChanged(manualCompactionBoundary - 1)
+        }
     }
 
     /**
@@ -649,9 +666,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // nullable like includeSummary. Lets the tray swap sides of Message
         // Actions depending on whether the message also carries text.
         private val messageActionsRow: View? = itemView.findViewById(R.id.message_actions_row)
+        private val compactionMarker: TextView =
+            itemView.findViewById(R.id.compaction_marker)
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
+
+            compactionMarker.visibility = if (position + 1 == manualCompactionBoundary) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
 
             // The version the pager is currently showing. For a turn with one
             // version (or none regenerated) this is just chatMessage itself; when

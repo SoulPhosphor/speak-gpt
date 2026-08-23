@@ -2635,6 +2635,7 @@ class Preferences internal constructor(
                 .putString("summarizer_folded", "0")
                 .putString("summarizer_over_length", "false")
                 .putString("summarizer_episode", "")
+                .putString("manual_compaction_boundary", "0")
                 .putString(
                     "summarizer_projection_version",
                     SummarizerProjectionContract.VERSION.toString()
@@ -2696,6 +2697,44 @@ class Preferences internal constructor(
         } catch (_: Exception) {
             false
         }
+    }
+
+    /**
+     * Commits a user-requested Compact operation as one unit. The rolling
+     * summary, fold bookmark, and visible manual boundary must never describe
+     * different snapshots after a failure or cancellation.
+     */
+    fun commitManualCompaction(
+        summary: String,
+        foldedCount: Int,
+        overLength: Boolean,
+        boundaryCount: Int
+    ): Boolean {
+        return try {
+            preferences.edit()
+                .putString("summarizer_summary", summary)
+                .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
+                .putString("summarizer_over_length", if (overLength) "true" else "false")
+                .putString("summarizer_episode", "")
+                .putString("manual_compaction_boundary", boundaryCount.coerceAtLeast(0).toString())
+                .putString(
+                    "summarizer_projection_version",
+                    SummarizerProjectionContract.VERSION.toString()
+                )
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Number of oldest canonical messages through the latest manual marker. */
+    fun getManualCompactionBoundary(): Int =
+        getString("manual_compaction_boundary", "0")
+            .toIntOrNull()?.coerceAtLeast(0) ?: 0
+
+    /** Direct boundary realignment after a canonical-history deletion. */
+    fun setManualCompactionBoundary(value: Int) {
+        putString("manual_compaction_boundary", value.coerceAtLeast(0).toString())
     }
 
     /** User edit of the summary text (bookmark untouched), committed

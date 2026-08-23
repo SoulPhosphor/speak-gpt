@@ -129,7 +129,8 @@ class ChatPreferences private constructor() {
      */
     private val summarizerContentKeys = arrayOf(
         "summarizer_summary", "summarizer_projection_version", "summarizer_folded",
-        "summarizer_over_length", "summarizer_episode", "summarizer_errors"
+        "summarizer_over_length", "summarizer_episode", "summarizer_errors",
+        "manual_compaction_boundary"
     )
 
     /**
@@ -604,9 +605,21 @@ class ChatPreferences private constructor() {
         try {
             val chatSettings = SecurePrefs.get(context, "settings.$chatId")
             val folded = chatSettings.getString("summarizer_folded", "0")?.toIntOrNull() ?: 0
-            if (position < folded && folded > 0) {
+            val manualBoundary = chatSettings
+                .getString("manual_compaction_boundary", "0")?.toIntOrNull() ?: 0
+            if ((position < folded && folded > 0) ||
+                (position < manualBoundary && manualBoundary > 0)
+            ) {
                 chatSettings.edit(commit = true) {
-                    putString("summarizer_folded", (folded - 1).toString())
+                    if (position < folded && folded > 0) {
+                        putString("summarizer_folded", (folded - 1).toString())
+                    }
+                    if (position < manualBoundary && manualBoundary > 0) {
+                        putString(
+                            "manual_compaction_boundary",
+                            (manualBoundary - 1).toString()
+                        )
+                    }
                 }
             }
         } catch (_: Exception) { /* clamped at read time as a backstop */ }
