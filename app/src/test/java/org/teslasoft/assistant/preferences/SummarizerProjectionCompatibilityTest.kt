@@ -75,10 +75,29 @@ class SummarizerProjectionCompatibilityTest {
 
         val editStore = FakeSharedPreferences()
         val editPrefs = preferences(editStore)
+        assertTrue(editPrefs.ensureSummarizerProjectionCompatibility())
         assertTrue(editPrefs.commitSummarizerSummaryEdit("safe edit"))
         assertEquals(
             SummarizerProjectionContract.VERSION,
             editPrefs.getSummarizerProjectionVersion()
+        )
+    }
+
+    @Test
+    fun oldSummaryEditorTextCannotBeBlessedAsCurrentProjectionState() {
+        val store = FakeSharedPreferences()
+        store.edit()
+            .putString("summarizer_summary", "STALE ATTACHMENT PAYLOAD")
+            .putString("summarizer_folded", "10")
+            .commit()
+        val prefs = preferences(store)
+
+        assertFalse(prefs.commitSummarizerSummaryEdit("STALE ATTACHMENT PAYLOAD edited"))
+        assertEquals("", prefs.getSummarizerSummary())
+        assertEquals(0, prefs.getSummarizerFoldedCount())
+        assertEquals(
+            SummarizerProjectionContract.VERSION,
+            prefs.getSummarizerProjectionVersion()
         )
     }
 }

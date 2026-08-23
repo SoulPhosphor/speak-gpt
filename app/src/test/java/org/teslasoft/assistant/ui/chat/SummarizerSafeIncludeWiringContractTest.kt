@@ -61,6 +61,18 @@ class SummarizerSafeIncludeWiringContractTest {
             "src/main/java/org/teslasoft/assistant/util/summarizer/SummarizerController.kt"
         )
         assertTrue(controller.contains("if (!prefs.ensureSummarizerProjectionCompatibility()) return false"))
+        assertTrue(activity.contains("val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true"))
+    }
+
+    @Test
+    fun historicalIncludeChangesBelongToTheNextFrozenRequest() {
+        val dispatchGuard = activity.substring(
+            activity.indexOf("if (preparedTurn != null)"),
+            activity.indexOf("// Put timestamp to chat")
+        )
+        assertTrue(dispatchGuard.contains("pendingIncludes.toList() == preparedTurn.pendingIncludes"))
+        assertFalse(dispatchGuard.contains("chatMessages.toList()"))
+        assertFalse(dispatchGuard.contains("historyBeforeSend"))
     }
 
     @Test

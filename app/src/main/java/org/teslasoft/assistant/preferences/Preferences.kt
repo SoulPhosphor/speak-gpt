@@ -2701,6 +2701,14 @@ class Preferences internal constructor(
     /** User edit of the summary text (bookmark untouched), committed
      *  synchronously so a hand correction is never lost to a process kill. */
     fun commitSummarizerSummaryEdit(summary: String): Boolean {
+        // Never let text loaded from a pre-6.2 summary editor session bless
+        // stale attachment-derived material as current. The UI establishes
+        // compatibility before loading the field; any other caller that did
+        // not do so gets a safe invalidation and must retry from fresh text.
+        if (getSummarizerProjectionVersion() != SummarizerProjectionContract.VERSION) {
+            ensureSummarizerProjectionCompatibility()
+            return false
+        }
         return try {
             preferences.edit()
                 .putString("summarizer_summary", summary)

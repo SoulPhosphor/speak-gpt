@@ -4472,7 +4472,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val field = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.field_summary_text)
         val update = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_action)
         update?.setText(R.string.summarizer_update_now)
-        field?.setText(preferences?.getSummarizerSummary().orEmpty())
+        val compatible = preferences?.ensureSummarizerProjectionCompatibility() == true
+        field?.setText(if (compatible) preferences?.getSummarizerSummary().orEmpty() else "")
 
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.summarizer_summary_title)
@@ -6568,6 +6569,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // corrupt (Round 4) — the blocking dialog owns this screen.
         if (chatStorageUnavailable) return
         if (preparedTurn != null) {
+            // Intentionally do not re-read historical Include state here.
+            // Phase 6.2 freezes that state for this dispatch; an edit/reduce/
+            // remove after projection creation belongs to the next request.
+            // Composer-owned pending Includes remain exact until committed.
             val stillExact = message == preparedTurn.rawMessage &&
                 messageInput?.text?.toString() == preparedTurn.rawMessage &&
                 pendingIncludes.toList() == preparedTurn.pendingIncludes &&
