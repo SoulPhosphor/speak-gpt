@@ -123,6 +123,29 @@ class ChatPresentationContractTest {
         assertTrue(adapter.contains("reasoningChevron?.setColorFilter(foreground)"))
         assertTrue(adapter.contains("reasoningLabel?.setTextColor(foreground)"))
         assertTrue(adapter.contains("reasoningText?.setTextColor(foreground)"))
+        assertTrue(adapter.contains("R.drawable.ic_chevron_up"))
+        assertTrue(adapter.contains("R.drawable.ic_chevron_down"))
+        assertFalse(adapter.contains("reasoningChevron?.rotation"))
+    }
+
+    @Test
+    fun modelAndTokenMetadataWrapsAgainstItsMeasuredMessageWidth() {
+        val layout = source("src/main/res/layout/view_assistant_bot_message.xml")
+        val metadataView = source(
+            "src/main/java/org/teslasoft/assistant/ui/chat/MessageMetadataView.kt"
+        )
+        val adapter = source(
+            "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
+        )
+
+        assertTrue(layout.contains("org.teslasoft.assistant.ui.chat.MessageMetadataView"))
+        assertTrue(metadataView.contains("Layout.getDesiredWidth"))
+        assertTrue(metadataView.contains("MeasureSpec.getSize(widthMeasureSpec)"))
+        assertTrue(metadataView.contains("\"\$model\\n\$tokens\""))
+        assertTrue(adapter.contains("meta.setMetadata(modelPart, tokenPart)"))
+        assertFalse(adapter.contains("availableMetaWidthPx"))
+        assertTrue(adapter.contains("metaParams.marginStart = if (showPortrait && showName)"))
+        assertTrue(adapter.contains("metaParams.topMargin = if (showName)"))
     }
 
     @Test

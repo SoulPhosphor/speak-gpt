@@ -111,6 +111,7 @@ import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
 import org.teslasoft.assistant.ui.chat.ChatMarkdownRenderer
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
+import org.teslasoft.assistant.ui.chat.MessageMetadataView
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
 import org.teslasoft.assistant.ui.util.IncludesPopupController
 import org.teslasoft.assistant.util.LegacyAvatarResolver
@@ -657,7 +658,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             itemView.findViewById(R.id.btn_persistent_includes)
         // Compact model/token line under the identity. Present only on the
         // assistant layout (model/tokens are AI-side), so nullable.
-        private val messageMeta: TextView? = itemView.findViewById(R.id.message_meta)
+        private val messageMeta: MessageMetadataView? = itemView.findViewById(R.id.message_meta)
         // Provider-supplied reasoning disclosure (§7.1). Present only on the
         // assistant layout, so nullable.
         private val reasoningContainer: LinearLayout? = itemView.findViewById(R.id.reasoning_container)
@@ -977,7 +978,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // presentation, so the compact line never appears there.
             if (chatMessage["isBot"] != true || isGeneratedImage) {
                 meta.visibility = View.GONE
-                meta.text = ""
+                meta.setMetadata(null, null)
                 return
             }
 
@@ -986,28 +987,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             } else null
             val tokenPart = if (preferences.getShowTokenUsage()) tokenCountLabel(chatMessage) else null
 
-            val text = when {
-                modelPart != null && tokenPart != null -> {
-                    val combined = "$modelPart  ·  $tokenPart"
-                    val nameBesidePortrait = preferences.getShowChatProfileImages() &&
-                        preferences.getShowChatNames()
-                    val available = availableMetaWidthPx(nameBesidePortrait)
-                    if (available > 0 && meta.paint.measureText(combined) <= available) {
-                        combined
-                    } else {
-                        "$modelPart\n$tokenPart"
-                    }
-                }
-                modelPart != null -> modelPart
-                tokenPart != null -> tokenPart
-                else -> null
-            }
-
-            if (text == null) {
+            if (modelPart == null && tokenPart == null) {
                 meta.visibility = View.GONE
-                meta.text = ""
+                meta.setMetadata(null, null)
             } else {
-                meta.text = text
+                meta.setMetadata(modelPart, tokenPart)
                 meta.visibility = View.VISIBLE
             }
         }
@@ -1400,26 +1384,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             reasoningText?.text = text
             reasoningText?.visibility = if (expanded) View.VISIBLE else View.GONE
-            // Chevron: up (rotated 180 from the down-pointing asset) when
-            // collapsed, down (unrotated) when expanded.
-            reasoningChevron?.rotation = if (expanded) 0f else 180f
-
-            // One blank line above Thinking when the model/token line above it
-            // is showing anything (model name, token count, or both), so
-            // Thinking never sits flush against it. No gap when that line is
-            // empty — Thinking then starts immediately, same as before (owner
-            // spec, Aug 23 2026). Stays flush with the bubble's own left edge
-            // either way; it never follows the model/token line's portrait
-            // indent.
-            val metaVisible = messageMeta?.visibility == View.VISIBLE
-            val containerParams = container.layoutParams as? ViewGroup.MarginLayoutParams
-            if (containerParams != null) {
-                val desiredTopMargin = if (metaVisible) (messageMeta?.lineHeight ?: 0) else 0
-                if (containerParams.topMargin != desiredTopMargin) {
-                    containerParams.topMargin = desiredTopMargin
-                    container.layoutParams = containerParams
-                }
-            }
+            reasoningChevron?.setImageResource(
+                if (expanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_up
+            )
 
             reasoningHeader?.setOnClickListener {
                 if (!expandedReasoning.add(key)) expandedReasoning.remove(key)
@@ -2096,6 +2063,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             messageMeta?.let { meta ->
                 val metaParams = meta.layoutParams as ConstraintLayout.LayoutParams
                 metaParams.marginStart = if (showPortrait && showName) metaPortraitExtraStartPx() else 0
+                metaParams.topMargin = if (showName) {
+                    val bubbleTop = bubbleParams.topMargin
+                    (nameParams.topMargin + username.lineHeight - bubbleTop - contentPadding)
+                        .coerceAtLeast(0)
+                } else {
+                    0
+                }
                 meta.layoutParams = metaParams
             }
 
@@ -2196,18 +2170,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val bubbleContentStart = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
                 dimensionPixelSize(R.dimen.chat_message_content_padding)
             return (nameStart - bubbleContentStart).coerceAtLeast(0)
-        }
-
-        /** The pixel width available to the metadata line before it would run
-         *  past the row's right edge, used to decide whether the model name
-         *  and token count still fit on one line. */
-        private fun availableMetaWidthPx(nameBesidePortrait: Boolean): Int {
-            val screenWidth = context.resources.displayMetrics.widthPixels
-            val insets = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
-                dimensionPixelSize(R.dimen.chat_message_ai_right_inset) +
-                dimensionPixelSize(R.dimen.chat_message_content_padding) * 2
-            val portraitExtra = if (nameBesidePortrait) metaPortraitExtraStartPx() else 0
-            return screenWidth - insets - portraitExtra
         }
 
         private fun resolveThemeColor(attribute: Int): Int {

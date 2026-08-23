@@ -100,6 +100,8 @@ import androidx.core.net.toUri
 import androidx.core.util.Pair
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.interpolator.view.animation.FastOutLinearInInterpolator
@@ -2684,6 +2686,39 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             before = ::captureTranscriptAnchor,
             after = ::restoreTranscriptAnchor
         )
+        root?.let { transcriptRoot ->
+            ViewCompat.setWindowInsetsAnimationCallback(
+                transcriptRoot,
+                object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                    override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
+                            captureTranscriptAnchor()
+                        }
+                        super.onPrepare(animation)
+                    }
+
+                    override fun onProgress(
+                        insets: WindowInsetsCompat,
+                        runningAnimations: MutableList<WindowInsetsAnimationCompat>
+                    ): WindowInsetsCompat {
+                        if (runningAnimations.any {
+                                it.typeMask and WindowInsetsCompat.Type.ime() != 0
+                            }
+                        ) {
+                            restoreTranscriptAnchor()
+                        }
+                        return insets
+                    }
+
+                    override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
+                            restoreTranscriptAnchor()
+                        }
+                        super.onEnd(animation)
+                    }
+                }
+            )
+        }
         root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
@@ -3207,40 +3242,39 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         button.isEnabled = visible
     }
 
-    /** Position (and its on-screen offset) of the transcript row that sat at
-     * the top of the visible viewport just before the composer's own
-     * geometry changed. RecyclerView.NO_POSITION when there was nothing to
-     * anchor to (e.g. an empty chat). */
+    /** Position and geometry of the transcript row touching the composer's
+     * top edge before the composer or IME changes size. */
     private var transcriptAnchorPosition = RecyclerView.NO_POSITION
-    private var transcriptAnchorOffset = 0
+    private var transcriptAnchorBottomGap = 0
+    private var transcriptAnchorHeight = 0
 
     /**
-     * Composer promotion/collapse/expand must never itself move
-     * already-visible transcript content — only the keyboard's own
-     * arrival/departure should change what is on screen. Captured right
-     * before the composer's layout params change and restored once that
-     * resize's layout pass has settled (see ChatComposerLayout's
-     * setResizeAnchorListener), this keeps the row that was at the top of
-     * the viewport pinned there: content the composer no longer leaves room
-     * for is simply covered from the bottom instead of the whole transcript
-     * sliding to keep the newest message glued above the composer.
+     * The bottommost visible row is the stable reference because its bottom
+     * is the content immediately above the composer. Preserving that row and
+     * its exact gap keeps the same text at the composer's top edge while still
+     * allowing ordinary transcript scrolling in either composer mode.
      */
     private fun captureTranscriptAnchor() {
-        val layoutManager = chat?.layoutManager as? LinearLayoutManager ?: return
-        val position = layoutManager.findFirstVisibleItemPosition()
+        val recycler = chat ?: return
+        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
+        val position = layoutManager.findLastVisibleItemPosition()
         if (position == RecyclerView.NO_POSITION) {
             transcriptAnchorPosition = RecyclerView.NO_POSITION
             return
         }
+        val anchor = layoutManager.findViewByPosition(position) ?: return
         transcriptAnchorPosition = position
-        transcriptAnchorOffset = layoutManager.findViewByPosition(position)?.top ?: 0
+        transcriptAnchorBottomGap = recycler.height - anchor.bottom
+        transcriptAnchorHeight = anchor.height
     }
 
     private fun restoreTranscriptAnchor() {
+        val recycler = chat ?: return
         val position = transcriptAnchorPosition
         if (position == RecyclerView.NO_POSITION) return
-        val layoutManager = chat?.layoutManager as? LinearLayoutManager ?: return
-        layoutManager.scrollToPositionWithOffset(position, transcriptAnchorOffset)
+        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
+        val targetTop = recycler.height - transcriptAnchorBottomGap - transcriptAnchorHeight
+        layoutManager.scrollToPositionWithOffset(position, targetTop)
     }
 
     /**

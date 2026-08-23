@@ -248,6 +248,17 @@
                                 android:visibility="gone"
                                 app:srcCompat="@drawable/ic_attach" />
 
+                            <!-- The inline editor normally owns the flexible
+                                 middle width. When it is promoted above this
+                                 row, this spacer takes over so the controls on
+                                 the end never drift toward the start. -->
+                            <Space
+                                android:id="@+id/composer_controls_spacer"
+                                android:layout_width="0dp"
+                                android:layout_height="1dp"
+                                android:layout_weight="1"
+                                android:visibility="gone" />
+
                             <ImageButton
                                 style="@style/Widget.App.Chat.ComposerContentToggle"
                                 android:id="@+id/btn_expand_content"

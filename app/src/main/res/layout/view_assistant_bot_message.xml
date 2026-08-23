@@ -68,7 +68,7 @@
                  reply. GONE (a zero-height point) whenever nothing is enabled or
                  available, so the reply keeps its original position. Its color is
                  set in code to the bubble foreground so it follows the theme. -->
-            <TextView
+            <org.teslasoft.assistant.ui.chat.MessageMetadataView
                 android:id="@+id/message_meta"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -102,10 +102,10 @@
                         android:id="@+id/reasoning_label"
                         android:text="@string/reasoning_thinking_label" />
 
-                    <!-- Outline chevron, not a filled arrow: pointing up (rotated
-                         180) while collapsed, pointing down (unrotated) while
-                         expanded (owner spec, Aug 23 2026). ChatAdapter sets the
-                         rotation per state. Its color is likewise set in code
+                    <!-- Outline chevron, not a filled arrow: pointing up while
+                         collapsed and down while expanded (owner spec, Aug 23
+                         2026). ChatAdapter selects the explicit state drawable
+                         instead of relying on rotation. Its color is set in code
                          (tintActionIcons) to the live bubble foreground, not a
                          static tint here — the asset's own baked-in color was
                          invisible against some bubble/theme combinations. -->
