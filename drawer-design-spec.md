@@ -81,13 +81,33 @@ The Search screen still participates in normal system Back/gesture navigation ev
 - The search executes when the user presses the **magnifying-glass button** in the search box.
 - After the magnifying-glass button is pressed, matching chats appear underneath the search box.
 - Live filtering while the user types is **not required** unless separately approved later.
-- Search results should use the same approved chat-row presentation described in Section 5 unless a later Search-specific result design is explicitly approved.
+- Search results use the same approved flat chat-row presentation described in Section 5 unless a later Search-specific result design is explicitly approved.
 
 ## 5. Chat List Presentation
 
 Reuse the existing chat-list data and behavior, but **do not copy the old chat-list visual design**.
 
-### 5.1 Companion Image Preference
+### 5.1 Flat Row Structure
+
+- Chat entries are **not cards, pills, or tiles**.
+- Do **not** put a filled background, rounded rectangle, elevation, or individual surface color behind each chat entry. The drawer surface remains visible behind the rows.
+- Separation comes from whitespace and typography rather than colored containers.
+- The old message-preview/snippet line is removed from the drawer and Search results. Do not show `chat_first_message` or an equivalent conversation excerpt under the title.
+- The chat name is **one line**, ellipsized at the end when needed.
+- The chat-name text is only slightly larger than ordinary reading/body text. It should be visibly a title without becoming oversized. Keep the exact size in the shared style system rather than hard-coding a drawer-only value.
+- Leave approximately **one full text-line of empty vertical space** between the bottom of one entry's final visible line and the next chat entry. The intended rhythm is comparable to a blank paragraph line, not a tightly packed list margin.
+
+### 5.2 Existing Optional Metadata Must Survive
+
+Simplifying the row does **not** remove the existing chat-list display preferences or their semantics.
+
+- Preserve the existing model-name display preference (`hide_model_names` / the positive Show Model Names UI). When model names are enabled, show the existing model/provider line underneath the chat title. When disabled, omit that line completely and reclaim the space.
+- Preserve **Show Memory Status on Chat List**. When enabled, show the existing memory review/status line underneath the title and any enabled model line. Preserve the existing state meanings, including waiting for review/pending, partially archived, archived, and excluded. When disabled, omit the line completely and reclaim the space.
+- The memory-status display setting is display-only. Drawer work must not enable, disable, archive, review, or otherwise change memory processing merely because the line is shown or hidden.
+- Do not replace these existing preferences with new drawer-only duplicates. The drawer and Search results should reflect the same stored settings.
+- Optional metadata uses quieter/subordinate typography than the chat title and remains theme-ready through shared styles/theme attributes.
+
+### 5.3 Companion Image Preference
 
 Add a temporary Chat Settings toggle labeled:
 
@@ -96,34 +116,26 @@ Add a temporary Chat Settings toggle labeled:
 - Default: **Off**.
 - Chat Settings is only the temporary location for this preference. It may be moved later without changing its meaning or stored behavior.
 
-### 5.2 Toggle Off: Text-Only Rows
-
 When **Show Companion Images in Chat List** is Off:
 
-- Each chat entry shows **only the chat name**.
-- Do not show the old snippet/model-label treatment.
 - Do not reserve an empty image/icon column.
-- The chat name may use up to **two lines**.
-- The chat-name text should be slightly larger than ordinary body/message text.
-- Keep the exact text size in the shared style system rather than hard-coding a drawer-only value.
-- Leave approximately **one full text-line of empty vertical space** between neighboring chat names. The intended visual rhythm is comparable to a blank paragraph line, not a tightly packed list margin.
-
-### 5.3 Toggle On: Companion Image Rows
+- The title and any enabled metadata use the available row width.
 
 When **Show Companion Images in Chat List** is On:
 
 - Use a simple two-column row.
 - The companion/profile image is in the **left column**, along the left side of the row.
-- The chat name is in the **right column** and may still use up to two lines.
-- Vertically center the image against the one-to-two-line chat-name text area.
-- The image should be approximately the visual height of two chat-name lines.
-- It must not be smaller than the companion image currently shown in the existing main chat list.
-- Exact image size, column width, and local spacing may use implementation judgment to preserve those visual relationships.
-- Do not right-align the image and do not place it after the chat name.
+- The text block is in the **right column** and contains the one-line chat title plus whichever optional metadata lines are enabled.
+- Vertically center the image against the visible text block.
+- The image should be approximately the visual height of two chat-name lines and must not be smaller than the companion image currently shown in the existing main chat list.
+- Do not stretch the image simply because optional metadata makes the text block taller.
+- Exact image size, column width, and local spacing may use implementation judgment to preserve these visual relationships.
+- Do not right-align the image and do not place it after the chat text.
 
 ### 5.4 Current Chat State
 
-- Highlight the currently open saved chat using the approved selected/drawer-selected theme role.
+- The currently open saved chat still needs a visible selected state, but **do not recreate the old filled rounded chat tile** just to show selection.
+- Use a restrained, theme-ready non-card selection treatment, such as an accent/marker or text treatment, using the approved selected/drawer-selected theme role. Exact treatment may use implementation judgment as long as it is clearly visible and does not become a per-row background tile.
 - A blank startup chat has no saved chat row to highlight until it becomes a saved/current chat according to the app's existing behavior.
 - Drawer chat rows must remain palette/theme ready. Use shared typography, theme attributes, and drawer zones rather than hard-coded colors.
 
