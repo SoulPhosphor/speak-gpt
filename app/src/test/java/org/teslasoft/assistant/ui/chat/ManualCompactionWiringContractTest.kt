@@ -7,6 +7,7 @@
 package org.teslasoft.assistant.ui.chat
 
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -73,5 +74,15 @@ class ManualCompactionWiringContractTest {
         assertTrue(dimensions.contains("chat_action_menu_blur_radius"))
         assertTrue(activity.contains("R.dimen.chat_action_menu_blur_radius"))
         assertFalse(activity.contains("val radius = 16f"))
+    }
+
+    @Test
+    fun projectionSwitchClosesTheSummaryWindowInBothDirections() {
+        val summaryView = activity.substring(
+            activity.indexOf("private fun showSummaryView()"),
+            activity.indexOf("private fun showProjectionStatus")
+        )
+        assertTrue(summaryView.contains("showProjectionStatus(enableCondensed)\n            dialog.dismiss()"))
+        assertEquals(1, Regex("dialog\\.show\\(\\)").findAll(summaryView).count())
     }
 }

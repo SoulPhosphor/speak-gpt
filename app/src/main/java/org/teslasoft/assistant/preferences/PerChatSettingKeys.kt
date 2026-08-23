@@ -126,6 +126,9 @@ object PerChatSettingKeys {
         "summarizer_episode",
         "summarizer_errors",
         "manual_compaction_boundary",
+        "use_summarized_conversation_projection",
+        "condensed_conversation_kind",
+        "summarizer_catch_up_pending",
 
         // Legacy (deprecated plaintext API key slot; secureApiKey migrates it out)
         "api_key"

@@ -4886,20 +4886,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val enableCondensed = preferences?.getUseSummarizedConversationProjection() == false
             preferences?.setUseSummarizedConversationProjection(enableCondensed)
             showProjectionStatus(enableCondensed)
+            dialog.dismiss()
             if (enableCondensed) {
-                dialog.dismiss()
                 if (preferences?.getCondensedConversationKind() !=
                     org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
                 ) {
                     summarizerCycle(force = true)
                 }
-            } else {
-                projection.setText(
-                    if (preferences?.getCondensedConversationKind() ==
-                        org.teslasoft.assistant.preferences.Preferences.CONDENSED_KIND_COMPACTION
-                    ) R.string.summarizer_use_compacted
-                    else R.string.summarizer_use_summary
-                )
             }
         }
         dialog.show()

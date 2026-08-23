@@ -431,13 +431,14 @@ class SummarizerController(
         if (chatId.isBlank() || snapshot.entries.isEmpty()) return false
         val prefs = Preferences.getPreferences(appContext, chatId)
         if (!prefs.ensureSummarizerProjectionCompatibility()) {
+            val configuredModel = prefs.getSummarizerModel()
             recordFailure(
                 prefs,
                 SummarizerErrorCategory.SAVE_FAILED,
                 appContext.getString(R.string.summarizer_unknown_profile),
-                prefs.getSummarizerModel().ifBlank {
+                if (configuredModel.isBlank()) {
                     appContext.getString(R.string.summarizer_unknown_model)
-                },
+                } else configuredModel,
                 null,
                 "The app could not establish a compatible persisted summary projection before compaction."
             )
@@ -521,13 +522,14 @@ class SummarizerController(
             prefs.getSummarizerOverLength() != startingOverLength ||
             prefs.getSummarizerProjectionVersion() != startingVersion
         ) {
+            val configuredModel = prefs.getSummarizerModel()
             recordFailure(
                 prefs,
                 SummarizerErrorCategory.UNEXPECTED,
                 appContext.getString(R.string.summarizer_unknown_profile),
-                prefs.getSummarizerModel().ifBlank {
+                if (configuredModel.isBlank()) {
                     appContext.getString(R.string.summarizer_unknown_model)
-                },
+                } else configuredModel,
                 null,
                 "Compaction finished generating, but its frozen conversation prefix or saved summary state changed before the atomic commit. Generated work was discarded."
             )
