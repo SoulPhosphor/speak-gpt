@@ -361,13 +361,14 @@ class SummarizerController(
         }
 
         if (!prefs.commitManualCompaction(summary, target, overLength, target)) {
+            val configuredModel = prefs.getSummarizerModel()
             recordFailure(
                 prefs,
                 SummarizerErrorCategory.SAVE_FAILED,
                 appContext.getString(R.string.summarizer_unknown_profile),
-                prefs.getSummarizerModel().ifBlank {
+                if (configuredModel.isBlank()) {
                     appContext.getString(R.string.summarizer_unknown_model)
-                },
+                } else configuredModel,
                 null,
                 null
             )
