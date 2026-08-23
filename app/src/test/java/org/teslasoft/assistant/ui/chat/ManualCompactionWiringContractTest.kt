@@ -83,6 +83,9 @@ class ManualCompactionWiringContractTest {
             activity.indexOf("private fun showProjectionStatus")
         )
         assertTrue(summaryView.contains("showProjectionStatus(enableCondensed)\n            dialog.dismiss()"))
+        assertTrue(summaryView.contains("setSummarizerCatchUpPending(true)"))
+        assertTrue(summaryView.contains("OperationKind.SUMMARIZING"))
+        assertTrue(summaryView.contains("summarizerController?.cancel()"))
         assertEquals(1, Regex("dialog\\.show\\(\\)").findAll(summaryView).count())
     }
 }

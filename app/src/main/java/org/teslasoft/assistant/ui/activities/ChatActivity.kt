@@ -426,7 +426,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var summarizerOperationText: TextView? = null
     private var summarizerOperationCancel: com.google.android.material.button.MaterialButton? = null
     private val summarizerStatusHandler = Handler(Looper.getMainLooper())
-    private val hideSummarizerStatus = Runnable { summarizerOperationChip?.visibility = View.GONE }
+    private var projectionStatusVisible = false
+    private val hideSummarizerStatus = Runnable {
+        projectionStatusVisible = false
+        summarizerOperationChip?.visibility = View.GONE
+    }
     private val summarizerListener = object :
         org.teslasoft.assistant.util.summarizer.SummarizerController.Listener {
         override fun onSummarizerStateChanged() {
@@ -4448,10 +4452,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun renderSummarizerOperation(
         state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
     ) {
-        summarizerStatusHandler.removeCallbacks(hideSummarizerStatus)
+        val preserveProjectionNotice = projectionStatusVisible &&
+            (state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Idle ||
+                state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Cancelled)
+        if (!preserveProjectionNotice) {
+            projectionStatusVisible = false
+            summarizerStatusHandler.removeCallbacks(hideSummarizerStatus)
+        }
         when (state) {
             org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Idle ->
-                summarizerOperationChip?.visibility = View.GONE
+                if (!projectionStatusVisible) summarizerOperationChip?.visibility = View.GONE
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running -> {
                 summarizerOperationChip?.visibility = View.VISIBLE
                 summarizerOperationSpinner?.visibility = View.VISIBLE
@@ -4486,7 +4496,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
             }
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Cancelled ->
-                summarizerOperationChip?.visibility = View.GONE
+                if (!projectionStatusVisible) summarizerOperationChip?.visibility = View.GONE
         }
     }
 
@@ -4885,6 +4895,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             saveEditsIfChanged()
             val enableCondensed = preferences?.getUseSummarizedConversationProjection() == false
             preferences?.setUseSummarizedConversationProjection(enableCondensed)
+            if (!enableCondensed) {
+                // Entire-chat transmission is also a true pause for automatic
+                // summarization. Preserve the already committed summary and
+                // bookmark, and remember to catch up when condensed mode is
+                // deliberately restored. Manual compaction is a separate,
+                // explicit operation and is allowed to keep running.
+                preferences?.setSummarizerCatchUpPending(true)
+                val state = summarizerController?.currentOperationState()
+                if (state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running &&
+                    state.kind == org.teslasoft.assistant.util.summarizer.SummarizerController.OperationKind.SUMMARIZING
+                ) {
+                    summarizerController?.cancel()
+                }
+            }
             showProjectionStatus(enableCondensed)
             dialog.dismiss()
             if (enableCondensed) {
@@ -4899,6 +4923,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun showProjectionStatus(enableCondensed: Boolean) {
+        projectionStatusVisible = true
         summarizerOperationChip?.visibility = View.VISIBLE
         summarizerOperationSpinner?.visibility = View.GONE
         summarizerOperationSuccess?.visibility = View.VISIBLE
