@@ -49,6 +49,7 @@ class ChatActionSurfaceSourceContractTest {
     @Test
     fun expandIsBesideMicrophoneAndContentTogglesUseTheBareSharedStyle() {
         val layout = source("main/res/layout/activity_chat.xml")
+        assertOrdered(layout, "@+id/composer_controls_spacer", "@+id/btn_expand_content")
         assertOrdered(layout, "@+id/btn_expand_content", "@+id/btn_micro")
         val sharedStyle = "style=\"@style/Widget.App.Chat.ComposerContentToggle\""
         assertTrue(view(layout, "btn_expand_content").contains(sharedStyle))
@@ -56,6 +57,19 @@ class ChatActionSurfaceSourceContractTest {
 
         val composer = source("main/java/org/teslasoft/assistant/ui/chat/ChatComposerLayout.kt")
         assertTrue(composer.contains("if (!expanded && active)"))
+        assertTrue(composer.contains("controlsSpacer.visibility = View.VISIBLE"))
+        assertTrue(composer.contains("controlsSpacer.visibility = View.GONE"))
+    }
+
+    @Test
+    fun composerAndImeResizeKeepTheTranscriptPinnedAtTheComposerEdge() {
+        val activity = source("main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
+
+        assertTrue(activity.contains("findLastVisibleItemPosition()"))
+        assertTrue(activity.contains("transcriptAnchorBottomGap = recycler.height - anchor.bottom"))
+        assertTrue(activity.contains("recycler.height - transcriptAnchorBottomGap - transcriptAnchorHeight"))
+        assertTrue(activity.contains("WindowInsetsAnimationCompat.Callback"))
+        assertTrue(activity.contains("animation.typeMask and WindowInsetsCompat.Type.ime()"))
     }
 
     @Test

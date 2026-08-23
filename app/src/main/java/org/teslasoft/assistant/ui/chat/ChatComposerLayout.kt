@@ -55,6 +55,7 @@ class ChatComposerLayout @JvmOverloads constructor(
     private lateinit var messageInput: EditText
     private lateinit var btnExpand: ImageButton
     private lateinit var btnCollapse: ImageButton
+    private lateinit var controlsSpacer: View
 
     private var expanded = false
     private var active = false
@@ -81,6 +82,7 @@ class ChatComposerLayout @JvmOverloads constructor(
         messageInput = findViewById(R.id.message_input)
         btnExpand = findViewById(R.id.btn_expand_content)
         btnCollapse = findViewById(R.id.btn_collapse_content)
+        controlsSpacer = findViewById(R.id.composer_controls_spacer)
 
         active = messageInput.text?.isNotBlank() == true
         controlsBottomPadding = messageInput.paddingBottom
@@ -210,6 +212,7 @@ class ChatComposerLayout @JvmOverloads constructor(
     }
 
     private fun moveEditorToContent() {
+        controlsSpacer.visibility = View.VISIBLE
         if (messageInput.parent !== composerContent) {
             (messageInput.parent as? ViewGroup)?.removeView(messageInput)
             composerContent.addView(messageInput, 0)
@@ -232,6 +235,7 @@ class ChatComposerLayout @JvmOverloads constructor(
     }
 
     private fun moveEditorToControls() {
+        controlsSpacer.visibility = View.GONE
         if (messageInput.parent !== composerControls) {
             (messageInput.parent as? ViewGroup)?.removeView(messageInput)
             val persistent = composerControls.findViewById<View>(R.id.btn_persistent_includes)
