@@ -684,6 +684,19 @@ Use for a checkbox option where the whole line is the tap target but must read a
 
 Distinct from `Widget.App.Row.Toggle`, which is a switch row with a subtitle.
 
+## Chat composer host and surface
+
+### Chat composer host and surface
+
+Use:
+
+- `Widget.App.Chat.ComposerHost` on the outer bottom composer host. It keeps the space behind the floating oblong transparent.
+- `Widget.App.Chat.ComposerSurface` on the live composer surface. It uses `@drawable/bubble_in`, so the editor and its controls resolve the same app-owned theme surface as the incoming AI bubble.
+
+The initial empty composer keeps the one-row editor between the bottom controls. Focusing it moves that same editor above the controls and allows natural growth up to eight lines. The expand control is shown only for an active non-empty draft; expanded mode uses the bounded space below the app header and the collapse control restores the previous mode. Keep the controls in this order: Add, conditional persistent Includes, Expand content, microphone, Send.
+
+Do not assign phone/dynamic-system colors or a second local composer palette in XML or Kotlin. The host remains transparent and the surface resolves through the shared drawable/theme roles.
+
 ## Attached-document strip
 
 `Widget.App.Include.Container`
