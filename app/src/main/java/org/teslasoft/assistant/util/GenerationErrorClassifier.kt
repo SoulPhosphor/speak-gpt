@@ -123,7 +123,7 @@ object GenerationErrorClassifier {
             code: GenErrorCode,
             providerLimit: ProviderLimitKind? = null,
             vision: Boolean = false,
-            filterSide: ContentFilterSide = providerEvidence?.contentFilterSide
+            filterSide: ContentFilterSide = providerEvidence?.errorContentFilterSide
                 ?: ContentFilterSide.NONE
         ) = GenErrorResult(
             code = code,
@@ -145,7 +145,7 @@ object GenerationErrorClassifier {
         // In particular, OpenRouter may call an AtlasCloud filtered-output
         // termination `provider_unavailable`; the output-side evidence is still
         // the honest user-facing classification.
-        when (providerEvidence?.contentFilterSide) {
+        when (providerEvidence?.errorContentFilterSide) {
             ContentFilterSide.INPUT -> return result(GenErrorCode.S3)
             ContentFilterSide.OUTPUT -> return result(GenErrorCode.S4)
             ContentFilterSide.AMBIGUOUS -> return result(GenErrorCode.S5)
@@ -382,7 +382,7 @@ object GenerationErrorClassifier {
             httpStatus = status,
             providerLimit = kind,
             embeddedProviderStatus = providerEvidence?.embeddedHttpStatus,
-            contentFilterSide = providerEvidence?.contentFilterSide ?: ContentFilterSide.NONE,
+            contentFilterSide = providerEvidence?.errorContentFilterSide ?: ContentFilterSide.NONE,
             providerResponseReceived = providerEvidence?.providerResponded == true || status != null
         )
     }

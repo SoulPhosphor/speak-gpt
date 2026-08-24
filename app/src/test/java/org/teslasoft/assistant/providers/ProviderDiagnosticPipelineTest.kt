@@ -177,6 +177,17 @@ class ProviderDiagnosticPipelineTest {
         assertTrue(snapshot.errorEvents.isEmpty())
     }
 
+    @Test fun explicitModerationResultsBecomeSideSpecificWarningsOnly() {
+        val events = ProviderDiagnosticParser.parseSsePayload(
+            """{"prompt_filter_results":[{"content_filter_results":{"sexual":{"filtered":true}}}],"choices":[]}"""
+        )
+        val snapshot = ProviderDiagnosticSnapshot("moderation", 200, events = events)
+        assertTrue(snapshot.warningMessages.single().contains("input filtered"))
+        assertEquals(ContentFilterSide.INPUT, snapshot.contentFilterSide)
+        assertEquals(ContentFilterSide.NONE, snapshot.errorContentFilterSide)
+        assertTrue(snapshot.errorEvents.isEmpty())
+    }
+
     @Test fun u0IsReservedForEvidenceWithNoKnownClassification() {
         assertEquals(
             GenErrorCode.U0,

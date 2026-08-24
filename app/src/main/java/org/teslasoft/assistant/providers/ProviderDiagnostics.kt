@@ -74,8 +74,13 @@ data class ProviderDiagnosticSnapshot(
     val providerErrorType: String? get() = primaryError?.errorType
 
     val contentFilterSide: ContentFilterSide
-        get() {
-            val sides = events.map { it.contentFilterSide }
+        get() = combinedFilterSide(events)
+
+    val errorContentFilterSide: ContentFilterSide
+        get() = combinedFilterSide(errorEvents)
+
+    private fun combinedFilterSide(sourceEvents: List<ProviderDiagnosticEvent>): ContentFilterSide {
+            val sides = sourceEvents.map { it.contentFilterSide }
                 .filter { it != ContentFilterSide.NONE }
                 .toSet()
             return when {
@@ -83,7 +88,7 @@ data class ProviderDiagnosticSnapshot(
                 sides.size == 1 -> sides.first()
                 else -> ContentFilterSide.AMBIGUOUS
             }
-        }
+    }
 
     /** Exact provider messages, de-duplicated without normalizing their text. */
     val errorMessages: List<String>
@@ -189,6 +194,18 @@ object ProviderDiagnosticParser {
                 rawPayload = rawPayload,
                 actualServingProvider = actualProvider,
                 contentFilterSide = filterSide(root, finishReason, null, warning)
+            )
+        }
+
+        collectModerationFindings(root).forEach { finding ->
+            result += ProviderDiagnosticEvent(
+                source = source,
+                isError = false,
+                isWarning = true,
+                message = finding.message,
+                rawPayload = rawPayload,
+                actualServingProvider = actualProvider,
+                contentFilterSide = finding.side
             )
         }
 
@@ -302,6 +319,66 @@ object ProviderDiagnosticParser {
         add(root.get("warning"))
         add(root.get("warnings"))
         return out.distinct()
+    }
+
+    private data class ModerationFinding(
+        val side: ContentFilterSide,
+        val message: String
+    )
+
+    /** Only explicit `filtered=true` / `flagged=true` facts count. Scores and
+     * category names alone are not warnings and never trigger attribution. */
+    private fun collectModerationFindings(root: JsonObject): List<ModerationFinding> {
+        val findings = mutableListOf<ModerationFinding>()
+        fun filteredCategories(element: JsonElement?): List<String> {
+            if (element == null || element.isJsonNull) return emptyList()
+            if (element.isJsonArray) return element.asJsonArray.flatMap(::filteredCategories)
+            if (!element.isJsonObject) return emptyList()
+            val obj = element.asJsonObject
+            val out = mutableListOf<String>()
+            for ((name, value) in obj.entrySet()) {
+                when {
+                    name.equals("filtered", true) && value.isJsonPrimitive &&
+                        runCatching { value.asBoolean }.getOrDefault(false) -> out += "filtered"
+                    name.equals("flagged", true) && value.isJsonPrimitive &&
+                        runCatching { value.asBoolean }.getOrDefault(false) -> out += "flagged"
+                    value.isJsonObject || value.isJsonArray -> {
+                        val nested = filteredCategories(value)
+                        if (nested.isNotEmpty()) out += if (nested.all { it in setOf("filtered", "flagged") }) {
+                            name
+                        } else nested
+                    }
+                }
+            }
+            return out.distinct()
+        }
+        val promptCategories = filteredCategories(root.get("prompt_filter_results"))
+        if (promptCategories.isNotEmpty()) {
+            findings += ModerationFinding(
+                ContentFilterSide.INPUT,
+                "Provider moderation result: input filtered (${promptCategories.joinToString(", ")})"
+            )
+        }
+        val outputCategories = root.array("choices").orEmpty().flatMap { choiceElement ->
+            val choice = choiceElement.takeIf { it.isJsonObject }?.asJsonObject
+            filteredCategories(choice?.get("content_filter_results"))
+        }.distinct()
+        if (outputCategories.isNotEmpty()) {
+            findings += ModerationFinding(
+                ContentFilterSide.OUTPUT,
+                "Provider moderation result: generated output filtered (${outputCategories.joinToString(", ")})"
+            )
+        }
+        val generic = filteredCategories(root.get("moderation")) +
+            filteredCategories(root.get("moderation_result")) +
+            filteredCategories(root.get("moderation_results"))
+        if (generic.isNotEmpty()) {
+            findings += ModerationFinding(
+                ContentFilterSide.AMBIGUOUS,
+                "Provider moderation result: content flagged (${generic.distinct().joinToString(", ")})"
+            )
+        }
+        return findings
     }
 
     private fun filterSide(
