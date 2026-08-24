@@ -155,6 +155,26 @@ class ChatComposerLayout @JvmOverloads constructor(
         return true
     }
 
+    /** Sending ends the current editing gesture even while request preflight
+     * continues. Keeping this inside the composer makes focus and IME ownership
+     * explicit instead of relying on a text clear to happen later. */
+    fun dismissImeForSend() {
+        if (!::messageInput.isInitialized) return
+        messageInput.clearFocus()
+        ViewCompat.getWindowInsetsController(messageInput)?.hide(WindowInsetsCompat.Type.ime())
+    }
+
+    /** Once the draft has been committed and cleared, restore the compact
+     * single-row composer in the same resize transaction used by every other
+     * composer mode change. */
+    fun resetAfterSend() {
+        if (!::messageInput.isInitialized) return
+        expanded = false
+        active = false
+        applyMode()
+        expansionListener?.invoke(false)
+    }
+
     /** A tap outside the composer while its draft is blank should return it
      * to the single-line control row instead of leaving an empty, promoted
      * editor focused. Expanded mode keeps its own explicit Collapse control

@@ -650,6 +650,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val btnRetry: ImageButton = itemView.findViewById(R.id.btn_retry)
         private val btnShare: ImageButton = itemView.findViewById(R.id.btn_share)
         private val btnSpeak: ImageButton = itemView.findViewById(R.id.btn_speak)
+        private val btnSpeakTop: ImageButton? = itemView.findViewById(R.id.btn_speak_top)
         private val btnActiveMemories: ImageButton? =
             itemView.findViewById(R.id.btn_active_memories)
         // Message Details action on both layouts. Active Memories may precede
@@ -709,6 +710,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private var boundShowsPortrait = false
         private var boundShowsName = false
         private var boundIsGeneratedImage = false
+        private var actionIconForeground: Int? = null
 
         init {
             ui.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -1936,6 +1938,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * updateSpeakButton, which owns its speaking-state color.
          */
         private fun tintActionIcons(foreground: Int) {
+            actionIconForeground = foreground
             btnActiveMemories?.setColorFilter(foreground)
             btnDetails.setColorFilter(foreground)
             btnPersistentIncludes?.setColorFilter(foreground)
@@ -1944,6 +1947,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnCopy.setColorFilter(foreground)
             btnEdit.setColorFilter(foreground)
             btnMore?.setColorFilter(foreground)
+            btnSpeakTop?.setColorFilter(foreground)
             // The version pager sits on the same bar and follows the same
             // bubble foreground so its glyphs and count read on any theme.
             btnVersionPrev?.setColorFilter(foreground)
@@ -2246,23 +2250,30 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val msg = chatMessage["message"].toString()
             val speakable = chatMessage["isBot"] == true &&
                     !msg.contains("~file:")
-            if (speakable) {
-                btnSpeak.visibility = View.VISIBLE
-                if (position == speakingPosition) {
-                    btnSpeak.setColorFilter(
-                        ResourcesCompat.getColor(context.resources, R.color.mic_listening_green, context.theme)
+            val useTopControl = preferences.getTopPositionedAudioControl() && btnSpeakTop != null
+            btnSpeak.visibility = if (speakable && !useTopControl) View.VISIBLE else View.GONE
+            btnSpeakTop?.visibility = if (speakable && useTopControl) View.VISIBLE else View.GONE
+
+            val click = View.OnClickListener {
+                if (!bulkActionMode) {
+                    val pos = bindingAdapterPosition
+                    listener?.onSpeakClick(
+                        msg,
+                        if (pos != RecyclerView.NO_POSITION) pos else position
                     )
-                } else {
-                    btnSpeak.clearColorFilter()
                 }
-                btnSpeak.setOnClickListener {
-                    if (!bulkActionMode) {
-                        val pos = bindingAdapterPosition
-                        listener?.onSpeakClick(msg, if (pos != RecyclerView.NO_POSITION) pos else position)
-                    }
-                }
-            } else {
-                btnSpeak.visibility = View.GONE
+            }
+            val speakingColor = ResourcesCompat.getColor(
+                context.resources,
+                R.color.mic_listening_green,
+                context.theme
+            )
+            val normalColor = actionIconForeground
+                ?: ResourcesCompat.getColor(context.resources, R.color.text, context.theme)
+
+            listOfNotNull(btnSpeak, btnSpeakTop).forEach { button ->
+                button.setOnClickListener(if (speakable) click else null)
+                button.setColorFilter(if (position == speakingPosition) speakingColor else normalColor)
             }
         }
 
@@ -2277,10 +2288,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val metaVisible = messageMeta?.visibility == View.VISIBLE
             val reasoningVisible = reasoningContainer?.visibility == View.VISIBLE
             val nameVisible = boundShowsName && username.visibility == View.VISIBLE
+            val topAudioVisible = btnSpeakTop?.visibility == View.VISIBLE
+            val identityVisible = nameVisible || topAudioVisible
 
-            val metaNameClearance = if (nameVisible) measuredNameClearancePx(0) else 0
-            val bodyNameClearance = if (nameVisible) {
-                measuredNameClearancePx(dimensionPixelSize(R.dimen.chat_name_body_gap))
+            val metaNameClearance = if (identityVisible) measuredIdentityClearancePx(0) else 0
+            val bodyNameClearance = if (identityVisible) {
+                measuredIdentityClearancePx(dimensionPixelSize(R.dimen.chat_name_body_gap))
             } else {
                 0
             }
@@ -2327,18 +2340,26 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             reasoningText?.requestPortraitGeometryUpdate()
         }
 
-        private fun measuredNameClearancePx(afterNameGap: Int): Int {
-            if (ui.width > 0 && username.height > 0 && bubbleBg.height > 0) {
-                val nameBounds = boundsInRow(username)
+        private fun measuredIdentityClearancePx(afterNameGap: Int): Int {
+            if (ui.width > 0 && bubbleBg.height > 0 &&
+                (username.height > 0 || (btnSpeakTop?.height ?: 0) > 0)
+            ) {
+                val identityBottom = listOfNotNull(
+                    username.takeIf { it.visibility == View.VISIBLE }?.let(::boundsInRow)?.bottom,
+                    btnSpeakTop?.takeIf { it.visibility == View.VISIBLE }?.let(::boundsInRow)?.bottom
+                ).maxOrNull() ?: 0
                 val bubbleBounds = boundsInRow(bubbleBg)
-                return (nameBounds.bottom + afterNameGap -
+                return (identityBottom + afterNameGap -
                     (bubbleBounds.top + bubbleBg.paddingTop)).coerceAtLeast(0)
             }
 
             val nameParams = username.layoutParams as ViewGroup.MarginLayoutParams
             val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
-            val nameHeight = username.measuredHeight.coerceAtLeast(username.lineHeight)
-            return (nameParams.topMargin + nameHeight + afterNameGap -
+            val identityHeight = maxOf(
+                username.measuredHeight.coerceAtLeast(username.lineHeight),
+                btnSpeakTop?.measuredHeight ?: 0
+            )
+            return (nameParams.topMargin + identityHeight + afterNameGap -
                 bubbleParams.topMargin - bubbleBg.paddingTop).coerceAtLeast(0)
         }
 
