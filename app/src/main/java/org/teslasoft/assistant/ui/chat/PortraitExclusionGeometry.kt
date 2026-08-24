@@ -13,6 +13,11 @@ import kotlin.math.max
 /** Pixel geometry shared by every text block that flows around a portrait. */
 internal object PortraitExclusionGeometry {
 
+    data class HorizontalExclusion(
+        val leadingMarginPx: Int,
+        val portraitOnLeft: Boolean
+    )
+
     data class TextFlow(
         val leadingMarginPx: Int,
         val lineCount: Int
@@ -34,6 +39,27 @@ internal object PortraitExclusionGeometry {
             heightToClear.toDouble() / lineHeightPx.coerceAtLeast(1)
         ).toInt()
         return TextFlow(margin, lines)
+    }
+
+    /**
+     * Resolves the portrait's physical side from the rendered rectangles.
+     * This deliberately avoids speaker identity: start/end constraints mirror
+     * in RTL, while these coordinates already describe the post-layout result.
+     */
+    fun horizontalExclusion(
+        portraitLeft: Int,
+        portraitRight: Int,
+        contentLeft: Int,
+        contentRight: Int,
+        gapPx: Int
+    ): HorizontalExclusion {
+        val portraitOnLeft = portraitLeft + portraitRight <= contentLeft + contentRight
+        val margin = if (portraitOnLeft) {
+            portraitRight - contentLeft + gapPx
+        } else {
+            contentRight - portraitLeft + gapPx
+        }
+        return HorizontalExclusion(max(0, margin), portraitOnLeft)
     }
 
     fun overlaps(

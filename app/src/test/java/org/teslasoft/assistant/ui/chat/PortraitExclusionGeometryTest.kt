@@ -67,4 +67,27 @@ class PortraitExclusionGeometryTest {
         assertTrue(PortraitExclusionGeometry.overlaps(0, 96, 80, 112))
         assertFalse(PortraitExclusionGeometry.overlaps(0, 96, 96, 128))
     }
+
+    @Test
+    fun horizontalClearanceFollowsTheRenderedPortraitSide() {
+        val left = PortraitExclusionGeometry.horizontalExclusion(
+            portraitLeft = 20,
+            portraitRight = 116,
+            contentLeft = 42,
+            contentRight = 342,
+            gapPx = 9
+        )
+        val right = PortraitExclusionGeometry.horizontalExclusion(
+            portraitLeft = 284,
+            portraitRight = 380,
+            contentLeft = 58,
+            contentRight = 358,
+            gapPx = 9
+        )
+
+        assertTrue(left.portraitOnLeft)
+        assertEquals(83, left.leadingMarginPx)
+        assertFalse(right.portraitOnLeft)
+        assertEquals(83, right.leadingMarginPx)
+    }
 }

@@ -144,7 +144,7 @@ class ChatPresentationContractTest {
         assertTrue(metadataView.contains("\"\$model\\n\$tokens\""))
         assertTrue(adapter.contains("meta.setMetadata(modelPart, tokenPart)"))
         assertFalse(adapter.contains("availableMetaWidthPx"))
-        assertTrue(adapter.contains("setPortraitStartMargin("))
+        assertTrue(adapter.contains("setPortraitSideMargin("))
         assertTrue(adapter.contains("measuredNameClearancePx("))
         assertTrue(adapter.contains("messageMeta?.lineHeight ?: 0"))
     }
@@ -167,6 +167,10 @@ class ChatPresentationContractTest {
         assertTrue(adapter.contains("reasoningText?.requestPortraitGeometryUpdate()"))
         assertTrue(adapter.contains("message.requestPortraitGeometryUpdate()"))
         assertTrue(adapter.contains("updateMeasuredNameInset(portraitBounds)"))
+        assertTrue(adapter.contains("portraitIsOnLeft(portraitBounds)"))
+        assertTrue(adapter.contains("ui.layoutDirection != View.LAYOUT_DIRECTION_RTL"))
+        assertTrue(portraitAwareText.contains("PortraitExclusionGeometry.horizontalExclusion("))
+        assertTrue(portraitAwareText.contains("horizontal.portraitOnLeft"))
         assertTrue(portraitAwareText.contains("portrait?.layoutParams?.width"))
         assertFalse(
             portraitAwareText.contains(

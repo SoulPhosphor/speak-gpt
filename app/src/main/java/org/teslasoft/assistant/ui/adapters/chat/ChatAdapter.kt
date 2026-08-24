@@ -2221,19 +2221,19 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             if (portraitVisible) {
                 val portraitBounds = boundsInRow(icon)
                 if (nameVisible) updateMeasuredNameInset(portraitBounds)
-                setPortraitStartMargin(
+                setPortraitSideMargin(
                     messageMeta,
                     if (metaVisible) portraitBounds else null,
                     dimensionPixelSize(R.dimen.chat_portrait_name_gap)
                 )
-                setPortraitStartMargin(
+                setPortraitSideMargin(
                     reasoningHeader,
                     if (reasoningVisible) portraitBounds else null,
                     dimensionPixelSize(R.dimen.chat_portrait_text_gap)
                 )
             } else if (!boundShowsPortrait || icon.visibility != View.VISIBLE) {
-                setStartMargin(messageMeta, 0)
-                setStartMargin(reasoningHeader, 0)
+                setSideMargins(messageMeta, portraitOnStart = true, desired = 0)
+                setSideMargins(reasoningHeader, portraitOnStart = true, desired = 0)
             }
 
             message.requestPortraitGeometryUpdate()
@@ -2256,48 +2256,65 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         private fun updateMeasuredNameInset(portraitBounds: Rect) {
-            val params = username.layoutParams as ConstraintLayout.LayoutParams
             val gap = dimensionPixelSize(R.dimen.chat_portrait_name_gap)
-            val desired = if (boundIsBot) {
+            val portraitOnLeft = portraitIsOnLeft(portraitBounds)
+            val portraitOnStart = physicalLeftIsStart() == portraitOnLeft
+            val desired = if (portraitOnLeft) {
                 portraitBounds.right + gap
             } else {
                 ui.width - portraitBounds.left + gap
             }
-            val current = if (boundIsBot) params.marginStart else params.marginEnd
-            if (current == desired) return
-            if (boundIsBot) params.marginStart = desired else params.marginEnd = desired
-            username.layoutParams = params
+            setSideMargins(username, portraitOnStart, desired)
         }
 
-        private fun setPortraitStartMargin(view: View?, portrait: Rect?, gap: Int) {
+        private fun setPortraitSideMargin(view: View?, portrait: Rect?, gap: Int) {
             if (view == null || portrait == null || view.visibility != View.VISIBLE ||
                 view.width <= 0 || view.height <= 0) {
-                setStartMargin(view, 0)
+                setSideMargins(view, portraitOnStart = true, desired = 0)
                 return
             }
             val bounds = boundsInRow(view)
             if (!PortraitExclusionGeometry.overlaps(
                     portrait.top, portrait.bottom, bounds.top, bounds.bottom
                 )) {
-                setStartMargin(view, 0)
+                setSideMargins(view, portraitOnStart = true, desired = 0)
                 return
             }
+
+            val portraitOnLeft = portraitIsOnLeft(portrait)
+            val portraitOnStart = physicalLeftIsStart() == portraitOnLeft
             val params = view.layoutParams as? ViewGroup.MarginLayoutParams ?: return
-            val naturalStart = bounds.left - params.marginStart
-            setStartMargin(view, (portrait.right + gap - naturalStart).coerceAtLeast(0))
+            val currentMargin = if (portraitOnStart) params.marginStart else params.marginEnd
+            val desired = if (portraitOnLeft) {
+                val naturalLeft = bounds.left - currentMargin
+                portrait.right + gap - naturalLeft
+            } else {
+                val naturalRight = bounds.right + currentMargin
+                naturalRight - portrait.left + gap
+            }
+            setSideMargins(view, portraitOnStart, desired.coerceAtLeast(0))
+        }
+
+        private fun portraitIsOnLeft(portrait: Rect): Boolean =
+            portrait.left + portrait.right <= ui.width
+
+        private fun physicalLeftIsStart(): Boolean =
+            ui.layoutDirection != View.LAYOUT_DIRECTION_RTL
+
+        private fun setSideMargins(view: View?, portraitOnStart: Boolean, desired: Int) {
+            val params = view?.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+            val start = if (portraitOnStart) desired else 0
+            val end = if (portraitOnStart) 0 else desired
+            if (params.marginStart == start && params.marginEnd == end) return
+            params.marginStart = start
+            params.marginEnd = end
+            view.layoutParams = params
         }
 
         private fun setTopMargin(view: View?, desired: Int) {
             val params = view?.layoutParams as? ViewGroup.MarginLayoutParams ?: return
             if (params.topMargin == desired) return
             params.topMargin = desired
-            view.layoutParams = params
-        }
-
-        private fun setStartMargin(view: View?, desired: Int) {
-            val params = view?.layoutParams as? ViewGroup.MarginLayoutParams ?: return
-            if (params.marginStart == desired) return
-            params.marginStart = desired
             view.layoutParams = params
         }
 
