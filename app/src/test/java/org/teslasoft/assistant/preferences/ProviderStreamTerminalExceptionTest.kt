@@ -6,8 +6,7 @@ import org.teslasoft.assistant.util.reachedServer
 
 class ProviderStreamTerminalExceptionTest {
 
-    @Test(expected = ProviderStreamTerminalException::class)
-    fun typedFinishReasonErrorEscapesNormalSuccessTail() {
+    @Test fun lifecycleRecorderPreservesTerminalReasonWithoutOwningFailureControl() {
         val recorder = ResponseLifecycleRecorder(
             turnId = "T-sse-error-ui",
             phase = ResponseLifecycle.PHASE_PRIMARY,
@@ -25,14 +24,15 @@ class ProviderStreamTerminalExceptionTest {
             completionTokens = null,
             totalTokens = null
         )
+        assertEquals("error", recorder.lastFinishReason)
     }
 
-    @Test fun terminalExceptionCarriesHttpEvidenceForExistingErrorClassifier() {
+    @Test fun terminalExceptionDoesNotInventAnOuterHttpStatus() {
         val classified = org.teslasoft.assistant.util.GenerationErrorClassifier.classify(
             ProviderStreamTerminalException()
         )
-        assertEquals(200, classified.httpStatus)
+        assertEquals(null, classified.httpStatus)
         assertEquals(org.teslasoft.assistant.util.GenErrorCode.U0, classified.code)
-        assertEquals(true, classified.reachedServer())
+        assertEquals(false, classified.reachedServer())
     }
 }

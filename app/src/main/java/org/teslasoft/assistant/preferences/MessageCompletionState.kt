@@ -56,6 +56,9 @@ object MessageCompletionState {
      *  error prose. Shown next to the marker only when "Show chat errors" is on. */
     const val KEY_ERROR_TEXT = "errorText"
 
+    /** Exact non-fatal provider warnings, separate from generated text. */
+    const val KEY_PROVIDER_WARNING_TEXT = "providerWarningText"
+
     // ---- State values -----------------------------------------------------
 
     /** The reply is being generated right now. Found on disk at load time it

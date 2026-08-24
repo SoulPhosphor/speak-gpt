@@ -185,6 +185,7 @@ import org.teslasoft.assistant.providers.ProviderRoutingDiagnostics
 import org.teslasoft.assistant.providers.ProviderRoutingResolver
 import org.teslasoft.assistant.providers.ProviderRoutingSerializer
 import org.teslasoft.assistant.providers.ReportedProviderParser
+import org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot
 import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.includes.ChatInclude
@@ -294,7 +295,6 @@ import org.teslasoft.assistant.util.chatMessage
 import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.util.providerLimitMessage
 import org.teslasoft.assistant.util.reachedServer
-import org.teslasoft.assistant.util.ProviderErrorInfo
 import org.teslasoft.assistant.util.summarizer.CondensedRegenerationLock
 import io.ktor.client.plugins.observer.ResponseObserver
 import io.ktor.client.plugins.api.Send
@@ -6667,12 +6667,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                 val wantsReasoning = call.request.attributes.contains(reasoningObservationAttribute)
                                 when {
                                     usageAttempt != null -> {
-                                        usageAttempt.beginObservation()
-                                        recorder?.beginProviderObservation()
+                                        usageAttempt.beginObservation(call.response.status.value)
+                                        recorder?.beginProviderObservation(call.response.status.value)
                                         true
                                     }
                                     recorder != null && streamed -> {
-                                        recorder.beginProviderObservation()
+                                        recorder.beginProviderObservation(call.response.status.value)
                                         true
                                     }
                                     wantsReasoning -> true
@@ -6683,7 +6683,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         onResponse { response ->
                             try {
                                 if (!response.status.isSuccess()) {
-                                    capturedProviderErrorBody = response.bodyAsText()
+                                    val body = response.bodyAsText()
+                                    val attrs = response.call.request.attributes
+                                    if (attrs.contains(providerUsageAttemptAttribute)) {
+                                        attrs[providerUsageAttemptAttribute]
+                                            .noteHttpResponse(response.status.value, body)
+                                    }
                                 } else {
                                     val attrs = response.call.request.attributes
                                     val recorder = if (attrs.contains(responseLifecycleRecorderAttribute)) {
@@ -6717,12 +6722,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                                                 onProvider = { reported ->
                                                     // Response-derived only. Never substitute the
                                                     // configured or requested provider here.
-                                                    recorder?.noteActualModelProvider(reported)
                                                     if (!org.teslasoft.assistant.preferences.RawStreamObservationCodec.isEncoded(reported)) {
+                                                        recorder?.noteActualModelProvider(reported)
                                                         usageAttempt?.noteProvider(reported)
                                                     }
                                                 },
                                                 onObservation = { observation ->
+                                                    recorder?.noteRawObservation(observation)
                                                     usageAttempt?.noteRawObservation(observation)
                                                 },
                                                 lineObserver = reasoningObservation?.let { observation ->
@@ -7951,7 +7957,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             currentLifecycle?.markNonStreamingResponse()
             adapter?.notifyItemChanged(messages.size - 1)
         }
-        finalizeLifecycleSuccess()
+        val providerDiagnostics = finalizeLifecycleSuccess()
+        applyProviderWarnings(providerDiagnostics)
         messages[messages.size - 1]["message"] = "$response\n"
         markLastAssistantDone()
         adapter?.notifyItemChanged(messages.size - 1)
@@ -8079,30 +8086,47 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         finishReason: String?, id: String?, contentLength: Int,
         promptTokens: Int?, completionTokens: Int?, totalTokens: Int?
     ) {
-        currentProviderUsageAttempt?.noteTypedUsage(promptTokens, completionTokens, totalTokens)
-        val r = currentLifecycle ?: return
-        if (r.finalized) return
-        r.noteChunk(finishReason, id, contentLength, promptTokens, completionTokens, totalTokens)
+        val attempt = currentProviderUsageAttempt
+        attempt?.noteTypedUsage(promptTokens, completionTokens, totalTokens)
+        attempt?.noteTypedChunk(finishReason, id, contentLength)
+        currentLifecycle?.takeUnless { it.finalized }?.noteChunk(
+            finishReason, id, contentLength, promptTokens, completionTokens, totalTokens
+        )
+
+        // This gate is always active, independent of the optional Response
+        // Lifecycle toggle. The thrown exception carries the exact request
+        // owner; its raw SSE observer may finish a few scheduling ticks later,
+        // and the catch path awaits that same object's evidence.
+        val terminal = finishReason?.trim()?.lowercase()
+        if (terminal in setOf("error", "content_filter", "safety", "prohibited_content")) {
+            throw org.teslasoft.assistant.preferences.ProviderStreamTerminalException(
+                attempt = attempt,
+                providerFinishReason = terminal ?: "error"
+            )
+        }
     }
 
     /** Finalize a response that ended on its own. Streaming uses the finish
      *  reason/terminal evidence matrix; a successful completed-response call
      *  has provider-completion evidence from the client return itself. */
-    private suspend fun finalizeLifecycleSuccess() {
-        currentProviderUsageAttempt?.let {
+    private suspend fun finalizeLifecycleSuccess(): ProviderDiagnosticSnapshot? {
+        val usageAttempt = currentProviderUsageAttempt
+        val providerDiagnostics = usageAttempt?.diagnosticSnapshot()
+        usageAttempt?.let {
             pendingProviderUsageSnapshot = it.snapshot()
             pendingCompletedPricingCatalog = currentPricingCatalog
         }
         currentProviderUsageAttempt = null
         currentPricingCatalog = null
-        val r = currentLifecycle ?: return
-        if (r.finalized) return
+        val r = currentLifecycle ?: return providerDiagnostics
+        if (r.finalized) return providerDiagnostics
         val n = if (r.nonStreamingResponse) {
             ResponseLifecycle.classifyNonStreamingCompletion(r.lastFinishReason, r.receivedCharacters)
         } else {
             ResponseLifecycle.classifyNormalCompletion(r.lastFinishReason, r.receivedCharacters)
         }
         writeLifecycle(r, n.outcome, n.finishReasonDisplay, n.streamClosed, n.termination, null)
+        return providerDiagnostics
     }
 
     /** Finalize a response cut short by an error, a user stop, or an app cancel —
@@ -8120,6 +8144,77 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val r = currentLifecycle ?: return
         if (r.finalized) return
         writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
+    }
+
+    /** Surface non-fatal provider warnings without contaminating model text. */
+    private fun applyProviderWarnings(snapshot: ProviderDiagnosticSnapshot?) {
+        val warnings = snapshot?.warningMessages.orEmpty()
+        if (warnings.isEmpty() || messages.isEmpty()) return
+        val index = messages.lastIndex
+        if (messages[index]["isBot"] != true) return
+        val exact = warnings.joinToString("\n")
+        messages[index][MessageCompletionState.KEY_PROVIDER_WARNING_TEXT] = exact
+        try {
+            val body = StringBuilder("Non-fatal provider warning\n")
+            appendProviderEvidence(body, snapshot)
+            org.teslasoft.assistant.preferences.Logger.log(
+                this, "crash", "GenWarning", "warning", body.toString()
+            )
+        } catch (_: Throwable) { /* diagnostics must not alter generation */ }
+    }
+
+    /** Request intent only; never substituted for the response-derived server. */
+    private fun requestedRoutedProviderForDiagnostics(modelId: String): String? {
+        if (apiEndpointObject?.isOpenRouterRouting() != true) return null
+        val favorite = favoriteForActiveEndpoint(modelId)
+        return when (favorite?.routingType ?: FavoriteModelObject.ROUTING_AUTOMATIC) {
+            FavoriteModelObject.ROUTING_ONLY -> favorite?.selectedProvider?.trim()?.ifBlank { null }
+            FavoriteModelObject.ROUTING_PREFERRED -> favorite?.providerOrder
+                ?.filter { it.isNotBlank() }?.joinToString(", ")?.ifBlank { null }
+            else -> "automatic selection"
+        }
+    }
+
+    /** Rich technical facts shared by Error Log errors and warnings. */
+    private fun appendProviderEvidence(
+        out: StringBuilder,
+        snapshot: ProviderDiagnosticSnapshot?
+    ) {
+        val notReported = "Not Reported"
+        out.append("Attempt ID: ").append(snapshot?.attemptId ?: notReported).append('\n')
+        out.append("Configured API Provider: ")
+            .append(apiEndpointObject?.label?.trim()?.ifBlank { null }
+                ?: apiEndpointObject?.host?.trim()?.ifBlank { null } ?: notReported).append('\n')
+        out.append("Requested/Routed Model Provider: ")
+            .append(requestedRoutedProviderForDiagnostics(model) ?: notReported).append('\n')
+        out.append("Actual Serving Model Provider: ")
+            .append(snapshot?.actualServingProvider ?: notReported).append('\n')
+        out.append("Outer HTTP Status: ").append(snapshot?.outerHttpStatus ?: notReported).append('\n')
+        out.append("Embedded Provider Status: ")
+            .append(snapshot?.embeddedHttpStatus ?: notReported).append('\n')
+        out.append("Provider Code: ").append(snapshot?.providerCode ?: notReported).append('\n')
+        out.append("Provider Type: ").append(snapshot?.providerType ?: notReported).append('\n')
+        out.append("Provider Error Type: ")
+            .append(snapshot?.providerErrorType ?: notReported).append('\n')
+        out.append("Content Filter Side: ")
+            .append(snapshot?.contentFilterSide?.wire ?: notReported).append('\n')
+        out.append("Finish Reason: ").append(snapshot?.finishReason ?: notReported).append('\n')
+        out.append("Generation ID: ").append(snapshot?.generationId ?: notReported).append('\n')
+        out.append("Partial Content Characters: ")
+            .append(snapshot?.partialContentCharacters ?: 0).append('\n')
+        out.append("Reasoning Characters Received: ")
+            .append(snapshot?.reasoningCharacters ?: 0).append('\n')
+        out.append("Prompt Tokens: ").append(snapshot?.promptTokens ?: notReported).append('\n')
+        out.append("Completion Tokens: ").append(snapshot?.completionTokens ?: notReported).append('\n')
+        out.append("Total Tokens: ").append(snapshot?.totalTokens ?: notReported).append('\n')
+        out.append("Malformed Provider Payloads: ")
+            .append(snapshot?.malformedPayloadCount ?: 0).append('\n')
+        val messages = snapshot?.errorMessages.orEmpty()
+        out.append("Provider Message: ")
+            .append(messages.takeIf { it.isNotEmpty() }?.joinToString("\n") ?: notReported)
+        snapshot?.events?.mapNotNull { it.rawPayload }?.distinct()?.takeIf { it.isNotEmpty() }?.let {
+            out.append("\nRaw Provider Payload(s):\n").append(it.joinToString("\n---\n"))
+        }
     }
 
     private suspend fun writeLifecycle(
@@ -9391,12 +9486,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    @Suppress("deprecation")
-    // The raw error-response body captured by the chat client's ResponseObserver
-    // for the current turn (null on success or a transport failure that never got
-    // a response). Read in the failure handler to name the upstream provider.
-    @Volatile private var capturedProviderErrorBody: String? = null
-
     private suspend fun generateResponse(
         request: String,
         shouldPronounce: Boolean,
@@ -9416,10 +9505,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Silent retry point: any completed image still missing its summary
         // gets one before this turn's history is projected to the model.
         ensureImageSummaries()
-
-        // Clear any provider error captured on a previous turn before this one
-        // makes its request, so a failure never shows a stale provider.
-        capturedProviderErrorBody = null
 
         // Mint the turn id every streamed request in this visible turn (primary
         // plus any tool continuation) shares in the Response Lifecycle Log.
@@ -9503,7 +9588,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     }
                 }
 
-                finalizeLifecycleSuccess()
+                val providerDiagnostics = finalizeLifecycleSuccess()
+                applyProviderWarnings(providerDiagnostics)
                 messages[messages.size - 1]["message"] = "$response\n"
                 markLastAssistantDone()
                 if (messages.size > 2) {
@@ -9663,8 +9749,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // the diagnostic Error Log entry, and show the user the short coded
             // message (no profile/URL/model/trace — those live in the log). See
             // ERROR_CODES.md.
-            val genError = GenerationErrorClassifier.classify(e)
-            logGenerationError(genError, e, "message", failureDiagnostics)
+            val evidenceOwner =
+                (e as? org.teslasoft.assistant.preferences.ProviderStreamTerminalException)?.attempt
+                    ?: currentProviderUsageAttempt
+            val providerEvidence = evidenceOwner?.diagnosticSnapshot()
+            val genError = GenerationErrorClassifier.classify(e, providerEvidence)
+            logGenerationError(genError, e, "message", failureDiagnostics, providerEvidence)
 
             if (genError.isVisionRejection && conversationHasFullImages(chatMessageIncludes)) {
                 recordVisionCapability(ImageCapability.UNSUPPORTED)
@@ -9675,11 +9765,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // provider name (or a truthful placeholder for each).
             val appExplanation = genError.providerLimitMessage(this)
                 ?: genError.chatMessage(this)
-            val providerInfo = ProviderErrorInfo.parse(capturedProviderErrorBody)
-            // Error responses sometimes report the upstream provider even when
-            // no successful SSE stream began. Preserve it as actual only because
-            // it came from the response body parsed above.
-            currentLifecycle?.noteActualModelProvider(providerInfo.providerName)
+            // Error responses and failed SSE streams use the same immutable
+            // request snapshot. The serving provider is response-derived only.
+            currentLifecycle?.noteActualModelProvider(providerEvidence?.actualServingProvider)
             // Expanded provider detail (owner ruling, Aug 1 2026): the connection
             // profile's name, the upstream model service the server reported (or
             // "Not Reported" for a direct provider that names none), the model,
@@ -9688,13 +9776,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val notReported = getString(R.string.provider_value_not_reported)
             val apiProviderName = apiEndpointObject?.label?.trim()?.ifBlank { null }
                 ?: apiEndpointObject?.host?.trim()?.ifBlank { null } ?: notReported
-            val modelServiceProvider = providerInfo.providerName?.trim()?.ifBlank { null } ?: notReported
+            val modelServiceProvider = providerEvidence?.actualServingProvider
+                ?.trim()?.ifBlank { null } ?: notReported
+            val requestedRoutedProvider = requestedRoutedProviderForDiagnostics(model)
             val modelName = model.trim().ifBlank { null }
                 ?: apiEndpointObject?.model?.trim()?.ifBlank { null } ?: notReported
             val functionLabel = getString(R.string.provider_function_chat)
             val response = appExplanation + "\n" +
                 genError.providerDetailBlock(
-                    this, e.message, apiProviderName, modelServiceProvider, modelName, functionLabel, providerInfo.message
+                    this, e.message, apiProviderName, modelServiceProvider, modelName,
+                    functionLabel,
+                    rawProviderMessage = providerEvidence?.errorMessages?.joinToString("\n"),
+                    providerEvidence = providerEvidence,
+                    requestedRoutedProvider = requestedRoutedProvider
                 )
 
             // Lifecycle: an errored reply is Incomplete. The termination source
@@ -9714,13 +9808,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     ResponseLifecycle.Termination.PARSER_ERROR
                 else -> ResponseLifecycle.Termination.NETWORK_ERROR
             }
-            val lifecycleError = listOfNotNull(
-                genError.httpStatus?.toString(),
-                (providerInfo.message ?: e.message)?.trim()?.ifBlank { null }
-            ).joinToString(" ").ifBlank { e.message ?: "error" }
+            val lifecycleError = providerEvidence?.errorMessages?.joinToString("\n")
+                ?.ifBlank { null } ?: e.message ?: "error"
             finalizeLifecycleTerminal(
                 ResponseLifecycle.Outcome.INCOMPLETE,
-                currentLifecycle?.lastFinishReason ?: "missing",
+                providerEvidence?.finishReason ?: currentLifecycle?.lastFinishReason ?: "missing",
                 true,
                 lifecycleTermination, lifecycleError
             )
@@ -9733,12 +9825,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // provider fault: skip the Provider Failure Log even if a local
             // exception happened to classify as one that "reached" a server.
             if (preferences?.getLogChatFailures() == true && genError.reachedServer() && providerRequestDispatched) {
-                val providerErrorRaw = listOfNotNull(
-                    genError.httpStatus?.toString(),
-                    (providerInfo.message ?: e.message)?.trim()?.ifBlank { null }
-                ).joinToString(" ").ifBlank { "(no message)" }
+                val providerErrorRaw = providerEvidence?.errorMessages?.joinToString("\n")
+                    ?.ifBlank { null } ?: e.message?.trim()?.ifBlank { null } ?: "(no message)"
                 org.teslasoft.assistant.preferences.Logger
-                    .logProviderFailure(this, apiProviderName, modelServiceProvider, modelName, functionLabel, providerErrorRaw)
+                    .logProviderFailure(
+                        this, apiProviderName, modelServiceProvider, modelName,
+                        functionLabel, providerErrorRaw,
+                        requestedRoutedProvider = requestedRoutedProvider,
+                        outerHttpStatus = providerEvidence?.outerHttpStatus,
+                        embeddedProviderStatus = providerEvidence?.embeddedHttpStatus,
+                        providerCode = providerEvidence?.providerCode,
+                        providerType = providerEvidence?.providerType,
+                        providerErrorType = providerEvidence?.providerErrorType,
+                        contentFilterSide = providerEvidence?.contentFilterSide?.wire,
+                        attemptId = providerEvidence?.attemptId
+                    )
             }
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
@@ -9928,7 +10029,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         result: GenErrorResult,
         e: Throwable,
         trigger: String,
-        failureSnapshot: org.teslasoft.assistant.util.GenerationFailureSnapshot? = null
+        failureSnapshot: org.teslasoft.assistant.util.GenerationFailureSnapshot? = null,
+        providerEvidence: ProviderDiagnosticSnapshot? = null
     ) {
         val voiceLive = org.teslasoft.assistant.util.resolveFailureVoiceState(
             failureSnapshot,
@@ -9936,7 +10038,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
         try {
             val sb = StringBuilder()
-            sb.append(result.providerLimitMessage(this) ?: result.chatMessage(this)).append('\n')
+            if (result.code == GenErrorCode.U0) {
+                sb.append("[U0] Unclassified generation failure.")
+            } else {
+                sb.append(result.providerLimitMessage(this) ?: result.chatMessage(this))
+            }
+            sb.append('\n')
+            sb.append("Application Classification: ").append(result.code.code).append('\n')
             sb.append("Profile: ${apiEndpointObject?.label ?: "unknown"}\n")
             sb.append("Base URL: ${apiEndpointObject?.host ?: "unknown"}\n")
             sb.append("Model: ${model.ifBlank { "unknown" }}\n")
@@ -9951,7 +10059,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 sb.append("Network: ${networkState()}\n")
             }
             sb.append("Power save: ${powerSaveState()}")
-            result.httpStatus?.let { sb.append("\nHTTP status: $it") }
+            sb.append('\n')
+            appendProviderEvidence(sb, providerEvidence)
             if (voiceLive) sb.append('\n').append(compactVoiceContext())
             if (result.code.includeStackTrace) {
                 sb.append("\n\n").append(e.stackTraceToString())
@@ -11151,7 +11260,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // now — before any tool-call continuation opens its own record under
         // the same turn id — so a completed primary and an interrupted
         // continuation stay separate, comparable entries.
-        finalizeLifecycleSuccess()
+        val providerDiagnostics = finalizeLifecycleSuccess()
+        applyProviderWarnings(providerDiagnostics)
 
         // §8: a completed stream of a tool-bearing request proves the
         // endpoint ACCEPTED tools for this model — whether or not the model

@@ -19,6 +19,7 @@ package org.teslasoft.assistant.preferences
 import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
+import org.teslasoft.assistant.usage.ProviderUsageAttempt
 
 /**
  * Raised from the typed chunk path when OpenRouter's unified mid-stream error
@@ -30,9 +31,12 @@ import kotlinx.coroutines.withTimeoutOrNull
  * ChatActivity error/UI path in charge instead of letting a provider error fall
  * through the normal-success tail and mark the message done.
  */
-class ProviderStreamTerminalException : RuntimeException(
-    "HTTP/1.1 200 provider SSE stream terminated with finish_reason=error"
-)
+class ProviderStreamTerminalException(
+    /** Exact request owner. Carrying the object through the thrown failure means
+     * the catch path never consults a process/activity-wide "latest error". */
+    val attempt: ProviderUsageAttempt? = null,
+    val providerFinishReason: String = "error"
+) : RuntimeException("Provider stream terminated with finish_reason=$providerFinishReason")
 
 /**
  * Response Lifecycle diagnostics: an evidence record of how each user-visible
@@ -286,7 +290,11 @@ object ResponseLifecycle {
                 ?: suppliedFinish.takeUnless { it.equals("missing", ignoreCase = true) }
                 ?: "missing"
             finalStreamClosed = true
-            val rawSummary = raw.providerErrorSummary ?: "provider error event received in SSE stream"
+            val exactMessages = raw.providerDiagnostics.filter { it.isError }.flatMap { event ->
+                listOfNotNull(event.message) + event.additionalMessages
+            }.distinct()
+            val rawSummary = exactMessages.takeIf { it.isNotEmpty() }?.joinToString("\n")
+                ?: raw.providerErrorSummary ?: "provider error event received in SSE stream"
             finalError = when {
                 finalError == null -> rawSummary
                 raw.providerErrorSummary != null && !finalError.contains(raw.providerErrorSummary) ->
@@ -399,6 +407,17 @@ object ResponseLifecycle {
             append("Model: ").append(model.ifBlank { NOT_REPORTED }).append('\n')
             append("Request Dispatched: ").append(requestDispatched).append('\n')
             append("HTTP Status Successful: ").append(httpSuccessful).append('\n')
+            append("Outer HTTP Status: ")
+                .append(evidence?.outerHttpStatus ?: NOT_REPORTED).append('\n')
+            val providerEvent = raw?.providerDiagnostics?.firstOrNull { it.isError }
+            append("Embedded Provider Status: ")
+                .append(providerEvent?.embeddedHttpStatus ?: NOT_REPORTED).append('\n')
+            append("Provider Code: ").append(providerEvent?.code ?: NOT_REPORTED).append('\n')
+            append("Provider Type: ").append(providerEvent?.type ?: NOT_REPORTED).append('\n')
+            append("Provider Error Type: ")
+                .append(providerEvent?.errorType ?: NOT_REPORTED).append('\n')
+            append("Content Filter Side: ")
+                .append(providerEvent?.contentFilterSide?.wire ?: NOT_REPORTED).append('\n')
             append("Outcome: ").append(finalOutcome.display).append('\n')
             append("Finish Reason: ").append(finalFinish).append('\n')
             append("Finish Reason Received: ").append(finishReasonReceived).append('\n')
@@ -421,6 +440,8 @@ object ResponseLifecycle {
             append("Raw SSE Flow End: ").append(rawFlowEnd).append('\n')
             append("Raw SSE Flow Exception: ").append(rawFlowExceptionDisplay).append('\n')
             append("Malformed Raw SSE Data Events: ").append(raw?.malformedDataEvents ?: 0).append('\n')
+            append("Reasoning Characters Received: ")
+                .append(raw?.reasoningCharacters ?: 0).append('\n')
             append("Requested Max Output: ").append(num(requestedMaxOutput)).append('\n')
             append("Prompt Tokens: ").append(num(effectivePromptTokens)).append('\n')
             append("Completion Tokens: ").append(num(effectiveCompletionTokens)).append('\n')
@@ -502,19 +523,15 @@ class ResponseLifecycleRecorder(
             usageReceived = promptTokens != null || completionTokens != null || totalTokens != null
         )
 
-        // OpenRouter's Chat Completions mid-stream provider error is a normal
-        // HTTP-200 SSE chunk whose choice terminates with finish_reason="error".
-        // aallam ignores the unknown top-level `error` object, so without this
-        // explicit terminal signal ChatActivity would continue its success tail.
-        if (normalizedFinish.equals("error", ignoreCase = true)) {
-            throw ProviderStreamTerminalException()
-        }
+        // Terminal failure decisions belong to the always-on request attempt,
+        // not this optional lifecycle recorder. ChatActivity throws after both
+        // typed and lifecycle facts have been recorded.
     }
 
     /** Called only by ResponseObserver's successful-HTTP branch. */
-    fun beginProviderObservation() {
+    fun beginProviderObservation(status: Int = 200) {
         providerObservationExpected = true
-        LifecycleDiagnosticEvidenceStore.noteSuccessfulHttpResponse(attemptId)
+        LifecycleDiagnosticEvidenceStore.noteSuccessfulHttpResponse(attemptId, status)
     }
 
     /** Mark a successful completed-response API call. No SSE observer is
@@ -551,6 +568,28 @@ class ResponseLifecycleRecorder(
         }
         if (!LifecycleDiagnosticEvidenceStore.isOpen(attemptId)) return
         value?.trim()?.ifBlank { null }?.let { actualModelProvider = it }
+    }
+
+    /** Direct object path used by the shared request evidence owner. Unlike the
+     * legacy String envelope, this preserves all provider diagnostic events. */
+    fun noteRawObservation(raw: RawStreamObservation) {
+        if (!LifecycleDiagnosticEvidenceStore.noteRawObservation(attemptId, raw)) return
+        raw.finishReason?.trim()?.ifBlank { null }?.let {
+            if (lastFinishReason == null) lastFinishReason = it
+        }
+        raw.generationId?.trim()?.ifBlank { null }?.let {
+            if (generationId == null) generationId = it
+        }
+        raw.promptTokens?.let { if (promptTokens == null) promptTokens = it }
+        raw.completionTokens?.let { if (completionTokens == null) completionTokens = it }
+        raw.totalTokens?.let { if (totalTokens == null) totalTokens = it }
+        raw.actualServingProvider?.trim()?.ifBlank { null }?.let {
+            actualModelProvider = it
+        }
+        if (raw.actualServingProvider.isNullOrBlank()) {
+            raw.providerDiagnostics.firstNotNullOfOrNull { it.actualServingProvider }
+                ?.let { actualModelProvider = it }
+        }
     }
 
     fun finishProviderObservation() {

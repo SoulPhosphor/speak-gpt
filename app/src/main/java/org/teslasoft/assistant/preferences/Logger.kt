@@ -459,7 +459,15 @@ class Logger {
             modelServiceProvider: String,
             model: String,
             function: String,
-            providerError: String
+            providerError: String,
+            requestedRoutedProvider: String? = null,
+            outerHttpStatus: Int? = null,
+            embeddedProviderStatus: Int? = null,
+            providerCode: String? = null,
+            providerType: String? = null,
+            providerErrorType: String? = null,
+            contentFilterSide: String? = null,
+            attemptId: String? = null
         ) {
             val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
             // Same richer detail the user sees under the failed reply (owner
@@ -467,9 +475,17 @@ class Logger {
             val entry = "[$timestamp]\n" +
                 "Provider Error: $providerError\n" +
                 "API Provider: $apiProvider\n" +
+                "Requested/Routed Model Provider: ${requestedRoutedProvider ?: "Not Reported"}\n" +
                 "Model Service Provider: $modelServiceProvider\n" +
                 "Model: $model\n" +
-                "Function: $function\n\n\n"
+                "Function: $function\n" +
+                "Outer HTTP Status: ${outerHttpStatus ?: "Not Reported"}\n" +
+                "Embedded Provider Status: ${embeddedProviderStatus ?: "Not Reported"}\n" +
+                "Provider Code: ${providerCode ?: "Not Reported"}\n" +
+                "Provider Type: ${providerType ?: "Not Reported"}\n" +
+                "Provider Error Type: ${providerErrorType ?: "Not Reported"}\n" +
+                "Content Filter Side: ${contentFilterSide ?: "Not Reported"}\n" +
+                "Attempt ID: ${attemptId ?: "Not Reported"}\n\n\n"
             val p = Preferences.getPreferences(context, "")
             val log = trimByEntries(
                 "${getProviderFailLog(context)}$entry",
