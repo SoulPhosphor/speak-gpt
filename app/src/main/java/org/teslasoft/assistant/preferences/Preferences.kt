@@ -502,6 +502,13 @@ class Preferences internal constructor(
     }
 
     /** Appearance controls for the adaptable chat message shell. */
+    fun getStaggeredResponses(): Boolean =
+        getGlobalBoolean("chat_staggered_responses", true)
+
+    fun setStaggeredResponses(state: Boolean) {
+        putGlobalBoolean("chat_staggered_responses", state, true)
+    }
+
     fun getShowChatProfileImages(): Boolean =
         getGlobalBoolean("chat_show_profile_images", true)
 

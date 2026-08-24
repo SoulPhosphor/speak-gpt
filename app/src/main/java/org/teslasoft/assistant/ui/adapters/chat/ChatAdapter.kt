@@ -109,6 +109,7 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
 import org.teslasoft.assistant.ui.chat.ChatMarkdownRenderer
+import org.teslasoft.assistant.ui.chat.ChatMessagePlacement
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.MessageMetadataView
@@ -688,6 +689,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // The "Includes" record of what this message carried. Absent from the
         // assistant bubble (attachments are user-side only), so nullable.
         private val includeSummary: LinearLayout? = itemView.findViewById(R.id.include_summary)
+        private val includeBookmarks: View? = itemView.findViewById(R.id.include_bookmarks)
         private val includeSummaryHeader: LinearLayout? = itemView.findViewById(R.id.include_summary_header)
         private val includeSummaryLabel: TextView? = itemView.findViewById(R.id.include_summary_label)
         private val includeSummaryChevron: ImageView? = itemView.findViewById(R.id.include_summary_chevron)
@@ -1834,6 +1836,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             } else {
                 preferences.getShowUserBubble()
             }
+            val placeOnStart = ChatMessagePlacement.usesLogicalStart(
+                isBot = isBot,
+                staggeredResponses = preferences.getStaggeredResponses()
+            )
 
             boundIsBot = isBot
             boundShowsPortrait = showPortrait
@@ -1865,7 +1871,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 if (isBot) displayAvatar() else displayUserAvatar()
             }
 
-            updateIdentityGeometry(isBot, showPortrait, showName, showBubble, isImage)
+            updateSpeakerPlacement(placeOnStart)
+            updateIdentityGeometry(
+                placeOnStart,
+                showPortrait,
+                showName,
+                showBubble,
+                isImage
+            )
             updateBubbleDecoration(isBot, showBubble)
         }
 
@@ -1973,6 +1986,80 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         /**
+         * Moves every user-only child to the same logical edge used by the
+         * assistant renderer while preserving user colors, actions, and data.
+         * Logical start/end lets Android mirror the complete arrangement in RTL.
+         */
+        private fun updateSpeakerPlacement(placeOnStart: Boolean) {
+            messageRow?.let { row ->
+                val params = row.layoutParams as ViewGroup.MarginLayoutParams
+                params.marginStart = dimensionPixelSize(
+                    if (placeOnStart) {
+                        R.dimen.chat_message_speaker_inset
+                    } else {
+                        R.dimen.chat_message_user_left_inset
+                    }
+                )
+                params.marginEnd = dimensionPixelSize(
+                    if (placeOnStart) {
+                        R.dimen.chat_message_ai_right_inset
+                    } else {
+                        R.dimen.chat_message_speaker_inset
+                    }
+                )
+                row.layoutParams = params
+                row.gravity = if (placeOnStart) Gravity.START else Gravity.END
+            }
+
+            message.tag = if (placeOnStart) "ai" else "user"
+            constrainToSpeakerEdge(message, placeOnStart)
+            constrainToSpeakerEdge(includeBookmarks, placeOnStart)
+            constrainToSpeakerEdge(messageActionsRow, placeOnStart)
+            constrainToSpeakerEdge(includeSummary, placeOnStart)
+
+            val imageParams = imageFrame.layoutParams as? ConstraintLayout.LayoutParams
+            if (imageParams != null) {
+                imageParams.startToStart = if (placeOnStart) {
+                    ConstraintLayout.LayoutParams.PARENT_ID
+                } else {
+                    ConstraintLayout.LayoutParams.UNSET
+                }
+                imageParams.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+                imageFrame.layoutParams = imageParams
+            }
+
+            val iconParams = icon.layoutParams as ConstraintLayout.LayoutParams
+            iconParams.startToStart = ConstraintLayout.LayoutParams.UNSET
+            iconParams.endToEnd = ConstraintLayout.LayoutParams.UNSET
+            iconParams.setMarginStart(0)
+            iconParams.setMarginEnd(0)
+            val portraitEdge = dimensionPixelSize(R.dimen.chat_portrait_edge_inset)
+            if (placeOnStart) {
+                iconParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+                iconParams.setMarginStart(portraitEdge)
+            } else {
+                iconParams.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+                iconParams.setMarginEnd(portraitEdge)
+            }
+            icon.layoutParams = iconParams
+        }
+
+        private fun constrainToSpeakerEdge(view: View?, placeOnStart: Boolean) {
+            val params = view?.layoutParams as? ConstraintLayout.LayoutParams ?: return
+            params.startToStart = if (placeOnStart) {
+                ConstraintLayout.LayoutParams.PARENT_ID
+            } else {
+                ConstraintLayout.LayoutParams.UNSET
+            }
+            params.endToEnd = if (placeOnStart) {
+                ConstraintLayout.LayoutParams.UNSET
+            } else {
+                ConstraintLayout.LayoutParams.PARENT_ID
+            }
+            view.layoutParams = params
+        }
+
+        /**
          * Places the portrait, speaker name, and bubble.
          *
          * Generated images use the same horizontal assistant-message geometry
@@ -1987,7 +2074,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * keeps its original placement untouched.
          */
         private fun updateIdentityGeometry(
-            isBot: Boolean,
+            placeOnStart: Boolean,
             showPortrait: Boolean,
             showName: Boolean,
             showBubble: Boolean,
@@ -2012,9 +2099,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
             bubbleBg.layoutParams = bubbleParams
 
-            // The bubble remains on the same speaker side as a normal response.
-            // Only the generated image inside it is centered.
-            messageRow?.gravity = if (isBot) Gravity.START else Gravity.END
+            // The bubble follows the selected logical speaker edge. Only a
+            // generated image inside it is centered.
+            messageRow?.gravity = if (placeOnStart) Gravity.START else Gravity.END
 
             bubbleBg.setPadding(
                 contentPadding,
@@ -2034,9 +2121,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             nameParams.setMarginEnd(0)
 
             if (showPortrait) {
-                val edge = portraitNameInsetPx(isBot)
+                val edge = portraitNameInsetPx(placeOnStart)
                 nameParams.topMargin = dimensionPixelSize(R.dimen.chat_name_portrait_top)
-                if (isBot) {
+                if (placeOnStart) {
                     nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
                     nameParams.setMarginStart(edge)
                 } else {
@@ -2049,7 +2136,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 // a label above the message instead of sitting on the border.
                 val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) + contentPadding
                 nameParams.topMargin = contentPadding
-                if (isBot) {
+                if (placeOnStart) {
                     nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
                     nameParams.setMarginStart(edge)
                 } else {
@@ -2060,7 +2147,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
                     dimensionPixelSize(R.dimen.chat_name_bubble_edge_offset)
                 nameParams.topMargin = 0
-                if (isBot) {
+                if (placeOnStart) {
                     nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
                     nameParams.setMarginStart(edge)
                 } else {
@@ -2082,7 +2169,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             messageMeta?.let { meta ->
                 val metaParams = meta.layoutParams as ConstraintLayout.LayoutParams
                 metaParams.marginStart = if (showPortrait) {
-                    preliminaryMetaPortraitStartPx(isBot)
+                    preliminaryMetaPortraitStartPx(placeOnStart)
                 } else {
                     0
                 }
@@ -2327,9 +2414,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             context.resources.getDimensionPixelSize(resource)
 
         /** Initial bind geometry; measured row bounds replace it after layout. */
-        private fun portraitNameInsetPx(isBot: Boolean): Int {
+        private fun portraitNameInsetPx(placeOnStart: Boolean): Int {
             val params = icon.layoutParams as ViewGroup.MarginLayoutParams
-            val edge = if (isBot) params.marginStart else params.marginEnd
+            val edge = if (placeOnStart) params.marginStart else params.marginEnd
             val portraitWidth = icon.measuredWidth.takeIf { it > 0 }
                 ?: params.width.takeIf { it > 0 }
                 ?: dimensionPixelSize(R.dimen.chat_portrait_size)
@@ -2337,10 +2424,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 dimensionPixelSize(R.dimen.chat_portrait_name_gap)
         }
 
-        private fun preliminaryMetaPortraitStartPx(isBot: Boolean): Int {
+        private fun preliminaryMetaPortraitStartPx(placeOnStart: Boolean): Int {
             val bubbleContentStart = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
                 dimensionPixelSize(R.dimen.chat_message_content_padding)
-            return (portraitNameInsetPx(isBot) - bubbleContentStart).coerceAtLeast(0)
+            return (portraitNameInsetPx(placeOnStart) - bubbleContentStart).coerceAtLeast(0)
         }
 
         private fun resolveThemeColor(attribute: Int): Int {

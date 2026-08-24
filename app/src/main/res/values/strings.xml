@@ -3281,6 +3281,8 @@
          (owner ruling, Aug 23 2026). No subtitle, matching the row above. -->
     <string name="chat_settings_show_thinking">Show Thinking</string>
     <string name="appearance_section_message_display">Message Display</string>
+    <string name="appearance_staggered_responses">Staggered Responses</string>
+    <string name="appearance_staggered_responses_hint">Display user prompts on the opposite side from AI responses.</string>
     <string name="appearance_profile_images">Profile Images</string>
     <string name="appearance_profile_images_hint">Show speaker profile images in chat.</string>
     <string name="appearance_names">Names</string>

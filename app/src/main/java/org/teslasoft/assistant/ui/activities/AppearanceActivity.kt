@@ -85,6 +85,9 @@ class AppearanceActivity : FragmentActivity() {
     private fun bindControls() {
         btnBack?.setOnClickListener { finish() }
 
+        bindSwitch(R.id.switch_staggered_responses, preferences.getStaggeredResponses()) {
+            preferences.setStaggeredResponses(it)
+        }
         bindSwitch(R.id.switch_profile_images, preferences.getShowChatProfileImages()) {
             preferences.setShowChatProfileImages(it)
         }
