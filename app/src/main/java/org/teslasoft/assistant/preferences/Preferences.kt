@@ -583,6 +583,15 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_show_thinking", state, true)
     }
 
+    /** Places the per-response read-aloud control beside the assistant name.
+     * Default on. Off preserves the original action-row placement. */
+    fun getTopPositionedAudioControl(): Boolean =
+        getGlobalBoolean("chat_top_positioned_audio_control", true)
+
+    fun setTopPositionedAudioControl(state: Boolean) {
+        putGlobalBoolean("chat_top_positioned_audio_control", state, true)
+    }
+
     /** Renamed presentation of Desktop Mode; the stored key and behavior stay intact. */
     fun getHardwareKeyboardShortcuts(): Boolean = getDesktopMode()
 

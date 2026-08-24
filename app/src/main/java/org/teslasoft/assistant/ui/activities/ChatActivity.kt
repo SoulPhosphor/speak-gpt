@@ -100,8 +100,6 @@ import androidx.core.net.toUri
 import androidx.core.util.Pair
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsAnimationCompat
-import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.interpolator.view.animation.FastOutLinearInInterpolator
@@ -2689,39 +2687,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             before = ::captureTranscriptAnchor,
             after = ::restoreTranscriptAnchor
         )
-        root?.let { transcriptRoot ->
-            ViewCompat.setWindowInsetsAnimationCallback(
-                transcriptRoot,
-                object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
-                    override fun onPrepare(animation: WindowInsetsAnimationCompat) {
-                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
-                            captureTranscriptAnchor()
-                        }
-                        super.onPrepare(animation)
-                    }
-
-                    override fun onProgress(
-                        insets: WindowInsetsCompat,
-                        runningAnimations: MutableList<WindowInsetsAnimationCompat>
-                    ): WindowInsetsCompat {
-                        if (runningAnimations.any {
-                                it.typeMask and WindowInsetsCompat.Type.ime() != 0
-                            }
-                        ) {
-                            restoreTranscriptAnchor()
-                        }
-                        return insets
-                    }
-
-                    override fun onEnd(animation: WindowInsetsAnimationCompat) {
-                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
-                            restoreTranscriptAnchor()
-                        }
-                        super.onEnd(animation)
-                    }
-                }
-            )
-        }
+        // The RecyclerView is constrained directly to the composer host, so its
+        // bottom edge already follows every IME inset frame. Do not also force
+        // scroll offsets from an IME animation callback: that fights the live
+        // constraint resize and makes the transcript/composer seam jump.
         root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
@@ -7100,7 +7069,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (message != "") {
             val explicitlyArmedImagine = explicitImagineDraft &&
                 ImagineCommand.isImagineAttempt(message)
-            messageInput?.setText("")
+            clearComposerAfterCommittedSend()
             explicitImagineDraft = false
 
             keyboardMode = false
@@ -8298,11 +8267,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
 
+        // A send action always closes the software keyboard. Capacity or
+        // capability checks may continue asynchronously, but the tap has
+        // already completed the user's editing gesture.
+        composerSurface?.dismissImeForSend()
+
         val compactCommand = org.teslasoft.assistant.util.summarizer.CompactCommand.parse(rawMessage)
         val effectiveMessage = when (compactCommand) {
             org.teslasoft.assistant.util.summarizer.CompactCommand.Parse.NotCompact -> rawMessage
             org.teslasoft.assistant.util.summarizer.CompactCommand.Parse.CompactOnly -> {
-                messageInput?.setText("")
+                clearComposerAfterCommittedSend()
                 compactThroughLastAssistantResponse()
                 return
             }
@@ -8502,6 +8476,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun commitPreparedTurn(prepared: PreparedRegularTurn) {
         requestPreparationInProgress = false
         parseMessage(prepared.rawMessage, preparedTurn = prepared)
+    }
+
+    private fun clearComposerAfterCommittedSend() {
+        messageInput?.setText("")
+        composerSurface?.resetAfterSend()
     }
 
     private fun formatTokenCount(value: Int): String =

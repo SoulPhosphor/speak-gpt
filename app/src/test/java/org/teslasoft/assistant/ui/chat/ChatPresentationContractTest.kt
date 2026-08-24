@@ -145,7 +145,7 @@ class ChatPresentationContractTest {
         assertTrue(adapter.contains("meta.setMetadata(modelPart, tokenPart)"))
         assertFalse(adapter.contains("availableMetaWidthPx"))
         assertTrue(adapter.contains("setPortraitSideMargin("))
-        assertTrue(adapter.contains("measuredNameClearancePx("))
+        assertTrue(adapter.contains("measuredIdentityClearancePx("))
         assertTrue(adapter.contains("messageMeta?.lineHeight ?: 0"))
     }
 

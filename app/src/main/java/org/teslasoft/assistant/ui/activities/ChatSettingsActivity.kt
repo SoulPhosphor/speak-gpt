@@ -63,6 +63,13 @@ class ChatSettingsActivity : FragmentActivity() {
     private fun bindControls() {
         btnBack?.setOnClickListener { finish() }
 
+        findViewById<MaterialSwitch>(R.id.switch_top_positioned_audio_control)?.apply {
+            isChecked = preferences.getTopPositionedAudioControl()
+            setOnCheckedChangeListener { _, value ->
+                preferences.setTopPositionedAudioControl(value)
+            }
+        }
+
         findViewById<MaterialSwitch>(R.id.switch_thinking_indicator)?.apply {
             isChecked = preferences.getShowThinkingIndicator()
             setOnCheckedChangeListener { _, value -> preferences.setShowThinkingIndicator(value) }

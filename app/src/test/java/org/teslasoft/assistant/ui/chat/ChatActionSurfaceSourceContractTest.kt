@@ -62,14 +62,15 @@ class ChatActionSurfaceSourceContractTest {
     }
 
     @Test
-    fun composerAndImeResizeKeepTheTranscriptPinnedAtTheComposerEdge() {
+    fun composerResizePinsTranscriptWithoutFightingTheImeConstraint() {
         val activity = source("main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
 
         assertTrue(activity.contains("findLastVisibleItemPosition()"))
         assertTrue(activity.contains("transcriptAnchorBottomGap = recycler.height - anchor.bottom"))
         assertTrue(activity.contains("recycler.height - transcriptAnchorBottomGap - transcriptAnchorHeight"))
-        assertTrue(activity.contains("WindowInsetsAnimationCompat.Callback"))
-        assertTrue(activity.contains("animation.typeMask and WindowInsetsCompat.Type.ime()"))
+        assertTrue(!activity.contains("WindowInsetsAnimationCompat.Callback"))
+        assertTrue(activity.contains("composerSurface?.dismissImeForSend()"))
+        assertTrue(activity.contains("composerSurface?.resetAfterSend()"))
     }
 
     @Test
@@ -79,6 +80,35 @@ class ChatActionSurfaceSourceContractTest {
         assertTrue(composer.contains("messageInput.post {"))
         assertTrue(composer.contains("applyMode()\n                        messageInput.requestFocus()"))
         assertTrue(composer.contains("?.show(WindowInsetsCompat.Type.ime())"))
+    }
+
+    @Test
+    fun topAudioControlDefaultsOnAndUsesTheExistingSpeakCallback() {
+        val settings = source("main/res/layout/activity_chat_settings.xml")
+        val preferences = source("main/java/org/teslasoft/assistant/preferences/Preferences.kt")
+        val assistantLayout = source("main/res/layout/view_assistant_bot_message.xml")
+        val adapter = source("main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt")
+
+        assertTrue(settings.contains("@+id/switch_top_positioned_audio_control"))
+        assertTrue(settings.contains("@string/chat_settings_top_positioned_audio_control"))
+        assertTrue(preferences.contains("getGlobalBoolean(\"chat_top_positioned_audio_control\", true)"))
+        assertTrue(assistantLayout.contains("@+id/btn_speak_top"))
+        assertTrue(view(assistantLayout, "btn_speak_top").contains("app:layout_constraintStart_toEndOf=\"@+id/username\""))
+        assertTrue(adapter.contains("preferences.getTopPositionedAudioControl()"))
+        assertTrue(adapter.contains("listener?.onSpeakClick("))
+    }
+
+    @Test
+    fun responseVersionNavigatorWrapsAsOneRightAlignedUnitOnlyWhenNeeded() {
+        val layout = source("main/res/layout/view_assistant_bot_message.xml")
+        val responsive = source(
+            "main/java/org/teslasoft/assistant/ui/chat/ResponsiveMessageActionsLayout.kt"
+        )
+
+        assertTrue(layout.contains("org.teslasoft.assistant.ui.chat.ResponsiveMessageActionsLayout"))
+        assertTrue(responsive.contains("primaryWidth + versionWidth > availableWidth"))
+        assertTrue(responsive.contains("child === versionNavigator"))
+        assertTrue(responsive.contains("width - paddingRight - outerWidth(versionNavigator)"))
     }
 
     @Test

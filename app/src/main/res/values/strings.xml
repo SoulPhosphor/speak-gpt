@@ -3280,6 +3280,7 @@
          Display-only — reasoning is still requested and stored either way
          (owner ruling, Aug 23 2026). No subtitle, matching the row above. -->
     <string name="chat_settings_show_thinking">Show Thinking</string>
+    <string name="chat_settings_top_positioned_audio_control">Top Positioned Audio Control</string>
     <string name="appearance_section_message_display">Message Display</string>
     <string name="appearance_staggered_responses">Staggered Responses</string>
     <string name="appearance_staggered_responses_hint">Display user prompts on the opposite side from AI responses.</string>

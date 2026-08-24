@@ -259,13 +259,13 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/image_frame" />
 
-            <LinearLayout
+            <org.teslasoft.assistant.ui.chat.ResponsiveMessageActionsLayout
+                android:id="@+id/assistant_action_row"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:layout_marginEnd="8dp"
                 android:layout_marginBottom="8dp"
-                android:orientation="horizontal"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/status_marker">
@@ -434,7 +434,7 @@
                         android:src="@drawable/ic_check_circle"
                         app:srcCompat="@drawable/ic_check_circle" />
                 </LinearLayout>
-            </LinearLayout>
+            </org.teslasoft.assistant.ui.chat.ResponsiveMessageActionsLayout>
 
         </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
@@ -474,6 +474,25 @@
         android:textSize="21sp"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Optional read-aloud placement. The original @id/btn_speak remains in
+         the action row and is used unchanged when the Chat Settings toggle is
+         off; this control is shown instead when the toggle is on. -->
+    <ImageButton
+        android:id="@+id/btn_speak_top"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginStart="4dp"
+        android:background="@color/transparent"
+        android:contentDescription="@string/btn_msg_speak"
+        android:descendantFocusability="blocksDescendants"
+        android:src="@drawable/ic_volume_up"
+        android:tooltipText="@string/btn_msg_speak"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/username"
+        app:layout_constraintStart_toEndOf="@+id/username"
+        app:layout_constraintTop_toTopOf="@+id/username"
+        app:srcCompat="@drawable/ic_volume_up" />
 
     <!-- Declared last so the 96dp portrait stays above the overlapping bubble,
          matching the tuner's portrait z-index. -->
