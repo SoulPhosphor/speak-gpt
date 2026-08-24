@@ -144,8 +144,47 @@ class ChatPresentationContractTest {
         assertTrue(metadataView.contains("\"\$model\\n\$tokens\""))
         assertTrue(adapter.contains("meta.setMetadata(modelPart, tokenPart)"))
         assertFalse(adapter.contains("availableMetaWidthPx"))
-        assertTrue(adapter.contains("metaParams.marginStart = if (showPortrait && showName)"))
-        assertTrue(adapter.contains("metaParams.topMargin = if (showName)"))
+        assertTrue(adapter.contains("setPortraitSideMargin("))
+        assertTrue(adapter.contains("measuredNameClearancePx("))
+        assertTrue(adapter.contains("messageMeta?.lineHeight ?: 0"))
+    }
+
+    @Test
+    fun portraitFlowUsesMeasuredBoundsAcrossThinkingAndReply() {
+        val layout = source("src/main/res/layout/view_assistant_bot_message.xml")
+        val adapter = source(
+            "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
+        )
+        val portraitAwareText = source(
+            "src/main/java/org/teslasoft/assistant/ui/chat/PortraitAwareMessageTextView.kt"
+        )
+
+        assertTrue(
+            viewTag(layout, "reasoning_text")
+                .contains("org.teslasoft.assistant.ui.chat.PortraitAwareMessageTextView")
+        )
+        assertTrue(adapter.contains("ui.offsetDescendantRectToMyCoords(view, bounds)"))
+        assertTrue(adapter.contains("reasoningText?.requestPortraitGeometryUpdate()"))
+        assertTrue(adapter.contains("message.requestPortraitGeometryUpdate()"))
+        assertTrue(adapter.contains("updateMeasuredNameInset(portraitBounds)"))
+        assertTrue(adapter.contains("portraitIsOnLeft(portraitBounds)"))
+        assertTrue(adapter.contains("ui.layoutDirection != View.LAYOUT_DIRECTION_RTL"))
+        assertTrue(portraitAwareText.contains("PortraitExclusionGeometry.horizontalExclusion("))
+        assertTrue(portraitAwareText.contains("horizontal.portraitOnLeft"))
+        assertTrue(portraitAwareText.contains("portrait?.layoutParams?.width"))
+        assertFalse(
+            portraitAwareText.contains(
+                "dimen(R.dimen.chat_portrait_top_offset) + dimen(R.dimen.chat_portrait_size)"
+            )
+        )
+    }
+
+    private fun viewTag(layout: String, id: String): String {
+        val idAt = layout.indexOf("android:id=\"@+id/$id\"")
+        if (idAt < 0) return ""
+        val start = layout.lastIndexOf('<', idAt)
+        val end = layout.indexOf('>', idAt)
+        return if (start >= 0 && end >= 0) layout.substring(start, end + 1) else ""
     }
 
     @Test
@@ -195,11 +234,9 @@ class ChatPresentationContractTest {
         val portraitAwareText = source(
             "src/main/java/org/teslasoft/assistant/ui/chat/PortraitAwareMessageTextView.kt"
         )
-        assertTrue(
-            portraitAwareText.contains(
-                "dimen(R.dimen.chat_portrait_top_offset) + dimen(R.dimen.chat_portrait_size)"
-            )
-        )
+        assertTrue(portraitAwareText.contains("boundsInRow(row, portrait)"))
+        assertTrue(portraitAwareText.contains("portraitBounds.bottom"))
+        assertTrue(portraitAwareText.contains("contentBounds.top"))
     }
 
     @Test

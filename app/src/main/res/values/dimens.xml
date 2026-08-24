@@ -63,6 +63,7 @@
     <!-- Horizontal breathing room between the portrait and the text it
          clears (owner ask, Aug 14 2026: the first pass hugged too tight). -->
     <dimen name="chat_portrait_text_gap">9dp</dimen>
+    <dimen name="chat_portrait_name_gap">14dp</dimen>
 
     <!-- Name begins/ends 102dp inward from the tuned 25dp bubble edge. -->
     <dimen name="chat_name_portrait_edge_inset">127dp</dimen>
