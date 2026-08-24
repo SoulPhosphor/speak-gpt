@@ -250,6 +250,7 @@ import org.teslasoft.assistant.ui.chat.ChatExportMessage
 import org.teslasoft.assistant.ui.chat.ChatExportOptions
 import org.teslasoft.assistant.ui.chat.ChatExportPdfWriter
 import org.teslasoft.assistant.ui.chat.ChatImeInsetLayout
+import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
@@ -2895,7 +2896,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         chat?.setOnTouchListener { _, event -> run {
-            if (event.action == MotionEvent.ACTION_SCROLL || event.action == MotionEvent.ACTION_UP) {
+            if (event.action == MotionEvent.ACTION_DOWN ||
+                event.action == MotionEvent.ACTION_SCROLL ||
+                event.action == MotionEvent.ACTION_UP
+            ) {
                 // chat?.transcriptMode = ListView.TRANSCRIPT_MODE_DISABLED
                 disableAutoScroll = true
             }
@@ -9369,12 +9373,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun scrollX(itemCount: Int) {
+        if (itemCount <= 0) return
         chat?.post {
-            val lastView = chat?.layoutManager?.findViewByPosition(itemCount - 1)
+            val recycler = chat ?: return@post
+            val lastView = recycler.layoutManager?.findViewByPosition(itemCount - 1)
             lastView?.let {
-                val scrollDistance = it.bottom - (chat?.height ?: 0)
+                val scrollDistance = StreamingBubbleScrollPolicy.distance(
+                    itemTop = it.top,
+                    itemBottom = it.bottom,
+                    viewportTop = recycler.paddingTop,
+                    viewportBottom = recycler.height - recycler.paddingBottom
+                )
                 if (scrollDistance > 0) {
-                    chat?.scrollBy(0, scrollDistance)
+                    recycler.scrollBy(0, scrollDistance)
                 }
             }
         }
