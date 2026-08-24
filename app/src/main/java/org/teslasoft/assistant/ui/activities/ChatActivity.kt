@@ -1334,6 +1334,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (chatStartupComplete && chatId != "") {
             refreshSummarizerIcons()
             refreshComposerTools()
+            // Appearance may have changed while Settings covered this screen.
+            // Rebind existing rows so Staggered Responses takes effect at once.
+            adapter?.notifyDataSetChanged()
         }
 
         // Catch images that finished while the screen was detached, and retry

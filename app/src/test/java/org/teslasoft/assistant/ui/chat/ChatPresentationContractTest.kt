@@ -268,4 +268,56 @@ class ChatPresentationContractTest {
         assertTrue(Regex("useFullPortraitSlot\\(\\)").findAll(adapter).count() >= 5)
         assertTrue(Regex("restorePortraitGlyphSlot\\(\\)").findAll(adapter).count() >= 4)
     }
+
+    @Test
+    fun staggeredResponsesDefaultsOnAndMovesUserRowsToAssistantPlacement() {
+        val appearanceLayout = source("src/main/res/layout/activity_appearance.xml")
+        val appearanceActivity = source(
+            "src/main/java/org/teslasoft/assistant/ui/activities/AppearanceActivity.kt"
+        )
+        val preferences = source(
+            "src/main/java/org/teslasoft/assistant/preferences/Preferences.kt"
+        )
+        val adapter = source(
+            "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
+        )
+        val chatActivity = source(
+            "src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt"
+        )
+        val strings = source("src/main/res/values/strings.xml")
+
+        val staggered = appearanceLayout.indexOf("@+id/switch_staggered_responses")
+        val profileImages = appearanceLayout.indexOf("@+id/switch_profile_images")
+        assertTrue(
+            "Staggered Responses must be the first Appearance toggle",
+            staggered in 0 until profileImages
+        )
+
+        val textColumnStart = appearanceLayout.lastIndexOf("<LinearLayout", staggered)
+        val rowStart = appearanceLayout.lastIndexOf("<LinearLayout", textColumnStart - 1)
+        val rowEnd = appearanceLayout.indexOf("</LinearLayout>", staggered)
+        val row = appearanceLayout.substring(rowStart, rowEnd)
+        assertTrue(row.contains("style=\"@style/Widget.App.Row.Toggle\""))
+        assertTrue(row.contains("@string/appearance_staggered_responses"))
+        assertTrue(row.contains("@string/appearance_staggered_responses_hint"))
+        assertTrue(row.contains("style=\"@style/Widget.App.Row.Switch\""))
+
+        assertTrue(strings.contains(
+            "<string name=\"appearance_staggered_responses\">Staggered Responses</string>"
+        ))
+        assertTrue(preferences.contains(
+            "getGlobalBoolean(\"chat_staggered_responses\", true)"
+        ))
+        assertTrue(appearanceActivity.contains(
+            "bindSwitch(R.id.switch_staggered_responses, preferences.getStaggeredResponses())"
+        ))
+        assertTrue(adapter.contains("ChatMessagePlacement.usesLogicalStart("))
+        assertTrue(adapter.contains("updateSpeakerPlacement(placeOnStart)"))
+        assertTrue(adapter.contains("constrainToSpeakerEdge(message, placeOnStart)"))
+        assertTrue(adapter.contains("iconParams.setMarginStart(portraitEdge)"))
+        assertTrue(chatActivity.contains(
+            "Rebind existing rows so Staggered Responses takes effect at once."
+        ))
+    }
+
 }
