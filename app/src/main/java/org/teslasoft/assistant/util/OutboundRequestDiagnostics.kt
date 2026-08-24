@@ -66,7 +66,28 @@ object OutboundRequestDiagnostics {
         }
     }
 
-    /** Snapshot safe to use from the later provider-failure path. */
+    /**
+     * Top-level field names of one serialized body, computed without touching
+     * any shared state. Diagnostics that must stay tied to a single generation
+     * attempt use this and keep the result on that attempt, so two overlapping
+     * generations can never read each other's request shape.
+     */
+    fun fieldNamesOf(body: String): List<String>? = try {
+        val root = JsonParser.parseString(body).asJsonObject
+        if (root.has("model") && root.has("messages")) {
+            root.keySet().sorted().takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
+     * Process-wide record of the most recent outbound body. It is NOT safe for
+     * per-attempt attribution and is deliberately not read by the generation
+     * failure path; use the field names captured on the attempt instead.
+     */
     fun latestFieldNames(): List<String>? = latestOutboundFieldNames?.toList()
 
     fun latestFieldNamesText(): String? = latestOutboundFieldNames

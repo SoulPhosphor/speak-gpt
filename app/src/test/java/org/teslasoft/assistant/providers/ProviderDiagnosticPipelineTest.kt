@@ -10,6 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.usage.ProviderUsageAttempt
 import org.teslasoft.assistant.util.GenErrorCode
+import org.teslasoft.assistant.util.OutboundRequestDiagnostics
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 
 class ProviderDiagnosticPipelineTest {
@@ -205,5 +206,40 @@ class ProviderDiagnosticPipelineTest {
             GenErrorCode.S6,
             classify(ProviderDiagnosticSnapshot("known", 200, events = listOf(upstream))).code
         )
+    }
+
+    /** Request shape is per attempt, never process-wide "latest request" state. */
+    @Test fun concurrentAttemptsKeepTheirOwnOutboundRequestFields() = runBlocking {
+        val first = ProviderUsageAttempt("model-a", "provider-a", "https://a.example")
+        val second = ProviderUsageAttempt("model-b", "provider-b", "https://b.example")
+
+        first.noteOutboundFieldNames(
+            OutboundRequestDiagnostics.fieldNamesOf(
+                "{\"model\":\"model-a\",\"messages\":[],\"temperature\":1}"
+            )
+        )
+        second.noteOutboundFieldNames(
+            OutboundRequestDiagnostics.fieldNamesOf(
+                "{\"model\":\"model-b\",\"messages\":[],\"top_p\":1}"
+            )
+        )
+
+        val firstFields = first.diagnosticSnapshot().outboundFieldNames.orEmpty()
+        val secondFields = second.diagnosticSnapshot().outboundFieldNames.orEmpty()
+        assertTrue(firstFields.contains("temperature"))
+        assertFalse(firstFields.contains("top_p"))
+        assertTrue(secondFields.contains("top_p"))
+        assertFalse(secondFields.contains("temperature"))
+    }
+
+    /** Only field NAMES leave the request; no prompt or parameter values. */
+    @Test fun outboundFieldCaptureNeverCopiesRequestValues() {
+        val names = OutboundRequestDiagnostics.fieldNamesOf(
+            "{\"model\":\"m\",\"messages\":[{\"role\":\"user\",\"content\":\"SECRET_PROMPT\"}]}"
+        ).orEmpty()
+        assertTrue(names.contains("messages"))
+        assertFalse(names.joinToString(",").contains("SECRET_PROMPT"))
+        assertNull(OutboundRequestDiagnostics.fieldNamesOf("not json at all"))
+        assertNull(OutboundRequestDiagnostics.fieldNamesOf("{\"input\":\"no messages member\"}"))
     }
 }

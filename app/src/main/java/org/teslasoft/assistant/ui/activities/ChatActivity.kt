@@ -6437,6 +6437,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
+        // Record the final request shape on THIS attempt. Kept on the attempt
+        // rather than in process-wide state so two overlapping generations can
+        // never report each other's outbound fields.
+        if (request.attributes.contains(providerUsageAttemptAttribute)) {
+            request.attributes[providerUsageAttemptAttribute].noteOutboundFieldNames(
+                org.teslasoft.assistant.util.OutboundRequestDiagnostics.fieldNamesOf(newBody)
+            )
+        }
+
         if (newBody != text) {
             request.setBody(TextContent(newBody, content.contentType ?: ContentType.Application.Json))
             // On OpenRouter, a visible summary is positively requested whenever
@@ -8201,7 +8210,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             FavoriteModelObject.ROUTING_ONLY -> favorite?.selectedProvider?.trim()?.ifBlank { null }
             FavoriteModelObject.ROUTING_PREFERRED -> favorite?.providerOrder
                 ?.filter { it.isNotBlank() }?.joinToString(", ")?.ifBlank { null }
-            else -> "automatic selection"
+            // Automatic routing requests no particular provider. Reporting a
+            // placeholder here would read like a provider name and would hide
+            // the fact that the response-derived serving provider is the only
+            // provider fact that exists for this attempt.
+            else -> null
         }
     }
 
@@ -8215,8 +8228,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         out.append("Configured API Provider: ")
             .append(apiEndpointObject?.label?.trim()?.ifBlank { null }
                 ?: apiEndpointObject?.host?.trim()?.ifBlank { null } ?: notReported).append('\n')
-        out.append("Requested/Routed Model Provider: ")
-            .append(requestedRoutedProviderForDiagnostics(model) ?: notReported).append('\n')
+        // Only present when a provider was actually requested; automatic routing
+        // asks for none, and an absent line is truthful where a placeholder is not.
+        requestedRoutedProviderForDiagnostics(model)?.let {
+            out.append("Requested/Routed Model Provider: ").append(it).append('\n')
+        }
         out.append("Actual Serving Model Provider: ")
             .append(snapshot?.actualServingProvider ?: notReported).append('\n')
         out.append("Outer HTTP Status: ").append(snapshot?.outerHttpStatus ?: notReported).append('\n')
@@ -10074,7 +10090,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (result.code == GenErrorCode.U0) {
                 sb.append("[U0] Unclassified generation failure.")
             } else {
-                sb.append(result.providerLimitMessage(this) ?: result.chatMessage(this))
+                // Error Log copy: no sentence telling the reader that details
+                // were saved to the Error Log they are already reading.
+                sb.append(
+                    result.providerLimitMessage(this, forErrorLog = true)
+                        ?: result.chatMessage(this, forErrorLog = true)
+                )
             }
             sb.append('\n')
             sb.append("Application Classification: ").append(result.code.code).append('\n')

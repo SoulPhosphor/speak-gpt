@@ -42,8 +42,19 @@ fun GenErrorCode.messageRes(): Int = when (this) {
     GenErrorCode.U0 -> R.string.gen_error_u0
 }
 
-fun GenErrorResult.chatMessage(context: Context): String =
-    "[${code.code}] " + context.getString(code.messageRes())
+/**
+ * The short failure line. [forErrorLog] drops the sentence that points the
+ * reader at the Error Log: inside the Error Log that sentence is circular and
+ * tells the reader nothing they are not already looking at.
+ */
+fun GenErrorResult.chatMessage(context: Context, forErrorLog: Boolean = false): String {
+    val base = "[${code.code}] " + context.getString(code.messageRes())
+    return if (forErrorLog || code != GenErrorCode.U0) {
+        base
+    } else {
+        base + " " + context.getString(R.string.gen_error_u0_log_note)
+    }
+}
 
 private val NO_RESPONSE_CODES = setOf(
     GenErrorCode.N1, GenErrorCode.N2, GenErrorCode.N3, GenErrorCode.N4, GenErrorCode.C1
@@ -92,18 +103,24 @@ fun GenErrorResult.providerDetailBlock(
             else -> context.getString(R.string.provider_error_none)
         }
     }
+    // Request shape comes from this attempt's own snapshot. Process-wide
+    // "latest request" state is never read here: it would let one generation
+    // describe another generation's request.
     val outboundFields = if (serverAnswered) {
-        OutboundRequestDiagnostics.latestFieldNamesText()
+        providerEvidence?.outboundFieldNames
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString(", ")
     } else {
         null
     }
     return context.getString(R.string.provider_error_line, detail) +
         "\n" + context.getString(R.string.provider_api_provider_line, apiProvider) +
-        "\n" + context.getString(
-            R.string.provider_requested_service_line,
-            requestedRoutedProvider?.trim()?.ifBlank { null }
-                ?: context.getString(R.string.provider_value_not_reported)
-        ) +
+        // Shown only when a provider was actually requested. Under automatic
+        // routing nothing was requested, so no line is printed rather than a
+        // placeholder that reads like a provider name.
+        (requestedRoutedProvider?.trim()?.ifBlank { null }?.let {
+            "\n" + context.getString(R.string.provider_requested_service_line, it)
+        } ?: "") +
         "\n" + context.getString(R.string.provider_model_service_line, modelServiceProvider) +
         "\n" + context.getString(R.string.provider_model_line, model) +
         "\n" + context.getString(R.string.provider_function_line, function) +
@@ -130,7 +147,16 @@ fun GenErrorResult.providerDetailBlock(
         (outboundFields?.let { "\nOutbound request fields: $it" } ?: "")
 }
 
-fun GenErrorResult.providerLimitMessage(context: Context): String? =
+fun GenErrorResult.providerLimitMessage(context: Context, forErrorLog: Boolean = false): String? {
+    val base = providerLimitBaseMessage(context) ?: return null
+    return if (forErrorLog || providerLimit != ProviderLimitKind.UNIDENTIFIED) {
+        base
+    } else {
+        base + " " + context.getString(R.string.provider_unknown_limit_log_note)
+    }
+}
+
+private fun GenErrorResult.providerLimitBaseMessage(context: Context): String? =
     when (providerLimit) {
         ProviderLimitKind.MODEL_CONTEXT ->
             context.getString(R.string.provider_context_overflow)

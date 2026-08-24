@@ -57,6 +57,8 @@ data class ProviderDiagnosticSnapshot(
     val completionTokens: Int? = null,
     val totalTokens: Int? = null,
     val malformedPayloadCount: Int = 0,
+    /** Top-level request field NAMES for this attempt. Values are never kept. */
+    val outboundFieldNames: List<String>? = null,
     val events: List<ProviderDiagnosticEvent> = emptyList()
 ) {
     val errorEvents: List<ProviderDiagnosticEvent> get() = events.filter { it.isError }

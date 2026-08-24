@@ -35,9 +35,17 @@ class ProviderUsageAttempt(
     @Volatile private var partialContentCharacters: Int = 0
     @Volatile private var reasoningCharacters: Int = 0
     @Volatile private var malformedPayloadCount: Int = 0
+    @Volatile private var outboundFieldNames: List<String>? = null
     private val providerDiagnosticEvents = mutableListOf<ProviderDiagnosticEvent>()
     @Volatile private var observationExpected = false
     private val observationFinished = CompletableDeferred<Unit>()
+
+    /** Request shape for THIS attempt only, so overlapping generations cannot
+     * report each other's outbound fields. */
+    @Synchronized
+    fun noteOutboundFieldNames(names: List<String>?) {
+        if (!names.isNullOrEmpty()) outboundFieldNames = names.toList()
+    }
 
     @Synchronized
     fun noteTypedUsage(prompt: Int?, completion: Int?, total: Int?) {
@@ -134,6 +142,7 @@ class ProviderUsageAttempt(
                 completionTokens = completionTokens,
                 totalTokens = totalTokens,
                 malformedPayloadCount = malformedPayloadCount,
+                outboundFieldNames = outboundFieldNames,
                 events = providerDiagnosticEvents.toList()
             )
         }
