@@ -237,6 +237,7 @@ import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
 import org.teslasoft.assistant.usage.ConversationUsageSummary
 import org.teslasoft.assistant.usage.ProviderUsageAttempt
+import org.teslasoft.assistant.usage.GenerationAttemptFailureException
 import org.teslasoft.assistant.usage.ProviderUsageSnapshot
 import org.teslasoft.assistant.usage.TokenCounts
 import org.teslasoft.assistant.usage.TokenPricingCatalog
@@ -324,6 +325,7 @@ import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.seconds
 import androidx.core.content.edit
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.asContextElement
 import okio.FileSystem
 import okio.Path.Companion.toPath
 
@@ -6210,7 +6212,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (request.attributes.contains(responseLifecycleRecorderAttribute) ||
             request.attributes.contains(generationRequestAttribute)
         ) return
-        val recorder = currentLifecycle?.takeUnless { it.finalized }
+        val boundContext = generationRequestContext.get()
+        val recorder = (boundContext?.lifecycle ?: currentLifecycle)
+            ?.takeUnless { it.finalized }
         val content = request.body as? TextContent ?: return
         if (content.contentType?.match(ContentType.Application.Json) != true) return
 
@@ -6231,7 +6235,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         if (isGenerationRequest) {
             recorder?.let { request.attributes.put(responseLifecycleRecorderAttribute, it) }
-            currentProviderUsageAttempt?.let {
+            (boundContext?.usageAttempt ?: currentProviderUsageAttempt)?.let {
                 request.attributes.put(providerUsageAttemptAttribute, it)
             }
             request.attributes.put(generationRequestAttribute, true)
@@ -7890,35 +7894,37 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (streamingEnabled) {
             generationRequestActive = true
             try {
-                val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(request)
-            // Dispatch begins at collection; a failure past this point is a real
-            // provider/network end, not a pre-dispatch one.
-            startGenerationNetworkDiagnostics()
-            providerRequestDispatched = true
-            completions.flowOn(Dispatchers.IO).collect { v ->
-                if (!currentCoroutineContext().isActive) throw CancellationException()
-                val choice = v.choices.firstOrNull()
-                noteLifecycleChunk(
-                    choice?.finishReason?.value, v.id,
-                    (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
-                    v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
-                )
-                choice?.delta?.toolCalls?.forEach { fragment ->
-                    toolCallAssembler.accept(
-                        fragment.index,
-                        fragment.id?.id,
-                        fragment.function?.nameOrNull,
-                        fragment.function?.argumentsOrNull
-                    )
+                withGenerationRequestContext {
+                    val completions: Flow<ChatCompletionChunk> = ai!!.chatCompletions(request)
+                    // Dispatch begins at collection; a failure past this point is a real
+                    // provider/network end, not a pre-dispatch one.
+                    startGenerationNetworkDiagnostics()
+                    providerRequestDispatched = true
+                    completions.flowOn(Dispatchers.IO).collect { v ->
+                        if (!currentCoroutineContext().isActive) throw CancellationException()
+                        val choice = v.choices.firstOrNull()
+                        noteLifecycleChunk(
+                            choice?.finishReason?.value, v.id,
+                            (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
+                            v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
+                        )
+                        choice?.delta?.toolCalls?.forEach { fragment ->
+                            toolCallAssembler.accept(
+                                fragment.index,
+                                fragment.id?.id,
+                                fragment.function?.nameOrNull,
+                                fragment.function?.argumentsOrNull
+                            )
+                        }
+                        val delta = choice?.delta?.content
+                        if (delta != null && delta != "null") {
+                            response += delta
+                            messages[messages.size - 1]["message"] = response
+                            adapter?.notifyItemChanged(messages.size - 1)
+                            scroll(false)
+                        }
+                    }
                 }
-                val delta = choice?.delta?.content
-                if (delta != null && delta != "null") {
-                    response += delta
-                    messages[messages.size - 1]["message"] = response
-                    adapter?.notifyItemChanged(messages.size - 1)
-                    scroll(false)
-                }
-            }
             } finally {
                 generationRequestActive = false
             }
@@ -7931,7 +7937,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             providerRequestDispatched = true
             val completion = try {
                 generationRequestActive = true
-                ai!!.chatCompletion(request)
+                withGenerationRequestContext { ai!!.chatCompletion(request) }
             } finally {
                 generationRequestActive = false
             }
@@ -7982,6 +7988,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // when it is off, [currentLifecycle] stays null and these helpers no-op.
     @Volatile
     private var currentLifecycle: ResponseLifecycleRecorder? = null
+
+    /** Coroutine-propagated request owner. Unlike activity-wide "current" fields,
+     * this remains correct if two attempts ever overlap on different jobs. */
+    private data class GenerationRequestContext(
+        val usageAttempt: ProviderUsageAttempt?,
+        val lifecycle: ResponseLifecycleRecorder?
+    )
+    private val generationRequestContext = ThreadLocal<GenerationRequestContext?>()
+
+    private suspend fun <T> withGenerationRequestContext(block: suspend () -> T): T {
+        val context = GenerationRequestContext(currentProviderUsageAttempt, currentLifecycle)
+        return try {
+            kotlinx.coroutines.withContext(generationRequestContext.asContextElement(context)) {
+                block()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: org.teslasoft.assistant.preferences.ProviderStreamTerminalException) {
+            throw e
+        } catch (e: Exception) {
+            throw GenerationAttemptFailureException(context.usageAttempt, e)
+        }
+    }
 
     /** Network transport evidence for the currently dispatched provider request. */
     private var generationNetworkMonitor: org.teslasoft.assistant.util.GenerationNetworkMonitor? = null
@@ -8086,10 +8115,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         finishReason: String?, id: String?, contentLength: Int,
         promptTokens: Int?, completionTokens: Int?, totalTokens: Int?
     ) {
-        val attempt = currentProviderUsageAttempt
+        val boundContext = generationRequestContext.get()
+        val attempt = boundContext?.usageAttempt ?: currentProviderUsageAttempt
         attempt?.noteTypedUsage(promptTokens, completionTokens, totalTokens)
         attempt?.noteTypedChunk(finishReason, id, contentLength)
-        currentLifecycle?.takeUnless { it.finalized }?.noteChunk(
+        (boundContext?.lifecycle ?: currentLifecycle)?.takeUnless { it.finalized }?.noteChunk(
             finishReason, id, contentLength, promptTokens, completionTokens, totalTokens
         )
 
@@ -9560,30 +9590,32 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     )
                 }
 
-                val completions: Flow<TextCompletion> = ai!!.completions(completionRequest)
+                withGenerationRequestContext {
+                    val completions: Flow<TextCompletion> = ai!!.completions(completionRequest)
 
-                // Dispatch begins at collection; a failure past this point is a
-                // real provider/network end, not a pre-dispatch one.
-                startGenerationNetworkDiagnostics()
-                providerRequestDispatched = true
-                completions.flowOn(Dispatchers.IO).collect { v ->
-                    run {
-                        if (!currentCoroutineContext().isActive) throw CancellationException()
-                        val choice = v.choices.firstOrNull()
-                        noteLifecycleChunk(
-                            choice?.finishReason?.value, v.id,
-                            (choice?.text?.takeIf { it != "null" }?.length ?: 0),
-                            v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
-                        )
-                        if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
-                            response += v.choices[0].text
-                            messages[messages.size - 1]["message"] = response
-                            if (messages.size > 2) {
-                                adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                            } else {
-                                adapter?.notifyItemChanged(messages.size - 1)
+                    // Dispatch begins at collection; a failure past this point is a
+                    // real provider/network end, not a pre-dispatch one.
+                    startGenerationNetworkDiagnostics()
+                    providerRequestDispatched = true
+                    completions.flowOn(Dispatchers.IO).collect { v ->
+                        run {
+                            if (!currentCoroutineContext().isActive) throw CancellationException()
+                            val choice = v.choices.firstOrNull()
+                            noteLifecycleChunk(
+                                choice?.finishReason?.value, v.id,
+                                (choice?.text?.takeIf { it != "null" }?.length ?: 0),
+                                v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
+                            )
+                            if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
+                                response += v.choices[0].text
+                                messages[messages.size - 1]["message"] = response
+                                if (messages.size > 2) {
+                                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                                } else {
+                                    adapter?.notifyItemChanged(messages.size - 1)
+                                }
+                                saveSettings()
                             }
-                            saveSettings()
                         }
                     }
                 }
@@ -9751,6 +9783,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // ERROR_CODES.md.
             val evidenceOwner =
                 (e as? org.teslasoft.assistant.preferences.ProviderStreamTerminalException)?.attempt
+                    ?: (e as? GenerationAttemptFailureException)?.attempt
                     ?: currentProviderUsageAttempt
             val providerEvidence = evidenceOwner?.diagnosticSnapshot()
             val genError = GenerationErrorClassifier.classify(e, providerEvidence)
@@ -11166,58 +11199,60 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (streamingEnabled) {
             generationRequestActive = true
             try {
-                val completions: Flow<ChatCompletionChunk> =
-                    ai!!.chatCompletions(chatCompletionRequest)
+                withGenerationRequestContext {
+                    val completions: Flow<ChatCompletionChunk> =
+                        ai!!.chatCompletions(chatCompletionRequest)
 
-            // The provider request begins dispatch here; from this point a
-            // failure is a genuine provider/network/stream end, not a
-            // pre-dispatch one.
-            startGenerationNetworkDiagnostics()
-            providerRequestDispatched = true
-            completions.flowOn(Dispatchers.IO).collect { v ->
-                run {
-                    if (!currentCoroutineContext().isActive) throw CancellationException()
-                    val choice = v.choices.firstOrNull()
-                    // A usage-only final chunk (requested via streamOptions)
-                    // carries an EMPTY choices list, so every choice access here
-                    // must be null-safe — the old v.choices[0] would throw on
-                    // that chunk.
-                    noteLifecycleChunk(
-                        choice?.finishReason?.value, v.id,
-                        (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
-                        v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
-                    )
-                    choice?.delta?.toolCalls?.forEach { fragment ->
-                        toolCallAssembler.accept(
-                            fragment.index,
-                            fragment.id?.id,
-                            fragment.function?.nameOrNull,
-                            fragment.function?.argumentsOrNull
-                        )
-                    }
-                    val deltaContent = choice?.delta?.content
-                    if (deltaContent != null && deltaContent != "null") {
-                        response += deltaContent
-                        messages[messages.size - 1]["message"] = response
-                        if (messages.size > 2) {
-                            adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                        } else {
-                            adapter?.notifyItemChanged(messages.size - 1)
-                        }
-                        scroll(false)
-                        // Persist mid-stream so a killed process doesn't lose
-                        // the partial reply — but NOT on every chunk:
-                        // saveSettings() re-serializes and re-encrypts the WHOLE
-                        // history on the main thread. The completion save below
-                        // still persists the full reply.
-                        val nowUptime = android.os.SystemClock.uptimeMillis()
-                        if (nowUptime - lastStreamSaveUptime >= STREAM_SAVE_INTERVAL_MS) {
-                            lastStreamSaveUptime = nowUptime
-                            saveSettings()
+                    // The provider request begins dispatch here; from this point a
+                    // failure is a genuine provider/network/stream end, not a
+                    // pre-dispatch one.
+                    startGenerationNetworkDiagnostics()
+                    providerRequestDispatched = true
+                    completions.flowOn(Dispatchers.IO).collect { v ->
+                        run {
+                            if (!currentCoroutineContext().isActive) throw CancellationException()
+                            val choice = v.choices.firstOrNull()
+                            // A usage-only final chunk (requested via streamOptions)
+                            // carries an EMPTY choices list, so every choice access here
+                            // must be null-safe — the old v.choices[0] would throw on
+                            // that chunk.
+                            noteLifecycleChunk(
+                                choice?.finishReason?.value, v.id,
+                                (choice?.delta?.content?.takeIf { it != "null" }?.length ?: 0),
+                                v.usage?.promptTokens, v.usage?.completionTokens, v.usage?.totalTokens
+                            )
+                            choice?.delta?.toolCalls?.forEach { fragment ->
+                                toolCallAssembler.accept(
+                                    fragment.index,
+                                    fragment.id?.id,
+                                    fragment.function?.nameOrNull,
+                                    fragment.function?.argumentsOrNull
+                                )
+                            }
+                            val deltaContent = choice?.delta?.content
+                            if (deltaContent != null && deltaContent != "null") {
+                                response += deltaContent
+                                messages[messages.size - 1]["message"] = response
+                                if (messages.size > 2) {
+                                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                                } else {
+                                    adapter?.notifyItemChanged(messages.size - 1)
+                                }
+                                scroll(false)
+                                // Persist mid-stream so a killed process doesn't lose
+                                // the partial reply — but NOT on every chunk:
+                                // saveSettings() re-serializes and re-encrypts the WHOLE
+                                // history on the main thread. The completion save below
+                                // still persists the full reply.
+                                val nowUptime = android.os.SystemClock.uptimeMillis()
+                                if (nowUptime - lastStreamSaveUptime >= STREAM_SAVE_INTERVAL_MS) {
+                                    lastStreamSaveUptime = nowUptime
+                                    saveSettings()
+                                }
+                            }
                         }
                     }
                 }
-            }
             } finally {
                 generationRequestActive = false
             }
@@ -11229,7 +11264,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             providerRequestDispatched = true
             val completion = try {
                 generationRequestActive = true
-                ai!!.chatCompletion(chatCompletionRequest)
+                withGenerationRequestContext { ai!!.chatCompletion(chatCompletionRequest) }
             } finally {
                 generationRequestActive = false
             }

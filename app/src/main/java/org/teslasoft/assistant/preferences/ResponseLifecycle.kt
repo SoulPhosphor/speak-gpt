@@ -22,14 +22,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.teslasoft.assistant.usage.ProviderUsageAttempt
 
 /**
- * Raised from the typed chunk path when OpenRouter's unified mid-stream error
- * chunk reaches the OpenAI-compatible client as finish_reason="error".
+ * Raised from the typed chunk path when a provider supplies a terminal failure
+ * finish reason (`error`, `content_filter`, `safety`, or `prohibited_content`).
  *
- * The top-level `error` object is not represented by aallam's typed
- * ChatCompletionChunk model, but OpenRouter guarantees this terminal choice on
- * its Chat Completions mid-stream error shape. Throwing here keeps the existing
- * ChatActivity error/UI path in charge instead of letting a provider error fall
- * through the normal-success tail and mark the message done.
+ * Top-level provider error objects are not represented by aallam's typed
+ * ChatCompletionChunk model. Throwing here keeps ChatActivity's one error/UI
+ * funnel in charge; [attempt] supplies the matching raw HTTP/SSE evidence.
  */
 class ProviderStreamTerminalException(
     /** Exact request owner. Carrying the object through the thrown failure means

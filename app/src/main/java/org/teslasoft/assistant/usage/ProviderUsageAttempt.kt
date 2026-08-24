@@ -140,6 +140,13 @@ class ProviderUsageAttempt(
     }
 }
 
+/** Carries the request owner through SDK exceptions that cannot themselves be
+ * augmented with response metadata. The classifier still sees [cause]. */
+class GenerationAttemptFailureException(
+    val attempt: ProviderUsageAttempt?,
+    cause: Throwable
+) : Exception(cause.message, cause)
+
 data class ProviderUsageSnapshot(
     val model: String,
     val provider: String,
