@@ -116,9 +116,10 @@
                         app:srcCompat="@drawable/ic_chevron_down" />
                 </LinearLayout>
 
-                <TextView
+                <org.teslasoft.assistant.ui.chat.PortraitAwareMessageTextView
                     style="@style/Widget.App.Chat.Thinking.Body"
                     android:id="@+id/reasoning_text"
+                    android:tag="ai"
                     android:textIsSelectable="true"
                     android:visibility="gone" />
             </LinearLayout>

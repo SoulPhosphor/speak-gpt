@@ -112,6 +112,8 @@ import org.teslasoft.assistant.ui.chat.ChatMarkdownRenderer
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.MessageMetadataView
+import org.teslasoft.assistant.ui.chat.PortraitAwareMessageTextView
+import org.teslasoft.assistant.ui.chat.PortraitExclusionGeometry
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
 import org.teslasoft.assistant.ui.util.IncludesPopupController
 import org.teslasoft.assistant.util.LegacyAvatarResolver
@@ -620,7 +622,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val iconInitialPaddingRight = icon.paddingRight
         private val iconInitialPaddingBottom = icon.paddingBottom
         private val iconInitialScaleType = icon.scaleType
-        private val message: TextView = itemView.findViewById(R.id.message)
+        private val message: PortraitAwareMessageTextView = itemView.findViewById(R.id.message)
         private val username: TextView = itemView.findViewById(R.id.username)
         private val bubbleBg: ConstraintLayout = itemView.findViewById(R.id.bubble_bg)
         private val imageFrame: View = itemView.findViewById(R.id.image_frame)
@@ -664,7 +666,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val reasoningContainer: LinearLayout? = itemView.findViewById(R.id.reasoning_container)
         private val reasoningHeader: LinearLayout? = itemView.findViewById(R.id.reasoning_header)
         private val reasoningLabel: TextView? = itemView.findViewById(R.id.reasoning_label)
-        private val reasoningText: TextView? = itemView.findViewById(R.id.reasoning_text)
+        private val reasoningText: PortraitAwareMessageTextView? = itemView.findViewById(R.id.reasoning_text)
         private val reasoningChevron: ImageView? = itemView.findViewById(R.id.reasoning_chevron)
         // Per-message reasoning indicator glyph in the action bar, right of the
         // info button (owner design, Aug 2026). Assistant layout only, so
@@ -700,6 +702,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             itemView.findViewById(R.id.compaction_marker)
         private val summaryMarker: TextView =
             itemView.findViewById(R.id.summary_marker)
+
+        private var boundIsBot = false
+        private var boundShowsPortrait = false
+        private var boundShowsName = false
+        private var boundIsGeneratedImage = false
+
+        init {
+            ui.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                updatePortraitFlowGeometry()
+            }
+        }
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
@@ -760,6 +773,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             } else {
                 updatePresentation(chatMessage)
             }
+            updatePortraitFlowGeometry()
 
             ui.setOnLongClickListener {
                 switchBulkActionState(position)
@@ -1821,6 +1835,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 preferences.getShowUserBubble()
             }
 
+            boundIsBot = isBot
+            boundShowsPortrait = showPortrait
+            boundShowsName = showName
+            boundIsGeneratedImage = isImage
+
             ui.setBackgroundColor(0x00000000)
 
             val nameText = if (isBot) {
@@ -2015,7 +2034,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             nameParams.setMarginEnd(0)
 
             if (showPortrait) {
-                val edge = dimensionPixelSize(R.dimen.chat_name_portrait_edge_inset)
+                val edge = portraitNameInsetPx(isBot)
                 nameParams.topMargin = dimensionPixelSize(R.dimen.chat_name_portrait_top)
                 if (isBot) {
                     nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
@@ -2062,14 +2081,15 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // keeps its default bubble-edge position.
             messageMeta?.let { meta ->
                 val metaParams = meta.layoutParams as ConstraintLayout.LayoutParams
-                metaParams.marginStart = if (showPortrait && showName) metaPortraitExtraStartPx() else 0
-                metaParams.topMargin = if (showName) {
-                    val bubbleTop = bubbleParams.topMargin
-                    (nameParams.topMargin + username.lineHeight - bubbleTop - contentPadding)
-                        .coerceAtLeast(0)
+                metaParams.marginStart = if (showPortrait) {
+                    preliminaryMetaPortraitStartPx(isBot)
                 } else {
                     0
                 }
+                // The first visible content block receives the measured name
+                // clearance in updatePortraitFlowGeometry after metadata and
+                // Thinking visibility are known.
+                metaParams.topMargin = 0
                 meta.layoutParams = metaParams
             }
 
@@ -2159,17 +2179,151 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
         }
 
+        /**
+         * Treats the rendered portrait as a temporary exclusion rectangle.
+         * Vertical margins select the first visible block after the optional
+         * name. Horizontal margins are applied only while each block actually
+         * intersects the portrait. Opened Thinking content and the answer then
+         * remeasure themselves line by line against the same live bounds.
+         */
+        private fun updatePortraitFlowGeometry() {
+            val metaVisible = messageMeta?.visibility == View.VISIBLE
+            val reasoningVisible = reasoningContainer?.visibility == View.VISIBLE
+            val nameVisible = boundShowsName && username.visibility == View.VISIBLE
+
+            val metaNameClearance = if (nameVisible) measuredNameClearancePx(0) else 0
+            val bodyNameClearance = if (nameVisible) {
+                measuredNameClearancePx(dimensionPixelSize(R.dimen.chat_name_body_gap))
+            } else {
+                0
+            }
+
+            setTopMargin(messageMeta, if (metaVisible) metaNameClearance else 0)
+            setTopMargin(
+                reasoningContainer,
+                if (!reasoningVisible) {
+                    0
+                } else if (metaVisible) {
+                    // One intentionally blank metadata line before Thinking.
+                    messageMeta?.lineHeight ?: 0
+                } else {
+                    bodyNameClearance
+                }
+            )
+            setTopMargin(
+                message,
+                if (boundIsGeneratedImage || metaVisible || reasoningVisible) 0
+                else bodyNameClearance
+            )
+
+            val portraitVisible = boundShowsPortrait && icon.visibility == View.VISIBLE &&
+                ui.width > 0 && icon.width > 0
+            if (portraitVisible) {
+                val portraitBounds = boundsInRow(icon)
+                if (nameVisible) updateMeasuredNameInset(portraitBounds)
+                setPortraitStartMargin(
+                    messageMeta,
+                    if (metaVisible) portraitBounds else null,
+                    dimensionPixelSize(R.dimen.chat_portrait_name_gap)
+                )
+                setPortraitStartMargin(
+                    reasoningHeader,
+                    if (reasoningVisible) portraitBounds else null,
+                    dimensionPixelSize(R.dimen.chat_portrait_text_gap)
+                )
+            } else if (!boundShowsPortrait || icon.visibility != View.VISIBLE) {
+                setStartMargin(messageMeta, 0)
+                setStartMargin(reasoningHeader, 0)
+            }
+
+            message.requestPortraitGeometryUpdate()
+            reasoningText?.requestPortraitGeometryUpdate()
+        }
+
+        private fun measuredNameClearancePx(afterNameGap: Int): Int {
+            if (ui.width > 0 && username.height > 0 && bubbleBg.height > 0) {
+                val nameBounds = boundsInRow(username)
+                val bubbleBounds = boundsInRow(bubbleBg)
+                return (nameBounds.bottom + afterNameGap -
+                    (bubbleBounds.top + bubbleBg.paddingTop)).coerceAtLeast(0)
+            }
+
+            val nameParams = username.layoutParams as ViewGroup.MarginLayoutParams
+            val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
+            val nameHeight = username.measuredHeight.coerceAtLeast(username.lineHeight)
+            return (nameParams.topMargin + nameHeight + afterNameGap -
+                bubbleParams.topMargin - bubbleBg.paddingTop).coerceAtLeast(0)
+        }
+
+        private fun updateMeasuredNameInset(portraitBounds: Rect) {
+            val params = username.layoutParams as ConstraintLayout.LayoutParams
+            val gap = dimensionPixelSize(R.dimen.chat_portrait_name_gap)
+            val desired = if (boundIsBot) {
+                portraitBounds.right + gap
+            } else {
+                ui.width - portraitBounds.left + gap
+            }
+            val current = if (boundIsBot) params.marginStart else params.marginEnd
+            if (current == desired) return
+            if (boundIsBot) params.marginStart = desired else params.marginEnd = desired
+            username.layoutParams = params
+        }
+
+        private fun setPortraitStartMargin(view: View?, portrait: Rect?, gap: Int) {
+            if (view == null || portrait == null || view.visibility != View.VISIBLE ||
+                view.width <= 0 || view.height <= 0) {
+                setStartMargin(view, 0)
+                return
+            }
+            val bounds = boundsInRow(view)
+            if (!PortraitExclusionGeometry.overlaps(
+                    portrait.top, portrait.bottom, bounds.top, bounds.bottom
+                )) {
+                setStartMargin(view, 0)
+                return
+            }
+            val params = view.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+            val naturalStart = bounds.left - params.marginStart
+            setStartMargin(view, (portrait.right + gap - naturalStart).coerceAtLeast(0))
+        }
+
+        private fun setTopMargin(view: View?, desired: Int) {
+            val params = view?.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+            if (params.topMargin == desired) return
+            params.topMargin = desired
+            view.layoutParams = params
+        }
+
+        private fun setStartMargin(view: View?, desired: Int) {
+            val params = view?.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+            if (params.marginStart == desired) return
+            params.marginStart = desired
+            view.layoutParams = params
+        }
+
+        private fun boundsInRow(view: View): Rect {
+            val bounds = Rect(0, 0, view.width, view.height)
+            ui.offsetDescendantRectToMyCoords(view, bounds)
+            return bounds
+        }
         private fun dimensionPixelSize(resource: Int): Int =
             context.resources.getDimensionPixelSize(resource)
 
-        /** How far past the bubble's own content edge the metadata line must
-         *  shift to line up with the name when the name sits beside a
-         *  portrait, in pixels. Never negative. */
-        private fun metaPortraitExtraStartPx(): Int {
-            val nameStart = dimensionPixelSize(R.dimen.chat_name_portrait_edge_inset)
+        /** Initial bind geometry; measured row bounds replace it after layout. */
+        private fun portraitNameInsetPx(isBot: Boolean): Int {
+            val params = icon.layoutParams as ViewGroup.MarginLayoutParams
+            val edge = if (isBot) params.marginStart else params.marginEnd
+            val portraitWidth = icon.measuredWidth.takeIf { it > 0 }
+                ?: params.width.takeIf { it > 0 }
+                ?: dimensionPixelSize(R.dimen.chat_portrait_size)
+            return edge + portraitWidth +
+                dimensionPixelSize(R.dimen.chat_portrait_name_gap)
+        }
+
+        private fun preliminaryMetaPortraitStartPx(isBot: Boolean): Int {
             val bubbleContentStart = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
                 dimensionPixelSize(R.dimen.chat_message_content_padding)
-            return (nameStart - bubbleContentStart).coerceAtLeast(0)
+            return (portraitNameInsetPx(isBot) - bubbleContentStart).coerceAtLeast(0)
         }
 
         private fun resolveThemeColor(attribute: Int): Int {
