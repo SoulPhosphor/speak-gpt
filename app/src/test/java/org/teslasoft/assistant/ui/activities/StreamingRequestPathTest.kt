@@ -36,9 +36,11 @@ class StreamingRequestPathTest {
     }
 
     @Test
-    fun completedResponseErrorsStillUseTheExistingResponseObserverCapture() {
-        assertTrue(source.contains("if (!call.response.status.isSuccess())"))
-        assertTrue(source.contains("capturedProviderErrorBody = response.bodyAsText()"))
+    fun completedResponseErrorsAreCapturedOnTheirExactRequestAttempt() {
+        assertTrue(source.contains("if (!response.status.isSuccess())"))
+        assertTrue(source.contains("attrs[providerUsageAttemptAttribute]"))
+        assertTrue(source.contains(".noteHttpResponse(response.status.value, body)"))
+        assertTrue(!source.contains("capturedProviderErrorBody"))
         assertTrue(source.contains("ai!!.chatCompletion(chatCompletionRequest)"))
         assertTrue(source.contains("stream_options"))
     }
