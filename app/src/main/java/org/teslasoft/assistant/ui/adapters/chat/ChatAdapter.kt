@@ -1986,20 +1986,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         /**
-         * Places the portrait, speaker name, and bubble.
-         *
-         * Generated images use the same horizontal assistant-message geometry
-         * as ordinary replies. Their bubble fills that normal available width so
-         * the image can use the space, while the image itself remains centered.
-         * With a portrait the image bubble still drops below the portrait's full
-         * reach, preserving the clean no-overlap behavior.
-         *
-         * For text, the bubble hugs the speaker side. With a portrait the name
-         * sits beside it; with just a painted bubble the row name aligns with the
-         * message content (not the bubble's border). The no-bubble presentation
-         * keeps its original placement untouched.
-         */
-        /**
          * Moves every user-only child to the same logical edge used by the
          * assistant renderer while preserving user colors, actions, and data.
          * Logical start/end lets Android mirror the complete arrangement in RTL.
@@ -2073,6 +2059,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             view.layoutParams = params
         }
 
+        /**
+         * Places the portrait, speaker name, and bubble.
+         *
+         * Generated images use the same horizontal assistant-message geometry
+         * as ordinary replies. Their bubble fills that normal available width so
+         * the image can use the space, while the image itself remains centered.
+         * With a portrait the image bubble still drops below the portrait's full
+         * reach, preserving the clean no-overlap behavior.
+         *
+         * For text, the bubble hugs the speaker side. With a portrait the name
+         * sits beside it; with just a painted bubble the row name aligns with the
+         * message content (not the bubble's border). The no-bubble presentation
+         * keeps its original placement untouched.
+         */
         private fun updateIdentityGeometry(
             placeOnStart: Boolean,
             showPortrait: Boolean,
