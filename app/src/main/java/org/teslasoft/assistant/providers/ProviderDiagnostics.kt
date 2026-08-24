@@ -344,9 +344,13 @@ object ProviderDiagnosticParser {
                         runCatching { value.asBoolean }.getOrDefault(false) -> out += "flagged"
                     value.isJsonObject || value.isJsonArray -> {
                         val nested = filteredCategories(value)
-                        if (nested.isNotEmpty()) out += if (nested.all { it in setOf("filtered", "flagged") }) {
-                            name
-                        } else nested
+                        if (nested.isNotEmpty()) {
+                            if (nested.all { it == "filtered" || it == "flagged" }) {
+                                out += name
+                            } else {
+                                out.addAll(nested)
+                            }
+                        }
                     }
                 }
             }
@@ -359,14 +363,16 @@ object ProviderDiagnosticParser {
                 "Provider moderation result: input filtered (${promptCategories.joinToString(", ")})"
             )
         }
-        val outputCategories = root.array("choices").orEmpty().flatMap { choiceElement ->
+        val outputCategories = mutableListOf<String>()
+        root.array("choices")?.forEach { choiceElement ->
             val choice = choiceElement.takeIf { it.isJsonObject }?.asJsonObject
-            filteredCategories(choice?.get("content_filter_results"))
-        }.distinct()
-        if (outputCategories.isNotEmpty()) {
+            outputCategories.addAll(filteredCategories(choice?.get("content_filter_results")))
+        }
+        val distinctOutputCategories = outputCategories.distinct()
+        if (distinctOutputCategories.isNotEmpty()) {
             findings += ModerationFinding(
                 ContentFilterSide.OUTPUT,
-                "Provider moderation result: generated output filtered (${outputCategories.joinToString(", ")})"
+                "Provider moderation result: generated output filtered (${distinctOutputCategories.joinToString(", ")})"
             )
         }
         val generic = filteredCategories(root.get("moderation")) +
