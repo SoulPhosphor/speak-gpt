@@ -169,6 +169,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.tts.voices.OpenAiVoiceProvider
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
@@ -1645,6 +1646,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     // Init TTS
     private var tts: TextToSpeech? = null
+    private var savedVoiceUnavailableShown = false
     private var pendingSpeak: String? = null
     private var pendingSpeakSession: Int? = null
     private var ttsUtteranceCounter: Long = 0
@@ -1706,6 +1708,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             } else {
                 isTTSInitialized = false
                 Log.w("TTS", "TextToSpeech init failed with status $status")
+                showSavedVoiceUnavailable(
+                    "the phone's default speech engine could not start (status $status)"
+                )
             }
         }
 
@@ -2096,12 +2101,35 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 null
             }
             if (voices != null) {
-                for (v: Voice in voices) {
-                    if (v.name == preferences!!.getVoice()) {
-                        tts!!.voice = v
-                    }
+                val savedVoiceId = preferences!!.getVoice()
+                val savedVoice = voices.firstOrNull { it.name == savedVoiceId }
+                val activeEngine = tts?.defaultEngine ?: "the phone's default engine"
+                when {
+                    savedVoice == null -> showSavedVoiceUnavailable(
+                        "it is not available from the active speech engine ($activeEngine)"
+                    )
+                    tts!!.setVoice(savedVoice) == TextToSpeech.ERROR -> showSavedVoiceUnavailable(
+                        "the active speech engine ($activeEngine) rejected it"
+                    )
                 }
+            } else {
+                showSavedVoiceUnavailable("the active speech engine did not provide a voice list")
             }
+        }
+    }
+
+    private fun showSavedVoiceUnavailable(reason: String) {
+        val prefs = preferences ?: return
+        if (prefs.getTtsEngine() != "google" || savedVoiceUnavailableShown || isFinishing || isDestroyed) return
+        savedVoiceUnavailableShown = true
+        val voiceId = prefs.getVoice()
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                .setTitle(R.string.saved_voice_unavailable_title)
+                .setMessage(getString(R.string.saved_voice_unavailable_message, voiceId, reason))
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
         }
     }
 
@@ -11726,7 +11754,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     try {
                         val rawAudio = openAIAI!!.speech(
                             request = SpeechRequest(
-                                model = ModelId("tts-1"),
+                                model = ModelId(preferences!!.getOpenAITtsModel().ifBlank {
+                                    throw IllegalStateException("No speech-capable model has been selected for this endpoint.")
+                                }),
                                 input = message,
                                 voice = com.aallam.openai.api.audio.Voice(preferences!!.getOpenAIVoice()),
                             )
@@ -11786,6 +11816,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         // listener above.
                         logTtsLifecycle("TTS onError engine=openai code=request_failed (speech request never returned audio)")
                         logVoiceEventAlways("cloud voice request failed: ${e.message}")
+                        if (OpenAiVoiceProvider.isUnknownVoiceFailure(e.message.orEmpty())) {
+                            apiEndpointPreferences?.rejectTtsVoice(
+                                preferences!!.getApiEndpointId(),
+                                preferences!!.getOpenAIVoice()
+                            )
+                        }
                         runOnUiThread {
                             adapter?.clearSpeakingPosition()
                             onHandsFreeReadbackFinished()

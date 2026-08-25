@@ -1105,6 +1105,49 @@
         <item name="android:textSize">14sp</item>
     </style>
 
+    <!-- Voice Browser family. All colors resolve through the same semantic
+         theme roles as shared dropdowns and rows; the reference screenshot
+         supplies hierarchy only and contributes no literal palette values. -->
+    <style name="Widget.App.VoiceBrowser.Segment" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:backgroundTint">@color/voice_browser_segment_background</item>
+        <item name="android:textColor">@color/voice_browser_segment_text</item>
+        <item name="android:textSize">14sp</item>
+        <item name="strokeColor">?attr/appDropdownBorderColor</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="Widget.App.VoiceBrowser.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:minHeight">72dp</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingVertical">8dp</item>
+    </style>
+
+    <style name="Widget.App.VoiceBrowser.SelectedIcon" parent="">
+        <item name="android:layout_width">28dp</item>
+        <item name="android:layout_height">28dp</item>
+        <item name="android:layout_marginEnd">12dp</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.App.VoiceBrowser.Action" parent="Widget.Material3.Button.TextButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">56dp</item>
+        <item name="android:minWidth">72dp</item>
+        <item name="android:paddingHorizontal">8dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="iconTint">?attr/colorPrimary</item>
+    </style>
+
     <!-- Provider chart (Choose Provider screen, owner spec Aug 2 2026): a
          horizontally scrollable table of provider endpoints. One Chart.Row per
          provider (and one for the header), cells sized by the column table in

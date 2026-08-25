@@ -295,6 +295,13 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.VoiceBrowserActivity"
+            android:exported="false"
+            android:label="@string/voice_browser_title"
+            android:launchMode="singleTask">
+        </activity>
+
+        <activity
             android:name=".ui.activities.SummarizerSettingsActivity"
             android:exported="false"
             android:label="@string/title_summarizer_settings"

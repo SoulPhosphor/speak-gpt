@@ -67,6 +67,7 @@ object PerChatSettingKeys {
         "voice",
         "tts_engine",
         "openai_voice",
+        "openai_tts_model",
 
         // Identity & prompts
         "prompt",
