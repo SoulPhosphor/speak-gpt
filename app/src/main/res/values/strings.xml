@@ -941,9 +941,9 @@
     <string name="gen_error_q1">The account\'s quota or usage limit has been reached. Check the account\'s billing and usage limits.</string>
     <string name="gen_error_s1">The endpoint was not found (HTTP 404). Check the Base URL in this profile\'s settings.</string>
     <string name="gen_error_s2">The server returned a response the app could not read as a stream. Check whether this endpoint and model support streaming.</string>
-    <string name="gen_error_s3">The request was rejected as inappropriate content and could not be processed.</string>
-    <string name="gen_error_s4">The provider stopped the model-generated output because of a content filter. This does not mean the user\'s request was rejected.</string>
-    <string name="gen_error_s5">A provider content filter stopped the generation, but the provider did not report whether it filtered the input or generated output.</string>
+    <string name="gen_error_s3">Your message was blocked by the provider\'s content filter. The model never received it, and nothing was generated. You can edit the message and send it again.</string>
+    <string name="gen_error_s4">Your message went through. The provider\'s content filter stopped the model partway through writing its reply, so the answer is cut short. Nothing you sent was blocked.</string>
+    <string name="gen_error_s5">A content filter stopped this exchange, but the provider did not say whether it blocked your message or the model\'s reply. The provider\'s own words are below.</string>
     <string name="gen_error_s6">The provider, upstream model service, or routing service failed while handling the request.</string>
     <string name="gen_error_u0">An unexpected error occurred.</string>
     <!-- Pointer to the Error Log. Appended only where the reader is NOT
