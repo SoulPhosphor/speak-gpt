@@ -654,6 +654,28 @@ or override dropdown colors, border, background, height, internal padding,
 chevron, sizing rules, open-state behavior, disabled treatment, or touch
 feedback in the QuickTile family.
 
+## Voice Browser
+
+The full-screen Voice Browser composes the existing `Widget.App.ActionBar`,
+`Widget.App.Dropdown.CanonicalLabel`/`.CanonicalValue`, `Widget.App.Section.*`,
+and `Widget.App.Row.*` families. Its provider and metadata filters use the
+canonical dropdown behavior; no provider owns a separate selector layout.
+
+The few controls unique to browsing voices use one documented family:
+
+- `Widget.App.VoiceBrowser.Segment` — the equal-width All / On-device / Network
+  single-choice group. Checked and unchecked colors come from theme roles via
+  `voice_browser_segment_*` state lists.
+- `Widget.App.VoiceBrowser.Row` — the selectable voice row container and its
+  minimum accessible height.
+- `Widget.App.VoiceBrowser.SelectedIcon` — the independent selected-state mark.
+- `Widget.App.VoiceBrowser.Action` — the independent 56dp Preview or Download
+  action target. Selection never replaces or absorbs this control.
+
+These styles deliberately contain no screenshot-derived literal colors. New
+provider metadata may add canonical dropdown fields without adding another
+Voice Browser style or provider-specific screen.
+
 ## Provider chart
 
 `Widget.App.Chart.Row`

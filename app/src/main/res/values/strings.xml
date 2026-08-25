@@ -1071,6 +1071,31 @@
 
     <!-- Voice &amp; speech consolidated settings -->
     <string name="voice_settings_title">Voice &amp; Speech</string>
+    <string name="voice_browser_title">Select Voice</string>
+    <string name="voice_browser_provider">Provider</string>
+    <string name="voice_browser_all">All</string>
+    <string name="voice_browser_on_device">On-device</string>
+    <string name="voice_browser_network">Network</string>
+    <string name="voice_browser_voices">Voices</string>
+    <string name="voice_browser_voice_row">%1$s. %2$s</string>
+    <string name="voice_browser_selected_voice">Selected %1$s</string>
+    <string name="voice_browser_count">%1$d Voices</string>
+    <string name="voice_browser_any">Any</string>
+    <string name="voice_browser_all_genders">All</string>
+    <string name="voice_browser_preview">Preview</string>
+    <string name="voice_browser_download">Download</string>
+    <string name="voice_browser_preview_desc">Preview %1$s</string>
+    <string name="voice_browser_download_desc">Download %1$s</string>
+    <string name="voice_browser_download_required">Download Required</string>
+    <string name="voice_browser_no_matches">No voices match these filters.</string>
+    <string name="voice_browser_provider_empty">No voices are available from this provider.</string>
+    <string name="voice_browser_load_failed">Voices could not be loaded.\n\n%1$s</string>
+    <string name="voice_browser_reset_filters">Reset Filters</string>
+    <string name="voice_browser_action_failed">Voice Action Failed</string>
+    <string name="voice_browser_provider_openai">OpenAI</string>
+    <string name="voice_browser_setting_title">Voice</string>
+    <string name="voice_browser_setting_subtitle_google">Google Speech Services</string>
+    <string name="voice_browser_setting_subtitle_provider">%1$s · %2$s</string>
     <string name="tile_voice_settings_title">Voice &amp; Speech</string>
     <string name="tile_voice_settings_subtitle">Settings related to transcription and text to speech.</string>
     <string name="tile_voice_settings_desc">Everything related to speech in one place: text-to-speech voice and engine, speech-to-text (dictation) engine, hands-free mode, voice-activity detection, and audio feedback. Tap to open.</string>

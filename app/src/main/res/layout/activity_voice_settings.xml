@@ -68,14 +68,22 @@
                     android:layout_width="0dp"
                     android:layout_height="match_parent"
                     android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
+                    android:layout_weight="2" />
+            </LinearLayout>
 
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_voice"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
+            <LinearLayout
+                android:id="@+id/row_voice_browser"
+                style="@style/Widget.App.Row.WithSubtitle"
+                android:paddingHorizontal="20dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/voice_browser_setting_title" />
+                    <TextView android:id="@+id/value_voice_browser" style="@style/Widget.App.Row.Subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/voice_browser_title" />
             </LinearLayout>
 
             <androidx.constraintlayout.widget.ConstraintLayout

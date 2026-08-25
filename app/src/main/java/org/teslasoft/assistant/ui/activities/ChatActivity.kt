@@ -2005,7 +2005,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             tts?.shutdown()
         } catch (_: Exception) { /* ignore */ }
         isTTSInitialized = false
-        tts = TextToSpeech(this, ttsListener)
+        tts = TextToSpeech(this, ttsListener, "com.google.android.tts")
     }
 
     // One-shot guard for the delivery-tuning retry so overlapping ttsPostInit
@@ -6000,7 +6000,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun initTTS() {
-        tts = TextToSpeech(this, ttsListener)
+        // Voice Browser Google IDs come from this engine. Initializing the
+        // same engine here guarantees the stored provider voice ID resolves
+        // to the exact Voice object the user selected.
+        tts = TextToSpeech(this, ttsListener, "com.google.android.tts")
     }
 
     /**

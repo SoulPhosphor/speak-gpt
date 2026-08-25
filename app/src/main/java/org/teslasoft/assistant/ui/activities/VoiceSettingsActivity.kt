@@ -45,7 +45,6 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.fragments.TileFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.LanguageSelectorDialogFragment
-import org.teslasoft.assistant.ui.fragments.dialogs.VoiceSelectorDialogFragment
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
 import java.util.Locale
@@ -67,7 +66,8 @@ import org.teslasoft.assistant.theme.ThemeManager
 class VoiceSettingsActivity : FragmentActivity() {
 
     private var tileTTS: TileFragment? = null
-    private var tileVoice: TileFragment? = null
+    private var rowVoiceBrowser: LinearLayout? = null
+    private var valueVoiceBrowser: TextView? = null
     private var rowVoiceLanguage: ConstraintLayout? = null
     private var valueVoiceLanguage: TextView? = null
     private var tileSTT: TileFragment? = null
@@ -86,7 +86,6 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var chatId = ""
     private var preferences: Preferences? = null
     private var language = "en"
-    private var voice = ""
     private var ttsEngine = "google"
 
     private var languageChangedListener: LanguageSelectorDialogFragment.StateChangesListener = object : LanguageSelectorDialogFragment.StateChangesListener {
@@ -103,12 +102,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             languageSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "LanguageSelectorDialog")
         }
     }
-
-    private var voiceSelectorListener: VoiceSelectorDialogFragment.OnVoiceSelectedListener =
-        VoiceSelectorDialogFragment.OnVoiceSelectedListener { voice ->
-            this@VoiceSettingsActivity.voice = voice
-            tileVoice?.updateSubtitle(voice)
-        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -150,7 +143,6 @@ class VoiceSettingsActivity : FragmentActivity() {
 
         language = preferences?.getLanguage() ?: "en"
         ttsEngine = preferences?.getTtsEngine() ?: "google"
-        voice = if (ttsEngine == "google") preferences?.getVoice() ?: "" else preferences?.getOpenAIVoice() ?: ""
 
         btnBack?.setOnClickListener { finish() }
 
@@ -168,6 +160,29 @@ class VoiceSettingsActivity : FragmentActivity() {
         adjustPaddings()
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (preferences != null) {
+            ttsEngine = preferences?.getTtsEngine() ?: "google"
+            tileTTS?.setChecked(ttsEngine == "openai")
+            updateVoiceBrowserRow()
+        }
+    }
+
+    private fun updateVoiceBrowserRow() {
+        val prefs = preferences ?: return
+        ttsEngine = prefs.getTtsEngine()
+        valueVoiceBrowser?.text = if (ttsEngine == "openai") {
+            getString(
+                R.string.voice_browser_setting_subtitle_provider,
+                getString(R.string.voice_browser_provider_openai),
+                prefs.getOpenAIVoice().replaceFirstChar(Char::uppercase)
+            )
+        } else {
+            getString(R.string.voice_browser_setting_subtitle_google)
+        }
+    }
+
     private fun createTiles() {
         tileTTS = TileFragment.newInstance(
             preferences?.getTtsEngine() == "openai",
@@ -180,19 +195,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             false,
             chatId,
             getString(R.string.tile_tts_desc)
-        )
-
-        tileVoice = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.tile_tts_voice_title),
-            disabledText = null,
-            enabledDesc = voice,
-            disabledDesc = null,
-            icon = R.drawable.ic_voice,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.tile_tts_voice_desc)
         )
 
         tileSTT = TileFragment.newInstance(
@@ -243,7 +245,6 @@ class VoiceSettingsActivity : FragmentActivity() {
     private fun placeTiles() {
         supportFragmentManager.beginTransaction()
             .replace(R.id.tile_tts, tileTTS!!)
-            .replace(R.id.tile_voice, tileVoice!!)
             .replace(R.id.tile_stt, tileSTT!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
@@ -259,14 +260,14 @@ class VoiceSettingsActivity : FragmentActivity() {
                 preferences?.setTtsEngine("google")
                 ttsEngine = "google"
             }
-            voice = if (!isChecked) preferences?.getVoice() ?: "" else preferences?.getOpenAIVoice() ?: ""
-            tileVoice?.updateSubtitle(voice)
+            updateVoiceBrowserRow()
         }
 
-        tileVoice?.setOnTileClickListener {
-            val voiceSelectorDialogFragment: VoiceSelectorDialogFragment = VoiceSelectorDialogFragment.newInstance(if (ttsEngine == "google") preferences?.getVoice() ?: "" else preferences?.getOpenAIVoice() ?: "", chatId, ttsEngine)
-            voiceSelectorDialogFragment.setVoiceSelectedListener(voiceSelectorListener)
-            voiceSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "VoiceSelectorDialogFragment")
+        rowVoiceBrowser = findViewById(R.id.row_voice_browser)
+        valueVoiceBrowser = findViewById(R.id.value_voice_browser)
+        updateVoiceBrowserRow()
+        rowVoiceBrowser?.setOnClickListener {
+            startActivity(Intent(this, VoiceBrowserActivity::class.java).putExtra(VoiceBrowserActivity.EXTRA_CHAT_ID, chatId))
         }
 
         rowVoiceLanguage = findViewById(R.id.row_voice_language)
