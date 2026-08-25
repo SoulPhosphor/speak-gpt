@@ -48,13 +48,12 @@ class ReasoningRequestDiagnosticsIntegrationTest {
         val root = JsonParser.parseString(out).asJsonObject
 
         assertFalse(root.has("logit_bias"))
-        // Auto with Show Reasoning On now positively requests a visible summary,
-        // so the outgoing body carries a `reasoning` object even on Auto. The
-        // final-request diagnostics still run: the empty logit_bias is stripped
-        // and the top-level field names (now including reasoning) are captured.
-        assertEquals("auto", root.getAsJsonObject("reasoning").get("summary").asString)
+        // Auto with Show Reasoning On relies on OpenRouter's documented default
+        // return behavior and sends no reasoning object. Final-request
+        // diagnostics still run and strip the empty logit_bias.
+        assertFalse(root.has("reasoning"))
         assertEquals(
-            listOf("max_tokens", "messages", "model", "reasoning", "stream"),
+            listOf("max_tokens", "messages", "model", "stream"),
             OutboundRequestDiagnostics.latestFieldNames()
         )
     }
