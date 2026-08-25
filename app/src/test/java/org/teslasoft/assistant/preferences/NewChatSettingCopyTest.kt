@@ -72,6 +72,7 @@ class NewChatSettingCopyTest {
             "LogitBiasesConfigId",
             "MaxTokens",
             "Model",
+            "OpenAITtsModel",
             "OpenAIVoice",
             "Prefix",
             "PresencePenalty",
