@@ -6,14 +6,14 @@ import android.os.Handler
 import android.os.Looper
 import com.aallam.openai.api.audio.SpeechRequest
 import com.aallam.openai.api.logging.LogLevel
-import com.aallam.openai.api.logging.LoggingConfig
+import com.aallam.openai.api.http.Timeout
 import com.aallam.openai.api.model.ModelId
+import com.aallam.openai.api.logging.Logger
 import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.OpenAIConfig
 import com.aallam.openai.client.OpenAIHost
+import com.aallam.openai.client.LoggingConfig
 import com.aallam.openai.client.RetryStrategy
-import com.aallam.openai.client.Timeout
-import com.aallam.openai.client.logging.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

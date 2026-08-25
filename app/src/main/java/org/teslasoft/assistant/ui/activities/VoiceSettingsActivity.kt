@@ -160,15 +160,6 @@ class VoiceSettingsActivity : FragmentActivity() {
         adjustPaddings()
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (preferences != null) {
-            ttsEngine = preferences?.getTtsEngine() ?: "google"
-            tileTTS?.setChecked(ttsEngine == "openai")
-            updateVoiceBrowserRow()
-        }
-    }
-
     private fun updateVoiceBrowserRow() {
         val prefs = preferences ?: return
         ttsEngine = prefs.getTtsEngine()
@@ -603,8 +594,10 @@ class VoiceSettingsActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        ttsEngine = preferences?.getTtsEngine() ?: "google"
+        tileTTS?.setChecked(ttsEngine == "openai")
+        updateVoiceBrowserRow()
         tileSTT?.updateSubtitle(voiceInputSubtitle())
-        Preferences.getPreferences(this, chatId)
     }
 
     private fun isDarkThemeEnabled(): Boolean {
