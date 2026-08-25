@@ -931,15 +931,25 @@
     <string name="gen_error_n2">Connection Timed Out: The app could not establish a connection to the server within the connection timeout. This usually points to a slow or unstable network rather than the model. Try again, or raise the connection timeout for this endpoint.</string>
     <string name="gen_error_n3">The app could not reach the server address. Check your connection or the Base URL, then try again.</string>
     <string name="gen_error_n4">Response Timed Out: The connection succeeded, but the server did not send a response within the response time. The model may be busy or slow to reply. Try again, switch models, or raise the response time for this endpoint.</string>
+    <string name="gen_error_c1">The client canceled the request before it completed.</string>
     <string name="gen_error_a1">The API key was rejected. Update the key in Settings.</string>
+    <string name="gen_error_a2">The service refused access to this request. Check the account and model permissions.</string>
     <string name="gen_error_m1">No model is set for this chat. Choose a model in this chat\'s settings.</string>
     <string name="gen_error_m2">The selected model is not available on this endpoint. Check the model name in this chat\'s settings, or choose another.</string>
     <string name="gen_error_m3">The conversation is too long for this model\'s limit. Start a new chat or shorten the input.</string>
+    <string name="gen_error_m4">The provider rejected an unsupported or invalid request parameter. The provider\'s exact explanation is shown below.</string>
+    <string name="gen_error_m5">The provider rejected the request and generated nothing. It did not say which part it objected to — its exact wording is below.</string>
     <string name="gen_error_q1">The account\'s quota or usage limit has been reached. Check the account\'s billing and usage limits.</string>
     <string name="gen_error_s1">The endpoint was not found (HTTP 404). Check the Base URL in this profile\'s settings.</string>
     <string name="gen_error_s2">The server returned a response the app could not read as a stream. Check whether this endpoint and model support streaming.</string>
-    <string name="gen_error_s3">The request was rejected as inappropriate content and could not be processed.</string>
-    <string name="gen_error_u0">An unexpected error occurred. The technical details were saved to the Error Log.</string>
+    <string name="gen_error_s3">Your message was blocked by the provider\'s content filter. The model never received it, and nothing was generated. You can edit the message and send it again.</string>
+    <string name="gen_error_s4">Your message went through. The provider\'s content filter stopped the model partway through writing its reply, so the answer is cut short. Nothing you sent was blocked.</string>
+    <string name="gen_error_s5">A content filter stopped this exchange, but the provider did not say whether it blocked your message or the model\'s reply. The provider\'s own words are below.</string>
+    <string name="gen_error_s6">The provider, upstream model service, or routing service failed while handling the request.</string>
+    <string name="gen_error_u0">An unexpected error occurred.</string>
+    <!-- Pointer to the Error Log. Appended only where the reader is NOT
+         already reading the Error Log; an entry never points at itself. -->
+    <string name="gen_error_u0_log_note">The technical details were saved to the Error Log.</string>
     <string name="provider_context_overflow">The provider rejected the complete request because it exceeded the selected model’s context limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose a model with a larger context window.</string>
     <string name="provider_input_limit">The provider rejected the request because the complete input exceeded the selected model’s input limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose another model.</string>
     <string name="provider_request_body_limit">The server rejected the request because the request body was larger than it accepts. This is a server request-size limit, not necessarily the model’s context limit. Nothing was shortened or retried.</string>
@@ -953,14 +963,23 @@
          "Not Reported" rather than blank. -->
     <string name="provider_error_line">Provider Error: %1$s</string>
     <string name="provider_api_provider_line">API Provider: %1$s</string>
+    <string name="provider_requested_service_line">Requested/Routed Model Provider: %1$s</string>
     <string name="provider_model_service_line">Model Service Provider: %1$s</string>
     <string name="provider_model_line">Model: %1$s</string>
     <string name="provider_function_line">Function: %1$s</string>
+    <string name="provider_outer_http_status_line">Outer HTTP Status: %1$s</string>
+    <string name="provider_embedded_status_line">Embedded Provider Status: %1$s</string>
+    <string name="provider_code_line">Provider Code: %1$s</string>
+    <string name="provider_type_line">Provider Type: %1$s</string>
+    <string name="provider_error_type_line">Provider Error Type: %1$s</string>
+    <string name="provider_filter_side_line">Content Filter Side: %1$s</string>
+    <string name="provider_warning_title">Provider Warning</string>
     <string name="provider_error_no_response">No response received from the server.</string>
     <string name="provider_error_none">None provided by the server.</string>
     <string name="provider_value_not_reported">Not Reported</string>
     <string name="provider_function_chat">Chat</string>
-    <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried. Technical details were saved to the Error Log.</string>
+    <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried.</string>
+    <string name="provider_unknown_limit_log_note">Technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>
     <string name="label_permission_denied">Permission denied</string>
     <string name="label_use_camera">Use camera</string>

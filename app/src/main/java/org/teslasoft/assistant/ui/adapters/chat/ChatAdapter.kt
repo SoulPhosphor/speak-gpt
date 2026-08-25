@@ -313,7 +313,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             KEY_ACTIVE_MEMORY_ATTRIBUTION,
             MessageCompletionState.KEY_STATE,
             MessageCompletionState.KEY_STATE_DETAIL,
-            MessageCompletionState.KEY_ERROR_TEXT
+            MessageCompletionState.KEY_ERROR_TEXT,
+            MessageCompletionState.KEY_PROVIDER_WARNING_TEXT
         )
 
         /** Parse the stored version list, or an empty list when a turn has none. */
@@ -557,6 +558,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             dataArray[position][MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             dataArray[position].remove(MessageCompletionState.KEY_STATE_DETAIL)
             dataArray[position].remove(MessageCompletionState.KEY_ERROR_TEXT)
+            dataArray[position].remove(MessageCompletionState.KEY_PROVIDER_WARNING_TEXT)
         }
         listener?.onMessageEdited()
     }
@@ -1711,6 +1713,15 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {
             val marker = statusMarker ?: return
             val state = chatMessage[MessageCompletionState.KEY_STATE]?.toString()
+            val providerWarning = chatMessage[MessageCompletionState.KEY_PROVIDER_WARNING_TEXT]
+                ?.toString().orEmpty()
+            if (chatMessage["isBot"] == true && providerWarning.isNotBlank() &&
+                state != MessageCompletionState.STREAMING
+            ) {
+                marker.text = context.getString(R.string.provider_warning_title) + "\n" + providerWarning
+                marker.visibility = View.VISIBLE
+                return
+            }
             // A deliberate user Stop is not an error and shows no marker at all
             // (owner ruling, Aug 8 2026); a complete or still-streaming reply
             // never shows one either.

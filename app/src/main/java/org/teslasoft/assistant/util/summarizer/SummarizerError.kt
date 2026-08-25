@@ -176,13 +176,20 @@ object SummarizerErrorClassifier {
             GenErrorCode.N1, GenErrorCode.N3 -> SummarizerErrorCategory.SERVICE_UNREACHABLE
             GenErrorCode.N2 -> SummarizerErrorCategory.CONNECT_TIMEOUT
             GenErrorCode.N4 -> SummarizerErrorCategory.RESPONSE_TIMEOUT
-            GenErrorCode.A1 -> SummarizerErrorCategory.ACCESS_REJECTED
+            GenErrorCode.C1 -> SummarizerErrorCategory.UNEXPECTED
+            GenErrorCode.A1, GenErrorCode.A2 -> SummarizerErrorCategory.ACCESS_REJECTED
             GenErrorCode.M1, GenErrorCode.M2 -> SummarizerErrorCategory.MODEL_UNAVAILABLE
             GenErrorCode.M3 -> SummarizerErrorCategory.REQUEST_TOO_LARGE
+            GenErrorCode.M4 -> SummarizerErrorCategory.SERVICE_ERROR
+            // Same category these client-error refusals already resolved to
+            // here, so the new code changes nothing about summary reporting.
+            GenErrorCode.M5 -> SummarizerErrorCategory.SERVICE_ERROR
             GenErrorCode.Q1 -> SummarizerErrorCategory.RATE_LIMIT
             GenErrorCode.S1 -> SummarizerErrorCategory.SERVICE_ERROR
             GenErrorCode.S2 -> SummarizerErrorCategory.RESPONSE_UNREADABLE
-            GenErrorCode.S3 -> SummarizerErrorCategory.CONTENT_REJECTED
+            GenErrorCode.S3, GenErrorCode.S4, GenErrorCode.S5 ->
+                SummarizerErrorCategory.CONTENT_REJECTED
+            GenErrorCode.S6 -> SummarizerErrorCategory.SERVICE_ERROR
             GenErrorCode.U0 ->
                 if (result.httpStatus != null && result.httpStatus >= 400) {
                     SummarizerErrorCategory.SERVICE_ERROR

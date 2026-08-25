@@ -106,10 +106,19 @@ object ArchivistFailureCategory {
         return when (gen.code) {
             GenErrorCode.N1, GenErrorCode.N3 -> CONNECTION
             GenErrorCode.N2, GenErrorCode.N4 -> TIMEOUT
+            GenErrorCode.C1 -> UNKNOWN
             GenErrorCode.A1 -> API_KEY_REJECTED
-            GenErrorCode.S3 -> CONTENT_REFUSED
+            GenErrorCode.A2 -> CONFIG
+            GenErrorCode.S3, GenErrorCode.S4, GenErrorCode.S5 -> CONTENT_REFUSED
+            GenErrorCode.S6 -> PROVIDER_ERROR
             GenErrorCode.S2 -> UNREADABLE
             GenErrorCode.M1 -> CONFIG
+            GenErrorCode.M4 -> CONFIG
+            // A refusal the provider did not explain is not evidence of a
+            // configuration fault. It keeps the category these failures already
+            // had here, so naming the cause in chat does not silently re-label
+            // Memory Assistant results.
+            GenErrorCode.M5 -> UNKNOWN
             // Only a response that names the MODEL as missing is Model
             // Unavailable; a bare 404 is most often a wrong endpoint URL, so it
             // maps to Invalid Configuration (owner ruling, Aug 1 2026).

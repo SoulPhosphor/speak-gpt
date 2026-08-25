@@ -16,6 +16,9 @@
 
 package org.teslasoft.assistant.util
 
+import kotlinx.coroutines.CancellationException
+import org.teslasoft.assistant.providers.ContentFilterSide
+import org.teslasoft.assistant.providers.ProviderDiagnosticSnapshot
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
@@ -32,14 +35,21 @@ enum class GenErrorCode(val code: String, val includeStackTrace: Boolean) {
     N2("N2", false), // connect timeout — could not establish the connection in time
     N3("N3", false), // host unreachable / DNS / offline
     N4("N4", false), // response (read/socket) timeout — connected, but no reply in time
+    C1("C1", false), // client/app cancellation wrapped by a transport/client exception
     A1("A1", false), // API key rejected
+    A2("A2", false), // authenticated but forbidden / access denied
     M1("M1", false), // no model set on the request
     M2("M2", false), // named model not available on the endpoint
     M3("M3", false), // context length exceeded
+    M4("M4", false), // unsupported/invalid request parameter
+    M5("M5", false), // provider rejected the request; no specific part identified
     Q1("Q1", false), // quota / usage limit reached
     S1("S1", false), // bare HTTP 404 / Not Found
     S2("S2", true),  // response could not be read as the expected stream
     S3("S3", false), // request rejected as inappropriate content
+    S4("S4", false), // generated output stopped by a content filter
+    S5("S5", false), // content filter fired but provider did not identify side
+    S6("S6", false), // provider/upstream/routing service failure
     U0("U0", true);  // anything unmatched
 }
 
@@ -63,7 +73,10 @@ data class GenErrorResult(
     val code: GenErrorCode,
     val httpStatus: Int?,
     val providerLimit: ProviderLimitKind? = null,
-    val isVisionRejection: Boolean = false
+    val isVisionRejection: Boolean = false,
+    val embeddedProviderStatus: Int? = null,
+    val contentFilterSide: ContentFilterSide = ContentFilterSide.NONE,
+    val providerResponseReceived: Boolean = false
 )
 
 /**
@@ -79,7 +92,10 @@ data class GenErrorResult(
  */
 object GenerationErrorClassifier {
 
-    fun classify(error: Throwable): GenErrorResult {
+    fun classify(
+        error: Throwable,
+        providerEvidence: ProviderDiagnosticSnapshot? = null
+    ): GenErrorResult {
         val chain = causeChain(error)
         val text = buildString {
             for (t in chain) {
@@ -91,15 +107,62 @@ object GenerationErrorClassifier {
         val structured = extractStructuredEvidence(chain)
         val structuredCodes = structured.codesAndTypes.lowercase()
         val structuredBodies = structured.bodies.lowercase()
-        val status = extractStructuredHttpStatus(structured.httpStatuses)
+        val status = providerEvidence?.outerHttpStatus
+            ?: extractStructuredHttpStatus(structured.httpStatuses)
             ?: extractHttpStatus(text)
         val lower = text.lowercase()
+        val providerText = providerEvidence?.events.orEmpty().joinToString("\n") { event ->
+            (listOfNotNull(event.code, event.type, event.errorType, event.message) +
+                event.additionalMessages + listOfNotNull(event.rawPayload))
+                .joinToString("\n")
+        }.lowercase()
+        val allEvidenceText = "$lower\n$providerText"
+        val embeddedStatus = providerEvidence?.embeddedHttpStatus
+        val responseReceived = providerEvidence?.providerResponded == true || status != null
+
+        fun result(
+            code: GenErrorCode,
+            providerLimit: ProviderLimitKind? = null,
+            vision: Boolean = false,
+            filterSide: ContentFilterSide = providerEvidence?.errorContentFilterSide
+                ?: ContentFilterSide.NONE
+        ) = GenErrorResult(
+            code = code,
+            httpStatus = status,
+            providerLimit = providerLimit,
+            isVisionRejection = vision,
+            embeddedProviderStatus = embeddedStatus,
+            contentFilterSide = filterSide,
+            providerResponseReceived = responseReceived
+        )
+
+        // A cancellation remains a client/app event even when a wrapper adds
+        // provider-looking prose. It must never become a provider failure.
+        if (chain.any { it is CancellationException }) {
+            return GenErrorResult(GenErrorCode.C1, null)
+        }
+
+        // Structured side attribution outranks generic provider status/type.
+        // In particular, OpenRouter may call an AtlasCloud filtered-output
+        // termination `provider_unavailable`; the output-side evidence is still
+        // the honest user-facing classification.
+        when (providerEvidence?.errorContentFilterSide) {
+            ContentFilterSide.INPUT -> return result(GenErrorCode.S3)
+            ContentFilterSide.OUTPUT -> return result(GenErrorCode.S4)
+            ContentFilterSide.AMBIGUOUS -> return result(GenErrorCode.S5)
+            else -> Unit
+        }
 
         // 1. Auth.
-        if (status == 401 || lower.contains("incorrect api key") ||
+        if (status == 401 || allEvidenceText.contains("incorrect api key") ||
             (status == null && hasType(chain, "AuthenticationException"))
         ) {
-            return GenErrorResult(GenErrorCode.A1, status)
+            return result(GenErrorCode.A1)
+        }
+        if (status == 403 && !providerText.contains("content_filter") &&
+            !providerText.contains("content policy")
+        ) {
+            return result(GenErrorCode.A2)
         }
         // 2. Network / transport. No HTTP response exists for these, so status is
         //    forced null even if a stray number appeared in the trace.
@@ -134,59 +197,95 @@ object GenerationErrorClassifier {
         // Otherwise a structured provider code/type/body wins before any
         // fallback inspection of exception prose.
         if (status == 413) {
-            return providerLimitResult(ProviderLimitKind.REQUEST_BODY, status)
+            return providerLimitResult(ProviderLimitKind.REQUEST_BODY, status, providerEvidence)
         }
         // HTTP 402 Payment Required is the unambiguous "no credits" signal —
         // kept ahead of the throttle/quota checks so an empty balance is never
         // reported as a rate limit.
         if (status == 402) {
-            return providerLimitResult(ProviderLimitKind.OUT_OF_CREDITS, status)
+            return providerLimitResult(ProviderLimitKind.OUT_OF_CREDITS, status, providerEvidence)
+        }
+        providerLimitFromEvidence(providerText)?.let {
+            return providerLimitResult(it, status, providerEvidence)
         }
         providerLimitFromEvidence(structuredCodes)?.let {
-            return providerLimitResult(it, status)
+            return providerLimitResult(it, status, providerEvidence)
         }
         providerLimitFromEvidence(structuredBodies)?.let {
-            return providerLimitResult(it, status)
+            return providerLimitResult(it, status, providerEvidence)
         }
         providerLimitFromEvidence(lower)?.let {
-            return providerLimitResult(it, status)
+            return providerLimitResult(it, status, providerEvidence)
         }
         // The concrete HTTP status wins over the SDK wrapper class. A class-name
         // match is useful only when the client exposed no status at all.
         if (status == 429 || (status == null && hasType(chain, "RateLimitException"))) {
-            return providerLimitResult(ProviderLimitKind.RATE_OR_THROUGHPUT, status)
+            return providerLimitResult(ProviderLimitKind.RATE_OR_THROUGHPUT, status, providerEvidence)
         }
 
         // 4. Model-specific. A model-not-found body is M2 even when the HTTP
         //    status is 404, so this is checked before the bare-404 rule below.
-        if (lower.contains("invalid model") || lower.contains("you must provide a model")) {
-            return GenErrorResult(GenErrorCode.M1, status)
+        if (allEvidenceText.contains("invalid model") ||
+            allEvidenceText.contains("you must provide a model")
+        ) {
+            return result(GenErrorCode.M1)
         }
-        if (lower.contains("does not exist")) {
-            return GenErrorResult(GenErrorCode.M2, status)
+        if (allEvidenceText.contains("does not exist")) {
+            return result(GenErrorCode.M2)
         }
         // 5. Bare HTTP 404 with no model-specific body. Text is fallback evidence
         // only when the client did not expose a concrete status.
         if (status == 404 || (status == null && lower.contains("not found"))) {
-            return GenErrorResult(GenErrorCode.S1, status ?: 404)
+            return result(GenErrorCode.S1).copy(httpStatus = status ?: 404)
         }
         // 6. Response-shape failure / content rejection.
         if (lower.contains("notransformationfoundexception") ||
             lower.contains("expected response body of the type")
         ) {
-            return GenErrorResult(GenErrorCode.S2, status)
+            return result(GenErrorCode.S2)
         }
-        if (lower.contains("your request was rejected")) {
-            return GenErrorResult(GenErrorCode.S3, status,
-                isVisionRejection = looksLikeVisionRejection(lower))
+        if (allEvidenceText.contains("your request was rejected")) {
+            return result(GenErrorCode.S3, vision = looksLikeVisionRejection(allEvidenceText),
+                filterSide = ContentFilterSide.INPUT)
         }
+        if (providerEvidence?.malformedPayloadCount?.let { it > 0 } == true &&
+            providerEvidence.errorEvents.isEmpty()
+        ) return result(GenErrorCode.S2)
+
+        val normalizedProviderTypes = providerEvidence?.errorEvents.orEmpty()
+            .flatMap { listOfNotNull(it.code, it.type, it.errorType) }
+            .map { it.lowercase() }
+        if (normalizedProviderTypes.any {
+                it in setOf(
+                    "invalid_request_error", "invalid_argument", "unsupported_parameter",
+                    "unsupported_value", "unknown_parameter", "parameter_not_supported"
+                )
+            }
+        ) return result(GenErrorCode.M4)
+
+        if (normalizedProviderTypes.any {
+                it in setOf(
+                    "provider_unavailable", "provider_error", "upstream_error",
+                    "routing_error", "no_available_providers", "service_unavailable"
+                )
+            } || (status != null && status in 500..599) ||
+            (embeddedStatus != null && embeddedStatus in 500..599)
+        ) return result(GenErrorCode.S6)
         // Do not infer a generic provider limit from vague words such as
-        // "limit" or "maximum" in a 400/422. If no specific recognized provider
-        // evidence exists, preserve the request rejection as the unknown bucket
-        // and let the raw provider/client detail explain it.
+        // "limit" or "maximum" in a 400/422.
+        //
+        // A client-error status is still a fact: the provider looked at the
+        // request and refused it before generating anything. Auth, payment,
+        // not-found, payload-size and rate-limit statuses were already matched
+        // above, so what remains here is a rejection whose specific reason the
+        // provider did not put in a field the app recognizes. Reporting that as
+        // an unexpected error would deny evidence the app was handed; the raw
+        // provider wording travels with the code and explains the rest.
+        if ((status != null && status in 400..499) ||
+            (embeddedStatus != null && embeddedStatus in 400..499)
+        ) return result(GenErrorCode.M5)
         // 7. Unknown catch-all.
-        return GenErrorResult(GenErrorCode.U0, status,
-            isVisionRejection = looksLikeVisionRejection(lower))
+        return result(GenErrorCode.U0, vision = looksLikeVisionRejection(allEvidenceText))
     }
 
     private fun looksLikeVisionRejection(lower: String): Boolean =
@@ -276,7 +375,8 @@ object GenerationErrorClassifier {
 
     private fun providerLimitResult(
         kind: ProviderLimitKind,
-        status: Int?
+        status: Int?,
+        providerEvidence: ProviderDiagnosticSnapshot? = null
     ): GenErrorResult {
         val code = when (kind) {
             ProviderLimitKind.REQUEST_BODY -> GenErrorCode.S2
@@ -287,7 +387,14 @@ object GenerationErrorClassifier {
             ProviderLimitKind.OUT_OF_CREDITS -> GenErrorCode.Q1
             ProviderLimitKind.UNIDENTIFIED -> GenErrorCode.U0
         }
-        return GenErrorResult(code, status, kind)
+        return GenErrorResult(
+            code = code,
+            httpStatus = status,
+            providerLimit = kind,
+            embeddedProviderStatus = providerEvidence?.embeddedHttpStatus,
+            contentFilterSide = providerEvidence?.errorContentFilterSide ?: ContentFilterSide.NONE,
+            providerResponseReceived = providerEvidence?.providerResponded == true || status != null
+        )
     }
 
     /**
