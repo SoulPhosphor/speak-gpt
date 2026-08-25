@@ -100,6 +100,8 @@ import androidx.core.net.toUri
 import androidx.core.util.Pair
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.interpolator.view.animation.FastOutLinearInInterpolator
@@ -254,6 +256,7 @@ import org.teslasoft.assistant.ui.chat.ChatExportOptions
 import org.teslasoft.assistant.ui.chat.ChatExportPdfWriter
 import org.teslasoft.assistant.ui.chat.ChatImeInsetLayout
 import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
+import org.teslasoft.assistant.ui.chat.TranscriptAutoScrollState
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
@@ -572,7 +575,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // provider/model/routing, resolved during initSettings and acted on once the
     // chat UI exists (a dialog + Summoning Circle, or the API Endpoints screen).
     private var providerRestoreOutcome: NewChatProviderRestore.Outcome? = null
-    private var disableAutoScroll = false
+    private val transcriptAutoScroll = TranscriptAutoScrollState()
     private var inCost: Float = 0.0f
     private var outCost: Float = 0.0f
     private var usageIn: Int = 0
@@ -2718,10 +2721,50 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             before = ::captureTranscriptAnchor,
             after = ::restoreTranscriptAnchor
         )
-        // The RecyclerView is constrained directly to the composer host, so its
-        // bottom edge already follows every IME inset frame. Do not also force
-        // scroll offsets from an IME animation callback: that fights the live
-        // constraint resize and makes the transcript/composer seam jump.
+        // Keep the transcript/composer seam fixed while the IME changes the
+        // viewport. The earlier implementation anchored the first visible row
+        // and fought the bottom constraint on every animation frame. This uses
+        // the row touching the composer instead, preserving the exact bottom
+        // gap that the user actually sees.
+        root?.let { transcriptRoot ->
+            ViewCompat.setWindowInsetsAnimationCallback(
+                transcriptRoot,
+                object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                    override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
+                            imeTranscriptAnchor = currentTranscriptAnchor()
+                        }
+                        super.onPrepare(animation)
+                    }
+
+                    override fun onProgress(
+                        insets: WindowInsetsCompat,
+                        runningAnimations: MutableList<WindowInsetsAnimationCompat>
+                    ): WindowInsetsCompat {
+                        if (runningAnimations.any {
+                                it.typeMask and WindowInsetsCompat.Type.ime() != 0
+                            }
+                        ) {
+                            val anchor = if (transcriptAutoScroll.isTouchActive) {
+                                touchTranscriptAnchor
+                            } else {
+                                imeTranscriptAnchor
+                            }
+                            scheduleTranscriptAnchorRestore(anchor)
+                        }
+                        return insets
+                    }
+
+                    override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                        if (animation.typeMask and WindowInsetsCompat.Type.ime() != 0) {
+                            scheduleTranscriptAnchorRestore(imeTranscriptAnchor)
+                            imeTranscriptAnchor = null
+                        }
+                        super.onEnd(animation)
+                    }
+                }
+            )
+        }
         root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
@@ -2925,16 +2968,34 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             chat?.scrollToPosition(adapter?.itemCount!! - 1)
         }
 
-        chat?.setOnTouchListener { _, event -> run {
-            if (event.action == MotionEvent.ACTION_DOWN ||
-                event.action == MotionEvent.ACTION_SCROLL ||
-                event.action == MotionEvent.ACTION_UP
-            ) {
-                // chat?.transcriptMode = ListView.TRANSCRIPT_MODE_DISABLED
-                disableAutoScroll = true
+        chat?.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    transcriptAutoScroll.onTouchStarted()
+                    touchTranscriptAnchor = currentTranscriptAnchor()
+                    // Once the user takes the transcript, an IME animation may
+                    // no longer restore the older pre-touch position.
+                    imeTranscriptAnchor = null
+                }
+                MotionEvent.ACTION_SCROLL -> {
+                    transcriptAutoScroll.onTouchStarted()
+                    touchTranscriptAnchor = currentTranscriptAnchor()
+                    chat?.post { transcriptAutoScroll.onTouchFinished() }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    transcriptAutoScroll.onTouchFinished()
+                    touchTranscriptAnchor = null
+                }
             }
-            return@setOnTouchListener false
-        }}
+            false
+        }
+        chat?.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (transcriptAutoScroll.isTouchActive) {
+                    touchTranscriptAnchor = currentTranscriptAnchor()
+                }
+            }
+        })
 
         Handler(Looper.getMainLooper()).postDelayed({
             val fadeOut: Animation = AnimationUtils.loadAnimation(this, R.anim.fade_out)
@@ -3248,11 +3309,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         button.isEnabled = visible
     }
 
-    /** Position and geometry of the transcript row touching the composer's
-     * top edge before the composer or IME changes size. */
-    private var transcriptAnchorPosition = RecyclerView.NO_POSITION
-    private var transcriptAnchorBottomGap = 0
-    private var transcriptAnchorHeight = 0
+    /** One immutable snapshot of the row touching the composer's top edge. */
+    private data class TranscriptAnchor(
+        val position: Int,
+        val bottomGap: Int,
+        val height: Int
+    )
+
+    private var composerTranscriptAnchor: TranscriptAnchor? = null
+    private var imeTranscriptAnchor: TranscriptAnchor? = null
+    private var touchTranscriptAnchor: TranscriptAnchor? = null
 
     /**
      * The bottommost visible row is the stable reference because its bottom
@@ -3261,26 +3327,53 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * allowing ordinary transcript scrolling in either composer mode.
      */
     private fun captureTranscriptAnchor() {
-        val recycler = chat ?: return
-        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
+        composerTranscriptAnchor = currentTranscriptAnchor()
+    }
+
+    private fun currentTranscriptAnchor(): TranscriptAnchor? {
+        val recycler = chat ?: return null
+        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return null
         val position = layoutManager.findLastVisibleItemPosition()
-        if (position == RecyclerView.NO_POSITION) {
-            transcriptAnchorPosition = RecyclerView.NO_POSITION
-            return
-        }
-        val anchor = layoutManager.findViewByPosition(position) ?: return
-        transcriptAnchorPosition = position
-        transcriptAnchorBottomGap = recycler.height - anchor.bottom
-        transcriptAnchorHeight = anchor.height
+        if (position == RecyclerView.NO_POSITION) return null
+        val anchor = layoutManager.findViewByPosition(position) ?: return null
+        return TranscriptAnchor(
+            position = position,
+            bottomGap = recycler.height - anchor.bottom,
+            height = anchor.height
+        )
     }
 
     private fun restoreTranscriptAnchor() {
+        restoreTranscriptAnchor(composerTranscriptAnchor)
+        composerTranscriptAnchor = null
+    }
+
+    private fun restoreTranscriptAnchor(anchor: TranscriptAnchor?) {
         val recycler = chat ?: return
-        val position = transcriptAnchorPosition
-        if (position == RecyclerView.NO_POSITION) return
+        anchor ?: return
         val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
-        val targetTop = recycler.height - transcriptAnchorBottomGap - transcriptAnchorHeight
-        layoutManager.scrollToPositionWithOffset(position, targetTop)
+        if (anchor.position !in 0 until (adapter?.itemCount ?: 0)) return
+        val targetTop = recycler.height - anchor.bottomGap - anchor.height
+        layoutManager.scrollToPositionWithOffset(anchor.position, targetTop)
+    }
+
+    private fun scheduleTranscriptAnchorRestore(anchor: TranscriptAnchor?) {
+        val recycler = chat ?: return
+        anchor ?: return
+        recycler.postOnAnimation { restoreTranscriptAnchor(anchor) }
+    }
+
+    /** A growing streamed row must not shift the viewport after the user has
+     * taken control. The adapter update is allowed, but its next layout is
+     * pinned back to the exact row/gap visible before that update. */
+    private inline fun preserveTranscriptForUser(block: () -> Unit) {
+        if (!transcriptAutoScroll.shouldPreserveGrowingContentAnchor) {
+            block()
+            return
+        }
+        val anchor = currentTranscriptAnchor()
+        block()
+        scheduleTranscriptAnchorRestore(anchor)
     }
 
     /**
@@ -6207,6 +6300,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    /** Auto-generated topics are allowed to repeat; chat storage ids are not.
+     * Give a repeated title a short numeric suffix instead of retrying the same
+     * provider output until the placeholder remains Untitled forever. */
+    private fun uniqueAutoTitle(baseTitle: String): String {
+        val chatPreferences = ChatPreferences.getChatPreferences()
+        if (!chatPreferences.checkDuplicate(this, baseTitle)) return baseTitle
+
+        for (number in 2..999) {
+            val suffix = " ($number)"
+            val stem = baseTitle
+                .take(org.teslasoft.assistant.ui.chat.ConversationTitlePolicy.MAX_TITLE_CHARS - suffix.length)
+                .trimEnd()
+            val candidate = stem + suffix
+            if (!chatPreferences.checkDuplicate(this, candidate)) return candidate
+        }
+        return (baseTitle.take(68).trimEnd() + " (${System.currentTimeMillis() % 100000})")
+            .take(org.teslasoft.assistant.ui.chat.ConversationTitlePolicy.MAX_TITLE_CHARS)
+    }
+
     /** Open the API Endpoints screen so the user can set up a provider + model
      *  (used when nothing has ever produced a successful reply — never a
      *  hardcoded default model). */
@@ -6476,10 +6588,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         if (newBody != text) {
             request.setBody(TextContent(newBody, content.contentType ?: ContentType.Application.Json))
-            // On OpenRouter, a visible summary is positively requested whenever
-            // reasoning is wanted for display and not being disabled. Report it so
-            // the request shape is explicit in the log.
-            val summaryRequested = isOpenRouter && resolved.showReasoning && !resolved.disablesReasoning
+            // Report what is actually present on the wire. This used to infer
+            // summary_requested=true from the UI setting even after the serializer
+            // stopped sending `reasoning.summary`, making a correct request look
+            // suspicious in the lifecycle log.
+            val summaryRequested = try {
+                com.google.gson.JsonParser.parseString(newBody).asJsonObject
+                    .getAsJsonObject("reasoning")?.has("summary") == true
+            } catch (_: Exception) {
+                false
+            }
             lastReasoningAttachment = buildString {
                 append(
                     if (paramAttached) {
@@ -7957,7 +8075,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         if (delta != null && delta != "null") {
                             response += delta
                             messages[messages.size - 1]["message"] = response
-                            adapter?.notifyItemChanged(messages.size - 1)
+                            preserveTranscriptForUser {
+                                adapter?.notifyItemChanged(messages.size - 1)
+                            }
                             scroll(false)
                         }
                     }
@@ -7998,13 +8118,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             messages[messages.size - 1]["message"] = response
             currentLifecycle?.markNonStreamingResponse()
-            adapter?.notifyItemChanged(messages.size - 1)
+            preserveTranscriptForUser {
+                adapter?.notifyItemChanged(messages.size - 1)
+            }
         }
         val providerDiagnostics = finalizeLifecycleSuccess()
         applyProviderWarnings(providerDiagnostics)
         messages[messages.size - 1]["message"] = "$response\n"
         markLastAssistantDone()
-        adapter?.notifyItemChanged(messages.size - 1)
+        preserveTranscriptForUser {
+            adapter?.notifyItemChanged(messages.size - 1)
+        }
         syncChatProjection()
         pronounce(shouldPronounce, response)
         saveSettings()
@@ -9354,10 +9478,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (!reason.isNullOrBlank()) {
                     messages[idx][MessageCompletionState.KEY_ERROR_TEXT] = reason
                 }
-                if (messages.size > 2) {
-                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                } else {
-                    adapter?.notifyItemChanged(messages.size - 1)
+                preserveTranscriptForUser {
+                    if (messages.size > 2) {
+                        adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                    } else {
+                        adapter?.notifyItemChanged(messages.size - 1)
+                    }
                 }
             }
         }
@@ -9531,26 +9657,27 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun scroll(mode: Boolean) {
-        if (!disableAutoScroll) {
-            val itemCount = adapter?.itemCount ?: 0
+        if (!transcriptAutoScroll.allowsAutomaticScroll()) return
+        val itemCount = adapter?.itemCount ?: 0
 
-            if (mode) {
-                chat?.post {
-                    if (itemCount > 0) {
-                        chat?.scrollToPosition(itemCount - 1)
+        if (mode) {
+            chat?.post {
+                if (!transcriptAutoScroll.allowsAutomaticScroll()) return@post
+                if (itemCount > 0) {
+                    chat?.scrollToPosition(itemCount - 1)
 
-                        scrollX(itemCount)
-                    }
+                    scrollX(itemCount)
                 }
-            } else {
-                scrollX(itemCount)
             }
+        } else {
+            scrollX(itemCount)
         }
     }
 
     private fun scrollX(itemCount: Int) {
-        if (itemCount <= 0) return
+        if (itemCount <= 0 || !transcriptAutoScroll.allowsAutomaticScroll()) return
         chat?.post {
+            if (!transcriptAutoScroll.allowsAutomaticScroll()) return@post
             val recycler = chat ?: return@post
             val lastView = recycler.layoutManager?.findViewByPosition(itemCount - 1)
             lastView?.let {
@@ -9596,20 +9723,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
 
-        disableAutoScroll = false
+        transcriptAutoScroll.onGenerationStarted()
 
         // Capture the user's message here, the single point every input method flows
         // through (typing, voice recognition, and Whisper transcription), so the
         // lorebook matches triggers regardless of how the message was entered.
         lastUserMessageForLore = request
 
-        // Keep the app at foreground importance for the whole generation so the
-        // stream survives the screen turning off or the user switching apps
-        // (otherwise the OS freezes the process / lets Wi-Fi power-save drop the
-        // socket, and the request dies with "Software caused connection abort").
-        GenerationForegroundService.begin(this, chatId, chatName)
-
         try {
+            // Keep the app at foreground importance for the whole generation so the
+            // stream survives the screen turning off or the user switching apps
+            // (otherwise the OS freezes the process / lets Wi-Fi power-save drop the
+            // socket, and the request dies with "Software caused connection abort").
+            GenerationForegroundService.begin(this, chatId, chatName)
             var response = ""
 
             if (model.contains(":ft") || model.contains("ft:")) {
@@ -9660,10 +9786,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             if (v.choices[0] != null && v.choices[0].text != null && v.choices[0].text.toString() != "null") {
                                 response += v.choices[0].text
                                 messages[messages.size - 1]["message"] = response
-                                if (messages.size > 2) {
-                                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                                } else {
-                                    adapter?.notifyItemChanged(messages.size - 1)
+                                preserveTranscriptForUser {
+                                    if (messages.size > 2) {
+                                        adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                                    } else {
+                                        adapter?.notifyItemChanged(messages.size - 1)
+                                    }
                                 }
                                 saveSettings()
                             }
@@ -9675,10 +9803,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 applyProviderWarnings(providerDiagnostics)
                 messages[messages.size - 1]["message"] = "$response\n"
                 markLastAssistantDone()
-                if (messages.size > 2) {
-                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                } else {
-                    adapter?.notifyItemChanged(messages.size - 1)
+                preserveTranscriptForUser {
+                    if (messages.size > 2) {
+                        adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                    } else {
+                        adapter?.notifyItemChanged(messages.size - 1)
+                    }
                 }
 
                 syncChatProjection()
@@ -9838,7 +9968,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     ?: currentProviderUsageAttempt
             val providerEvidence = evidenceOwner?.diagnosticSnapshot()
             val genError = GenerationErrorClassifier.classify(e, providerEvidence)
-            logGenerationError(genError, e, "message", failureDiagnostics, providerEvidence)
 
             if (genError.isVisionRejection && conversationHasFullImages(chatMessageIncludes)) {
                 recordVisionCapability(ImageCapability.UNSUPPORTED)
@@ -9901,16 +10030,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 lifecycleTermination, lifecycleError
             )
 
-            // Record to the Provider Failure Log when enabled AND the server
-            // actually answered — a user stop or a request that never reached a
-            // server is not a provider fault and is never logged. The same
-            // expanded fields the user sees, plus the server's own error.
-            // A pre-dispatch failure contacted no provider, so it is never a
-            // provider fault: skip the Provider Failure Log even if a local
-            // exception happened to classify as one that "reached" a server.
-            if (preferences?.getLogChatFailures() == true && genError.reachedServer() && providerRequestDispatched) {
+            // A provider response gets ONE diagnostic owner. When Provider
+            // Failure logging is enabled, that entry receives the complete
+            // application diagnostic and Error Log gets no duplicate. When it
+            // is disabled, the always-on Error Log remains the fallback so the
+            // failure never disappears. Chat display and Response Lifecycle are
+            // deliberately independent and unchanged.
+            val diagnosticDestination = org.teslasoft.assistant.util.GenerationDiagnosticDestination.choose(
+                providerFailureLoggingEnabled = preferences?.getLogChatFailures() == true,
+                reachedServer = genError.reachedServer(),
+                requestDispatched = providerRequestDispatched
+            )
+            if (diagnosticDestination ==
+                org.teslasoft.assistant.util.GenerationDiagnosticDestination.PROVIDER_FAILURE_LOG
+            ) {
                 val providerErrorRaw = providerEvidence?.errorMessages?.joinToString("\n")
                     ?.ifBlank { null } ?: e.message?.trim()?.ifBlank { null } ?: "(no message)"
+                val diagnostic = buildGenerationErrorDiagnostic(
+                    genError, e, "message", failureDiagnostics, providerEvidence
+                )
                 org.teslasoft.assistant.preferences.Logger
                     .logProviderFailure(
                         this, apiProviderName, modelServiceProvider, modelName,
@@ -9922,8 +10060,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         providerType = providerEvidence?.providerType,
                         providerErrorType = providerEvidence?.providerErrorType,
                         contentFilterSide = providerEvidence?.contentFilterSide?.wire,
-                        attemptId = providerEvidence?.attemptId
+                        attemptId = providerEvidence?.attemptId,
+                        applicationDiagnostic = diagnostic.message
                     )
+                logVoiceFailureSnapshot(genError.code.code, diagnostic.voiceLive)
+            } else {
+                logGenerationError(genError, e, "message", failureDiagnostics, providerEvidence)
             }
 
             if (messages.isEmpty() || messages[messages.size - 1]["isBot"] == false) {
@@ -9941,10 +10083,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 messages[failedIndex][MessageCompletionState.KEY_STATE] = MessageCompletionState.FAILED
                 messages[failedIndex][MessageCompletionState.KEY_STATE_DETAIL] = genError.code.code
                 messages[failedIndex][MessageCompletionState.KEY_ERROR_TEXT] = response
-                if (messages.size > 2) {
-                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                } else {
-                    adapter?.notifyItemChanged(messages.size - 1)
+                preserveTranscriptForUser {
+                    if (messages.size > 2) {
+                        adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                    } else {
+                        adapter?.notifyItemChanged(messages.size - 1)
+                    }
                 }
             }
 
@@ -9966,6 +10110,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 messageInput?.requestFocus()
             }
         } finally {
+            transcriptAutoScroll.onGenerationFinished()
             try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
             generationNetworkMonitor = null
             GenerationForegroundService.end(this)
@@ -10094,13 +10239,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         preferences?.getHandsFreeMode() == true || isRecording || handsFreeReadbackExpected
 
     /**
-     * Write the always-on Error Log entry for a classified generation failure
-     * (ERROR_CODES.md). Unlike the chat message, this carries the diagnostic
+     * Write the Error Log entry for a non-provider generation failure, or for a
+     * provider failure when its dedicated log is disabled. Unlike the chat
+     * message, this carries the diagnostic
      * context the chat deliberately omits — profile, Base URL, model, voice flag,
      * HTTP status — plus the exception detail, or the full stack trace for the
-     * ambiguous/unknown codes (S2/U0). Written on every error regardless of the
-     * "Show chat errors" toggle, which controls only the chat display. Never logs
-     * the API key, headers, or prompt text.
+     * ambiguous/unknown codes (S2/U0). A dispatched provider response is folded
+     * into its one Provider Failure entry when that log is enabled. "Show chat
+     * errors" controls only chat display. Never logs keys, headers, or prompts.
      *
      * The entry is written to the "crash" channel, which is the user-facing Error
      * Log. `trigger` is which generation path failed (e.g. "message",
@@ -10116,52 +10262,75 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         failureSnapshot: org.teslasoft.assistant.util.GenerationFailureSnapshot? = null,
         providerEvidence: ProviderDiagnosticSnapshot? = null
     ) {
-        val voiceLive = org.teslasoft.assistant.util.resolveFailureVoiceState(
-            failureSnapshot,
-            isVoiceLive()
+        val diagnostic = buildGenerationErrorDiagnostic(
+            result, e, trigger, failureSnapshot, providerEvidence
         )
         try {
-            val sb = StringBuilder()
-            if (result.code == GenErrorCode.U0) {
-                sb.append("[U0] Unclassified generation failure.")
-            } else {
-                // Error Log copy: no sentence telling the reader that details
-                // were saved to the Error Log they are already reading.
-                sb.append(
-                    result.providerLimitMessage(this, forErrorLog = true)
-                        ?: result.chatMessage(this, forErrorLog = true)
-                )
-            }
-            sb.append('\n')
-            sb.append("Application Classification: ").append(result.code.code).append('\n')
-            sb.append("Profile: ${apiEndpointObject?.label ?: "unknown"}\n")
-            sb.append("Base URL: ${apiEndpointObject?.host ?: "unknown"}\n")
-            sb.append("Model: ${model.ifBlank { "unknown" }}\n")
-            sb.append("Voice: ${if (voiceLive) "active" else "inactive"}\n")
-            sb.append("Trigger: $trigger\n")
-            sb.append("Screen: ${screenState()}\n")
-            if (failureSnapshot != null) {
-                failureSnapshot.asLogLines().forEach { line ->
-                    sb.append(line).append('\n')
-                }
-            } else {
-                sb.append("Network: ${networkState()}\n")
-            }
-            sb.append("Power save: ${powerSaveState()}")
-            sb.append('\n')
-            appendProviderEvidence(sb, providerEvidence)
-            if (voiceLive) sb.append('\n').append(compactVoiceContext())
-            if (result.code.includeStackTrace) {
-                sb.append("\n\n").append(e.stackTraceToString())
-            } else {
-                e.message?.takeIf { it.isNotBlank() }?.let { sb.append("\nDetail: $it") }
-            }
-            org.teslasoft.assistant.preferences.Logger.log(this, "crash", "GenError", "error", sb.toString())
+            org.teslasoft.assistant.preferences.Logger.log(
+                this, "crash", "GenError", "error", diagnostic.message
+            )
         } catch (_: Throwable) { /* never let diagnostics crash the error path */ }
 
         // Failure clue into the Voice Debug Log even when per-turn voice logging is
         // off (ERROR_CODES.md section 5). No-op when voice wasn't live.
-        logVoiceFailureSnapshot(result.code.code, voiceLive)
+        logVoiceFailureSnapshot(result.code.code, diagnostic.voiceLive)
+    }
+
+    private data class GenerationErrorDiagnostic(
+        val message: String,
+        val voiceLive: Boolean
+    )
+
+    /** Builds the Error Log body without choosing its destination. Provider
+     * responses can therefore place this same diagnostic inside their one
+     * Provider Failure entry instead of spraying a duplicate into Error Log. */
+    private fun buildGenerationErrorDiagnostic(
+        result: GenErrorResult,
+        e: Throwable,
+        trigger: String,
+        failureSnapshot: org.teslasoft.assistant.util.GenerationFailureSnapshot? = null,
+        providerEvidence: ProviderDiagnosticSnapshot? = null
+    ): GenerationErrorDiagnostic {
+        val voiceLive = org.teslasoft.assistant.util.resolveFailureVoiceState(
+            failureSnapshot,
+            isVoiceLive()
+        )
+        val sb = StringBuilder()
+        if (result.code == GenErrorCode.U0) {
+            sb.append("[U0] Unclassified generation failure.")
+        } else {
+            // Error Log copy: no sentence telling the reader that details
+            // were saved to the Error Log they are already reading.
+            sb.append(
+                result.providerLimitMessage(this, forErrorLog = true)
+                    ?: result.chatMessage(this, forErrorLog = true)
+            )
+        }
+        sb.append('\n')
+        sb.append("Application Classification: ").append(result.code.code).append('\n')
+        sb.append("Profile: ${apiEndpointObject?.label ?: "unknown"}\n")
+        sb.append("Base URL: ${apiEndpointObject?.host ?: "unknown"}\n")
+        sb.append("Model: ${model.ifBlank { "unknown" }}\n")
+        sb.append("Voice: ${if (voiceLive) "active" else "inactive"}\n")
+        sb.append("Trigger: $trigger\n")
+        sb.append("Screen: ${screenState()}\n")
+        if (failureSnapshot != null) {
+            failureSnapshot.asLogLines().forEach { line ->
+                sb.append(line).append('\n')
+            }
+        } else {
+            sb.append("Network: ${networkState()}\n")
+        }
+        sb.append("Power save: ${powerSaveState()}")
+        sb.append('\n')
+        appendProviderEvidence(sb, providerEvidence)
+        if (voiceLive) sb.append('\n').append(compactVoiceContext())
+        if (result.code.includeStackTrace) {
+            sb.append("\n\n").append(e.stackTraceToString())
+        } else {
+            e.message?.takeIf { it.isNotBlank() }?.let { sb.append("\nDetail: $it") }
+        }
+        return GenerationErrorDiagnostic(sb.toString(), voiceLive)
     }
 
     /** "on"/"off"/"unknown" — whether the screen was interactive at failure time.
@@ -10887,7 +11056,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         preparedTurn: PreparedRegularTurn? = null,
         suppressImageTools: Boolean = false
     ) {
-        disableAutoScroll = false
         val streamingEnabled = preferences?.getStreaming() ?: true
         val legacyCanonical = if (preparedTurn == null) {
             canonicalConversationSnapshot()
@@ -11289,10 +11457,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             if (deltaContent != null && deltaContent != "null") {
                                 response += deltaContent
                                 messages[messages.size - 1]["message"] = response
-                                if (messages.size > 2) {
-                                    adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-                                } else {
-                                    adapter?.notifyItemChanged(messages.size - 1)
+                                preserveTranscriptForUser {
+                                    if (messages.size > 2) {
+                                        adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+                                    } else {
+                                        adapter?.notifyItemChanged(messages.size - 1)
+                                    }
                                 }
                                 scroll(false)
                                 // Persist mid-stream so a killed process doesn't lose
@@ -11344,7 +11514,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             messages[messages.size - 1]["message"] = response
             currentLifecycle?.markNonStreamingResponse()
-            adapter?.notifyItemChanged(messages.size - 1)
+            preserveTranscriptForUser {
+                adapter?.notifyItemChanged(messages.size - 1)
+            }
         }
 
         // The primary stream ended on its own. Finalize its lifecycle record
@@ -11384,10 +11556,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             recordVisionCapability(ImageCapability.SUPPORTED)
         }
 
-        if (messages.size > 2) {
-            adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
-        } else {
-            adapter?.notifyItemChanged(messages.size - 1)
+        preserveTranscriptForUser {
+            if (messages.size > 2) {
+                adapter?.notifyItemRangeChanged(messages.size - 3, messages.size - 1)
+            } else {
+                adapter?.notifyItemChanged(messages.size - 1)
+            }
         }
 
         syncChatProjection()
@@ -11420,23 +11594,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 setGenerationProgressVisible(false)
                 messageInput?.requestFocus()
 
-                // Preserve the normal leading System prefix byte-for-byte so providers
-                // can reuse any prompt cache already built for the conversation. The
-                // title-only instruction belongs at the boundary immediately before
-                // the first conversation turn. Appending it as a User message caused
-                // some models to title the naming instruction itself instead.
-                val m = ArrayList(msgs)
-                val conversationStart = m.indexOfFirst { it.role != ChatRole.System }
-                    .let { if (it >= 0) it else m.size }
-
-                m.add(
-                    conversationStart,
+                // Do not send the companion/system prompt or the entire chat to
+                // the title request. Those instructions made some models stay in
+                // character and answer the conversation again, which then put a
+                // full message in the title area. A bounded first-turn excerpt is
+                // enough to name the topic and keeps this auxiliary request small.
+                val firstUserMessage = messages.firstOrNull { it["isBot"] != true }
+                    ?.get("message")?.toString().orEmpty()
+                val titleMessages = listOf(
                     ChatMessage(
                         role = ChatRole.System,
-                        content = "Create a concise 2-6 word title for the conversation that follows. " +
-                                "Return only the title text. Describe the conversation topic, not this naming instruction. " +
-                                "Do not explain or describe what the user wants. Do not prefix the title with " +
-                                "'Title', 'Name', 'Chat', or 'Bot'."
+                        content = org.teslasoft.assistant.ui.chat.ConversationTitlePolicy.SYSTEM_PROMPT
+                    ),
+                    ChatMessage(
+                        role = ChatRole.User,
+                        content = org.teslasoft.assistant.ui.chat.ConversationTitlePolicy
+                            .conversationExcerpt(firstUserMessage, response)
                     )
                 )
 
@@ -11448,11 +11621,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 val titleModel = model.ifBlank { preferences?.getModel() ?: "gpt-4o" }
                 val chatCompletionRequest2 = ChatCompletionRequest(
                     model = ModelId(titleModel),
-                    // Ten tokens was too small for a heterogeneous set of models:
-                    // some spend part of the completion budget before emitting title
-                    // text. The prompt still constrains the visible answer to 2-6 words.
-                    maxTokens = 128,
-                    messages = m
+                    // Mandatory-reasoning models spend from this same completion
+                    // budget before emitting visible title text. 128 frequently
+                    // produced an empty completion; the stored title is still
+                    // constrained independently to six words / 80 characters.
+                    maxTokens = org.teslasoft.assistant.ui.chat.ConversationTitlePolicy.TITLE_OUTPUT_TOKENS,
+                    messages = titleMessages
                 )
 
                 // The naming REQUEST and the local rename are separate failure
@@ -11461,28 +11635,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // means editChat aborted with the chat intact under its old
                 // name. One catch-all used to swallow both — including a
                 // half-applied settings copy.
-                val newChatName: String? = try {
+                val generatedChatName: String? = try {
                     val rawName = ai!!.chatCompletion(chatCompletionRequest2)
                         .choices.firstOrNull()?.message?.content
-                    rawName
-                        ?.trim()
-                        ?.lineSequence()
-                        ?.firstOrNull { it.isNotBlank() }
-                        ?.trim()
-                        ?.replace(Regex("(?i)^(title|name)\\s*:\\s*"), "")
-                        ?.trim()
-                        ?.removeSurrounding("\"")
-                        ?.removeSurrounding("'")
-                        ?.removeSurrounding("`")
-                        ?.removeSurrounding("**")
-                        ?.trim()
-                        ?.take(80)
-                        ?.trim()
-                        ?.takeIf { it.isNotBlank() }
+                    org.teslasoft.assistant.ui.chat.ConversationTitlePolicy.sanitize(rawName)
                 } catch (e: Exception) {
                     logVoiceEvent("auto-name request failed (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS); a later turn retries")
                     null
                 }
+
+                // A provider can fail every auxiliary request even while normal
+                // chat works. After the final attempt, use the user's first
+                // message instead of leaving the chat permanently Untitled.
+                val baseChatName = generatedChatName ?: if (autoNameAttempts >= AUTO_NAME_MAX_ATTEMPTS) {
+                    org.teslasoft.assistant.ui.chat.ConversationTitlePolicy
+                        .fallbackFromUserMessage(firstUserMessage)
+                } else {
+                    null
+                }
+                val newChatName = baseChatName?.let(::uniqueAutoTitle)
 
                 if (!newChatName.isNullOrBlank() && !renameInProgress) {
                     // Storage work goes OFF the main thread: editChat does
@@ -11544,6 +11715,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         activityTitle?.text = newChatName
                         logVoiceEvent("chat auto-named without restarting the screen (voice loop preserved)")
                     } else if (!renamed) {
+                        // The provider produced a usable title; storage was the
+                        // failure. Keep one attempt available so a transient
+                        // rename problem cannot make Untitled permanent.
+                        autoNameAttempts = (autoNameAttempts - 1).coerceAtLeast(0)
                         logVoiceEventAlways("auto-name rename did not apply; the chat keeps its placeholder name (attempt $autoNameAttempts of $AUTO_NAME_MAX_ATTEMPTS)")
                     }
                 }

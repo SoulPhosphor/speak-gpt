@@ -448,10 +448,11 @@ class Logger {
          *     Provider: <name>
          *     Provider Error: <verbatim server error>
          *
-         * Two blank lines separate consecutive entries. No app interpretation
-         * is written — only the raw provider name and the server's own error.
-         * Trimmed by whole entries to the log's configurable retention. Called
-         * off the main thread by the failure handler.
+         * Two blank lines separate consecutive entries. For chat generation the
+         * optional application diagnostic is folded into this same entry, making
+         * Provider Failure Log the single diagnostic source instead of also
+         * duplicating a GenError block into Error Log. Trimmed by whole entries
+         * to the log's configurable retention.
          */
         fun logProviderFailure(
             context: Context,
@@ -467,7 +468,8 @@ class Logger {
             providerType: String? = null,
             providerErrorType: String? = null,
             contentFilterSide: String? = null,
-            attemptId: String? = null
+            attemptId: String? = null,
+            applicationDiagnostic: String? = null
         ) {
             val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
             // Same richer detail the user sees under the failed reply (owner
@@ -485,7 +487,10 @@ class Logger {
                 "Provider Type: ${providerType ?: "Not Reported"}\n" +
                 "Provider Error Type: ${providerErrorType ?: "Not Reported"}\n" +
                 "Content Filter Side: ${contentFilterSide ?: "Not Reported"}\n" +
-                "Attempt ID: ${attemptId ?: "Not Reported"}\n\n\n"
+                "Attempt ID: ${attemptId ?: "Not Reported"}" +
+                applicationDiagnostic?.takeIf { it.isNotBlank() }
+                    ?.let { "\n\nApplication Diagnostic:\n$it" }.orEmpty() +
+                "\n\n\n"
             val p = Preferences.getPreferences(context, "")
             val log = trimByEntries(
                 "${getProviderFailLog(context)}$entry",

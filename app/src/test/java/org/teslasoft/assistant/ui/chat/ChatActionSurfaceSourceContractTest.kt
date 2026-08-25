@@ -62,13 +62,15 @@ class ChatActionSurfaceSourceContractTest {
     }
 
     @Test
-    fun composerResizePinsTranscriptWithoutFightingTheImeConstraint() {
+    fun composerAndImeResizePinTheComposerSideTranscriptEdge() {
         val activity = source("main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
 
         assertTrue(activity.contains("findLastVisibleItemPosition()"))
-        assertTrue(activity.contains("transcriptAnchorBottomGap = recycler.height - anchor.bottom"))
-        assertTrue(activity.contains("recycler.height - transcriptAnchorBottomGap - transcriptAnchorHeight"))
-        assertTrue(!activity.contains("WindowInsetsAnimationCompat.Callback"))
+        assertTrue(activity.contains("bottomGap = recycler.height - anchor.bottom"))
+        assertTrue(activity.contains("recycler.height - anchor.bottomGap - anchor.height"))
+        assertTrue(activity.contains("WindowInsetsAnimationCompat.Callback"))
+        assertTrue(activity.contains("imeTranscriptAnchor = currentTranscriptAnchor()"))
+        assertTrue(activity.contains("scheduleTranscriptAnchorRestore(imeTranscriptAnchor)"))
         assertTrue(activity.contains("composerSurface?.dismissImeForSend()"))
         assertTrue(activity.contains("composerSurface?.resetAfterSend()"))
     }

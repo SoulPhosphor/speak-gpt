@@ -152,7 +152,8 @@ class PreDispatchLifecycleTest {
         val chat = source(chatActivity)
         assertTrue(
             "the Provider Failure Log write must be gated on the request having been dispatched",
-            chat.contains("genError.reachedServer() && providerRequestDispatched")
+            chat.contains("reachedServer = genError.reachedServer()") &&
+                chat.contains("requestDispatched = providerRequestDispatched")
         )
     }
 }
