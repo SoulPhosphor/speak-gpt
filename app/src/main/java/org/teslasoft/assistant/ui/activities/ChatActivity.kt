@@ -9958,10 +9958,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             playErrorSignal()
             val failureDiagnostics = captureGenerationFailureDiagnostics()
             stopHandsFreeOnError()
-            // Single funnel: classify the failure to a stable code, always write
-            // the diagnostic Error Log entry, and show the user the short coded
-            // message (no profile/URL/model/trace — those live in the log). See
-            // ERROR_CODES.md.
+            // Single funnel: classify the failure to a stable code, then choose
+            // exactly one diagnostic owner while leaving the user-facing error and
+            // response-lifecycle diagnostics intact. See ERROR_CODES.md.
             val evidenceOwner =
                 (e as? org.teslasoft.assistant.preferences.ProviderStreamTerminalException)?.attempt
                     ?: (e as? GenerationAttemptFailureException)?.attempt
@@ -11599,8 +11598,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 // character and answer the conversation again, which then put a
                 // full message in the title area. A bounded first-turn excerpt is
                 // enough to name the topic and keeps this auxiliary request small.
-                val firstUserMessage = messages.firstOrNull { it["isBot"] != true }
-                    ?.get("message")?.toString().orEmpty()
+                val firstUserMessage = preparedTurn?.rawMessage?.takeIf { it.isNotBlank() }
+                    ?: messages.firstOrNull { it["isBot"] != true }
+                        ?.get("message")?.toString().orEmpty()
                 val titleMessages = listOf(
                     ChatMessage(
                         role = ChatRole.System,

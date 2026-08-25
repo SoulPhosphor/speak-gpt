@@ -66,6 +66,8 @@ object ConversationTitlePolicy {
             cleaned = cleaned.replace(labelPrefix, "").trim()
         }
         cleaned = cleaned
+            .replace(Regex("^[*_`]+\\s*"), "")
+            .replace(Regex("\\s*[*_`]+$"), "")
             .trim(' ', '\t', '\n', '\r', ':', '-', '–', '—')
             .trimEnd('.', ',', ';', ':')
             .trim()
@@ -86,6 +88,7 @@ object ConversationTitlePolicy {
         cleaned = cleaned.substringBefore('\n')
             .substringBefore('?')
             .substringBefore('!')
+            .replace(Regex("(?i)\\s+please[.,;:]*$"), "")
             .trim()
         return sanitize(cleaned) ?: "New conversation"
     }
