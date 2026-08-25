@@ -85,7 +85,7 @@ class VoiceBrowserControllerTest {
     @Test fun previewDoesNotSelectButRowSelectionDoes() {
         val google = FakeProvider("google", listOf(googleVoice))
         val controller = VoiceBrowserController(listOf(google), "google")
-        controller.preview(googleVoice) { error(it) }
+        controller.preview(googleVoice, VoicePreviewText.DEFAULT, onFailure = { error(it) })
         assertEquals(1, google.previews)
         assertEquals(0, google.activations)
         controller.select(googleVoice)
@@ -142,7 +142,7 @@ class VoiceBrowserControllerTest {
         }
         override fun activeVoiceId(): String? = activeId
         override fun activate(voice: BrowserVoice) { activations++; activeId = voice.providerVoiceId }
-        override fun preview(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) { previews++ }
+        override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) { previews++ }
         override fun download(voice: BrowserVoice, onFailure: (String) -> Unit) = Unit
         override fun stopPreview() = Unit
         override fun shutdown() { closed = true }
@@ -156,7 +156,7 @@ class VoiceBrowserControllerTest {
         fun complete(voices: List<BrowserVoice>) = callbacks.removeAt(0)(Result.success(voices))
         override fun activeVoiceId(): String? = null
         override fun activate(voice: BrowserVoice) = Unit
-        override fun preview(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
+        override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
         override fun download(voice: BrowserVoice, onFailure: (String) -> Unit) = Unit
         override fun stopPreview() = Unit
         override fun shutdown() = Unit

@@ -49,6 +49,10 @@ sealed interface VoiceLoadState {
     data class Failed(val message: String) : VoiceLoadState
 }
 
+object VoicePreviewText {
+    const val DEFAULT = "Hello. This is a preview of this voice."
+}
+
 object VoiceQualityLabels {
     fun fromAndroidQuality(value: Int): VoiceFacetValue? = when (value) {
         100 -> VoiceFacetValue("very_low", "Very Low")

@@ -55,7 +55,7 @@ class GoogleSpeechVoiceProvider(
         preferences.setTtsEngine(id)
     }
 
-    override fun preview(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) {
+    override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) {
         val engine = tts
         val androidVoice = androidVoices[voice.providerVoiceId]
         if (!initialized || engine == null || androidVoice == null) {
@@ -68,7 +68,7 @@ class GoogleSpeechVoiceProvider(
                 onFailure("Google Speech Services could not use this voice.")
                 return
             }
-            val result = engine.speak(PREVIEW_TEXT, TextToSpeech.QUEUE_FLUSH, null, PREVIEW_UTTERANCE_ID)
+            val result = engine.speak(sampleText, TextToSpeech.QUEUE_FLUSH, null, PREVIEW_UTTERANCE_ID)
             if (result == TextToSpeech.ERROR) onFailure("Google Speech Services could not play this preview.")
         } catch (error: Throwable) {
             onFailure(error.message ?: "Google Speech Services could not play this preview.")
@@ -139,7 +139,6 @@ class GoogleSpeechVoiceProvider(
 
     companion object {
         private const val GOOGLE_ENGINE_PACKAGE = "com.google.android.tts"
-        private const val PREVIEW_TEXT = "Hello. This is a preview of this voice."
         private const val PREVIEW_UTTERANCE_ID = "speak-gpt-voice-preview"
     }
 }

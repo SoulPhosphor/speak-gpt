@@ -8,7 +8,7 @@ interface VoiceBrowserProvider {
     fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit)
     fun activeVoiceId(): String?
     fun activate(voice: BrowserVoice)
-    fun preview(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
+    fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
     fun download(voice: BrowserVoice, onFailure: (String) -> Unit)
     fun stopPreview()
     fun shutdown()
@@ -74,8 +74,8 @@ class VoiceBrowserController(
 
     fun select(voice: BrowserVoice) = providersById.getValue(voice.providerId).activate(voice)
 
-    fun preview(voice: BrowserVoice, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
-        providersById.getValue(voice.providerId).preview(voice, onFailure) { load(onChanged) }
+    fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
+        providersById.getValue(voice.providerId).preview(voice, sampleText, onFailure) { load(onChanged) }
 
     fun download(voice: BrowserVoice, onFailure: (String) -> Unit) =
         providersById.getValue(voice.providerId).download(voice, onFailure)

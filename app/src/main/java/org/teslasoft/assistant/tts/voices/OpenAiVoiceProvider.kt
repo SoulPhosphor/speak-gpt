@@ -98,7 +98,7 @@ class OpenAiVoiceProvider(
         preferences.setTtsEngine(id)
     }
 
-    override fun preview(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) {
+    override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) {
         stopPreview()
         val endpointId = loadedEndpointId
         val modelId = voice.providerModelId ?: loadedModelId
@@ -106,7 +106,7 @@ class OpenAiVoiceProvider(
             onFailure("The endpoint's speech model has not finished loading.")
             return
         }
-        val cacheKey = "$endpointId\u0000$modelId\u0000${voice.providerVoiceId}"
+        val cacheKey = "$endpointId\u0000$modelId\u0000${voice.providerVoiceId}\u0000$sampleText"
         previewCache[cacheKey]?.let {
             play(it, cacheKey, onFailure)
             return
@@ -116,7 +116,7 @@ class OpenAiVoiceProvider(
                 val endpoint = endpointPreferences.getApiEndpoint(appContext, endpointId)
                 val audio = createClient(endpoint).speech(SpeechRequest(
                     model = ModelId(modelId),
-                    input = PREVIEW_TEXT,
+                    input = sampleText,
                     voice = com.aallam.openai.api.audio.Voice(voice.providerVoiceId)
                 ))
                 previewCache[cacheKey] = audio
@@ -204,8 +204,6 @@ class OpenAiVoiceProvider(
     }
 
     companion object {
-        private const val PREVIEW_TEXT = "Hello. This is a preview of this voice."
-
         internal fun isUnknownVoiceFailure(message: String): Boolean {
             val normalized = message.lowercase()
             return listOf(

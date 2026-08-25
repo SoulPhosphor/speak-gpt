@@ -62,11 +62,31 @@
             android:layout_marginEnd="20dp"
             android:orientation="vertical" />
 
+        <TextView
+            style="@style/Widget.App.Field.Label"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="24dp"
+            android:text="@string/voice_browser_preview_text" />
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/voice_preview_text"
+            style="@style/Widget.App.Field.Box"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:gravity="top|start"
+            android:inputType="textMultiLine|textCapSentences"
+            android:isScrollContainer="true"
+            android:maxLines="6"
+            android:minLines="3"
+            android:overScrollMode="ifContentScrolls"
+            android:scrollbars="vertical" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="24dp"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="8dp"
             android:layout_marginEnd="24dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
@@ -121,4 +141,3 @@
         </FrameLayout>
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>
-

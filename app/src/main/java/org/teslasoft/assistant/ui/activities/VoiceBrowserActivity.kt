@@ -12,6 +12,7 @@ import android.widget.TextView
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -19,6 +20,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.loadingindicator.LoadingIndicator
+import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
@@ -29,6 +31,7 @@ import org.teslasoft.assistant.tts.voices.VoiceFacet
 import org.teslasoft.assistant.tts.voices.VoiceFilterDefinition
 import org.teslasoft.assistant.tts.voices.VoiceLoadState
 import org.teslasoft.assistant.tts.voices.VoiceLocation
+import org.teslasoft.assistant.tts.voices.VoicePreviewText
 import org.teslasoft.assistant.ui.adapters.VoiceListAdapter
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.util.WindowInsetsUtil
@@ -49,6 +52,7 @@ class VoiceBrowserActivity : FragmentActivity() {
     private lateinit var loading: LoadingIndicator
     private lateinit var stateMessage: TextView
     private lateinit var resetFilters: MaterialButton
+    private lateinit var previewText: TextInputEditText
     private var resumedOnce = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,6 +78,9 @@ class VoiceBrowserActivity : FragmentActivity() {
         loading = findViewById(R.id.voice_loading)
         stateMessage = findViewById(R.id.voice_state_message)
         resetFilters = findViewById(R.id.reset_filters)
+        previewText = findViewById(R.id.voice_preview_text)
+        previewText.setText(preferences.getVoicePreviewText())
+        previewText.doAfterTextChanged { preferences.setVoicePreviewText(it?.toString().orEmpty()) }
         findViewById<ImageButton>(R.id.btn_back).setOnClickListener { finish() }
 
         controller = VoiceBrowserController(
@@ -88,7 +95,14 @@ class VoiceBrowserActivity : FragmentActivity() {
                 controller.select(voice)
                 render()
             },
-            onPreview = { voice -> controller.preview(voice, ::showActionError, ::renderOnMainThread) },
+            onPreview = { voice ->
+                controller.preview(
+                    voice,
+                    previewText.text?.toString()?.takeIf(String::isNotBlank) ?: VoicePreviewText.DEFAULT,
+                    ::showActionError,
+                    ::renderOnMainThread
+                )
+            },
             onDownload = { voice -> controller.download(voice, ::showActionError) }
         )
         voicesList.layoutManager = LinearLayoutManager(this)
@@ -189,8 +203,8 @@ class VoiceBrowserActivity : FragmentActivity() {
         val label = view.findViewById<TextView>(R.id.filter_label)
         val value = view.findViewById<TextView>(R.id.filter_value)
         label.text = definition.facet.label
-        val emptyLabel = if (definition.facet == VoiceFacet.GENDER) {
-            getString(R.string.voice_browser_all_genders)
+        val emptyLabel = if (definition.facet == VoiceFacet.GENDER || definition.facet == VoiceFacet.QUALITY) {
+            getString(R.string.voice_browser_all)
         } else getString(R.string.voice_browser_any)
         val selectedId = controller.filterState.selectedFacetValues[definition.facet]
         value.text = definition.options.firstOrNull { it.id == selectedId }?.label ?: emptyLabel

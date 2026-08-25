@@ -1083,6 +1083,7 @@
     <string name="voice_browser_any">Any</string>
     <string name="voice_browser_all_genders">All</string>
     <string name="voice_browser_preview">Preview</string>
+    <string name="voice_browser_preview_text">Preview Text</string>
     <string name="voice_browser_download">Download</string>
     <string name="voice_browser_preview_desc">Preview %1$s</string>
     <string name="voice_browser_download_desc">Download %1$s</string>

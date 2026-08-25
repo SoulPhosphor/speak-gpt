@@ -22,6 +22,7 @@ import org.teslasoft.assistant.preferences.includes.SummarizerProjectionContract
 import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
 import org.teslasoft.assistant.tts.voices.OPENAI_COMPATIBLE_FALLBACK_VOICE_NAMES
+import org.teslasoft.assistant.tts.voices.VoicePreviewText
 
 class Preferences internal constructor(
     private var preferences: SharedPreferences,
@@ -923,6 +924,12 @@ class Preferences internal constructor(
     }
 
     fun getOpenAITtsModel(): String = getString("openai_tts_model", "")
+
+    fun getVoicePreviewText(): String = getGlobalString("voice_preview_text", VoicePreviewText.DEFAULT)
+
+    fun setVoicePreviewText(text: String) {
+        putGlobalString("voice_preview_text", text, VoicePreviewText.DEFAULT)
+    }
 
     /**
      * Set temperature. Min value 0, max 2

@@ -1,13 +1,16 @@
 package org.teslasoft.assistant.ui.adapters
 
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.widget.ImageViewCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.MaterialColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.tts.voices.BrowserVoice
 import org.teslasoft.assistant.tts.voices.VoiceFilterState
@@ -41,7 +44,17 @@ class VoiceListAdapter(
         val voice = voices[position]
         val selected = selectedProviderId == voice.providerId && selectedVoiceId == voice.providerVoiceId
         holder.name.text = voice.displayName
-        holder.selected.visibility = if (selected) View.VISIBLE else View.INVISIBLE
+        holder.selected.visibility = View.VISIBLE
+        holder.selected.setImageResource(if (selected) R.drawable.ic_check_circle else R.drawable.ic_circle_outline)
+        ImageViewCompat.setImageTintList(
+            holder.selected,
+            ColorStateList.valueOf(
+                MaterialColors.getColor(
+                    holder.selected,
+                    if (selected) com.google.android.material.R.attr.colorPrimary else R.attr.appSubtleTextColor
+                )
+            )
+        )
 
         val metadata = buildList {
             voice.gender?.label?.let(::add)
