@@ -114,6 +114,11 @@ object ArchivistFailureCategory {
             GenErrorCode.S2 -> UNREADABLE
             GenErrorCode.M1 -> CONFIG
             GenErrorCode.M4 -> CONFIG
+            // A refusal the provider did not explain is not evidence of a
+            // configuration fault. It keeps the category these failures already
+            // had here, so naming the cause in chat does not silently re-label
+            // Memory Assistant results.
+            GenErrorCode.M5 -> UNKNOWN
             // Only a response that names the MODEL as missing is Model
             // Unavailable; a bare 404 is most often a wrong endpoint URL, so it
             // maps to Invalid Configuration (owner ruling, Aug 1 2026).

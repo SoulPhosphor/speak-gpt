@@ -181,6 +181,9 @@ object SummarizerErrorClassifier {
             GenErrorCode.M1, GenErrorCode.M2 -> SummarizerErrorCategory.MODEL_UNAVAILABLE
             GenErrorCode.M3 -> SummarizerErrorCategory.REQUEST_TOO_LARGE
             GenErrorCode.M4 -> SummarizerErrorCategory.SERVICE_ERROR
+            // Same category these client-error refusals already resolved to
+            // here, so the new code changes nothing about summary reporting.
+            GenErrorCode.M5 -> SummarizerErrorCategory.SERVICE_ERROR
             GenErrorCode.Q1 -> SummarizerErrorCategory.RATE_LIMIT
             GenErrorCode.S1 -> SummarizerErrorCategory.SERVICE_ERROR
             GenErrorCode.S2 -> SummarizerErrorCategory.RESPONSE_UNREADABLE
