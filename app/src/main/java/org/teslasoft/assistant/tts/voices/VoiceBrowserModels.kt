@@ -7,6 +7,7 @@ data class BrowserVoice(
     val providerId: String,
     val providerVoiceId: String,
     val displayName: String,
+    val providerModelId: String? = null,
     val language: VoiceFacetValue? = null,
     val region: VoiceFacetValue? = null,
     val gender: VoiceFacetValue? = null,
@@ -71,10 +72,6 @@ object GoogleVoiceMetadata {
         }?.lowercase(Locale.ROOT) ?: return null
         return VoiceFacetValue(match, match.replaceFirstChar { it.titlecase(Locale.getDefault()) })
     }
-
-    /** Numbering is based on the complete sorted provider set, never the filtered list. */
-    fun deterministicDisplayNames(providerVoiceIds: List<String>): Map<String, String> =
-        providerVoiceIds.distinct().sorted().mapIndexed { index, id -> id to "Voice ${index + 1}" }.toMap()
 
     fun isDownloadRequired(requiresNetwork: Boolean, features: Set<String>, notInstalledFeature: String): Boolean =
         !requiresNetwork && features.any { it.equals(notInstalledFeature, ignoreCase = true) }

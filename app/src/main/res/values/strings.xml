@@ -1092,6 +1092,8 @@
     <string name="voice_browser_load_failed">Voices could not be loaded.\n\n%1$s</string>
     <string name="voice_browser_reset_filters">Reset Filters</string>
     <string name="voice_browser_action_failed">Voice Action Failed</string>
+    <string name="saved_voice_unavailable_title">Saved Voice Unavailable</string>
+    <string name="saved_voice_unavailable_message">The saved voice “%1$s” could not be used because %2$s.</string>
     <string name="voice_browser_provider_openai">OpenAI</string>
     <string name="voice_browser_setting_title">Voice</string>
     <string name="voice_browser_setting_subtitle_google">Google Speech Services</string>

@@ -88,7 +88,7 @@ class VoiceBrowserActivity : FragmentActivity() {
                 controller.select(voice)
                 render()
             },
-            onPreview = { voice -> controller.preview(voice, ::showActionError) },
+            onPreview = { voice -> controller.preview(voice, ::showActionError, ::renderOnMainThread) },
             onDownload = { voice -> controller.download(voice, ::showActionError) }
         )
         voicesList.layoutManager = LinearLayoutManager(this)
@@ -127,6 +127,11 @@ class VoiceBrowserActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         if (resumedOnce) controller.load(::renderOnMainThread) else resumedOnce = true
+    }
+
+    override fun onPause() {
+        controller.provider.stopPreview()
+        super.onPause()
     }
 
     override fun onDestroy() {

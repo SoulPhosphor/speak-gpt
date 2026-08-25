@@ -66,11 +66,14 @@ class VoiceBrowserControllerTest {
         assertNull(VoiceQualityLabels.fromAndroidQuality(123))
     }
 
-    @Test fun googleNumberingIsStableAcrossFiltering() {
-        val names = GoogleVoiceMetadata.deterministicDisplayNames(listOf("voice-z", "voice-a", "voice-m"))
-        assertEquals("Voice 1", names["voice-a"])
-        assertEquals("Voice 2", names["voice-m"])
-        assertEquals("Voice 3", names["voice-z"])
+    @Test fun googleNumberingNeverRenumbersOrReusesMissingAssignments() {
+        val first = GoogleVoiceNumberRegistry.assign(emptyMap(), 1, listOf("voice-z", "voice-a"))
+        assertEquals(1, first.assignments["voice-a"])
+        assertEquals(2, first.assignments["voice-z"])
+        val afterPackChange = GoogleVoiceNumberRegistry.assign(first.assignments, first.nextNumber, listOf("voice-new"))
+        assertEquals(1, afterPackChange.assignments["voice-a"])
+        assertEquals(2, afterPackChange.assignments["voice-z"])
+        assertEquals(3, afterPackChange.assignments["voice-new"])
     }
 
     @Test fun onlyMissingLocalDataRequiresDownload() {
@@ -110,6 +113,18 @@ class VoiceBrowserControllerTest {
         assertTrue(second.closed)
     }
 
+    @Test fun lateResultFromPreviousProviderIsIgnored() {
+        val google = DelayedProvider("google")
+        val openAi = DelayedProvider("openai")
+        val controller = VoiceBrowserController(listOf(google, openAi), "google")
+        controller.load { }
+        controller.browse("openai") { }
+        openAi.complete(listOf(googleVoice.copy(providerId = "openai", providerVoiceId = "river")))
+        google.complete(listOf(googleVoice))
+        assertEquals("openai", controller.browsedProviderId)
+        assertEquals("river", controller.visibleVoices().single().providerVoiceId)
+    }
+
     private class FakeProvider(
         override val id: String,
         private val voices: List<BrowserVoice>,
@@ -127,9 +142,23 @@ class VoiceBrowserControllerTest {
         }
         override fun activeVoiceId(): String? = activeId
         override fun activate(voice: BrowserVoice) { activations++; activeId = voice.providerVoiceId }
-        override fun preview(voice: BrowserVoice, onFailure: (String) -> Unit) { previews++ }
+        override fun preview(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) { previews++ }
         override fun download(voice: BrowserVoice, onFailure: (String) -> Unit) = Unit
         override fun stopPreview() = Unit
         override fun shutdown() { closed = true }
+    }
+
+    private class DelayedProvider(override val id: String) : VoiceBrowserProvider {
+        override val displayName = id
+        override val exposesLocationFilter = false
+        private val callbacks = mutableListOf<(Result<List<BrowserVoice>>) -> Unit>()
+        override fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit) { callbacks += onResult }
+        fun complete(voices: List<BrowserVoice>) = callbacks.removeAt(0)(Result.success(voices))
+        override fun activeVoiceId(): String? = null
+        override fun activate(voice: BrowserVoice) = Unit
+        override fun preview(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
+        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit) = Unit
+        override fun stopPreview() = Unit
+        override fun shutdown() = Unit
     }
 }

@@ -50,6 +50,7 @@ import java.util.EnumSet
 import java.util.Locale
 import kotlin.math.roundToInt
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.tts.voices.GoogleVoiceNumberRegistry
 
 /**
  * One screen that owns every speech-related setting. Reached from the single
@@ -170,7 +171,11 @@ class VoiceSettingsActivity : FragmentActivity() {
                 prefs.getOpenAIVoice().replaceFirstChar(Char::uppercase)
             )
         } else {
-            getString(R.string.voice_browser_setting_subtitle_google)
+            getString(
+                R.string.voice_browser_setting_subtitle_provider,
+                getString(R.string.voice_browser_setting_subtitle_google),
+                GoogleVoiceNumberRegistry(this).displayNameFor(prefs.getVoice())
+            )
         }
     }
 

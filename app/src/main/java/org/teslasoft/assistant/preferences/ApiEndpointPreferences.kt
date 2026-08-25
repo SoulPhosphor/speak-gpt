@@ -21,6 +21,7 @@ import android.content.SharedPreferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.util.StableId
 import androidx.core.content.edit
+import org.json.JSONArray
 
 class ApiEndpointPreferences private constructor(
     private var preferences: SharedPreferences,
@@ -72,6 +73,22 @@ class ApiEndpointPreferences private constructor(
 
     fun putString(key: String, value: String) {
         preferences.edit { putString(key, value) }
+    }
+
+    fun getRejectedTtsVoices(endpointId: String): Set<String> = try {
+        val values = JSONArray(getString(endpointId + "_tts_rejected_voices", "[]"))
+        buildSet {
+            for (index in 0 until values.length()) {
+                values.optString(index).takeIf(String::isNotBlank)?.let(::add)
+            }
+        }
+    } catch (_: Throwable) {
+        emptySet()
+    }
+
+    fun rejectTtsVoice(endpointId: String, voiceId: String) {
+        val rejected = getRejectedTtsVoices(endpointId) + voiceId
+        putString(endpointId + "_tts_rejected_voices", JSONArray(rejected.sorted()).toString())
     }
 
     // The public methods keep their `context` parameter for source
@@ -170,6 +187,7 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_reasoning_rejected_levels_by_model") }
         preferences.edit { remove(id + "_provider_discovery_path") }
         preferences.edit { remove(id + "_identity") }
+        preferences.edit { remove(id + "_tts_rejected_voices") }
         secrets.set(id + "_api_key", "null")
 
         for (listener in listeners) {

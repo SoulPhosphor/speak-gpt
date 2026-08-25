@@ -8,7 +8,7 @@ interface VoiceBrowserProvider {
     fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit)
     fun activeVoiceId(): String?
     fun activate(voice: BrowserVoice)
-    fun preview(voice: BrowserVoice, onFailure: (String) -> Unit)
+    fun preview(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
     fun download(voice: BrowserVoice, onFailure: (String) -> Unit)
     fun stopPreview()
     fun shutdown()
@@ -21,6 +21,7 @@ class VoiceBrowserController(
 ) {
     private val providersById = providers.associateBy { it.id }
     private val filterStates = mutableMapOf<String, VoiceFilterState>()
+    private var loadGeneration = 0L
 
     var browsedProviderId: String = activeProviderId.takeIf(providersById::containsKey)
         ?: providers.first().id
@@ -41,9 +42,14 @@ class VoiceBrowserController(
     }
 
     fun load(onChanged: () -> Unit) {
+        val requestedProviderId = browsedProviderId
+        val requestGeneration = ++loadGeneration
         loadState = VoiceLoadState.Loading
         onChanged()
-        provider.loadVoices { result ->
+        providersById.getValue(requestedProviderId).loadVoices { result ->
+            if (requestGeneration != loadGeneration || requestedProviderId != browsedProviderId) {
+                return@loadVoices
+            }
             loadState = result.fold(
                 onSuccess = { voices ->
                     val definitions = VoiceBrowserFilters.definitions(voices)
@@ -68,8 +74,8 @@ class VoiceBrowserController(
 
     fun select(voice: BrowserVoice) = providersById.getValue(voice.providerId).activate(voice)
 
-    fun preview(voice: BrowserVoice, onFailure: (String) -> Unit) =
-        providersById.getValue(voice.providerId).preview(voice, onFailure)
+    fun preview(voice: BrowserVoice, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
+        providersById.getValue(voice.providerId).preview(voice, onFailure) { load(onChanged) }
 
     fun download(voice: BrowserVoice, onFailure: (String) -> Unit) =
         providersById.getValue(voice.providerId).download(voice, onFailure)

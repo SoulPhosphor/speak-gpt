@@ -19,6 +19,7 @@ class GoogleSpeechVoiceProvider(
 
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val numberRegistry = GoogleVoiceNumberRegistry(appContext)
     private var tts: TextToSpeech? = null
     private var initialized = false
     private val androidVoices = mutableMapOf<String, Voice>()
@@ -37,6 +38,11 @@ class GoogleSpeechVoiceProvider(
                 val result = if (initialized) readVoices() else Result.failure(
                     IllegalStateException("Google Speech Services could not be initialized (status $status).")
                 )
+                if (!initialized) {
+                    try { tts?.shutdown() } catch (_: Throwable) { }
+                    tts = null
+                    androidVoices.clear()
+                }
                 pendingLoads.toList().also { pendingLoads.clear() }.forEach { it(result) }
             }
         }, GOOGLE_ENGINE_PACKAGE)
@@ -49,7 +55,7 @@ class GoogleSpeechVoiceProvider(
         preferences.setTtsEngine(id)
     }
 
-    override fun preview(voice: BrowserVoice, onFailure: (String) -> Unit) {
+    override fun preview(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) {
         val engine = tts
         val androidVoice = androidVoices[voice.providerVoiceId]
         if (!initialized || engine == null || androidVoice == null) {
@@ -104,7 +110,7 @@ class GoogleSpeechVoiceProvider(
         androidVoices.clear()
         returned.forEach { androidVoices[it.name] = it }
 
-        val displayNames = GoogleVoiceMetadata.deterministicDisplayNames(returned.map { it.name })
+        val displayNames = numberRegistry.displayNamesFor(returned.map { it.name })
         returned.sortedBy { it.name }.map { voice ->
             val locale = voice.locale ?: Locale.ROOT
             val network = voice.isNetworkConnectionRequired
