@@ -938,6 +938,7 @@
     <string name="gen_error_m2">The selected model is not available on this endpoint. Check the model name in this chat\'s settings, or choose another.</string>
     <string name="gen_error_m3">The conversation is too long for this model\'s limit. Start a new chat or shorten the input.</string>
     <string name="gen_error_m4">The provider rejected an unsupported or invalid request parameter. The provider\'s exact explanation is shown below.</string>
+    <string name="gen_error_m5">The provider rejected the request and generated nothing. It did not say which part it objected to — its exact wording is below.</string>
     <string name="gen_error_q1">The account\'s quota or usage limit has been reached. Check the account\'s billing and usage limits.</string>
     <string name="gen_error_s1">The endpoint was not found (HTTP 404). Check the Base URL in this profile\'s settings.</string>
     <string name="gen_error_s2">The server returned a response the app could not read as a stream. Check whether this endpoint and model support streaming.</string>

@@ -208,6 +208,45 @@ class ProviderDiagnosticPipelineTest {
         )
     }
 
+    /** A 4xx is evidence of a deliberate refusal, not an unexplained failure. */
+    @Test fun clientErrorStatusIsReportedAsARefusalRatherThanU0() {
+        val bare = ProviderDiagnosticEvent(
+            source = ProviderDiagnosticSource.HTTP_RESPONSE,
+            isError = true,
+            isWarning = false,
+            message = "Provider returned error"
+        )
+        val result = classify(ProviderDiagnosticSnapshot("bad-request", 400, events = listOf(bare)))
+        assertEquals(GenErrorCode.M5, result.code)
+
+        val embedded = ProviderDiagnosticEvent(
+            source = ProviderDiagnosticSource.SSE_EVENT,
+            isError = true,
+            isWarning = false,
+            embeddedHttpStatus = 422,
+            message = "upstream refused the request"
+        )
+        assertEquals(
+            GenErrorCode.M5,
+            classify(ProviderDiagnosticSnapshot("embedded-4xx", 200, events = listOf(embedded))).code
+        )
+    }
+
+    /** A named parameter fault stays the more specific code. */
+    @Test fun identifiedParameterFaultOutranksTheGenericRefusal() {
+        val typed = ProviderDiagnosticEvent(
+            source = ProviderDiagnosticSource.HTTP_RESPONSE,
+            isError = true,
+            isWarning = false,
+            type = "invalid_request_error",
+            message = "temperature is not supported for this model"
+        )
+        assertEquals(
+            GenErrorCode.M4,
+            classify(ProviderDiagnosticSnapshot("param", 400, events = listOf(typed))).code
+        )
+    }
+
     /** Request shape is per attempt, never process-wide "latest request" state. */
     @Test fun concurrentAttemptsKeepTheirOwnOutboundRequestFields() = runBlocking {
         val first = ProviderUsageAttempt("model-a", "provider-a", "https://a.example")

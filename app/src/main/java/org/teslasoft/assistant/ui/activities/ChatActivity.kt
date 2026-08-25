@@ -8255,6 +8255,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         out.append("Total Tokens: ").append(snapshot?.totalTokens ?: notReported).append('\n')
         out.append("Malformed Provider Payloads: ")
             .append(snapshot?.malformedPayloadCount ?: 0).append('\n')
+        // Field NAMES only. Paired with the provider's own rejection message,
+        // this is what identifies which parameter a request was refused over.
+        out.append("Outbound Request Fields: ")
+            .append(
+                snapshot?.outboundFieldNames?.takeIf { it.isNotEmpty() }?.joinToString(", ")
+                    ?: notReported
+            ).append('\n')
         val messages = snapshot?.errorMessages.orEmpty()
         out.append("Provider Message: ")
             .append(messages.takeIf { it.isNotEmpty() }?.joinToString("\n") ?: notReported)

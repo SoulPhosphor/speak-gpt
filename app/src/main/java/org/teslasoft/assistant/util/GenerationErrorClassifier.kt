@@ -42,6 +42,7 @@ enum class GenErrorCode(val code: String, val includeStackTrace: Boolean) {
     M2("M2", false), // named model not available on the endpoint
     M3("M3", false), // context length exceeded
     M4("M4", false), // unsupported/invalid request parameter
+    M5("M5", false), // provider rejected the request; no specific part identified
     Q1("Q1", false), // quota / usage limit reached
     S1("S1", false), // bare HTTP 404 / Not Found
     S2("S2", true),  // response could not be read as the expected stream
@@ -271,9 +272,18 @@ object GenerationErrorClassifier {
             (embeddedStatus != null && embeddedStatus in 500..599)
         ) return result(GenErrorCode.S6)
         // Do not infer a generic provider limit from vague words such as
-        // "limit" or "maximum" in a 400/422. If no specific recognized provider
-        // evidence exists, preserve the request rejection as the unknown bucket
-        // and let the raw provider/client detail explain it.
+        // "limit" or "maximum" in a 400/422.
+        //
+        // A client-error status is still a fact: the provider looked at the
+        // request and refused it before generating anything. Auth, payment,
+        // not-found, payload-size and rate-limit statuses were already matched
+        // above, so what remains here is a rejection whose specific reason the
+        // provider did not put in a field the app recognizes. Reporting that as
+        // an unexpected error would deny evidence the app was handed; the raw
+        // provider wording travels with the code and explains the rest.
+        if ((status != null && status in 400..499) ||
+            (embeddedStatus != null && embeddedStatus in 400..499)
+        ) return result(GenErrorCode.M5)
         // 7. Unknown catch-all.
         return result(GenErrorCode.U0, vision = looksLikeVisionRejection(allEvidenceText))
     }
