@@ -51,7 +51,7 @@ class VoiceListAdapter(
             ColorStateList.valueOf(
                 MaterialColors.getColor(
                     holder.selected,
-                    if (selected) com.google.android.material.R.attr.colorPrimary else R.attr.appSubtleTextColor
+                    if (selected) R.attr.colorPrimary else R.attr.appSubtleTextColor
                 )
             )
         )
