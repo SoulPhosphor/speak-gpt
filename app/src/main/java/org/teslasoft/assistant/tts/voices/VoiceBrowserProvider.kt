@@ -9,7 +9,7 @@ interface VoiceBrowserProvider {
     fun activeVoiceId(): String?
     fun activate(voice: BrowserVoice)
     fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
-    fun download(voice: BrowserVoice, onFailure: (String) -> Unit)
+    fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
     fun stopPreview()
     fun shutdown()
 }
@@ -79,8 +79,8 @@ class VoiceBrowserController(
     fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
         providersById.getValue(voice.providerId).preview(voice, sampleText, onFailure) { load(onChanged) }
 
-    fun download(voice: BrowserVoice, onFailure: (String) -> Unit) =
-        providersById.getValue(voice.providerId).download(voice, onFailure)
+    fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
+        providersById.getValue(voice.providerId).download(voice, onFailure) { load(onChanged) }
 
     fun updateVoice(updated: BrowserVoice) {
         val state = loadState as? VoiceLoadState.Ready ?: return

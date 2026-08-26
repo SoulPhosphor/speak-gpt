@@ -134,7 +134,7 @@ class OpenAiVoiceProvider(
         }
     }
 
-    override fun download(voice: BrowserVoice, onFailure: (String) -> Unit) {
+    override fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) {
         onFailure("API voices are network voices and do not download to the device.")
     }
 

@@ -111,7 +111,7 @@ class VoiceBrowserActivity : FragmentActivity() {
                     ::renderOnMainThread
                 )
             },
-            onDownload = { voice -> controller.download(voice, ::showActionError) }
+            onDownload = { voice -> controller.download(voice, ::showActionError, ::renderOnMainThread) }
         )
         voicesList.layoutManager = LinearLayoutManager(this)
         voicesList.adapter = adapter

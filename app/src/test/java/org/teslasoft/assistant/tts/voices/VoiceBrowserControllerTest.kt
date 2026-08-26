@@ -82,6 +82,24 @@ class VoiceBrowserControllerTest {
         assertFalse(GoogleVoiceMetadata.isDownloadRequired(true, setOf("notInstalled"), "notInstalled"))
     }
 
+    @Test fun exactGoogleVoiceDownloadAcceptsSuccessAndTemporaryNotInstalledResults() {
+        assertTrue(GoogleVoiceDownloadPolicy.targetAccepted(android.speech.tts.TextToSpeech.SUCCESS))
+        assertTrue(GoogleVoiceDownloadPolicy.targetAccepted(android.speech.tts.TextToSpeech.ERROR_NOT_INSTALLED_YET))
+        assertFalse(GoogleVoiceDownloadPolicy.targetAccepted(android.speech.tts.TextToSpeech.ERROR))
+    }
+
+    @Test fun exactGoogleVoiceDownloadConfirmsTheMissingFeatureDisappeared() {
+        val missing = setOf(android.speech.tts.TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)
+        assertTrue(GoogleVoiceDownloadPolicy.isNotInstalled(
+            missing,
+            android.speech.tts.TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED
+        ))
+        assertFalse(GoogleVoiceDownloadPolicy.isNotInstalled(
+            emptySet(),
+            android.speech.tts.TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED
+        ))
+    }
+
     @Test fun userIdentityOverrideReplacesDisplayNameAndProviderGenderWithoutLosingOriginals() {
         val providerGender = VoiceFacetValue("female", "Female")
         val original = googleVoice.copy(
@@ -179,7 +197,7 @@ class VoiceBrowserControllerTest {
         override fun activeVoiceId(): String? = activeId
         override fun activate(voice: BrowserVoice) { activations++; activeId = voice.providerVoiceId }
         override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) { previews++ }
-        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit) = Unit
+        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
         override fun stopPreview() = Unit
         override fun shutdown() { closed = true }
     }
@@ -193,7 +211,7 @@ class VoiceBrowserControllerTest {
         override fun activeVoiceId(): String? = null
         override fun activate(voice: BrowserVoice) = Unit
         override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
-        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit) = Unit
+        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
         override fun stopPreview() = Unit
         override fun shutdown() = Unit
     }

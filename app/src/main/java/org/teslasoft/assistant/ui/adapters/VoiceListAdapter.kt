@@ -69,7 +69,11 @@ class VoiceListAdapter(
                     null -> Unit
                 }
             }
-            if (voice.downloadable) add(holder.itemView.context.getString(R.string.voice_browser_download_required))
+            when {
+                voice.downloadInProgress -> add(holder.itemView.context.getString(R.string.voice_browser_downloading))
+                voice.downloadedRecently -> add(holder.itemView.context.getString(R.string.voice_browser_downloaded))
+                voice.downloadable -> add(holder.itemView.context.getString(R.string.voice_browser_download_required))
+            }
         }.joinToString(" · ")
         holder.metadata.text = metadata
         holder.metadata.visibility = if (metadata.isBlank()) View.GONE else View.VISIBLE
@@ -86,8 +90,20 @@ class VoiceListAdapter(
         }
 
         when {
+            voice.downloadInProgress -> {
+                holder.action.visibility = View.VISIBLE
+                holder.action.isEnabled = false
+                holder.action.text = holder.itemView.context.getString(R.string.voice_browser_downloading)
+                holder.action.setIconResource(R.drawable.ic_download)
+                holder.action.contentDescription = holder.itemView.context.getString(
+                    R.string.voice_browser_downloading_desc,
+                    voice.displayName
+                )
+                holder.action.setOnClickListener(null)
+            }
             voice.downloadable -> {
                 holder.action.visibility = View.VISIBLE
+                holder.action.isEnabled = true
                 holder.action.text = holder.itemView.context.getString(R.string.voice_browser_download)
                 holder.action.setIconResource(R.drawable.ic_download)
                 holder.action.contentDescription = holder.itemView.context.getString(R.string.voice_browser_download_desc, voice.displayName)
@@ -95,6 +111,7 @@ class VoiceListAdapter(
             }
             voice.canPreview -> {
                 holder.action.visibility = View.VISIBLE
+                holder.action.isEnabled = true
                 holder.action.text = holder.itemView.context.getString(R.string.voice_browser_preview)
                 holder.action.setIconResource(R.drawable.ic_play)
                 holder.action.contentDescription = holder.itemView.context.getString(R.string.voice_browser_preview_desc, voice.displayName)
@@ -102,6 +119,7 @@ class VoiceListAdapter(
             }
             else -> {
                 holder.action.visibility = View.INVISIBLE
+                holder.action.isEnabled = false
                 holder.action.setOnClickListener(null)
             }
         }

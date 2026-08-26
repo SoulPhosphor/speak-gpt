@@ -22,6 +22,8 @@ data class BrowserVoice(
     val requiresNetwork: Boolean? = null,
     val installedLocally: Boolean? = null,
     val downloadable: Boolean = false,
+    val downloadInProgress: Boolean = false,
+    val downloadedRecently: Boolean = false,
     val canPreview: Boolean = false
 )
 
