@@ -195,6 +195,25 @@ class VoiceBrowserControllerTest {
         assertEquals("river", controller.visibleVoices().single().providerVoiceId)
     }
 
+    @Test fun voicesStillRequiringDownloadAreHiddenFromTheList() {
+        val installed = googleVoice.copy(
+            providerVoiceId = "installed",
+            requiresNetwork = false,
+            downloadable = false,
+            canPreview = true
+        )
+        val needsDownload = googleVoice.copy(
+            providerVoiceId = "needs-download",
+            requiresNetwork = false,
+            downloadable = true,
+            canPreview = false
+        )
+        val google = FakeProvider("google", listOf(installed, needsDownload))
+        val controller = VoiceBrowserController(listOf(google), "google")
+        controller.load { }
+        assertEquals(listOf("installed"), controller.visibleVoices().map { it.providerVoiceId })
+    }
+
     private class FakeProvider(
         override val id: String,
         private val voices: List<BrowserVoice>,

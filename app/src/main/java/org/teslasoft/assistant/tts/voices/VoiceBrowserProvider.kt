@@ -69,14 +69,18 @@ class VoiceBrowserController(
     }
 
     fun visibleVoices(): List<BrowserVoice> = when (val state = loadState) {
-        is VoiceLoadState.Ready -> VoiceBrowserFilters.apply(state.voices, filterState)
+        is VoiceLoadState.Ready -> VoiceBrowserFilters.apply(forDisplay(state.voices), filterState)
         else -> emptyList()
     }
 
     fun filterDefinitions(): List<VoiceFilterDefinition> = when (val state = loadState) {
-        is VoiceLoadState.Ready -> VoiceBrowserFilters.definitions(state.voices)
+        is VoiceLoadState.Ready -> VoiceBrowserFilters.definitions(forDisplay(state.voices))
         else -> emptyList()
     }
+
+    /** Applies the display policy for voices that still require a download. */
+    private fun forDisplay(voices: List<BrowserVoice>): List<BrowserVoice> =
+        if (SHOW_VOICES_REQUIRING_DOWNLOAD) voices else voices.filterNot(BrowserVoice::downloadable)
 
     fun loadedVoice(providerId: String, voiceId: String?): BrowserVoice? =
         voiceId?.let { id -> loadedVoicesByProviderId[providerId]?.firstOrNull { it.providerVoiceId == id } }
@@ -106,4 +110,14 @@ class VoiceBrowserController(
     }
 
     fun shutdown() = providersById.values.forEach(VoiceBrowserProvider::shutdown)
+
+    companion object {
+        // Voices whose on-device data is not installed are hidden from the list
+        // for now: Android offers no reliable way to fetch a single voice, and
+        // the system voice-data screen it would open only manages whole
+        // languages, so the Download button led nowhere useful. All download
+        // code is left in place — flip this to true to show those voices (and
+        // their Download button) again without recoding anything.
+        const val SHOW_VOICES_REQUIRING_DOWNLOAD = false
+    }
 }
