@@ -2128,7 +2128,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                 .setTitle(R.string.saved_voice_unavailable_title)
                 .setMessage(getString(R.string.saved_voice_unavailable_message, voiceId, reason))
-                .setPositiveButton(android.R.string.ok, null)
+                .setPositiveButton(R.string.btn_ok, null)
                 .show()
         }
     }
