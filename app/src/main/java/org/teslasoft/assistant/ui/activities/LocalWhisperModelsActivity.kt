@@ -221,7 +221,7 @@ class LocalWhisperModelsActivity : FragmentActivity() {
                         )
                             .setTitle(model.displayName)
                             .setMessage(getString(R.string.local_whisper_download_failed_fmt, result.reason))
-                            .setPositiveButton(android.R.string.ok) { _, _ -> }
+                            .setPositiveButton(R.string.btn_ok) { _, _ -> }
                             .show()
                         refreshRow(model)
                     }
