@@ -18,6 +18,7 @@ import org.teslasoft.assistant.tts.voices.VoiceLocation
 
 class VoiceListAdapter(
     private val onSelect: (BrowserVoice) -> Unit,
+    private val onLongPress: (BrowserVoice) -> Unit,
     private val onPreview: (BrowserVoice) -> Unit,
     private val onDownload: (BrowserVoice) -> Unit
 ) : RecyclerView.Adapter<VoiceListAdapter.ViewHolder>() {
@@ -44,6 +45,8 @@ class VoiceListAdapter(
         val voice = voices[position]
         val selected = selectedProviderId == voice.providerId && selectedVoiceId == voice.providerVoiceId
         holder.name.text = voice.displayName
+        holder.userGender.text = voice.userAssignedGender?.label.orEmpty()
+        holder.userGender.visibility = if (voice.userAssignedGender == null) View.GONE else View.VISIBLE
         holder.selected.visibility = View.VISIBLE
         holder.selected.setImageResource(if (selected) R.drawable.ic_check_circle else R.drawable.ic_circle_outline)
         ImageViewCompat.setImageTintList(
@@ -57,7 +60,7 @@ class VoiceListAdapter(
         )
 
         val metadata = buildList {
-            voice.gender?.label?.let(::add)
+            if (voice.userAssignedGender == null) voice.gender?.label?.let(::add)
             voice.quality?.label?.let { add("$it Quality") }
             if (filters.location == VoiceLocation.ALL) {
                 when (voice.requiresNetwork) {
@@ -77,6 +80,10 @@ class VoiceListAdapter(
             holder.itemView.context.getString(R.string.voice_browser_voice_row, voice.displayName, metadata)
         }
         holder.row.setOnClickListener { onSelect(voice) }
+        holder.row.setOnLongClickListener {
+            onLongPress(voice)
+            true
+        }
 
         when {
             voice.downloadable -> {
@@ -104,6 +111,7 @@ class VoiceListAdapter(
         val row: ConstraintLayout = view.findViewById(R.id.voice_row)
         val selected: ImageView = view.findViewById(R.id.voice_selected)
         val name: TextView = view.findViewById(R.id.voice_name)
+        val userGender: TextView = view.findViewById(R.id.voice_user_gender)
         val metadata: TextView = view.findViewById(R.id.voice_metadata)
         val action: MaterialButton = view.findViewById(R.id.voice_action)
     }

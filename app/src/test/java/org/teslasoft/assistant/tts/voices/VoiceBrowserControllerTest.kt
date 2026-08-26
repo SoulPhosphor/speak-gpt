@@ -82,6 +82,42 @@ class VoiceBrowserControllerTest {
         assertFalse(GoogleVoiceMetadata.isDownloadRequired(true, setOf("notInstalled"), "notInstalled"))
     }
 
+    @Test fun userIdentityOverrideReplacesDisplayNameAndProviderGenderWithoutLosingOriginals() {
+        val providerGender = VoiceFacetValue("female", "Female")
+        val original = googleVoice.copy(
+            displayName = "Voice 500",
+            originalDisplayName = "Voice 500",
+            gender = providerGender,
+            providerGender = providerGender
+        )
+        val renamed = VoiceIdentityRegistry.applyOverride(
+            original,
+            VoiceIdentityRegistry.VoiceIdentityOverride("Fred", "neutral")
+        )
+
+        assertEquals("Fred", renamed.displayName)
+        assertEquals("neutral", renamed.gender?.id)
+        assertEquals("neutral", renamed.userAssignedGender?.id)
+        assertEquals("female", renamed.providerGender?.id)
+        assertEquals("Voice 500", renamed.originalDisplayName)
+        assertEquals(original.providerVoiceId, renamed.providerVoiceId)
+    }
+
+    @Test fun identityOverrideCodecRoundTripsProviderScopedVoiceKeys() {
+        val id = VoiceIdentityRegistry.key("openai", "server-voice-name")
+        val expected = mapOf(id to VoiceIdentityRegistry.VoiceIdentityOverride("Fred", "male"))
+        assertEquals(expected, VoiceIdentityRegistry.decode(VoiceIdentityRegistry.encode(expected)))
+    }
+
+    @Test fun userAssignedGenderCreatesOnlyTheAvailableGenderFilterOption() {
+        val neutral = VoiceIdentityRegistry.applyOverride(
+            googleVoice.copy(gender = null, providerGender = null),
+            VoiceIdentityRegistry.VoiceIdentityOverride("Voice 1", "neutral")
+        )
+        val gender = VoiceBrowserFilters.definitions(listOf(neutral)).single { it.facet == VoiceFacet.GENDER }
+        assertEquals(listOf("neutral"), gender.options.map { it.id })
+    }
+
     @Test fun previewDoesNotSelectButRowSelectionDoes() {
         val google = FakeProvider("google", listOf(googleVoice))
         val controller = VoiceBrowserController(listOf(google), "google")

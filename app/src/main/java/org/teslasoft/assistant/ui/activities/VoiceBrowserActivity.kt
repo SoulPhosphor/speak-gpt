@@ -1,12 +1,14 @@
 package org.teslasoft.assistant.ui.activities
 
 import android.graphics.Color
+import android.content.DialogInterface
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.RadioGroup
 import android.widget.Space
 import android.widget.TextView
 import androidx.activity.SystemBarStyle
@@ -31,6 +33,8 @@ import org.teslasoft.assistant.tts.voices.VoiceFacet
 import org.teslasoft.assistant.tts.voices.VoiceFilterDefinition
 import org.teslasoft.assistant.tts.voices.VoiceLoadState
 import org.teslasoft.assistant.tts.voices.VoiceLocation
+import org.teslasoft.assistant.tts.voices.BrowserVoice
+import org.teslasoft.assistant.tts.voices.VoiceIdentityRegistry
 import org.teslasoft.assistant.tts.voices.VoicePreviewText
 import org.teslasoft.assistant.ui.adapters.VoiceListAdapter
 import org.teslasoft.assistant.ui.widgets.AppDropdown
@@ -53,6 +57,7 @@ class VoiceBrowserActivity : FragmentActivity() {
     private lateinit var stateMessage: TextView
     private lateinit var resetFilters: MaterialButton
     private lateinit var previewText: TextInputEditText
+    private lateinit var identityRegistry: VoiceIdentityRegistry
     private var resumedOnce = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,6 +74,7 @@ class VoiceBrowserActivity : FragmentActivity() {
 
         val chatId = intent.getStringExtra(EXTRA_CHAT_ID).orEmpty()
         preferences = Preferences.getPreferences(this, chatId)
+        identityRegistry = VoiceIdentityRegistry(this)
         providerDropdown = findViewById(R.id.provider_dropdown)
         locationSegments = findViewById(R.id.location_segments)
         filterGrid = findViewById(R.id.filter_grid)
@@ -88,13 +94,15 @@ class VoiceBrowserActivity : FragmentActivity() {
                 GoogleSpeechVoiceProvider(this, preferences),
                 OpenAiVoiceProvider(this, preferences)
             ),
-            activeProviderId = preferences.getTtsEngine()
+            activeProviderId = preferences.getTtsEngine(),
+            decorateVoice = identityRegistry::apply
         )
         adapter = VoiceListAdapter(
             onSelect = { voice ->
                 controller.select(voice)
                 render()
             },
+            onLongPress = ::showVoiceIdentityDialog,
             onPreview = { voice ->
                 controller.preview(
                     voice,
@@ -267,5 +275,56 @@ class VoiceBrowserActivity : FragmentActivity() {
             .setMessage(message)
             .setPositiveButton(android.R.string.ok, null)
             .show()
+    }
+
+    private fun showVoiceIdentityDialog(voice: BrowserVoice) {
+        val content = layoutInflater.inflate(R.layout.dialog_voice_identity, null)
+        val name = content.findViewById<TextInputEditText>(R.id.voice_identity_name)
+        val genderGroup = content.findViewById<RadioGroup>(R.id.voice_identity_gender_group)
+        name.setText(voice.displayName)
+        content.findViewById<TextView>(R.id.voice_identity_original_name).text = voice.originalDisplayName
+        content.findViewById<TextView>(R.id.voice_identity_provider_name).text = voice.providerVoiceId
+
+        val currentGenderId = voice.gender?.id
+        genderGroup.check(when (currentGenderId) {
+            "female" -> R.id.voice_identity_female
+            "male" -> R.id.voice_identity_male
+            "neutral" -> R.id.voice_identity_neutral
+            else -> View.NO_ID
+        })
+
+        content.findViewById<MaterialButton>(R.id.voice_identity_preview).setOnClickListener {
+            controller.preview(
+                voice,
+                previewText.text?.toString()?.takeIf(String::isNotBlank) ?: VoicePreviewText.DEFAULT,
+                ::showActionError,
+                ::renderOnMainThread
+            )
+        }
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_VoiceIdentityDialog)
+            .setView(content)
+            .setNegativeButton(R.string.voice_identity_cancel, null)
+            .setPositiveButton(R.string.voice_identity_save, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+                val selectedGender = when (genderGroup.checkedRadioButtonId) {
+                    R.id.voice_identity_female -> "female"
+                    R.id.voice_identity_male -> "male"
+                    R.id.voice_identity_neutral -> "neutral"
+                    else -> null
+                }
+                val updated = identityRegistry.save(
+                    voice = voice,
+                    displayName = name.text?.toString().orEmpty(),
+                    genderId = selectedGender
+                )
+                controller.updateVoice(updated)
+                render()
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
     }
 }

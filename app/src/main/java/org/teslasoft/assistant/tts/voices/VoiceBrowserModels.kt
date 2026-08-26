@@ -7,10 +7,15 @@ data class BrowserVoice(
     val providerId: String,
     val providerVoiceId: String,
     val displayName: String,
+    /** Immutable label assigned by the app/provider before a user override. */
+    val originalDisplayName: String = displayName,
     val providerModelId: String? = null,
     val language: VoiceFacetValue? = null,
     val region: VoiceFacetValue? = null,
     val gender: VoiceFacetValue? = null,
+    /** Provider-supplied gender retained even when [gender] is user-overridden. */
+    val providerGender: VoiceFacetValue? = gender,
+    val userAssignedGender: VoiceFacetValue? = null,
     val quality: VoiceFacetValue? = null,
     val accent: VoiceFacetValue? = null,
     val style: VoiceFacetValue? = null,

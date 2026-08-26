@@ -21,6 +21,10 @@
         app:layout_constraintStart_toEndOf="@id/voice_selected"
         app:layout_constraintTop_toTopOf="parent">
         <TextView android:id="@+id/voice_name" style="@style/Widget.App.Row.Title" />
+        <TextView
+            android:id="@+id/voice_user_gender"
+            style="@style/Widget.App.VoiceBrowser.UserGender"
+            android:visibility="gone" />
         <TextView android:id="@+id/voice_metadata" style="@style/Widget.App.Row.Subtitle" android:maxLines="2" />
     </LinearLayout>
     <com.google.android.material.button.MaterialButton

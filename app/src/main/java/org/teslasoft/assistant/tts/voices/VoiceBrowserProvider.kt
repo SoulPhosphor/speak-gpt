@@ -17,7 +17,8 @@ interface VoiceBrowserProvider {
 /** Keeps browsing state independent from the active persisted provider/voice. */
 class VoiceBrowserController(
     providers: List<VoiceBrowserProvider>,
-    activeProviderId: String
+    activeProviderId: String,
+    private val decorateVoice: (BrowserVoice) -> BrowserVoice = { it }
 ) {
     private val providersById = providers.associateBy { it.id }
     private val filterStates = mutableMapOf<String, VoiceFilterState>()
@@ -51,7 +52,8 @@ class VoiceBrowserController(
                 return@loadVoices
             }
             loadState = result.fold(
-                onSuccess = { voices ->
+                onSuccess = { loadedVoices ->
+                    val voices = loadedVoices.map(decorateVoice)
                     val definitions = VoiceBrowserFilters.definitions(voices)
                     VoiceBrowserFilters.sanitize(filterState, definitions)
                     VoiceLoadState.Ready(voices)
@@ -79,6 +81,14 @@ class VoiceBrowserController(
 
     fun download(voice: BrowserVoice, onFailure: (String) -> Unit) =
         providersById.getValue(voice.providerId).download(voice, onFailure)
+
+    fun updateVoice(updated: BrowserVoice) {
+        val state = loadState as? VoiceLoadState.Ready ?: return
+        loadState = VoiceLoadState.Ready(state.voices.map { voice ->
+            if (voice.providerId == updated.providerId && voice.providerVoiceId == updated.providerVoiceId) updated else voice
+        })
+        VoiceBrowserFilters.sanitize(filterState, filterDefinitions())
+    }
 
     fun shutdown() = providersById.values.forEach(VoiceBrowserProvider::shutdown)
 }
