@@ -1622,7 +1622,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             .setTitle(R.string.rp_continue_title)
             .setMessage(R.string.rp_continue_msg)
             .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
+            .setPositiveButton(R.string.btn_ok) { _, _ ->
                 applyWorldMove(
                     campaign, newWorldId,
                     reasonInput.text?.toString()?.trim().orEmpty(),
@@ -1688,7 +1688,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                     // (owner ruling, spec §8b).
                     MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
                         .setMessage(getString(R.string.memory_operation_failed, e.message ?: e.javaClass.simpleName))
-                        .setPositiveButton(android.R.string.ok) { _, _ -> }
+                        .setPositiveButton(R.string.btn_ok) { _, _ -> }
                         .show()
                 }
             }
@@ -1702,7 +1702,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         if (selectedCampaign()?.roleplayCharacterId != null) {
             MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
                 .setMessage(R.string.rp_character_locked_msg)
-                .setPositiveButton(android.R.string.ok) { _, _ -> }
+                .setPositiveButton(R.string.btn_ok) { _, _ -> }
                 .show()
             return
         }
