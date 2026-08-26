@@ -31,7 +31,7 @@ object MemoryInfoDialog {
         MaterialAlertDialogBuilder(context, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.mem_info_title)
             .setMessage(lines.joinToString("\n\n"))
-            .setPositiveButton(android.R.string.ok) { d, _ -> d.dismiss() }
+            .setPositiveButton(R.string.btn_ok) { d, _ -> d.dismiss() }
             .show()
     }
 
