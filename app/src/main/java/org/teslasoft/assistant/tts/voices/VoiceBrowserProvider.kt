@@ -18,7 +18,9 @@ interface VoiceBrowserProvider {
 class VoiceBrowserController(
     providers: List<VoiceBrowserProvider>,
     activeProviderId: String,
-    private val decorateVoice: (BrowserVoice) -> BrowserVoice = { it }
+    private val decorateVoice: (BrowserVoice) -> BrowserVoice = { it },
+    /** Supplies each provider's remembered filters the first time they are shown. */
+    private val initialFilterState: (String) -> VoiceFilterState = { VoiceFilterState() }
 ) {
     private val providersById = providers.associateBy { it.id }
     private val filterStates = mutableMapOf<String, VoiceFilterState>()
@@ -34,7 +36,7 @@ class VoiceBrowserController(
 
     val provider: VoiceBrowserProvider get() = providersById.getValue(browsedProviderId)
     val availableProviders: List<VoiceBrowserProvider> = providers
-    val filterState: VoiceFilterState get() = filterStates.getOrPut(browsedProviderId) { VoiceFilterState() }
+    val filterState: VoiceFilterState get() = filterStates.getOrPut(browsedProviderId) { initialFilterState(browsedProviderId) }
 
     fun browse(providerId: String, onChanged: () -> Unit) {
         if (!providersById.containsKey(providerId)) return

@@ -240,6 +240,17 @@ Ordinary Yes/No or similar dialogs may use the text action buttons supplied by `
 
 Use the custom button layouts above when the approved design calls for filled, outlined, or specially arranged actions.
 
+### The affirmative word is always "Okay", never "OK" (owner ruling, Aug 26 2026)
+
+Every affirmative confirmation label in the app is spelled out as **Okay**.
+The two-letter form **OK** is never used, anywhere — dialog buttons, banners,
+toasts, helper text, or any other user-facing string, in any language.
+
+Use the shared `@string/btn_ok` string (its value is `Okay`) for affirmative
+dialog buttons rather than the platform `android.R.string.ok`, so a single
+resource carries the approved spelling everywhere. Do not hardcode the literal
+`OK` in a layout, a Kotlin string, or a translation.
+
 ## Navigation and settings rows
 
 A navigation row is assembled from shared pieces. Do not copy a completed row's raw XML into another screen.

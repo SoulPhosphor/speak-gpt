@@ -71,6 +71,38 @@ object VoicePreviewText {
     const val DEFAULT = "Hello. This is a preview of this voice."
 }
 
+/**
+ * Serializes a [VoiceFilterState] to and from a compact string so the browser
+ * can remember the location segment and every chosen facet — language and
+ * region included — after the user leaves the screen. Format:
+ * `location|FACET=id;FACET=id`. Unknown facets or values are ignored on read,
+ * and the loaded catalog is still sanitized afterward, so a saved value that no
+ * longer exists simply drops out.
+ */
+object VoiceFilterStatePersistence {
+    fun encode(state: VoiceFilterState): String {
+        val facets = state.selectedFacetValues.entries
+            .joinToString(";") { (facet, id) -> "${facet.name}=$id" }
+        return "${state.location.name}|$facets"
+    }
+
+    fun decode(raw: String): VoiceFilterState {
+        val state = VoiceFilterState()
+        if (raw.isBlank()) return state
+        val parts = raw.split("|", limit = 2)
+        runCatching { VoiceLocation.valueOf(parts[0]) }.getOrNull()?.let { state.location = it }
+        parts.getOrNull(1)?.split(";")?.forEach { pair ->
+            val kv = pair.split("=", limit = 2)
+            if (kv.size == 2 && kv[0].isNotBlank() && kv[1].isNotBlank()) {
+                runCatching { VoiceFacet.valueOf(kv[0]) }.getOrNull()?.let { facet ->
+                    state.selectedFacetValues[facet] = kv[1]
+                }
+            }
+        }
+        return state
+    }
+}
+
 object VoiceQualityLabels {
     fun fromAndroidQuality(value: Int): VoiceFacetValue? = when (value) {
         100 -> VoiceFacetValue("very_low", "Very Low")
