@@ -82,7 +82,7 @@ class ActivationActivity : FragmentActivity() {
                 // Plain-http endpoints send the API key and all chat content
                 // unencrypted; require explicit confirmation (local/LAN
                 // servers are a legitimate use).
-                MaterialAlertDialogBuilder(this)
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                     .setTitle(R.string.title_http_endpoint_warning)
                     .setMessage(R.string.message_http_endpoint_warning)
                     .setPositiveButton(R.string.btn_http_endpoint_accept) { _, _ -> completeSetup(host) }

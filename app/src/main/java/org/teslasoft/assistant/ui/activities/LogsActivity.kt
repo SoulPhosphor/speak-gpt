@@ -250,7 +250,7 @@ class LogsActivity : FragmentActivity() {
                 }
 
                 btnClearLog?.setOnClickListener {
-                    MaterialAlertDialogBuilder(this)
+                    MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                         .setTitle(R.string.label_clear_log)
                         .setMessage(R.string.msg_clear_log_confirm)
                         .setPositiveButton(R.string.yes) { _, _ ->
