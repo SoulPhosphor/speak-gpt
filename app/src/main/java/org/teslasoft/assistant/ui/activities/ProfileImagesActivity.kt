@@ -820,7 +820,7 @@ class ProfileImagesActivity : FragmentActivity(), ProfileImageDetailBottomSheetD
             .setView(view)
             .create()
         view.findViewById<MaterialButton>(R.id.btn_dialog_action).apply {
-            setText(android.R.string.ok)
+            setText(R.string.btn_ok)
             setOnClickListener { dialog.dismiss() }
         }
         dialog.show()
