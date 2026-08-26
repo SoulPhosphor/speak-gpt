@@ -357,7 +357,7 @@
     <string name="label_error_fill_all_blanks">Будь ласка, заповніть усі поля</string>
     <string name="label_server_error">Помилка сервера. Будь ласка, спробуйте ще раз пізніше.</string>
     <string name="msg_failed_to_post_prompt">Не вдалося опублікувати запит. Будь ласка, перевірте ваше Інтернет-з\'єднання.</string>
-    <string name="btn_ok">ОК</string>
+    <string name="btn_ok">Okay</string>
     <string name="btn_cancel">Скасувати</string>
     <string name="btn_delete">Видалити</string><string name="label_confirm_deletion">Підтвердити видалення</string>
     <string name="msg_confirm_deletion_chat">Цю дію не можна скасувати.</string>
