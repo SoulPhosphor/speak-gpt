@@ -367,7 +367,7 @@ class VoiceSettingsActivity : FragmentActivity() {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.tile_hands_free_timing_title)
             .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
+            .setPositiveButton(R.string.btn_ok) { _, _ ->
                 silenceInput.text.toString().toIntOrNull()?.coerceIn(1, 120)?.let {
                     preferences?.setHandsFreeSilenceSeconds(it)
                 }
@@ -493,7 +493,7 @@ class VoiceSettingsActivity : FragmentActivity() {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.tile_vad_method_title)
             .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
+            .setPositiveButton(R.string.btn_ok) { _, _ ->
                 preferences?.setVadMethod(selectedId)
                 tileVadMethod?.updateSubtitle(vadMethodSubtitle())
                 if (selectedId == "webrtc" && !org.teslasoft.assistant.stt.WebRtcVadNative.ensureLoaded()) {
@@ -553,7 +553,7 @@ class VoiceSettingsActivity : FragmentActivity() {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.vad_sensitivity_title)
             .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
+            .setPositiveButton(R.string.btn_ok) { _, _ ->
                 preferences?.setVadWebRtcMode(selected)
                 tileVadMethod?.updateSubtitle(vadMethodSubtitle())
             }
