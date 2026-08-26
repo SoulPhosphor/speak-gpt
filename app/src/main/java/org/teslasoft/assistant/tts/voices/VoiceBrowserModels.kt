@@ -27,6 +27,17 @@ data class BrowserVoice(
     val canPreview: Boolean = false
 )
 
+data class LastKnownGoodVoiceSelection(
+    val providerId: String,
+    val providerVoiceId: String,
+    val providerModelId: String? = null
+)
+
+object VoiceSelectionExitPolicy {
+    fun requiresUnavailableVoiceWarning(voice: BrowserVoice?): Boolean =
+        voice?.providerId == "google" && voice.installedLocally == false
+}
+
 data class VoiceFacetValue(val id: String, val label: String)
 
 enum class VoiceFacet(val label: String) {

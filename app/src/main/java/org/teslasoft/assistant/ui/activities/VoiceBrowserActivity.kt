@@ -34,8 +34,11 @@ import org.teslasoft.assistant.tts.voices.VoiceFilterDefinition
 import org.teslasoft.assistant.tts.voices.VoiceLoadState
 import org.teslasoft.assistant.tts.voices.VoiceLocation
 import org.teslasoft.assistant.tts.voices.BrowserVoice
+import org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceRegistry
+import org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceSelection
 import org.teslasoft.assistant.tts.voices.VoiceIdentityRegistry
 import org.teslasoft.assistant.tts.voices.VoicePreviewText
+import org.teslasoft.assistant.tts.voices.VoiceSelectionExitPolicy
 import org.teslasoft.assistant.ui.adapters.VoiceListAdapter
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.util.WindowInsetsUtil
@@ -58,6 +61,7 @@ class VoiceBrowserActivity : FragmentActivity() {
     private lateinit var resetFilters: MaterialButton
     private lateinit var previewText: TextInputEditText
     private lateinit var identityRegistry: VoiceIdentityRegistry
+    private lateinit var lastKnownGoodVoiceRegistry: LastKnownGoodVoiceRegistry
     private var resumedOnce = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,6 +79,7 @@ class VoiceBrowserActivity : FragmentActivity() {
         val chatId = intent.getStringExtra(EXTRA_CHAT_ID).orEmpty()
         preferences = Preferences.getPreferences(this, chatId)
         identityRegistry = VoiceIdentityRegistry(this)
+        lastKnownGoodVoiceRegistry = LastKnownGoodVoiceRegistry(this, chatId)
         providerDropdown = findViewById(R.id.provider_dropdown)
         locationSegments = findViewById(R.id.location_segments)
         filterGrid = findViewById(R.id.filter_grid)
@@ -87,7 +92,7 @@ class VoiceBrowserActivity : FragmentActivity() {
         previewText = findViewById(R.id.voice_preview_text)
         previewText.setText(preferences.getVoicePreviewText())
         previewText.doAfterTextChanged { preferences.setVoicePreviewText(it?.toString().orEmpty()) }
-        findViewById<ImageButton>(R.id.btn_back).setOnClickListener { finish() }
+        findViewById<ImageButton>(R.id.btn_back).setOnClickListener { attemptChevronExit() }
 
         controller = VoiceBrowserController(
             providers = listOf(
@@ -99,6 +104,9 @@ class VoiceBrowserActivity : FragmentActivity() {
         )
         adapter = VoiceListAdapter(
             onSelect = { voice ->
+                if (!VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(voice) && voice.canPreview) {
+                    rememberLastKnownGood(voice)
+                }
                 controller.select(voice)
                 render()
             },
@@ -232,6 +240,11 @@ class VoiceBrowserActivity : FragmentActivity() {
         val visible = controller.visibleVoices()
         val activeProviderId = preferences.getTtsEngine()
         val activeVoiceId = controller.availableProviders.firstOrNull { it.id == activeProviderId }?.activeVoiceId()
+        controller.loadedVoice(activeProviderId, activeVoiceId)?.let { activeVoice ->
+            if (!VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(activeVoice) && activeVoice.canPreview) {
+                rememberLastKnownGood(activeVoice)
+            }
+        }
         adapter.submit(visible, activeProviderId, activeVoiceId, controller.filterState)
         voiceCount.text = getString(R.string.voice_browser_count, visible.size)
 
@@ -276,6 +289,52 @@ class VoiceBrowserActivity : FragmentActivity() {
             .setPositiveButton(android.R.string.ok, null)
             .show()
     }
+
+    private fun attemptChevronExit() {
+        val activeProviderId = preferences.getTtsEngine()
+        val activeVoiceId = controller.availableProviders.firstOrNull { it.id == activeProviderId }?.activeVoiceId()
+        val activeVoice = controller.loadedVoice(activeProviderId, activeVoiceId)
+        if (!VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(activeVoice)) {
+            finish()
+            return
+        }
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setMessage(R.string.voice_browser_selected_not_downloaded)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val fallback = lastKnownGoodVoiceRegistry.load()
+                    ?: controller.firstUsableLoadedVoice()?.let(::selectionFor)
+                if (fallback != null) {
+                    lastKnownGoodVoiceRegistry.save(fallback)
+                    restoreSelection(fallback)
+                }
+                finish()
+            }
+            .show()
+    }
+
+    private fun rememberLastKnownGood(voice: BrowserVoice) {
+        lastKnownGoodVoiceRegistry.save(selectionFor(voice))
+    }
+
+    private fun restoreSelection(selection: LastKnownGoodVoiceSelection) {
+        when (selection.providerId) {
+            "google" -> preferences.setVoice(selection.providerVoiceId)
+            "openai" -> {
+                preferences.setOpenAIVoice(selection.providerVoiceId)
+                selection.providerModelId?.let(preferences::setOpenAITtsModel)
+            }
+            else -> return
+        }
+        preferences.setTtsEngine(selection.providerId)
+    }
+
+    private fun selectionFor(voice: BrowserVoice) = LastKnownGoodVoiceSelection(
+        providerId = voice.providerId,
+        providerVoiceId = voice.providerVoiceId,
+        providerModelId = voice.providerModelId
+    )
 
     private fun showVoiceIdentityDialog(voice: BrowserVoice) {
         val content = layoutInflater.inflate(R.layout.dialog_voice_identity, null)

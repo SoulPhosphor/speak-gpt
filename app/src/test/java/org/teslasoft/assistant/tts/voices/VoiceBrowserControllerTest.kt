@@ -100,6 +100,22 @@ class VoiceBrowserControllerTest {
         ))
     }
 
+    @Test fun onlyAnActiveGoogleVoiceWithMissingLocalDataRequiresExitWarning() {
+        val missingGoogleVoice = googleVoice.copy(
+            requiresNetwork = false,
+            installedLocally = false,
+            downloadable = true,
+            canPreview = false
+        )
+        assertTrue(VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(missingGoogleVoice))
+        assertFalse(VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(
+            missingGoogleVoice.copy(installedLocally = true, downloadable = false, canPreview = true)
+        ))
+        assertFalse(VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(
+            missingGoogleVoice.copy(providerId = "openai")
+        ))
+    }
+
     @Test fun userIdentityOverrideReplacesDisplayNameAndProviderGenderWithoutLosingOriginals() {
         val providerGender = VoiceFacetValue("female", "Female")
         val original = googleVoice.copy(

@@ -22,6 +22,7 @@ class VoiceBrowserController(
 ) {
     private val providersById = providers.associateBy { it.id }
     private val filterStates = mutableMapOf<String, VoiceFilterState>()
+    private val loadedVoicesByProviderId = mutableMapOf<String, List<BrowserVoice>>()
     private var loadGeneration = 0L
 
     var browsedProviderId: String = activeProviderId.takeIf(providersById::containsKey)
@@ -54,6 +55,7 @@ class VoiceBrowserController(
             loadState = result.fold(
                 onSuccess = { loadedVoices ->
                     val voices = loadedVoices.map(decorateVoice)
+                    loadedVoicesByProviderId[requestedProviderId] = voices
                     val definitions = VoiceBrowserFilters.definitions(voices)
                     VoiceBrowserFilters.sanitize(filterState, definitions)
                     VoiceLoadState.Ready(voices)
@@ -74,6 +76,14 @@ class VoiceBrowserController(
         else -> emptyList()
     }
 
+    fun loadedVoice(providerId: String, voiceId: String?): BrowserVoice? =
+        voiceId?.let { id -> loadedVoicesByProviderId[providerId]?.firstOrNull { it.providerVoiceId == id } }
+
+    fun firstUsableLoadedVoice(): BrowserVoice? = loadedVoicesByProviderId.values
+        .asSequence()
+        .flatten()
+        .firstOrNull { !VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(it) && it.canPreview }
+
     fun select(voice: BrowserVoice) = providersById.getValue(voice.providerId).activate(voice)
 
     fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
@@ -87,6 +97,9 @@ class VoiceBrowserController(
         loadState = VoiceLoadState.Ready(state.voices.map { voice ->
             if (voice.providerId == updated.providerId && voice.providerVoiceId == updated.providerVoiceId) updated else voice
         })
+        loadedVoicesByProviderId[updated.providerId] = loadedVoicesByProviderId[updated.providerId].orEmpty().map { voice ->
+            if (voice.providerVoiceId == updated.providerVoiceId) updated else voice
+        }
         VoiceBrowserFilters.sanitize(filterState, filterDefinitions())
     }
 
