@@ -71,7 +71,7 @@ class ShareUtil {
                     MaterialAlertDialogBuilder(context)
                         .setTitle("Debug: Error")
                         .setMessage("Failed to share image: ${e.stackTraceToString()}")
-                        .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+                        .setPositiveButton(context.getString(org.teslasoft.assistant.R.string.btn_ok)) { dialog, _ -> dialog.dismiss() }
                         .show()
                 }
                 e.printStackTrace()
