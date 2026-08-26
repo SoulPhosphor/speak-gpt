@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 73537)
-Total output lines: 3444
-
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name" translatable="false">Phosphor Shines</string>
     <string name="app_name_lite" translatable="false">Phosphor Shines Lite</string>
@@ -1304,7 +1301,685 @@ Total output lines: 3444
     <string name="mem_arch_fail_api_key_title">API Key Rejected</string>
     <string name="mem_arch_fail_api_key_msg">The provider rejected the API key. Check the API key saved for the selected endpoint.</string>
     <string name="mem_arch_fail_access_denied_title">Access Denied</string>
-    <string name="mem_arch_fail_access_denied_msg">The provider denied access to the analysis requests. Check the selected model and the accou…13537 tokens truncated… short field
+    <string name="mem_arch_fail_access_denied_msg">The provider denied access to the analysis requests. Check the selected model and the account’s access permissions.</string>
+    <string name="mem_arch_fail_content_refused_title">Content Refused</string>
+    <string name="mem_arch_fail_content_refused_msg">The provider refused the analysis requests because of its content rules.</string>
+
+    <string name="mem_arch_fail_usage_limit_title">Usage Limit Reached</string>
+    <string name="mem_arch_fail_usage_limit_msg">The provider would not run the analysis because an account limit, spending limit, or usage cap was reached.</string>
+    <string name="mem_arch_fail_credits_title">Insufficient Credits</string>
+    <string name="mem_arch_fail_credits_msg">The provider could not run the analysis because the account does not have enough credits.</string>
+    <string name="mem_arch_fail_model_unavailable_title">Model Unavailable</string>
+    <string name="mem_arch_fail_model_unavailable_msg">The selected model is currently unavailable or could not be found. Choose another model or check the endpoint’s model list.</string>
+    <string name="mem_arch_fail_config_title">Invalid Configuration</string>
+    <string name="mem_arch_fail_config_msg">The selected model or endpoint is not configured correctly. Check the Memory Assistant settings, then try again.</string>
+    <string name="mem_arch_fail_unreadable_title">Response Could Not Be Read</string>
+    <string name="mem_arch_fail_unreadable_msg">The provider returned a response the app could not understand. No Lorebook suggestions were saved.</string>
+    <string name="mem_arch_fail_invalid_result_title">Invalid Analysis Result</string>
+    <string name="mem_arch_fail_invalid_result_msg">The model completed the request but did not return a usable Lorebook analysis result. No suggestions were saved.</string>
+    <string name="mem_arch_fail_interrupted_title">Analysis Interrupted</string>
+    <string name="mem_arch_fail_interrupted_msg">The analysis stopped before it completed and could not be resumed. Try again to restart the run.</string>
+    <string name="mem_arch_fail_cancelled_title">Analysis Cancelled</string>
+    <string name="mem_arch_fail_cancelled_msg">The Lorebook analysis was cancelled by the system before it completed. No suggestions were saved.</string>
+    <string name="mem_arch_fail_unavailable_title">Lorebook Analysis Unavailable</string>
+    <string name="mem_arch_fail_unavailable_msg">The selected model or endpoint cannot perform this type of analysis. Choose a different model or endpoint.</string>
+    <string name="mem_arch_fail_unknown_title">Unexpected Analysis Error</string>
+    <string name="mem_arch_fail_unknown_msg">The analysis could not be completed, and the app could not determine the specific cause. Try again or review the error details.</string>
+    <string name="mem_arch_function_archiving">Archiving</string>
+
+    <!-- Rate limit as a distinct full-failure state (owner ruling, Aug 1 2026):
+         a temporary throttle is kept separate from a usage/spending cap. -->
+    <string name="mem_arch_fail_rate_limit_title">Rate Limit Reached</string>
+    <string name="mem_arch_fail_rate_limit_msg">The provider is temporarily limiting requests. Wait a moment, then try again.</string>
+
+    <!-- Run stopped in-process by the system (owner-approved, Aug 1 2026). The
+         Android 15+ dataSync runtime limit uses the Time Limit variant; any
+         other system stop uses the generic Stopped Early. -->
+    <string name="mem_arch_stopped_early_title">Analysis Stopped Early</string>
+    <string name="mem_arch_stopped_early_msg">The analysis stopped before every conversation could be reviewed. Any Lorebook suggestions found before it stopped were saved to Pending.</string>
+    <string name="mem_arch_time_limit_title">Analysis Time Limit Reached</string>
+    <string name="mem_arch_time_limit_msg">The analysis reached its allowed running time before every conversation could be reviewed. Any Lorebook suggestions found before it stopped were saved to Pending.</string>
+
+    <!-- User cancellation is neutral, never an error (owner ruling). Title
+         reuses mem_arch_fail_cancelled_title ("Analysis Cancelled"); the count
+         is reported on the shared "Potential Lorebook Memories found" line. -->
+    <string name="mem_arch_cancel_saved_msg">The analysis was stopped. Any Lorebook suggestions found before cancellation were saved to Pending.</string>
+    <string name="mem_arch_cancel_none_msg">The analysis was stopped before it finished. No Lorebook suggestions were saved.</string>
+    <string name="mem_arch_btn_done">Done</string>
+
+    <!-- Partial-failure states (owner-approved, Aug 1 2026): some conversations
+         were analyzed and some failed. A specific title is used when every
+         failed conversation shares one cause; a mix uses Lorebook Analysis
+         Incomplete with a short breakdown. The saved count is reported on the
+         shared "Potential Lorebook Memories found" line. -->
+    <string name="mem_arch_part_incomplete_title">Lorebook Analysis Incomplete</string>
+    <string name="mem_arch_part_incomplete_msg">Some conversations were analyzed successfully, but the full run could not be completed.</string>
+    <string name="mem_arch_part_connection_title">Connection Failed During Analysis</string>
+    <string name="mem_arch_part_connection_msg">The app could not connect to the provider for some requests, or the connection ended before they finished. Any Lorebook suggestions found before those failures were saved to Pending.</string>
+    <string name="mem_arch_part_timeout_title">Some Requests Timed Out</string>
+    <string name="mem_arch_part_timeout_msg">The provider did not finish one or more analysis requests in time. Suggestions returned successfully by other requests were saved.</string>
+    <string name="mem_arch_part_rejected_title">Some Requests Were Rejected</string>
+    <string name="mem_arch_part_rejected_msg">The provider rejected one or more requests before the full analysis finished. Suggestions from requests that completed successfully were saved.</string>
+
+    <!-- Rejection sub-reasons, partial failure (owner-approved, Aug 3 2026):
+         shown instead of the generic Some Requests Were Rejected state when
+         every REJECTED conversation in the run shares the same detectable
+         subtype. -->
+    <string name="mem_arch_part_api_key_title">Some API Requests Had an Invalid Key</string>
+    <string name="mem_arch_part_api_key_msg">The provider rejected the API key for some requests. Check the API key saved for the selected endpoint.</string>
+    <string name="mem_arch_part_access_denied_title">Some Requests Were Denied Access</string>
+    <string name="mem_arch_part_access_denied_msg">The provider denied access for some requests. Check the selected model and the account’s access permissions.</string>
+    <string name="mem_arch_part_content_refused_title">Some Requests Were Refused for Content</string>
+    <string name="mem_arch_part_content_refused_msg">The provider refused some analysis requests because of its content rules.</string>
+
+    <string name="mem_arch_part_rate_limit_title">Rate Limit Interrupted Analysis</string>
+    <string name="mem_arch_part_rate_limit_msg">The provider temporarily stopped accepting requests because too many were sent within its allowed time window. Suggestions created before the limit was reached were saved.</string>
+    <string name="mem_arch_part_usage_limit_title">Usage Limit Reached During Analysis</string>
+    <string name="mem_arch_part_usage_limit_msg">The provider stopped the run because an account, spending, or usage limit was reached. Suggestions created before the limit was reached were saved.</string>
+    <string name="mem_arch_part_credits_title">Credits Ran Out During Analysis</string>
+    <string name="mem_arch_part_credits_msg">The provider stopped processing requests because the account ran out of credits. Suggestions created before the balance was exhausted were saved.</string>
+    <string name="mem_arch_part_model_title">Model Unavailable During Analysis</string>
+    <string name="mem_arch_part_model_msg">The provider reported that the selected model was unavailable before the analysis finished. Any Lorebook suggestions found before that were saved to Pending.</string>
+    <string name="mem_arch_part_unreadable_title">Some Responses Could Not Be Read</string>
+    <string name="mem_arch_part_unreadable_msg">The provider returned one or more responses the app could not understand. Suggestions from readable responses were saved.</string>
+    <string name="mem_arch_part_invalid_title">Some Analysis Results Could Not Be Used</string>
+    <string name="mem_arch_part_invalid_msg">One or more responses did not contain valid Lorebook suggestions. Valid suggestions from the rest of the run were saved.</string>
+    <string name="mem_arch_part_process_title">Some Conversations Could Not Be Processed</string>
+    <string name="mem_arch_part_process_msg">The app could not prepare or analyze one or more selected conversations. Suggestions from conversations processed successfully were saved.</string>
+    <string name="mem_arch_part_save_title">Some Suggestions Could Not Be Saved</string>
+    <string name="mem_arch_part_save_msg">The analysis produced additional Lorebook suggestions, but the app could not save all of them to Pending. Suggestions saved successfully are still available.</string>
+    <string name="mem_arch_part_interrupted_title">Analysis Was Interrupted</string>
+    <string name="mem_arch_part_interrupted_msg">The run stopped before every conversation was analyzed and could not resume from where it ended. Suggestions completed before the interruption were saved.</string>
+
+    <!-- Mixed-cause breakdown clauses (owner-approved, Aug 1 2026): each is a
+         grammatical counted clause with singular/plural agreement, joined into
+         e.g. "1 request timed out, 2 requests were rejected, and 1 result could
+         not be saved." -->
+    <plurals name="mem_arch_break_connection">
+        <item quantity="one">%1$d request could not connect</item>
+        <item quantity="other">%1$d requests could not connect</item>
+    </plurals>
+    <plurals name="mem_arch_break_timeout">
+        <item quantity="one">%1$d request timed out</item>
+        <item quantity="other">%1$d requests timed out</item>
+    </plurals>
+    <plurals name="mem_arch_break_rejected">
+        <item quantity="one">%1$d request was rejected</item>
+        <item quantity="other">%1$d requests were rejected</item>
+    </plurals>
+    <plurals name="mem_arch_break_rate_limit">
+        <item quantity="one">%1$d request was rate-limited</item>
+        <item quantity="other">%1$d requests were rate-limited</item>
+    </plurals>
+    <plurals name="mem_arch_break_usage_limit">
+        <item quantity="one">%1$d request hit a usage limit</item>
+        <item quantity="other">%1$d requests hit a usage limit</item>
+    </plurals>
+    <plurals name="mem_arch_break_credits">
+        <item quantity="one">%1$d request ran out of credits</item>
+        <item quantity="other">%1$d requests ran out of credits</item>
+    </plurals>
+    <plurals name="mem_arch_break_model">
+        <item quantity="one">%1$d request found the model unavailable</item>
+        <item quantity="other">%1$d requests found the model unavailable</item>
+    </plurals>
+    <plurals name="mem_arch_break_config">
+        <item quantity="one">%1$d request had a configuration problem</item>
+        <item quantity="other">%1$d requests had a configuration problem</item>
+    </plurals>
+    <plurals name="mem_arch_break_unreadable">
+        <item quantity="one">%1$d response could not be read</item>
+        <item quantity="other">%1$d responses could not be read</item>
+    </plurals>
+    <plurals name="mem_arch_break_invalid">
+        <item quantity="one">%1$d result could not be used</item>
+        <item quantity="other">%1$d results could not be used</item>
+    </plurals>
+    <plurals name="mem_arch_break_save">
+        <item quantity="one">%1$d result could not be saved</item>
+        <item quantity="other">%1$d results could not be saved</item>
+    </plurals>
+    <plurals name="mem_arch_break_unknown">
+        <item quantity="one">%1$d request could not be processed</item>
+        <item quantity="other">%1$d requests could not be processed</item>
+    </plurals>
+    <plurals name="mem_arch_break_provider_error">
+        <item quantity="one">%1$d request returned a server error</item>
+        <item quantity="other">%1$d requests returned a server error</item>
+    </plurals>
+    <plurals name="mem_arch_break_too_large">
+        <item quantity="one">%1$d conversation was too large</item>
+        <item quantity="other">%1$d conversations were too large</item>
+    </plurals>
+
+    <!-- Four additional failure states (owner-approved, Aug 1 2026): a 5xx
+         server error, a request over the input/context limit, and the
+         full-failure counterparts of the save and local-processing partials. -->
+    <string name="mem_arch_fail_provider_error_title">Provider Error</string>
+    <string name="mem_arch_fail_provider_error_msg">The provider encountered a server error and could not complete the analysis. Wait a moment, then try again.</string>
+    <string name="mem_arch_fail_too_large_title">Request Too Large</string>
+    <string name="mem_arch_fail_too_large_msg">The conversation exceeded the selected model or provider\'s input limit and could not be analyzed. Choose a model with a larger context window or reduce the amount of content, then try again.</string>
+    <string name="mem_arch_fail_save_title">Suggestions Could Not Be Saved</string>
+    <string name="mem_arch_fail_save_msg">The analysis produced Lorebook suggestions, but the app could not save them to Pending. Check the device\'s available storage, then try again.</string>
+    <string name="mem_arch_fail_process_title">Conversations Could Not Be Processed</string>
+    <string name="mem_arch_fail_process_msg">The app could not read or prepare the conversations for analysis. No conversations were sent to the provider.</string>
+    <string name="mem_arch_part_provider_error_title">Provider Error During Analysis</string>
+    <string name="mem_arch_part_provider_error_msg">The provider encountered errors before every conversation could be analyzed. Any Lorebook suggestions found before those errors were saved to Pending.</string>
+    <string name="mem_arch_part_too_large_title">Some Conversations Were Too Large</string>
+    <string name="mem_arch_part_too_large_msg">One or more conversations exceeded the selected model or provider\'s input limit. Other conversations were analyzed, and any Lorebook suggestions found were saved to Pending.</string>
+
+    <!-- Memory Analysis Type control (Step 1.7 — plan_one_page.md, owner
+         approved). Two-column settings row on the Memory Assistant screen,
+         matching the Memory Engine row. The subtitle is three paragraphs shown
+         with visible spacing between them. -->
+    <string name="memory_analysis_type_title">Memory Analysis Type</string>
+    <string name="memory_analysis_type_p1">Choose which memory system this analysis should create suggestions for.</string>
+    <string name="memory_analysis_type_p2">Associative Memories use an embedding model to surface memories connected to the ideas and topics being discussed.</string>
+    <string name="memory_analysis_type_p3">Lorebook Memories are activated by specific keywords and do not require an embedding model.</string>
+    <string name="memory_analysis_type_associative">Associative Memories</string>
+    <string name="memory_analysis_type_lorebook">Lorebook Memories</string>
+
+    <!-- Lorebook analysis result on the Memory Assistant (Step 1.7 — owner
+         approved). Shown when a Lorebook Memories run finds suggestions; View
+         opens the Lorebooks area on Pending. -->
+    <string name="memory_assistant_lore_found">Potential Lorebook Memories found: %1$d</string>
+    <string name="memory_assistant_view_lore_pending">View</string>
+
+    <!-- Lorebooks Pending review (Step 1.7 — owner approved). The split control
+         at the top of the Lorebooks screen while suggestions are pending. -->
+    <string name="lore_mode_lorebooks">Lorebooks</string>
+    <string name="lore_mode_pending">Pending</string>
+    <string name="lore_suggestion_triggers">Triggers: %1$s</string>
+    <string name="lore_suggestion_assign">Assign Lorebook</string>
+    <string name="lore_suggestion_create_new">Create new Lorebook…</string>
+    <string name="lore_suggestion_edit">Edit</string>
+    <string name="lore_suggestion_approve">Approve</string>
+    <string name="lore_suggestion_delete">Delete</string>
+    <string name="lore_suggestion_needs_book">Assign a Lorebook before approving.</string>
+    <string name="lore_suggestion_edit_title">Edit suggestion</string>
+    <string name="lore_suggestion_edit_content_hint">Lorebook entry text</string>
+    <string name="lore_suggestion_edit_triggers_hint">Trigger keywords, separated by commas</string>
+
+    <!-- Memory Browser reminder while no embedding model is installed (Step 1.7
+         — owner approved, plan_one_page.md). A dismissible per-visit reminder,
+         never a permanent banner. -->
+    <string name="lore_no_model_reminder">Associative Search can\'t be used in chats until an embedding model is installed.</string>
+    <string name="lore_no_model_reminder_ok">Okay</string>
+
+    <!-- Two-mode memory browser + pending actions (owner design, July 8 2026
+         evening — phase6_owner_answers_2026-07-08.md; owner wording). -->
+    <string name="mem_mode_memories">Memories</string>
+    <string name="mem_mode_separator"> | </string>
+    <string name="mem_mode_pending">Pending</string>
+    <string name="mem_pending_count_one">One Memory Pending</string>
+    <string name="mem_pending_count_many">%1$d Memories Pending</string>
+    <string name="mem_pending_accept">Accept</string>
+    <string name="mem_pending_delete">Delete</string>
+    <string name="mem_pending_edit">Edit</string>
+    <string name="mem_pending_add_card">Add to Card</string>
+    <string name="mem_add_card_title">Accept Memory and Link to Lore Card?</string>
+    <string name="mem_add_card_card_label">Lore Card</string>
+    <string name="mem_add_card_section_label">Section</string>
+    <string name="mem_dropdown_select">Select</string>
+    <string name="mem_approve_all_as_shown">Approve All As Shown</string>
+    <string name="mem_edit_link_card_label">Link to Lore Card:</string>
+    <!-- Owner wording (round-3 rulings, July 9 2026): a roleplay draft with
+         no world/campaign/character target — shown inline on the row and in
+         the editor; the draft cannot be added to a card until targeted. -->
+    <string name="mem_needs_roleplay_target">Needs roleplay target.</string>
+
+    <!-- Companion memory system (Phase 1: store, seed, backups) -->
+    <string name="tile_memory_title">Memory system</string>
+    <string name="tile_memory_desc">Long-term companion memory: status, starter seed, backups (experimental)</string>
+    <string name="memory_status_loading">Loading…</string>
+    <string name="memory_status_not_provisioned">The memory store hasn\'t been created yet. Load the starter template, import a backup, or create companions from your personas to set it up.</string>
+    <string name="memory_status_integrity_ok">Store integrity: OK</string>
+    <string name="memory_status_integrity_bad">Store integrity: FAILED — %1$s. Restore from a backup export rather than continuing on a corrupt store.</string>
+    <string name="memory_status_counts">Companions: %1$d · Memories: %2$d · Entities: %3$d · Modes: %4$d · Directives: %5$d</string>
+    <string name="memory_status_counts2">Worlds: %1$d · User personas: %2$d · Roleplay characters: %3$d · Proposals: %4$d</string>
+    <string name="memory_status_transcripts">Transcripts: %1$d (%2$d pending review)</string>
+    <string name="memory_status_chats_since_backup">Chats since last back-up: %1$d</string>
+    <string name="memory_status_pending_review">Pending memory review: %1$d</string>
+    <string name="memory_status_seed_yes">Seed: imported</string>
+    <string name="memory_status_seed_no">Seed: not imported yet</string>
+    <string name="memory_status_bootstrap_yes">Personas linked to companions: yes</string>
+    <string name="memory_status_bootstrap_no">Personas linked to companions: not yet</string>
+    <string name="memory_status_last_backup">Last automatic backup: %1$s</string>
+    <string name="memory_status_last_backup_never">Last automatic backup: never</string>
+    <string name="memory_not_provisioned_toast">The memory store hasn\'t been set up yet.</string>
+    <string name="memory_export_done">Backup exported.</string>
+    <string name="memory_operation_failed">Memory operation failed: %1$s</string>
+    <string name="memory_file_unreadable">The selected file couldn\'t be read.</string>
+    <string name="memory_integrity_failed">Memory store check failed — open Memory settings in Characters for details.</string>
+    <string name="memory_bootstrap_done">Created %1$d companion record(s) from your personas.</string>
+
+    <!-- Memory system Phase 2: transcript capture, review markers, kill switch -->
+    <string name="label_memory">Memory</string>
+    <string name="label_chat_memory_enabled">Use memory in this chat</string>
+    <string name="label_chat_lorebooks_enabled">Use Lorebooks in this chat</string>
+    <string name="label_chat_memory_excluded">Archive This Chat</string>
+    <string name="memory_marker_pending">Memory: waiting for review</string>
+    <string name="memory_marker_partial">Memory: partially archived</string>
+    <string name="memory_marker_processed">Memory: archived</string>
+    <string name="memory_marker_excluded">Memory: excluded</string>
+
+    <!-- Memory system Phase 3: librarian (embedding model + semantic search) -->
+    <string name="memory_section_librarian">Librarian (semantic memory)</string>
+    <string name="memory_librarian_hint">An on-device embedding model lets memories be found by meaning, not just exact words. Download one variant that fits your phone. This is optional — without it, memory still works by keyword.</string>
+    <string name="btn_rebuild_index">Rebuild memory index</string>
+    <string name="memory_index_none">No embedding model installed — search uses keywords only.</string>
+    <string name="memory_index_ok">Index up to date (%1$d memories embedded).</string>
+    <string name="memory_index_stale">Index needs rebuilding (model changed or new memories).</string>
+    <string name="memory_index_building">Embedding… %1$d / %2$d</string>
+    <string name="memory_index_done">Indexed %1$d memories.</string>
+    <string name="memory_index_failed">Couldn\'t build the index — the model may not have loaded. Search falls back to keywords.</string>
+    <string name="memory_model_download">Download</string>
+    <string name="memory_model_cancel">Cancel</string>
+    <string name="memory_model_delete">Remove</string>
+    <string name="memory_model_active">Active</string>
+    <string name="memory_model_progress_fmt">%1$d / %2$d MB</string>
+    <string name="memory_model_progress_placeholder">~%1$d MB · %2$s</string>
+    <string name="memory_model_downloaded">Downloaded model %1$s.</string>
+    <string name="memory_model_download_failed">Download failed: %1$s</string>
+    <string name="memory_debug_search_hint">Search your memories</string>
+    <string name="memory_debug_search_button">Search</string>
+    <string name="memory_debug_search_empty">No matches.</string>
+    <string name="memory_debug_search_result_fmt">%1$.2f\n%2$s</string>
+    <string name="memory_debug_semantic_header">— Semantic memory matches —</string>
+    <string name="memory_debug_all_header">— All records (keyword) —</string>
+    <string name="memory_debug_logging_title">Memory diagnostics logging</string>
+    <string name="memory_debug_logging_desc">Write what the memory system is doing to the Event log. Off by default; turn on only when investigating a memory problem.</string>
+
+    <!-- Performance diagnostics: two independent opt-in toggles, both off by
+         default, both writing to the dedicated Performance Log (kept separate
+         from the Voice Debug and Error logs so they stay readable). -->
+    <string name="whisper_perf_logging_title">Whisper performance logging</string>
+    <string name="whisper_perf_logging_desc">Write one line per on-device transcription to the Performance Log: how long the recording was, how long the model took to load, and how long it took to transcribe — plus a snapshot of memory use. Off by default; turn on to find out why Whisper is suddenly slow.</string>
+    <string name="tile_log_chat_failures_title">Log Chat Failures</string>
+    <string name="tile_log_chat_failures_desc">Save each failed reply\'s provider and the raw server error to the Provider Failure Log. This does not change what appears in chat — failures always show there. Off by default.</string>
+    <string name="tile_response_lifecycle_title">Response Lifecycle</string>
+    <string name="tile_response_lifecycle_desc">Records completion status, token usage, request limits, and how each AI response ended for troubleshooting.</string>
+    <string name="memory_usage_logging_title">Memory usage logging</string>
+    <string name="memory_usage_logging_desc">Write the app\'s memory use to the Performance Log about once a minute (and whenever the system asks the app to free memory). Off by default; leave it on across a long session to spot a memory leak — a steadily rising figure is the tell-tale sign.</string>
+
+    <!-- Memory system Phase 4: engine tier, per-chat scene picker, assembly debug.
+         (Engine picker title, "needs model" toast and endpoint infra strings are
+         reused by the reorged Memory Controls screen — see the reorg block below.) -->
+    <string name="memory_engine_picker_title">Choose memory engine</string>
+    <!-- Owner wording, July 9 2026 — shown inline (persistent) under the
+         Memory Engine control, never a toast. -->
+    <string name="memory_engine_needs_embedding">Install the embedding model in Advanced Memory Settings to enable Associative Search.</string>
+    <string name="memory_archivist_endpoint_picker_title">Choose an endpoint</string>
+    <string name="memory_archivist_endpoint_none_toast">No saved API endpoints yet — add one in API Endpoints first.</string>
+    <string name="memory_archivist_model_hint">e.g. gpt-4o-mini</string>
+    <string name="label_endpoint_none">None configured</string>
+    <string name="label_archivist_model_none">Not set</string>
+
+    <!-- Memory system Phase 4: per-chat scene selection in Quick Settings -->
+    <string name="label_memory_scene">Scene</string>
+    <string name="label_chat_world">World</string>
+    <string name="label_chat_playing_as">Playing as</string>
+    <string name="label_chat_appear_as">Appear as</string>
+    <string name="label_world_none">None</string>
+    <string name="label_roleplay_character_none">None</string>
+    <string name="label_user_persona_none">None</string>
+    <string name="memory_scene_world_picker_title">Choose a world</string>
+    <string name="memory_scene_playing_as_picker_title">Choose who you\'re playing</string>
+    <string name="memory_scene_appear_as_picker_title">Choose how you appear</string>
+    <string name="label_chat_project">Project</string>
+    <string name="label_project_none">None</string>
+    <string name="memory_scene_project_picker_title">Choose a project</string>
+    <string name="label_chat_campaign">Campaign</string>
+    <string name="label_campaign_none">None</string>
+    <string name="memory_scene_campaign_picker_title">Choose a campaign</string>
+
+    <!-- Model rules (owner_approved_rules §11 Revision 6): the
+         per-chat "Apply Model Rules" toggle label (owner-approved title case). -->
+    <string name="label_chat_model_rules">Apply Model Rules</string>
+    <!-- Prompt text: the header line of the model-rules prompt block. Part of
+         the byte-stable block 2 of the prompt-layer contract — changing it
+         invalidates every chat's cached prefix, so don't reword casually. -->
+    <string name="model_rules_injection_header">Model rules (user-written handling rules for this model):</string>
+
+    <!-- ===== AI System Settings + Model rules UI (§11 Revision 6) =====
+         "AI System Settings", "Model Specific Rules", the explanation line, the
+         two toggle labels and the mindfulness hint are owner-approved words —
+         do not reword. -->
+    <string name="title_ai_system_settings">AI System Settings</string>
+    <string name="tile_ai_system_settings_title">AI System Settings</string>
+    <string name="tile_ai_system_settings_desc">System prompt and model rules</string>
+    <string name="ai_system_settings_hint">Be mindful of longer rules as they take up more context space and are sent every turn, which may negatively affect smaller model performance. These count toward token usage, but caching may help with the cost.</string>
+    <string name="row_model_rules_title">Model Specific Rules</string>
+    <string name="row_model_rules_subtitle">Allows custom rules to be sent to exact models from specific saved API endpoints. Rules may be assigned to multiple AIs.</string>
+    <string name="label_auto_apply_model_rules_title">Automatically Apply Model Rules</string>
+    <string name="label_auto_apply_model_rules_desc">When on, model rules apply to any chat whose saved endpoint and exact model match. You can still turn them off for a single chat.</string>
+
+    <!-- Model rules browser -->
+    <string name="model_rules_btn_new">New rule</string>
+    <string name="model_rules_pending_title">Pending model rules</string>
+    <string name="model_rules_pending_banner">Pending model rules (%1$d) ›</string>
+    <string name="model_rules_filter_model">Model</string>
+    <string name="model_rules_no_models">(no models set)</string>
+    <string name="model_rules_size_header">≈ %2$d characters sent for %1$s</string>
+    <string name="model_rules_size_header_warn">≈ %2$d characters sent for %1$s — a lot; smaller models may struggle</string>
+    <string name="model_rules_delete_confirm_title">Delete rule?</string>
+    <string name="model_rules_delete_confirm_msg">Delete this rule?\n\n%1$s</string>
+
+    <!-- Model rule editor -->
+    <string name="model_rule_edit_title_new">New Rule</string>
+    <string name="model_rule_edit_title_edit">Edit Rule</string>
+    <string name="model_rule_edit_hint_text">Rule for the AI Model</string>
+    <string name="model_rule_edit_label_models">Applied Models</string>
+    <string name="model_rule_edit_models_hint">Appends this rule to the system prompt for the models selected below.</string>
+    <string name="model_rule_edit_add_model">Add Model</string>
+    <string name="model_rule_select_endpoint">Select API Endpoint</string>
+    <string name="model_rule_use_current_chat_model">Use Current Chat Model</string>
+    <string name="model_rule_use_current_chat_model_value">Use Current Chat Model — %1$s: %2$s</string>
+    <string name="model_rule_target_label">%1$s: %2$s</string>
+    <string name="model_rule_legacy_target_label">%1$s</string>
+    <string name="model_rule_missing_endpoint">Unavailable Endpoint</string>
+    <string name="model_rule_edit_model_required">Add at least one endpoint and model before activating this rule.</string>
+    <string name="model_rule_no_endpoints">Add an API endpoint before selecting a model.</string>
+    <string name="model_rule_edit_label_tags">Tags</string>
+    <string name="model_rule_edit_hint_tag_input">Add a tag</string>
+    <string name="model_rule_edit_required">Add the rule text first.</string>
+    <string name="model_rule_size_count">%1$d characters</string>
+    <string name="model_rule_size_warn">%1$d characters — long rules use more of the model\'s memory every turn</string>
+
+    <!-- Model rule tags -->
+    <string name="model_rule_tags_title">Tags</string>
+    <string name="model_rule_tag_rename">Rename tag</string>
+    <string name="model_rule_tag_delete_confirm_title">Delete tag?</string>
+    <string name="model_rule_tag_delete_confirm_msg">Delete the tag \"%1$s\"? The rules keep their text; they just lose this tag.</string>
+    <plurals name="model_rule_tag_rule_count">
+        <item quantity="one">%d rule</item>
+        <item quantity="other">%d rules</item>
+    </plurals>
+
+    <!-- User-triggered Model Cleanup. -->
+    <string name="model_cleanup_title">Clean Up Models</string>
+    <string name="model_cleanup_settings_subtitle">Checks for unavailable models associated with Favorites or Rules</string>
+    <string name="model_cleanup_explanation">This check looks at your saved Favorite Models and Model Rules to see whether their models are currently available from their saved API endpoints.\n\nA model marked unavailable was not available when this report was generated. This does not necessarily mean the model has been permanently removed.\n\nYou can delete unavailable items or leave them as they are. Items you keep will remain marked as unavailable until a future check finds the model available again. Availability can change, and a provider may not always return complete or reliable model information.</string>
+    <string name="model_cleanup_check">Check Available Models</string>
+    <string name="model_cleanup_check_failed">Couldn’t check saved models. Try again later.</string>
+    <string name="model_cleanup_unavailable">Unavailable</string>
+    <string name="model_cleanup_report_generated">Report generated: %1$s</string>
+    <string name="model_cleanup_no_report">No cleanup report has been generated yet.</string>
+    <string name="model_cleanup_endpoint_unchecked">Models associated with %1$s were not available to be checked as endpoint was not available. Try again later.</string>
+    <string name="model_cleanup_favorites_heading">Unavailable Model Favorites</string>
+    <string name="model_cleanup_rules_heading">Model Rules Using Unavailable Models</string>
+    <string name="model_cleanup_none">None</string>
+    <string name="model_cleanup_delete_all">Delete All</string>
+    <string name="model_cleanup_delete_favorites_confirm_title">Delete Unavailable Favorites?</string>
+    <string name="model_cleanup_delete_favorites_confirm_message">Delete all unavailable Favorites currently listed in this report?</string>
+    <string name="model_cleanup_delete_rules_confirm_title">Remove Unavailable Models from Model Rules?</string>
+    <string name="model_cleanup_delete_rules_confirm_message">Remove every unavailable model currently listed from the Model Rules that use it? A rule will be deleted only if it has no other model target.</string>
+    <string name="model_cleanup_unknown_endpoint">Unavailable Endpoint</string>
+    <plurals name="model_cleanup_removed_favorites">
+        <item quantity="one">Successfully removed %d unavailable favorite.</item>
+        <item quantity="other">Successfully removed %d unavailable favorites.</item>
+    </plurals>
+    <plurals name="model_cleanup_removed_rule_targets">
+        <item quantity="one">Successfully removed %d unavailable model from Model Rules.</item>
+        <item quantity="other">Successfully removed %d unavailable models from Model Rules.</item>
+    </plurals>
+
+    <!-- Memory system Phase 4: enforcer assembly debug view (shown above the lorebook debug log) -->
+    <string name="memory_debug_assembly_header">Memory assembly (full engine)</string>
+    <string name="lorebook_debug_records_header">Lore book injections</string>
+    <string name="memory_debug_companion_fmt">Companion: %1$s</string>
+    <string name="memory_debug_eligibility_fmt">Room: %1$s</string>
+    <string name="memory_debug_injected_header">Injected:</string>
+    <string name="memory_debug_cut_header">Cut:</string>
+    <string name="memory_debug_lore_notes_header">Lore notes:</string>
+    <string name="memory_debug_scene_fmt">Scene: %1$s</string>
+    <string name="memory_debug_notes_header">Notes:</string>
+    <string name="memory_degraded_notice">Memory unavailable this turn — continuing without it</string>
+    <string name="lorebook_debug_store_unavailable">Lore books were unavailable this turn (see the Event log)</string>
+    <string name="lorebook_debug_no_active_books">No active lore books to search — check the persona\'s linked books and the Quick Settings checklist</string>
+    <string name="lorebook_debug_searched_fmt">Searched %1$d active book(s)</string>
+
+    <!-- ============ Phase 5: memory manager UI ============ -->
+    <!-- Shared list scaffold -->
+    <string name="memory_row_actions">Actions</string>
+    <string name="memory_list_empty">Nothing here yet.</string>
+    <!-- Settings entry point -->
+    <string name="memory_section_manage">Browse &amp; edit</string>
+    <string name="btn_memory_browse">Open memory manager</string>
+    <string name="memory_manage_hint">View, add and edit everything the memory system stores.</string>
+    <!-- Memory browser -->
+    <string name="title_memories">Memories</string>
+    <string name="memory_search_hint">Search Memories</string>
+    <string name="memory_scope_global">Global</string>
+    <string name="memory_scope_companion">Companion</string>
+    <string name="memory_badge_archived">Archived</string>
+    <string name="memory_badge_superseded">Superseded</string>
+    <string name="memory_badge_protected">Protected</string>
+    <string name="memory_badge_always">Always</string>
+    <string name="memory_showing_archived">Showing archived memories too</string>
+    <string name="memory_hiding_archived">Hiding archived memories</string>
+    <string name="memory_saved">Memory saved</string>
+    <string name="memory_deleted">Memory deleted</string>
+    <string name="memory_change_edited">Edited by hand</string>
+    <string name="memory_change_status">Status changed by hand</string>
+    <string name="memory_change_protection">Protection changed by hand</string>
+
+    <!-- Full-screen memory editor (Stage 2.2) -->
+    <string name="mem_edit_title_new">New memory</string>
+    <string name="mem_edit_title_edit">Edit memory</string>
+    <string name="mem_edit_hint_title">Title</string>
+    <string name="mem_edit_hint_content">What to remember</string>
+    <string name="mem_edit_hint_tags">Tags (comma-separated)</string>
+    <string name="mem_edit_label_type">Type</string>
+    <string name="mem_edit_label_importance">Importance</string>
+    <string name="mem_edit_label_scope">Scope</string>
+    <!-- Owner rework (July 8–9 2026): the old "Which ones does this belong
+         to?" sentence is GONE; the picker label is "Associated <Scope>",
+         composed from the owner's approved scope labels below ("Associated
+         Companion" is the owner's exact wording for the companion case). -->
+    <string name="mem_edit_associated_fmt">Associated %1$s</string>
+    <string name="mem_edit_new_project">New project</string>
+    <string name="mem_edit_new_project_hint">Project name</string>
+    <string name="mem_edit_btn_save">Save</string>
+    <string name="mem_edit_required">Content is required.</string>
+    <string name="mem_edit_still_loading">Still loading — try again in a moment.</string>
+    <string name="mem_edit_op_failed">Couldn\'t save: %1$s</string>
+    <!-- Types (owner_approved_rules §5) -->
+    <string name="mem_type_none">No Type</string>
+    <string name="mem_type_none_hint">No category. A memory does not need a Type.</string>
+    <string name="mem_type_fact">Fact</string>
+    <string name="mem_type_preference">Preference</string>
+    <string name="mem_type_event">Event</string>
+    <string name="mem_type_status">Status</string>
+    <string name="mem_type_instruction">Instruction</string>
+    <string name="mem_type_lore">Lore</string>
+    <string name="mem_type_fact_hint">Stable information.</string>
+    <string name="mem_type_preference_hint">Likes, dislikes, style needs, response preferences.</string>
+    <string name="mem_type_event_hint">Something that happened.</string>
+    <string name="mem_type_status_hint">Something currently true but expected to change.</string>
+    <string name="mem_type_instruction_hint">Applies when its topic comes up — for always-on rules, write them on the card.</string>
+    <string name="mem_type_lore_hint">Fictional/world/roleplay information.</string>
+    <!-- Scope categories (owner_approved_rules §1/§2) -->
+    <string name="mem_scope_global">Global</string>
+    <string name="mem_scope_real_life">Real life</string>
+    <string name="mem_scope_companion">Companion</string>
+    <string name="mem_scope_project">Project</string>
+    <string name="mem_scope_world">World</string>
+    <string name="mem_scope_campaign">Campaign</string>
+    <string name="mem_scope_rp_character">RP character</string>
+    <!-- Importance (owner_approved_rules §8; canonical recovery plan §7) -->
+    <string name="mem_importance_minus_2">-2</string>
+    <string name="mem_importance_minus_1">-1</string>
+    <string name="mem_importance_0">0 · Neutral</string>
+    <string name="mem_importance_1">+1</string>
+    <string name="mem_importance_2">+2</string>
+    <string name="mem_importance_3">+3 · Always include</string>
+    <string name="mem_importance_value_fmt">Importance: %1$s</string>
+    <string name="mem_importance_value_neutral">Importance: 0 · Neutral</string>
+    <!-- Memory Assistant minimum-importance option (owner ruling, Aug 15 2026):
+         the default. The Memory Assistant suggests whatever it judges worth
+         suggesting, with no importance floor. -->
+    <string name="mem_importance_no_minimum">No Minimum</string>
+    <string name="mem_importance_4">4 High</string>
+    <string name="mem_importance_5">5 Critical</string>
+
+    <!-- Browser filter/sort (Stage 2.3) -->
+    <string name="mem_filter_chip">%1$s: %2$s</string>
+    <string name="mem_filter_all">All</string>
+    <string name="mem_filter_sort">Sort</string>
+    <string name="mem_filter_sort_newest">Newest</string>
+    <string name="mem_filter_sort_oldest">Oldest</string>
+    <string name="mem_filter_status">Status</string>
+    <string name="mem_filter_source">Source</string>
+    <string name="mem_filter_tag">Tag</string>
+    <string name="mem_filter_reset">Reset</string>
+    <string name="mem_status_active">Active</string>
+    <string name="mem_status_draft">Draft</string>
+    <string name="mem_status_archived">Archived</string>
+    <string name="mem_status_superseded">Superseded</string>
+    <string name="mem_source_hand">Entered by hand</string>
+    <string name="mem_source_learned">Learned from chat</string>
+    <!-- Associative Memory Pending + Possible Match review (Step 1.5, owner
+         placement spec). Icon-only controls carry accessible labels; the
+         caution icon has NO visible label beside it (this string is only its
+         screen-reader description). -->
+    <string name="mem_info_action">Source and evidence</string>
+    <string name="mem_pending_caution_desc">Possible match found — review before saving</string>
+    <string name="mem_pending_checking">Checking for possible matches</string>
+    <string name="mem_pending_save">Approve suggestion</string>
+    <string name="mem_pending_discard">Discard suggestion</string>
+    <string name="mem_pending_review">Review</string>
+    <string name="mem_pending_retry">Retry</string>
+    <string name="mem_pending_check_failed">Couldn\'t check for possible matches</string>
+
+    <!-- Info control content. -->
+    <string name="mem_info_title">Source and evidence</string>
+    <string name="mem_info_source">Source: %1$s</string>
+    <string name="mem_info_none">No additional source information is recorded for this memory.</string>
+
+    <!-- Possible Match Review screen. -->
+    <string name="mem_review_title">Possible Match Review</string>
+    <string name="mem_review_intro">This suggestion may overlap memories you already have. Compare them below and choose what to keep. Nothing changes until you pick an option.</string>
+    <string name="mem_review_proposed_header">Proposed memory</string>
+    <string name="mem_review_existing_header">Existing possible matches</string>
+    <string name="mem_review_save_edit">Save &amp; Edit Old Memory</string>
+    <string name="mem_review_save_supersede">Save &amp; Supersede</string>
+    <string name="mem_review_save_replace">Save &amp; Replace</string>
+    <string name="mem_review_edit_save">Save Changes</string>
+    <string name="mem_review_select_hint">Select the memories this operation applies to.</string>
+    <string name="mem_review_match_select">Select this memory</string>
+    <string name="mem_review_stale">This suggestion or a selected memory changed. Nothing was applied — please review again.</string>
+    <string name="mem_review_gone">This suggestion is no longer pending. Nothing was applied.</string>
+    <string name="mem_review_no_matches">No possible matches remain for this suggestion.</string>
+
+    <!-- Memory Filters slide-out panel (owner-approved wording, July 8 2026).
+         Category labels reuse the existing "Sort/Scope/Type/Status/Source"
+         strings above; the Tags label is plural here. Options render with their
+         first letter capitalised, per the style guide. -->
+    <string name="title_memory_filters">Memory Filters</string>
+    <string name="mem_filter_tags">Tags</string>
+    <!-- Memory Importance filter (owner ruling, Aug 15 2026): multi-select over
+         the signed scale so the user can browse or audit memories by rating. -->
+    <string name="mem_filter_importance">Memory Importance</string>
+    <!-- Superseded Memories filter (owner ruling, Aug 3 2026). Hide is the
+         default: normal browsing without old versions. Include mixes active,
+         archived, and superseded together; Only browses just superseded. -->
+    <string name="mem_filter_superseded">Superseded Memories</string>
+    <string name="mem_filter_superseded_hide">Hide</string>
+    <string name="mem_filter_superseded_include">Include</string>
+    <string name="mem_filter_superseded_only">Only</string>
+    <string name="mem_filter_reset_full">Reset Filters</string>
+    <string name="mem_filter_open">Open Memory Filters</string>
+    <string name="mem_filter_close">Close Memory Filters</string>
+    <string name="mem_filter_remove">Remove filter</string>
+    <string name="mem_filter_option_all">All</string>
+    <string name="mem_filter_option_any">Any</string>
+    <string name="mem_filter_pending">Pending</string>
+    <string name="mem_row_icon">Memory type icon</string>
+    <string name="mem_row_edit">Edit memory</string>
+
+    <!-- The Stage-2.4 separate Pending screen was retired (owner ruling,
+         July 8 2026 evening): the browser's two-mode Memories | Pending view
+         replaced it; its strings left with it. -->
+    <string name="mem_edit_accept">Accept</string>
+
+    <!-- Reset memories (Stage 2.5) -->
+    <string name="mem_reset_title">Reset memories?</string>
+    <string name="mem_reset_message">This will delete all your memories. It cannot be undone. Are you sure?</string>
+    <string name="mem_reset_backup">Save a backup file first</string>
+    <string name="mem_reset_confirm">Reset</string>
+    <string name="mem_reset_done">Memory reset.</string>
+    <string name="mem_reset_done_backup">Memory reset. Backup saved: %1$s</string>
+    <string name="mem_reset_backup_failed">The backup file could not be written, so nothing was deleted. Your memories are untouched. You can try again, or run the reset without a backup by unchecking the backup option.</string>
+
+    <!-- ============================================================
+         Memory Settings reorganization (memory_settings_reorg_spec.md,
+         owner-sanctioned, July 9 2026). The old combined Memory Settings
+         screen is split into three: Memory Controls (§1), Memory Assistant
+         Advanced Settings (§2), Advanced Memory Settings (§3). All
+         user-facing wording below is verbatim from that spec. User-facing
+         name is "Memory Assistant" — never "Archivist".
+         ============================================================ -->
+    <!-- Screen titles (also the manifest activity labels) -->
+    <string name="title_memory_controls">Memory Controls</string>
+    <string name="title_memory_assistant_advanced">Memory Assistant Advanced Settings</string>
+    <string name="title_advanced_memory_settings">Advanced Memory Settings</string>
+
+    <!-- Memory Controls (spec §1) -->
+    <string name="memory_controls_intro">Choose how memory works in chats, roleplay, backups, and memory review.</string>
+    <string name="memory_controls_section_defaults">Memory Defaults</string>
+    <string name="memory_controls_use_in_new_chats">Use Memory in New Chats</string>
+    <string name="memory_controls_use_in_new_chats_hint">Turn memory on by default for new chats. You can still change this per chat.</string>
+    <string name="memory_controls_companion_roleplay">Allow Companion Memories in Roleplay</string>
+    <string name="memory_controls_companion_roleplay_hint">Let the active companion\'s approved memories be eligible during roleplay. Off keeps companion memories out of roleplay unless another rule allows them.</string>
+    <string name="memory_controls_chat_list_status">Show Memory Status on Chat List</string>
+    <string name="memory_controls_importance_ratings">Use Importance Ratings</string>
+    <string name="memory_controls_importance_ratings_hint">Rate memories from -2 to +3. 0 is neutral. +3 is always included when relevant, even beyond the normal memory-count limit. Turning this off keeps saved ratings but ignores them.</string>
+    <string name="memory_controls_chat_list_status_hint">Show whether each chat is waiting for memory review, partially archived, archived, or excluded. This does not show backup status.</string>
+    <string name="memory_controls_row_assistant">Memory Assistant</string>
+    <string name="memory_controls_row_assistant_hint">Find possible memories in finished conversations, then review them in Pending before saving.</string>
+    <string name="memory_controls_max_suggestions">Maximum Suggestions Per Conversation</string>
+    <string name="memory_controls_max_suggestions_hint">Limit how many memory drafts Memory Assistant can create from each conversation.</string>
+    <string name="memory_assistant_conversation_amount">Conversation Amount Per Request</string>
+    <string name="memory_assistant_conversation_amount_hint">Controls how much conversation text is sent in each AI request. Smaller amounts work with more models and providers but require more requests.</string>
+    <string name="memory_assistant_conversation_amount_auto">Auto</string>
+    <string name="memory_assistant_conversation_amount_small">Small · About 4,000 Tokens</string>
+    <string name="memory_assistant_conversation_amount_standard">Standard · About 8,000 Tokens</string>
+    <string name="memory_assistant_conversation_amount_large">Large · About 16,000 Tokens</string>
+    <string name="memory_assistant_conversation_amount_custom">Custom</string>
+    <string name="memory_assistant_conversation_tokens">Conversation Tokens Per Request</string>
+    <string name="memory_controls_row_advanced_assistant">Advanced Memory Assistant Settings</string>
+    <string name="memory_controls_row_advanced_assistant_subtitle">Tune extraction temperature, importance, and prompt behavior.</string>
+    <string name="memory_controls_section_engine">Memory Engine</string>
+    <string name="memory_controls_row_engine">Memory Engine</string>
+    <string name="memory_controls_row_engine_hint">Choose how much memory support the app uses.</string>
+    <string name="memory_controls_engine_none">None</string>
+    <string name="memory_controls_engine_lorebooks">Lorebooks Only</string>
+    <string name="memory_controls_engine_associative">Associative Search Only</string>
+    <string name="memory_controls_engine_both">Both Memory Systems</string>
+    <string name="memory_controls_section_assistant_model">Memory Assistant Model</string>
+    <string name="memory_controls_row_assistant_endpoint">Memory Assistant Endpoint</string>
+    <string name="memory_controls_row_assistant_endpoint_hint">Choose which saved AI endpoint analyzes history and drafts memory items.</string>
+    <string name="memory_controls_row_assistant_model">Memory Assistant Model</string>
+    <string name="memory_controls_row_assistant_model_hint">Model name used by Memory Assistant.</string>
+    <string name="memory_assistant_edit_endpoint_desc">Edit selected endpoint</string>
+    <string name="memory_assistant_routing_title">Select Preferred Routing Type</string>
+    <string name="memory_assistant_routing_hint">Provider routing remains Automatic unless the selected model is a favorite with routing already set up. Preferred and Only use the provider settings saved with that favorite.</string>
+    <string name="memory_controls_section_backups">Backups</string>
+    <string name="memory_controls_auto_backup">Automatic Daily Backup</string>
+    <string name="memory_controls_auto_backup_hint">Save a rotating local backup once a day.</string>
+    <string name="memory_controls_import">Import Backup</string>
+    <string name="memory_controls_import_hint">Restore memories from an exported JSON backup.</string>
+    <string name="memory_controls_export">Export Backup</string>
+    <string name="memory_controls_export_hint">Save a JSON backup you can store or move to another device.</string>
+    <string name="memory_controls_last_backup">Last Backup: %1$s</string>
+    <string name="memory_controls_never">Never</string>
+    <string name="memory_controls_section_reset">Reset</string>
+    <string name="memory_controls_reset">Reset Memories</string>
+    <string name="memory_controls_reset_hint">Delete memory content. Offer to export a backup first.</string>
+
+    <!-- Database Health & Backups, Build Phase 2 (owner-approved wording, July 21 2026).
+         Title Case for section headings, buttons, toggle labels and short field
          labels; sentence case for complete helper sentences and warnings. -->
     <!-- 2. Database Health (on-screen order since July 24 2026 — Backup
          Status now leads; see MemoryBackupRestoreActivity's class doc) -->
