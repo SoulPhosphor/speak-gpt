@@ -997,7 +997,7 @@
     <string name="label_error_fill_all_blanks">Please fill all blanks</string>
     <string name="label_server_error">Server error. Please try again later.</string>
     <string name="msg_failed_to_post_prompt">Failed to post prompt. Please check your Internet connection.</string>
-    <string name="btn_ok">OK</string>
+    <string name="btn_ok">Okay</string>
     <string name="btn_cancel">Cancel</string>
     <string name="btn_delete">Delete</string>
 
@@ -1536,7 +1536,7 @@
     <string name="tile_memory_desc">Long-term companion memory: status, starter seed, backups (experimental)</string>
     <string name="memory_status_loading">Loading…</string>
     <string name="memory_status_not_provisioned">The memory store hasn\'t been created yet. Load the starter template, import a backup, or create companions from your personas to set it up.</string>
-    <string name="memory_status_integrity_ok">Store integrity: OK</string>
+    <string name="memory_status_integrity_ok">Store integrity: Okay</string>
     <string name="memory_status_integrity_bad">Store integrity: FAILED — %1$s. Restore from a backup export rather than continuing on a corrupt store.</string>
     <string name="memory_status_counts">Companions: %1$d · Memories: %2$d · Entities: %3$d · Modes: %4$d · Directives: %5$d</string>
     <string name="memory_status_counts2">Worlds: %1$d · User personas: %2$d · Roleplay characters: %3$d · Proposals: %4$d</string>
@@ -2855,7 +2855,7 @@
     <string name="chat_unavailable_back">Back</string>
     <string name="chat_backup_unavailable_title">Chat backup unavailable</string>
     <string name="chat_backup_unavailable_body">The app cannot create a complete chat backup while encrypted chat storage is unavailable. Your existing backups have not been deleted.</string>
-    <string name="chat_backup_unavailable_ok">OK</string>
+    <string name="chat_backup_unavailable_ok">Okay</string>
 
     <!-- ============ Profile Images: Framing screen (owner-approved copy,
          July 19 2026 — verbatim from profile-images-plan.md; do not reword
