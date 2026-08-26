@@ -362,7 +362,7 @@
     <string name="label_error_fill_all_blanks">Por favor, completa todos los campos</string>
     <string name="label_server_error">Error del servidor. Por favor, intenta de nuevo más tarde.</string>
     <string name="msg_failed_to_post_prompt">No se pudo publicar la solicitud. Por favor verifica tu conexión a Internet.</string>
-    <string name="btn_ok">OK</string>
+    <string name="btn_ok">Okay</string>
     <string name="btn_cancel">Cancelar</string>
     <string name="btn_delete">Eliminar</string>
     <string name="label_confirm_deletion">Confirmar eliminación</string>
