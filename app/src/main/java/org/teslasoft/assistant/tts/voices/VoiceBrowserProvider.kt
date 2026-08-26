@@ -9,7 +9,7 @@ interface VoiceBrowserProvider {
     fun activeVoiceId(): String?
     fun activate(voice: BrowserVoice)
     fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
-    fun download(voice: BrowserVoice, onFailure: (String) -> Unit)
+    fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
     fun stopPreview()
     fun shutdown()
 }
@@ -17,10 +17,12 @@ interface VoiceBrowserProvider {
 /** Keeps browsing state independent from the active persisted provider/voice. */
 class VoiceBrowserController(
     providers: List<VoiceBrowserProvider>,
-    activeProviderId: String
+    activeProviderId: String,
+    private val decorateVoice: (BrowserVoice) -> BrowserVoice = { it }
 ) {
     private val providersById = providers.associateBy { it.id }
     private val filterStates = mutableMapOf<String, VoiceFilterState>()
+    private val loadedVoicesByProviderId = mutableMapOf<String, List<BrowserVoice>>()
     private var loadGeneration = 0L
 
     var browsedProviderId: String = activeProviderId.takeIf(providersById::containsKey)
@@ -51,7 +53,9 @@ class VoiceBrowserController(
                 return@loadVoices
             }
             loadState = result.fold(
-                onSuccess = { voices ->
+                onSuccess = { loadedVoices ->
+                    val voices = loadedVoices.map(decorateVoice)
+                    loadedVoicesByProviderId[requestedProviderId] = voices
                     val definitions = VoiceBrowserFilters.definitions(voices)
                     VoiceBrowserFilters.sanitize(filterState, definitions)
                     VoiceLoadState.Ready(voices)
@@ -72,13 +76,32 @@ class VoiceBrowserController(
         else -> emptyList()
     }
 
+    fun loadedVoice(providerId: String, voiceId: String?): BrowserVoice? =
+        voiceId?.let { id -> loadedVoicesByProviderId[providerId]?.firstOrNull { it.providerVoiceId == id } }
+
+    fun firstUsableLoadedVoice(): BrowserVoice? = loadedVoicesByProviderId.values
+        .asSequence()
+        .flatten()
+        .firstOrNull { !VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(it) && it.canPreview }
+
     fun select(voice: BrowserVoice) = providersById.getValue(voice.providerId).activate(voice)
 
     fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
         providersById.getValue(voice.providerId).preview(voice, sampleText, onFailure) { load(onChanged) }
 
-    fun download(voice: BrowserVoice, onFailure: (String) -> Unit) =
-        providersById.getValue(voice.providerId).download(voice, onFailure)
+    fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
+        providersById.getValue(voice.providerId).download(voice, onFailure) { load(onChanged) }
+
+    fun updateVoice(updated: BrowserVoice) {
+        val state = loadState as? VoiceLoadState.Ready ?: return
+        loadState = VoiceLoadState.Ready(state.voices.map { voice ->
+            if (voice.providerId == updated.providerId && voice.providerVoiceId == updated.providerVoiceId) updated else voice
+        })
+        loadedVoicesByProviderId[updated.providerId] = loadedVoicesByProviderId[updated.providerId].orEmpty().map { voice ->
+            if (voice.providerVoiceId == updated.providerVoiceId) updated else voice
+        }
+        VoiceBrowserFilters.sanitize(filterState, filterDefinitions())
+    }
 
     fun shutdown() = providersById.values.forEach(VoiceBrowserProvider::shutdown)
 }

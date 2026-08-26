@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.Voice
 import org.teslasoft.assistant.preferences.Preferences
@@ -24,6 +25,9 @@ class GoogleSpeechVoiceProvider(
     private var initialized = false
     private val androidVoices = mutableMapOf<String, Voice>()
     private val pendingLoads = mutableListOf<(Result<List<BrowserVoice>>) -> Unit>()
+    private val downloadingVoiceIds = mutableSetOf<String>()
+    private val recentlyDownloadedVoiceIds = mutableSetOf<String>()
+    private val downloadChecks = mutableMapOf<String, Runnable>()
 
     override fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit) {
         if (initialized) {
@@ -64,30 +68,134 @@ class GoogleSpeechVoiceProvider(
         }
         try {
             engine.stop()
-            if (engine.setVoice(androidVoice) == TextToSpeech.ERROR) {
-                onFailure("Google Speech Services could not use this voice.")
-                return
+            when (engine.setVoice(androidVoice)) {
+                TextToSpeech.ERROR_NOT_INSTALLED_YET -> {
+                    beginDownloadMonitoring(voice.providerVoiceId, onFailure, onCatalogChanged)
+                    return
+                }
+                TextToSpeech.SUCCESS -> Unit
+                else -> {
+                    onFailure("Google Speech Services could not use this voice.")
+                    return
+                }
             }
             val result = engine.speak(sampleText, TextToSpeech.QUEUE_FLUSH, null, PREVIEW_UTTERANCE_ID)
-            if (result == TextToSpeech.ERROR) onFailure("Google Speech Services could not play this preview.")
+            when (result) {
+                TextToSpeech.ERROR_NOT_INSTALLED_YET ->
+                    beginDownloadMonitoring(voice.providerVoiceId, onFailure, onCatalogChanged)
+                TextToSpeech.SUCCESS -> Unit
+                else -> onFailure("Google Speech Services could not play this preview.")
+            }
         } catch (error: Throwable) {
             onFailure(error.message ?: "Google Speech Services could not play this preview.")
         }
     }
 
-    override fun download(voice: BrowserVoice, onFailure: (String) -> Unit) {
+    override fun download(
+        voice: BrowserVoice,
+        onFailure: (String) -> Unit,
+        onCatalogChanged: () -> Unit
+    ) {
         if (!voice.downloadable || voice.requiresNetwork == true) {
             onFailure("This voice does not have downloadable on-device data.")
             return
         }
+        if (voice.providerVoiceId in downloadingVoiceIds) return
+        val engine = tts
+        val selectedVoice = androidVoices[voice.providerVoiceId]
+        if (!initialized || engine == null || selectedVoice == null) {
+            onFailure("This exact Google voice is not ready to download.")
+            return
+        }
+
+        try {
+            val result = engine.setVoice(selectedVoice)
+            if (!GoogleVoiceDownloadPolicy.targetAccepted(result)) {
+                openGenericVoiceDataFallback(onFailure)
+                return
+            }
+
+            beginDownloadMonitoring(voice.providerVoiceId, onFailure, onCatalogChanged)
+        } catch (error: Throwable) {
+            openGenericVoiceDataFallback(onFailure, error)
+        }
+    }
+
+    private fun beginDownloadMonitoring(
+        voiceId: String,
+        onFailure: (String) -> Unit,
+        onCatalogChanged: () -> Unit
+    ) {
+        if (voiceId in downloadingVoiceIds) return
+        downloadingVoiceIds += voiceId
+        recentlyDownloadedVoiceIds -= voiceId
+        onCatalogChanged()
+        scheduleDownloadCheck(
+            voiceId = voiceId,
+            startedAt = SystemClock.elapsedRealtime(),
+            onFailure = onFailure,
+            onCatalogChanged = onCatalogChanged
+        )
+    }
+
+    private fun scheduleDownloadCheck(
+        voiceId: String,
+        startedAt: Long,
+        onFailure: (String) -> Unit,
+        onCatalogChanged: () -> Unit
+    ) {
+        downloadChecks.remove(voiceId)?.let(mainHandler::removeCallbacks)
+        val check = object : Runnable {
+            override fun run() {
+                if (!initialized || tts == null) return finishDownloadCheck(voiceId, onCatalogChanged)
+                val refreshed = try {
+                    tts?.voices?.firstOrNull { it.name == voiceId }
+                } catch (_: Throwable) {
+                    null
+                }
+                if (refreshed != null) androidVoices[voiceId] = refreshed
+                val stillMissing = refreshed == null || GoogleVoiceDownloadPolicy.isNotInstalled(
+                    refreshed.features.orEmpty(),
+                    TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED
+                )
+                if (!stillMissing) {
+                    downloadingVoiceIds -= voiceId
+                    recentlyDownloadedVoiceIds += voiceId
+                    downloadChecks.remove(voiceId)
+                    onCatalogChanged()
+                    return
+                }
+
+                if (SystemClock.elapsedRealtime() - startedAt >= DOWNLOAD_CONFIRM_TIMEOUT_MS) {
+                    finishDownloadCheck(voiceId, onCatalogChanged)
+                    openGenericVoiceDataFallback(onFailure)
+                    return
+                }
+                mainHandler.postDelayed(this, DOWNLOAD_CHECK_INTERVAL_MS)
+            }
+        }
+        downloadChecks[voiceId] = check
+        mainHandler.postDelayed(check, DOWNLOAD_CHECK_INTERVAL_MS)
+    }
+
+    private fun finishDownloadCheck(voiceId: String, onCatalogChanged: () -> Unit) {
+        downloadChecks.remove(voiceId)?.let(mainHandler::removeCallbacks)
+        if (downloadingVoiceIds.remove(voiceId)) onCatalogChanged()
+    }
+
+    private fun openGenericVoiceDataFallback(onFailure: (String) -> Unit, cause: Throwable? = null) {
         try {
             appContext.startActivity(
                 Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA)
                     .setPackage(GOOGLE_ENGINE_PACKAGE)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
-        } catch (error: Throwable) {
-            onFailure(error.message ?: "The voice download screen could not be opened.")
+        } catch (fallbackError: Throwable) {
+            onFailure(
+                cause?.message
+                    ?: fallbackError.message
+                    ?: "Google Speech Services could not target this voice or open voice data settings."
+            )
         }
     }
 
@@ -97,6 +205,10 @@ class GoogleSpeechVoiceProvider(
 
     override fun shutdown() {
         stopPreview()
+        downloadChecks.values.forEach(mainHandler::removeCallbacks)
+        downloadChecks.clear()
+        downloadingVoiceIds.clear()
+        recentlyDownloadedVoiceIds.clear()
         try { tts?.shutdown() } catch (_: Throwable) { }
         tts = null
         initialized = false
@@ -132,6 +244,8 @@ class GoogleSpeechVoiceProvider(
                 requiresNetwork = network,
                 installedLocally = if (network) null else !notInstalled,
                 downloadable = notInstalled,
+                downloadInProgress = voice.name in downloadingVoiceIds,
+                downloadedRecently = voice.name in recentlyDownloadedVoiceIds && !notInstalled,
                 canPreview = !notInstalled
             )
         }
@@ -140,5 +254,15 @@ class GoogleSpeechVoiceProvider(
     companion object {
         private const val GOOGLE_ENGINE_PACKAGE = "com.google.android.tts"
         private const val PREVIEW_UTTERANCE_ID = "speak-gpt-voice-preview"
+        private const val DOWNLOAD_CHECK_INTERVAL_MS = 1_000L
+        private const val DOWNLOAD_CONFIRM_TIMEOUT_MS = 120_000L
     }
+}
+
+object GoogleVoiceDownloadPolicy {
+    fun targetAccepted(result: Int): Boolean =
+        result == TextToSpeech.SUCCESS || result == TextToSpeech.ERROR_NOT_INSTALLED_YET
+
+    fun isNotInstalled(features: Set<String>, notInstalledFeature: String): Boolean =
+        features.any { it.equals(notInstalledFeature, ignoreCase = true) }
 }

@@ -51,6 +51,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.tts.voices.GoogleVoiceNumberRegistry
+import org.teslasoft.assistant.tts.voices.VoiceIdentityRegistry
 
 /**
  * One screen that owns every speech-related setting. Reached from the single
@@ -164,17 +165,25 @@ class VoiceSettingsActivity : FragmentActivity() {
     private fun updateVoiceBrowserRow() {
         val prefs = preferences ?: return
         ttsEngine = prefs.getTtsEngine()
+        val identities = VoiceIdentityRegistry(this)
         valueVoiceBrowser?.text = if (ttsEngine == "openai") {
+            val providerVoiceId = prefs.getOpenAIVoice()
             getString(
                 R.string.voice_browser_setting_subtitle_provider,
                 getString(R.string.voice_browser_provider_openai),
-                prefs.getOpenAIVoice().replaceFirstChar(Char::uppercase)
+                identities.displayNameFor(
+                    "openai",
+                    providerVoiceId,
+                    providerVoiceId.replaceFirstChar(Char::uppercase)
+                )
             )
         } else {
+            val providerVoiceId = prefs.getVoice()
+            val originalDisplayName = GoogleVoiceNumberRegistry(this).displayNameFor(providerVoiceId)
             getString(
                 R.string.voice_browser_setting_subtitle_provider,
                 getString(R.string.voice_browser_setting_subtitle_google),
-                GoogleVoiceNumberRegistry(this).displayNameFor(prefs.getVoice())
+                identities.displayNameFor("google", providerVoiceId, originalDisplayName)
             )
         }
     }

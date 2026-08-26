@@ -1,12 +1,14 @@
 package org.teslasoft.assistant.ui.activities
 
 import android.graphics.Color
+import android.content.DialogInterface
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.RadioGroup
 import android.widget.Space
 import android.widget.TextView
 import androidx.activity.SystemBarStyle
@@ -31,7 +33,12 @@ import org.teslasoft.assistant.tts.voices.VoiceFacet
 import org.teslasoft.assistant.tts.voices.VoiceFilterDefinition
 import org.teslasoft.assistant.tts.voices.VoiceLoadState
 import org.teslasoft.assistant.tts.voices.VoiceLocation
+import org.teslasoft.assistant.tts.voices.BrowserVoice
+import org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceRegistry
+import org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceSelection
+import org.teslasoft.assistant.tts.voices.VoiceIdentityRegistry
 import org.teslasoft.assistant.tts.voices.VoicePreviewText
+import org.teslasoft.assistant.tts.voices.VoiceSelectionExitPolicy
 import org.teslasoft.assistant.ui.adapters.VoiceListAdapter
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.util.WindowInsetsUtil
@@ -53,6 +60,8 @@ class VoiceBrowserActivity : FragmentActivity() {
     private lateinit var stateMessage: TextView
     private lateinit var resetFilters: MaterialButton
     private lateinit var previewText: TextInputEditText
+    private lateinit var identityRegistry: VoiceIdentityRegistry
+    private lateinit var lastKnownGoodVoiceRegistry: LastKnownGoodVoiceRegistry
     private var resumedOnce = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,6 +78,8 @@ class VoiceBrowserActivity : FragmentActivity() {
 
         val chatId = intent.getStringExtra(EXTRA_CHAT_ID).orEmpty()
         preferences = Preferences.getPreferences(this, chatId)
+        identityRegistry = VoiceIdentityRegistry(this)
+        lastKnownGoodVoiceRegistry = LastKnownGoodVoiceRegistry(this, chatId)
         providerDropdown = findViewById(R.id.provider_dropdown)
         locationSegments = findViewById(R.id.location_segments)
         filterGrid = findViewById(R.id.filter_grid)
@@ -81,20 +92,25 @@ class VoiceBrowserActivity : FragmentActivity() {
         previewText = findViewById(R.id.voice_preview_text)
         previewText.setText(preferences.getVoicePreviewText())
         previewText.doAfterTextChanged { preferences.setVoicePreviewText(it?.toString().orEmpty()) }
-        findViewById<ImageButton>(R.id.btn_back).setOnClickListener { finish() }
+        findViewById<ImageButton>(R.id.btn_back).setOnClickListener { attemptChevronExit() }
 
         controller = VoiceBrowserController(
             providers = listOf(
                 GoogleSpeechVoiceProvider(this, preferences),
                 OpenAiVoiceProvider(this, preferences)
             ),
-            activeProviderId = preferences.getTtsEngine()
+            activeProviderId = preferences.getTtsEngine(),
+            decorateVoice = identityRegistry::apply
         )
         adapter = VoiceListAdapter(
             onSelect = { voice ->
+                if (!VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(voice) && voice.canPreview) {
+                    rememberLastKnownGood(voice)
+                }
                 controller.select(voice)
                 render()
             },
+            onLongPress = ::showVoiceIdentityDialog,
             onPreview = { voice ->
                 controller.preview(
                     voice,
@@ -103,7 +119,7 @@ class VoiceBrowserActivity : FragmentActivity() {
                     ::renderOnMainThread
                 )
             },
-            onDownload = { voice -> controller.download(voice, ::showActionError) }
+            onDownload = { voice -> controller.download(voice, ::showActionError, ::renderOnMainThread) }
         )
         voicesList.layoutManager = LinearLayoutManager(this)
         voicesList.adapter = adapter
@@ -224,6 +240,11 @@ class VoiceBrowserActivity : FragmentActivity() {
         val visible = controller.visibleVoices()
         val activeProviderId = preferences.getTtsEngine()
         val activeVoiceId = controller.availableProviders.firstOrNull { it.id == activeProviderId }?.activeVoiceId()
+        controller.loadedVoice(activeProviderId, activeVoiceId)?.let { activeVoice ->
+            if (!VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(activeVoice) && activeVoice.canPreview) {
+                rememberLastKnownGood(activeVoice)
+            }
+        }
         adapter.submit(visible, activeProviderId, activeVoiceId, controller.filterState)
         voiceCount.text = getString(R.string.voice_browser_count, visible.size)
 
@@ -267,5 +288,102 @@ class VoiceBrowserActivity : FragmentActivity() {
             .setMessage(message)
             .setPositiveButton(android.R.string.ok, null)
             .show()
+    }
+
+    private fun attemptChevronExit() {
+        val activeProviderId = preferences.getTtsEngine()
+        val activeVoiceId = controller.availableProviders.firstOrNull { it.id == activeProviderId }?.activeVoiceId()
+        val activeVoice = controller.loadedVoice(activeProviderId, activeVoiceId)
+        if (!VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(activeVoice)) {
+            finish()
+            return
+        }
+
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setMessage(R.string.voice_browser_selected_not_downloaded)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val fallback = lastKnownGoodVoiceRegistry.load()
+                    ?: controller.firstUsableLoadedVoice()?.let(::selectionFor)
+                if (fallback != null) {
+                    lastKnownGoodVoiceRegistry.save(fallback)
+                    restoreSelection(fallback)
+                }
+                finish()
+            }
+            .show()
+    }
+
+    private fun rememberLastKnownGood(voice: BrowserVoice) {
+        lastKnownGoodVoiceRegistry.save(selectionFor(voice))
+    }
+
+    private fun restoreSelection(selection: LastKnownGoodVoiceSelection) {
+        when (selection.providerId) {
+            "google" -> preferences.setVoice(selection.providerVoiceId)
+            "openai" -> {
+                preferences.setOpenAIVoice(selection.providerVoiceId)
+                selection.providerModelId?.let(preferences::setOpenAITtsModel)
+            }
+            else -> return
+        }
+        preferences.setTtsEngine(selection.providerId)
+    }
+
+    private fun selectionFor(voice: BrowserVoice) = LastKnownGoodVoiceSelection(
+        providerId = voice.providerId,
+        providerVoiceId = voice.providerVoiceId,
+        providerModelId = voice.providerModelId
+    )
+
+    private fun showVoiceIdentityDialog(voice: BrowserVoice) {
+        val content = layoutInflater.inflate(R.layout.dialog_voice_identity, null)
+        val name = content.findViewById<TextInputEditText>(R.id.voice_identity_name)
+        val genderGroup = content.findViewById<RadioGroup>(R.id.voice_identity_gender_group)
+        name.setText(voice.displayName)
+        content.findViewById<TextView>(R.id.voice_identity_original_name).text = voice.originalDisplayName
+        content.findViewById<TextView>(R.id.voice_identity_provider_name).text = voice.providerVoiceId
+
+        val currentGenderId = voice.gender?.id
+        genderGroup.check(when (currentGenderId) {
+            "female" -> R.id.voice_identity_female
+            "male" -> R.id.voice_identity_male
+            "neutral" -> R.id.voice_identity_neutral
+            else -> View.NO_ID
+        })
+
+        content.findViewById<MaterialButton>(R.id.voice_identity_preview).setOnClickListener {
+            controller.preview(
+                voice,
+                previewText.text?.toString()?.takeIf(String::isNotBlank) ?: VoicePreviewText.DEFAULT,
+                ::showActionError,
+                ::renderOnMainThread
+            )
+        }
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_VoiceIdentityDialog)
+            .setView(content)
+            .setNegativeButton(R.string.voice_identity_cancel, null)
+            .setPositiveButton(R.string.voice_identity_save, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+                val selectedGender = when (genderGroup.checkedRadioButtonId) {
+                    R.id.voice_identity_female -> "female"
+                    R.id.voice_identity_male -> "male"
+                    R.id.voice_identity_neutral -> "neutral"
+                    else -> null
+                }
+                val updated = identityRegistry.save(
+                    voice = voice,
+                    displayName = name.text?.toString().orEmpty(),
+                    genderId = selectedGender
+                )
+                controller.updateVoice(updated)
+                render()
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
     }
 }

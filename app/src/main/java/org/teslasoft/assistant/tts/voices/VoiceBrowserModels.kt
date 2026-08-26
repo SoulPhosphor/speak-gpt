@@ -7,18 +7,36 @@ data class BrowserVoice(
     val providerId: String,
     val providerVoiceId: String,
     val displayName: String,
+    /** Immutable label assigned by the app/provider before a user override. */
+    val originalDisplayName: String = displayName,
     val providerModelId: String? = null,
     val language: VoiceFacetValue? = null,
     val region: VoiceFacetValue? = null,
     val gender: VoiceFacetValue? = null,
+    /** Provider-supplied gender retained even when [gender] is user-overridden. */
+    val providerGender: VoiceFacetValue? = gender,
+    val userAssignedGender: VoiceFacetValue? = null,
     val quality: VoiceFacetValue? = null,
     val accent: VoiceFacetValue? = null,
     val style: VoiceFacetValue? = null,
     val requiresNetwork: Boolean? = null,
     val installedLocally: Boolean? = null,
     val downloadable: Boolean = false,
+    val downloadInProgress: Boolean = false,
+    val downloadedRecently: Boolean = false,
     val canPreview: Boolean = false
 )
+
+data class LastKnownGoodVoiceSelection(
+    val providerId: String,
+    val providerVoiceId: String,
+    val providerModelId: String? = null
+)
+
+object VoiceSelectionExitPolicy {
+    fun requiresUnavailableVoiceWarning(voice: BrowserVoice?): Boolean =
+        voice?.providerId == "google" && voice.installedLocally == false
+}
 
 data class VoiceFacetValue(val id: String, val label: String)
 

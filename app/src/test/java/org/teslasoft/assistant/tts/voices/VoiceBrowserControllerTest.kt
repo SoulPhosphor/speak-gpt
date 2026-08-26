@@ -82,6 +82,76 @@ class VoiceBrowserControllerTest {
         assertFalse(GoogleVoiceMetadata.isDownloadRequired(true, setOf("notInstalled"), "notInstalled"))
     }
 
+    @Test fun exactGoogleVoiceDownloadAcceptsSuccessAndTemporaryNotInstalledResults() {
+        assertTrue(GoogleVoiceDownloadPolicy.targetAccepted(android.speech.tts.TextToSpeech.SUCCESS))
+        assertTrue(GoogleVoiceDownloadPolicy.targetAccepted(android.speech.tts.TextToSpeech.ERROR_NOT_INSTALLED_YET))
+        assertFalse(GoogleVoiceDownloadPolicy.targetAccepted(android.speech.tts.TextToSpeech.ERROR))
+    }
+
+    @Test fun exactGoogleVoiceDownloadConfirmsTheMissingFeatureDisappeared() {
+        val missing = setOf(android.speech.tts.TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)
+        assertTrue(GoogleVoiceDownloadPolicy.isNotInstalled(
+            missing,
+            android.speech.tts.TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED
+        ))
+        assertFalse(GoogleVoiceDownloadPolicy.isNotInstalled(
+            emptySet(),
+            android.speech.tts.TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED
+        ))
+    }
+
+    @Test fun onlyAnActiveGoogleVoiceWithMissingLocalDataRequiresExitWarning() {
+        val missingGoogleVoice = googleVoice.copy(
+            requiresNetwork = false,
+            installedLocally = false,
+            downloadable = true,
+            canPreview = false
+        )
+        assertTrue(VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(missingGoogleVoice))
+        assertFalse(VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(
+            missingGoogleVoice.copy(installedLocally = true, downloadable = false, canPreview = true)
+        ))
+        assertFalse(VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(
+            missingGoogleVoice.copy(providerId = "openai")
+        ))
+    }
+
+    @Test fun userIdentityOverrideReplacesDisplayNameAndProviderGenderWithoutLosingOriginals() {
+        val providerGender = VoiceFacetValue("female", "Female")
+        val original = googleVoice.copy(
+            displayName = "Voice 500",
+            originalDisplayName = "Voice 500",
+            gender = providerGender,
+            providerGender = providerGender
+        )
+        val renamed = VoiceIdentityRegistry.applyOverride(
+            original,
+            VoiceIdentityRegistry.VoiceIdentityOverride("Fred", "neutral")
+        )
+
+        assertEquals("Fred", renamed.displayName)
+        assertEquals("neutral", renamed.gender?.id)
+        assertEquals("neutral", renamed.userAssignedGender?.id)
+        assertEquals("female", renamed.providerGender?.id)
+        assertEquals("Voice 500", renamed.originalDisplayName)
+        assertEquals(original.providerVoiceId, renamed.providerVoiceId)
+    }
+
+    @Test fun identityOverrideCodecRoundTripsProviderScopedVoiceKeys() {
+        val id = VoiceIdentityRegistry.key("openai", "server-voice-name")
+        val expected = mapOf(id to VoiceIdentityRegistry.VoiceIdentityOverride("Fred", "male"))
+        assertEquals(expected, VoiceIdentityRegistry.decode(VoiceIdentityRegistry.encode(expected)))
+    }
+
+    @Test fun userAssignedGenderCreatesOnlyTheAvailableGenderFilterOption() {
+        val neutral = VoiceIdentityRegistry.applyOverride(
+            googleVoice.copy(gender = null, providerGender = null),
+            VoiceIdentityRegistry.VoiceIdentityOverride("Voice 1", "neutral")
+        )
+        val gender = VoiceBrowserFilters.definitions(listOf(neutral)).single { it.facet == VoiceFacet.GENDER }
+        assertEquals(listOf("neutral"), gender.options.map { it.id })
+    }
+
     @Test fun previewDoesNotSelectButRowSelectionDoes() {
         val google = FakeProvider("google", listOf(googleVoice))
         val controller = VoiceBrowserController(listOf(google), "google")
@@ -143,7 +213,7 @@ class VoiceBrowserControllerTest {
         override fun activeVoiceId(): String? = activeId
         override fun activate(voice: BrowserVoice) { activations++; activeId = voice.providerVoiceId }
         override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) { previews++ }
-        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit) = Unit
+        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
         override fun stopPreview() = Unit
         override fun shutdown() { closed = true }
     }
@@ -157,7 +227,7 @@ class VoiceBrowserControllerTest {
         override fun activeVoiceId(): String? = null
         override fun activate(voice: BrowserVoice) = Unit
         override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
-        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit) = Unit
+        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
         override fun stopPreview() = Unit
         override fun shutdown() = Unit
     }

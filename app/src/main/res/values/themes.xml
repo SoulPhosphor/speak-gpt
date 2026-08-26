@@ -1134,8 +1134,64 @@
     <style name="Widget.App.VoiceBrowser.SelectedIcon" parent="">
         <item name="android:layout_width">28dp</item>
         <item name="android:layout_height">28dp</item>
-        <item name="android:layout_marginEnd">12dp</item>
+        <item name="android:layout_marginEnd">24dp</item>
         <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.App.VoiceBrowser.UserGender" parent="Widget.App.Row.Subtitle">
+        <item name="android:textColor">?attr/colorPrimary</item>
+    </style>
+
+    <!-- Long-press voice identity editor. Geometry and typography live here so
+         the complete popup can be adjusted without changing activity code. -->
+    <style name="App.VoiceIdentityDialog" parent="App.MaterialAlertDialog" />
+
+    <style name="Widget.App.VoiceIdentityDialog.Content" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">24dp</item>
+        <item name="android:paddingTop">20dp</item>
+        <item name="android:paddingEnd">24dp</item>
+        <item name="android:paddingBottom">8dp</item>
+    </style>
+
+    <style name="Widget.App.VoiceIdentityDialog.Name" parent="Widget.App.Field.Box">
+        <item name="android:minHeight">48dp</item>
+        <item name="android:gravity">center_vertical|start</item>
+    </style>
+
+    <style name="Widget.App.VoiceIdentityDialog.Preview" parent="Widget.Material3.Button.TextButton">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginStart">12dp</item>
+        <item name="android:minWidth">48dp</item>
+        <item name="android:padding">0dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconTint">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.App.VoiceIdentityDialog.SectionLabel" parent="Widget.App.Field.Label">
+        <item name="android:layout_marginTop">20dp</item>
+    </style>
+
+    <style name="Widget.App.VoiceIdentityDialog.RadioButton" parent="Widget.Material3.CompoundButton.RadioButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:buttonTint">?attr/colorPrimary</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="Widget.App.VoiceIdentityDialog.IdentifierLabel" parent="Widget.App.Row.Subtitle">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_marginTop">16dp</item>
+    </style>
+
+    <style name="Widget.App.VoiceIdentityDialog.IdentifierValue" parent="Widget.App.Row.Title">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_marginTop">2dp</item>
     </style>
 
     <style name="Widget.App.VoiceBrowser.Action" parent="Widget.Material3.Button.TextButton">

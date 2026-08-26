@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voice_browser_selected_not_downloaded">Selected voice is not downloaded. Text to speech will default to the last known good selected voice.</string>
+</resources>
