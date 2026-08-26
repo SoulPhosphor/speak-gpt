@@ -286,7 +286,7 @@ class VoiceBrowserActivity : FragmentActivity() {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.voice_browser_action_failed)
             .setMessage(message)
-            .setPositiveButton(android.R.string.ok, null)
+            .setPositiveButton(R.string.btn_ok, null)
             .show()
     }
 
@@ -302,7 +302,7 @@ class VoiceBrowserActivity : FragmentActivity() {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setMessage(R.string.voice_browser_selected_not_downloaded)
             .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
+            .setPositiveButton(R.string.btn_ok) { _, _ ->
                 val fallback = lastKnownGoodVoiceRegistry.load()
                     ?: controller.firstUsableLoadedVoice()?.let(::selectionFor)
                 if (fallback != null) {
