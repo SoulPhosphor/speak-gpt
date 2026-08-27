@@ -487,7 +487,7 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             }
         }
         progressBar?.visibility = View.GONE
-        val dialog = MaterialAlertDialogBuilder(requireContext())
+        val dialog = MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
             .setTitle(R.string.label_error)
             .setMessage(msg)
             .setPositiveButton(R.string.btn_ok) { _, _ -> }

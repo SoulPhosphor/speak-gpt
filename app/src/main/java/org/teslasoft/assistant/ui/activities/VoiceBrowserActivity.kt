@@ -27,7 +27,6 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.tts.voices.GoogleSpeechVoiceProvider
-import org.teslasoft.assistant.tts.voices.OpenAiVoiceProvider
 import org.teslasoft.assistant.tts.voices.VoiceBrowserController
 import org.teslasoft.assistant.tts.voices.VoiceFacet
 import org.teslasoft.assistant.tts.voices.VoiceFilterDefinition
@@ -37,6 +36,7 @@ import org.teslasoft.assistant.tts.voices.BrowserVoice
 import org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceRegistry
 import org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceSelection
 import org.teslasoft.assistant.tts.voices.VoiceIdentityRegistry
+import org.teslasoft.assistant.tts.voices.VoiceFilterStatePersistence
 import org.teslasoft.assistant.tts.voices.VoicePreviewText
 import org.teslasoft.assistant.tts.voices.VoiceSelectionExitPolicy
 import org.teslasoft.assistant.ui.adapters.VoiceListAdapter
@@ -95,12 +95,16 @@ class VoiceBrowserActivity : FragmentActivity() {
         findViewById<ImageButton>(R.id.btn_back).setOnClickListener { attemptChevronExit() }
 
         controller = VoiceBrowserController(
+            // Only Google is offered here for now. Additional API voice services
+            // are added through the coming provider-selection flow, not hardcoded.
             providers = listOf(
-                GoogleSpeechVoiceProvider(this, preferences),
-                OpenAiVoiceProvider(this, preferences)
+                GoogleSpeechVoiceProvider(this, preferences)
             ),
             activeProviderId = preferences.getTtsEngine(),
-            decorateVoice = identityRegistry::apply
+            decorateVoice = identityRegistry::apply,
+            initialFilterState = { providerId ->
+                VoiceFilterStatePersistence.decode(preferences.getVoiceBrowserFilters(providerId))
+            }
         )
         adapter = VoiceListAdapter(
             onSelect = { voice ->
@@ -112,12 +116,23 @@ class VoiceBrowserActivity : FragmentActivity() {
             },
             onLongPress = ::showVoiceIdentityDialog,
             onPreview = { voice ->
+                adapter.setPreviewing(voice.providerId, voice.providerVoiceId)
                 controller.preview(
                     voice,
                     previewText.text?.toString()?.takeIf(String::isNotBlank) ?: VoicePreviewText.DEFAULT,
-                    ::showActionError,
-                    ::renderOnMainThread
+                    onFailure = { message ->
+                        adapter.setPreviewing(null, null)
+                        showActionError(message)
+                    },
+                    onChanged = ::renderOnMainThread,
+                    onPlaybackChanged = { playingVoiceId ->
+                        if (!isFinishing && !isDestroyed) adapter.setPreviewing(voice.providerId, playingVoiceId)
+                    }
                 )
+            },
+            onStopPreview = {
+                adapter.setPreviewing(null, null)
+                controller.stopPreview()
             },
             onDownload = { voice -> controller.download(voice, ::showActionError, ::renderOnMainThread) }
         )
@@ -132,11 +147,13 @@ class VoiceBrowserActivity : FragmentActivity() {
                 R.id.location_network -> VoiceLocation.NETWORK
                 else -> VoiceLocation.ALL
             }
+            persistFilters()
             renderListAndState()
         }
         resetFilters.setOnClickListener {
             controller.filterState.location = VoiceLocation.ALL
             controller.filterState.selectedFacetValues.clear()
+            persistFilters()
             render()
         }
         controller.load(::renderOnMainThread)
@@ -230,6 +247,7 @@ class VoiceBrowserActivity : FragmentActivity() {
             AppDropdown.show(value, labels, selectedIndex.coerceAtLeast(0)) { index ->
                 if (index == 0) controller.filterState.selectedFacetValues.remove(definition.facet)
                 else controller.filterState.selectedFacetValues[definition.facet] = definition.options[index - 1].id
+                persistFilters()
                 render()
             }
         }
@@ -314,6 +332,13 @@ class VoiceBrowserActivity : FragmentActivity() {
             .show()
     }
 
+    private fun persistFilters() {
+        preferences.setVoiceBrowserFilters(
+            controller.browsedProviderId,
+            VoiceFilterStatePersistence.encode(controller.filterState)
+        )
+    }
+
     private fun rememberLastKnownGood(voice: BrowserVoice) {
         lastKnownGoodVoiceRegistry.save(selectionFor(voice))
     }
@@ -341,8 +366,10 @@ class VoiceBrowserActivity : FragmentActivity() {
         val name = content.findViewById<TextInputEditText>(R.id.voice_identity_name)
         val genderGroup = content.findViewById<RadioGroup>(R.id.voice_identity_gender_group)
         name.setText(voice.displayName)
-        content.findViewById<TextView>(R.id.voice_identity_original_name).text = voice.originalDisplayName
-        content.findViewById<TextView>(R.id.voice_identity_provider_name).text = voice.providerVoiceId
+        content.findViewById<TextView>(R.id.voice_identity_identifiers).text =
+            listOf(voice.originalDisplayName, voice.providerVoiceId)
+                .filter(String::isNotBlank)
+                .joinToString("  ·  ")
 
         val currentGenderId = voice.gender?.id
         genderGroup.check(when (currentGenderId) {

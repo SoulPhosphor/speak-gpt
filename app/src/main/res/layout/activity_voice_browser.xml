@@ -93,6 +93,8 @@
             android:layout_marginTop="12dp"
             android:layout_marginEnd="24dp"
             android:paddingTop="0dp"
+            android:gravity="center_horizontal"
+            android:textAlignment="center"
             android:text="@string/voice_browser_long_press_hint" />
 
         <LinearLayout

@@ -1134,12 +1134,8 @@
     <style name="Widget.App.VoiceBrowser.SelectedIcon" parent="">
         <item name="android:layout_width">28dp</item>
         <item name="android:layout_height">28dp</item>
-        <item name="android:layout_marginEnd">24dp</item>
+        <item name="android:layout_marginEnd">32dp</item>
         <item name="android:tint">?attr/colorPrimary</item>
-    </style>
-
-    <style name="Widget.App.VoiceBrowser.UserGender" parent="Widget.App.Row.Subtitle">
-        <item name="android:textColor">?attr/colorPrimary</item>
     </style>
 
     <!-- Long-press voice identity editor. Geometry and typography live here so
@@ -1153,20 +1149,27 @@
         <item name="android:paddingStart">24dp</item>
         <item name="android:paddingTop">20dp</item>
         <item name="android:paddingEnd">24dp</item>
-        <item name="android:paddingBottom">8dp</item>
+        <item name="android:paddingBottom">20dp</item>
     </style>
 
     <style name="Widget.App.VoiceIdentityDialog.Name" parent="Widget.App.Field.Box">
-        <item name="android:minHeight">48dp</item>
+        <item name="android:minHeight">56dp</item>
         <item name="android:gravity">center_vertical|start</item>
     </style>
 
+    <!-- Preview control sits beside the name field and matches its height so
+         the two read as one input row (owner ruling, Aug 26 2026: the preview
+         button must be about the same height as the writing box, not a tiny
+         square). -->
     <style name="Widget.App.VoiceIdentityDialog.Preview" parent="Widget.Material3.Button.TextButton">
-        <item name="android:layout_width">48dp</item>
-        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_width">56dp</item>
+        <item name="android:layout_height">56dp</item>
         <item name="android:layout_marginStart">12dp</item>
-        <item name="android:minWidth">48dp</item>
+        <item name="android:minWidth">56dp</item>
+        <item name="android:minHeight">56dp</item>
         <item name="android:padding">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
         <item name="iconPadding">0dp</item>
         <item name="iconTint">?attr/colorPrimary</item>
     </style>
@@ -1184,14 +1187,9 @@
         <item name="android:textSize">14sp</item>
     </style>
 
-    <style name="Widget.App.VoiceIdentityDialog.IdentifierLabel" parent="Widget.App.Row.Subtitle">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_marginTop">16dp</item>
-    </style>
-
     <style name="Widget.App.VoiceIdentityDialog.IdentifierValue" parent="Widget.App.Row.Title">
         <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:layout_marginTop">20dp</item>
     </style>
 
     <style name="Widget.App.VoiceBrowser.Action" parent="Widget.Material3.Button.TextButton">

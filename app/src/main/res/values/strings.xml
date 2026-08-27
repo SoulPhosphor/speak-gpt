@@ -1084,6 +1084,8 @@
     <string name="voice_browser_any">Any</string>
     <string name="voice_browser_all_genders">All</string>
     <string name="voice_browser_preview">Preview</string>
+    <string name="voice_browser_stop">Stop</string>
+    <string name="voice_browser_stop_desc">Stop preview of %1$s</string>
     <string name="voice_browser_preview_text">Preview Text</string>
     <string name="voice_browser_download">Download</string>
     <string name="voice_browser_downloading">Downloading…</string>

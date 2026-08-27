@@ -52,19 +52,7 @@
     </RadioGroup>
 
     <TextView
-        style="@style/Widget.App.VoiceIdentityDialog.IdentifierLabel"
-        android:text="@string/voice_identity_original_name" />
-
-    <TextView
-        android:id="@+id/voice_identity_original_name"
-        style="@style/Widget.App.VoiceIdentityDialog.IdentifierValue" />
-
-    <TextView
-        style="@style/Widget.App.VoiceIdentityDialog.IdentifierLabel"
-        android:text="@string/voice_identity_provider_name" />
-
-    <TextView
-        android:id="@+id/voice_identity_provider_name"
+        android:id="@+id/voice_identity_identifiers"
         style="@style/Widget.App.VoiceIdentityDialog.IdentifierValue"
         android:textIsSelectable="true" />
 </LinearLayout>

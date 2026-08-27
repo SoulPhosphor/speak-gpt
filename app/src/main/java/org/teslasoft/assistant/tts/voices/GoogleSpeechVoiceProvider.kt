@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import org.teslasoft.assistant.preferences.Preferences
 import java.util.Locale
@@ -28,6 +29,26 @@ class GoogleSpeechVoiceProvider(
     private val downloadingVoiceIds = mutableSetOf<String>()
     private val recentlyDownloadedVoiceIds = mutableSetOf<String>()
     private val downloadChecks = mutableMapOf<String, Runnable>()
+
+    // Preview playback tracking, so a row can flip to Stop while it is sounding.
+    private var pendingPreviewVoiceId: String? = null
+    private var onPreviewStateChanged: (String?) -> Unit = {}
+    private val previewProgressListener = object : UtteranceProgressListener() {
+        override fun onStart(utteranceId: String?) {
+            if (utteranceId != PREVIEW_UTTERANCE_ID) return
+            val voiceId = pendingPreviewVoiceId
+            mainHandler.post { onPreviewStateChanged(voiceId) }
+        }
+        override fun onDone(utteranceId: String?) = notifyStopped(utteranceId)
+        @Deprecated("Deprecated in Java")
+        override fun onError(utteranceId: String?) = notifyStopped(utteranceId)
+        override fun onError(utteranceId: String?, errorCode: Int) = notifyStopped(utteranceId)
+        override fun onStop(utteranceId: String?, interrupted: Boolean) = notifyStopped(utteranceId)
+        private fun notifyStopped(utteranceId: String?) {
+            if (utteranceId != PREVIEW_UTTERANCE_ID) return
+            mainHandler.post { onPreviewStateChanged(null) }
+        }
+    }
 
     override fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit) {
         if (initialized) {
@@ -59,13 +80,22 @@ class GoogleSpeechVoiceProvider(
         preferences.setTtsEngine(id)
     }
 
-    override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) {
+    override fun preview(
+        voice: BrowserVoice,
+        sampleText: String,
+        onFailure: (String) -> Unit,
+        onCatalogChanged: () -> Unit,
+        onPlaybackChanged: (String?) -> Unit
+    ) {
         val engine = tts
         val androidVoice = androidVoices[voice.providerVoiceId]
         if (!initialized || engine == null || androidVoice == null) {
             onFailure("This voice is not ready to preview.")
             return
         }
+        onPreviewStateChanged = onPlaybackChanged
+        pendingPreviewVoiceId = voice.providerVoiceId
+        engine.setOnUtteranceProgressListener(previewProgressListener)
         try {
             engine.stop()
             when (engine.setVoice(androidVoice)) {
@@ -201,6 +231,8 @@ class GoogleSpeechVoiceProvider(
 
     override fun stopPreview() {
         try { tts?.stop() } catch (_: Throwable) { }
+        pendingPreviewVoiceId = null
+        onPreviewStateChanged(null)
     }
 
     override fun shutdown() {
@@ -214,6 +246,8 @@ class GoogleSpeechVoiceProvider(
         initialized = false
         pendingLoads.clear()
         androidVoices.clear()
+        onPreviewStateChanged = {}
+        pendingPreviewVoiceId = null
     }
 
     private fun readVoices(): Result<List<BrowserVoice>> = runCatching {

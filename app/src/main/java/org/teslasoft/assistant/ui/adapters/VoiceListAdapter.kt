@@ -20,12 +20,23 @@ class VoiceListAdapter(
     private val onSelect: (BrowserVoice) -> Unit,
     private val onLongPress: (BrowserVoice) -> Unit,
     private val onPreview: (BrowserVoice) -> Unit,
+    private val onStopPreview: (BrowserVoice) -> Unit,
     private val onDownload: (BrowserVoice) -> Unit
 ) : RecyclerView.Adapter<VoiceListAdapter.ViewHolder>() {
     private var voices: List<BrowserVoice> = emptyList()
     private var selectedProviderId: String? = null
     private var selectedVoiceId: String? = null
     private var filters = VoiceFilterState()
+    private var previewingProviderId: String? = null
+    private var previewingVoiceId: String? = null
+
+    /** Marks the voice currently sounding so its row shows Stop instead of Preview. */
+    fun setPreviewing(providerId: String?, voiceId: String?) {
+        if (previewingProviderId == providerId && previewingVoiceId == voiceId) return
+        previewingProviderId = providerId
+        previewingVoiceId = voiceId
+        notifyDataSetChanged()
+    }
 
     fun submit(voices: List<BrowserVoice>, selectedProviderId: String?, selectedVoiceId: String?, filters: VoiceFilterState) {
         this.voices = voices
@@ -45,8 +56,6 @@ class VoiceListAdapter(
         val voice = voices[position]
         val selected = selectedProviderId == voice.providerId && selectedVoiceId == voice.providerVoiceId
         holder.name.text = voice.displayName
-        holder.userGender.text = voice.userAssignedGender?.label.orEmpty()
-        holder.userGender.visibility = if (voice.userAssignedGender == null) View.GONE else View.VISIBLE
         holder.selected.visibility = View.VISIBLE
         holder.selected.setImageResource(if (selected) R.drawable.ic_check_circle else R.drawable.ic_circle_outline)
         ImageViewCompat.setImageTintList(
@@ -60,7 +69,7 @@ class VoiceListAdapter(
         )
 
         val metadata = buildList {
-            if (voice.userAssignedGender == null) voice.gender?.label?.let(::add)
+            (voice.userAssignedGender ?: voice.gender)?.label?.let(::add)
             voice.quality?.label?.let { add("$it Quality") }
             if (filters.location == VoiceLocation.ALL) {
                 when (voice.requiresNetwork) {
@@ -68,11 +77,6 @@ class VoiceListAdapter(
                     false -> add("On-device")
                     null -> Unit
                 }
-            }
-            when {
-                voice.downloadInProgress -> add(holder.itemView.context.getString(R.string.voice_browser_downloading))
-                voice.downloadedRecently -> add(holder.itemView.context.getString(R.string.voice_browser_downloaded))
-                voice.downloadable -> add(holder.itemView.context.getString(R.string.voice_browser_download_required))
             }
         }.joinToString(" · ")
         holder.metadata.text = metadata
@@ -112,10 +116,18 @@ class VoiceListAdapter(
             voice.canPreview -> {
                 holder.action.visibility = View.VISIBLE
                 holder.action.isEnabled = true
-                holder.action.text = holder.itemView.context.getString(R.string.voice_browser_preview)
-                holder.action.setIconResource(R.drawable.ic_play)
-                holder.action.contentDescription = holder.itemView.context.getString(R.string.voice_browser_preview_desc, voice.displayName)
-                holder.action.setOnClickListener { onPreview(voice) }
+                val previewing = previewingProviderId == voice.providerId && previewingVoiceId == voice.providerVoiceId
+                if (previewing) {
+                    holder.action.text = holder.itemView.context.getString(R.string.voice_browser_stop)
+                    holder.action.setIconResource(R.drawable.ic_stop)
+                    holder.action.contentDescription = holder.itemView.context.getString(R.string.voice_browser_stop_desc, voice.displayName)
+                    holder.action.setOnClickListener { onStopPreview(voice) }
+                } else {
+                    holder.action.text = holder.itemView.context.getString(R.string.voice_browser_preview)
+                    holder.action.setIconResource(R.drawable.ic_play)
+                    holder.action.contentDescription = holder.itemView.context.getString(R.string.voice_browser_preview_desc, voice.displayName)
+                    holder.action.setOnClickListener { onPreview(voice) }
+                }
             }
             else -> {
                 holder.action.visibility = View.INVISIBLE
@@ -129,7 +141,6 @@ class VoiceListAdapter(
         val row: ConstraintLayout = view.findViewById(R.id.voice_row)
         val selected: ImageView = view.findViewById(R.id.voice_selected)
         val name: TextView = view.findViewById(R.id.voice_name)
-        val userGender: TextView = view.findViewById(R.id.voice_user_gender)
         val metadata: TextView = view.findViewById(R.id.voice_metadata)
         val action: MaterialButton = view.findViewById(R.id.voice_action)
     }

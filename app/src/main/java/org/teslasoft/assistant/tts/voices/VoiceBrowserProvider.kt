@@ -8,7 +8,18 @@ interface VoiceBrowserProvider {
     fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit)
     fun activeVoiceId(): String?
     fun activate(voice: BrowserVoice)
-    fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
+    /**
+     * [onPlaybackChanged] reports the id of the voice currently sounding, or
+     * null when preview playback has started, finished, or been stopped, so the
+     * UI can flip a row between Preview and Stop.
+     */
+    fun preview(
+        voice: BrowserVoice,
+        sampleText: String,
+        onFailure: (String) -> Unit,
+        onCatalogChanged: () -> Unit = {},
+        onPlaybackChanged: (String?) -> Unit = {}
+    )
     fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
     fun stopPreview()
     fun shutdown()
@@ -18,7 +29,9 @@ interface VoiceBrowserProvider {
 class VoiceBrowserController(
     providers: List<VoiceBrowserProvider>,
     activeProviderId: String,
-    private val decorateVoice: (BrowserVoice) -> BrowserVoice = { it }
+    private val decorateVoice: (BrowserVoice) -> BrowserVoice = { it },
+    /** Supplies each provider's remembered filters the first time they are shown. */
+    private val initialFilterState: (String) -> VoiceFilterState = { VoiceFilterState() }
 ) {
     private val providersById = providers.associateBy { it.id }
     private val filterStates = mutableMapOf<String, VoiceFilterState>()
@@ -34,7 +47,7 @@ class VoiceBrowserController(
 
     val provider: VoiceBrowserProvider get() = providersById.getValue(browsedProviderId)
     val availableProviders: List<VoiceBrowserProvider> = providers
-    val filterState: VoiceFilterState get() = filterStates.getOrPut(browsedProviderId) { VoiceFilterState() }
+    val filterState: VoiceFilterState get() = filterStates.getOrPut(browsedProviderId) { initialFilterState(browsedProviderId) }
 
     fun browse(providerId: String, onChanged: () -> Unit) {
         if (!providersById.containsKey(providerId)) return
@@ -67,14 +80,18 @@ class VoiceBrowserController(
     }
 
     fun visibleVoices(): List<BrowserVoice> = when (val state = loadState) {
-        is VoiceLoadState.Ready -> VoiceBrowserFilters.apply(state.voices, filterState)
+        is VoiceLoadState.Ready -> VoiceBrowserFilters.apply(forDisplay(state.voices), filterState)
         else -> emptyList()
     }
 
     fun filterDefinitions(): List<VoiceFilterDefinition> = when (val state = loadState) {
-        is VoiceLoadState.Ready -> VoiceBrowserFilters.definitions(state.voices)
+        is VoiceLoadState.Ready -> VoiceBrowserFilters.definitions(forDisplay(state.voices))
         else -> emptyList()
     }
+
+    /** Applies the display policy for voices that still require a download. */
+    private fun forDisplay(voices: List<BrowserVoice>): List<BrowserVoice> =
+        if (SHOW_VOICES_REQUIRING_DOWNLOAD) voices else voices.filterNot(BrowserVoice::downloadable)
 
     fun loadedVoice(providerId: String, voiceId: String?): BrowserVoice? =
         voiceId?.let { id -> loadedVoicesByProviderId[providerId]?.firstOrNull { it.providerVoiceId == id } }
@@ -86,8 +103,16 @@ class VoiceBrowserController(
 
     fun select(voice: BrowserVoice) = providersById.getValue(voice.providerId).activate(voice)
 
-    fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
-        providersById.getValue(voice.providerId).preview(voice, sampleText, onFailure) { load(onChanged) }
+    fun preview(
+        voice: BrowserVoice,
+        sampleText: String,
+        onFailure: (String) -> Unit,
+        onChanged: () -> Unit = {},
+        onPlaybackChanged: (String?) -> Unit = {}
+    ) = providersById.getValue(voice.providerId)
+        .preview(voice, sampleText, onFailure, { load(onChanged) }, onPlaybackChanged)
+
+    fun stopPreview() = provider.stopPreview()
 
     fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
         providersById.getValue(voice.providerId).download(voice, onFailure) { load(onChanged) }
@@ -104,4 +129,14 @@ class VoiceBrowserController(
     }
 
     fun shutdown() = providersById.values.forEach(VoiceBrowserProvider::shutdown)
+
+    companion object {
+        // Voices whose on-device data is not installed are hidden from the list
+        // for now: Android offers no reliable way to fetch a single voice, and
+        // the system voice-data screen it would open only manages whole
+        // languages, so the Download button led nowhere useful. All download
+        // code is left in place — flip this to true to show those voices (and
+        // their Download button) again without recoding anything.
+        const val SHOW_VOICES_REQUIRING_DOWNLOAD = false
+    }
 }

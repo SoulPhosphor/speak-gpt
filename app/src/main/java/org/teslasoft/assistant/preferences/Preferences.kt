@@ -931,6 +931,13 @@ class Preferences internal constructor(
         putGlobalString("voice_preview_text", text, VoicePreviewText.DEFAULT)
     }
 
+    fun getVoiceBrowserFilters(providerId: String): String =
+        getGlobalString("voice_browser_filters_$providerId", "")
+
+    fun setVoiceBrowserFilters(providerId: String, encoded: String) {
+        putGlobalString("voice_browser_filters_$providerId", encoded, "")
+    }
+
     /**
      * Set temperature. Min value 0, max 2
      *

@@ -274,6 +274,21 @@ If it is encrypted, scrambled, truncated, missing a key, or otherwise unusable, 
 
 Never let the owner repeat a diagnostic collection process that cannot produce usable evidence.
 
+### Never add or change logging without approval (owner ruling, Aug 27 2026)
+
+Do not add, remove, move, or reword any log line without asking the owner
+first and explaining why the change would be useful and exactly where the
+line would go. This covers every kind of log: plain debug / Logcat
+(`Log.d/v/i/w/e`), the persistent Event log, the error log, the Whisper
+performance log, and any other diagnostic channel.
+
+The reason for the gate: logs added on assumption tend to land in the wrong
+channel or the wrong place, and the owner does not want the codebase or the
+voice logs accumulating unrequested log lines. Wanting evidence for a bug is
+not permission to add logging — state what you would log and why, and wait
+for a yes. Restoring a log line to its exact original form while reverting an
+unapproved change is fine; introducing a new or altered one is not.
+
 ## 9. UI consistency and theme readiness
 
 ### The app's name never appears in wording (owner ruling, July 28 2026)

@@ -28,7 +28,7 @@ import androidx.core.graphics.drawable.toDrawable
 
 class SimpleDialogFragment : DialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        return MaterialAlertDialogBuilder(requireContext())
+        return MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
             .setTitle("Dialog Title")
             .setMessage("Dialog Message")
             .setPositiveButton(R.string.btn_close) { _, _ -> }
