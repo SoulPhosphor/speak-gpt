@@ -62,12 +62,56 @@ class ChatActionSurfaceSourceContractTest {
     }
 
     @Test
-    fun composerResizePinsTranscriptWithoutFightingTheImeConstraint() {
+    fun everyViewportResizePinsTranscriptWithoutFightingTheImeConstraint() {
         val activity = source("main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
+        val composer = source("main/java/org/teslasoft/assistant/ui/chat/ChatComposerLayout.kt")
 
+        // The keyboard resizes the chat viewport exactly as the composer does,
+        // so it has to report before it takes or gives back that space.
+        // Narrowing this back to composer-only resizes is what puts the
+        // conversation back to jumping when the keyboard opens and closes.
+        assertTrue(composer.contains("onBottomInsetChanging?.invoke(isKeyboardOpen, retreating)"))
+        assertTrue(activity.contains("keyboardInput?.onBottomInsetChanging = { keyboardOpen, retreating ->"))
+        assertTrue(activity.contains("before = ::captureTranscriptAnchor"))
+
+        // Captured while the viewport still has its old size, restored on the
+        // viewport's own resize so it cannot land before the resize it is
+        // compensating for.
         assertTrue(activity.contains("findLastVisibleItemPosition()"))
-        assertTrue(activity.contains("transcriptAnchorBottomGap = recycler.height - anchor.bottom"))
-        assertTrue(activity.contains("recycler.height - transcriptAnchorBottomGap - transcriptAnchorHeight"))
+        assertTrue(activity.contains("transcriptAnchorTopFromBottom = anchor.top - recycler.height"))
+        assertTrue(activity.contains("if (bottom - top != oldBottom - oldTop) restoreTranscriptAnchorAfterResize()"))
+
+        // An absolute position, not a shift by the height difference: a growing
+        // viewport is already partly corrected by the transcript itself, and a
+        // blind shift would double that and hide the newest message.
+        assertTrue(activity.contains("recycler.height + transcriptAnchorTopFromBottom"))
+        assertTrue(activity.contains("scrollToPositionWithOffset("))
+
+        // An open keyboard locks the conversation in place. A reply arriving or
+        // growing must never move it out from under the user, so nothing here
+        // may make an incoming message win over the held position.
+        assertTrue(composer.contains("isKeyboardOpen = imeBottom > 0"))
+        assertTrue(activity.contains("keyboardInput?.isKeyboardOpen == true && !imeClosingForSend"))
+        assertTrue(activity.contains("if (!disableAutoScroll && !keyboardHolding)"))
+
+        // The single exception: the keyboard closing because the user hit Send.
+        // That close is the user asking for the reply, so the transcript follows
+        // it. The flag is consumed by the next keyboard change, so reopening the
+        // keyboard mid-reply locks the conversation again.
+        assertTrue(activity.contains("imeClosingForSend = true\n        composerSurface?.dismissImeForSend()"))
+        // The exception ends when the keyboard is actually gone, not on the
+        // first inset frame: a close can take several, and the early ones still
+        // report the keyboard as present. Consuming it eagerly hands the rest of
+        // the close back to the hold and strands the reply off screen.
+        assertTrue(composer.contains("val retreating = imeBottom < lastImeBottom"))
+        assertTrue(activity.contains("if (imeClosingForSend && (retreating || !keyboardOpen))"))
+        assertTrue(activity.contains("if (!keyboardOpen) imeClosingForSend = false"))
+
+        // Opening the keyboard mid-reply ends automatic follow for the rest of
+        // that reply. Closing the keyboard again must not resume it, so this
+        // uses the same latch as a touch rather than a keyboard-open check.
+        assertTrue(activity.contains("if (keyboardOpen && replyIsStreaming()) disableAutoScroll = true"))
+
         assertTrue(!activity.contains("WindowInsetsAnimationCompat.Callback"))
         assertTrue(activity.contains("composerSurface?.dismissImeForSend()"))
         assertTrue(activity.contains("composerSurface?.resetAfterSend()"))

@@ -573,6 +573,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // chat UI exists (a dialog + Summoning Circle, or the API Endpoints screen).
     private var providerRestoreOutcome: NewChatProviderRestore.Outcome? = null
     private var disableAutoScroll = false
+
+    // Set when a send closes the keyboard, consumed by the first keyboard
+    // change that follows, so only that one close skips the position hold.
+    private var imeClosingForSend = false
     private var inCost: Float = 0.0f
     private var outCost: Float = 0.0f
     private var usageIn: Int = 0
@@ -2727,21 +2731,49 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         composerSurface?.setExpansionListener { expanded ->
             setComposerContainerExpanded(expanded)
         }
+        // The RecyclerView is constrained directly to the composer host, so its
+        // bottom edge follows both the composer's own growth and every IME
+        // inset frame. Both of those note the transcript's position first,
+        // while the viewport is still its old size, and the viewport's own
+        // resize below is what puts the conversation back against the moving
+        // edge afterwards.
         composerSurface?.setResizeAnchorListener(
             before = ::captureTranscriptAnchor,
-            after = ::restoreTranscriptAnchor
+            after = null
         )
-        // The RecyclerView is constrained directly to the composer host, so its
-        // bottom edge already follows every IME inset frame. Do not also force
-        // scroll offsets from an IME animation callback: that fights the live
-        // constraint resize and makes the transcript/composer seam jump.
+        keyboardInput?.onBottomInsetChanging = { keyboardOpen, retreating ->
+            // The keyboard closing because the user hit Send is the one change
+            // no position is held across: that send asked for the reply, and
+            // the transcript is meant to follow it up the screen. Every other
+            // arrival or departure holds the conversation where it was.
+            //
+            // That close can take several frames, and the early ones still
+            // report the keyboard as present. So the exception lasts until the
+            // keyboard is actually gone rather than ending at the first frame,
+            // which would hand the rest of the close back to the hold and
+            // strand the reply off screen. The keyboard coming back up ends it
+            // immediately, whatever it interrupts.
+            if (imeClosingForSend && (retreating || !keyboardOpen)) {
+                if (!keyboardOpen) imeClosingForSend = false
+            } else {
+                imeClosingForSend = false
+                // Opening the keyboard while a reply is streaming means
+                // something on screen caught the user's attention. Following
+                // stops for the rest of that reply, exactly as touching the
+                // conversation does, and putting the keyboard away again does
+                // not start it back up.
+                if (keyboardOpen && replyIsStreaming()) disableAutoScroll = true
+                captureTranscriptAnchor()
+            }
+        }
         root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
         keyboardInput?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
-        chat?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        chat?.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (bottom - top != oldBottom - oldTop) restoreTranscriptAnchorAfterResize()
             scheduleComposerHeightUpdate()
         }
         composerSurface?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -3261,39 +3293,71 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         button.isEnabled = visible
     }
 
-    /** Position and geometry of the transcript row touching the composer's
-     * top edge before the composer or IME changes size. */
+    /** The transcript row nearest the composer, and where its top edge sat
+     *  measured up from the bottom of the chat viewport — the edge that moves
+     *  when the keyboard arrives or leaves. */
     private var transcriptAnchorPosition = RecyclerView.NO_POSITION
-    private var transcriptAnchorBottomGap = 0
-    private var transcriptAnchorHeight = 0
+    private var transcriptAnchorTopFromBottom = 0
+    private var transcriptAnchorPending = false
 
     /**
-     * The bottommost visible row is the stable reference because its bottom
-     * is the content immediately above the composer. Preserving that row and
-     * its exact gap keeps the same text at the composer's top edge while still
-     * allowing ordinary transcript scrolling in either composer mode.
+     * Notes where the conversation is sitting, measured from the composer's
+     * top edge, while the chat viewport is still its old size.
+     *
+     * Called from the two things that resize that viewport: the composer
+     * promoting, collapsing or expanding, and the keyboard arriving or
+     * leaving. Both report before they change anything, which is the only
+     * moment the pre-resize geometry can still be read.
      */
     private fun captureTranscriptAnchor() {
         val recycler = chat ?: return
+        if (recycler.height <= 0) return
         val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
         val position = layoutManager.findLastVisibleItemPosition()
-        if (position == RecyclerView.NO_POSITION) {
-            transcriptAnchorPosition = RecyclerView.NO_POSITION
-            return
-        }
+        if (position == RecyclerView.NO_POSITION) return
         val anchor = layoutManager.findViewByPosition(position) ?: return
         transcriptAnchorPosition = position
-        transcriptAnchorBottomGap = recycler.height - anchor.bottom
-        transcriptAnchorHeight = anchor.height
+        transcriptAnchorTopFromBottom = anchor.top - recycler.height
+        transcriptAnchorPending = true
     }
 
-    private fun restoreTranscriptAnchor() {
+    /**
+     * Puts the noted row back the same distance up from the viewport's new
+     * bottom edge, so the conversation travels with the composer instead of
+     * standing still while the composer moves.
+     *
+     * Whatever line sat immediately above the message box is still there once
+     * the keyboard is up, and the same lines come back down with the box when
+     * the keyboard goes away. It runs on the viewport's own resize rather than
+     * on a timer or an inset animation callback, so it cannot land before the
+     * resize it is compensating for.
+     *
+     * Restoring the noted position rather than shifting by the height
+     * difference is what makes it exact in both directions: a growing viewport
+     * is already partly corrected by the transcript itself, and a blind shift
+     * would double that correction and push the newest message under the
+     * composer.
+     */
+    private fun restoreTranscriptAnchorAfterResize() {
+        if (!transcriptAnchorPending) return
+        transcriptAnchorPending = false
         val recycler = chat ?: return
         val position = transcriptAnchorPosition
-        if (position == RecyclerView.NO_POSITION) return
-        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
-        val targetTop = recycler.height - transcriptAnchorBottomGap - transcriptAnchorHeight
-        layoutManager.scrollToPositionWithOffset(position, targetTop)
+        // A reply arriving or growing never takes this over: the noted position
+        // wins, so the conversation cannot be moved out from under the user
+        // while they have the keyboard open.
+        if (position == RecyclerView.NO_POSITION ||
+            position >= (adapter?.itemCount ?: 0)
+        ) {
+            return
+        }
+        recycler.post {
+            val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return@post
+            layoutManager.scrollToPositionWithOffset(
+                position,
+                recycler.height + transcriptAnchorTopFromBottom
+            )
+        }
     }
 
     /**
@@ -8508,6 +8572,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // A send action always closes the software keyboard. Capacity or
         // capability checks may continue asynchronously, but the tap has
         // already completed the user's editing gesture.
+        //
+        // This close belongs to the send rather than to the user putting the
+        // keyboard away, so the transcript is left free to follow the reply
+        // instead of holding the position it had before the message was sent.
+        imeClosingForSend = true
         composerSurface?.dismissImeForSend()
 
         val compactCommand = org.teslasoft.assistant.util.summarizer.CompactCommand.parse(rawMessage)
@@ -9131,6 +9200,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // blob as the text — there is never a window where the text is final but the
     // state is stale.
 
+    /** Whether the newest reply is still being generated. */
+    private fun replyIsStreaming(): Boolean =
+        messages.lastOrNull()?.get(MessageCompletionState.KEY_STATE)?.toString() ==
+            MessageCompletionState.STREAMING
+
     /** Tag the just-added assistant placeholder as actively streaming. Not
      *  saved eagerly: the marker rides the first mid-stream save, so no
      *  fragment ever reaches disk without it. A death before that first save
@@ -9588,8 +9662,22 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         json != null && ChatInclude.listFromJson(json).any { it.hasLiveImageBytes() }
     }
 
+    /**
+     * Moves the transcript to follow new content, but only when the user has
+     * left it free to do so.
+     *
+     * An open keyboard means the user is holding a place in the conversation,
+     * so nothing automatic moves it while the keyboard is up — a reply
+     * arriving or growing included. Their own scrolling still works normally;
+     * this only stops the screen from moving on its own.
+     *
+     * The exception is the moment a send closes the keyboard, where the user
+     * has just asked for the reply and the transcript is meant to follow it.
+     * Reopening the keyboard while that reply streams locks it again.
+     */
     private fun scroll(mode: Boolean) {
-        if (!disableAutoScroll) {
+        val keyboardHolding = keyboardInput?.isKeyboardOpen == true && !imeClosingForSend
+        if (!disableAutoScroll && !keyboardHolding) {
             val itemCount = adapter?.itemCount ?: 0
 
             if (mode) {
