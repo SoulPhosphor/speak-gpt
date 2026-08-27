@@ -1731,6 +1731,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             host = currentProfile.host,
             apiKey = currentProfile.apiKey,
             chatEndpoint = currentProfile.chatEndpoint,
+            speechEndpoint = currentProfile.speechEndpoint,
             authType = currentProfile.authType,
             model = preferences?.getModel() ?: currentProfile.model,
             temperature = preferences?.getTemperature() ?: currentProfile.temperature,

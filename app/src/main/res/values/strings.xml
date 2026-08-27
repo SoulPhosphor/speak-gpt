@@ -392,6 +392,8 @@
     <string name="api_endpoint_host_full">API Service Endpoint Base URL</string>
     <string name="api_endpoint_key_unchanged">API key</string>
     <string name="api_endpoint_chat_endpoint">Chat completions endpoint</string>
+    <string name="api_endpoint_speech_endpoint">Text to Speech Endpoint</string>
+    <string name="api_endpoint_speech_endpoint_help">Path added to the Base URL, e.g. /audio/speech.</string>
     <string name="api_endpoint_chat_endpoint_help">Path added to the Base URL, e.g. /chat/completions. Most OpenAI-compatible providers use this default.</string>
     <string name="api_endpoint_auth_mode">Auth mode</string>
     <string name="api_endpoint_auth_help">How your API key is sent. Bearer works for OpenAI, GLM/z.ai, OpenRouter and Groq.</string>

@@ -224,4 +224,47 @@ class ApiEndpointStableIdTest {
         assertEquals("sk-legacy", store.getApiEndpoint(legacyId).apiKey)
         assertNotEquals("id not re-derived from the new label", Hash.hash("Renamed"), loaded.id)
     }
+    @Test fun legacyProfileWithoutSpeechPathUsesDefaultWithoutRewritingIt() {
+        val id = "legacy"
+        prefs.edit().putString(id + "_label", "Legacy").apply()
+        assertEquals(ApiEndpointObject.DEFAULT_SPEECH_ENDPOINT, store.getApiEndpoint(id).speechEndpoint)
+        assertTrue(!prefs.contains(id + "_speech_endpoint"))
+    }
+
+    @Test fun customSpeechPathSurvivesRenameAndUnrelatedEditsWithCredentialsIntact() {
+        val id = store.setApiEndpoint(sample("Speech").apply { speechEndpoint = "/custom/speech/" })
+        val source = org.teslasoft.assistant.preferences.tts.SavedTtsSource("tts-stable", id, "voice/model:free")
+        val loaded = store.getApiEndpoint(id).apply {
+            label = "Renamed"
+            model = "another-chat-model"
+            temperature = 1.2f
+        }
+        store.setApiEndpoint(loaded)
+        val reopened = ApiEndpointPreferences.createForTest(prefs, secrets).getApiEndpoint(source.endpointId)
+        assertEquals("/custom/speech/", reopened.speechEndpoint)
+        assertEquals("Renamed", reopened.label)
+        assertEquals("sk-secret-123", reopened.apiKey)
+        assertEquals(id, reopened.id)
+    }
+
+    @Test fun chatAndSpeechPathsAreIndependentAndDeletedWithTheirProfile() {
+        val id = store.setApiEndpoint(sample("Paths"))
+        store.setApiEndpoint(store.getApiEndpoint(id).apply { speechEndpoint = "custom/speech/" })
+        assertEquals(ApiEndpointObject.DEFAULT_CHAT_ENDPOINT, store.getApiEndpoint(id).chatEndpoint)
+        store.setApiEndpoint(store.getApiEndpoint(id).apply { chatEndpoint = "/custom/chat/completions" })
+        assertEquals("custom/speech/", store.getApiEndpoint(id).speechEndpoint)
+        store.deleteApiEndpoint(id)
+        assertTrue(!prefs.contains(id + "_speech_endpoint"))
+    }
+
+    @Test fun speechUrlAppendPreservesBasePrefixAndCustomTrailingSlash() {
+        for (base in listOf("https://example.com/api/v1", " https://example.com/api/v1/ ")) {
+            for (path in listOf("/audio/speech", "audio/speech", " /audio/speech ")) {
+                assertEquals("https://example.com/api/v1/audio/speech", ApiEndpointObject.composeSpeechUrl(base, path))
+            }
+            assertEquals("https://example.com/api/v1/custom/speech/", ApiEndpointObject.composeSpeechUrl(base, "/custom/speech/"))
+            assertEquals("https://example.com/api/v1/audio/speech", ApiEndpointObject.composeSpeechUrl(base, "  "))
+        }
+    }
+
 }

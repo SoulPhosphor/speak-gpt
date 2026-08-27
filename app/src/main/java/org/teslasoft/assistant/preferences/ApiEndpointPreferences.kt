@@ -103,6 +103,7 @@ class ApiEndpointPreferences private constructor(
         val label = getString(id + "_label", "")
         val host = getString(id + "_host", "")
         val chatEndpoint = getString(id + "_chat_endpoint", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT)
+        val speechEndpoint = getString(id + "_speech_endpoint", ApiEndpointObject.DEFAULT_SPEECH_ENDPOINT)
         val authType = getString(id + "_auth_type", ApiEndpointObject.AUTH_BEARER)
         val apiKey: String = secrets.get(id + "_api_key")
         val model = getString(id + "_model", ApiEndpointObject.DEFAULT_MODEL)
@@ -157,7 +158,7 @@ class ApiEndpointPreferences private constructor(
             contextWindowTokens, storedContextModel,
             imageCapabilityByModel, toolCapabilityByModel,
             providerDiscoveryPath, identity,
-            reasoningCapabilityByModel, reasoningRejectedLevelsByModel
+            reasoningCapabilityByModel, reasoningRejectedLevelsByModel, speechEndpoint
         )
     }
 
@@ -167,6 +168,7 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_label") }
         preferences.edit { remove(id + "_host") }
         preferences.edit { remove(id + "_chat_endpoint") }
+        preferences.edit { remove(id + "_speech_endpoint") }
         preferences.edit { remove(id + "_auth_type") }
         preferences.edit { remove(id + "_model") }
         preferences.edit { remove(id + "_temperature") }
@@ -211,6 +213,7 @@ class ApiEndpointPreferences private constructor(
         putString(id + "_label", endpoint.label)
         putString(id + "_host", endpoint.host)
         putString(id + "_chat_endpoint", endpoint.chatEndpoint)
+        putString(id + "_speech_endpoint", endpoint.speechEndpoint)
         putString(id + "_auth_type", endpoint.authType)
         putString(id + "_model", endpoint.model)
         putString(id + "_temperature", endpoint.temperature.toString())

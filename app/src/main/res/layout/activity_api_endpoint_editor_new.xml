@@ -188,6 +188,32 @@
                     android:textColorHint="?attr/appSubtleTextColor" />
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="18dp"
+                android:layout_marginEnd="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/label_speech_endpoint"
+                    style="@style/Widget.App.Field.Label"
+                    android:text="@string/api_endpoint_speech_endpoint"
+                    android:visibility="gone" />
+
+                <TextView
+                    style="@style/Widget.App.Field.Hint"
+                    android:text="@string/api_endpoint_speech_endpoint_help" />
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/field_speech_endpoint"
+                    style="@style/Widget.App.Field.Box"
+                    android:hint="@string/api_endpoint_speech_endpoint"
+                    android:singleLine="true"
+                    android:textColorHint="?attr/appSubtleTextColor" />
+            </LinearLayout>
+
             <!-- API key. Empty on a new endpoint. -->
             <LinearLayout
                 android:layout_width="match_parent"
