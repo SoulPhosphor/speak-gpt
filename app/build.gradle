@@ -213,6 +213,7 @@ dependencies {
 
     // JVM unit tests (app/src/test); run in CI via "gradlew test".
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
     // Real org.json for unit tests (the android.jar stub throws); lets the
     // memory seed codec be tested without Robolectric.
     testImplementation 'org.json:json:20240303'
