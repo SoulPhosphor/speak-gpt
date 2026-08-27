@@ -107,6 +107,11 @@ class ChatActionSurfaceSourceContractTest {
         assertTrue(activity.contains("if (imeClosingForSend && (retreating || !keyboardOpen))"))
         assertTrue(activity.contains("if (!keyboardOpen) imeClosingForSend = false"))
 
+        // Opening the keyboard mid-reply ends automatic follow for the rest of
+        // that reply. Closing the keyboard again must not resume it, so this
+        // uses the same latch as a touch rather than a keyboard-open check.
+        assertTrue(activity.contains("if (keyboardOpen && replyIsStreaming()) disableAutoScroll = true"))
+
         assertTrue(!activity.contains("WindowInsetsAnimationCompat.Callback"))
         assertTrue(activity.contains("composerSurface?.dismissImeForSend()"))
         assertTrue(activity.contains("composerSurface?.resetAfterSend()"))

@@ -86,6 +86,11 @@ If an AI reply is already streaming when the keyboard opens, opening the
 keyboard immediately ends automatic follow and holds the current position.
 The reply may continue generating, but it must not drag the conversation.
 
+Opening the keyboard mid-reply stops automatic follow for **the rest of that
+reply**. Closing the keyboard again does not resume it. The user opened the
+keyboard because something caught their attention, so that content stays in
+front of them until they send the next message.
+
 ### 5. The user can scroll freely with the keyboard open
 
 The keyboard being open must never disable or interfere with manual scrolling.
@@ -125,7 +130,7 @@ These cases are intentionally different and must not be collapsed into one
 | AI reply arrives/grows while keyboard is open | Do not move conversation |
 | User presses Send | Release hold and start automatic follow for the new reply |
 | User touches/scrolls during generation | Stop automatic follow for the rest of that reply |
-| User opens keyboard during generation | Stop automatic follow and hold current position |
+| User opens keyboard during generation | Stop automatic follow for the rest of that reply, and hold current position; closing the keyboard again does not resume it |
 
 ## Why this matters
 

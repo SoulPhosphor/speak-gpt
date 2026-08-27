@@ -2757,6 +2757,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (!keyboardOpen) imeClosingForSend = false
             } else {
                 imeClosingForSend = false
+                // Opening the keyboard while a reply is streaming means
+                // something on screen caught the user's attention. Following
+                // stops for the rest of that reply, exactly as touching the
+                // conversation does, and putting the keyboard away again does
+                // not start it back up.
+                if (keyboardOpen && replyIsStreaming()) disableAutoScroll = true
                 captureTranscriptAnchor()
             }
         }
@@ -9193,6 +9199,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // reply's own message map, so the marker travels atomically in the same JSON
     // blob as the text — there is never a window where the text is final but the
     // state is stale.
+
+    /** Whether the newest reply is still being generated. */
+    private fun replyIsStreaming(): Boolean =
+        messages.lastOrNull()?.get(MessageCompletionState.KEY_STATE)?.toString() ==
+            MessageCompletionState.STREAMING
 
     /** Tag the just-added assistant placeholder as actively streaming. Not
      *  saved eagerly: the marker rides the first mid-stream save, so no
