@@ -5899,6 +5899,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // This turn is being collected; any capture callback still in flight
         // (a duplicate end-of-turn, a racing error) belongs to the past.
         whisperTurnToken++
+        // The token for THIS collection. Every stop funnel bumps whisperTurnToken,
+        // so if it moves before transcription finishes the user stopped mid-way
+        // and the result must be discarded (see the guard below).
+        val turnToken = whisperTurnToken
         btnMicro?.isEnabled = false
         btnSend?.isEnabled = false
         setGenerationProgressVisible(true)
@@ -5932,6 +5936,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             LocalWhisperEngine.Phase.TRANSCRIBING -> getString(R.string.hint_transcribing)
                         }
                     }
+                if (turnToken != whisperTurnToken) {
+                    // A stop fired while we were transcribing (e.g. the hands-free
+                    // stop button tapped during transcription). The transcript is
+                    // stale: don't submit it or start a reply/readback, and settle
+                    // the UI so the conversation button drops its red hands-free
+                    // look now instead of only on a second tap.
+                    restoreUIState()
+                    return@launch
+                }
                 processLocalWhisperTranscript(transcription)
             } catch (_: CancellationException) {
                 restoreUIState()
