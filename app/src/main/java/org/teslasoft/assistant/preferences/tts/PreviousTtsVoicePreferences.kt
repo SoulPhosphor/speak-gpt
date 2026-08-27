@@ -61,7 +61,7 @@ class PreviousTtsVoicePreferences internal constructor(private val storage: TtsS
         }
 
     private fun read(): TtsVoiceSelection? = readTts(storage, null) { content ->
-        val root = JSONObject(content).apply { requireVersionOne() }
+        val root = parseTtsObject(content).apply { requireVersionOne() }
         require(root.has("previous"))
         if (root.isNull("previous")) null else {
             val item = root.getJSONObject("previous")

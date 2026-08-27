@@ -122,6 +122,22 @@ class SavedTtsSourcesPreferencesTest {
         assertEquals(0, storage.writes)
     }
 
+    @Test fun trailingDamageAfterAValidCollectionBlocksMutation() {
+        val entry = store.add("ep", "model", only("a")).getOrThrow()
+        storage.content += " damaged suffix"
+        val before = storage.content
+        assertFailure(TtsStorageFailure.INVALID_DATA, store.removeEntryIds(setOf(entry.id)))
+        assertEquals(before, storage.content)
+    }
+
+    @Test fun multipleInstancesReloadBeforeEveryMutation() {
+        val other = SavedTtsSourcesPreferences(storage)
+        val first = store.add("ep", "model", only("a")).getOrThrow()
+        val second = other.add("ep", "model", only("b")).getOrThrow()
+        val changed = store.replaceRouting(first.id, only("c")).getOrThrow()
+        assertEquals(listOf(changed, second), other.load().getOrThrow())
+    }
+
     @Test fun invalidEntryTypesAndRepeatedIdsProtectTheWholeCollection() {
         store.add("ep", "model", only("a")).getOrThrow()
         val root = JSONObject(storage.content!!)

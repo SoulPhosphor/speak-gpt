@@ -7,6 +7,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import org.json.JSONArray
 import org.json.JSONObject
+import org.json.JSONTokener
 
 /** Typed failures let callers distinguish unreadable data from an empty collection. */
 enum class TtsStorageFailure { READ_FAILED, INVALID_DATA, WRITE_FAILED, INVALID_SELECTION, DUPLICATE, NOT_FOUND }
@@ -81,3 +82,11 @@ internal fun JSONObject.requireVersionOne() {
 }
 
 internal fun stringsJson(values: List<String>): JSONArray = JSONArray(values)
+
+/** JSONObject alone accepts a valid object followed by damaged/trailing content. */
+internal fun parseTtsObject(content: String): JSONObject {
+    val tokens = JSONTokener(content)
+    val root = tokens.nextValue()
+    require(root is JSONObject && tokens.nextClean() == '\u0000')
+    return root
+}

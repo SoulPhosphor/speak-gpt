@@ -67,7 +67,7 @@ class SavedTtsSourcesPreferences internal constructor(private val storage: TtsSt
     }
 
     private fun read(): List<SavedTtsSource> = readTts(storage, emptyList()) { content ->
-        val root = JSONObject(content).apply { requireVersionOne() }
+        val root = parseTtsObject(content).apply { requireVersionOne() }
         val array = root.getJSONArray("entries")
         (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
