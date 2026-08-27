@@ -1367,6 +1367,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
+        // Orphaned-capture safety net. If the engine still has a live on-device
+        // capture holding the mic while the UI is not recording (and not in a
+        // hands-free turn), that session was leaked by an earlier stop/cancel and
+        // is what keeps the OS mic indicator up every time this screen returns.
+        // Release it. isRecording() is true only during actual capture — never
+        // during a transcription — so this can never interrupt a real transcribe.
+        if (!isRecording && !isHandsFreeEngaged() &&
+            LocalWhisperEngine.get().isRecording()
+        ) {
+            try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
+            micIdle()
+        }
+
         // Safety net for the top action bar. The settings cog is a shared-element
         // scene-transition target, so Android hides it (and can leave the bar in a
         // half-transitioned state) during the animation, restoring it when the
@@ -5510,6 +5523,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
             return
         }
+        // Clean slate before opening the mic. If a previous turn left a capture
+        // session alive that the UI lost track of (an orphan), the engine would
+        // otherwise refuse this start as "busy" while the orphan keeps holding
+        // the mic — the "it opens the mic, flips back, then errors, and then
+        // won't work again" case. cancel() is idempotent and only tears down a
+        // live *capture*; it never touches an in-progress transcription (that
+        // runs with capture already stopped).
+        LocalWhisperEngine.get().cancel()
         micRecording()
         isRecording = true
         val token = ++whisperTurnToken
@@ -5524,7 +5545,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (!ok) {
             isRecording = false
             micIdle()
-            Toast.makeText(this, R.string.local_whisper_capture_failed, Toast.LENGTH_LONG).show()
+            showAudioCaptureErrorDialog()
             return
         }
         preloadActiveLocalWhisperModel()
@@ -5729,13 +5750,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
         setGenerationProgressVisible(false)
-        if (preferences?.getHandsFreeMode() != true && !isFinishing && !isDestroyed) {
-            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setTitle(R.string.label_audio_error)
-                .setMessage(R.string.local_whisper_capture_failed)
-                .setPositiveButton(R.string.btn_close) { _, _ -> }
-                .show()
-        }
+        if (preferences?.getHandsFreeMode() != true) showAudioCaptureErrorDialog()
+    }
+
+    /**
+     * Readable, dismiss-when-ready surface for an on-device capture failure —
+     * the house persistent-message dialog, reused so the error can actually be
+     * read (a 3-second toast could not) and so every capture-failure path shows
+     * the same thing. Hands-free never calls this: there the give-up chime plus
+     * the Event log are the screen-off signals.
+     */
+    private fun showAudioCaptureErrorDialog() {
+        if (isFinishing || isDestroyed) return
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.label_audio_error)
+            .setMessage(R.string.local_whisper_capture_failed)
+            .setPositiveButton(R.string.btn_close) { _, _ -> }
+            .show()
     }
 
     /** Surface the per-recording diagnostics when a hands-free turn ends. Two
