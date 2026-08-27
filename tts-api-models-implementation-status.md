@@ -1,8 +1,10 @@
 # API Voice Models — Implementation Status
 
-## Phase 1 — Code implemented; Android Checks pending
+## Phase 1 — Complete
 
 - Branch: `feature/tts-api-models-phase-1`.
+- Implementation/test commit: `647407c7878e14e2d986ebab8cf0147f31c5dc7e`.
+- Android Checks: https://github.com/SoulPhosphor/speak-gpt/actions/runs/33067674630
 - Baseline: `e2180c3dc048f8f21aa4f4d7a127b2faddc597fa` on `main`.
 - No later phase is implemented by this change. No merge to `main` is authorized.
 
@@ -88,9 +90,11 @@ Tests, relative to `app/src/test/java/org/teslasoft/assistant/`:
   field, correct immediate placement after chat field and shared field style;
   passed. Strings XML parsed successfully.
 - `git diff --check`: passed.
-- Full verification required on the implementation commit through Android Checks:
-  `./gradlew --no-daemon test`, `./gradlew --no-daemon assembleDebug`, and
-  `./gradlew --no-daemon assembleDebugAndroidTest`. Results pending.
+- Android Checks on the implementation/test commit above:
+  - `./gradlew --no-daemon test`: passed.
+  - `./gradlew --no-daemon assembleDebug`: passed.
+  - `./gradlew --no-daemon assembleDebugAndroidTest`: passed.
+- The final status-only commit does not change the tested application or test code.
 - Device/emulator review: not performed. No live speech requests or paid calls.
 - Playback, remote routing support, source activation and deletion recovery are
   not claimed verified. These remain the assigned work of later phases.
