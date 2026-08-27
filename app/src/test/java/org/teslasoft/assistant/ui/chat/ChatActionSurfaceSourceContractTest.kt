@@ -70,7 +70,7 @@ class ChatActionSurfaceSourceContractTest {
         // so it has to report before it takes or gives back that space.
         // Narrowing this back to composer-only resizes is what puts the
         // conversation back to jumping when the keyboard opens and closes.
-        assertTrue(composer.contains("onBottomInsetChanging?.invoke()"))
+        assertTrue(composer.contains("onBottomInsetChanging?.invoke(isKeyboardOpen, retreating)"))
         assertTrue(activity.contains("keyboardInput?.onBottomInsetChanging = { keyboardOpen, retreating ->"))
         assertTrue(activity.contains("before = ::captureTranscriptAnchor"))
 
