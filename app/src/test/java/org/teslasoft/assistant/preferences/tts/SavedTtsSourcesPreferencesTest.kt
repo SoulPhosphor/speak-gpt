@@ -65,6 +65,11 @@ class SavedTtsSourcesPreferencesTest {
         // The same provider in Preferred is not a new combination solely because its mode changed.
         assertFailure(TtsStorageFailure.DUPLICATE, store.add("ep", "model",
             TtsRoutingSettings(TtsRoutingMode.PREFERRED, providerOrder = listOf("a"))))
+        // A mode-only edit must not bypass duplicate detection through inactive routing fields.
+        assertFailure(TtsStorageFailure.DUPLICATE, store.add("ep", "model",
+            first.routing.copy(mode = TtsRoutingMode.AUTOMATIC)))
+        assertFailure(TtsStorageFailure.DUPLICATE, store.replaceRouting(second.id,
+            first.routing.copy(mode = TtsRoutingMode.PREFERRED)))
         assertEquals(before, storage.content)
     }
 

@@ -17,10 +17,9 @@ data class TtsRoutingSettings(
     }
 
     /** Mode/fallback/priority changes alone do not create a different provider combination. */
-    internal fun providerCombination(): Set<String> = when (mode) {
-        TtsRoutingMode.AUTOMATIC -> emptySet()
-        TtsRoutingMode.PREFERRED -> providerOrder.toSet()
-        TtsRoutingMode.ONLY -> setOf(selectedProvider)
+    internal fun providerCombination(): Set<String> = buildSet {
+        addAll(providerOrder)
+        if (selectedProvider.isNotBlank()) add(selectedProvider)
     }
 }
 
