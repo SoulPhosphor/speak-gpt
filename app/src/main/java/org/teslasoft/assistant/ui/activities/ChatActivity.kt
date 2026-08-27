@@ -2727,21 +2727,25 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         composerSurface?.setExpansionListener { expanded ->
             setComposerContainerExpanded(expanded)
         }
+        // The RecyclerView is constrained directly to the composer host, so its
+        // bottom edge follows both the composer's own growth and every IME
+        // inset frame. Both of those note the transcript's position first,
+        // while the viewport is still its old size, and the viewport's own
+        // resize below is what puts the conversation back against the moving
+        // edge afterwards.
         composerSurface?.setResizeAnchorListener(
             before = ::captureTranscriptAnchor,
-            after = ::restoreTranscriptAnchor
+            after = null
         )
-        // The RecyclerView is constrained directly to the composer host, so its
-        // bottom edge already follows every IME inset frame. Do not also force
-        // scroll offsets from an IME animation callback: that fights the live
-        // constraint resize and makes the transcript/composer seam jump.
+        keyboardInput?.onBottomInsetChanging = ::captureTranscriptAnchor
         root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
         keyboardInput?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
-        chat?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        chat?.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (bottom - top != oldBottom - oldTop) restoreTranscriptAnchorAfterResize()
             scheduleComposerHeightUpdate()
         }
         composerSurface?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -3261,39 +3265,73 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         button.isEnabled = visible
     }
 
-    /** Position and geometry of the transcript row touching the composer's
-     * top edge before the composer or IME changes size. */
+    /** The transcript row nearest the composer, and where its top edge sat
+     *  measured up from the bottom of the chat viewport — the edge that moves
+     *  when the keyboard arrives or leaves. */
     private var transcriptAnchorPosition = RecyclerView.NO_POSITION
-    private var transcriptAnchorBottomGap = 0
-    private var transcriptAnchorHeight = 0
+    private var transcriptAnchorTopFromBottom = 0
+    private var transcriptAnchorItemCount = 0
+    private var transcriptAnchorPending = false
 
     /**
-     * The bottommost visible row is the stable reference because its bottom
-     * is the content immediately above the composer. Preserving that row and
-     * its exact gap keeps the same text at the composer's top edge while still
-     * allowing ordinary transcript scrolling in either composer mode.
+     * Notes where the conversation is sitting, measured from the composer's
+     * top edge, while the chat viewport is still its old size.
+     *
+     * Called from the two things that resize that viewport: the composer
+     * promoting, collapsing or expanding, and the keyboard arriving or
+     * leaving. Both report before they change anything, which is the only
+     * moment the pre-resize geometry can still be read.
      */
     private fun captureTranscriptAnchor() {
         val recycler = chat ?: return
+        if (recycler.height <= 0) return
         val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
         val position = layoutManager.findLastVisibleItemPosition()
-        if (position == RecyclerView.NO_POSITION) {
-            transcriptAnchorPosition = RecyclerView.NO_POSITION
-            return
-        }
+        if (position == RecyclerView.NO_POSITION) return
         val anchor = layoutManager.findViewByPosition(position) ?: return
         transcriptAnchorPosition = position
-        transcriptAnchorBottomGap = recycler.height - anchor.bottom
-        transcriptAnchorHeight = anchor.height
+        transcriptAnchorTopFromBottom = anchor.top - recycler.height
+        transcriptAnchorItemCount = adapter?.itemCount ?: 0
+        transcriptAnchorPending = true
     }
 
-    private fun restoreTranscriptAnchor() {
+    /**
+     * Puts the noted row back the same distance up from the viewport's new
+     * bottom edge, so the conversation travels with the composer instead of
+     * standing still while the composer moves.
+     *
+     * Whatever line sat immediately above the message box is still there once
+     * the keyboard is up, and the same lines come back down with the box when
+     * the keyboard goes away. It runs on the viewport's own resize rather than
+     * on a timer or an inset animation callback, so it cannot land before the
+     * resize it is compensating for.
+     *
+     * Restoring the noted position rather than shifting by the height
+     * difference is what makes it exact in both directions: a growing viewport
+     * is already partly corrected by the transcript itself, and a blind shift
+     * would double that correction and push the newest message under the
+     * composer.
+     */
+    private fun restoreTranscriptAnchorAfterResize() {
+        if (!transcriptAnchorPending) return
+        transcriptAnchorPending = false
         val recycler = chat ?: return
         val position = transcriptAnchorPosition
-        if (position == RecyclerView.NO_POSITION) return
-        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
-        val targetTop = recycler.height - transcriptAnchorBottomGap - transcriptAnchorHeight
-        layoutManager.scrollToPositionWithOffset(position, targetTop)
+        // A message arriving between the two halves means the transcript's own
+        // scrolling owns where the conversation should be, not a position noted
+        // before that message existed.
+        if (position == RecyclerView.NO_POSITION ||
+            (adapter?.itemCount ?: 0) != transcriptAnchorItemCount
+        ) {
+            return
+        }
+        recycler.post {
+            val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return@post
+            layoutManager.scrollToPositionWithOffset(
+                position,
+                recycler.height + transcriptAnchorTopFromBottom
+            )
+        }
     }
 
     /**

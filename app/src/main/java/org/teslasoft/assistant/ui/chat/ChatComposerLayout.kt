@@ -371,6 +371,18 @@ class ChatImeInsetLayout @JvmOverloads constructor(
     private val baseRight = paddingRight
     private val baseBottom = paddingBottom
 
+    /**
+     * Reports that the keyboard is about to arrive or leave, immediately
+     * before this container takes up or gives back that space and the chat
+     * viewport above it resizes.
+     *
+     * ChatActivity uses the callback to note where the conversation is
+     * sitting while the viewport still has its old size, so it can hold the
+     * same content against the composer's top edge across the change. This is
+     * the last moment that geometry can be read.
+     */
+    var onBottomInsetChanging: (() -> Unit)? = null
+
     init {
         ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
             val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
@@ -378,6 +390,7 @@ class ChatImeInsetLayout @JvmOverloads constructor(
             val targetBottom = baseBottom + max(navBottom, imeBottom)
 
             if (view.paddingBottom != targetBottom) {
+                onBottomInsetChanging?.invoke()
                 view.setPadding(baseLeft, baseTop, baseRight, targetBottom)
             }
             insets

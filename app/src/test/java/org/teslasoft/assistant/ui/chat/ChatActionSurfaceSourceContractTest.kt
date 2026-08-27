@@ -62,12 +62,31 @@ class ChatActionSurfaceSourceContractTest {
     }
 
     @Test
-    fun composerResizePinsTranscriptWithoutFightingTheImeConstraint() {
+    fun everyViewportResizePinsTranscriptWithoutFightingTheImeConstraint() {
         val activity = source("main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
+        val composer = source("main/java/org/teslasoft/assistant/ui/chat/ChatComposerLayout.kt")
 
+        // The keyboard resizes the chat viewport exactly as the composer does,
+        // so it has to report before it takes or gives back that space.
+        // Narrowing this back to composer-only resizes is what puts the
+        // conversation back to jumping when the keyboard opens and closes.
+        assertTrue(composer.contains("onBottomInsetChanging?.invoke()"))
+        assertTrue(activity.contains("keyboardInput?.onBottomInsetChanging = ::captureTranscriptAnchor"))
+        assertTrue(activity.contains("before = ::captureTranscriptAnchor"))
+
+        // Captured while the viewport still has its old size, restored on the
+        // viewport's own resize so it cannot land before the resize it is
+        // compensating for.
         assertTrue(activity.contains("findLastVisibleItemPosition()"))
-        assertTrue(activity.contains("transcriptAnchorBottomGap = recycler.height - anchor.bottom"))
-        assertTrue(activity.contains("recycler.height - transcriptAnchorBottomGap - transcriptAnchorHeight"))
+        assertTrue(activity.contains("transcriptAnchorTopFromBottom = anchor.top - recycler.height"))
+        assertTrue(activity.contains("if (bottom - top != oldBottom - oldTop) restoreTranscriptAnchorAfterResize()"))
+
+        // An absolute position, not a shift by the height difference: a growing
+        // viewport is already partly corrected by the transcript itself, and a
+        // blind shift would double that and hide the newest message.
+        assertTrue(activity.contains("recycler.height + transcriptAnchorTopFromBottom"))
+        assertTrue(activity.contains("scrollToPositionWithOffset("))
+
         assertTrue(!activity.contains("WindowInsetsAnimationCompat.Callback"))
         assertTrue(activity.contains("composerSurface?.dismissImeForSend()"))
         assertTrue(activity.contains("composerSurface?.resetAfterSend()"))
