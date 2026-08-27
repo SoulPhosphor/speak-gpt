@@ -3270,7 +3270,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  when the keyboard arrives or leaves. */
     private var transcriptAnchorPosition = RecyclerView.NO_POSITION
     private var transcriptAnchorTopFromBottom = 0
-    private var transcriptAnchorItemCount = 0
     private var transcriptAnchorPending = false
 
     /**
@@ -3291,7 +3290,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val anchor = layoutManager.findViewByPosition(position) ?: return
         transcriptAnchorPosition = position
         transcriptAnchorTopFromBottom = anchor.top - recycler.height
-        transcriptAnchorItemCount = adapter?.itemCount ?: 0
         transcriptAnchorPending = true
     }
 
@@ -3317,11 +3315,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         transcriptAnchorPending = false
         val recycler = chat ?: return
         val position = transcriptAnchorPosition
-        // A message arriving between the two halves means the transcript's own
-        // scrolling owns where the conversation should be, not a position noted
-        // before that message existed.
+        // A reply arriving or growing never takes this over: the noted position
+        // wins, so the conversation cannot be moved out from under the user
+        // while they have the keyboard open.
         if (position == RecyclerView.NO_POSITION ||
-            (adapter?.itemCount ?: 0) != transcriptAnchorItemCount
+            position >= (adapter?.itemCount ?: 0)
         ) {
             return
         }
@@ -9626,8 +9624,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         json != null && ChatInclude.listFromJson(json).any { it.hasLiveImageBytes() }
     }
 
+    /**
+     * Moves the transcript to follow new content, but only when the user has
+     * left it free to do so.
+     *
+     * An open keyboard means the user is holding a place in the conversation,
+     * so nothing automatic moves it while the keyboard is up — a reply
+     * arriving or growing included. Their own scrolling still works normally;
+     * this only stops the screen from moving on its own.
+     */
     private fun scroll(mode: Boolean) {
-        if (!disableAutoScroll) {
+        if (!disableAutoScroll && keyboardInput?.isKeyboardOpen != true) {
             val itemCount = adapter?.itemCount ?: 0
 
             if (mode) {

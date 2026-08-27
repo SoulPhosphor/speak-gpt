@@ -383,11 +383,23 @@ class ChatImeInsetLayout @JvmOverloads constructor(
      */
     var onBottomInsetChanging: (() -> Unit)? = null
 
+    /**
+     * Whether the software keyboard is currently taking space.
+     *
+     * An open keyboard means the user is holding a place in the conversation,
+     * so ChatActivity leaves the transcript alone for as long as this is true:
+     * a reply arriving or growing does not move it. Their own scrolling is
+     * unaffected.
+     */
+    var isKeyboardOpen: Boolean = false
+        private set
+
     init {
         ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
             val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
             val targetBottom = baseBottom + max(navBottom, imeBottom)
+            isKeyboardOpen = imeBottom > 0
 
             if (view.paddingBottom != targetBottom) {
                 onBottomInsetChanging?.invoke()

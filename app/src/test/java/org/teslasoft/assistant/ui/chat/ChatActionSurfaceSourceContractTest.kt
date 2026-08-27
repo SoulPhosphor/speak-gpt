@@ -87,6 +87,12 @@ class ChatActionSurfaceSourceContractTest {
         assertTrue(activity.contains("recycler.height + transcriptAnchorTopFromBottom"))
         assertTrue(activity.contains("scrollToPositionWithOffset("))
 
+        // An open keyboard locks the conversation in place. A reply arriving or
+        // growing must never move it out from under the user, so nothing here
+        // may make an incoming message win over the held position.
+        assertTrue(composer.contains("isKeyboardOpen = imeBottom > 0"))
+        assertTrue(activity.contains("!disableAutoScroll && keyboardInput?.isKeyboardOpen != true"))
+
         assertTrue(!activity.contains("WindowInsetsAnimationCompat.Callback"))
         assertTrue(activity.contains("composerSurface?.dismissImeForSend()"))
         assertTrue(activity.contains("composerSurface?.resetAfterSend()"))
