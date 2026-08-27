@@ -233,17 +233,21 @@ class TtsSpeechTransport(
         token.check()
         response.requireSuccess(source, operation, listOf("model", "voice", "input", "response_format") +
             if (source.target.routing.mode != TtsRoutingMode.AUTOMATIC || options.size() > 0) listOf("provider") else emptyList())
-        if (response.bytes.isEmpty()) fail(source, operation, TtsFailureKind.NO_AUDIO)
+        if (response.bytes.isEmpty()) fail(source, operation, TtsFailureKind.NO_AUDIO, responseReceived = true)
         val type = response.contentType?.substringBefore(';')?.lowercase()
+        if (type == "application/json" || type?.endsWith("+json") == true)
+            fail(source, operation, TtsFailureKind.NO_AUDIO, responseReceived = true)
         val b = response.bytes
         val mp3 = (b.size >= 3 && b[0] == 73.toByte() && b[1] == 68.toByte() && b[2] == 51.toByte()) ||
             (b.size >= 2 && b[0].toInt() and 255 == 255 && b[1].toInt() and 224 == 224)
         if (!mp3 || type !in setOf(null, "audio/mpeg", "audio/mp3", "application/octet-stream"))
-            fail(source, operation, TtsFailureKind.AUDIO_FORMAT)
+            fail(source, operation, TtsFailureKind.AUDIO_FORMAT, responseReceived = true)
         token.check()
         return TtsAudio(b, source.target, response.generationId)
     }
 
-    private fun fail(source: ResolvedTtsSource, operation: TtsOperation, kind: TtsFailureKind): Nothing =
-        throw TtsException(TtsFailure(operation, source.target, source.endpoint.label, kind))
+    private fun fail(source: ResolvedTtsSource, operation: TtsOperation, kind: TtsFailureKind,
+        responseReceived: Boolean = false): Nothing =
+        throw TtsException(TtsFailure(operation, source.target, source.endpoint.label, kind,
+            responseReceived = responseReceived))
 }

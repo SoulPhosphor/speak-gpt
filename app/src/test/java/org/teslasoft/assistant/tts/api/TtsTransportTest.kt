@@ -152,6 +152,17 @@ class TtsTransportTest {
                 .synthesize(source(), "Hello", TtsRequestGate().begin())
         }
         assertEquals(TtsFailureKind.NO_AUDIO, error.failure.kind)
+        assertTrue(error.failure.responseReceived)
+    }
+
+    @Test fun successfulJsonWithoutAudioDoesNotClaimAudioWasReturned() {
+        val error = assertThrows(TtsException::class.java) {
+            TtsSpeechTransport(FakeHttp { response("{}") })
+                .synthesize(source(), "Hello", TtsRequestGate().begin())
+        }
+        assertEquals(TtsFailureKind.NO_AUDIO, error.failure.kind)
+        assertNull(error.failure.evidence)
+        assertTrue(error.failure.responseReceived)
     }
 
     @Test fun cancelledOrReplacedRequestCannotStartLatePlayback() {

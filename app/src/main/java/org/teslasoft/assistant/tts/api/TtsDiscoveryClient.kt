@@ -11,7 +11,7 @@ class TtsDiscoveryClient(private val http: TtsHttpExecutor = OkHttpTtsExecutor()
     fun models(source: ResolvedTtsSource, token: TtsRequestToken): TtsModelCatalog {
         val op = TtsOperation.MODELS
         var url = path(source, "models")
-        if (source.endpoint.openRouter) url = url.toHttpUrlOrNull()!!.newBuilder()
+        if (source.endpoint.openRouter) url = checkedUrl(source, op, url).newBuilder()
             .addQueryParameter("output_modalities", "speech").build().toString()
         val response = get(source, op, url, token)
         response.requireSuccess(source, op)
@@ -101,7 +101,7 @@ class TtsDiscoveryClient(private val http: TtsHttpExecutor = OkHttpTtsExecutor()
         }
         for (probe in listOf("audio/voices", "voices")) {
             try {
-                val url = path(source, probe).toHttpUrlOrNull()!!.newBuilder()
+                val url = checkedUrl(source, op, path(source, probe)).newBuilder()
                     .addQueryParameter("model", source.target.modelId).apply {
                         val routing = TtsRouting.compose(JsonObject(), source.target.routing, JsonObject()).get("provider")
                         if (routing != null) addQueryParameter("provider", routing.toString())
@@ -138,6 +138,9 @@ class TtsDiscoveryClient(private val http: TtsHttpExecutor = OkHttpTtsExecutor()
 
     private fun path(source: ResolvedTtsSource, path: String): String =
         source.endpoint.baseUrl.trim().trimEnd('/') + "/" + path.trimStart('/')
+    private fun checkedUrl(source: ResolvedTtsSource, op: TtsOperation, url: String) =
+        url.toHttpUrlOrNull() ?: throw TtsException(TtsFailure(op, source.target,
+            source.endpoint.label, TtsFailureKind.INVALID_ADDRESS))
     private fun encodedModel(id: String): String = id.split('/').joinToString("/") {
         java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")
     }

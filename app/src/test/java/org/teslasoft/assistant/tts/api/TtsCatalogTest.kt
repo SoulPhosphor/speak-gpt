@@ -114,4 +114,16 @@ class TtsCatalogTest {
         }
         assertFalse(token.deliver { fail("stale delivery") })
     }
+
+    @Test fun invalidSavedAddressesRemainStructuredFailures() {
+        for (openRouter in listOf(false, true)) {
+            val http = FakeHttp { fail("Invalid address must not be sent"); response("") }
+            val client = TtsDiscoveryClient(http)
+            val failure = assertThrows(TtsException::class.java) {
+                client.voices(source(host = "not a URL", openRouter = openRouter), TtsRequestGate().begin())
+            }.failure
+            assertEquals(TtsFailureKind.INVALID_ADDRESS, failure.kind)
+            assertNull(failure.evidence)
+        }
+    }
 }
