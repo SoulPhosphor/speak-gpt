@@ -99,9 +99,12 @@ Tests, relative to `app/src/test/java/org/teslasoft/assistant/`:
 - Playback, remote routing support, source activation and deletion recovery are
   not claimed verified. These remain the assigned work of later phases.
 
-## Phase 2 — Implemented; Android Checks pending
+## Phase 2 — Complete
 
 - Branch: `feature/tts-api-models-phase-2`, based on Phase 1 at `891d693`.
+- Final implementation/test commit: `256467d53e9dd3890cfc12996297bab24642520b`.
+- Android Checks: https://github.com/SoulPhosphor/speak-gpt/actions/runs/33112273264
+  — passed on the final implementation/test commit.
 - Scope: internal discovery, provider metadata, routing, failure handling and
   transport contracts. No new screens, voice activation, player integration,
   cleanup deletion, or changes to current chat/Google behavior.
@@ -210,8 +213,12 @@ All new production files are in
 - Local JUnit run: 131 tests passed, including 42 Phase 2 tests and 89 existing
   routing, discovery-parser, filter, error-classifier and provider-error tests.
   HTTP tests use MockWebServer or injected transports; none call a paid API.
-- `git diff --check`: passed. Full Android tests/APK/instrumentation compilation
-  are pending GitHub Android Checks; the final result will be recorded here.
+- `git diff --check`: passed. GitHub Android Checks on the final implementation
+  commit passed all required steps:
+  - `./gradlew --no-daemon test`
+  - `./gradlew --no-daemon assembleDebug`
+  - `./gradlew --no-daemon assembleDebugAndroidTest`
+- The final status-only commit changes no tested application or test code.
 - No device/emulator UI review, real speech playback or live provider-routing
   enforcement test was performed. No endpoint/model/provider/voice combination
   is claimed live-verified. No merge to `main` was performed.
