@@ -573,6 +573,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // chat UI exists (a dialog + Summoning Circle, or the API Endpoints screen).
     private var providerRestoreOutcome: NewChatProviderRestore.Outcome? = null
     private var disableAutoScroll = false
+
+    // Set when a send closes the keyboard, consumed by the first keyboard
+    // change that follows, so only that one close skips the position hold.
+    private var imeClosingForSend = false
     private var inCost: Float = 0.0f
     private var outCost: Float = 0.0f
     private var usageIn: Int = 0
@@ -2737,7 +2741,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             before = ::captureTranscriptAnchor,
             after = null
         )
-        keyboardInput?.onBottomInsetChanging = ::captureTranscriptAnchor
+        keyboardInput?.onBottomInsetChanging = { keyboardOpen ->
+            // The keyboard closing because the user hit Send is the one change
+            // no position is held across: that send asked for the reply, and
+            // the transcript is meant to follow it up the screen. Every other
+            // arrival or departure holds the conversation where it was.
+            val closingForSend = !keyboardOpen && imeClosingForSend
+            imeClosingForSend = false
+            if (!closingForSend) captureTranscriptAnchor()
+        }
         root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
@@ -8544,6 +8556,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // A send action always closes the software keyboard. Capacity or
         // capability checks may continue asynchronously, but the tap has
         // already completed the user's editing gesture.
+        //
+        // This close belongs to the send rather than to the user putting the
+        // keyboard away, so the transcript is left free to follow the reply
+        // instead of holding the position it had before the message was sent.
+        imeClosingForSend = true
         composerSurface?.dismissImeForSend()
 
         val compactCommand = org.teslasoft.assistant.util.summarizer.CompactCommand.parse(rawMessage)
@@ -9632,9 +9649,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * so nothing automatic moves it while the keyboard is up — a reply
      * arriving or growing included. Their own scrolling still works normally;
      * this only stops the screen from moving on its own.
+     *
+     * The exception is the moment a send closes the keyboard, where the user
+     * has just asked for the reply and the transcript is meant to follow it.
+     * Reopening the keyboard while that reply streams locks it again.
      */
     private fun scroll(mode: Boolean) {
-        if (!disableAutoScroll && keyboardInput?.isKeyboardOpen != true) {
+        val keyboardHolding = keyboardInput?.isKeyboardOpen == true && !imeClosingForSend
+        if (!disableAutoScroll && !keyboardHolding) {
             val itemCount = adapter?.itemCount ?: 0
 
             if (mode) {

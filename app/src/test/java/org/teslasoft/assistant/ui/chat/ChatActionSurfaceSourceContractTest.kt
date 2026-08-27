@@ -71,7 +71,7 @@ class ChatActionSurfaceSourceContractTest {
         // Narrowing this back to composer-only resizes is what puts the
         // conversation back to jumping when the keyboard opens and closes.
         assertTrue(composer.contains("onBottomInsetChanging?.invoke()"))
-        assertTrue(activity.contains("keyboardInput?.onBottomInsetChanging = ::captureTranscriptAnchor"))
+        assertTrue(activity.contains("keyboardInput?.onBottomInsetChanging = { keyboardOpen ->"))
         assertTrue(activity.contains("before = ::captureTranscriptAnchor"))
 
         // Captured while the viewport still has its old size, restored on the
@@ -91,7 +91,15 @@ class ChatActionSurfaceSourceContractTest {
         // growing must never move it out from under the user, so nothing here
         // may make an incoming message win over the held position.
         assertTrue(composer.contains("isKeyboardOpen = imeBottom > 0"))
-        assertTrue(activity.contains("!disableAutoScroll && keyboardInput?.isKeyboardOpen != true"))
+        assertTrue(activity.contains("keyboardInput?.isKeyboardOpen == true && !imeClosingForSend"))
+        assertTrue(activity.contains("if (!disableAutoScroll && !keyboardHolding)"))
+
+        // The single exception: the keyboard closing because the user hit Send.
+        // That close is the user asking for the reply, so the transcript follows
+        // it. The flag is consumed by the next keyboard change, so reopening the
+        // keyboard mid-reply locks the conversation again.
+        assertTrue(activity.contains("imeClosingForSend = true\n        composerSurface?.dismissImeForSend()"))
+        assertTrue(activity.contains("val closingForSend = !keyboardOpen && imeClosingForSend"))
 
         assertTrue(!activity.contains("WindowInsetsAnimationCompat.Callback"))
         assertTrue(activity.contains("composerSurface?.dismissImeForSend()"))

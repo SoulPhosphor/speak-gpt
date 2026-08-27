@@ -379,9 +379,10 @@ class ChatImeInsetLayout @JvmOverloads constructor(
      * ChatActivity uses the callback to note where the conversation is
      * sitting while the viewport still has its old size, so it can hold the
      * same content against the composer's top edge across the change. This is
-     * the last moment that geometry can be read.
+     * the last moment that geometry can be read. The reported value is the
+     * keyboard state the change is moving to, not the one it is leaving.
      */
-    var onBottomInsetChanging: (() -> Unit)? = null
+    var onBottomInsetChanging: ((keyboardOpen: Boolean) -> Unit)? = null
 
     /**
      * Whether the software keyboard is currently taking space.
@@ -402,7 +403,7 @@ class ChatImeInsetLayout @JvmOverloads constructor(
             isKeyboardOpen = imeBottom > 0
 
             if (view.paddingBottom != targetBottom) {
-                onBottomInsetChanging?.invoke()
+                onBottomInsetChanging?.invoke(isKeyboardOpen)
                 view.setPadding(baseLeft, baseTop, baseRight, targetBottom)
             }
             insets
