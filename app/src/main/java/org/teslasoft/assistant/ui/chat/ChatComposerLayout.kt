@@ -379,10 +379,15 @@ class ChatImeInsetLayout @JvmOverloads constructor(
      * ChatActivity uses the callback to note where the conversation is
      * sitting while the viewport still has its old size, so it can hold the
      * same content against the composer's top edge across the change. This is
-     * the last moment that geometry can be read. The reported value is the
-     * keyboard state the change is moving to, not the one it is leaving.
+     * the last moment that geometry can be read.
+     *
+     * `keyboardOpen` is the state the change is moving to, not the one it is
+     * leaving. `retreating` says the keyboard is on its way out: a close can
+     * take several frames, and the early ones still report the keyboard as
+     * present, so `keyboardOpen` alone cannot tell an arrival from a close in
+     * progress.
      */
-    var onBottomInsetChanging: ((keyboardOpen: Boolean) -> Unit)? = null
+    var onBottomInsetChanging: ((keyboardOpen: Boolean, retreating: Boolean) -> Unit)? = null
 
     /**
      * Whether the software keyboard is currently taking space.
@@ -395,15 +400,21 @@ class ChatImeInsetLayout @JvmOverloads constructor(
     var isKeyboardOpen: Boolean = false
         private set
 
+    /** Tracked on every inset pass, not only the ones that change padding, so
+     *  the reported direction cannot miss a frame. */
+    private var lastImeBottom = 0
+
     init {
         ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
             val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
             val targetBottom = baseBottom + max(navBottom, imeBottom)
+            val retreating = imeBottom < lastImeBottom
+            lastImeBottom = imeBottom
             isKeyboardOpen = imeBottom > 0
 
             if (view.paddingBottom != targetBottom) {
-                onBottomInsetChanging?.invoke(isKeyboardOpen)
+                onBottomInsetChanging?.invoke(isKeyboardOpen, retreating)
                 view.setPadding(baseLeft, baseTop, baseRight, targetBottom)
             }
             insets

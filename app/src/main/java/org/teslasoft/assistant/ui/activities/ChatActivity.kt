@@ -2741,14 +2741,24 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             before = ::captureTranscriptAnchor,
             after = null
         )
-        keyboardInput?.onBottomInsetChanging = { keyboardOpen ->
+        keyboardInput?.onBottomInsetChanging = { keyboardOpen, retreating ->
             // The keyboard closing because the user hit Send is the one change
             // no position is held across: that send asked for the reply, and
             // the transcript is meant to follow it up the screen. Every other
             // arrival or departure holds the conversation where it was.
-            val closingForSend = !keyboardOpen && imeClosingForSend
-            imeClosingForSend = false
-            if (!closingForSend) captureTranscriptAnchor()
+            //
+            // That close can take several frames, and the early ones still
+            // report the keyboard as present. So the exception lasts until the
+            // keyboard is actually gone rather than ending at the first frame,
+            // which would hand the rest of the close back to the hold and
+            // strand the reply off screen. The keyboard coming back up ends it
+            // immediately, whatever it interrupts.
+            if (imeClosingForSend && (retreating || !keyboardOpen)) {
+                if (!keyboardOpen) imeClosingForSend = false
+            } else {
+                imeClosingForSend = false
+                captureTranscriptAnchor()
+            }
         }
         root?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()

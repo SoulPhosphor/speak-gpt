@@ -71,7 +71,7 @@ class ChatActionSurfaceSourceContractTest {
         // Narrowing this back to composer-only resizes is what puts the
         // conversation back to jumping when the keyboard opens and closes.
         assertTrue(composer.contains("onBottomInsetChanging?.invoke()"))
-        assertTrue(activity.contains("keyboardInput?.onBottomInsetChanging = { keyboardOpen ->"))
+        assertTrue(activity.contains("keyboardInput?.onBottomInsetChanging = { keyboardOpen, retreating ->"))
         assertTrue(activity.contains("before = ::captureTranscriptAnchor"))
 
         // Captured while the viewport still has its old size, restored on the
@@ -99,7 +99,13 @@ class ChatActionSurfaceSourceContractTest {
         // it. The flag is consumed by the next keyboard change, so reopening the
         // keyboard mid-reply locks the conversation again.
         assertTrue(activity.contains("imeClosingForSend = true\n        composerSurface?.dismissImeForSend()"))
-        assertTrue(activity.contains("val closingForSend = !keyboardOpen && imeClosingForSend"))
+        // The exception ends when the keyboard is actually gone, not on the
+        // first inset frame: a close can take several, and the early ones still
+        // report the keyboard as present. Consuming it eagerly hands the rest of
+        // the close back to the hold and strands the reply off screen.
+        assertTrue(composer.contains("val retreating = imeBottom < lastImeBottom"))
+        assertTrue(activity.contains("if (imeClosingForSend && (retreating || !keyboardOpen))"))
+        assertTrue(activity.contains("if (!keyboardOpen) imeClosingForSend = false"))
 
         assertTrue(!activity.contains("WindowInsetsAnimationCompat.Callback"))
         assertTrue(activity.contains("composerSurface?.dismissImeForSend()"))
