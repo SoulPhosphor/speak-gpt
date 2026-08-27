@@ -8,7 +8,18 @@ interface VoiceBrowserProvider {
     fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit)
     fun activeVoiceId(): String?
     fun activate(voice: BrowserVoice)
-    fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
+    /**
+     * [onPlaybackChanged] reports the id of the voice currently sounding, or
+     * null when preview playback has started, finished, or been stopped, so the
+     * UI can flip a row between Preview and Stop.
+     */
+    fun preview(
+        voice: BrowserVoice,
+        sampleText: String,
+        onFailure: (String) -> Unit,
+        onCatalogChanged: () -> Unit = {},
+        onPlaybackChanged: (String?) -> Unit = {}
+    )
     fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
     fun stopPreview()
     fun shutdown()
@@ -92,8 +103,16 @@ class VoiceBrowserController(
 
     fun select(voice: BrowserVoice) = providersById.getValue(voice.providerId).activate(voice)
 
-    fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
-        providersById.getValue(voice.providerId).preview(voice, sampleText, onFailure) { load(onChanged) }
+    fun preview(
+        voice: BrowserVoice,
+        sampleText: String,
+        onFailure: (String) -> Unit,
+        onChanged: () -> Unit = {},
+        onPlaybackChanged: (String?) -> Unit = {}
+    ) = providersById.getValue(voice.providerId)
+        .preview(voice, sampleText, onFailure, { load(onChanged) }, onPlaybackChanged)
+
+    fun stopPreview() = provider.stopPreview()
 
     fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onChanged: () -> Unit = {}) =
         providersById.getValue(voice.providerId).download(voice, onFailure) { load(onChanged) }

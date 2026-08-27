@@ -116,12 +116,23 @@ class VoiceBrowserActivity : FragmentActivity() {
             },
             onLongPress = ::showVoiceIdentityDialog,
             onPreview = { voice ->
+                adapter.setPreviewing(voice.providerId, voice.providerVoiceId)
                 controller.preview(
                     voice,
                     previewText.text?.toString()?.takeIf(String::isNotBlank) ?: VoicePreviewText.DEFAULT,
-                    ::showActionError,
-                    ::renderOnMainThread
+                    onFailure = { message ->
+                        adapter.setPreviewing(null, null)
+                        showActionError(message)
+                    },
+                    onChanged = ::renderOnMainThread,
+                    onPlaybackChanged = { playingVoiceId ->
+                        if (!isFinishing && !isDestroyed) adapter.setPreviewing(voice.providerId, playingVoiceId)
+                    }
                 )
+            },
+            onStopPreview = {
+                adapter.setPreviewing(null, null)
+                controller.stopPreview()
             },
             onDownload = { voice -> controller.download(voice, ::showActionError, ::renderOnMainThread) }
         )

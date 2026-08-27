@@ -231,7 +231,7 @@ class VoiceBrowserControllerTest {
         }
         override fun activeVoiceId(): String? = activeId
         override fun activate(voice: BrowserVoice) { activations++; activeId = voice.providerVoiceId }
-        override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) { previews++ }
+        override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit, onPlaybackChanged: (String?) -> Unit) { previews++ }
         override fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
         override fun stopPreview() = Unit
         override fun shutdown() { closed = true }
@@ -245,7 +245,7 @@ class VoiceBrowserControllerTest {
         fun complete(voices: List<BrowserVoice>) = callbacks.removeAt(0)(Result.success(voices))
         override fun activeVoiceId(): String? = null
         override fun activate(voice: BrowserVoice) = Unit
-        override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
+        override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit, onPlaybackChanged: (String?) -> Unit) = Unit
         override fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
         override fun stopPreview() = Unit
         override fun shutdown() = Unit

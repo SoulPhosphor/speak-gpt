@@ -51,6 +51,7 @@ class OpenAiVoiceProvider(
     private var mediaPlayer: MediaPlayer? = null
     private var loadedEndpointId: String? = null
     private var loadedModelId: String? = null
+    private var onPreviewStateChanged: (String?) -> Unit = {}
 
     override fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit) {
         loadJob?.cancel()
@@ -98,8 +99,15 @@ class OpenAiVoiceProvider(
         preferences.setTtsEngine(id)
     }
 
-    override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) {
+    override fun preview(
+        voice: BrowserVoice,
+        sampleText: String,
+        onFailure: (String) -> Unit,
+        onCatalogChanged: () -> Unit,
+        onPlaybackChanged: (String?) -> Unit
+    ) {
         stopPreview()
+        onPreviewStateChanged = onPlaybackChanged
         val endpointId = loadedEndpointId
         val modelId = voice.providerModelId ?: loadedModelId
         if (endpointId == null || modelId == null) {
@@ -108,7 +116,7 @@ class OpenAiVoiceProvider(
         }
         val cacheKey = "$endpointId\u0000$modelId\u0000${voice.providerVoiceId}\u0000$sampleText"
         previewCache[cacheKey]?.let {
-            play(it, cacheKey, onFailure)
+            play(it, cacheKey, voice.providerVoiceId, onFailure)
             return
         }
         previewJob = scope.launch {
@@ -120,7 +128,7 @@ class OpenAiVoiceProvider(
                     voice = com.aallam.openai.api.audio.Voice(voice.providerVoiceId)
                 ))
                 previewCache[cacheKey] = audio
-                mainHandler.post { play(audio, cacheKey, onFailure) }
+                mainHandler.post { play(audio, cacheKey, voice.providerVoiceId, onFailure) }
             } catch (_: CancellationException) {
             } catch (error: Throwable) {
                 val message = error.message ?: "The API voice preview failed."
@@ -144,6 +152,7 @@ class OpenAiVoiceProvider(
         try { mediaPlayer?.stop() } catch (_: Throwable) { }
         try { mediaPlayer?.release() } catch (_: Throwable) { }
         mediaPlayer = null
+        onPreviewStateChanged(null)
     }
 
     override fun shutdown() {
@@ -177,7 +186,7 @@ class OpenAiVoiceProvider(
         ))
     }
 
-    private fun play(audio: ByteArray, cacheKey: String, onFailure: (String) -> Unit) {
+    private fun play(audio: ByteArray, cacheKey: String, voiceId: String, onFailure: (String) -> Unit) {
         try {
             stopPreview()
             val file = File.createTempFile("voice-preview-${cacheKey.hashCode()}", ".mp3", appContext.cacheDir)
@@ -188,18 +197,22 @@ class OpenAiVoiceProvider(
                 setOnCompletionListener {
                     it.release()
                     if (mediaPlayer === it) mediaPlayer = null
+                    onPreviewStateChanged(null)
                 }
                 setOnErrorListener { player, _, _ ->
                     player.release()
                     if (mediaPlayer === player) mediaPlayer = null
                     onFailure("The generated preview audio could not be played.")
+                    onPreviewStateChanged(null)
                     true
                 }
                 prepare()
                 start()
             }
+            onPreviewStateChanged(voiceId)
         } catch (error: Throwable) {
             onFailure(error.message ?: "The generated preview audio could not be played.")
+            onPreviewStateChanged(null)
         }
     }
 
