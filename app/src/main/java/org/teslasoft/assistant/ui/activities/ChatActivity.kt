@@ -5919,9 +5919,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         whisperScope = CoroutineScope(Dispatchers.Main)
         whisperScope?.launch {
             progress?.setOnClickListener {
-                cancel()
-                LocalWhisperEngine.get().cancel()
-                restoreUIState()
+                if (isHandsFreeEngaged()) {
+                    // In hands-free the red conversation button is hidden behind
+                    // this cancel ring during transcription. Cancelling here only
+                    // used to drop the transcription and restore the UI, leaving
+                    // hands-free still engaged — so the button-reset was skipped
+                    // and the red button reappeared, needing a second tap to
+                    // actually stop. Cancelling mid-transcription in hands-free
+                    // ends the whole conversation, so run the real stop funnel:
+                    // it clears the loop flag and returns the button to its
+                    // resting hands-free icon in one tap.
+                    cancel()
+                    cancelAllAiActivity("transcription cancel ring (hands-free)")
+                } else {
+                    cancel()
+                    LocalWhisperEngine.get().cancel()
+                    restoreUIState()
+                }
             }
 
             try {
