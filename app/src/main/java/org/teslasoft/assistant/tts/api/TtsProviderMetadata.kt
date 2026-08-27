@@ -9,7 +9,8 @@ data class TtsCharge(val component: String, val amount: BigDecimal?, val currenc
     val unit: String?, val quantity: BigDecimal? = BigDecimal.ONE)
 
 data class TtsPrice(val charges: List<TtsCharge>, val complete: Boolean) {
-    val free: Boolean get() = complete && charges.isNotEmpty() && charges.all { it.amount?.signum() == 0 }
+    val free: Boolean get() = complete && charges.isNotEmpty() &&
+        charges.all { it.amount?.signum() == 0 && (it.quantity?.signum() ?: 0) > 0 }
     fun display(): String = if (charges.isEmpty()) "?" else charges.joinToString("; ") { c ->
         val amount = c.amount?.stripTrailingZeros()?.toPlainString() ?: "?"
         "${c.component}: ${c.currency ?: "?"} $amount / ${c.quantity?.stripTrailingZeros()?.toPlainString() ?: "?"} ${c.unit ?: "?"}"
@@ -73,28 +74,35 @@ object TtsProviderParser {
         if (components != null) {
             val charges = components.mapNotNull { item -> item.objectOrNull()?.let { c ->
                 TtsCharge(c.text("component") ?: "?", decimal(c, "amount"), c.text("currency"),
-                    c.text("unit"), decimal(c, "quantity"))
+                    c.text("unit"), quantity(c))
             } }
             return TtsPrice(charges, charges.size == components.size() && charges.isNotEmpty() &&
                 charges.all { it.component != "?" } && obj.bool("complete") != false)
         }
-        val names = listOf("prompt", "completion", "input", "output", "request", "audio", "characters", "bytes")
-        val charges = names.filter(obj::has).map { key ->
+        val metadata = setOf("currency", "unit", "quantity", "complete", "component")
+        // Retain unfamiliar charge components too: dropping one could label a paid source free.
+        val names = obj.keySet().filter { it !in metadata && !it.endsWith("_unit") &&
+            !it.endsWith("_currency") && !it.endsWith("_quantity") }
+        val charges = names.map { key ->
             val nested = obj.get(key).objectOrNull()
-            TtsCharge(when(key) { "prompt" -> "input"; "completion" -> "output"; else -> key },
+            TtsCharge(when(key) { "prompt" -> "input"; "completion" -> "output"; "amount" -> obj.text("component") ?: "price"; else -> key },
                 if (nested != null) decimal(nested, "amount") else decimal(obj, key),
-                nested?.text("currency") ?: obj.text("currency"),
+                nested?.text("currency") ?: obj.text("${key}_currency") ?: obj.text("currency"),
                 nested?.text("unit") ?: obj.text("${key}_unit") ?: obj.text("unit"),
-                nested?.let { decimal(it, "quantity") } ?: decimal(obj, "quantity") ?: BigDecimal.ONE)
+                when { nested?.has("quantity") == true -> quantity(nested)
+                    obj.has("${key}_quantity") -> decimal(obj, "${key}_quantity")
+                    else -> quantity(obj) })
         }
         // Flat OpenRouter prompt/completion are both applicable. One missing component is unknown.
         val pairComplete = if (obj.has("prompt") || obj.has("completion")) obj.has("prompt") && obj.has("completion")
-            else if (obj.has("input") || obj.has("output")) obj.has("input") && obj.has("output") else false
+            else if (obj.has("input") || obj.has("output")) obj.has("input") && obj.has("output") else charges.isNotEmpty()
         return TtsPrice(charges, obj.bool("complete") ?: pairComplete)
     }
 
     private fun decimal(obj: JsonObject, key: String): BigDecimal? = obj.get(key)
         ?.takeIf { it.isJsonPrimitive }?.asString?.toBigDecimalOrNull()?.takeIf { it.signum() >= 0 }
+    private fun quantity(obj: JsonObject): BigDecimal? =
+        if (obj.has("quantity")) decimal(obj, "quantity") else BigDecimal.ONE
 }
 
 /** Picker-local value, never the mutable text-model filter singleton. */

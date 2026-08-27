@@ -13,7 +13,7 @@ enum class TtsOperation(val label: String, val item: String) {
 }
 
 enum class TtsFailureKind {
-    ENDPOINT_REQUIRED, MODEL_REQUIRED, PROVIDER_REQUIRED, INVALID_ADDRESS, KEY_MISSING,
+    ENDPOINT_REQUIRED, MODEL_REQUIRED, VOICE_REQUIRED, PROVIDER_REQUIRED, INVALID_ADDRESS, KEY_MISSING,
     OFFLINE, DNS, REFUSED, CONNECT_TIMEOUT, RESPONSE_TIMEOUT, TLS, CONNECTION,
     AUTH, DENIED, RATE_LIMIT, USAGE_LIMIT, NO_CREDITS, SERVER, REJECTED,
     UNSUPPORTED_PARAMETER, REGION_RESTRICTED, CONTENT_REJECTED,
@@ -85,7 +85,10 @@ object TtsFailures {
         val (title, explanation, actions) = when (f.kind) {
             TtsFailureKind.ENDPOINT_REQUIRED -> Triple("Endpoint Required", "Select an endpoint before choosing a model.", okay)
             TtsFailureKind.MODEL_REQUIRED -> Triple("Model Required", "Select a text-to-speech model before choosing its provider or adding it.", okay)
-            TtsFailureKind.PROVIDER_REQUIRED -> Triple("Provider Required", "Select a provider to use Only.", okay)
+            TtsFailureKind.VOICE_REQUIRED -> Triple("Voice Required", "Select a voice before requesting speech.", okay)
+            TtsFailureKind.PROVIDER_REQUIRED -> Triple("Provider Required",
+                if (f.target.routing.mode == org.teslasoft.assistant.preferences.tts.TtsRoutingMode.ONLY)
+                    "Select a provider to use Only." else "Select a preferred provider or allow fallbacks.", okay)
             TtsFailureKind.INVALID_ADDRESS -> Triple("Service Address Invalid", "The Base URL saved for $e is not a valid service address. Check its API profile.", okay)
             TtsFailureKind.KEY_MISSING -> Triple("API Key Missing", "$e requires an API key, but none is saved in its API profile.", okay)
             TtsFailureKind.OFFLINE -> Triple("No Internet Connection", "The $item could not be ${if (list) "loaded" else "generated"} because this device is offline. Reconnect and try again.", retry)

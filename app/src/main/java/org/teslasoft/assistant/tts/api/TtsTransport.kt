@@ -66,11 +66,17 @@ object TtsRouting : TtsRequestAdapter {
 /** One operation generation per UI consumer. Replacing it cancels sockets and invalidates queued callbacks. */
 class TtsRequestGate {
     private var current: TtsRequestToken? = null
-    @Synchronized fun begin(): TtsRequestToken {
-        current?.cancel()
-        return TtsRequestToken().also { current = it }
+    fun begin(): TtsRequestToken {
+        val next = TtsRequestToken()
+        val previous = synchronized(this) { current.also { current = next } }
+        // Never hold the gate lock while acquiring a token's delivery lock.
+        previous?.cancel()
+        return next
     }
-    @Synchronized fun cancel() { current?.cancel(); current = null }
+    fun cancel() {
+        val previous = synchronized(this) { current.also { current = null } }
+        previous?.cancel()
+    }
 }
 
 class TtsRequestToken internal constructor() {
@@ -202,12 +208,12 @@ class TtsSpeechTransport(
         if (t.endpointId.isBlank()) fail(source, operation, TtsFailureKind.ENDPOINT_REQUIRED)
         if (t.endpointId != source.endpoint.id) fail(source, operation, TtsFailureKind.SOURCE_MISSING)
         if (t.modelId.isBlank()) fail(source, operation, TtsFailureKind.MODEL_REQUIRED)
-        if (t.voiceId.isNullOrBlank()) fail(source, operation, TtsFailureKind.IDENTIFIERS_MISSING)
+        if (t.voiceId.isNullOrBlank()) fail(source, operation, TtsFailureKind.VOICE_REQUIRED)
         if (t.routing.mode == TtsRoutingMode.ONLY && t.routing.selectedProvider.isBlank())
             fail(source, operation, TtsFailureKind.PROVIDER_REQUIRED)
         if (t.routing.mode == TtsRoutingMode.PREFERRED && !t.routing.allowFallbacks &&
             t.routing.providerOrder.isEmpty() && t.routing.selectedProvider.isBlank())
-            fail(source, operation, TtsFailureKind.PROVIDER_UNAVAILABLE)
+            fail(source, operation, TtsFailureKind.PROVIDER_REQUIRED)
         val body = JsonObject().apply {
             addProperty("model", t.modelId); addProperty("voice", t.voiceId)
             addProperty("input", input); addProperty("response_format", "mp3")

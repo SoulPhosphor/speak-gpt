@@ -77,6 +77,22 @@ class TtsPriceTest {
         assertNull(parsed.providers[1].zdr)
     }
 
+    @Test fun extraPaidComponentCannotDisappearBehindZeroInputAndOutput() {
+        val p = TtsProviderParser.price(JsonParser.parseString(
+            """{"prompt":"0","completion":"0","audio_output":"0.5","unit":"minute","currency":"USD"}""").asJsonObject)
+        assertFalse(p.free)
+        assertTrue(p.charges.any { it.component == "audio_output" && it.amount == BigDecimal("0.5") })
+    }
+
+    @Test fun singleReportedRateIsComparableButInvalidQuantityIsNotReplaced() {
+        val p = TtsProviderParser.price(JsonParser.parseString(
+            """{"amount":"0.02","unit":"minute","currency":"USD"}""").asJsonObject)
+        assertTrue(TtsPriceComparator.known(p))
+        val invalid = TtsProviderParser.price(JsonParser.parseString(
+            """{"amount":"0.02","unit":"minute","currency":"USD","quantity":-1}""").asJsonObject)
+        assertFalse(TtsPriceComparator.known(invalid))
+    }
+
     @Test fun zdrOverlayRequiresExactModelAndProviderAndAbsenceStaysUnknown() {
         val catalog = TtsProviderParser.parse("""{"endpoints":[{"tag":"a","provider_name":"A"},{"tag":"b","provider_name":"B"}]}""")
         val updated = TtsProviderParser.overlayZdr(catalog,

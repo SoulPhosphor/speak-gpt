@@ -48,6 +48,8 @@ class TtsSourceResolver(
     }
 
     fun resolve(target: TtsTarget): ResolvedTtsSource {
+        if (target.endpointId.isBlank()) throw TtsException(TtsFailure(TtsOperation.SPEECH,
+            target, "", TtsFailureKind.ENDPOINT_REQUIRED))
         // getApiEndpoint() can supply a default for a missing ID. Never use that fallback here.
         val profile = endpoints().singleOrNull { it.id == target.endpointId }
             ?: throw TtsException(TtsFailure(TtsOperation.SPEECH, target, "", TtsFailureKind.PROFILE_MISSING))

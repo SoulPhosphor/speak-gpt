@@ -70,7 +70,7 @@ class TtsTransportTest {
         val failure = assertThrows(TtsException::class.java) {
             TtsSpeechTransport().request(source(routing = TtsRoutingSettings(TtsRoutingMode.PREFERRED, allowFallbacks = false)), "Hello")
         }.failure
-        assertEquals(TtsFailureKind.PROVIDER_UNAVAILABLE, failure.kind)
+        assertEquals(TtsFailureKind.PROVIDER_REQUIRED, failure.kind)
     }
 
     @Test fun networkReasonsRemainSpecificWithoutProviderAttribution() {

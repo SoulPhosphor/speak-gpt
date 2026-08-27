@@ -207,7 +207,7 @@ All new production files are in
 
 - Focused compilation of the new non-Android core against actual repository
   dependencies passed using the available Kotlin compiler.
-- Local JUnit run: 127 tests passed, including 38 Phase 2 tests and 89 existing
+- Local JUnit run: 129 tests passed, including 40 Phase 2 tests and 89 existing
   routing, discovery-parser, filter, error-classifier and provider-error tests.
   HTTP tests use MockWebServer or injected transports; none call a paid API.
 - `git diff --check`: passed. Full Android tests/APK/instrumentation compilation
