@@ -14,8 +14,8 @@ import org.teslasoft.assistant.preferences.models.ModelIdentity
  */
 class SavedTtsSourcesPreferences internal constructor(private val storage: TtsStorage) {
     companion object {
-        private val changes = java.util.concurrent.CopyOnWriteArraySet<() -> Unit>()
-        fun observeChanges(listener: () -> Unit): () -> Unit {
+        private val changes = java.util.concurrent.CopyOnWriteArraySet<(Set<String>) -> Unit>()
+        fun observeChanges(listener: (Set<String>) -> Unit): () -> Unit {
             changes += listener
             return { changes -= listener }
         }
@@ -91,6 +91,9 @@ class SavedTtsSourcesPreferences internal constructor(private val storage: TtsSt
     }
 
     private fun write(entries: List<SavedTtsSource>) {
+        val before = read().associateBy { it.sourceId }
+        val after = entries.associateBy { it.sourceId }
+        val changedIds = (before.keys + after.keys).filter { before[it] != after[it] }.toSet()
         val array = JSONArray()
         entries.forEach { entry ->
             array.put(JSONObject().put("id", entry.id).put("endpointId", entry.endpointId)
@@ -101,7 +104,7 @@ class SavedTtsSourcesPreferences internal constructor(private val storage: TtsSt
                     .put("allowFallbacks", entry.routing.allowFallbacks)))
         }
         writeTts(storage, JSONObject().put("version", 1).put("entries", array).toString())
-        changes.forEach { runCatching { it() } }
+        changes.forEach { runCatching { it(changedIds) } }
     }
 
     private fun validateSelection(entry: SavedTtsSource) {

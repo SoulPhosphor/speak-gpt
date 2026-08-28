@@ -119,6 +119,17 @@ class TtsPlaybackTest {
         assertFalse(File(player.path).exists())
     }
 
+    @Test fun unrelatedProfileAndChatModelEditsDoNotStopSpeech() {
+        start(playback())
+        val player = players.single()
+        val settings = context.getSharedPreferences("api_endpoint", Context.MODE_PRIVATE)
+        settings.edit().putString("other_host", "changed").putString("ep_model", "different-chat-model").commit()
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        player.prepared!!.onPrepared(player)
+        assertEquals(1, starts)
+        assertFalse(player.released)
+    }
+
     private class RecordingPlayer : MediaPlayer() {
         var path = ""
         var prepared: OnPreparedListener? = null

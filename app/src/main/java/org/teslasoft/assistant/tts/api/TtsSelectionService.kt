@@ -20,7 +20,7 @@ class TtsSelectionService internal constructor(
 ) {
     constructor(context: Context, preferences: Preferences) : this(preferences,
         TtsAndroidServices.resolver(context),
-        PreviousTtsVoicePreferences.getPreferences(context, preferences.ttsPreferenceScope()),
+        PreviousTtsVoicePreferences.getPreferences(context, preferences.ttsHistoryScope()),
         { selection, token -> usableOnAndroid(context.applicationContext, preferences, selection, token) })
 
     suspend fun activate(next: TtsVoiceSelection): Result<Unit> = mutex.withLock {

@@ -200,4 +200,15 @@ class PreviousTtsVoicePreferencesTest {
         assertEquals("old-api-voice", prefs.getOpenAIVoice())
         assertEquals("old-google-id", prefs.getVoice())
     }
+    @Test fun renamedChatKeepsTheHistoryFileReferenceWhileCurrentScopeChanges() = runBlocking {
+        service().activate(api).getOrThrow()
+        val renamed = Preferences(raw, FakeSharedPreferences(), "renamed", null)
+        assertEquals("renamed", renamed.ttsPreferenceScope())
+        assertEquals("test", renamed.ttsHistoryScope())
+        assertEquals(api, renamed.getSelectedTtsVoice())
+        assertTrue(renamed.saveSelectedTtsVoice(device))
+        assertEquals("test", renamed.ttsHistoryScope())
+        val different = Preferences(FakeSharedPreferences(), FakeSharedPreferences(), "different", null)
+        assertEquals("different", different.ttsHistoryScope())
+    }
 }

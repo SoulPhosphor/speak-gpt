@@ -66,6 +66,9 @@ object PerChatSettingKeys {
         "autoLangDetect",
         "voice",
         "tts_engine",
+        "selected_tts_voice",
+        "unavailable_tts_voice",
+        "tts_history_scope",
         "openai_voice",
         "openai_tts_model",
 

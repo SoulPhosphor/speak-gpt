@@ -28,8 +28,16 @@ class TtsPlayback(
     private var stateChanged: (MediaPlayer?) -> Unit = {}
     private val main = Handler(Looper.getMainLooper())
     private val profilePrefs = app.getSharedPreferences("api_endpoint", Context.MODE_PRIVATE)
-    private val profileListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> invalidate() }
-    private val removeSourceObserver = SavedTtsSourcesPreferences.observeChanges(::invalidate)
+    @Volatile private var activeSourceId: String? = null
+    @Volatile private var activeEndpointId: String? = null
+    private var invalidatedCallback: () -> Unit = {}
+    private val profileListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        val endpointId = activeEndpointId
+        if (endpointId != null && key != null && key in speechProfileKeys.map { endpointId + it }) invalidate()
+    }
+    private val removeSourceObserver = SavedTtsSourcesPreferences.observeChanges { changed ->
+        if (activeSourceId in changed) invalidate()
+    }
 
     init { profilePrefs.registerOnSharedPreferenceChangeListener(profileListener) }
 
@@ -37,7 +45,7 @@ class TtsPlayback(
         // Cancel synchronously, even if the UI cleanup is queued behind a prepared callback.
         val invalidated = epoch.get()
         gate.cancel()
-        main.post { if (epoch.get() == invalidated) stop() }
+        main.post { if (epoch.get() == invalidated) { stop(); invalidatedCallback() } }
     }
 
     fun play(sourceId: String, voiceId: String, text: String, operation: TtsOperation,
@@ -45,9 +53,11 @@ class TtsPlayback(
         onPlayer: (MediaPlayer?) -> Unit = {},
         onStart: () -> Unit = {}, onDone: () -> Unit = {},
         onFailure: (TtsFailure) -> Unit,
-        onPlaybackError: (Int, Int) -> Unit = { _, _ -> }) {
+        onPlaybackError: (Int, Int) -> Unit = { _, _ -> }, onInvalidated: () -> Unit = {}) {
         stop()
         stateChanged = onPlayer
+        invalidatedCallback = onInvalidated
+        activeSourceId = sourceId
         val token = gate.begin()
         job = scope.launch {
             var target = TtsTarget("", sourceId = sourceId, voiceId = voiceId)
@@ -60,6 +70,7 @@ class TtsPlayback(
                 withContext(ioDispatcher) {
                     val source = resolver.saved(sourceId, voiceId).getOrThrow()
                     target = source.target
+                    activeEndpointId = source.endpoint.id
                     endpointName = source.endpoint.label
                     val audio = transport.synthesize(source, text, token, operation)
                     token.check()
@@ -120,6 +131,7 @@ class TtsPlayback(
         epoch.incrementAndGet()
         gate.cancel()
         job?.cancel(); job = null
+        activeSourceId = null; activeEndpointId = null
         releaseAudio()
     }
 
@@ -133,6 +145,11 @@ class TtsPlayback(
         player = null
         audioFile?.delete(); audioFile = null
         stateChanged(null)
+    }
+
+    private companion object {
+        val speechProfileKeys = setOf("_label", "_host", "_api_key", "_speech_endpoint", "_auth_type",
+            "_timeout", "_response_timeout", "_provider_discovery_path", "_identity")
     }
 
     fun shutdown() {

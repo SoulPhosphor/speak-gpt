@@ -11969,6 +11969,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     onHandsFreeReadbackFinished()
                     releaseReadbackKeepAlive()
                 },
+                onInvalidated = { adapter?.clearSpeakingPosition(); releaseReadbackKeepAlive() },
                 onPlaybackError = { what, extra ->
                     logTtsLifecycle("TTS onError engine=openai code=$what/$extra (mediaPlayer playback error)")
                 },
@@ -12018,8 +12019,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         speechNotice = TtsVoiceDialogs.show(this, chatId, failure) {
             if (session == readbackSession && preferences?.getSelectedTtsVoice() == selection) {
                 // Retry is an explicit user action and resolves the same still-valid source again.
-                acquireReadbackKeepAlive()
-                speak(message, session)
+                if (message.isNotBlank()) {
+                    // The existing manual-readback path stops listening before replaying audio.
+                    onSpeakClick(message, -1)
+                } else {
+                    val token = speechRecoveryGate.begin()
+                    lifecycleScope.launch {
+                        val result = TtsSelectionService(this@ChatActivity, preferences!!).reconcile(token)
+                        token.deliver { (result.exceptionOrNull() as? TtsException)?.failure?.let {
+                            showSpeechNotice(it, "", readbackSession)
+                        } }
+                    }
+                }
             }
         }
     }

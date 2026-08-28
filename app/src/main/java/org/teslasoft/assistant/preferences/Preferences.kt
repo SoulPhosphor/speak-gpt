@@ -912,6 +912,9 @@ class Preferences internal constructor(
 
     fun ttsPreferenceScope(): String = chatId
 
+    /** The settings file carries this reference through chat renames. */
+    fun ttsHistoryScope(): String = getString("tts_history_scope", chatId)
+
     /** Missing legacy API identity is unresolved, never guessed from the chat endpoint. */
     fun getSelectedTtsVoice(): org.teslasoft.assistant.preferences.tts.TtsVoiceSelection? {
         val raw = getString("selected_tts_voice", "")
@@ -927,9 +930,9 @@ class Preferences internal constructor(
     /** Call off the UI thread, after the previous-selection history has been saved. */
     fun saveSelectedTtsVoice(selection: org.teslasoft.assistant.preferences.tts.TtsVoiceSelection): Boolean {
         selection.validate()
-        val keys = listOf("selected_tts_voice", "tts_engine", "voice", "openai_voice", "openai_tts_model")
+        val keys = listOf("selected_tts_voice", "tts_history_scope", "tts_engine", "voice", "openai_voice", "openai_tts_model")
         val before = keys.associateWith { preferences.getString(it, null) }
-        val editor = preferences.edit().putString("selected_tts_voice",
+        val editor = preferences.edit().putString("tts_history_scope", ttsHistoryScope()).putString("selected_tts_voice",
             org.teslasoft.assistant.tts.api.TtsVoiceSelectionCodec.encode(selection))
         if (selection.kind == org.teslasoft.assistant.preferences.tts.TtsVoiceKind.DEVICE) {
             editor.putString("voice", selection.voiceId).putString("tts_engine", "google")
