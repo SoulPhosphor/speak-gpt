@@ -303,7 +303,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
                 adapter?.notifyItemChanged(position)
 
                 if (swipeDir == ItemTouchHelper.RIGHT) {
-                    ChatPreferences.getChatPreferences().switchPinState(mContext ?: return@post, Hash.hash(chats[position]["name"].toString()))
+                    ChatPreferences.getChatPreferences().switchPinState(mContext ?: return@post, ChatPreferences.storedChatId(chats[position]))
                     initSettings()
                 } else {
                     ChatPreferences.getChatPreferences().deleteChat(mContext ?: return@post, chats[position]["name"].toString())
@@ -465,7 +465,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
             }
 
             if (selected.size == 1) {
-                val chatDialogFragment: AddChatDialogFragment = AddChatDialogFragment.newInstance(true, selected[0]["name"] ?: "", fromFile = false, disableAutoName = false, saveChat = false, "", "", "", "", "", selectedPosition)
+                val chatDialogFragment: AddChatDialogFragment = AddChatDialogFragment.newInstance(true, selected[0]["name"] ?: "", fromFile = false, disableAutoName = false, saveChat = false, "", "", "", "", "", selectedPosition, ChatPreferences.storedChatId(selected[0]))
                 chatDialogFragment.setStateChangedListener(chatListUpdatedListener)
                 chatDialogFragment.show(parentFragmentManager.beginTransaction(), "AddChatDialog")
             }
@@ -766,7 +766,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
     }
 
     override fun onRename(position: Int, name: String, id: String) {
-        val chatDialogFragment: AddChatDialogFragment = AddChatDialogFragment.newInstance(true, name, fromFile = false, disableAutoName = false, saveChat = false, "", "", "", "", "", position)
+        val chatDialogFragment: AddChatDialogFragment = AddChatDialogFragment.newInstance(true, name, fromFile = false, disableAutoName = false, saveChat = false, "", "", "", "", "", position, id)
         chatDialogFragment.setStateChangedListener(chatListUpdatedListener)
         chatDialogFragment.show(parentFragmentManager.beginTransaction(), "AddChatDialog")
     }

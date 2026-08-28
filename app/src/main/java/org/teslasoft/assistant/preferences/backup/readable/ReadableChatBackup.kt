@@ -108,7 +108,7 @@ object ReadableChatBackup {
                     // hashed even when the entry is malformed, so every chat
                     // the app can display, this backup can carry.
                     val name = chat["name"].toString()
-                    val chatId = Hash.hash(name)
+                    val chatId = ChatPreferences.storedChatId(chat)
                     val history = chatPreferences.getChatByIdResult(context, chatId)
                     if (!ChatStorageHealth.isAuthoritative(history.state)) {
                         logUnreadable(context, "chat $chatId could not be read (state ${history.state})")

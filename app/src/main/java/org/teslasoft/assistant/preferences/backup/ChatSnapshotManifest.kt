@@ -89,7 +89,7 @@ object ChatSnapshotManifest {
             val entries = ArrayList<ChatEntry>()
             for (chat in listResult.chats) {
                 val name = chat["name"] ?: continue
-                val chatId = Hash.hash(name)
+                val chatId = ChatPreferences.storedChatId(chat)
                 val history = chatPreferences.getChatByIdResult(context, chatId)
                 if (ChatStorageHealth.isAuthoritative(history.state)) {
                     val payload = gson.toJson(history.messages)

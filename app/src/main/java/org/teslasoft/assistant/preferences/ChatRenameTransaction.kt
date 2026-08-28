@@ -99,8 +99,22 @@ object ChatRenameTransaction {
         newChatId: String,
         newChatListJson: String
     ): Outcome {
-        if (oldChatId == newChatId || oldChatId.isBlank() || newChatId.isBlank()) {
+        if (oldChatId.isBlank() || newChatId.isBlank()) {
             return Outcome(false, "invalid chat ids (old=$oldChatId, new=$newChatId)")
+        }
+
+        // A title-only rename writes just the list. No history/settings reads,
+        // copies, deletes, or identity migration are involved.
+        if (oldChatId == newChatId) {
+            val original = files.readString(CHAT_LIST_FILE, CHAT_LIST_KEY)
+                ?: return Outcome(false, STAGE_WRITE_LIST)
+            if (files.writeString(CHAT_LIST_FILE, CHAT_LIST_KEY, newChatListJson)) {
+                return Outcome(true)
+            }
+            // SharedPreferences may update its in-memory view even when commit
+            // fails. Restore the original list before reporting failure.
+            files.writeString(CHAT_LIST_FILE, CHAT_LIST_KEY, original)
+            return Outcome(false, STAGE_WRITE_LIST)
         }
 
         // A missing history key reads as an empty conversation, never null —

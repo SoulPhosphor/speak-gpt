@@ -39,6 +39,8 @@ class ChatRenameTransactionTest {
         val failWriteString = HashSet<String>()
         val failClear = HashSet<String>()
         val corruptReadsOf = HashSet<String>()
+        val writes = mutableListOf<String>()
+        val reads = mutableListOf<String>()
         var writesUntilKill = Int.MAX_VALUE
         private var writesDone = 0
 
@@ -50,6 +52,7 @@ class ChatRenameTransactionTest {
         }
 
         override fun readAll(fileName: String): Map<String, Any?> {
+            reads += fileName
             val copy = LinkedHashMap<String, Any?>(file(fileName))
             if (fileName in corruptReadsOf && copy.isNotEmpty()) {
                 copy[copy.keys.first()] = "CORRUPTED"
@@ -58,6 +61,7 @@ class ChatRenameTransactionTest {
         }
 
         override fun readString(fileName: String, key: String): String? {
+            reads += fileName
             val v = file(fileName)[key] as? String ?: return null
             return if (fileName in corruptReadsOf) "$v-CORRUPTED" else v
         }
@@ -65,6 +69,7 @@ class ChatRenameTransactionTest {
         override fun replaceAll(fileName: String, entries: Map<String, Any?>): Boolean {
             if (fileName in failReplaceAll) return false
             beforeWrite()
+            writes += fileName
             val f = file(fileName)
             f.clear()
             f.putAll(entries)
@@ -74,6 +79,7 @@ class ChatRenameTransactionTest {
         override fun writeString(fileName: String, key: String, value: String): Boolean {
             if (fileName in failWriteString) return false
             beforeWrite()
+            writes += fileName
             file(fileName)[key] = value
             return true
         }
@@ -81,6 +87,7 @@ class ChatRenameTransactionTest {
         override fun clear(fileName: String): Boolean {
             if (fileName in failClear) return false
             beforeWrite()
+            writes += fileName
             file(fileName).clear()
             return true
         }
@@ -251,11 +258,51 @@ class ChatRenameTransactionTest {
     }
 
     @Test
-    fun identicalOrBlankIdsAreRefused() {
+    fun blankIdsAreRefused() {
         val fake = freshFake()
-        assertFalse(rename(fake, oldId, oldId).success)
         assertFalse(rename(fake, oldId, "").success)
         assertFalse(rename(fake, "", newId).success)
+        assertOldFullyIntact(fake)
+    }
+
+    @Test
+    fun titleOnlyRenameKeepsExistingIdAndEveryOtherFileUntouched() {
+        val fake = freshFake()
+        fake.file("tts_history")["voice"] = "previous"
+        fake.file("memory")["chat_id"] = oldId
+        fake.file("images")["directory"] = oldId
+        val original = fake.files.mapValues { it.value.toMap() }
+        val titleList = """[{"name":"Renamed","id":"oldhash"}]"""
+        assertTrue(ChatRenameTransaction.rename(fake, oldId, oldId, titleList).success)
+        assertEquals(listOf("chat_list"), fake.writes)
+        assertTrue(fake.reads.all { it == "chat_list" })
+        assertEquals(original.keys, fake.files.keys)
+        for ((file, values) in original) {
+            if (file != "chat_list") assertEquals(file, values, fake.files[file])
+        }
+        assertEquals(titleList, listNow(fake))
+        assertTrue(ChatRenameTransaction.rename(fake, oldId, oldId, oldListJson).success)
+        assertOldFullyIntact(fake)
+    }
+
+    @Test
+    fun failedTitleWriteKeepsTheOldTitleAndAllChatData() {
+        val fake = freshFake()
+        fake.failWriteString += "chat_list"
+        val titleList = """[{"name":"Renamed","id":"oldhash"}]"""
+        assertFalse(ChatRenameTransaction.rename(fake, oldId, oldId, titleList).success)
+        assertOldFullyIntact(fake)
+        assertTrue(fake.writes.isEmpty())
+    }
+
+    @Test
+    fun titleRenameInterruptedBeforeItsOnlyWriteLeavesEverythingIntact() {
+        val fake = freshFake()
+        fake.writesUntilKill = 0
+        try {
+            ChatRenameTransaction.rename(fake, oldId, oldId,
+                """[{"name":"Renamed","id":"oldhash"}]""")
+        } catch (_: Killed) { }
         assertOldFullyIntact(fake)
     }
 

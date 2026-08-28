@@ -6307,17 +6307,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    /** Applies a user-edited title from [EditChatTitleDialog]. Reuses the same
-     *  atomic rename path as auto-naming (ChatPreferences.editChat /
-     *  ChatRenameTransaction — moves history and copies every per-chat
-     *  settings key, never re-derives them) and the same [renameInProgress]
-     *  guard, so a manual rename and an in-flight auto-name rename can never
-     *  overlap. */
+    /** Manual and automatic naming share the title-only storage operation and
+     *  [renameInProgress] guard. The existing chat ID and live services stay put. */
     private fun renameChatTitle(newTitle: String) {
         if (newTitle == chatName || renameInProgress) return
 
         val chatPreferences = ChatPreferences.getChatPreferences()
-        if (chatPreferences.checkDuplicate(this, newTitle)) {
+        if (chatPreferences.checkDuplicate(this, newTitle, chatId)) {
             Toast.makeText(this, R.string.chat_error_unique, Toast.LENGTH_SHORT).show()
             return
         }
@@ -6327,7 +6323,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         lifecycleScope.launch {
             val renamed = try {
                 withContext(Dispatchers.IO) {
-                    chatPreferences.editChat(this@ChatActivity, newTitle, oldName)
+                    chatPreferences.editChat(this@ChatActivity, newTitle, oldName, chatId)
                 }
             } catch (e: Exception) {
                 false
@@ -6338,14 +6334,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (isFinishing || isDestroyed) return@launch
 
             if (renamed) {
-                val previousChatId = chatId
-                chatId = Hash.hash(newTitle)
-                ImageGenerationJobRegistry.rename(previousChatId, chatId)
-                org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
-                    .rename(previousChatId, chatId)
                 chatName = newTitle
-                preferences = Preferences.getPreferences(this@ChatActivity, chatId)
-                intent.putExtra("chatId", chatId)
                 intent.putExtra("name", chatName)
                 activityTitle?.text = newTitle
             } else {
@@ -11664,25 +11653,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
 
                 if (!newChatName.isNullOrBlank() && !renameInProgress) {
-                    // Storage work goes OFF the main thread: editChat does
-                    // encrypted reads, verified encrypted writes, several
-                    // synchronous commits and a SQLCipher re-point — none of
-                    // which may run on the UI thread. The guard prevents a
-                    // second turn from launching an overlapping rename while
-                    // this one's IO is still in flight (the flag is set/checked
-                    // only on the main dispatcher, so it holds across the
-                    // withContext suspension).
+                    // Persist the title off the main thread. Keep the rename
+                    // guard across the IO suspension; the chat ID never changes.
                     renameInProgress = true
                     val renamed = try {
-                        // editChat is atomic on the prefs side (ChatRenameTransaction):
-                        // it moves the history, copies the WHOLE per-chat settings
-                        // file (nothing enumerated by hand or re-derived from the
-                        // endpoint profile) and flips the chat-list pointer only
-                        // after the copies verify; the memory re-point is journalled
-                        // and recoverable. false = nothing changed anywhere — keep
-                        // the old id; a later turn may retry with a fresh title.
                         withContext(Dispatchers.IO) {
-                            ChatPreferences.getChatPreferences().editChat(this@ChatActivity, newChatName, placeholderName)
+                            ChatPreferences.getChatPreferences().editChat(this@ChatActivity, newChatName, placeholderName, chatId)
                         }
                     } catch (e: Exception) {
                         logVoiceEventAlways("auto-name rename threw (${e.message}); keeping the placeholder name and old chat id")
@@ -11695,30 +11671,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     // Main after the IO hop). Never touch views/intent from IO,
                     // and never apply the result to a destroyed screen.
                     if (renamed && !isFinishing && !isDestroyed) {
-                        val previousChatId = chatId
-                        chatId = Hash.hash(newChatName)
-                        // Re-point any running image generation (and this
-                        // screen's registry listener) at the renamed chat id
-                        // so its terminal state cannot land in the deleted
-                        // placeholder chat.
-                        ImageGenerationJobRegistry.rename(previousChatId, chatId)
-                        org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
-                            .rename(previousChatId, chatId)
-
-                        // Adopt the renamed chat in place. This used to relaunch
-                        // ChatActivity (startActivity + finish) to pick up the new
-                        // chat id — but onDestroy of the old instance stops TTS,
-                        // kills the hands-free loop and releases the mic, which cut
-                        // off the first reply's readback almost immediately and
-                        // ended the voice conversation with no visible error.
-                        // Everything keyed by the chat id is re-pointed here
-                        // instead; the data itself was already moved by editChat.
+                        // Update the display and restored title only. Existing
+                        // preferences, voice playback and jobs keep the same ID.
                         this.chatName = newChatName
-                        this.preferences = Preferences.getPreferences(this, chatId)
-                        // If the OS later recreates this screen (rotation, process
-                        // restore), onCreate re-reads the intent extras — they must
-                        // name the renamed chat, not the deleted placeholder.
-                        intent.putExtra("chatId", chatId)
                         intent.putExtra("name", this.chatName)
                         activityTitle?.text = newChatName
                         logVoiceEvent("chat auto-named without restarting the screen (voice loop preserved)")
