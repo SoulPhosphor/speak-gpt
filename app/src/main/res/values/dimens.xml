@@ -75,4 +75,5 @@
          Aug 14 2026). With a painted bubble the name instead aligns with the
          message content (one content-padding in), computed in ChatAdapter. -->
     <dimen name="chat_name_bubble_edge_offset">1dp</dimen>
+    <dimen name="tts_manager_action_height">48dp</dimen>
 </resources>

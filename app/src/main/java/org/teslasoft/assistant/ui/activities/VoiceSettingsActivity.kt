@@ -320,6 +320,9 @@ class VoiceSettingsActivity : FragmentActivity() {
             GlobalPreferences.getPreferences(this).setReadFormattingLanguage(checked)
         }
 
+        findViewById<LinearLayout>(R.id.row_api_voice_models).setOnClickListener {
+            startActivity(Intent(this, ApiVoiceModelsActivity::class.java).putExtra("chatId", chatId))
+        }
         rowVoiceAdvanced = findViewById(R.id.tile_voice_advanced)
         rowVoiceDebugging = findViewById(R.id.tile_voice_debugging)
 

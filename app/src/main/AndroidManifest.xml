@@ -102,6 +102,7 @@
             android:windowSoftInputMode="adjustResize">
         </activity>
 
+        <activity android:name=".ui.activities.ApiVoiceModelsActivity" android:exported="false" android:label="@string/tts_manager_title" />
         <activity android:name=".ui.activities.TtsModelPickerActivity" android:exported="false" android:label="@string/label_select_ai_model" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".ui.activities.TtsProviderPickerActivity" android:exported="false" android:label="@string/endpoint_choose_provider_title" />
         <activity android:name=".ui.activities.TtsProviderFiltersActivity" android:exported="false" android:label="@string/provider_filters_title" />

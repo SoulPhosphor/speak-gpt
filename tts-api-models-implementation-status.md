@@ -293,3 +293,50 @@ All new production files are in
   their final contracts; the user-facing manager entry point belongs to Phase 4.
 - Live service/routing/playback: not performed. No endpoint/model/provider/voice
   combination is claimed live verified and no paid requests were made.
+
+
+## Phase 4 — Implemented; Android Checks pending
+
+- Branch: `feature/tts-api-models-phase-3`, continuing `5a2acabb` and preserving
+  all preceding phases and composer fixes. No new branch or main merge.
+- `ApiVoiceModelsActivity` is registered and opens from the new Select API Voice
+  Models row immediately above Advanced Voice Settings. Its simple header has
+  no Save/decorative icon. One vertical scroll includes the whole form and saved
+  table, with one horizontal table scroll and shared header/body column widths.
+- Endpoint choices read saved profiles without changing the active chat endpoint.
+  The AI Model and provider values start at Select. The exact Select Provider
+  title/hint precedes one Automatic/Preferred/Only dropdown + provider value row.
+  The value opens/reopens the Phase 3 provider picker for every endpoint.
+- `TtsManagerState` owns draft/picker target isolation and Add/Edit/Remove.
+  Endpoint/model changes clear dependent routing. Add validates and persists,
+  reloads the saved list, then resets every upper field. Explicit incomplete Only
+  remains Only and cannot save. Empty optional Preferred becomes Automatic.
+- Duplicate Add and provider-edit Save use the exact Combination Already Exists
+  message and the shared single Okay action. Failed writes retain draft/data;
+  failed saved-row routing stays available when reopening that row's picker.
+- Saved-row edits use `SavedTtsSource.id` / `sourceId` (`api-tts:<id>`), keeping
+  endpoint/model/position fixed. X removes only the exact row without another
+  confirmation. Neither action activates a voice or edits chat favorites.
+- `ApiVoiceModelsViewModel` retains local writes through activity recreation and
+  stores only non-secret draft/picker identities in SavedStateHandle. It serializes
+  mutations and defers a returned row edit behind an in-flight reload. A committed
+  Add with a failed refresh can retry the read without repeating the mutation.
+- Observation for Phase 5: `SavedTtsSourcesPreferences` remains the sole source
+  of truth. The manager reloads on start/return and after successful mutations;
+  `ui` is its StateFlow snapshot. There is no separate saved-source cache or
+  alternate voice registry. Phase 5 should refresh the Voice Browser from this
+  same store and re-resolve exact stable source IDs before playback.
+- The legacy engine tile intentionally remains until Phase 5 connects selected
+  voices to preview/readback. No saved API entry can be activated yet. Active API
+  voice/history/removal recovery must therefore be connected in Phase 5, using
+  this store's deletion as loss of the source; do not keep a playable hidden copy.
+
+### Phase 4 verification
+
+- Extended existing saved-source and picker suites for manager transactions,
+  exact duplicate wording, draft/row isolation, stale and canceled results,
+  source deletion, recreation, write/read failures and layout/navigation wiring.
+- Changed XML parsing, manager string/style reference checks and diff whitespace
+  checks passed locally. Full Android Checks results are pending.
+- No device/emulator visual review, live service calls, speech playback or remote
+  routing verification performed. Phase 5 and Phase 6 remain unimplemented.

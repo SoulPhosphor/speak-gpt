@@ -3453,4 +3453,13 @@
     <string name="tts_provider_col_price">Price</string>
     <string name="tts_picker_ai_model">AI Model</string>
     <string name="tts_no_matching_models">No models match the current search.</string>
+    <string name="tts_manager_title">Select API Voice Models</string>
+    <string name="tts_manager_endpoint">Endpoint</string>
+    <string name="tts_manager_model">Model</string>
+    <string name="tts_manager_select">Select</string>
+    <string name="tts_manager_provider_title">Select Provider</string>
+    <string name="tts_manager_provider_hint">Optional. This may not be available or necessary with all endpoints.</string>
+    <string name="tts_manager_remove_heading">X</string>
+    <string name="tts_manager_edit_provider">Edit Provider: %1$s, %2$s, %3$s</string>
+    <string name="tts_manager_remove">Remove TTS Selection: %1$s, %2$s, %3$s</string>
 </resources>

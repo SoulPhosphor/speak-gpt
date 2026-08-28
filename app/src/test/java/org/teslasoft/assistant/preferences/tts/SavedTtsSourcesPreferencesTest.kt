@@ -8,6 +8,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.teslasoft.assistant.preferences.models.ModelIdentity
+import org.teslasoft.assistant.tts.api.*
 
 internal class MemoryTtsStorage(var content: String? = null) : TtsStorage {
     var failRead = false
@@ -186,5 +187,186 @@ class SavedTtsSourcesPreferencesTest {
         order.clear()
         assertEquals(listOf("a", "b"), source.routing.providerOrder)
         assertEquals(source, store.load().getOrThrow().single())
+    }
+
+    private fun managerDraft(manager: TtsManagerState, endpoint: String = "ep", model: String = "vendor/model:exact",
+        routing: TtsRoutingSettings = only("Provider/A")) {
+        manager.endpoint(endpoint)
+        val request = manager.openModel()
+        manager.acceptModel(request.target.copy(modelId = model))
+        manager.openProvider()
+        manager.acceptProvider(manager.draft.copy(routing = routing))
+    }
+
+    @Test fun managerStartsNeutralAndSuccessfulAddResetsEveryUpperFieldOnce() {
+        val manager = TtsManagerState(store)
+        assertEquals(TtsTarget(""), manager.draft)
+        assertEquals("Select", TtsManagerProviderDisplay.label(manager.draft.routing, "Select"))
+        managerDraft(manager)
+        val captured = manager.draft
+        manager.add(captured) { assertEquals("ep", it.endpointId) }
+        assertEquals(TtsTarget(""), manager.draft)
+        assertEquals(1, manager.rows.size)
+        assertEquals("vendor/model:exact", manager.rows.single().modelId)
+        assertEquals(captured.routing, manager.rows.single().routing)
+        manager.add(captured) { fail("A stale add must not run") }
+        assertEquals(1, storage.writes)
+    }
+
+    @Test fun managerFailedAddPreservesDraftAndRowsAndRetryUsesSameRoute() {
+        val manager = TtsManagerState(store)
+        managerDraft(manager)
+        val captured = manager.draft
+        storage.failWrite = true
+        val error = assertThrows(TtsException::class.java) { manager.add(captured) {} }
+        assertEquals(TtsFailureKind.SAVE_FAILED, error.failure.kind)
+        assertEquals(listOf("Cancel", "Retry"), TtsFailures.message(error.failure).actions)
+        assertEquals(captured, manager.draft)
+        assertTrue(manager.rows.isEmpty())
+        storage.failWrite = false
+        manager.add(captured) {}
+        assertEquals(captured.routing, manager.rows.single().routing)
+    }
+
+    @Test fun managerDuplicateAddAndEditUseExactSingleOkayMessageAndPreserveData() {
+        val first = store.add("ep", "vendor/model:exact", only("Provider/A")).getOrThrow()
+        val second = store.add("ep", "vendor/model:exact", only("Provider/B")).getOrThrow()
+        val manager = TtsManagerState(store)
+        manager.refresh()
+        managerDraft(manager, routing = TtsRoutingSettings(TtsRoutingMode.PREFERRED, providerOrder = listOf("Provider/A")))
+        val draft = manager.draft
+        val bytes = storage.content
+        val add = assertThrows(TtsException::class.java) { manager.add(draft) {} }
+        val edit = assertThrows(TtsException::class.java) { manager.edit(second.target().copy(routing = first.routing)) {} }
+        for (error in listOf(add, edit)) {
+            assertEquals(TtsMessage("Combination Already Exists", "endpoint model and provider combination already exists.",
+                listOf("Okay")), TtsFailures.message(error.failure))
+        }
+        assertEquals(bytes, storage.content)
+        assertEquals(draft, manager.draft)
+        assertEquals(listOf(first, second), manager.rows)
+    }
+
+    @Test fun managerProviderSaveUpdatesInlineModeAndReopeningKeepsRouting() {
+        val manager = TtsManagerState(store)
+        managerDraft(manager)
+        val first = manager.openProvider()
+        assertEquals("Provider/A", TtsManagerProviderDisplay.label(first.target.routing, "Select"))
+        val preferred = TtsRoutingSettings(TtsRoutingMode.PREFERRED, providerOrder = listOf("Provider/B", "Provider/A"), allowFallbacks = false)
+        assertNull(manager.acceptProvider(first.target.copy(routing = preferred)))
+        assertEquals(preferred, manager.draft.routing)
+        assertEquals("Provider/B", TtsManagerProviderDisplay.label(preferred, "Select"))
+        assertEquals(preferred, manager.openProvider().target.routing)
+        manager.acceptProvider(null)
+        assertEquals(preferred, manager.draft.routing)
+        assertEquals(0, storage.writes)
+    }
+
+    @Test fun managerEndpointAndModelChangesInvalidateDependentRoutesAndLateResults() {
+        val manager = TtsManagerState(store)
+        managerDraft(manager)
+        val stale = manager.openProvider()
+        manager.endpoint("another-endpoint")
+        manager.acceptProvider(stale.target)
+        assertEquals(TtsTarget("another-endpoint"), manager.draft)
+        managerDraft(manager)
+        val model = manager.openModel()
+        manager.acceptModel(model.target.copy(modelId = "other-model"))
+        assertEquals(TtsRoutingSettings(), manager.draft.routing)
+        assertEquals("other-model", manager.draft.modelId)
+    }
+
+    @Test fun managerOnlyIsNeverDowngradedAndBlankPreferredRequiresFallbacks() {
+        val manager = TtsManagerState(store)
+        managerDraft(manager, routing = TtsRoutingSettings(TtsRoutingMode.ONLY))
+        assertEquals(TtsFailureKind.PROVIDER_REQUIRED,
+            assertThrows(TtsException::class.java) { manager.add(manager.draft) {} }.failure.kind)
+        assertEquals(TtsRoutingMode.ONLY, manager.draft.routing.mode)
+        managerDraft(manager, routing = TtsRoutingSettings(TtsRoutingMode.PREFERRED, allowFallbacks = false))
+        assertThrows(TtsException::class.java) { manager.add(manager.draft) {} }
+        managerDraft(manager, routing = TtsRoutingSettings(TtsRoutingMode.PREFERRED))
+        manager.add(manager.draft) {}
+        assertEquals(TtsRoutingSettings(), manager.rows.single().routing)
+    }
+
+    @Test fun savedRowEditAndRemovalKeepUpperDraftAndOtherEndpointRowsUntouched() {
+        val first = store.add("ep", "model", only("a")).getOrThrow()
+        val other = store.add("other", "model", only("a")).getOrThrow()
+        val manager = TtsManagerState(store)
+        manager.refresh()
+        managerDraft(manager, endpoint = "draft-only")
+        val draft = manager.draft
+        manager.openProvider(first)
+        val result = manager.acceptProvider(first.target().copy(routing = only("b")))!!
+        manager.edit(result) {}
+        assertEquals(first.copy(routing = only("b")), manager.rows.first())
+        assertEquals(draft, manager.draft)
+        manager.remove(manager.rows.first())
+        assertEquals(listOf(other), manager.rows)
+        assertEquals(draft, manager.draft)
+    }
+
+    @Test fun restoredSavedRowResultDoesNotNeedAlreadyLoadedRowsAndCannotResurrectDeletion() {
+        val first = store.add("ep", "model", only("a")).getOrThrow()
+        val original = TtsManagerState(store)
+        managerDraft(original)
+        original.openProvider(first)
+        val restored = TtsManagerState(store)
+        restored.restore(TtsPickerCodec.decode(TtsPickerCodec.encode(original.draft)), null,
+            TtsPickerCodec.decode(TtsPickerCodec.encode(original.providerRequest!!.target)), null)
+        val edit = restored.acceptProvider(first.target().copy(routing = only("b")))!!
+        store.removeEntryIds(setOf(first.id)).getOrThrow()
+        assertEquals(TtsFailureKind.SAVED_SOURCE_MISSING,
+            assertThrows(TtsException::class.java) { restored.edit(edit) {} }.failure.kind)
+        assertTrue(store.load().getOrThrow().isEmpty())
+        assertEquals(original.draft, restored.draft)
+    }
+
+    @Test fun managerRejectsWrongPickerTargetsAndCancelNeverWrites() {
+        val manager = TtsManagerState(store)
+        managerDraft(manager)
+        val before = manager.draft
+        manager.openProvider()
+        assertNull(manager.acceptProvider(before.copy(endpointId = "wrong")))
+        manager.openModel()
+        manager.acceptModel(before.copy(endpointId = "wrong", modelId = "wrong"))
+        manager.openProvider(); manager.acceptProvider(null)
+        assertEquals(before, manager.draft)
+        assertEquals(0, storage.writes)
+    }
+
+    @Test fun postCommitRefreshFailureRetriesOnlyReadAcrossRecreation() {
+        var bytes: String? = null
+        var writes = 0
+        var failReads = false
+        val delayed = SavedTtsSourcesPreferences(object : TtsStorage {
+            override fun read(): String? { if (failReads) throw IOException("Read failed"); return bytes }
+            override fun write(content: String) { bytes = content; writes++; failReads = true }
+        })
+        val manager = TtsManagerState(delayed)
+        managerDraft(manager)
+        assertEquals(TtsFailureKind.STORAGE,
+            assertThrows(TtsException::class.java) { manager.add(manager.draft) {} }.failure.kind)
+        assertNotNull(manager.committedAdd)
+        val restored = TtsManagerState(delayed)
+        restored.restore(manager.draft, null, null, manager.committedAdd)
+        failReads = false
+        restored.add(restored.draft) { fail("Committed Add must not repeat") }
+        assertEquals(1, writes)
+        assertEquals(1, restored.rows.size)
+        assertEquals(TtsTarget(""), restored.draft)
+    }
+
+    @Test fun failedManagerDeleteKeepsExactRowAndDraftWithRetryMessage() {
+        val source = store.add("ep", "model", only("a")).getOrThrow()
+        val manager = TtsManagerState(store)
+        manager.refresh(); managerDraft(manager)
+        val before = manager.draft
+        storage.failWrite = true
+        val error = assertThrows(TtsException::class.java) { manager.remove(source) }
+        assertEquals(TtsFailureKind.REMOVE_FAILED, error.failure.kind)
+        assertEquals(listOf("Cancel", "Retry"), TtsFailures.message(error.failure).actions)
+        assertEquals(listOf(source), manager.rows)
+        assertEquals(before, manager.draft)
     }
 }

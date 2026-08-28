@@ -199,6 +199,36 @@ class TtsPickerStateTest {
         assertFalse(provider.contains("buildIgnoreControl"))
     }
 
+    @Test fun managerKeepsOneVerticalFlowAndTheApprovedInlineProviderEntryPoint() {
+        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            .parse(source("res/layout/activity_api_voice_models.xml"))
+        val scrolls = document.getElementsByTagName("ScrollView")
+        assertEquals(1, scrolls.length)
+        val elements = document.getElementsByTagName("*")
+        val byId = (0 until elements.length).map { elements.item(it) as Element }
+            .associateBy { it.getAttribute("android:id").substringAfter("/") }
+        val form = byId.getValue("tts_add_model")
+        val table = byId.getValue("tts_saved_table")
+        assertSame(form.parentNode, table.parentNode.parentNode)
+        val providerRow = byId.getValue("tts_provider_row")
+        assertSame(providerRow, byId.getValue("tts_provider_value").parentNode)
+        assertSame(providerRow, byId.getValue("tts_routing_mode").parentNode)
+        assertFalse(byId.containsKey("btn_save"))
+        assertEquals("@style/Widget.App.Row.Selector.Value", byId.getValue("tts_provider_value").getAttribute("style"))
+        val activity = source("java/org/teslasoft/assistant/ui/activities/ApiVoiceModelsActivity.kt").readText()
+        assertTrue(activity.contains("model.openProvider()?.let(providerPicker::launch)"))
+        assertTrue(activity.contains("model.openProvider(source)?.let(providerPicker::launch)"))
+        assertFalse(activity.contains("hasOpenRouterCatalogAuthority"))
+        assertFalse(activity.contains("setTtsEngine"))
+        assertFalse(activity.contains("FavoriteModelsPreferences"))
+        val settings = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            .parse(source("res/layout/activity_voice_settings.xml"))
+        val rows = settings.getElementsByTagName("LinearLayout")
+        val ids = (0 until rows.length).map { (rows.item(it) as Element).getAttribute("android:id") }
+            .filter { it.isNotBlank() }
+        assertEquals(ids.indexOf("@+id/row_api_voice_models") + 1, ids.indexOf("@+id/tile_voice_advanced"))
+    }
+
     private fun source(relative: String): File = listOf(File("src/main/$relative"), File("app/src/main/$relative"))
         .first { it.isFile }
 }

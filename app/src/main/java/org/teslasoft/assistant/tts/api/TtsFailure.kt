@@ -19,7 +19,8 @@ enum class TtsFailureKind {
     UNSUPPORTED_PARAMETER, REGION_RESTRICTED, CONTENT_REJECTED,
     DISCOVERY_UNAVAILABLE, EMPTY, MALFORMED, IDENTIFIERS_MISSING, MODEL_UNAVAILABLE,
     VOICE_UNSUPPORTED, ROUTING_REJECTED, PROVIDER_UNAVAILABLE, NOT_FOUND,
-    NO_AUDIO, AUDIO_FORMAT, PLAYBACK, SOURCE_MISSING, PROFILE_MISSING, STORAGE, UNKNOWN
+    NO_AUDIO, AUDIO_FORMAT, PLAYBACK, SOURCE_MISSING, PROFILE_MISSING, STORAGE, UNKNOWN,
+    DUPLICATE, SAVE_FAILED, REMOVE_FAILED, SAVED_SOURCE_MISSING, ENDPOINT_LIST_FAILED, STORAGE_FULL
 }
 
 data class TtsFailure(
@@ -122,6 +123,12 @@ object TtsFailures {
             TtsFailureKind.SOURCE_MISSING -> Triple("Voice Source Unavailable", "The endpoint, model, and provider for this voice could not be identified. Choose a voice again in Select Voice.", okay)
             TtsFailureKind.PROFILE_MISSING -> Triple("API Profile No Longer Exists", "The API profile used by this TTS selection was deleted. Choose another saved TTS selection.", okay)
             TtsFailureKind.STORAGE -> Triple("Saved TTS Models Could Not Be Read", "The saved text-to-speech list could not be read. It has not been replaced or cleared.", okay)
+            TtsFailureKind.DUPLICATE -> Triple("Combination Already Exists", "endpoint model and provider combination already exists.", okay)
+            TtsFailureKind.SAVE_FAILED -> Triple("TTS Selection Could Not Be Saved", "The TTS selection could not be saved. The saved list and your current selections have not changed.", retry)
+            TtsFailureKind.STORAGE_FULL -> Triple("Not Enough Storage", "There is not enough space on this device to save the TTS selection. The saved list and your current selections have not changed.", okay)
+            TtsFailureKind.REMOVE_FAILED -> Triple("TTS Selection Could Not Be Removed", "The selected TTS entries could not be removed. They remain in the saved list.", retry)
+            TtsFailureKind.SAVED_SOURCE_MISSING -> Triple("Saved TTS Selection No Longer Exists", "This saved TTS selection was removed. It has not been recreated.", okay)
+            TtsFailureKind.ENDPOINT_LIST_FAILED -> Triple("API Profiles Could Not Be Read", "The saved API profiles could not be read. Your TTS selections have not changed. Try loading the profiles again.", retry)
             TtsFailureKind.REJECTED -> Triple("Request Rejected", "$e rejected the request to $action. Any explanation it supplied is shown below.", okay)
             TtsFailureKind.UNKNOWN -> Triple("$heading Could Not Be ${if(list) "Loaded" else "Generated"}", "The $item could not be ${if(list) "loaded" else "generated"}, and the cause could not be identified. No provider response was received.", retry)
         }
