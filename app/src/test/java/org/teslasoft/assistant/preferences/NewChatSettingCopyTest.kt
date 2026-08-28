@@ -72,8 +72,8 @@ class NewChatSettingCopyTest {
             "LogitBiasesConfigId",
             "MaxTokens",
             "Model",
-            "OpenAITtsModel",
-            "OpenAIVoice",
+            // Voice identity and engine compatibility are global; new chats
+            // must neither copy them nor write a cached default back.
             "Prefix",
             "PresencePenalty",
             "Prompt",
@@ -81,9 +81,7 @@ class NewChatSettingCopyTest {
             "Streaming",
             "SystemMessage",
             "Temperature",
-            "TopP",
-            "TtsEngine",
-            "Voice"
+            "TopP"
         )
 
         assertEquals(
