@@ -96,6 +96,25 @@ class ChatComposerLayoutTest {
     }
 
     @Test
+    fun automaticRestoreAndResetDoNotStartAnEditingGesture() = withActivity { activity ->
+        val original = Fixture(activity)
+        original.expand.performClick()
+        val saved = SparseArray<Parcelable>()
+        original.composer.saveHierarchyState(saved)
+
+        val restored = Fixture(activity)
+        restored.composer.restoreHierarchyState(saved)
+        shadowOf(Looper.getMainLooper()).idle()
+        restored.assertEditorIn(restored.content)
+        assertFalse(restored.editor.hasFocus())
+
+        restored.composer.resetAfterSend()
+        shadowOf(Looper.getMainLooper()).idle()
+        restored.assertEditorIn(restored.controls)
+        assertFalse(restored.editor.hasFocus())
+    }
+
+    @Test
     fun repeatedFocusOutsideTapAndSendKeepOneEditor() = withActivity { activity ->
         val fixture = Fixture(activity)
         repeat(10) {

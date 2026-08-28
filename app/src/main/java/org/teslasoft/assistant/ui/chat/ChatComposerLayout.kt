@@ -201,7 +201,21 @@ class ChatComposerLayout @JvmOverloads constructor(
     private fun applyMode() {
         if (!::messageInput.isInitialized) return
         beforeResize?.invoke()
-        applyModeInternal()
+        // removeView() synchronously reports focus loss before clearing the
+        // editor's parent. A focus callback must not start another move while
+        // that removal is still in progress, including during posted restore
+        // and send/reset transitions (not just the initial focus tap).
+        val wasMovingFocusedEditor = movingFocusedEditor
+        val keepEditorFocus = messageInput.hasFocus() && (expanded || active)
+        movingFocusedEditor = true
+        try {
+            applyModeInternal()
+            // Keep an existing editing gesture, but never focus a background
+            // composer or reopen the keyboard when returning to compact mode.
+            if (keepEditorFocus) messageInput.requestFocus()
+        } finally {
+            movingFocusedEditor = wasMovingFocusedEditor
+        }
         afterResize?.let { after -> post { after.invoke() } }
     }
 
