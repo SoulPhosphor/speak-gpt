@@ -1706,7 +1706,7 @@
     <!-- User-triggered Model Cleanup. -->
     <string name="model_cleanup_title">Clean Up Models</string>
     <string name="model_cleanup_settings_subtitle">Checks for unavailable models associated with Favorites or Rules</string>
-    <string name="model_cleanup_explanation">This check looks at your saved Favorite Models and Model Rules to see whether their models are currently available from their saved API endpoints.\n\nA model marked unavailable was not available when this report was generated. This does not necessarily mean the model has been permanently removed.\n\nYou can delete unavailable items or leave them as they are. Items you keep will remain marked as unavailable until a future check finds the model available again. Availability can change, and a provider may not always return complete or reliable model information.</string>
+    <string name="model_cleanup_explanation">This check looks at your saved Favorite Models, Model Rules, and TTS models to see whether their models are currently available from their saved API endpoints.\n\nA model marked unavailable was not available when this report was generated. This does not necessarily mean the model has been permanently removed.\n\nYou can delete unavailable items or leave them as they are. Items you keep will remain marked as unavailable until a future check finds the model available again. Availability can change, and a provider may not always return complete or reliable model information.</string>
     <string name="model_cleanup_check">Check Available Models</string>
     <string name="model_cleanup_check_failed">Couldn’t check saved models. Try again later.</string>
     <string name="model_cleanup_unavailable">Unavailable</string>
@@ -1714,6 +1714,13 @@
     <string name="model_cleanup_no_report">No cleanup report has been generated yet.</string>
     <string name="model_cleanup_endpoint_unchecked">Models associated with %1$s were not available to be checked as endpoint was not available. Try again later.</string>
     <string name="model_cleanup_favorites_heading">Unavailable Model Favorites</string>
+    <string name="model_cleanup_tts_heading">Unavailable TTS Models</string>
+    <string name="model_cleanup_delete_tts_confirm_title">Remove Unavailable TTS Models?</string>
+    <string name="model_cleanup_delete_tts_confirm_message">Remove the saved TTS combinations whose models were reported unavailable by the last check? This removes them from Select API Voice Models and Select Voice.</string>
+    <plurals name="model_cleanup_removed_tts">
+        <item quantity="one">Removed %d saved TTS combination.</item>
+        <item quantity="other">Removed %d saved TTS combinations.</item>
+    </plurals>
     <string name="model_cleanup_rules_heading">Model Rules Using Unavailable Models</string>
     <string name="model_cleanup_none">None</string>
     <string name="model_cleanup_delete_all">Delete All</string>

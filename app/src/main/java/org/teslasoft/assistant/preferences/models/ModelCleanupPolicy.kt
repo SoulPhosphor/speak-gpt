@@ -28,8 +28,8 @@ sealed class EndpointCatalogCheck {
 }
 
 /**
- * The most recent saved cleanup report. [unavailable] is shared by Favorites
- * and Model Rules, so one endpoint/model result drives every warning.
+ * The most recent saved cleanup report. [unavailable] is shared by Favorites,
+ * Model Rules and saved TTS sources, so one endpoint/model result drives every warning.
  */
 data class ModelCleanupReport(
     val generatedAtMillis: Long = 0L,
@@ -45,6 +45,9 @@ data class ModelCleanupReport(
 
 /** Pure update rules for user-triggered cleanup scans. */
 object ModelCleanupPolicy {
+
+    fun prune(report: ModelCleanupReport, references: ModelCleanupReferences): ModelCleanupReport =
+        if (references.isComplete) prune(report, references.allTargets) else report
 
     /**
      * Build a fresh saved report from one check per endpoint.

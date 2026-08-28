@@ -1,6 +1,6 @@
 # API Voice Models — Implementation Status
 
-Current implementation: see the Phase 5 handoff at the end. Its global voice-storage contract supersedes the earlier per-chat scope.
+Current implementation: Phase 6 is implemented below, with verification in progress. The Phase 5 global voice-storage contract supersedes the earlier per-chat scope.
 
 ## Phase 1 — Complete
 
@@ -464,3 +464,53 @@ All new production files are in
   definitions, storage/recovery instructions, Phase 6 steps, regression scenarios
   and acceptance checklist now carry these rules explicitly. The drawer redesign
   instructions also describe title-only renaming without changing chat IDs.
+
+
+## Phase 6 — Implemented; verification in progress
+
+- Branch: `feature/tts-api-models-phase-3`, continuing `92f79a92`. No new
+  branch, main merge, chat-ID changes, per-chat voice edits, or logging changes.
+- `ModelCleanupReferencesLoader` adds only explicitly saved TTS sources;
+  endpoint/model sets deduplicate provider combinations. Unreadable TTS storage
+  makes the reference load incomplete, preserves the saved report, and produces
+  the existing specific storage error. `ModelCleanupPolicy.prune` includes TTS
+  references and refuses to prune incomplete loads. The report format is unchanged.
+- `ModelCatalogAvailabilityClient` requests OpenRouter `output_modalities=all`
+  when a scan includes TTS references. Exact saved-ID/canonical-slug and alias
+  checks remain in use. Empty, failed, malformed and visibly partial catalogs
+  remain inconclusive. Pagination markers and HTTP next-page links never become
+  absence evidence; no pagination URL is guessed.
+- Official OpenAI's all-model catalog can establish absence. For generic endpoints,
+  an absent TTS ID receives an exact `/models/{id}` lookup: an exact returned ID
+  proves presence; an explicit `model_not_found` 404 proves absence. Unsupported
+  lookup paths, bare 404s, failed lookups and chat-only lists alone are inconclusive.
+  No voice or upstream-provider catalog is used as model-absence evidence.
+- `ModelCleanupActivity` adds Unavailable TTS Models last, reusing shared section,
+  result and Delete All styles. Its approved Cancel / Okay confirmation captures
+  only reported TTS endpoint/model targets. There is no availability recheck at
+  deletion time and no call to favorite/rule deletion from this action.
+- `TtsModelCleanupViewModel` retains a confirmed operation across rotation and
+  finishes an already-started atomic removal/recovery even when the activity leaves.
+  `TtsSelectionService.removeUnavailableSources` serializes the batch with global
+  activation, uses `SavedTtsSourcesPreferences.removeTargets`, and invokes the
+  existing recovery logic once only when the current API source was removed.
+  Recovery failures are separate from successful deletion, so a removed source
+  is never reported as still saved. The immediately previous usable voice can be
+  restored; otherwise the existing Okay / Select New Voice dialog is shown.
+- Inactive removal leaves selection/history/last-known-good records unchanged.
+  Store change notifications invalidate removed-source playback; the manager and
+  Voice Browser continue to reload that same store. Local report reconciliation
+  follows successful deletion and also runs when reopening cleanup.
+- Focused tests extend `ModelCleanupPolicyTest`, `PreviousTtsVoicePreferencesTest`,
+  `TtsPickerStateTest`, and `TtsPlaybackTest`. New `ModelCatalogAvailabilityClientTest`
+  covers the previously untested HTTP availability layer; `ModelCleanupReportStoreTest`
+  verifies old report compatibility. Existing atomic saved-source tests remain in use.
+
+### Phase 6 verification
+
+- Android Checks: pending.
+- No device/emulator visual review or real speech playback performed.
+- No paid speech requests or live provider-routing verification performed. Catalog
+  network tests use synthetic HTTP interceptors; they are not service verification.
+- Catalog-scope references: https://openrouter.ai/docs/guides/overview/models and
+  https://developers.openai.com/api/reference/resources/models/methods/list/.

@@ -287,4 +287,30 @@ class TtsPickerStateTest {
 
     private fun source(relative: String): File = listOf(File("src/main/$relative"), File("app/src/main/$relative"))
         .first { it.isFile }
+    @Test fun cleanupAddsLastCategoryAndOnlyOkayStartsTtsDeletion() {
+        val document = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            .parse(source("res/layout/activity_model_cleanup.xml"))
+        val elements = document.getElementsByTagName("*")
+        val nodes = (0 until elements.length).map { elements.item(it) as Element }
+        val headings = nodes.map { it.getAttribute("android:text") }.filter { it.endsWith("_heading") }
+        assertEquals(listOf("@string/model_cleanup_favorites_heading", "@string/model_cleanup_rules_heading",
+            "@string/model_cleanup_tts_heading"), headings)
+        assertEquals(1, document.getElementsByTagName("ScrollView").length)
+        val activity = source("java/org/teslasoft/assistant/ui/activities/ModelCleanupActivity.kt").readText()
+        val confirmation = activity.substringAfter("private fun confirmDeleteTts()").substringBefore("private fun ttsFailure")
+        assertTrue(confirmation.contains("R.layout.dialog_two_actions_cancel_first"))
+        val cancel = confirmation.substringAfter("R.id.btn_dialog_destructive_action").substringBefore("R.id.btn_dialog_primary_action")
+        assertTrue(cancel.contains("R.string.btn_cancel"))
+        assertTrue(cancel.contains("dialog.dismiss()"))
+        assertFalse(cancel.contains("ttsCleanup.remove"))
+        val okay = confirmation.substringAfter("R.id.btn_dialog_primary_action")
+        assertTrue(okay.contains("R.string.btn_ok"))
+        assertTrue(okay.contains("ttsCleanup.remove(targets)"))
+        assertFalse(confirmation.contains("ModelCatalogAvailabilityClient"))
+        assertTrue(activity.contains("TtsVoiceDialogs.show(this, \"\", failure, retry)"))
+        val strings = source("res/values/strings.xml").readText()
+        assertTrue(strings.contains(">Remove Unavailable TTS Models?</string>"))
+        assertTrue(strings.contains("Remove the saved TTS combinations whose models were reported unavailable by the last check? This removes them from Select API Voice Models and Select Voice."))
+    }
+
 }

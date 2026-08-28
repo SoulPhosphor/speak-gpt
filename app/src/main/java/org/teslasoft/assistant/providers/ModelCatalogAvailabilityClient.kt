@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.providers
 
 import com.google.gson.JsonParser
+import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -41,25 +42,35 @@ object ModelCatalogAvailabilityClient {
 
     suspend fun check(
         endpoint: ApiEndpointObject,
-        targetModelIds: Set<String> = emptySet()
+        targetModelIds: Set<String> = emptySet(),
+        speechModelIds: Set<String> = emptySet()
+    ): EndpointCatalogCheck = checkWithClient(endpoint, targetModelIds, speechModelIds,
+        OkHttpClient.Builder()
+            .connectTimeout(ApiEndpointObject.coerceConnectTimeoutSeconds(endpoint.connectTimeoutSeconds).toLong(), TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .build())
+
+    internal suspend fun checkWithClient(
+        endpoint: ApiEndpointObject,
+        targetModelIds: Set<String>,
+        speechModelIds: Set<String>,
+        client: OkHttpClient
     ): EndpointCatalogCheck = withContext(Dispatchers.IO) {
         try {
             val base = endpoint.host.toHttpUrlOrNull() ?: return@withContext EndpointCatalogCheck.Unchecked
-            val url = base.newBuilder().addPathSegment("models").build()
+            val url = base.newBuilder().addPathSegment("models").apply {
+                // OpenRouter defaults to text output. Never use that filtered list
+                // as the authority for speech, or feed a speech-only list to text cleanup.
+                if (speechModelIds.isNotEmpty() && endpoint.isOpenRouterRouting()) {
+                    setQueryParameter("output_modalities", "all")
+                }
+            }.build()
             val request = Request.Builder()
                 .url(url)
                 .header("Accept", "application/json")
                 .applyEndpointAuth(endpoint)
                 .get()
                 .build()
-            val client = OkHttpClient.Builder()
-                .connectTimeout(
-                    ApiEndpointObject.coerceConnectTimeoutSeconds(endpoint.connectTimeoutSeconds).toLong(),
-                    TimeUnit.SECONDS
-                )
-                .readTimeout(45, TimeUnit.SECONDS)
-                .build()
-
             val ids = client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@withContext EndpointCatalogCheck.Unchecked
                 val body = response.body?.string().orEmpty()
@@ -67,6 +78,12 @@ object ModelCatalogAvailabilityClient {
                 if (!root.isJsonObject) return@withContext EndpointCatalogCheck.Unchecked
                 val data = root.asJsonObject.get("data")
                 if (data == null || !data.isJsonArray) return@withContext EndpointCatalogCheck.Unchecked
+                if (speechModelIds.isNotEmpty() && (
+                        incomplete(root.asJsonObject, data.asJsonArray.size()) ||
+                        response.headers.values("Link").any { Regex("rel=\"?next", RegexOption.IGNORE_CASE).containsMatchIn(it) } ||
+                        data.asJsonArray.any { item -> !item.isJsonObject ||
+                            item.asJsonObject.stringId("id") == null }
+                    )) return@withContext EndpointCatalogCheck.Unchecked
                 data.asJsonArray.flatMap { item ->
                     val model = item.takeIf { it.isJsonObject }?.asJsonObject
                         ?: return@flatMap emptyList<String>()
@@ -90,14 +107,22 @@ object ModelCatalogAvailabilityClient {
             // An empty success response is too weak to call every saved model
             // unavailable. Treat it as inconclusive instead.
             if (ids.isEmpty()) return@withContext EndpointCatalogCheck.Unchecked
-            if (!endpoint.isOpenRouterRouting()) {
-                return@withContext EndpointCatalogCheck.Checked(ids)
-            }
-
             val available = ids.toMutableSet()
             val indeterminate = LinkedHashSet<String>()
-            (targetModelIds - ids).forEach { targetModelId ->
-                when (checkOpenRouterAlias(client, base, endpoint, targetModelId)) {
+            val openRouter = endpoint.isOpenRouterRouting()
+            // Official OpenAI /models is an all-model list. A generic compatible
+            // endpoint may expose only chat models: absence there needs exact evidence.
+            val exactTargets = if (openRouter) targetModelIds - ids
+                else if (base.host == "api.openai.com") emptySet()
+                else speechModelIds - ids
+            exactTargets.forEach { targetModelId ->
+                val result = when {
+                    openRouter && targetModelId in speechModelIds &&
+                        (targetModelId.indexOf('/') <= 0 || targetModelId.endsWith('/')) -> AliasCheck.INDETERMINATE
+                    openRouter -> checkOpenRouterAlias(client, base, endpoint, targetModelId)
+                    else -> checkSpeechModel(client, base, endpoint, targetModelId)
+                }
+                when (result) {
                     AliasCheck.AVAILABLE -> available.add(targetModelId)
                     AliasCheck.UNAVAILABLE -> Unit
                     AliasCheck.INDETERMINATE -> indeterminate.add(targetModelId)
@@ -166,6 +191,58 @@ object ModelCatalogAvailabilityClient {
         } catch (_: Exception) {
             AliasCheck.INDETERMINATE
         }
+    }
+
+
+    /** Partial discovery is never evidence of absence. We do not guess pagination URLs. */
+    private fun incomplete(root: JsonObject, count: Int): Boolean {
+        for (key in listOf("has_more", "hasMore", "has_next_page")) {
+            root.get(key)?.takeUnless { it.isJsonNull }?.let {
+                if (!it.isJsonPrimitive || !it.asJsonPrimitive.isBoolean || it.asBoolean) return true
+            }
+        }
+        for (key in listOf("next", "next_cursor", "next_page", "next_page_token", "continuation_token")) {
+            root.get(key)?.takeUnless { it.isJsonNull }?.let {
+                if (!it.isJsonPrimitive || it.asString !in listOf("", "false")) return true
+            }
+        }
+        for (key in listOf("total", "total_count")) {
+            root.get(key)?.takeUnless { it.isJsonNull }?.let {
+                if (!it.isJsonPrimitive || it.asString.toLongOrNull()?.let { total -> total <= count } != true) return true
+            }
+        }
+        for (key in listOf("pagination", "meta", "links")) {
+            root.get(key)?.takeUnless { it.isJsonNull }?.let {
+                if (!it.isJsonObject || incomplete(it.asJsonObject, count)) return true
+            }
+        }
+        return false
+    }
+
+    private fun JsonObject.stringId(key: String): String? = get(key)
+        ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+        ?.asString?.takeIf { it.isNotBlank() }
+
+    /** A generic route's bare 404 may mean this lookup is unsupported, not a missing model. */
+    private fun checkSpeechModel(client: OkHttpClient, base: okhttp3.HttpUrl,
+        endpoint: ApiEndpointObject, modelId: String): AliasCheck {
+        val request = Request.Builder().url(base.newBuilder().addPathSegment("models")
+            .addPathSegment(modelId).build()).header("Accept", "application/json")
+            .applyEndpointAuth(endpoint).get().build()
+        return try {
+            client.newCall(request).execute().use { response ->
+                val root = JsonParser.parseString(response.body?.string().orEmpty())
+                    .takeIf { it.isJsonObject }?.asJsonObject ?: return@use AliasCheck.INDETERMINATE
+                if (response.code == 404) {
+                    val error = root.get("error")?.takeIf { it.isJsonObject }?.asJsonObject
+                    return@use if (error?.stringId("code") == "model_not_found") AliasCheck.UNAVAILABLE
+                        else AliasCheck.INDETERMINATE
+                }
+                if (!response.isSuccessful) return@use AliasCheck.INDETERMINATE
+                val model = root.get("data")?.takeIf { it.isJsonObject }?.asJsonObject ?: root
+                if (model.stringId("id") == modelId) AliasCheck.AVAILABLE else AliasCheck.INDETERMINATE
+            }
+        } catch (_: Exception) { AliasCheck.INDETERMINATE }
     }
 
     private fun Request.Builder.applyEndpointAuth(endpoint: ApiEndpointObject): Request.Builder = apply {

@@ -28,6 +28,10 @@ import android.widget.Toast
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.repeatOnLifecycle
+import org.teslasoft.assistant.tts.api.*
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.CancellationException
@@ -56,7 +60,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Saved, user-triggered availability report for Favorite Models and Model Rules. */
+/** Saved, user-triggered availability report for Favorites, Model Rules and saved TTS models. */
 class ModelCleanupActivity : FragmentActivity() {
 
     private data class ScreenData(
@@ -78,9 +82,15 @@ class ModelCleanupActivity : FragmentActivity() {
     private var btnDeleteFavorites: MaterialButton? = null
     private var btnDeleteRules: MaterialButton? = null
 
+    private var ttsContainer: LinearLayout? = null
+    private var noTts: TextView? = null
+    private var btnDeleteTts: MaterialButton? = null
+    private lateinit var ttsCleanup: TtsModelCleanupViewModel
+
     private lateinit var reportStore: ModelCleanupReportStore
     private var screenData: ScreenData? = null
     private var scanning = false
+    private var refreshGeneration = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,11 +98,34 @@ class ModelCleanupActivity : FragmentActivity() {
         setContentView(R.layout.activity_model_cleanup)
         reportStore = ModelCleanupReportStore.get(this)
         bindViews()
+        ttsCleanup = ViewModelProvider(this)[TtsModelCleanupViewModel::class.java]
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                ttsCleanup.ui.collect { state ->
+                    setScanningUi(scanning || state.busy)
+                    state.result?.let { result ->
+                        ttsCleanup.consumeResult()
+                        val removed = result.getOrNull()
+                        if (removed != null) {
+                            Toast.makeText(this@ModelCleanupActivity,
+                                resources.getQuantityString(R.plurals.model_cleanup_removed_tts,
+                                    removed.removed, removed.removed), Toast.LENGTH_SHORT).show()
+                            refreshFromLocal()
+                            removed.recoveryFailure?.let { showTtsFailure(it) }
+                        } else {
+                            showTtsFailure((result.exceptionOrNull() as? TtsException)?.failure
+                                ?: ttsFailure(TtsFailureKind.REMOVE_FAILED)) { ttsCleanup.remove(state.targets) }
+                        }
+                    }
+                }
+            }
+        }
 
         btnBack?.setOnClickListener { finish() }
         btnCheck?.setOnClickListener { runScan() }
         btnDeleteFavorites?.setOnClickListener { confirmDeleteFavorites() }
         btnDeleteRules?.setOnClickListener { confirmDeleteRuleTargets() }
+        btnDeleteTts?.setOnClickListener { confirmDeleteTts() }
 
         // Local-only reconciliation. This is intentionally not a scan.
         refreshFromLocal()
@@ -111,24 +144,26 @@ class ModelCleanupActivity : FragmentActivity() {
         noRules = findViewById(R.id.text_no_unavailable_rules)
         btnDeleteFavorites = findViewById(R.id.btn_delete_all_favorites)
         btnDeleteRules = findViewById(R.id.btn_delete_all_rules)
+        ttsContainer = findViewById(R.id.container_unavailable_tts)
+        noTts = findViewById(R.id.text_no_unavailable_tts)
+        btnDeleteTts = findViewById(R.id.btn_delete_all_tts)
     }
 
     private fun refreshFromLocal() {
+        val generation = ++refreshGeneration
         lifecycleScope.launch {
             try {
                 val data = withContext(Dispatchers.IO) {
                     val references = ModelCleanupReferencesLoader.load(this@ModelCleanupActivity)
                     val saved = reportStore.load()
-                    val pruned = if (references.isComplete) {
-                        ModelCleanupPolicy.prune(saved, references.allTargets)
-                    } else {
-                        saved
-                    }
+                    val pruned = ModelCleanupPolicy.prune(saved, references)
                     if (references.isComplete) reportStore.save(pruned)
                     ScreenData(references, pruned, currentEndpointLabels())
                 }
+                if (generation != refreshGeneration || ttsCleanup.ui.value.busy) return@launch
                 screenData = data
                 render(data)
+                if (!data.references.ttsReadable) showTtsFailure(ttsFailure(TtsFailureKind.STORAGE))
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -175,13 +210,14 @@ class ModelCleanupActivity : FragmentActivity() {
     }
 
     private fun runScan() {
-        if (scanning) return
+        if (scanning || ttsCleanup.ui.value.busy) return
         scanning = true
         setScanningUi(true)
         lifecycleScope.launch {
             try {
                 val data = withContext(Dispatchers.IO) {
                     val references = ModelCleanupReferencesLoader.load(this@ModelCleanupActivity)
+                    if (!references.ttsReadable) throw TtsException(ttsFailure(TtsFailureKind.STORAGE))
                     check(references.isComplete) { "Saved model references could not be read." }
                     val endpoints = ApiEndpointPreferences.getApiEndpointPreferences(this@ModelCleanupActivity)
                         .getApiEndpointsList(this@ModelCleanupActivity)
@@ -200,7 +236,9 @@ class ModelCleanupActivity : FragmentActivity() {
                                         targetsByEndpoint[endpointId]
                                             .orEmpty()
                                             .map { target -> target.modelId }
-                                            .toSet()
+                                            .toSet(),
+                                        references.ttsTargets.filter { target -> target.endpointId == endpointId }
+                                            .map { target -> target.modelId }.toSet()
                                     )
                                 } ?: EndpointCatalogCheck.Unchecked)
                             }
@@ -214,18 +252,21 @@ class ModelCleanupActivity : FragmentActivity() {
                         generatedAtMillis = System.currentTimeMillis()
                     )
                     reportStore.save(report)
-                    purgeStaleReasoningLearning(endpoints, checks)
+                    val textEndpointIds = (references.favorites + references.ruleTargets).map { it.endpointId }.toSet()
+                    purgeStaleReasoningLearning(endpoints, checks.filterKeys { it in textEndpointIds })
                     ScreenData(references, report, labels)
                 }
                 screenData = data
                 render(data)
             } catch (cancelled: CancellationException) {
                 throw cancelled
+            } catch (error: TtsException) {
+                showTtsFailure(error.failure)
             } catch (_: Exception) {
                 showCheckFailed()
             } finally {
                 scanning = false
-                setScanningUi(false)
+                setScanningUi(ttsCleanup.ui.value.busy)
             }
         }
     }
@@ -254,8 +295,13 @@ class ModelCleanupActivity : FragmentActivity() {
         }
         val unavailableFavorites = data.references.favorites.intersect(report.unavailable)
         val unavailableRules = data.references.ruleTargets.intersect(report.unavailable)
+        val unavailableTts = data.references.ttsTargets.intersect(report.unavailable)
         renderGroups(favoritesContainer, unavailableFavorites, data)
         renderGroups(rulesContainer, unavailableRules, data)
+        renderGroups(ttsContainer, unavailableTts, data)
+        noTts?.visibility = if (data.references.ttsReadable && unavailableTts.isEmpty()) View.VISIBLE else View.GONE
+        btnDeleteTts?.visibility = if (unavailableTts.isEmpty()) View.GONE else View.VISIBLE
+        btnDeleteTts?.isEnabled = data.references.isComplete && !scanning && !ttsCleanup.ui.value.busy
         noFavorites?.visibility = if (unavailableFavorites.isEmpty()) View.VISIBLE else View.GONE
         noRules?.visibility = if (unavailableRules.isEmpty()) View.VISIBLE else View.GONE
         btnDeleteFavorites?.visibility = if (unavailableFavorites.isEmpty()) View.GONE else View.VISIBLE
@@ -347,10 +393,41 @@ class ModelCleanupActivity : FragmentActivity() {
             .show()
     }
 
+    private fun confirmDeleteTts() {
+        val data = screenData ?: return
+        if (!data.references.isComplete || scanning || ttsCleanup.ui.value.busy) return
+        val targets = data.references.ttsTargets.intersect(data.report.unavailable)
+        if (targets.isEmpty()) return
+        val actions = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.model_cleanup_delete_tts_confirm_title)
+            .setMessage(R.string.model_cleanup_delete_tts_confirm_message)
+            .setView(actions).create()
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+        actions.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.btn_ok)
+            setOnClickListener {
+                dialog.dismiss()
+                ttsCleanup.remove(targets)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun ttsFailure(kind: TtsFailureKind) = TtsFailure(TtsOperation.MODELS, TtsTarget(""), "", kind)
+
+    private fun showTtsFailure(failure: TtsFailure, retry: () -> Unit = {}) {
+        TtsVoiceDialogs.show(this, "", failure, retry)
+    }
+
     private fun setScanningUi(active: Boolean) {
         btnCheck?.isEnabled = !active
         btnDeleteFavorites?.isEnabled = !active
         btnDeleteRules?.isEnabled = !active
+        btnDeleteTts?.isEnabled = !active && screenData?.references?.isComplete == true
         progress?.visibility = if (active) View.VISIBLE else View.GONE
     }
 

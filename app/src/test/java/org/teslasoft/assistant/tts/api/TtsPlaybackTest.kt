@@ -130,6 +130,23 @@ class TtsPlaybackTest {
         assertFalse(player.released)
     }
 
+
+    @Test fun cleanupRemovalInvalidatesQueuedPlaybackBeforeUiDelivery() {
+        val storage = org.teslasoft.assistant.preferences.tts.MemoryTtsStorage("""{"version":1,"entries":[
+            {"id":"saved","endpointId":"ep","modelId":"model","routing":{
+                "mode":"automatic","selectedProvider":"","providerOrder":[],"allowFallbacks":true}}]}""")
+        val store = org.teslasoft.assistant.preferences.tts.SavedTtsSourcesPreferences(storage)
+        start(playback())
+        val player = players.single()
+        val queued = player.prepared!!
+        store.removeTargets(setOf(org.teslasoft.assistant.preferences.models.ModelIdentity("ep", "model"))).getOrThrow()
+        queued.onPrepared(player)
+        Shadows.shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, starts)
+        assertTrue(player.released)
+        assertFalse(File(player.path).exists())
+    }
+
     private class RecordingPlayer : MediaPlayer() {
         var path = ""
         var prepared: OnPreparedListener? = null

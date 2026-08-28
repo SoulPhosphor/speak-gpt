@@ -7,9 +7,13 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.models.ModelIdentity
 import org.teslasoft.assistant.preferences.tts.*
 import org.teslasoft.assistant.tts.voices.GoogleSpeechVoiceProvider
 import kotlin.coroutines.resume
+
+/** Persistence and voice recovery have distinct outcomes: a recovery error does not undo deletion. */
+data class TtsSourceRemoval(val removed: Int, val recoveryFailure: TtsFailure? = null)
 
 /** Activation and removal recovery for the app-wide default voice. */
 class TtsSelectionService internal constructor(
@@ -39,12 +43,48 @@ class TtsSelectionService internal constructor(
         }
     }
 
+    /** One confirmed batch, serialized with activation. No model availability check at deletion time. */
+    suspend fun removeUnavailableSources(store: SavedTtsSourcesPreferences, targets: Set<ModelIdentity>,
+        token: TtsRequestToken): Result<TtsSourceRemoval> = mutex.withLock {
+        token.check()
+        val current = runCatching { preferences.getSelectedTtsVoice() }.getOrElse {
+            return@withLock Result.failure(TtsException(TtsFailure(TtsOperation.MODELS,
+                TtsTarget(""), "", TtsFailureKind.REMOVE_FAILED)))
+        }
+        val removal = withContext(Dispatchers.IO) {
+            runCatching {
+                val matching = store.load().getOrThrow().filter {
+                    ModelIdentity(it.endpointId, it.modelId) in targets
+                }
+                val removed = store.removeTargets(targets).getOrThrow()
+                removed to (current?.kind == TtsVoiceKind.API && matching.any { it.sourceId == current.sourceId })
+            }
+        }
+        val (count, activeRemoved) = removal.getOrElse {
+            return@withLock Result.failure(TtsException(TtsFailure(TtsOperation.MODELS,
+                TtsTarget(""), "", if ((it as? TtsStorageException)?.reason in
+                    setOf(TtsStorageFailure.READ_FAILED, TtsStorageFailure.INVALID_DATA)) TtsFailureKind.STORAGE
+                    else TtsFailureKind.REMOVE_FAILED)))
+        }
+        val recovery = if (count > 0 && activeRemoved) reconcileLocked(token) else null
+        val recoveryFailure = recovery?.exceptionOrNull()?.let { error ->
+            (error as? TtsException)?.failure ?: TtsFailure(TtsOperation.SPEECH,
+                TtsTarget("", sourceId = current?.sourceId, voiceId = current?.voiceId), "",
+                TtsFailureKind.PERMANENT_UNAVAILABLE)
+        }
+        Result.success(TtsSourceRemoval(count, recoveryFailure))
+    }
+
     /** Does not contact a service unless a previous API selection needs to be validated. */
     suspend fun reconcile(token: TtsRequestToken, confirmed: TtsFailure? = null): Result<TtsVoiceSelection> = mutex.withLock {
-        try {
+        reconcileLocked(token, confirmed)
+    }
+
+    private suspend fun reconcileLocked(token: TtsRequestToken, confirmed: TtsFailure? = null): Result<TtsVoiceSelection> {
+        return try {
             val current = preferences.getSelectedTtsVoice() ?: throw TtsException(TtsFailure(
                 TtsOperation.SPEECH, TtsTarget(""), "", TtsFailureKind.SOURCE_MISSING))
-            if (current.kind == TtsVoiceKind.DEVICE) return@withLock Result.success(current)
+            if (current.kind == TtsVoiceKind.DEVICE) return Result.success(current)
             val resolved = withContext(Dispatchers.IO) { resolver.saved(current.sourceId, current.voiceId) }
             token.check()
             val missing = (resolved.exceptionOrNull() as? TtsException)?.failure
@@ -55,7 +95,7 @@ class TtsSelectionService internal constructor(
                 missing?.kind in setOf(TtsFailureKind.SOURCE_MISSING, TtsFailureKind.PROFILE_MISSING)
             if (!permanent) {
                 resolved.getOrThrow()
-                return@withLock Result.success(current)
+                return Result.success(current)
             }
             val previous = withContext(Dispatchers.IO) { history.load().getOrNull() }
             val canRestore = previous != null && previous != current &&

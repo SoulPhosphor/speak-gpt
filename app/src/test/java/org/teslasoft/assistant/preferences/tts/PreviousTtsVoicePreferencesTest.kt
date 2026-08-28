@@ -250,4 +250,111 @@ class PreviousTtsVoicePreferencesTest {
             assertEquals(1, file.parentFile.listFiles()!!.size)
         } finally { directory.deleteRecursively() }
     }
+    private val cleanupBytes = MemoryTtsStorage()
+    private val cleanupStore = SavedTtsSourcesPreferences(cleanupBytes)
+    private var usabilityChecks = 0
+    private fun cleanupService(usable: Boolean = true) = TtsSelectionService(prefs,
+        TtsSourceResolver(cleanupStore::load, { profiles }), history) { selected, _ ->
+            usabilityChecks++
+            usable && (selected.kind == TtsVoiceKind.DEVICE ||
+                cleanupStore.load().getOrThrow().any { it.sourceId == selected.sourceId })
+        }
+    private val cleanupTarget = setOf(org.teslasoft.assistant.preferences.models.ModelIdentity("endpoint", "vendor/model:free"))
+    private fun savedVoice(source: SavedTtsSource) = api.copy(sourceId = source.sourceId, modelId = source.modelId)
+
+    @Test fun cleanupRemovesAllMatchingRoutesAndRecoversGlobalSelectionExactlyOnce() = runBlocking {
+        val first = cleanupStore.add("endpoint", api.modelId!!, TtsRoutingSettings()).getOrThrow()
+        cleanupStore.add("endpoint", api.modelId!!, TtsRoutingSettings(TtsRoutingMode.ONLY, "route")).getOrThrow()
+        val other = cleanupStore.add("other-endpoint", api.modelId!!, TtsRoutingSettings()).getOrThrow()
+        val chatData = FakeSharedPreferences().apply { edit().putString("unrelated", "keep").commit() }
+        val anotherChat = Preferences(chatData, raw, "another-chat", null)
+        val good = org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceSelection("google", "known-good")
+        val registry = org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceRegistry(raw)
+        registry.save(good)
+        cleanupService().activate(device).getOrThrow()
+        cleanupService().activate(savedVoice(first)).getOrThrow()
+        val changes = mutableListOf<Set<String>>()
+        val unsubscribe = SavedTtsSourcesPreferences.observeChanges { changes += it }
+        try {
+            val result = cleanupService().removeUnavailableSources(cleanupStore, cleanupTarget, TtsRequestGate().begin()).getOrThrow()
+            assertEquals(2, result.removed)
+            assertNull(result.recoveryFailure)
+            assertEquals(1, usabilityChecks)
+            assertEquals(device, prefs.getSelectedTtsVoice())
+            assertEquals(device, anotherChat.getSelectedTtsVoice())
+            assertEquals(device, history.load().getOrThrow())
+            assertEquals(good, registry.load())
+            assertEquals("keep", chatData.getString("unrelated", null))
+            assertEquals(listOf(other), cleanupStore.load().getOrThrow())
+            assertEquals(2, changes.single().size)
+        } finally { unsubscribe() }
+    }
+
+    @Test fun cleanupInactiveSourceDoesNotTouchSelectionHistoryOrValidateFallback() = runBlocking {
+        cleanupStore.add("endpoint", api.modelId!!, TtsRoutingSettings()).getOrThrow()
+        val kept = cleanupStore.add("endpoint", "another-model", TtsRoutingSettings()).getOrThrow()
+        cleanupService().activate(savedVoice(kept)).getOrThrow()
+        val selectionBefore = raw.all
+        val historyBefore = storage.content
+        val result = cleanupService().removeUnavailableSources(cleanupStore, cleanupTarget, TtsRequestGate().begin()).getOrThrow()
+        assertEquals(1, result.removed)
+        assertNull(result.recoveryFailure)
+        assertEquals(0, usabilityChecks)
+        assertEquals(selectionBefore, raw.all)
+        assertEquals(historyBefore, storage.content)
+    }
+
+    @Test fun cleanupRecoveryFailureDoesNotMisreportCommittedDeletionAsFailed() = runBlocking {
+        val entry = cleanupStore.add("endpoint", api.modelId!!, TtsRoutingSettings()).getOrThrow()
+        cleanupService().activate(savedVoice(entry)).getOrThrow()
+        val result = cleanupService(false).removeUnavailableSources(cleanupStore, cleanupTarget, TtsRequestGate().begin()).getOrThrow()
+        assertEquals(1, result.removed)
+        assertTrue(cleanupStore.load().getOrThrow().isEmpty())
+        assertEquals(TtsMessage("Selected Voice Is Permanently Unavailable", "Please select a new voice.",
+            listOf("Okay", "Select New Voice")), TtsFailures.message(result.recoveryFailure!!))
+        assertEquals(savedVoice(entry), prefs.getSelectedTtsVoice())
+    }
+
+    @Test fun cleanupDoesNotResurrectPreviousSourceRemovedInSameBatch() = runBlocking {
+        val a = cleanupStore.add("endpoint", api.modelId!!, TtsRoutingSettings()).getOrThrow()
+        val b = cleanupStore.add("endpoint", api.modelId!!, TtsRoutingSettings(TtsRoutingMode.ONLY, "route")).getOrThrow()
+        cleanupService().activate(savedVoice(a)).getOrThrow()
+        cleanupService().activate(savedVoice(b)).getOrThrow()
+        val result = cleanupService().removeUnavailableSources(cleanupStore, cleanupTarget, TtsRequestGate().begin()).getOrThrow()
+        assertEquals(2, result.removed)
+        assertEquals(TtsFailureKind.PERMANENT_UNAVAILABLE, result.recoveryFailure?.kind)
+        assertTrue(cleanupStore.load().getOrThrow().isEmpty())
+    }
+
+    @Test fun failedCleanupWriteLeavesSourcesSelectionAndRecoveryRecordsUnchanged() = runBlocking {
+        val entry = cleanupStore.add("endpoint", api.modelId!!, TtsRoutingSettings()).getOrThrow()
+        cleanupService().activate(savedVoice(entry)).getOrThrow()
+        val before = cleanupBytes.content
+        val selectedBefore = raw.all
+        val historyBefore = storage.content
+        cleanupBytes.failWrite = true
+        val result = cleanupService().removeUnavailableSources(cleanupStore, cleanupTarget, TtsRequestGate().begin())
+        assertEquals(TtsFailureKind.REMOVE_FAILED, (result.exceptionOrNull() as TtsException).failure.kind)
+        assertEquals(before, cleanupBytes.content)
+        assertEquals(selectedBefore, raw.all)
+        assertEquals(historyBefore, storage.content)
+        assertEquals(0, usabilityChecks)
+    }
+
+    @Test fun canceledOrUnreadableCleanupDoesNotMutateOrReportSuccess() = runBlocking {
+        cleanupStore.add("endpoint", api.modelId!!, TtsRoutingSettings()).getOrThrow()
+        val before = cleanupBytes.content
+        val token = TtsRequestGate().begin().also { it.cancel() }
+        try {
+            cleanupService().removeUnavailableSources(cleanupStore, cleanupTarget, token)
+            fail("Cancellation expected")
+        } catch (_: java.util.concurrent.CancellationException) { }
+        assertEquals(before, cleanupBytes.content)
+        cleanupBytes.failRead = true
+        val result = cleanupService().removeUnavailableSources(cleanupStore, cleanupTarget, TtsRequestGate().begin())
+        assertEquals(TtsFailureKind.STORAGE, (result.exceptionOrNull() as TtsException).failure.kind)
+        assertEquals(before, cleanupBytes.content)
+        assertEquals(0, usabilityChecks)
+    }
+
 }
