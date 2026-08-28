@@ -83,16 +83,18 @@ class TtsPlayback(
                             if (!stillCurrent()) { stop(); return@deliver }
                             try { ready.start(); onStart() }
                             catch (_: Exception) {
+                                gate.cancel()
                                 releaseAudio()
                                 onFailure(TtsFailure(operation, target, endpointName, TtsFailureKind.PLAYBACK))
                             }
                         }
                     }
                     next.setOnCompletionListener {
-                        token.deliver { releaseAudio(); if (stillCurrent()) onDone() }
+                        token.deliver { gate.cancel(); releaseAudio(); if (stillCurrent()) onDone() }
                     }
                     next.setOnErrorListener { _, what, extra ->
                         token.deliver {
+                            gate.cancel()
                             releaseAudio()
                             if (stillCurrent()) {
                                 onPlaybackError(what, extra)
@@ -109,7 +111,7 @@ class TtsPlayback(
                 val failure = (error as? TtsException)?.failure?.copy(operation = operation)
                     ?: TtsFailure(operation, target, endpointName,
                         if (preparing) TtsFailureKind.PLAYBACK else TtsFailureKind.UNKNOWN)
-                token.deliver { releaseAudio(); if (stillCurrent()) onFailure(failure) }
+                token.deliver { gate.cancel(); releaseAudio(); if (stillCurrent()) onFailure(failure) }
             } finally { staged?.delete() }
         }
     }

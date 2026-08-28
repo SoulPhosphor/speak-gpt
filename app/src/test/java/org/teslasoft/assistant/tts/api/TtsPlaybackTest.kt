@@ -86,7 +86,9 @@ class TtsPlaybackTest {
         start(playback)
         val player = players.single()
         player.prepared!!.onPrepared(player)
-        player.completed!!.onCompletion(player)
+        val queuedCompletion = player.completed!!
+        queuedCompletion.onCompletion(player)
+        queuedCompletion.onCompletion(player)
         assertEquals(1, starts)
         assertEquals(1, completions)
         assertTrue(player.released)

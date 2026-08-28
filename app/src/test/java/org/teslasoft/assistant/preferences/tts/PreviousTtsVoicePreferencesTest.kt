@@ -192,7 +192,7 @@ class PreviousTtsVoicePreferencesTest {
     }
 
     @Test fun legacyApiFlagCannotInventASourceAndDevicePreferenceSurvives() = runBlocking {
-        prefs.setVoice("old-google-id")
+        raw.edit().putString("voice", "old-google-id").commit()
         assertEquals("old-google-id", prefs.getSelectedTtsVoice()?.voiceId)
         raw.edit().putString("tts_engine", "openai").putString("openai_voice", "old-api-voice").commit()
         assertEquals(TtsFailureKind.SOURCE_MISSING,

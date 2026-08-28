@@ -27,6 +27,20 @@ class TtsFailureTest {
         assertNull(error.evidence!!.actualServingProvider)
     }
 
+    @Test fun explicitDeletionCodeIsDistinctFromUnsupportedVoiceAndBareNotFound() {
+        for ((payload, expected) in listOf(
+            """{"error":{"code":"voice_deleted","message":"This voice was deleted"}}""" to TtsFailureKind.VOICE_DELETED,
+            """{"error":{"message":"unsupported voice"}}""" to TtsFailureKind.VOICE_UNSUPPORTED,
+            """{"error":{"message":"Not found"}}""" to TtsFailureKind.NOT_FOUND
+        )) {
+            val failure = assertThrows(TtsException::class.java) {
+                response(payload, 404).requireSuccess(source(), TtsOperation.SPEECH)
+            }.failure
+            assertEquals(expected, failure.kind)
+            assertNotNull(failure.evidence)
+        }
+    }
+
     @Test fun rateUsageAndCreditsHaveDistinctExplanations() {
         val examples = listOf(Triple(429, "Rate limit exceeded", TtsFailureKind.RATE_LIMIT),
             Triple(429, "Quota exceeded", TtsFailureKind.USAGE_LIMIT),
@@ -47,7 +61,11 @@ class TtsFailureTest {
             val message = TtsFailures.message(failure)
             assertTrue(message.title.first().isUpperCase())
             assertTrue(message.explanation.isNotBlank())
-            assertTrue(message.actions == listOf("Okay") || message.actions == listOf("Cancel", "Retry"))
+            if (kind in setOf(TtsFailureKind.VOICE_DELETED, TtsFailureKind.PERMANENT_UNAVAILABLE)) {
+                assertEquals(listOf("Okay", "Select New Voice"), message.actions)
+                assertEquals("Selected Voice Is Permanently Unavailable", message.title)
+                assertEquals("Please select a new voice.", message.explanation)
+            } else assertTrue(message.actions == listOf("Okay") || message.actions == listOf("Cancel", "Retry"))
             assertEquals(target, failure.target)
             assertNull(failure.evidence)
         }
