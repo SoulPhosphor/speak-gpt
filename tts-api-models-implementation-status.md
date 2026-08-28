@@ -295,8 +295,11 @@ All new production files are in
   combination is claimed live verified and no paid requests were made.
 
 
-## Phase 4 — Implemented; Android Checks pending
+## Phase 4 — Complete
 
+- Final implementation/test commit: `ff841b76afa95fd0a28e369d2b1c87fbc703c9b0`.
+- Android Checks: https://github.com/SoulPhosphor/speak-gpt/actions/runs/33145117762
+  — passed on the final implementation/test commit.
 - Branch: `feature/tts-api-models-phase-3`, continuing `5a2acabb` and preserving
   all preceding phases and composer fixes. No new branch or main merge.
 - `ApiVoiceModelsActivity` is registered and opens from the new Select API Voice
@@ -336,7 +339,13 @@ All new production files are in
 - Extended existing saved-source and picker suites for manager transactions,
   exact duplicate wording, draft/row isolation, stale and canceled results,
   source deletion, recreation, write/read failures and layout/navigation wiring.
-- Changed XML parsing, manager string/style reference checks and diff whitespace
-  checks passed locally. Full Android Checks results are pending.
+- Changed XML parsing, manager string/style/required-dimension checks and diff
+  whitespace checks passed locally. The layout regression checks required width
+  and height through the shared style chain, not just XML syntax.
+- Android Checks passed on the final implementation/test commit:
+  - `./gradlew --no-daemon test` (including 12 new manager regression tests).
+  - `./gradlew --no-daemon assembleDebug`.
+  - `./gradlew --no-daemon assembleDebugAndroidTest` (compilation, not execution).
+- The final status-only commit changes no tested application or test code.
 - No device/emulator visual review, live service calls, speech playback or remote
   routing verification performed. Phase 5 and Phase 6 remain unimplemented.
