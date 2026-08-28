@@ -31,6 +31,13 @@ android {
         buildConfig true
     }
 
+    testOptions {
+        unitTests.all {
+            // Keep framework regression failures diagnosable in CI logs.
+            testLogging.exceptionFormat = 'full'
+        }
+    }
+
     defaultConfig {
         applicationId "com.soulphosphor.phosphorshines"
         minSdk 28

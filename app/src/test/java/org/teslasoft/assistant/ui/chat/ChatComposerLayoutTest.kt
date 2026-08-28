@@ -27,12 +27,16 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.ConscryptMode
 import org.robolectric.annotation.LooperMode
 import org.teslasoft.assistant.R
 
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, application = Application::class, sdk = [28, 36])
 @LooperMode(LooperMode.Mode.PAUSED)
+// The app ships Conscrypt's Android native library. These layout-only JVM tests
+// do not use TLS and must not initialize that device-only security provider.
+@ConscryptMode(ConscryptMode.Mode.OFF)
 class ChatComposerLayoutTest {
 
     @Test
