@@ -12,7 +12,9 @@ Baseline: `main` at `f2bdf0047c0751e14d91a12179ee5ad921f804be`, inspected on 202
 
 ### Implementation note
 
-Before coding an authorized phase, read this note, the assigned phase and its reference sections, `CLAUDE.md`, `ui-style-guide.md`, relevant `ui-style-adoption.md` entries, and any implementation status record. Check the current branch, working tree, and prerequisite code; preserve intervening work and use a feature branch. Then proceed directly into code work. Reading is not a phase, deliverable, or reason to stop. Do not require loading the entire plan each session: a fresh instance can use the assigned phase, referenced contracts, and repository handoff without earlier conversation.
+Before coding an authorized phase, read this note, the assigned phase and its reference sections, `CLAUDE.md`, `ui-style-guide.md`, relevant `ui-style-adoption.md` entries, and any implementation status record. Check the current branch, working tree, and prerequisite code; preserve intervening work and use the owner-designated branch. Continue an existing designated feature branch without creating an extra branch. Then proceed directly into code work. Reading is not a phase, deliverable, or reason to stop. Do not require loading the entire plan each session: a fresh instance can use the assigned phase, referenced contracts, and repository handoff without earlier conversation.
+
+**Cross-phase identity and voice-storage contract:** renaming changes only a chat's title; its existing stored ID never changes. The selected/default TTS voice, previous-selection history and last-known-good record are global to the app, never keyed by chat ID or chosen from the open conversation. These rules supersede earlier per-chat voice-storage assumptions. Remaining work, including Phase 6 cleanup, must use the global selection/recovery interfaces described in Sections 7.1 and 7.7. No chat-ID migration, legacy chat/voice data cleanup or broader backup refactor is authorized by these corrections; Phase 6 retains its separately specified saved-TTS-entry removal scope. Companion-specific voices remain future work.
 
 The product decisions in this plan are settled. Current owner instructions remain authoritative; ordinary internal implementation choices and the specified error wording do not require new questions. Do not add unrelated refactors, palette changes, Google TTS repairs, or logging changes. Unit/build checks do not establish device behavior or remote routing support.
 
@@ -28,7 +30,10 @@ The product decisions in this plan are settled. Current owner instructions remai
 | Routing settings | Automatic/Preferred/Only plus the provider selection and any retained, applicable provider-selection settings. |
 | Voice | A voice ID supported by the saved source's model/provider combination. A model and a voice are different selections. |
 | Draft | The unsaved selections in the upper part of the new manager. They do not become a saved entry until Add Model succeeds. |
-| Active voice | The selected voice used for speech in the existing preference scope. Browsing a source is not the same action as selecting its voice. |
+| Active/default voice | The app-wide selected voice used for speech, independent of the open conversation. Browsing a source is not the same action as selecting its voice. |
+| Previous selection | The immediately preceding user-activated global voice. This is activation history, not proof that playback succeeded. |
+| Last-known-good voice | A separate global fallback record maintained by the existing voice-availability behavior. It must not be replaced merely because a different default is selected or a catalog advertises preview capability. |
+| Companion voice | A future Companion-specific override, not a chat-specific preference. It is not implemented in these phases. Its intended fallback order is Companion voice, global default, then last-known-good recovery. |
 
 ## 3. Approved product requirements
 
@@ -262,6 +267,10 @@ The collection should follow the existing favorites pattern of saved entries ava
 
 Persist the immediately previous selected voice globally and separately from the current global selection, including enough source identity to restore it correctly. Record this when the user activates a different voice, not when they browse or preview. The existing LastKnownGoodVoiceRegistry stores one selection and must also use global storage; it does not provide previous-selection history. Preserve its existing Google behavior. Future Companion-specific overrides will resolve before the global default, with last-known-good recovery after that default; implementing Companion overrides is outside this plan. Missing history on older preferences is handled by the explicit dialog in Section 7.7, not by inventing a prior selection.
 
+Current storage interfaces are `AppTtsVoicePreferences.getPreferences(context)`, `PreviousTtsVoicePreferences.getPreferences(context)` and `LastKnownGoodVoiceRegistry(context)`. None accepts a chat ID. Current/default and last-known-good values use the existing encrypted global `settings.` store; previous-selection history uses the existing global/default history file. `Preferences` delegates voice identity to this global store even when other settings belong to a chat. Do not copy voice identity during chat creation, use `tts_history_scope`, adopt an arbitrary chat's old voice as the global default, or delete global records when a conversation is deleted. Preserve old data without a migration or cleanup.
+
+Chat identity and TTS source identity are separate. Preserve every existing stored chat ID, including IDs originally derived from titles. A rename updates only the title and does not move history, settings, attachment directories, memory references or running jobs. Direct readers, including backup readers, use the stored chat ID rather than recomputing it from the new title. The existing missing-ID compatibility read is not permission to regenerate an ID that is present. Saved TTS source IDs remain independent stable entry IDs.
+
 An unreadable saved collection is not an empty collection that may safely be overwritten. Return an explicit failure to the caller, preserve existing bytes, and use the approved recovery/error path.
 
 ### 7.2 Add and edit transactions
@@ -433,20 +442,20 @@ Review transient failures separately from failures requiring changed settings: R
 
 ### 7.7 Deleted API voice: restore the previous selection
 
-Apply this recovery rule only to a deleted or permanently unavailable current API voice/source, using the immediately previous selection as specified below.
+Apply this recovery rule only to a deleted or permanently unavailable current API voice/source, using the immediately previous global selection as specified below. This is the current permanent-removal policy; it does not implement the future Companion fallback chain or automatic fallback for transient provider errors.
 
 1. Trigger this rule when the current API voice is confirmed deleted/unavailable permanently, or its saved source/profile is deliberately removed. An unreachable API, missing voice metadata, failed/empty voice-list request, or incomplete catalog does not prove permanent deletion.
-2. Resolve the voice the user selected immediately before the deleted voice. Its identity includes the voice and its source, so the same voice ID from another endpoint/model/provider is not interchangeable.
+2. Resolve the voice the user selected globally immediately before the deleted voice. Its identity includes the voice and its source, so the same voice ID from another endpoint/model/provider is not interchangeable.
 3. If that previous selection can still be used, make it the active/default voice again using its own saved source configuration. Reflect that selection in Select Voice and use it for subsequent speech. It may be a device or API voice if that was the actual previous selection; do not choose an arbitrary device voice.
 4. Do not resurrect deleted sources, restore stale credentials from history, or rotate among arbitrary older voices. If the immediately previous selection is absent or cannot be restored, use the dialog below. An automatic restoration must not overwrite history with the deleted voice and create a fallback loop.
-5. Preserve existing scope and playback cancellation protections. Pending work for a removed selection must not later replace the restored selection or begin stale playback.
+5. Read and write the global selection/history only, regardless of which conversation or settings screen is open. Preserve playback cancellation protections. Pending work for a removed selection must not later replace the restored selection or begin stale playback.
 
 Dialog:
 
 - **Title:** Selected Voice Is Permanently Unavailable
 - **Explanation:** Please select a new voice.
 - **Left action:** Okay — dismiss the dialog without selecting an arbitrary replacement.
-- **Right action:** Select New Voice — open the existing Select Voice screen (`VoiceBrowserActivity`) in the current preference/chat scope.
+- **Right action:** Select New Voice — open the existing Select Voice screen (`VoiceBrowserActivity`) for the app-wide default voice; do not pass a chat-specific storage scope.
 
 Use the shared dialog styling with the approved left-to-right action order. Do not rename Okay to Cancel, abbreviate it, add another button, or send Select New Voice to the API model-management screen. If no replacement is chosen, do not silently make the unavailable selection playable; a later speech attempt uses this same recovery/error rule. Include applicable provider-error evidence under the explanation using Section 7.6, without fabricating provider errors for a local deletion.
 
@@ -515,7 +524,7 @@ Tests:
 - Editing one entry's route preserves its ID and all other entries.
 - Failed persistence preserves the existing collection and does not look like success.
 - Malformed stored content does not trigger a destructive empty-list rewrite.
-- Previous-voice identity survives reopening and stays separate from the current voice and Google last-known-good behavior.
+- Global previous-voice identity survives reopening and stays separate from the current global voice and Google last-known-good behavior; no history factory takes a chat ID.
 
 Completion: storage and profile-field tests pass; no active chat selection or Google voice behavior changes. The field must be connected to the speech transport before a release claims it is functional.
 
@@ -705,7 +714,7 @@ Tests:
 - Preview and full readback use the same endpoint/model/routing/path/authentication.
 - Changing the chat model/endpoint does not redirect the chosen speech source.
 - Voice & Speech has no Google/OpenAI engine-toggle tile or replacement engine selector. Selecting a Google voice uses Google; selecting an API voice uses that exact saved source, regardless of a stale legacy engine flag.
-- Returning to Voice & Speech shows the current voice/source in its existing Select Voice row. Relaunching, preference-scope changes, and previous-voice recovery keep display and actual speech routing consistent.
+- Returning to Voice & Speech shows the current voice/source in its existing Select Voice row. Relaunching, switching conversations, and global previous-voice recovery keep display and actual speech routing consistent.
 - Older Google selections survive. An unresolvable older API preference produces the specific source error without creating a saved entry, deleting preference data, or guessing the active chat's endpoint.
 - Cancel/Stop prevents late playback and releases audio resources.
 - Existing Google browsing, filtering, renaming, selection, and readback continue to work.
@@ -716,11 +725,11 @@ Permitted development checkpoint: the source list may be completed before full p
 
 Completion: identify exactly which endpoint/model/provider/voice combinations were tested. A build alone does not establish correct voices, playback, or remote routing.
 
-Handoff to Phase 6: identify the active-voice/source resolver, activation/history operations, removal-recovery entry point, source-list refresh path, and tests. Report actual playback/routing verification separately from mocked tests so the next instance does not mistake an untested service for a verified one.
+Handoff to Phase 6: identify the global active-voice/source resolver, global activation/history and last-known-good stores, removal-recovery entry point, source-list refresh path, stable-chat-ID contract, and tests. Do not carry forward a per-chat voice-history constructor or any title-derived ID remapping. Report actual playback/routing verification separately from mocked tests so the next instance does not mistake an untested service for a verified one.
 
 ### Phase 6 — Unavailable TTS Models in Clean Up Models
 
-**Depends on:** Phases 1–5, including stable saved-source storage and the implemented active-voice removal/recovery behavior. This phase deletes saved entries.
+**Depends on:** Phases 1–5, including stable saved-source storage and the implemented global active-voice removal/recovery behavior. Read the Phase 5 handoff; chat IDs are immutable across renames, and all default/recovery voice records are app-wide. This phase deletes saved entries.
 
 Primary files:
 
@@ -747,7 +756,7 @@ Steps:
 10. Do not remove chat favorites or model-rule targets through the TTS delete action, even if they share an endpoint/model identity. Existing categories retain their own actions.
 11. Use the existing text-model cleanup deletion timing: act on the saved availability report with the existing confirmation pattern. Do not introduce a separate fresh network check at TTS deletion time or change the existing categories' behavior.
 12. Reconcile the report after a successful removal and refresh the manager/Voice Browser from the same saved store.
-13. If cleanup removes the source of the current API voice, apply Section 7.7: restore its immediately previous usable selection; if that is not possible, show the specified dialog with Okay and Select New Voice. Never choose an arbitrary replacement or recreate a removed entry.
+13. If cleanup removes the source of the current global API voice, call the global removal-recovery entry point from Phase 5 once, independent of the open chat. Do not enumerate chats or rewrite per-chat voice fields. Apply Section 7.7: restore its immediately previous usable selection; if that is not possible, show the specified dialog with Okay and Select New Voice. Never choose an arbitrary replacement or recreate a removed entry.
 
 Availability decision table:
 
@@ -771,9 +780,10 @@ Tests:
 - Provider outage and missing voice metadata do not remove a model.
 - The same model on a different endpoint is untouched.
 - Multiple saved provider combinations for a removed endpoint/model are all addressed by the TTS cleanup action.
-- TTS deletion does not modify chat favorites, rules, Google voices, or unrelated endpoint profiles.
+- TTS deletion does not modify chat favorites, rules, Google voice data, or unrelated endpoint profiles. Only the specified global-selection recovery may change the active voice.
 - Canceling confirmation removes nothing.
 - Removing entries updates both the management table and Select Voice source list.
+- Removing the active source recovers the same global default from any conversation or settings entry point. Inactive-source removal leaves the global default and recovery records unchanged.
 - An interrupted or failed mutation does not claim completion or erase unrelated entries.
 - Previously saved reports remain readable and correctly reconciled.
 
@@ -802,6 +812,11 @@ Apply these requirements to the relevant code changes in each phase and to the c
 
 | Scenario | Required result |
 | --- | --- |
+| Chat is renamed manually or automatically | Only the title changes; the exact stored chat ID and its data locations stay unchanged. |
+| Chat is opened, created, renamed or deleted | Global default, previous-selection history and last-known-good voice remain independent of that chat. |
+| Voice is selected from one conversation, then another is opened | Both use the same global selected voice and exact saved source. |
+| Default voice is changed | Previous-selection history records the preceding activation; the separate last-known-good record is not overwritten by selection alone. |
+| Renamed chat is opened or read for backup | Resolve its stored ID, not a hash of the new title; no backup format or ID migration is introduced. |
 | Chat uses endpoint A; speech source uses endpoint B | Chat remains on A; preview/readback use B. |
 | Voice & Speech is opened | The Google/OpenAI engine-toggle tile is absent; Select Voice remains and displays the selected voice/source. |
 | User activates a device voice, then an API voice | The speech source follows the activated voice; no separate engine toggle is needed and a stale legacy engine flag cannot override it. |
@@ -887,6 +902,9 @@ These support the inspected starting facts, not authorization to change product 
 - [ ] The top Google/OpenAI engine-toggle tile and its listeners are removed from Voice & Speech; no replacement engine selector is added.
 - [ ] The active voice determines the speech source, and the existing Select Voice row reports that same selection. Legacy compatibility state cannot override it.
 - [ ] Voices, previews, and actual speech use the same exact saved source.
+- [ ] Selected/default voice, previous-selection history and last-known-good record are global and separate; no chat ID, rename, deletion or open-conversation choice changes their storage.
+- [ ] Chat renaming changes only the title; direct readers use the saved ID, with no migration or broader backup refactor.
+- [ ] Phase 6 removal recovery uses the global interfaces. Future Companion overrides and their fallback chain have not been implemented as part of this scope.
 - [ ] Unsupported/unknown service behavior is reported honestly; Only is never silently rewritten to Automatic.
 - [ ] Unavailable TTS Models is the final cleanup category and targets only saved TTS references.
 - [ ] Cleanup preserves inconclusive results, aliases, other endpoints, and unrelated saved data.

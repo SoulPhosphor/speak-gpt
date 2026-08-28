@@ -1,5 +1,7 @@
 # API Voice Models — Implementation Status
 
+Current implementation: see the Phase 5 handoff at the end. Its global voice-storage contract supersedes the earlier per-chat scope.
+
 ## Phase 1 — Complete
 
 - Branch: `feature/tts-api-models-phase-1`.
@@ -41,17 +43,20 @@
 - Source JSON: version 1, `entries` array of the fields above, with `routing`
   nested per entry. Stored at private `filesDir/tts/saved_sources.json`.
   Credentials remain solely in the existing endpoint secret store.
-- `PreviousTtsVoicePreferences.getPreferences(context, chatId)` stores only the
-  immediately previous voice, in `filesDir/tts/previous_voice_<chat-id-hash>.json`.
+- `PreviousTtsVoicePreferences.getPreferences(context)` stores only the
+  immediately previous global voice, in
+  `filesDir/tts/previous_voice_<hash-of-empty-string>.json`. Phase 5 replaced the
+  original chat-scoped factory; use this no-chat-ID contract for later work.
   JSON version 1 has a nullable `previous` object: `kind` (`DEVICE` or `API`),
   `sourceId`, `voiceId`, nullable `modelId`. API source IDs use the saved source's
   `sourceId`; device IDs use the existing provider ID. `load()` returns
   `Result<TtsVoiceSelection?>`; absent history is null.
 - `recordActivation(current, next)` accepts the authoritative current selection
   and records it only when it differs from next. It does not select a voice.
-  Phase 5 must call it only for actual user activation, never browse, preview or
-  automatic restoration, and handle failures before completing activation. No
-  changes were made to current preferences or `LastKnownGoodVoiceRegistry`.
+  Phase 5 calls it only for actual user activation, never browse, preview or
+  automatic restoration, and handles failures before completing activation.
+  Current voice and `LastKnownGoodVoiceRegistry` are also global in Phase 5;
+  they remain distinct from this previous-selection history.
 - Both stores serialize read/modify/write across instances in this process.
   `TtsFileStorage` writes, flushes, syncs and verifies a same-directory temporary
   file, then atomically replaces the destination. There is no delete-original
@@ -348,4 +353,114 @@ All new production files are in
   - `./gradlew --no-daemon assembleDebugAndroidTest` (compilation, not execution).
 - The final status-only commit changes no tested application or test code.
 - No device/emulator visual review, live service calls, speech playback or remote
-  routing verification performed. Phase 5 and Phase 6 remain unimplemented.
+  routing verification performed in Phase 4. Phase 5 is recorded below; Phase 6 remains unimplemented.
+
+
+## Phase 5 — Complete
+
+- Branch: `feature/tts-api-models-phase-3`. Continues the existing phases and
+  composer fixes; no additional branch or merge to `main`.
+- Core integration commits: `6d311e83`, `9b3faf6f`, `f1da43e6`, `b27133a3`.
+- Stable chat-ID correction: `f0f63b3182e1a73cb068197d5e61c8bc6d84c919`.
+- Global voice-storage correction: `2e72ba92d25d3c22e7147d613a38f91d05104502`.
+
+### Selection, storage and recovery contracts
+
+- `VoiceBrowserActivity` keeps Google and registers one `SavedApiVoiceProvider`
+  per saved `api-tts:<entry-id>` source. Labels use endpoint/model/provider names
+  when available, with exact IDs as the optional-metadata fallback. Source
+  refresh preserves stable identities and source-specific filters/overrides.
+- Browsing and previewing do not activate a voice. `TtsSelectionService.activate`
+  commits the full source/voice/model identity and records the immediately
+  previous user selection. Failed persistence does not consume that predecessor.
+- **Voice selection is app-wide.** `AppTtsVoicePreferences` reads/writes the
+  existing encrypted global/default `settings.` store. `Preferences` delegates
+  voice identity and its legacy compatibility fields to it, even when constructed
+  for a chat. Chat-specific legacy voice values are neither adopted nor deleted.
+- `PreviousTtsVoicePreferences.getPreferences(context)` takes no chat ID. It uses
+  the existing global/default history file, `tts/previous_voice_<hash-of-empty-string>.json`.
+  `tts_history_scope` is no longer read or written. Old per-chat history is not
+  moved, merged, or deleted.
+- `LastKnownGoodVoiceRegistry(context)` also uses `settings.`. The selected
+  default, immediately previous activation, and last-known-good record remain
+  distinct. Existing Google availability/fallback behavior is retained; API
+  catalog/preview capability is not recorded as proof of successful playback.
+- Chat creation does not copy voice preferences. Chat readback observes global
+  selection changes and cancels superseded speech. Switching, renaming or deleting
+  a chat does not change the selected default or its recovery storage.
+- Future Companion overrides are not implemented. Their intended precedence is
+  Companion voice, global default, then last-known-good recovery. This phase does
+  not add a Companion selector or a new automatic retry/fallback policy.
+- `TtsSelectionService.reconcile` applies Section 7.7 only for confirmed voice
+  deletion or a removed saved source/profile. It restores the exact immediately
+  previous usable selection without recording the removed voice as new history.
+  Transient failures and failed/empty/unknown catalogs preserve the selection.
+- If the previous voice cannot be restored, `TtsVoiceDialogs` shows the exact
+  permanent-unavailability message with Okay / Select New Voice. The latter
+  opens the existing Voice Browser. Other errors retain typed provider evidence
+  and explicit source-specific retry behavior.
+
+### Playback and settings integration
+
+- Preview and ChatActivity API readback both use `TtsPlayback`, the saved-source
+  resolver, and the Phase 2 transport. Speech resolves the selected source's
+  endpoint, speech path, auth, model, voice, timeouts and routing; it does not use
+  the active chat client or chat model/endpoint.
+- Request tokens, playback generations, async player preparation and terminal
+  cancellation prevent stale starts and duplicate completion. Stop/replacement
+  releases the player and temporary audio. Source removal/edit or relevant speech
+  profile changes invalidate playback; unrelated chat-model/profile edits do not.
+- Chat speech retains its existing completion, hands-free and keepalive handling.
+  Cancel/Stop never manufactures a failure dialog or provider evidence.
+- The old engine tile and both dead settings-transition references are removed.
+  The existing Select Voice row shows the actual selected source/voice. Existing
+  shared row/dialog layouts and voice metadata controls remain in use.
+
+### Stable chat-ID correction
+
+- Manual naming, list-dialog naming and automatic naming persist only the title;
+  every existing stored ID stays unchanged. Live activities update the title
+  without replacing preferences or moving image/summarizer job identities.
+- Direct list/navigation, preview, pin/metadata, deletion, memory lookup and backup
+  lookup sites use the stored ID. Missing-ID legacy reads retain their prior
+  name-hash fallback without writing a migration. Automatic placeholder naming
+  skips IDs already owned by renamed chats; new named chats cannot overwrite an
+  existing ID through a reused title.
+- The rename transaction has a same-ID, list-only write path. History, settings,
+  attachments and memory records are not copied or moved. The legacy cross-ID
+  routines remain untouched behind the title-only return; no cleanup was run.
+- No existing IDs, backup formats or restore formats were migrated or rewritten.
+  This correction is not a broader backup or cross-feature audit.
+
+### Verification and remaining work
+
+- The core Phase 5 integration passed Android Checks at `b27133a3`:
+  https://github.com/SoulPhosphor/speak-gpt/actions/runs/33155950080
+- Final implementation/test commit: `73b8375eb619b338b5bde8e626e95b9b52dd9d5c`.
+- Final combined Android Checks passed:
+  https://github.com/SoulPhosphor/speak-gpt/actions/runs/33157771646
+  - `./gradlew --no-daemon test` — passed.
+  - `./gradlew --no-daemon assembleDebug` — passed; APK artifact uploaded.
+  - `./gradlew --no-daemon assembleDebugAndroidTest` — passed (compilation only).
+- The final documentation-only commit changes no tested application/test code.
+- Focused suites cover full selection identity, activation history, failed writes,
+  permanent versus transient recovery, global selection across different chat
+  stores and deletion, separate global last-known-good state, global history-file
+  reopening, source refresh/stale callbacks, exact preview/readback requests,
+  player stop/replacement/error/duplicate completion, and relevant configuration
+  invalidation. Chat-ID tests cover stored-ID reads and title-only transaction
+  success/failure/interruption without other file mutations.
+- Local checks: changed XML parsing, resource/reference checks, per-chat preference
+  inventory consistency, and `git diff --check`. No Android SDK bootstrap or
+  local full Gradle build was attempted.
+- No live endpoint/model/provider/voice combination was tested in this phase.
+  HTTP fixtures use synthetic speech sources/voices; playback tests use a
+  recording MediaPlayer, not a real audio decoder. No device/emulator visual,
+  actual audio, background/hands-free or remote-routing verification was done.
+  OpenRouter routing remains an intended request mapping, not a verified server
+  behavior.
+- Phase 6 cleanup integration remains unimplemented. Its implementation must
+  retain global voice storage and these selection/recovery contracts. The plan's
+  definitions, storage/recovery instructions, Phase 6 steps, regression scenarios
+  and acceptance checklist now carry these rules explicitly. The drawer redesign
+  instructions also describe title-only renaming without changing chat IDs.
