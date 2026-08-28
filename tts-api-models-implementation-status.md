@@ -1,6 +1,6 @@
 # API Voice Models — Implementation Status
 
-Current implementation: Phase 6 is implemented below, with verification in progress. The Phase 5 global voice-storage contract supersedes the earlier per-chat scope.
+Current implementation: Phases 1–6 are complete; the Phase 6 handoff and verification are recorded below. The Phase 5 global voice-storage contract supersedes the earlier per-chat scope.
 
 ## Phase 1 — Complete
 
@@ -353,7 +353,7 @@ All new production files are in
   - `./gradlew --no-daemon assembleDebugAndroidTest` (compilation, not execution).
 - The final status-only commit changes no tested application or test code.
 - No device/emulator visual review, live service calls, speech playback or remote
-  routing verification performed in Phase 4. Phase 5 is recorded below; Phase 6 remains unimplemented.
+  routing verification performed in Phase 4. Phases 5 and 6 are recorded below.
 
 
 ## Phase 5 — Complete
@@ -459,14 +459,14 @@ All new production files are in
   actual audio, background/hands-free or remote-routing verification was done.
   OpenRouter routing remains an intended request mapping, not a verified server
   behavior.
-- Phase 6 cleanup integration remains unimplemented. Its implementation must
+- At the Phase 5 handoff, cleanup integration remained unimplemented. Phase 6 below must
   retain global voice storage and these selection/recovery contracts. The plan's
   definitions, storage/recovery instructions, Phase 6 steps, regression scenarios
   and acceptance checklist now carry these rules explicitly. The drawer redesign
   instructions also describe title-only renaming without changing chat IDs.
 
 
-## Phase 6 — Implemented; verification in progress
+## Phase 6 — Complete
 
 - Branch: `feature/tts-api-models-phase-3`, continuing `92f79a92`. No new
   branch, main merge, chat-ID changes, per-chat voice edits, or logging changes.
@@ -508,7 +508,17 @@ All new production files are in
 
 ### Phase 6 verification
 
-- Android Checks: pending.
+- Final implementation/test commit: `a6a38d61ba7ec53414b5fa4d24de5815cfab05b3`.
+- Added 23 regression tests across the six focused suites named above.
+- Local checks passed: changed XML parsing, required layout dimensions through
+  shared style inheritance, string references/duplicates, and `git diff --check`.
+- Published code was compared byte-for-byte with the local implementation.
+- Final Android Checks passed:
+  https://github.com/SoulPhosphor/speak-gpt/actions/runs/33206996460
+  - `./gradlew --no-daemon test` — passed, including the 23 added regression tests.
+  - `./gradlew --no-daemon assembleDebug` — passed; APK artifact uploaded.
+  - `./gradlew --no-daemon assembleDebugAndroidTest` — passed (compilation only).
+- The final handoff-only commit changes no tested application or test code.
 - No device/emulator visual review or real speech playback performed.
 - No paid speech requests or live provider-routing verification performed. Catalog
   network tests use synthetic HTTP interceptors; they are not service verification.
