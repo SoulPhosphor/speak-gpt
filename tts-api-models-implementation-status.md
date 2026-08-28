@@ -223,9 +223,12 @@ All new production files are in
   enforcement test was performed. No endpoint/model/provider/voice combination
   is claimed live-verified. No merge to `main` was performed.
 
-## Phase 3 — Implemented; Android Checks pending
+## Phase 3 — Complete
 
 - Branch: `feature/tts-api-models-phase-3`, based on Phase 2 at `d940bc3e`.
+- Final implementation/test commit: `23eb2cd8959eabb1399af5df318b3e0bc33fe3c5`.
+- Android Checks: https://github.com/SoulPhosphor/speak-gpt/actions/runs/33139303774
+  — passed on the final implementation/test commit.
 - Scope: result-only TTS model/provider pickers and an isolated Filters panel.
   No manager entry point, voice activation, playback, cleanup, or main merge.
 - `TtsModelPickerActivity` reuses the full-screen View All scaffold and model
@@ -281,7 +284,11 @@ All new production files are in
 ### Phase 3 verification
 
 - Local XML parsing, referenced string/style checks and `git diff --check`: passed.
-- Android Checks: pending publication/run; not yet claimed passed.
+- Android Checks passed on the final implementation/test commit:
+  - `./gradlew --no-daemon test` (including 16 new picker tests).
+  - `./gradlew --no-daemon assembleDebug`.
+  - `./gradlew --no-daemon assembleDebugAndroidTest` (compilation, not execution).
+- The final handoff-only commit changes no tested application or test code.
 - Device/emulator visual review: not performed. The pickers are callable through
   their final contracts; the user-facing manager entry point belongs to Phase 4.
 - Live service/routing/playback: not performed. No endpoint/model/provider/voice
