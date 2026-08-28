@@ -196,16 +196,21 @@ class TtsProviderPickerActivity : TtsPickerActivity() {
             showFailure(error.failure, ::save); return
         }
         // Resolve again on Save: profile/source removal must not cause a stale result to be accepted.
+        loading = false
+        findViewById<View>(R.id.tts_provider_progress).visibility = View.GONE
         findViewById<View>(R.id.btn_save).isEnabled = false
         discover(result, TtsOperation.PROVIDERS, { _, _ -> result }, { returnSelection(it) }, {
             findViewById<View>(R.id.btn_save).isEnabled = true
+            render()
             showFailure(it, ::save)
         })
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putString(EXTRA_TARGET, TtsPickerCodec.encode(state.request.target.copy(routing = state.routing)))
-        outState.putString(TtsProviderFiltersActivity.EXTRA_SORT, TtsPickerCodec.encodeSort(state.sort))
+        if (::state.isInitialized) {
+            outState.putString(EXTRA_TARGET, TtsPickerCodec.encode(state.request.target.copy(routing = state.routing)))
+            outState.putString(TtsProviderFiltersActivity.EXTRA_SORT, TtsPickerCodec.encodeSort(state.sort))
+        }
         super.onSaveInstanceState(outState)
     }
 }

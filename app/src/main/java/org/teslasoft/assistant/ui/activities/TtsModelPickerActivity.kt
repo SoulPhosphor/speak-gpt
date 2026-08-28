@@ -27,6 +27,16 @@ class TtsModelPickerActivity : TtsPickerActivity() {
         override fun getItemId(position: Int) = position.toLong()
         override fun getView(position: Int, recycled: View?, parent: ViewGroup): View {
             val view = recycled ?: layoutInflater.inflate(R.layout.view_model, parent, false)
+            if (recycled == null) {
+                // Retain the existing row's minimum height, but let long IDs/larger text wrap.
+                val minimum = view.layoutParams.height
+                view.minimumHeight = minimum
+                view.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                view.findViewById<View>(R.id.voice_bg).apply {
+                    minimumHeight = minimum
+                    layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                }
+            }
             val model = rows[position]
             listOf(R.id.btn_action, R.id.btn_reasoning_settings, R.id.btn_routing_settings,
                 R.id.model_unavailable_warning).forEach { view.findViewById<View>(it).visibility = View.GONE }
@@ -108,7 +118,7 @@ class TtsModelPickerActivity : TtsPickerActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
-        outState.putString(EXTRA_TARGET, TtsPickerCodec.encode(target))
+        if (::target.isInitialized) outState.putString(EXTRA_TARGET, TtsPickerCodec.encode(target))
         outState.putString("query", query)
         super.onSaveInstanceState(outState)
     }

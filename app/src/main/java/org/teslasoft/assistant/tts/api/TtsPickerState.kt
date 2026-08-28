@@ -1,8 +1,10 @@
 package org.teslasoft.assistant.tts.api
 
-import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import org.teslasoft.assistant.preferences.tts.TtsRoutingMode
 import org.teslasoft.assistant.preferences.tts.TtsRoutingSettings
+import org.teslasoft.assistant.providers.SortDirection
 
 /** Navigation payload: identity and choices only, never endpoint credentials. */
 data class TtsPickerRequest(val target: TtsTarget) {
@@ -66,8 +68,18 @@ class TtsProviderPickerState(val request: TtsPickerRequest) {
 
 /** Same codec for activity results and recreation. Incomplete Only drafts are deliberately valid. */
 object TtsPickerCodec {
-    private val gson = Gson()
-    fun encode(target: TtsTarget): String = gson.toJson(target)
+    fun encode(target: TtsTarget): String = JsonObject().apply {
+        addProperty("endpointId", target.endpointId)
+        addProperty("modelId", target.modelId)
+        addProperty("sourceId", target.sourceId)
+        addProperty("voiceId", target.voiceId)
+        add("routing", JsonObject().apply {
+            addProperty("mode", target.routing.mode.name)
+            addProperty("selectedProvider", target.routing.selectedProvider)
+            addProperty("allowFallbacks", target.routing.allowFallbacks)
+            add("providerOrder", JsonArray().apply { target.routing.providerOrder.forEach { add(it) } })
+        })
+    }.toString()
     fun decode(value: String): TtsTarget {
         val root = objectBody(value)
         val routing = root.get("routing").objectOrNull() ?: error("Missing routing")
@@ -82,8 +94,18 @@ object TtsPickerCodec {
             sourceId = root.text("sourceId"), voiceId = root.text("voiceId")
         )
     }
-    fun encodeSort(sort: TtsProviderSort): String = gson.toJson(sort)
-    fun decodeSort(value: String): TtsProviderSort = gson.fromJson(value, TtsProviderSort::class.java)
+    fun encodeSort(sort: TtsProviderSort): String = JsonObject().apply {
+        addProperty("alphaAToZ", sort.alphaAToZ)
+        addProperty("price", sort.price.name)
+        addProperty("latency", sort.latency.name)
+        addProperty("uptime", sort.uptime.name)
+    }.toString()
+    fun decodeSort(value: String): TtsProviderSort {
+        val obj = objectBody(value)
+        return TtsProviderSort(obj.bool("alphaAToZ") ?: error("Missing alphabetical order"),
+            SortDirection.valueOf(obj.get("price").asString), SortDirection.valueOf(obj.get("latency").asString),
+            SortDirection.valueOf(obj.get("uptime").asString))
+    }
 }
 
 object TtsPickerPresentation {
