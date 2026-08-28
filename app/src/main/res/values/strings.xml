@@ -3448,4 +3448,9 @@
     <string name="companion_chat_name_style_hint">Optionally override the AI name style for this companion.</string>
     <string name="companion_chat_name_font">AI Name Font</string>
     <string name="companion_chat_name_size">AI Name Size</string>
+    <string name="tts_provider_picker_intro">Choose the provider settings for this text-to-speech model. Available providers and routing support depend on the endpoint.</string>
+    <string name="tts_provider_col_training">Training/Data Use</string>
+    <string name="tts_provider_col_price">Price</string>
+    <string name="tts_picker_ai_model">AI Model</string>
+    <string name="tts_no_matching_models">No models match the current search.</string>
 </resources>

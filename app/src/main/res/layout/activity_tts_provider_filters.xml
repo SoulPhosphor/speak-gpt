@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent">
+    <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/action_bar" style="@style/Widget.App.ActionBar">
+        <TextView style="@style/Widget.App.ActionBar.Title.LeftAligned" android:text="@string/provider_filters_title" />
+        <ImageButton android:id="@+id/btn_close" style="@style/Widget.App.ActionBar.CloseButton" android:contentDescription="@string/provider_filters_close" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+    <ScrollView android:id="@+id/scroll" android:layout_width="0dp" android:layout_height="0dp" android:clipToPadding="false" android:paddingBottom="24dp" app:layout_constraintTop_toBottomOf="@id/action_bar" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingHorizontal="24dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingVertical="6dp">
+                <TextView style="@style/Widget.App.Dropdown.CanonicalLabel" android:text="@string/provider_filter_alphabetical" />
+                <TextView android:id="@+id/tts_sort_alphabetical" style="@style/Widget.App.Dropdown.CanonicalValue" android:layout_width="0dp" android:layout_weight="1" android:layout_marginStart="12dp" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingVertical="6dp">
+                <TextView style="@style/Widget.App.Dropdown.CanonicalLabel" android:text="@string/tts_provider_col_price" />
+                <TextView android:id="@+id/tts_sort_price" style="@style/Widget.App.Dropdown.CanonicalValue" android:layout_width="0dp" android:layout_weight="1" android:layout_marginStart="12dp" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingVertical="6dp">
+                <TextView style="@style/Widget.App.Dropdown.CanonicalLabel" android:text="@string/provider_filter_latency" />
+                <TextView android:id="@+id/tts_sort_latency" style="@style/Widget.App.Dropdown.CanonicalValue" android:layout_width="0dp" android:layout_weight="1" android:layout_marginStart="12dp" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingVertical="6dp">
+                <TextView style="@style/Widget.App.Dropdown.CanonicalLabel" android:text="@string/provider_filter_uptime" />
+                <TextView android:id="@+id/tts_sort_uptime" style="@style/Widget.App.Dropdown.CanonicalValue" android:layout_width="0dp" android:layout_weight="1" android:layout_marginStart="12dp" />
+            </LinearLayout>
+            <com.google.android.material.button.MaterialButton android:id="@+id/btn_reset_filters" style="@style/AppButton.Destructive" android:text="@string/provider_filter_reset" />
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>

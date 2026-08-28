@@ -222,3 +222,67 @@ All new production files are in
 - No device/emulator UI review, real speech playback or live provider-routing
   enforcement test was performed. No endpoint/model/provider/voice combination
   is claimed live-verified. No merge to `main` was performed.
+
+## Phase 3 — Implemented; Android Checks pending
+
+- Branch: `feature/tts-api-models-phase-3`, based on Phase 2 at `d940bc3e`.
+- Scope: result-only TTS model/provider pickers and an isolated Filters panel.
+  No manager entry point, voice activation, playback, cleanup, or main merge.
+- `TtsModelPickerActivity` reuses the full-screen View All scaffold and model
+  row presentation. It hides View All/current-chat/favorite/reasoning/routing
+  actions, uses only `TtsDiscoveryClient.models`, searches exact IDs and names,
+  highlights the caller's current model, and returns the exact selected ID.
+- `TtsProviderPickerActivity` locks endpoint/model for both draft and saved-row
+  callers. Automatic/Preferred/Only, radio/checkbox selection, priority arrows,
+  removal and the Preferred fallback switch edit a local copy only. Save returns
+  the complete target; Back cancels. No chat preference/favorite writes occur.
+- Its data columns are Provider, Price, Latency, Uptime, ZDR, Training/Data Use.
+  One width table aligns headings and cells. Long values wrap; price components
+  and billing units are retained. Nullable booleans are X/blank/?. Sorting uses
+  Phase 2's decimal-safe grouped comparator and never changes routing priority.
+- `TtsProviderFiltersActivity` retains the separate slide-in panel and automatic
+  application on closing/Back. It exposes alphabetical, Price, Latency and Uptime
+  only, with the existing None/Highest to Lowest/Lowest to Highest wording and
+  Reset Filters. No privacy/text-capability filters or shared text singleton.
+- Requests resolve saved profiles off the UI thread. Saved-row requests also
+  validate source identity before discovery and Save. Failures retain routing,
+  display the Phase 2 specific explanation/provider evidence through shared
+  dialogs, and retry the same target. Cancellation/backgrounding invalidates
+  callbacks; interrupted work resumes on return. Recreation retains choices,
+  search and the local sort state. No logs or paid calls were added.
+
+### Phase 4 caller contract
+
+- Register `TtsModelPickerContract` / `TtsProviderPickerContract` using Android's
+  activity-result API. Launch either with `TtsPickerRequest(TtsTarget(...))`.
+  Only non-secret identity/routing travels in the encoded activity payload.
+- Model launch: exact endpoint ID plus the draft's current model ID, no source
+  ID. It starts directly on View All. The model picker refuses saved-row targets.
+- Provider draft launch: endpoint ID, model ID, complete draft routing, null
+  source ID. Saved-row launch: the same fields plus `SavedTtsSource.sourceId`.
+  Both lock the endpoint/model; there is no model chooser inside this picker.
+- Save/model tap returns `TtsTarget`; canceled results return null. Retain the
+  launch request in the caller and use `acceptsProviderResult` or
+  `acceptsModelResult` to reject results for a draft/row replaced while open.
+- The caller owns Add/replaceRouting, duplicate dialogs and all store mutations.
+  A returned provider result is not itself a persisted edit. Preserve the full
+  draft on an unsuccessful Add/edit and use Phase 1's stable entry ID for edits.
+- Incomplete Only drafts survive navigation/recreation but cannot Save. Empty
+  Preferred with fallback disabled is also blocked. An old Preferred selection
+  stored only in selectedProvider is exposed in the ordered list; removing it
+  clears that reference so it cannot survive as an invisible effective route.
+- `TtsProviderPickerState` owns one routing object and `TtsProviderSort` value.
+  A fresh picker resets sorting; visiting Filters/recreation preserves it.
+- `TtsPickerStateTest` covers result identity, saved-row locking, cancel isolation,
+  recreation, routing selection/order/fallback, blank Only validation, separate
+  text/TTS filters, grouped price ordering, endpoint-isolated speech search and
+  source/layout wiring. Phase 2 catalog/price/failure/transport tests remain.
+
+### Phase 3 verification
+
+- Local XML parsing, referenced string/style checks and `git diff --check`: passed.
+- Android Checks: pending publication/run; not yet claimed passed.
+- Device/emulator visual review: not performed. The pickers are callable through
+  their final contracts; the user-facing manager entry point belongs to Phase 4.
+- Live service/routing/playback: not performed. No endpoint/model/provider/voice
+  combination is claimed live verified and no paid requests were made.

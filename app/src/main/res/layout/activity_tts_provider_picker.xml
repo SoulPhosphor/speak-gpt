@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent">
+    <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/action_bar" style="@style/Widget.App.ActionBar">
+        <ImageButton android:id="@+id/btn_back" style="@style/Widget.App.ActionBar.BackButton" />
+        <TextView android:id="@+id/activity_title" style="@style/Widget.App.ActionBar.Title.NearBack" android:text="@string/endpoint_choose_provider_title" app:layout_constraintEnd_toStartOf="@+id/btn_save" />
+        <ImageButton android:id="@+id/btn_save" style="@style/Widget.App.ActionBar.SecondaryButton" android:contentDescription="@string/btn_save" android:tooltipText="@string/btn_save" app:srcCompat="@drawable/ic_save" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+    <ScrollView android:id="@+id/scroll" android:layout_width="0dp" android:layout_height="0dp" android:clipToPadding="false" android:paddingBottom="24dp" app:layout_constraintTop_toBottomOf="@id/action_bar" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintEnd_toEndOf="parent">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingHorizontal="24dp">
+            <TextView style="@style/Widget.App.Screen.Intro" android:layout_marginTop="24dp" android:text="@string/tts_provider_picker_intro" />
+            <TextView style="@style/Widget.App.Section.Title" android:text="@string/choose_provider_routing_picker_title" />
+            <TextView android:id="@+id/field_routing_type" style="@style/Widget.App.Dropdown.CanonicalValue" android:layout_width="match_parent" />
+            <TextView style="@style/Widget.App.Section.Title" android:text="@string/tts_picker_ai_model" />
+            <TextView android:id="@+id/tts_fixed_model" style="@style/Widget.App.Row.Title" />
+            <LinearLayout android:id="@+id/row_allow_fallbacks" style="@style/Widget.App.Row.Toggle" android:layout_marginTop="16dp">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn"><TextView style="@style/Widget.App.Row.Title" android:text="@string/provider_allow_fallbacks" /></LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/switch_allow_fallbacks" style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+            <LinearLayout android:id="@+id/section_preferred_order" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+                <TextView style="@style/Widget.App.Section.Title" android:text="@string/provider_preferred_order_title" />
+                <TextView style="@style/Widget.App.Section.Hint" android:text="@string/provider_preferred_order_subtext" />
+                <TextView android:id="@+id/text_preferred_order" style="@style/Widget.App.Section.Hint" android:text="@string/provider_preferred_order_placeholder" />
+                <LinearLayout android:id="@+id/rows_preferred_order" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+            </LinearLayout>
+            <com.google.android.material.button.MaterialButton android:id="@+id/btn_provider_filters" style="@style/AppButton.Primary.Inline" android:layout_marginTop="18dp" android:text="@string/provider_filters_button" />
+            <TextView android:id="@+id/text_provider_status" style="@style/Widget.App.Section.Hint" android:visibility="gone" />
+            <com.google.android.material.progressindicator.CircularProgressIndicator android:id="@+id/tts_provider_progress" android:layout_width="wrap_content" android:layout_height="wrap_content" android:indeterminate="true" />
+            <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp">
+                <LinearLayout android:id="@+id/tts_provider_chart" android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" />
+            </HorizontalScrollView>
+        </LinearLayout>
+    </ScrollView>
+</androidx.constraintlayout.widget.ConstraintLayout>
