@@ -357,4 +357,33 @@ class PreviousTtsVoicePreferencesTest {
         assertEquals(0, usabilityChecks)
     }
 
+    @Test fun failedRestorationWriteStillReportsTheRemovedVoiceAsPermanentlyUnavailable() = runBlocking {
+        var rejectWrites = false
+        val backing = FakeSharedPreferences()
+        val global = object : android.content.SharedPreferences by backing {
+            override fun edit(): android.content.SharedPreferences.Editor {
+                val editor = backing.edit()
+                return object : android.content.SharedPreferences.Editor by editor {
+                    override fun putString(key: String?, value: String?): android.content.SharedPreferences.Editor {
+                        editor.putString(key, value)
+                        return this
+                    }
+                    override fun commit(): Boolean = if (rejectWrites) false else editor.commit()
+                }
+            }
+        }
+        val preferences = Preferences(FakeSharedPreferences(), global, "", null)
+        val selection = TtsSelectionService(preferences, TtsSourceResolver(cleanupStore::load, { profiles }), history) { _, _ -> true }
+        val entry = cleanupStore.add("endpoint", api.modelId!!, TtsRoutingSettings()).getOrThrow()
+        selection.activate(device).getOrThrow()
+        selection.activate(savedVoice(entry)).getOrThrow()
+        rejectWrites = true
+        val result = selection.removeUnavailableSources(cleanupStore, cleanupTarget, TtsRequestGate().begin()).getOrThrow()
+        assertEquals(1, result.removed)
+        assertTrue(cleanupStore.load().getOrThrow().isEmpty())
+        assertEquals(TtsFailureKind.PERMANENT_UNAVAILABLE, result.recoveryFailure?.kind)
+        assertEquals(savedVoice(entry), preferences.getSelectedTtsVoice())
+        assertEquals(listOf("Okay", "Select New Voice"), TtsFailures.message(result.recoveryFailure!!).actions)
+    }
+
 }

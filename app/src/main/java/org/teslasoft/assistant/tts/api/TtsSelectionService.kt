@@ -68,9 +68,12 @@ class TtsSelectionService internal constructor(
         }
         val recovery = if (count > 0 && activeRemoved) reconcileLocked(token) else null
         val recoveryFailure = recovery?.exceptionOrNull()?.let { error ->
-            (error as? TtsException)?.failure ?: TtsFailure(TtsOperation.SPEECH,
+            // The source is already removed. Every failed restoration uses the
+            // approved permanent-unavailability dialog, never a save-error message
+            // claiming that the saved source list was left unchanged.
+            ((error as? TtsException)?.failure ?: TtsFailure(TtsOperation.SPEECH,
                 TtsTarget("", sourceId = current?.sourceId, voiceId = current?.voiceId), "",
-                TtsFailureKind.PERMANENT_UNAVAILABLE)
+                TtsFailureKind.PERMANENT_UNAVAILABLE)).copy(kind = TtsFailureKind.PERMANENT_UNAVAILABLE)
         }
         Result.success(TtsSourceRemoval(count, recoveryFailure))
     }
