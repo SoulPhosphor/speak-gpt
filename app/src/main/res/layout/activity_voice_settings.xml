@@ -55,23 +55,6 @@
             android:paddingBottom="24dp">
 
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_marginEnd="12dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal"
-                android:weightSum="2">
-
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_tts"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="2" />
-            </LinearLayout>
-
-            <LinearLayout
                 android:id="@+id/row_voice_browser"
                 style="@style/Widget.App.Row.WithSubtitle"
                 android:paddingHorizontal="20dp">

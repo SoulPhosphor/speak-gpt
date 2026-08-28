@@ -20,7 +20,7 @@ enum class TtsFailureKind {
     DISCOVERY_UNAVAILABLE, EMPTY, MALFORMED, IDENTIFIERS_MISSING, MODEL_UNAVAILABLE,
     VOICE_UNSUPPORTED, ROUTING_REJECTED, PROVIDER_UNAVAILABLE, NOT_FOUND,
     NO_AUDIO, AUDIO_FORMAT, PLAYBACK, SOURCE_MISSING, PROFILE_MISSING, STORAGE, UNKNOWN,
-    DUPLICATE, SAVE_FAILED, REMOVE_FAILED, SAVED_SOURCE_MISSING, ENDPOINT_LIST_FAILED, STORAGE_FULL
+    VOICE_DELETED, PERMANENT_UNAVAILABLE, DUPLICATE, SAVE_FAILED, REMOVE_FAILED, SAVED_SOURCE_MISSING, ENDPOINT_LIST_FAILED, STORAGE_FULL
 }
 
 data class TtsFailure(
@@ -52,6 +52,7 @@ object TtsFailures {
         val text = (evidence.errorMessages + listOfNotNull(evidence.providerCode,
             evidence.providerType, evidence.providerErrorType)).joinToString("\n").lowercase()
         val kind = when {
+            evidence.providerCode in setOf("voice_deleted", "voice_permanently_unavailable") -> TtsFailureKind.VOICE_DELETED
             listOf("unknown voice", "unsupported voice", "voice not found", "invalid voice").any(text::contains) -> TtsFailureKind.VOICE_UNSUPPORTED
             listOf("unsupported provider routing", "provider routing rejected", "unsupported parameter: provider",
                 "unsupported parameter: only", "unsupported parameter: order").any(text::contains) -> TtsFailureKind.ROUTING_REJECTED
@@ -120,6 +121,8 @@ object TtsFailures {
             TtsFailureKind.NO_AUDIO -> Triple("No Audio Returned", "$e completed the request but returned no audio to play.", retry)
             TtsFailureKind.AUDIO_FORMAT -> Triple("Audio Format Not Supported", "The service returned audio in a format this player cannot play.", okay)
             TtsFailureKind.PLAYBACK -> Triple("Audio Could Not Be Played", "The returned audio could not be played.", okay)
+            TtsFailureKind.VOICE_DELETED, TtsFailureKind.PERMANENT_UNAVAILABLE -> Triple(
+                "Selected Voice Is Permanently Unavailable", "Please select a new voice.", listOf("Okay", "Select New Voice"))
             TtsFailureKind.SOURCE_MISSING -> Triple("Voice Source Unavailable", "The endpoint, model, and provider for this voice could not be identified. Choose a voice again in Select Voice.", okay)
             TtsFailureKind.PROFILE_MISSING -> Triple("API Profile No Longer Exists", "The API profile used by this TTS selection was deleted. Choose another saved TTS selection.", okay)
             TtsFailureKind.STORAGE -> Triple("Saved TTS Models Could Not Be Read", "The saved text-to-speech list could not be read. It has not been replaced or cleared.", okay)

@@ -214,6 +214,57 @@ class VoiceBrowserControllerTest {
         assertEquals(listOf("installed"), controller.visibleVoices().map { it.providerVoiceId })
     }
 
+    @Test fun replacingSavedRegistrationsKeepsStableBrowseIdentityAndDropsOldCallbacks() {
+        val google = FakeProvider("google", listOf(googleVoice))
+        val old = DelayedProvider("api-tts:a")
+        val controller = VoiceBrowserController(listOf(google, old), "api-tts:a")
+        controller.load { }
+        val replacement = FakeProvider("api-tts:a", listOf(googleVoice.copy(providerId = "api-tts:a", providerVoiceId = "new")))
+        val second = FakeProvider("api-tts:b", emptyList())
+        controller.replaceProviders(listOf(google, replacement, second)) { }
+        old.complete(listOf(googleVoice.copy(providerId = "api-tts:a", providerVoiceId = "stale")))
+        assertEquals("api-tts:a", controller.browsedProviderId)
+        assertEquals(listOf("google", "api-tts:a", "api-tts:b"), controller.availableProviders.map { it.id })
+        assertEquals("new", controller.visibleVoices().single().providerVoiceId)
+        controller.replaceProviders(listOf(google, second)) { }
+        assertTrue(replacement.closed)
+        assertEquals("google", controller.browsedProviderId)
+        assertEquals(0, google.activations)
+    }
+
+    @Test fun pausedOrDestroyedBrowserRejectsLateLoads() {
+        val source = DelayedProvider("api-tts:a")
+        val controller = VoiceBrowserController(listOf(source), "api-tts:a")
+        controller.load { }
+        controller.suspendLoads()
+        source.complete(listOf(googleVoice.copy(providerId = source.id)))
+        assertEquals(VoiceLoadState.Loading, controller.loadState)
+    }
+
+    @Test fun failedApiListRemainsRegisteredAndReopeningCanRecover() {
+        val source = DelayedProvider("api-tts:a")
+        val controller = VoiceBrowserController(listOf(source), source.id)
+        controller.load { }
+        source.fail(IllegalStateException("No supported voice source"))
+        assertTrue(controller.loadState is VoiceLoadState.Failed)
+        assertEquals(listOf(source), controller.availableProviders)
+        controller.browse(source.id) { }
+        source.complete(listOf(googleVoice.copy(providerId = source.id)))
+        assertEquals(1, controller.visibleVoices().size)
+    }
+
+    @Test fun sameVoiceIdsUnderDifferentSavedSourcesHaveSeparateOverridesAndLoadedLists() {
+        val a = googleVoice.copy(providerId = "api-tts:a", providerVoiceId = "same")
+        val b = a.copy(providerId = "api-tts:b")
+        assertFalse(VoiceIdentityRegistry.key(a.providerId, a.providerVoiceId) == VoiceIdentityRegistry.key(b.providerId, b.providerVoiceId))
+        val controller = VoiceBrowserController(listOf(FakeProvider(a.providerId, listOf(a)), FakeProvider(b.providerId, listOf(b))), a.providerId)
+        controller.load { }
+        controller.updateVoice(a.copy(displayName = "Custom"))
+        controller.browse(b.providerId) { }
+        assertEquals(b.displayName, controller.visibleVoices().single().displayName)
+        assertEquals("Custom", controller.loadedVoice(a.providerId, "same")?.displayName)
+    }
+
     private class FakeProvider(
         override val id: String,
         private val voices: List<BrowserVoice>,
@@ -243,6 +294,7 @@ class VoiceBrowserControllerTest {
         private val callbacks = mutableListOf<(Result<List<BrowserVoice>>) -> Unit>()
         override fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit) { callbacks += onResult }
         fun complete(voices: List<BrowserVoice>) = callbacks.removeAt(0)(Result.success(voices))
+        fun fail(error: Throwable) = callbacks.removeAt(0)(Result.failure(error))
         override fun activeVoiceId(): String? = null
         override fun activate(voice: BrowserVoice) = Unit
         override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit, onPlaybackChanged: (String?) -> Unit) = Unit

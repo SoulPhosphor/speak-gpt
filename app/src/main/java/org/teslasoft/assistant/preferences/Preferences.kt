@@ -880,7 +880,11 @@ class Preferences internal constructor(
      * @param model voice model.
      */
     fun setVoice(model: String) {
+        val selection = getSelectedTtsVoice()
         putString("voice", model)
+        if (selection?.kind == org.teslasoft.assistant.preferences.tts.TtsVoiceKind.DEVICE && selection.voiceId != model) {
+            putString("selected_tts_voice", org.teslasoft.assistant.tts.api.TtsVoiceSelectionCodec.encode(selection.copy(voiceId = model)))
+        }
     }
 
     /**
@@ -898,8 +902,56 @@ class Preferences internal constructor(
      * @return TTS engine (google or openai)
      * */
     fun getTtsEngine() : String {
-        return getString("tts_engine", "google")
+        val selection = getSelectedTtsVoice()
+        return when (selection?.kind) {
+            org.teslasoft.assistant.preferences.tts.TtsVoiceKind.DEVICE -> "google"
+            org.teslasoft.assistant.preferences.tts.TtsVoiceKind.API -> "openai"
+            null -> getString("tts_engine", "google")
+        }
     }
+
+    fun ttsPreferenceScope(): String = chatId
+
+    /** Missing legacy API identity is unresolved, never guessed from the chat endpoint. */
+    fun getSelectedTtsVoice(): org.teslasoft.assistant.preferences.tts.TtsVoiceSelection? {
+        val raw = getString("selected_tts_voice", "")
+        if (raw.isNotBlank()) return runCatching {
+            org.teslasoft.assistant.tts.api.TtsVoiceSelectionCodec.decode(raw)
+        }.getOrNull()
+        return if (getString("tts_engine", "google") == "google") {
+            org.teslasoft.assistant.preferences.tts.TtsVoiceSelection(
+                org.teslasoft.assistant.preferences.tts.TtsVoiceKind.DEVICE, "google", getVoice())
+        } else null
+    }
+
+    /** Call off the UI thread, after the previous-selection history has been saved. */
+    fun saveSelectedTtsVoice(selection: org.teslasoft.assistant.preferences.tts.TtsVoiceSelection): Boolean {
+        selection.validate()
+        val keys = listOf("selected_tts_voice", "tts_engine", "voice", "openai_voice", "openai_tts_model")
+        val before = keys.associateWith { preferences.getString(it, null) }
+        val editor = preferences.edit().putString("selected_tts_voice",
+            org.teslasoft.assistant.tts.api.TtsVoiceSelectionCodec.encode(selection))
+        if (selection.kind == org.teslasoft.assistant.preferences.tts.TtsVoiceKind.DEVICE) {
+            editor.putString("voice", selection.voiceId).putString("tts_engine", "google")
+        } else {
+            editor.putString("openai_voice", selection.voiceId)
+                .putString("openai_tts_model", selection.modelId).putString("tts_engine", "openai")
+        }
+        if (editor.commit()) return true
+        // SharedPreferences may update memory even when its disk commit fails.
+        preferences.edit().also { rollback -> before.forEach { (key, value) ->
+            if (value == null) rollback.remove(key) else rollback.putString(key, value)
+        } }.commit()
+        return false
+    }
+
+    fun isTtsVoicePermanentlyUnavailable(selection: org.teslasoft.assistant.preferences.tts.TtsVoiceSelection): Boolean =
+        getString("unavailable_tts_voice", "") == org.teslasoft.assistant.tts.api.TtsVoiceSelectionCodec.encode(selection)
+
+    fun markTtsVoicePermanentlyUnavailable(selection: org.teslasoft.assistant.preferences.tts.TtsVoiceSelection) {
+        putString("unavailable_tts_voice", org.teslasoft.assistant.tts.api.TtsVoiceSelectionCodec.encode(selection))
+    }
+
 
     /**
      * Set OpenAI voice

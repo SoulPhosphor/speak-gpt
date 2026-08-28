@@ -14,6 +14,12 @@ import org.teslasoft.assistant.preferences.models.ModelIdentity
  */
 class SavedTtsSourcesPreferences internal constructor(private val storage: TtsStorage) {
     companion object {
+        private val changes = java.util.concurrent.CopyOnWriteArraySet<() -> Unit>()
+        fun observeChanges(listener: () -> Unit): () -> Unit {
+            changes += listener
+            return { changes -= listener }
+        }
+
         fun getPreferences(context: Context): SavedTtsSourcesPreferences =
             SavedTtsSourcesPreferences(TtsFileStorage(File(context.applicationContext.filesDir,
                 "tts/saved_sources.json")))
@@ -95,6 +101,7 @@ class SavedTtsSourcesPreferences internal constructor(private val storage: TtsSt
                     .put("allowFallbacks", entry.routing.allowFallbacks)))
         }
         writeTts(storage, JSONObject().put("version", 1).put("entries", array).toString())
+        changes.forEach { runCatching { it() } }
     }
 
     private fun validateSelection(entry: SavedTtsSource) {

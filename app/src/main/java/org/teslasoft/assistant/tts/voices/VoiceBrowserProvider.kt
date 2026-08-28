@@ -22,6 +22,7 @@ interface VoiceBrowserProvider {
     )
     fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit = {})
     fun stopPreview()
+    fun cancelLoad() {}
     fun shutdown()
 }
 
@@ -33,7 +34,7 @@ class VoiceBrowserController(
     /** Supplies each provider's remembered filters the first time they are shown. */
     private val initialFilterState: (String) -> VoiceFilterState = { VoiceFilterState() }
 ) {
-    private val providersById = providers.associateBy { it.id }
+    private var providersById = providers.associateBy { it.id }
     private val filterStates = mutableMapOf<String, VoiceFilterState>()
     private val loadedVoicesByProviderId = mutableMapOf<String, List<BrowserVoice>>()
     private var loadGeneration = 0L
@@ -46,12 +47,13 @@ class VoiceBrowserController(
         private set
 
     val provider: VoiceBrowserProvider get() = providersById.getValue(browsedProviderId)
-    val availableProviders: List<VoiceBrowserProvider> = providers
+    val availableProviders: List<VoiceBrowserProvider> get() = providersById.values.toList()
     val filterState: VoiceFilterState get() = filterStates.getOrPut(browsedProviderId) { initialFilterState(browsedProviderId) }
 
     fun browse(providerId: String, onChanged: () -> Unit) {
         if (!providersById.containsKey(providerId)) return
         provider.stopPreview()
+        provider.cancelLoad()
         browsedProviderId = providerId
         load(onChanged)
     }
@@ -73,7 +75,7 @@ class VoiceBrowserController(
                     VoiceBrowserFilters.sanitize(filterState, definitions)
                     VoiceLoadState.Ready(voices)
                 },
-                onFailure = { VoiceLoadState.Failed(it.message ?: "Voices could not be loaded.") }
+                onFailure = { VoiceLoadState.Failed(it.message ?: "Voices could not be loaded.", it) }
             )
             onChanged()
         }
@@ -128,7 +130,24 @@ class VoiceBrowserController(
         VoiceBrowserFilters.sanitize(filterState, filterDefinitions())
     }
 
-    fun shutdown() = providersById.values.forEach(VoiceBrowserProvider::shutdown)
+    /** Stable IDs preserve browsing/filter identity across source additions and edits. */
+    fun replaceProviders(providers: List<VoiceBrowserProvider>, onChanged: () -> Unit) {
+        require(providers.isNotEmpty() && providers.map { it.id }.distinct().size == providers.size)
+        suspendLoads()
+        val replacement = providers.associateBy { it.id }
+        providersById.values.filter { replacement[it.id] !== it }.forEach(VoiceBrowserProvider::shutdown)
+        loadedVoicesByProviderId.keys.removeAll { providersById[it] !== replacement[it] }
+        providersById = replacement
+        if (browsedProviderId !in replacement) browsedProviderId = providers.first().id
+        load(onChanged)
+    }
+
+    fun suspendLoads() {
+        loadGeneration++
+        providersById.values.forEach { it.stopPreview(); it.cancelLoad() }
+    }
+
+    fun shutdown() { suspendLoads(); providersById.values.forEach(VoiceBrowserProvider::shutdown) }
 
     companion object {
         // Voices whose on-device data is not installed are hidden from the list

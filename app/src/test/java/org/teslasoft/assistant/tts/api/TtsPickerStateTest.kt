@@ -252,6 +252,25 @@ class TtsPickerStateTest {
         assertEquals(ids.indexOf("@+id/row_api_voice_models") + 1, ids.indexOf("@+id/tile_voice_advanced"))
     }
 
+    @Test fun selectedVoiceIsTheOnlySpeechEngineControlAndPermanentDialogOpensVoiceBrowser() {
+        val settings = source("res/layout/activity_voice_settings.xml").readText()
+        assertFalse(settings.contains("@+id/tile_tts"))
+        val activity = source("java/org/teslasoft/assistant/ui/activities/VoiceSettingsActivity.kt").readText()
+        assertFalse(activity.contains("tileTTS"))
+        assertFalse(activity.contains("setTtsEngine"))
+        val chat = source("java/org/teslasoft/assistant/ui/activities/ChatActivity.kt").readText()
+        assertFalse(chat.contains("openAIAI!!.speech"))
+        assertTrue(chat.contains("playback.play(selected.sourceId, selected.voiceId"))
+        val browser = source("java/org/teslasoft/assistant/ui/activities/VoiceBrowserActivity.kt").readText()
+        assertTrue(browser.contains("selections.activate(next)"))
+        assertTrue(browser.contains("SavedTtsSourcesPreferences.getPreferences"))
+        val dialogs = source("java/org/teslasoft/assistant/tts/api/TtsVoiceDialogs.kt").readText()
+        assertTrue(dialogs.contains("VoiceBrowserActivity::class.java"))
+        assertFalse(dialogs.contains("ApiVoiceModelsActivity::class.java"))
+        assertTrue(dialogs.contains("if (permanent) R.string.btn_ok else R.string.btn_cancel"))
+        assertTrue(dialogs.contains("if (permanent) R.string.tts_select_new_voice else R.string.health_btn_retry"))
+    }
+
     private fun source(relative: String): File = listOf(File("src/main/$relative"), File("app/src/main/$relative"))
         .first { it.isFile }
 }

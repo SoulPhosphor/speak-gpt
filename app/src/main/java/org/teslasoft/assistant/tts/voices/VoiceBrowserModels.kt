@@ -64,7 +64,7 @@ data class VoiceFilterState(
 sealed interface VoiceLoadState {
     data object Loading : VoiceLoadState
     data class Ready(val voices: List<BrowserVoice>) : VoiceLoadState
-    data class Failed(val message: String) : VoiceLoadState
+    data class Failed(val message: String, val cause: Throwable? = null) : VoiceLoadState
 }
 
 object VoicePreviewText {

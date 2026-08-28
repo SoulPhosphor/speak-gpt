@@ -19,6 +19,11 @@ class TtsEndpoint private constructor(
     val authType: String, val speechPath: String, val discoveryPath: String,
     val connectSeconds: Int, val responseSeconds: Int, val openRouter: Boolean
 ) {
+    internal fun sameConfiguration(other: TtsEndpoint): Boolean = id == other.id &&
+        baseUrl == other.baseUrl && apiKey == other.apiKey && authType == other.authType &&
+        speechPath == other.speechPath && discoveryPath == other.discoveryPath &&
+        connectSeconds == other.connectSeconds && responseSeconds == other.responseSeconds
+
     companion object {
         fun from(profile: ApiEndpointObject) = TtsEndpoint(
             profile.id, profile.label, profile.host, profile.apiKey, profile.authType,

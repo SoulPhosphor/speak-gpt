@@ -16,6 +16,15 @@ import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.Lifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.tts.*
+import org.teslasoft.assistant.tts.api.*
+import org.teslasoft.assistant.tts.voices.SavedApiVoiceProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
@@ -62,7 +71,12 @@ class VoiceBrowserActivity : FragmentActivity() {
     private lateinit var previewText: TextInputEditText
     private lateinit var identityRegistry: VoiceIdentityRegistry
     private lateinit var lastKnownGoodVoiceRegistry: LastKnownGoodVoiceRegistry
-    private var resumedOnce = false
+    private lateinit var selections: TtsSelectionService
+    private val refreshGate = TtsRequestGate()
+    private val recoveryGate = TtsRequestGate()
+    private var notice: androidx.appcompat.app.AlertDialog? = null
+    private var shownLoadFailure: Throwable? = null
+    private var activating = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -78,6 +92,7 @@ class VoiceBrowserActivity : FragmentActivity() {
 
         val chatId = intent.getStringExtra(EXTRA_CHAT_ID).orEmpty()
         preferences = Preferences.getPreferences(this, chatId)
+        selections = TtsSelectionService(this, preferences)
         identityRegistry = VoiceIdentityRegistry(this)
         lastKnownGoodVoiceRegistry = LastKnownGoodVoiceRegistry(this, chatId)
         providerDropdown = findViewById(R.id.provider_dropdown)
@@ -95,25 +110,17 @@ class VoiceBrowserActivity : FragmentActivity() {
         findViewById<ImageButton>(R.id.btn_back).setOnClickListener { attemptChevronExit() }
 
         controller = VoiceBrowserController(
-            // Only Google is offered here for now. Additional API voice services
-            // are added through the coming provider-selection flow, not hardcoded.
             providers = listOf(
                 GoogleSpeechVoiceProvider(this, preferences)
             ),
-            activeProviderId = preferences.getTtsEngine(),
+            activeProviderId = preferences.getSelectedTtsVoice()?.sourceId ?: "google",
             decorateVoice = identityRegistry::apply,
             initialFilterState = { providerId ->
                 VoiceFilterStatePersistence.decode(preferences.getVoiceBrowserFilters(providerId))
             }
         )
         adapter = VoiceListAdapter(
-            onSelect = { voice ->
-                if (!VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(voice) && voice.canPreview) {
-                    rememberLastKnownGood(voice)
-                }
-                controller.select(voice)
-                render()
-            },
+            onSelect = ::activateVoice,
             onLongPress = ::showVoiceIdentityDialog,
             onPreview = { voice ->
                 adapter.setPreviewing(voice.providerId, voice.providerVoiceId)
@@ -156,7 +163,6 @@ class VoiceBrowserActivity : FragmentActivity() {
             persistFilters()
             render()
         }
-        controller.load(::renderOnMainThread)
     }
 
     override fun onAttachedToWindow() {
@@ -173,11 +179,14 @@ class VoiceBrowserActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (resumedOnce) controller.load(::renderOnMainThread) else resumedOnce = true
+        refreshSources()
     }
 
     override fun onPause() {
-        controller.provider.stopPreview()
+        refreshGate.cancel()
+        recoveryGate.cancel()
+        controller.suspendLoads()
+        notice?.dismiss()
         super.onPause()
     }
 
@@ -186,13 +195,107 @@ class VoiceBrowserActivity : FragmentActivity() {
         super.onDestroy()
     }
 
+    private fun refreshSources() {
+        val token = refreshGate.begin()
+        lifecycleScope.launch {
+            try {
+                val (rows, endpoints) = withContext(Dispatchers.IO) {
+                    val rows = SavedTtsSourcesPreferences.getPreferences(this@VoiceBrowserActivity).load()
+                        .getOrElse { throw TtsException(TtsFailure(TtsOperation.VOICES, TtsTarget(""), "", TtsFailureKind.STORAGE)) }
+                    rows to ApiEndpointPreferences.getApiEndpointPreferences(this@VoiceBrowserActivity)
+                        .getApiEndpointsList(this@VoiceBrowserActivity)
+                }
+                token.deliver {
+                    val google = controller.availableProviders.first { it.id == "google" }
+                    val apis = rows.map { row -> SavedApiVoiceProvider(this@VoiceBrowserActivity, row,
+                        endpoints.firstOrNull { it.id == row.endpointId }?.label ?: row.endpointId,
+                        preferences) { failure, retry ->
+                            if (controller.browsedProviderId == row.sourceId) showTtsFailure(failure, retry)
+                        } }
+                    shownLoadFailure = null
+                    controller.replaceProviders(listOf(google) + apis, ::renderOnMainThread)
+                    val current = preferences.getSelectedTtsVoice()?.sourceId
+                    if (firstSourceRefresh && current != null && apis.any { it.id == current }) {
+                        firstSourceRefresh = false
+                        controller.browse(current, ::renderOnMainThread)
+                    }
+                    firstSourceRefresh = false
+                    apis.forEach { it.loadLabel(::renderOnMainThread) }
+                }
+                val recovery = selections.reconcile(token)
+                token.deliver {
+                    recovery.exceptionOrNull()?.let { error ->
+                        (error as? TtsException)?.failure?.let { showTtsFailure(it) }
+                    }
+                    render()
+                }
+            } catch (_: java.util.concurrent.CancellationException) {
+            } catch (error: Exception) {
+                token.deliver { showTtsFailure((error as? TtsException)?.failure
+                    ?: TtsFailure(TtsOperation.VOICES, TtsTarget(""), "", TtsFailureKind.ENDPOINT_LIST_FAILED), ::refreshSources) }
+            }
+        }
+    }
+    private var firstSourceRefresh = true
+
+    private fun activateVoice(voice: BrowserVoice) {
+        if (activating) return
+        activating = true
+        controller.stopPreview()
+        notice?.dismiss()
+        val next = TtsVoiceSelection(if (voice.providerId == "google") TtsVoiceKind.DEVICE else TtsVoiceKind.API,
+            voice.providerId, voice.providerVoiceId, voice.providerModelId)
+        lifecycleScope.launch {
+            try {
+                selections.activate(next).fold(onSuccess = {
+                    if (voice.providerId == "google" && !VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(voice) && voice.canPreview)
+                        rememberLastKnownGood(voice)
+                    render()
+                }, onFailure = { error ->
+                    showTtsFailure((error as? TtsException)?.failure ?: TtsFailure(TtsOperation.SPEECH,
+                        TtsTarget("", sourceId = next.sourceId, voiceId = next.voiceId), "", TtsFailureKind.SAVE_FAILED)) {
+                        if (controller.browsedProviderId == voice.providerId) activateVoice(voice)
+                    }
+                })
+            } finally { activating = false }
+        }
+    }
+
+    private fun showTtsFailure(failure: TtsFailure, retry: () -> Unit = {}) {
+        if (isFinishing || isDestroyed || !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        if (failure.kind in setOf(TtsFailureKind.VOICE_DELETED, TtsFailureKind.SOURCE_MISSING, TtsFailureKind.PROFILE_MISSING) &&
+            preferences.getSelectedTtsVoice()?.let { it.sourceId == failure.target.sourceId && it.voiceId == failure.target.voiceId } == true) {
+            controller.stopPreview()
+            val token = recoveryGate.begin()
+            lifecycleScope.launch {
+                val result = selections.reconcile(token, failure)
+                token.deliver {
+                    result.exceptionOrNull()?.let { showTtsFailure((it as TtsException).failure) }
+                    render()
+                }
+            }
+            return
+        }
+        val browsed = controller.browsedProviderId
+        notice?.dismiss()
+        notice = TtsVoiceDialogs.show(this, preferences.ttsPreferenceScope(),
+            if (failure.kind == TtsFailureKind.VOICE_DELETED) failure.copy(kind = TtsFailureKind.VOICE_UNSUPPORTED) else failure) {
+            if (browsed == controller.browsedProviderId) retry()
+        }
+    }
+
     private fun showProviderDropdown() {
         val providers = controller.availableProviders
         AppDropdown.show(
             providerDropdown,
             providers.map { it.displayName },
             providers.indexOfFirst { it.id == controller.browsedProviderId }
-        ) { index -> controller.browse(providers[index].id, ::renderOnMainThread) }
+        ) { index ->
+            notice?.dismiss()
+            shownLoadFailure = null
+            adapter.setPreviewing(null, null)
+            controller.browse(providers[index].id, ::renderOnMainThread)
+        }
     }
 
     private fun renderOnMainThread() {
@@ -256,10 +359,10 @@ class VoiceBrowserActivity : FragmentActivity() {
 
     private fun renderListAndState() {
         val visible = controller.visibleVoices()
-        val activeProviderId = preferences.getTtsEngine()
+        val activeProviderId = preferences.getSelectedTtsVoice()?.sourceId.orEmpty()
         val activeVoiceId = controller.availableProviders.firstOrNull { it.id == activeProviderId }?.activeVoiceId()
         controller.loadedVoice(activeProviderId, activeVoiceId)?.let { activeVoice ->
-            if (!VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(activeVoice) && activeVoice.canPreview) {
+            if (activeVoice.providerId == "google" && !VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(activeVoice) && activeVoice.canPreview) {
                 rememberLastKnownGood(activeVoice)
             }
         }
@@ -268,11 +371,20 @@ class VoiceBrowserActivity : FragmentActivity() {
 
         when (val state = controller.loadState) {
             VoiceLoadState.Loading -> showState(message = null, showLoading = true, allowReset = false)
-            is VoiceLoadState.Failed -> showState(
-                message = getString(R.string.voice_browser_load_failed, state.message),
-                showLoading = false,
-                allowReset = false
-            )
+            is VoiceLoadState.Failed -> {
+                val failure = (state.cause as? TtsException)?.failure
+                showState(message = if (controller.browsedProviderId.startsWith("api-tts:"))
+                    getString(R.string.tts_voices_currently_unavailable)
+                    else getString(R.string.voice_browser_load_failed, state.message),
+                    showLoading = false, allowReset = false)
+                if (failure != null && shownLoadFailure !== state.cause) {
+                    shownLoadFailure = state.cause
+                    val sourceId = controller.browsedProviderId
+                    showTtsFailure(failure) {
+                        if (controller.browsedProviderId == sourceId) controller.load(::renderOnMainThread)
+                    }
+                }
+            }
             is VoiceLoadState.Ready -> when {
                 state.voices.isEmpty() -> showState(
                     getString(R.string.voice_browser_provider_empty), showLoading = false, allowReset = false
@@ -309,7 +421,7 @@ class VoiceBrowserActivity : FragmentActivity() {
     }
 
     private fun attemptChevronExit() {
-        val activeProviderId = preferences.getTtsEngine()
+        val activeProviderId = preferences.getSelectedTtsVoice()?.sourceId.orEmpty()
         val activeVoiceId = controller.availableProviders.firstOrNull { it.id == activeProviderId }?.activeVoiceId()
         val activeVoice = controller.loadedVoice(activeProviderId, activeVoiceId)
         if (!VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(activeVoice)) {

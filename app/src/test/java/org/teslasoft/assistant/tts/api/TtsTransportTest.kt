@@ -24,6 +24,35 @@ class TtsTransportTest {
     }
     private val mp3 = byteArrayOf(73, 68, 51, 4, 0, 0, 0, 0, 0, 0)
 
+    @Test fun savedPreviewAndReadbackResolveIdenticalSpeechConfiguration() {
+        val profile = ApiEndpointObject("Speech", "https://speech.example/api/v1/", "speech-key",
+            id = "speech-endpoint", authType = ApiEndpointObject.AUTH_API_KEY,
+            speechEndpoint = "/custom/speech", connectTimeoutSeconds = 7, responseTimeoutSeconds = 19)
+        var rows = listOf(SavedTtsSource("saved", profile.id, "exact/model:suffix",
+            TtsRoutingSettings(TtsRoutingMode.ONLY, "provider/exact")))
+        val resolver = TtsSourceResolver({ Result.success(rows) }, { listOf(profile) })
+        val resolved = resolver.saved(rows.single().sourceId, "voice/exact").getOrThrow()
+        val preview = TtsSpeechTransport().request(resolved, "hello", TtsOperation.PREVIEW)
+        val readback = TtsSpeechTransport().request(resolver.saved(rows.single().sourceId, "voice/exact").getOrThrow(), "hello")
+        assertEquals(preview.url, readback.url)
+        assertEquals(preview.headers, readback.headers)
+        assertEquals(body(preview), body(readback))
+        assertEquals("speech-key", preview.header("api-key"))
+        assertEquals("/api/v1/custom/speech", preview.url.encodedPath)
+        assertEquals(7, resolved.endpoint.connectSeconds)
+        assertEquals(19, resolved.endpoint.responseSeconds)
+        rows = emptyList()
+        assertTrue(resolver.saved("api-tts:saved", "voice/exact").isFailure)
+    }
+
+    @Test fun speechSnapshotComparisonDetectsConfigurationEditsIncludingCredentials() {
+        val profile = ApiEndpointObject("Speech", "https://speech.example/v1/", "key", id = "ep")
+        val snapshot = TtsEndpoint.from(profile)
+        assertTrue(snapshot.sameConfiguration(TtsEndpoint.from(profile)))
+        assertFalse(snapshot.sameConfiguration(TtsEndpoint.from(ApiEndpointObject("Speech", profile.host, "changed", id = "ep"))))
+        assertFalse(snapshot.sameConfiguration(TtsEndpoint.from(ApiEndpointObject("Speech", profile.host, "key", id = "ep", speechEndpoint = "/different"))))
+    }
+
     @Test fun routingPayloadsRetainExactIdsAndOptionsWithoutChangingChatState() {
         val transport = TtsSpeechTransport()
         val options = JsonObject().apply { add("vendor", JsonObject().apply { addProperty("style", "calm") }) }

@@ -16,6 +16,9 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import org.teslasoft.assistant.tts.api.*
+import org.teslasoft.assistant.preferences.tts.TtsVoiceSelection
+import org.teslasoft.assistant.preferences.tts.TtsVoiceKind
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
@@ -109,7 +112,6 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.aallam.ktoken.Encoding
 import com.aallam.ktoken.Tokenizer
-import com.aallam.openai.api.audio.SpeechRequest
 import com.aallam.openai.api.audio.TranscriptionRequest
 import com.aallam.openai.api.chat.ChatCompletionChunk
 import com.aallam.openai.api.chat.ChatCompletionRequest
@@ -169,7 +171,6 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
-import org.teslasoft.assistant.tts.voices.OpenAiVoiceProvider
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
@@ -312,7 +313,6 @@ import io.ktor.util.AttributeKey
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
@@ -800,6 +800,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         whisperPreloadScope?.coroutineContext?.cancel(CancellationException("Killed"))
         processRecordingScope?.coroutineContext?.cancel(CancellationException("Killed"))
         setupScope?.coroutineContext?.cancel(CancellationException("Killed"))
+        speechSelectionGate.cancel()
+        apiReadback?.stop()
         speakScope?.coroutineContext?.cancel(CancellationException("Killed"))
         parseMessageScope?.coroutineContext?.cancel(CancellationException("Killed"))
         condenseJob?.cancel(CancellationException("Killed"))
@@ -1330,6 +1332,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         if (chatStartupComplete && chatId != "") {
             preferences = Preferences.getPreferences(this, chatId)
+            speechSettings?.unregisterOnSharedPreferenceChangeListener(speechSelectionListener)
+            speechSettings = org.teslasoft.assistant.preferences.SecurePrefs.get(this, "settings.$chatId")
+            speechSettings?.registerOnSharedPreferenceChangeListener(speechSelectionListener)
+            val recoveryToken = speechRecoveryGate.begin()
+            lifecycleScope.launch {
+                val result = TtsSelectionService(this@ChatActivity, preferences!!).reconcile(recoveryToken)
+                recoveryToken.deliver { result.exceptionOrNull()?.let { error ->
+                    (error as? TtsException)?.failure?.let { showSpeechNotice(it, "", readbackSession) }
+                } }
+            }
             apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(this)
             logitBiasPreferences = LogitBiasPreferences(this, preferences?.getLogitBiasesConfigId()!!)
             apiEndpointObject = apiEndpointPreferences?.getApiEndpoint(this, preferences?.getApiEndpointId()!!)
@@ -1676,6 +1688,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // handing text to the engine; a stale stamp means "the user stopped this"
     // and the utterance is dropped.
     private var readbackSession = 0
+    private val speechSelectionGate = TtsRequestGate()
+    private val speechRecoveryGate = TtsRequestGate()
+    private var apiReadback: TtsPlayback? = null
+    private var speechNotice: androidx.appcompat.app.AlertDialog? = null
+    private var speechSettings: android.content.SharedPreferences? = null
+    private val speechSelectionListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "selected_tts_voice") {
+            // Selection changes invalidate pending speech without affecting chat generation.
+            speechSelectionGate.cancel()
+            runOnUiThread { stopReadback() }
+        }
+    }
     // Text handed to each queued TTS utterance, kept by id so an asynchronous
     // failure reports the chunk the engine actually rejected.
     private val ttsUtteranceText = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -2511,10 +2535,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Null-safe: when the locked-storage gate finishes onCreate early,
         // mediaPlayer was never constructed but onDestroy still runs.
         if (mediaPlayer?.isPlaying == true) {
-            mediaPlayer!!.stop()
-            mediaPlayer!!.reset()
+            mediaPlayer?.stop()
+            mediaPlayer?.reset()
         }
 
+        speechSelectionGate.cancel()
+        speechRecoveryGate.cancel()
+        speechSettings?.unregisterOnSharedPreferenceChangeListener(speechSelectionListener)
+        apiReadback?.shutdown()
+        speechNotice?.dismiss()
         try { unregisterReceiver(hangUpReceiver) } catch (_: Exception) { /* not registered */ }
         // Release the last ML Kit language-detector client (see pronounce()).
         try { languageIdentifier?.close() } catch (_: Exception) { /* ignore */ }
@@ -5658,6 +5687,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     mediaPlayer?.reset()
                 }
             } catch (_: Exception) { /* ignore */ }
+            stopReadback()
             try { tts?.stop() } catch (_: Exception) { /* ignore */ }
             startHandsFreeService()
         }
@@ -6101,11 +6131,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun handleGoogleSpeechRecognition() {
+        stopReadback()
         if (isRecording) {
             try {
-                if (mediaPlayer!!.isPlaying) {
-                    mediaPlayer!!.stop()
-                    mediaPlayer!!.reset()
+                if (mediaPlayer?.isPlaying == true) {
+                    mediaPlayer?.stop()
+                    mediaPlayer?.reset()
                 }
                 tts!!.stop()
             } catch (_: java.lang.Exception) {/* unused */}
@@ -6118,9 +6149,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         } else {
             try {
-                if (mediaPlayer!!.isPlaying) {
-                    mediaPlayer!!.stop()
-                    mediaPlayer!!.reset()
+                if (mediaPlayer?.isPlaying == true) {
+                    mediaPlayer?.stop()
+                    mediaPlayer?.reset()
                 }
                 tts!!.stop()
             } catch (_: java.lang.Exception) {/* unused */}
@@ -7233,12 +7264,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // Put timestamp to chat to sort chats by last message
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
         try {
-            if (mediaPlayer!!.isPlaying) {
-                mediaPlayer!!.stop()
-                mediaPlayer!!.reset()
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.stop()
+                mediaPlayer?.reset()
             }
             tts!!.stop()
         } catch (_: java.lang.Exception) {/* unused */}
+        stopReadback()
         if (message != "") {
             val explicitlyArmedImagine = explicitImagineDraft &&
                 ImagineCommand.isImagineAttempt(message)
@@ -9029,6 +9061,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun stopReadback() {
         readbackSession++
+        speechSelectionGate.cancel()
+        speechNotice?.dismiss()
+        apiReadback?.stop()
         pendingSpeak = null
         pendingSpeakSession = null
         ttsRemainingText = ""
@@ -11827,14 +11862,32 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    private fun speak(message: String, session: Int = readbackSession) {
+    private fun speak(message: String, session: Int = readbackSession, selected: TtsVoiceSelection? = null) {
         // The user stopped this readback while it was still in flight (see
         // readbackSession) — starting the audio now would speak over a stop.
         if (session != readbackSession) {
             logTtsLifecycle("TTS skipped reason=stale_session (stopped or superseded before dispatch)")
             return
         }
-        if (preferences!!.getTtsEngine() == "google") {
+        if (selected == null) {
+            val token = speechSelectionGate.begin()
+            lifecycleScope.launch {
+                val prefs = preferences ?: return@launch
+                val result = TtsSelectionService(this@ChatActivity, prefs).reconcile(token)
+                token.deliver {
+                    if (session != readbackSession || isDestroyed) return@deliver
+                    result.fold(onSuccess = { speak(message, session, it) }, onFailure = {
+                        finishApiReadback()
+                        showSpeechFailure((it as? TtsException)?.failure ?: TtsFailure(
+                            TtsOperation.SPEECH, TtsTarget(""), "", TtsFailureKind.UNKNOWN), message, session)
+                    })
+                }
+            }
+            return
+        }
+        if (preferences?.getSelectedTtsVoice() != selected) return
+        if (selected.kind == TtsVoiceKind.DEVICE) {
+
             val engine = tts
             if (engine == null || !isTTSInitialized) {
                 pendingSpeak = message
@@ -11850,6 +11903,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (session != readbackSession) {
                     logTtsLifecycle("TTS skipped reason=stale_session (stopped between dispatch and main-looper run)")
                     return@runSpeak
+                }
+                // A voice selected while Settings covered this existing engine must take
+                // effect without requiring activity recreation. Preserve auto-language behavior.
+                if (!autoLangDetect) {
+                    val voice = runCatching { engine.voices?.firstOrNull { it.name == selected.voiceId } }.getOrNull()
+                    if (voice != null && engine.voice?.name != selected.voiceId) engine.setVoice(voice)
                 }
                 val maxLength = try {
                     TextToSpeech.getMaxSpeechInputLength()
@@ -11884,98 +11943,75 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 Handler(Looper.getMainLooper()).post { runSpeak() }
             }
         } else {
-            if (openAIKey == null) {
-                logTtsLifecycle("TTS skipped reason=openai_key_missing")
-                adapter?.clearSpeakingPosition()
-                openAIMissing("tts", message)
-            } else {
-                speakScope = CoroutineScope(Dispatchers.Main)
-
-                speakScope?.launch {
-                    progress?.setOnClickListener {
-                        cancel()
-                        restoreUIState()
-                    }
-
-                    try {
-                        val rawAudio = openAIAI!!.speech(
-                            request = SpeechRequest(
-                                model = ModelId(preferences!!.getOpenAITtsModel().ifBlank {
-                                    throw IllegalStateException("No speech-capable model has been selected for this endpoint.")
-                                }),
-                                input = message,
-                                voice = com.aallam.openai.api.audio.Voice(preferences!!.getOpenAIVoice()),
-                            )
-                        )
-
-                        runOnUiThread {
-                            try {
-                                // create temp file that will hold byte array
-                                val tempMp3 = File.createTempFile("audio", "mp3", cacheDir)
-                                tempMp3.deleteOnExit()
-                                val fos = FileOutputStream(tempMp3)
-                                fos.write(rawAudio)
-                                fos.close()
-
-                                // resetting media player instance to evade problems
-                                mediaPlayer?.reset()
-
-                                val fis = FileInputStream(tempMp3)
-                                mediaPlayer?.setDataSource(fis.fd)
-                                mediaPlayer?.prepare()
-                                mediaPlayer?.setOnCompletionListener {
-                                    logTtsLifecycle("TTS onDone engine=openai")
-                                    adapter?.clearSpeakingPosition()
-                                    // Mirror the device-TTS onDone path so a
-                                    // cloud voice also keeps hands-free looping.
-                                    onHandsFreeReadbackFinished()
-                                }
-                                mediaPlayer?.setOnErrorListener { _, what, extra ->
-                                    logTtsLifecycle("TTS onError engine=openai code=$what/$extra (mediaPlayer playback error)")
-                                    adapter?.clearSpeakingPosition()
-                                    // A playback error must not strand the loop
-                                    // either — re-arm as if readback finished.
-                                    onHandsFreeReadbackFinished()
-                                    false
-                                }
-                                mediaPlayer?.start()
-                                logTtsLifecycle("TTS onStart engine=openai")
-                                beginHandsFreeReadbackWatch()
-                            } catch (ex: IOException) {
-                                logTtsLifecycle("TTS onError engine=openai code=io_exception (preparing local playback)")
-                                adapter?.clearSpeakingPosition()
-                                MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)
-                                    .setTitle(R.string.label_audio_error)
-                                    .setPositiveButton(R.string.btn_close) { _, _ -> }
-                                    .setMessage(ex.stackTraceToString())
-                                    .show()
-                            }
-                        }
-                    } catch (_: CancellationException) {
-                        restoreUIState()
-                    } catch (e: Exception) {
-                        // A failed speech request (network drop, HTTP error)
-                        // used to escape this coroutine uncaught and kill the
-                        // whole process mid-readback — and with it any
-                        // hands-free loop. Fail just the readback instead:
-                        // log it and re-arm exactly like the playback-error
-                        // listener above.
+            val playback = apiReadback ?: TtsPlayback(this).also { apiReadback = it }
+            playback.play(selected.sourceId, selected.voiceId, message, TtsOperation.SPEECH,
+                stillCurrent = { session == readbackSession && !isDestroyed && preferences?.getSelectedTtsVoice() == selected },
+                onPlayer = { next ->
+                    if (mediaPlayer !== next) runCatching { mediaPlayer?.release() }
+                    mediaPlayer = next
+                },
+                onStart = {
+                    logTtsLifecycle("TTS onStart engine=openai")
+                    beginHandsFreeReadbackWatch()
+                },
+                onDone = {
+                    logTtsLifecycle("TTS onDone engine=openai")
+                    adapter?.clearSpeakingPosition()
+                    // Mirror the device-TTS onDone path so a cloud voice keeps hands-free looping.
+                    onHandsFreeReadbackFinished()
+                    releaseReadbackKeepAlive()
+                },
+                onPlaybackError = { what, extra ->
+                    logTtsLifecycle("TTS onError engine=openai code=$what/$extra (mediaPlayer playback error)")
+                },
+                onFailure = { failure ->
+                    if (failure.kind == TtsFailureKind.KEY_MISSING) {
+                        logTtsLifecycle("TTS skipped reason=openai_key_missing")
+                    } else if (failure.kind == TtsFailureKind.PLAYBACK) {
+                        logTtsLifecycle("TTS onError engine=openai code=io_exception (preparing local playback)")
+                    } else {
+                        val e = TtsException(failure)
                         logTtsLifecycle("TTS onError engine=openai code=request_failed (speech request never returned audio)")
                         logVoiceEventAlways("cloud voice request failed: ${e.message}")
-                        if (OpenAiVoiceProvider.isUnknownVoiceFailure(e.message.orEmpty())) {
-                            apiEndpointPreferences?.rejectTtsVoice(
-                                preferences!!.getApiEndpointId(),
-                                preferences!!.getOpenAIVoice()
-                            )
-                        }
-                        runOnUiThread {
-                            adapter?.clearSpeakingPosition()
-                            onHandsFreeReadbackFinished()
-                        }
-                        releaseReadbackKeepAlive()
-                        restoreUIState()
+                    }
+                    finishApiReadback()
+                    showSpeechFailure(failure, message, session)
+                })
+        }
+    }
+
+    private fun finishApiReadback() {
+        adapter?.clearSpeakingPosition()
+        onHandsFreeReadbackFinished()
+        releaseReadbackKeepAlive()
+        restoreUIState()
+    }
+
+    private fun showSpeechFailure(failure: TtsFailure, message: String, session: Int) {
+        if (session != readbackSession || isFinishing || isDestroyed) return
+        if (failure.kind in setOf(TtsFailureKind.VOICE_DELETED, TtsFailureKind.SOURCE_MISSING, TtsFailureKind.PROFILE_MISSING) &&
+            preferences?.getSelectedTtsVoice()?.kind == TtsVoiceKind.API) {
+            val token = speechRecoveryGate.begin()
+            lifecycleScope.launch {
+                val result = TtsSelectionService(this@ChatActivity, preferences!!).reconcile(token, failure)
+                token.deliver {
+                    result.exceptionOrNull()?.let { error ->
+                        (error as? TtsException)?.failure?.let { showSpeechNotice(it, message, session) }
                     }
                 }
+            }
+        } else showSpeechNotice(failure, message, session)
+    }
+
+    private fun showSpeechNotice(failure: TtsFailure, message: String, session: Int) {
+        if (isFinishing || isDestroyed) return
+        val selection = preferences?.getSelectedTtsVoice()
+        speechNotice?.dismiss()
+        speechNotice = TtsVoiceDialogs.show(this, chatId, failure) {
+            if (session == readbackSession && preferences?.getSelectedTtsVoice() == selection) {
+                // Retry is an explicit user action and resolves the same still-valid source again.
+                acquireReadbackKeepAlive()
+                speak(message, session)
             }
         }
     }
@@ -12063,6 +12099,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
         // Stop any current playback so taps don't pile up.
+        stopReadback()
         try { tts?.stop() } catch (_: Exception) { /* ignore */ }
         try { if (mediaPlayer?.isPlaying == true) { mediaPlayer?.stop(); mediaPlayer?.reset() } } catch (_: Exception) { /* ignore */ }
         // Tint the tapped speaker button until playback finishes, so the press

@@ -60,6 +60,26 @@ class PreviousTtsVoicePreferences internal constructor(private val storage: TtsS
             }
         }
 
+    /** A rejected current-selection write must not consume its predecessor. */
+    internal fun activate(current: TtsVoiceSelection?, next: TtsVoiceSelection,
+        saveCurrent: () -> Boolean): Result<Unit> = synchronized(TtsStorageLock) {
+        runCatching {
+            val previous = read()
+            recordActivation(current, next).getOrThrow()
+            try {
+                if (!saveCurrent()) throw TtsStorageException(TtsStorageFailure.WRITE_FAILED)
+            } catch (error: Exception) {
+                if (current != next) {
+                    val value = previous?.let { JSONObject().put("kind", it.kind.name)
+                        .put("sourceId", it.sourceId).put("voiceId", it.voiceId)
+                        .put("modelId", it.modelId ?: JSONObject.NULL) } ?: JSONObject.NULL
+                    writeTts(storage, JSONObject().put("version", 1).put("previous", value).toString())
+                }
+                throw error
+            }
+        }
+    }
+
     private fun read(): TtsVoiceSelection? = readTts(storage, null) { content ->
         val root = parseTtsObject(content).apply { requireVersionOne() }
         require(root.has("previous"))

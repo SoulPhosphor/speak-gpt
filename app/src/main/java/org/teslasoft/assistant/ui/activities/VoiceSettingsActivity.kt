@@ -37,6 +37,13 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.teslasoft.assistant.preferences.tts.TtsVoiceKind
+import org.teslasoft.assistant.tts.api.*
+import org.teslasoft.assistant.tts.voices.SavedApiVoiceProvider
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
@@ -67,7 +74,6 @@ import org.teslasoft.assistant.tts.voices.VoiceIdentityRegistry
  */
 class VoiceSettingsActivity : FragmentActivity() {
 
-    private var tileTTS: TileFragment? = null
     private var rowVoiceBrowser: LinearLayout? = null
     private var valueVoiceBrowser: TextView? = null
     private var rowVoiceLanguage: ConstraintLayout? = null
@@ -88,7 +94,8 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var chatId = ""
     private var preferences: Preferences? = null
     private var language = "en"
-    private var ttsEngine = "google"
+    private val voiceGate = TtsRequestGate()
+    private var voiceNotice: androidx.appcompat.app.AlertDialog? = null
 
     private var languageChangedListener: LanguageSelectorDialogFragment.StateChangesListener = object : LanguageSelectorDialogFragment.StateChangesListener {
         override fun onSelected(name: String) {
@@ -144,7 +151,6 @@ class VoiceSettingsActivity : FragmentActivity() {
         preferences = Preferences.getPreferences(this, chatId)
 
         language = preferences?.getLanguage() ?: "en"
-        ttsEngine = preferences?.getTtsEngine() ?: "google"
 
         btnBack?.setOnClickListener { finish() }
 
@@ -164,44 +170,45 @@ class VoiceSettingsActivity : FragmentActivity() {
 
     private fun updateVoiceBrowserRow() {
         val prefs = preferences ?: return
-        ttsEngine = prefs.getTtsEngine()
-        val identities = VoiceIdentityRegistry(this)
-        valueVoiceBrowser?.text = if (ttsEngine == "openai") {
-            val providerVoiceId = prefs.getOpenAIVoice()
-            getString(
-                R.string.voice_browser_setting_subtitle_provider,
-                getString(R.string.voice_browser_provider_openai),
-                identities.displayNameFor(
-                    "openai",
-                    providerVoiceId,
-                    providerVoiceId.replaceFirstChar(Char::uppercase)
-                )
-            )
-        } else {
-            val providerVoiceId = prefs.getVoice()
-            val originalDisplayName = GoogleVoiceNumberRegistry(this).displayNameFor(providerVoiceId)
-            getString(
-                R.string.voice_browser_setting_subtitle_provider,
-                getString(R.string.voice_browser_setting_subtitle_google),
-                identities.displayNameFor("google", providerVoiceId, originalDisplayName)
-            )
+        val token = voiceGate.begin()
+        lifecycleScope.launch {
+            val result = TtsSelectionService(this@VoiceSettingsActivity, prefs).reconcile(token)
+            token.deliver {
+                val selection = result.getOrNull()
+                if (selection == null) {
+                    val failure = (result.exceptionOrNull() as? TtsException)?.failure ?: return@deliver
+                    valueVoiceBrowser?.text = TtsFailures.message(failure).title
+                    voiceNotice?.dismiss()
+                    voiceNotice = TtsVoiceDialogs.show(this@VoiceSettingsActivity, chatId, failure, ::updateVoiceBrowserRow)
+                } else if (selection.kind == TtsVoiceKind.DEVICE) {
+                    val identities = VoiceIdentityRegistry(this@VoiceSettingsActivity)
+                    valueVoiceBrowser?.text = getString(R.string.voice_browser_setting_subtitle_provider,
+                        getString(R.string.voice_browser_setting_subtitle_google), identities.displayNameFor("google",
+                            selection.voiceId, GoogleVoiceNumberRegistry(this@VoiceSettingsActivity).displayNameFor(selection.voiceId)))
+                }
+            }
+            val selection = result.getOrNull()?.takeIf { it.kind == TtsVoiceKind.API } ?: return@launch
+            val resolved = withContext(Dispatchers.IO) {
+                TtsAndroidServices.resolver(this@VoiceSettingsActivity).saved(selection.sourceId, selection.voiceId)
+            }
+            token.deliver {
+                resolved.getOrNull()?.let { source ->
+                    valueVoiceBrowser?.text = getString(R.string.voice_browser_setting_subtitle_provider,
+                        SavedApiVoiceProvider.sourceLabel(source.endpoint.label, source.target.modelId, source.target.routing),
+                        VoiceIdentityRegistry(this@VoiceSettingsActivity).displayNameFor(selection.sourceId,
+                            selection.voiceId, selection.voiceId))
+                }
+            }
         }
     }
 
-    private fun createTiles() {
-        tileTTS = TileFragment.newInstance(
-            preferences?.getTtsEngine() == "openai",
-            true,
-            getString(R.string.tile_openai_tts),
-            null,
-            getString(R.string.on),
-            getString(R.string.tile_google_tts),
-            R.drawable.ic_tts,
-            false,
-            chatId,
-            getString(R.string.tile_tts_desc)
-        )
+    override fun onPause() {
+        voiceGate.cancel()
+        voiceNotice?.dismiss()
+        super.onPause()
+    }
 
+    private fun createTiles() {
         tileSTT = TileFragment.newInstance(
             checked = false,
             checkable = false,
@@ -249,7 +256,6 @@ class VoiceSettingsActivity : FragmentActivity() {
 
     private fun placeTiles() {
         supportFragmentManager.beginTransaction()
-            .replace(R.id.tile_tts, tileTTS!!)
             .replace(R.id.tile_stt, tileSTT!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
@@ -257,20 +263,8 @@ class VoiceSettingsActivity : FragmentActivity() {
     }
 
     private fun initLogic() {
-        tileTTS?.setOnCheckedChangeListener { isChecked ->
-            if (isChecked) {
-                preferences?.setTtsEngine("openai")
-                ttsEngine = "openai"
-            } else {
-                preferences?.setTtsEngine("google")
-                ttsEngine = "google"
-            }
-            updateVoiceBrowserRow()
-        }
-
         rowVoiceBrowser = findViewById(R.id.row_voice_browser)
         valueVoiceBrowser = findViewById(R.id.value_voice_browser)
-        updateVoiceBrowserRow()
         rowVoiceBrowser?.setOnClickListener {
             startActivity(Intent(this, VoiceBrowserActivity::class.java).putExtra(VoiceBrowserActivity.EXTRA_CHAT_ID, chatId))
         }
@@ -611,8 +605,6 @@ class VoiceSettingsActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
-        ttsEngine = preferences?.getTtsEngine() ?: "google"
-        tileTTS?.setChecked(ttsEngine == "openai")
         updateVoiceBrowserRow()
         tileSTT?.updateSubtitle(voiceInputSubtitle())
     }
