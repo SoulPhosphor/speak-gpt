@@ -207,12 +207,24 @@ class ChatComposerLayout @JvmOverloads constructor(
         // and send/reset transitions (not just the initial focus tap).
         val wasMovingFocusedEditor = movingFocusedEditor
         val keepEditorFocus = messageInput.hasFocus() && (expanded || active)
+        val selectionStart = messageInput.selectionStart
+        val selectionEnd = messageInput.selectionEnd
         movingFocusedEditor = true
         try {
             applyModeInternal()
             // Keep an existing editing gesture, but never focus a background
             // composer or reopen the keyboard when returning to compact mode.
-            if (keepEditorFocus) messageInput.requestFocus()
+            if (keepEditorFocus) {
+                messageInput.requestFocus()
+                // Regaining focus can move the caret to the end of the draft.
+                if (selectionStart >= 0 && selectionEnd >= 0) {
+                    val length = messageInput.length()
+                    messageInput.setSelection(
+                        selectionStart.coerceAtMost(length),
+                        selectionEnd.coerceAtMost(length)
+                    )
+                }
+            }
         } finally {
             movingFocusedEditor = wasMovingFocusedEditor
         }

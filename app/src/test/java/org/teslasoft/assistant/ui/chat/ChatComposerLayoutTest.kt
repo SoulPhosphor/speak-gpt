@@ -43,8 +43,8 @@ class ChatComposerLayoutTest {
     fun expandingFocusedInlineEditorDoesNotReenterRemoval() = withActivity { activity ->
         val fixture = Fixture(activity)
         fixture.editor.setText("draft text")
-        fixture.editor.setSelection(2, 5)
         assertTrue(fixture.editor.requestFocus())
+        fixture.editor.setSelection(2, 5)
         // The focus-tap promotion is still queued. Expansion must safely move
         // the focused editor itself, including removeView's focus-loss callback.
         assertSame(fixture.controls, fixture.editor.parent)
