@@ -40,8 +40,8 @@ import java.util.zip.ZipOutputStream
  *    readable backup must never silently omit a chat (owner rule). LOCKED,
  *    CORRUPT and FAILED read states are unreadable; EMPTY and MISSING are
  *    honest data (a chat with no messages exports as an empty conversation).
- *  - Chat identity follows the app's OWN mapping: id = Hash.hash of the
- *    stored name's string form — a list entry with a missing or blank name
+ *  - Chat identity follows the app's stored ID, using the legacy name hash
+ *    only when the ID is absent — a list entry with a missing or blank name
  *    is serialized faithfully, never dropped and never a failure (the app
  *    itself displays such a chat; the backup mirrors the app).
  *  - Only chat titles and messages travel. Per-chat settings — and with them
@@ -103,10 +103,8 @@ object ReadableChatBackup {
                     return fail(staged, BuildResult.ChatsUnreadable)
                 }
                 for (chat in listResult.chats) {
-                    // The app's own identity mapping (see ChatPreferences'
-                    // first_message loop): the stored name's string form is
-                    // hashed even when the entry is malformed, so every chat
-                    // the app can display, this backup can carry.
+                    // Read the stored ID, with the same missing-ID compatibility
+                    // fallback as the chat list. A title change is not a new chat.
                     val name = chat["name"].toString()
                     val chatId = ChatPreferences.storedChatId(chat)
                     val history = chatPreferences.getChatByIdResult(context, chatId)

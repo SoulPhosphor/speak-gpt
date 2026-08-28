@@ -1,11 +1,15 @@
 package org.teslasoft.assistant.tts.voices
 
 import android.content.Context
+import android.content.SharedPreferences
+import org.teslasoft.assistant.preferences.tts.AppTtsVoicePreferences
 import androidx.core.content.edit
 import org.teslasoft.assistant.preferences.SecurePrefs
 
-class LastKnownGoodVoiceRegistry(context: Context, chatId: String) {
-    private val preferences = SecurePrefs.get(context.applicationContext, "settings.$chatId")
+/** App-wide fallback voice, separate from the currently selected default. */
+class LastKnownGoodVoiceRegistry internal constructor(private val preferences: SharedPreferences) {
+    constructor(context: Context) : this(
+        SecurePrefs.get(context.applicationContext, AppTtsVoicePreferences.STORE_NAME))
 
     fun save(selection: LastKnownGoodVoiceSelection) {
         preferences.edit {

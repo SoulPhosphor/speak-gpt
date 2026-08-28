@@ -11816,8 +11816,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun observeSpeechSelection() {
-        val scopeId = preferences?.ttsPreferenceScope() ?: return
-        val settings = org.teslasoft.assistant.preferences.SecurePrefs.get(this, "settings.$scopeId")
+        val settings = org.teslasoft.assistant.preferences.SecurePrefs.get(this,
+            org.teslasoft.assistant.preferences.tts.AppTtsVoicePreferences.STORE_NAME)
         if (speechSettings === settings) return
         speechSettings?.unregisterOnSharedPreferenceChangeListener(speechSelectionListener)
         speechSettings = settings

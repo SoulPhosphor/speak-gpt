@@ -94,7 +94,7 @@ class VoiceBrowserActivity : FragmentActivity() {
         preferences = Preferences.getPreferences(this, chatId)
         selections = TtsSelectionService(this, preferences)
         identityRegistry = VoiceIdentityRegistry(this)
-        lastKnownGoodVoiceRegistry = LastKnownGoodVoiceRegistry(this, chatId)
+        lastKnownGoodVoiceRegistry = LastKnownGoodVoiceRegistry(this)
         providerDropdown = findViewById(R.id.provider_dropdown)
         locationSegments = findViewById(R.id.location_segments)
         filterGrid = findViewById(R.id.filter_grid)

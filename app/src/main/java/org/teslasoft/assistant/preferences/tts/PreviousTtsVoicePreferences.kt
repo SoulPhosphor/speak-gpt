@@ -23,14 +23,17 @@ data class TtsVoiceSelection(
 }
 
 /**
- * Immediately previous selection, scoped like settings.<chatId>. Does not store or change
- * the current voice or LastKnownGoodVoiceRegistry. Phase 5 connects this to activation.
+ * Immediately previous app-wide selection. Kept separate from the selected default
+ * and LastKnownGoodVoiceRegistry; browsing and previewing never change this history.
  */
 class PreviousTtsVoicePreferences internal constructor(private val storage: TtsStorage) {
     companion object {
-        fun getPreferences(context: Context, chatId: String): PreviousTtsVoicePreferences =
-            PreviousTtsVoicePreferences(TtsFileStorage(File(context.applicationContext.filesDir,
-                "tts/previous_voice_${Hash.hash(chatId)}.json")))
+        fun getPreferences(context: Context): PreviousTtsVoicePreferences =
+            PreviousTtsVoicePreferences(TtsFileStorage(storageFile(context.applicationContext.filesDir)))
+
+        // Retain the existing global/default history file; never consult a chat ID.
+        internal fun storageFile(filesDir: File) = File(filesDir,
+            "tts/previous_voice_${Hash.hash("")}.json")
     }
 
     fun load(): Result<TtsVoiceSelection?> = synchronized(TtsStorageLock) { runCatching { read() } }

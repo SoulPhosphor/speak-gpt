@@ -47,7 +47,7 @@ class PreviousTtsVoicePreferencesTest {
         assertNull(history.load().getOrThrow())
     }
 
-    @Test fun separateScopesDoNotShareHistory() {
+    @Test fun independentStorageDoesNotShareHistory() {
         val other = PreviousTtsVoicePreferences(MemoryTtsStorage())
         history.recordActivation(device, api).getOrThrow()
         assertNull(other.load().getOrThrow())
@@ -79,7 +79,7 @@ class PreviousTtsVoicePreferencesTest {
     }
 
     private val raw = FakeSharedPreferences()
-    private val prefs = Preferences(raw, FakeSharedPreferences(), "test", null)
+    private val prefs = Preferences(FakeSharedPreferences(), raw, "test", null)
     private val profile = ApiEndpointObject("Speech", "https://speech.example/v1/", "key", id = "endpoint")
     private var sources = listOf(SavedTtsSource("tts-a", "endpoint", "vendor/model:free", TtsRoutingSettings()))
     private var profiles = listOf(profile)
@@ -95,7 +95,7 @@ class PreviousTtsVoicePreferencesTest {
         assertEquals("openai", prefs.getTtsEngine())
         assertEquals(api, prefs.getSelectedTtsVoice())
         assertEquals("endpoint", resolver.saved(api.sourceId, api.voiceId).getOrThrow().target.endpointId)
-        assertEquals(api, Preferences(raw, FakeSharedPreferences(), "test", null).getSelectedTtsVoice())
+        assertEquals(api, Preferences(FakeSharedPreferences(), raw, "test", null).getSelectedTtsVoice())
     }
 
     @Test fun existingDeviceSelectionAndDeviceRecoveryKeepCompatibilityValuesInSync() = runBlocking {
@@ -200,15 +200,54 @@ class PreviousTtsVoicePreferencesTest {
         assertEquals("old-api-voice", prefs.getOpenAIVoice())
         assertEquals("old-google-id", prefs.getVoice())
     }
-    @Test fun renamedChatKeepsTheHistoryFileReferenceWhileCurrentScopeChanges() = runBlocking {
+    @Test fun selectedDefaultAndRecoveryRemainGlobalAcrossChatSwitchRenameAndDeletion() = runBlocking {
+        val chatA = FakeSharedPreferences()
+        val chatB = FakeSharedPreferences()
+        chatA.edit().putString("voice", "stale-chat-a")
+            .putString("selected_tts_voice", TtsVoiceSelectionCodec.encode(device)).commit()
+        chatB.edit().putString("voice", "stale-chat-b").commit()
+        val first = Preferences(chatA, raw, "first", null)
+        val second = Preferences(chatB, raw, "second", null)
         service().activate(api).getOrThrow()
-        val renamed = Preferences(raw, FakeSharedPreferences(), "renamed", null)
-        assertEquals("renamed", renamed.ttsPreferenceScope())
-        assertEquals("test", renamed.ttsHistoryScope())
-        assertEquals(api, renamed.getSelectedTtsVoice())
-        assertTrue(renamed.saveSelectedTtsVoice(device))
-        assertEquals("test", renamed.ttsHistoryScope())
-        val different = Preferences(FakeSharedPreferences(), FakeSharedPreferences(), "different", null)
-        assertEquals("different", different.ttsHistoryScope())
+        assertEquals(api, first.getSelectedTtsVoice())
+        assertEquals(api, second.getSelectedTtsVoice())
+        assertEquals("", first.ttsPreferenceScope())
+        assertEquals("", second.ttsPreferenceScope())
+        chatA.edit().clear().commit()
+        chatB.edit().clear().commit()
+        val reopened = Preferences(FakeSharedPreferences(), raw, "renamed", null)
+        assertEquals(api, reopened.getSelectedTtsVoice())
+        assertEquals(device, history.load().getOrThrow())
+        reopened.markTtsVoicePermanentlyUnavailable(api)
+        assertTrue(second.isTtsVoicePermanentlyUnavailable(api))
+        sources = emptyList()
+        val recovery = TtsSelectionService(second, resolver, history) { _, _ -> true }
+        assertEquals(device, recovery.reconcile(TtsRequestGate().begin()).getOrThrow())
+        assertEquals(device, first.getSelectedTtsVoice())
+        assertEquals(device, reopened.getSelectedTtsVoice())
+        assertTrue(chatA.all.isEmpty())
+        assertTrue(chatB.all.isEmpty())
+    }
+
+    @Test fun lastKnownGoodIsGlobalAndSeparateFromTheDefault() = runBlocking {
+        val good = org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceSelection("google", "working-voice")
+        val registry = org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceRegistry(raw)
+        registry.save(good)
+        service().activate(api).getOrThrow()
+        assertEquals(good, org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceRegistry(raw).load())
+        assertEquals(api, prefs.getSelectedTtsVoice())
+    }
+
+    @Test fun historyFactoryUsesOneGlobalFileAcrossReopening() {
+        val directory = java.nio.file.Files.createTempDirectory("global-voice-history").toFile()
+        try {
+            val file = PreviousTtsVoicePreferences.storageFile(directory)
+            val first = PreviousTtsVoicePreferences(TtsFileStorage(file))
+            first.recordActivation(device, api).getOrThrow()
+            val reopened = PreviousTtsVoicePreferences(TtsFileStorage(
+                PreviousTtsVoicePreferences.storageFile(directory)))
+            assertEquals(device, reopened.load().getOrThrow())
+            assertEquals(1, file.parentFile.listFiles()!!.size)
+        } finally { directory.deleteRecursively() }
     }
 }

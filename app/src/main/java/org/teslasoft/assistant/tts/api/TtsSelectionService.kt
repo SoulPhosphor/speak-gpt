@@ -11,7 +11,7 @@ import org.teslasoft.assistant.preferences.tts.*
 import org.teslasoft.assistant.tts.voices.GoogleSpeechVoiceProvider
 import kotlin.coroutines.resume
 
-/** Activation and removal recovery in the existing settings.<chatId> scope. */
+/** Activation and removal recovery for the app-wide default voice. */
 class TtsSelectionService internal constructor(
     private val preferences: Preferences,
     private val resolver: TtsSourceResolver,
@@ -20,7 +20,7 @@ class TtsSelectionService internal constructor(
 ) {
     constructor(context: Context, preferences: Preferences) : this(preferences,
         TtsAndroidServices.resolver(context),
-        PreviousTtsVoicePreferences.getPreferences(context, preferences.ttsHistoryScope()),
+        PreviousTtsVoicePreferences.getPreferences(context),
         { selection, token -> usableOnAndroid(context.applicationContext, preferences, selection, token) })
 
     suspend fun activate(next: TtsVoiceSelection): Result<Unit> = mutex.withLock {

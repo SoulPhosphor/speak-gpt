@@ -19,11 +19,12 @@ package org.teslasoft.assistant.preferences.backup.portable
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.preferences.ChatPreferences
 
 /**
  * Compatibility contract (July 22 2026 on-device failure): the recovery
  * serializer must locate each chat's history under EXACTLY the id the app
- * itself uses. ChatPreferences hashes `map["name"].toString()` everywhere —
+ * itself uses. A present stored ID is authoritative. For rows without an ID,
  * so a missing name hashes the literal string "null", and a blank or
  * whitespace name hashes that exact string. The serializer must mirror this,
  * not "correct" it: an entry the app displays every day must never turn into
@@ -40,6 +41,16 @@ class ChatLogicalSerializerCompatTest {
         assertEquals("  ", ChatLogicalSerializer.storedNameForId("  "))
         // A missing name behaves like the app's map["name"].toString().
         assertEquals("null", ChatLogicalSerializer.storedNameForId(null))
+    }
+
+    @Test
+    fun renamedChatUsesItsStoredIdForBackupAndSettings() {
+        val savedId = Hash.hash("Original title")
+        val entry = mapOf("id" to savedId, "name" to "Renamed title")
+        assertEquals(savedId, ChatPreferences.storedChatId(entry))
+        // Even missing/blank titles do not invalidate an existing ID.
+        assertEquals(savedId, ChatPreferences.storedChatId(mapOf("id" to savedId)))
+        assertEquals(savedId, ChatPreferences.storedChatId(mapOf("id" to savedId, "name" to "")))
     }
 
     @Test

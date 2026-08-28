@@ -271,6 +271,20 @@ class TtsPickerStateTest {
         assertTrue(dialogs.contains("if (permanent) R.string.tts_select_new_voice else R.string.health_btn_retry"))
     }
 
+    @Test fun voiceStorageAndReadbackObservationAreGlobal() {
+        val preferences = source("java/org/teslasoft/assistant/preferences/Preferences.kt").readText()
+        assertTrue(preferences.contains("AppTtsVoicePreferences.getPreferences(context)"))
+        assertFalse(preferences.contains("tts_history_scope"))
+        val chat = source("java/org/teslasoft/assistant/ui/activities/ChatActivity.kt").readText()
+        assertTrue(chat.contains("AppTtsVoicePreferences.STORE_NAME"))
+        val newChat = source("java/org/teslasoft/assistant/ui/fragments/dialogs/AddChatDialogFragment.kt").readText()
+        assertFalse(newChat.contains("newPreferences.setVoice("))
+        assertFalse(newChat.contains("newPreferences.setTtsEngine("))
+        val registry = source("java/org/teslasoft/assistant/tts/voices/LastKnownGoodVoiceRegistry.kt").readText()
+        assertFalse(registry.contains("chatId"))
+        assertTrue(registry.contains("AppTtsVoicePreferences.STORE_NAME"))
+    }
+
     private fun source(relative: String): File = listOf(File("src/main/$relative"), File("app/src/main/$relative"))
         .first { it.isFile }
 }
