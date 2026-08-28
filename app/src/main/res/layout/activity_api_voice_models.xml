@@ -25,7 +25,7 @@
                 style="@style/Widget.App.Row.Selector" android:layout_marginTop="16dp"
                 android:background="@drawable/btn_accent_top">
                 <TextView android:id="@+id/tts_model_label" style="@style/Widget.App.Row.Selector.Label"
-                    android:text="@string/label_ai_model" app:layout_constraintStart_toStartOf="parent"
+                    android:text="@string/tts_picker_ai_model" app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent" app:layout_constraintBottom_toBottomOf="parent" />
                 <TextView android:id="@+id/tts_model_value" style="@style/Widget.App.Row.Selector.Value"
                     android:text="@string/tts_manager_select" app:layout_constraintStart_toEndOf="@id/tts_model_label"
@@ -44,7 +44,8 @@
                     android:gravity="center_vertical|end" android:clickable="true" android:text="@string/tts_manager_select" />
             </LinearLayout>
             <com.google.android.material.button.MaterialButton android:id="@+id/tts_add_model"
-                style="@style/AppButton.Primary" android:layout_marginTop="16dp" android:text="@string/model_rule_edit_add_model" />
+                style="@style/AppButton.Primary" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="16dp" android:text="@string/model_rule_edit_add_model" />
             <com.google.android.material.progressindicator.CircularProgressIndicator android:id="@+id/tts_manager_progress"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:indeterminate="true" android:visibility="gone" />

@@ -287,6 +287,10 @@ class SavedTtsSourcesPreferencesTest {
         managerDraft(manager, routing = TtsRoutingSettings(TtsRoutingMode.PREFERRED))
         manager.add(manager.draft) {}
         assertEquals(TtsRoutingSettings(), manager.rows.single().routing)
+        val row = manager.rows.single()
+        manager.edit(row.target().copy(routing = only("chosen"))) {}
+        manager.edit(row.target().copy(routing = TtsRoutingSettings(TtsRoutingMode.PREFERRED))) {}
+        assertEquals(TtsRoutingSettings(), manager.rows.single().routing)
     }
 
     @Test fun savedRowEditAndRemovalKeepUpperDraftAndOtherEndpointRowsUntouched() {

@@ -88,10 +88,7 @@ class TtsManagerState(private val store: SavedTtsSourcesPreferences) {
         val validated = TtsProviderPickerState(TtsPickerRequest(captured)).result()
         validateEndpoint(validated)
         // Optional Preferred without any preference is stored as Automatic. Only stays strict.
-        val routing = validated.routing.let {
-            if (it.mode == TtsRoutingMode.PREFERRED && it.providerOrder.isEmpty() &&
-                it.selectedProvider.isBlank() && it.allowFallbacks) TtsRoutingSettings() else it
-        }
+        val routing = savedRouting(validated.routing)
         store.add(captured.endpointId, captured.modelId, routing).getOrElse {
             throw storageFailure(captured, it, TtsFailureKind.SAVE_FAILED)
         }
@@ -100,12 +97,12 @@ class TtsManagerState(private val store: SavedTtsSourcesPreferences) {
     }
 
     fun edit(target: TtsTarget, validateEndpoint: (TtsTarget) -> Unit) {
-        TtsProviderPickerState(TtsPickerRequest(target)).result()
+        val validated = TtsProviderPickerState(TtsPickerRequest(target)).result()
         validateEndpoint(target)
         val row = store.load().getOrElse { fail(target, TtsFailureKind.STORAGE) }
             .singleOrNull { it.sourceId == target.sourceId && it.endpointId == target.endpointId && it.modelId == target.modelId }
             ?: fail(target, TtsFailureKind.SAVED_SOURCE_MISSING)
-        store.replaceRouting(row.id, target.routing).getOrElse {
+        store.replaceRouting(row.id, savedRouting(validated.routing)).getOrElse {
             throw storageFailure(target, it, TtsFailureKind.SAVE_FAILED)
         }
         refresh()
@@ -123,6 +120,9 @@ class TtsManagerState(private val store: SavedTtsSourcesPreferences) {
     private fun requireEndpoint(target: TtsTarget) {
         if (target.endpointId.isBlank()) fail(target, TtsFailureKind.ENDPOINT_REQUIRED)
     }
+    private fun savedRouting(routing: TtsRoutingSettings): TtsRoutingSettings =
+        if (routing.mode == TtsRoutingMode.PREFERRED && routing.providerOrder.isEmpty() &&
+            routing.selectedProvider.isBlank() && routing.allowFallbacks) TtsRoutingSettings() else routing
     private fun fail(target: TtsTarget, kind: TtsFailureKind): Nothing =
         throw TtsException(TtsFailure(TtsOperation.MODELS, target, "", kind))
     private fun storageFailure(target: TtsTarget, error: Throwable, fallback: TtsFailureKind): TtsException {

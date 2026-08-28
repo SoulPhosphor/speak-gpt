@@ -221,6 +221,29 @@ class TtsPickerStateTest {
         assertFalse(activity.contains("hasOpenRouterCatalogAuthority"))
         assertFalse(activity.contains("setTtsEngine"))
         assertFalse(activity.contains("FavoriteModelsPreferences"))
+        // Widget.Material3.Button supplies appearance, not required LayoutParams. Check
+        // the local family chain so a missing width/height cannot pass XML parsing and crash.
+        val theme = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(source("res/values/themes.xml"))
+        val styleNodes = theme.getElementsByTagName("style")
+        val styles = (0 until styleNodes.length).map { styleNodes.item(it) as Element }
+            .associateBy { it.getAttribute("name") }
+        fun hasDimension(element: Element, key: String): Boolean {
+            if (element.hasAttribute(key)) return true
+            var style = element.getAttribute("style").removePrefix("@style/")
+            while (style.isNotBlank()) {
+                val definition = styles[style] ?: return false
+                val items = definition.getElementsByTagName("item")
+                if ((0 until items.length).any { (items.item(it) as Element).getAttribute("name") == key }) return true
+                style = if (definition.hasAttribute("parent")) definition.getAttribute("parent").removePrefix("@style/")
+                    else style.substringBeforeLast('.', "")
+            }
+            return false
+        }
+        for (i in 0 until elements.length) {
+            val element = elements.item(i) as Element
+            for (key in listOf("android:layout_width", "android:layout_height"))
+                assertTrue("${element.tagName} must resolve $key", hasDimension(element, key))
+        }
         val settings = DocumentBuilderFactory.newInstance().newDocumentBuilder()
             .parse(source("res/layout/activity_voice_settings.xml"))
         val rows = settings.getElementsByTagName("LinearLayout")
