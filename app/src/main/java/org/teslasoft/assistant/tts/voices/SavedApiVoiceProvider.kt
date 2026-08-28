@@ -58,16 +58,7 @@ class SavedApiVoiceProvider(
             try {
                 val label = withContext(Dispatchers.IO) {
                     val resolved = TtsAndroidServices.resolver(app).saved(id, "").getOrThrow()
-                    val client = TtsDiscoveryClient()
-                    val name = try { client.models(resolved, token).models.firstOrNull { it.id == source.modelId }?.name }
-                        catch (cancel: java.util.concurrent.CancellationException) { throw cancel }
-                        catch (_: Exception) { null }
-                    val requested = TtsRouting.requestedProvider(source.routing)
-                    val provider = if (requested == null) null else try {
-                        client.providers(resolved, token).providers.firstOrNull { it.id == requested }?.name
-                    } catch (cancel: java.util.concurrent.CancellationException) { throw cancel }
-                    catch (_: Exception) { null }
-                    sourceLabel(resolved.endpoint.label, name ?: source.modelId, source.routing, provider)
+                    discoverLabel(resolved, token)
                 }
                 token.deliver { displayName = label; onChanged() }
             } catch (_: Exception) { /* Display IDs when optional labels cannot be loaded. */ }
@@ -98,6 +89,19 @@ class SavedApiVoiceProvider(
     override fun shutdown() { cancelLoad(); playback.shutdown(); scope.cancel() }
 
     companion object {
+        fun discoverLabel(source: ResolvedTtsSource, token: TtsRequestToken): String {
+            val client = TtsDiscoveryClient()
+            val name = try { client.models(source, token).models.firstOrNull { it.id == source.target.modelId }?.name }
+                catch (cancel: java.util.concurrent.CancellationException) { throw cancel }
+                catch (_: Exception) { null }
+            val requested = TtsRouting.requestedProvider(source.target.routing)
+            val provider = if (requested == null) null else try {
+                client.providers(source, token).providers.firstOrNull { it.id == requested }?.name
+            } catch (cancel: java.util.concurrent.CancellationException) { throw cancel }
+            catch (_: Exception) { null }
+            return sourceLabel(source.endpoint.label, name ?: source.target.modelId, source.target.routing, provider)
+        }
+
         fun sourceLabel(endpointName: String, modelName: String,
             routing: org.teslasoft.assistant.preferences.tts.TtsRoutingSettings, providerName: String? = null): String =
             listOf(endpointName, modelName, providerName ?: TtsRouting.requestedProvider(routing) ?: "Automatic")

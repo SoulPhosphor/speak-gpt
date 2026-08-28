@@ -1332,9 +1332,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         if (chatStartupComplete && chatId != "") {
             preferences = Preferences.getPreferences(this, chatId)
-            speechSettings?.unregisterOnSharedPreferenceChangeListener(speechSelectionListener)
-            speechSettings = org.teslasoft.assistant.preferences.SecurePrefs.get(this, "settings.$chatId")
-            speechSettings?.registerOnSharedPreferenceChangeListener(speechSelectionListener)
+            observeSpeechSelection()
             val recoveryToken = speechRecoveryGate.begin()
             lifecycleScope.launch {
                 val result = TtsSelectionService(this@ChatActivity, preferences!!).reconcile(recoveryToken)
@@ -11862,7 +11860,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    private fun observeSpeechSelection() {
+        val scopeId = preferences?.ttsPreferenceScope() ?: return
+        val settings = org.teslasoft.assistant.preferences.SecurePrefs.get(this, "settings.$scopeId")
+        if (speechSettings === settings) return
+        speechSettings?.unregisterOnSharedPreferenceChangeListener(speechSelectionListener)
+        speechSettings = settings
+        settings.registerOnSharedPreferenceChangeListener(speechSelectionListener)
+    }
+
     private fun speak(message: String, session: Int = readbackSession, selected: TtsVoiceSelection? = null) {
+        observeSpeechSelection()
         // The user stopped this readback while it was still in flight (see
         // readbackSession) — starting the audio now would speak over a stop.
         if (session != readbackSession) {

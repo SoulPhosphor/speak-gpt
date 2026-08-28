@@ -191,13 +191,16 @@ class VoiceSettingsActivity : FragmentActivity() {
             val resolved = withContext(Dispatchers.IO) {
                 TtsAndroidServices.resolver(this@VoiceSettingsActivity).saved(selection.sourceId, selection.voiceId)
             }
+            val source = resolved.getOrNull() ?: return@launch
+            val voiceName = VoiceIdentityRegistry(this@VoiceSettingsActivity).displayNameFor(selection.sourceId,
+                selection.voiceId, selection.voiceId)
             token.deliver {
-                resolved.getOrNull()?.let { source ->
-                    valueVoiceBrowser?.text = getString(R.string.voice_browser_setting_subtitle_provider,
-                        SavedApiVoiceProvider.sourceLabel(source.endpoint.label, source.target.modelId, source.target.routing),
-                        VoiceIdentityRegistry(this@VoiceSettingsActivity).displayNameFor(selection.sourceId,
-                            selection.voiceId, selection.voiceId))
-                }
+                valueVoiceBrowser?.text = getString(R.string.voice_browser_setting_subtitle_provider,
+                    SavedApiVoiceProvider.sourceLabel(source.endpoint.label, source.target.modelId, source.target.routing), voiceName)
+            }
+            val sourceName = withContext(Dispatchers.IO) { SavedApiVoiceProvider.discoverLabel(source, token) }
+            token.deliver {
+                valueVoiceBrowser?.text = getString(R.string.voice_browser_setting_subtitle_provider, sourceName, voiceName)
             }
         }
     }

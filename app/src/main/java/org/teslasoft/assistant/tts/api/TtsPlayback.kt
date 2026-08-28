@@ -10,9 +10,16 @@ import org.teslasoft.assistant.preferences.tts.SavedTtsSourcesPreferences
 import java.io.File
 
 /** A separate instance per consumer. Stop invalidates HTTP, prepared callbacks and playback. */
-class TtsPlayback(context: Context) {
+class TtsPlayback(
+    context: Context,
+    private val resolver: TtsSourceResolver = TtsAndroidServices.resolver(context),
+    private val transport: TtsSpeechTransport = TtsSpeechTransport(),
+    dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val newPlayer: () -> MediaPlayer = { MediaPlayer() }
+) {
     private val app = context.applicationContext
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val gate = TtsRequestGate()
     private var job: Job? = null
     private val epoch = java.util.concurrent.atomic.AtomicLong()
@@ -50,13 +57,13 @@ class TtsPlayback(context: Context) {
             try {
                 // Keep ownership in this coroutine until Main accepts the file. Cancellation
                 // between dispatchers must not orphan it or let a late response start playback.
-                withContext(Dispatchers.IO) {
-                    val source = TtsAndroidServices.resolver(app).saved(sourceId, voiceId).getOrThrow()
+                withContext(ioDispatcher) {
+                    val source = resolver.saved(sourceId, voiceId).getOrThrow()
                     target = source.target
                     endpointName = source.endpoint.label
-                    val audio = TtsSpeechTransport().synthesize(source, text, token, operation)
+                    val audio = transport.synthesize(source, text, token, operation)
                     token.check()
-                    val latest = TtsAndroidServices.resolver(app).saved(sourceId, voiceId).getOrThrow()
+                    val latest = resolver.saved(sourceId, voiceId).getOrThrow()
                     if (latest.target != source.target || !latest.endpoint.sameConfiguration(source.endpoint))
                         throw CancellationException()
                     staged = File.createTempFile("tts-audio-", audio.extension, app.cacheDir)
@@ -67,7 +74,7 @@ class TtsPlayback(context: Context) {
                     preparing = true
                     audioFile = staged
                     staged = null
-                    val next = MediaPlayer()
+                    val next = newPlayer()
                     player = next
                     stateChanged(next)
                     next.setDataSource(audioFile!!.absolutePath)
@@ -116,7 +123,9 @@ class TtsPlayback(context: Context) {
 
     private fun releaseAudio() {
         player?.let {
-            it.setOnPreparedListener(null); it.setOnCompletionListener(null); it.setOnErrorListener(null)
+            runCatching {
+                it.setOnPreparedListener(null); it.setOnCompletionListener(null); it.setOnErrorListener(null)
+            }
             runCatching { it.release() }
         }
         player = null
