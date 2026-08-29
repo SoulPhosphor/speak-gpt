@@ -23,6 +23,8 @@ import android.os.Looper
 import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.util.Hash
 import java.lang.Exception
@@ -826,18 +828,14 @@ class ChatPreferences private constructor() {
 
         // Title-only renames never enter the legacy cross-ID move path below.
         // Keep that path untouched here; no migration or cleanup is performed.
-        if (oldId == newId) {
-            // The image UUID/ownership stays immutable. Only its retained
-            // origin-chat display label follows a successful title rename.
-            // Startup maintenance re-synchronizes it after a catalog outage.
-            try {
-                org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
-                    .updateOriginChatName(oldId, chatName)
-                org.teslasoft.assistant.preferences.generatedimages
-                    .GeneratedImageCatalogStore.renameOriginChat(context, oldId, chatName)
-            } catch (_: Exception) { }
-            return true
-        }
+        // The image UUID/ownership stays immutable. Only its retained
+        // origin-chat display label follows a successful title rename.
+        // Startup maintenance re-synchronizes it after a catalog outage.
+        if (oldId == newId) try {
+            ImageGenerationJobRegistry.updateOriginChatName(oldId, chatName)
+            GeneratedImageCatalogStore.renameOriginChat(context, oldId, chatName)
+        } catch (_: Exception) { }
+        if (oldId == newId) return true
 
         // Attachment image bytes live in a directory keyed by chat id. The
         // rename copied the include records (with their image hashes) to the
