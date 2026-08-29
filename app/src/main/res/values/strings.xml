@@ -1117,7 +1117,7 @@
     <string name="voice_browser_provider_openai">OpenAI</string>
     <string name="voice_browser_setting_title">Voice Picker</string>
     <string name="voice_section_tts_title">Text to Speech</string>
-    <string name="voice_section_response_prefs_title">Response Preferences</string>
+    <string name="voice_section_response_prefs_title">General Preferences</string>
     <string name="voice_section_stt_title">Speech to Text</string>
     <string name="tile_ale_subtitle">Turning this on disables the transcription language selector.</string>
     <string name="voice_browser_setting_subtitle_google">Google Speech Services</string>
