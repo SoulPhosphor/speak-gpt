@@ -22,7 +22,7 @@
                 <TextView style="@style/Widget.App.Dropdown.CanonicalLabel" android:text="@string/provider_filter_uptime" />
                 <TextView android:id="@+id/tts_sort_uptime" style="@style/Widget.App.Dropdown.CanonicalValue" android:layout_width="0dp" android:layout_weight="1" android:layout_marginStart="12dp" />
             </LinearLayout>
-            <com.google.android.material.button.MaterialButton android:id="@+id/btn_reset_filters" style="@style/AppButton.Destructive" android:text="@string/provider_filter_reset" />
+            <com.google.android.material.button.MaterialButton android:id="@+id/btn_reset_filters" style="@style/AppButton.Destructive" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/provider_filter_reset" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

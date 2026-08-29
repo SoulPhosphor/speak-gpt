@@ -282,6 +282,7 @@ class AddChatDialogFragment : DialogFragment() {
 
             newPreferences.setPreferences(Hash.hash(chatName), requireActivity())
             newPreferences.resetNewChatInheritance()
+            newPreferences.initializeNewChatQuickSettings()
             newPreferences.setResolution(resolution)
             newPreferences.setAudioModel(speech)
             newPreferences.setModel(model)
