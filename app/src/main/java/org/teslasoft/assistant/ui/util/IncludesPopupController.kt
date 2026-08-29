@@ -55,6 +55,7 @@ object IncludesPopupController {
     private const val MENU_REMOVE = 2
     private const val MENU_CONDENSE = 3
     private const val MAX_POPUP_HEIGHT_DP = 400
+    private const val POPUP_SIDE_MARGIN_DP = 16
 
     fun show(
         anchor: View,
@@ -90,9 +91,15 @@ object IncludesPopupController {
             list.addView(row)
         }
 
+        // The popup is given a definite width instead of wrapping its content.
+        // A wrapped row measures the file name at its full natural length, so a
+        // long name grows the row past the screen edge and takes the three-dot
+        // menu with it. At a definite width the name ellipsizes in place and the
+        // menu stays on screen at the far right of every row.
+        val popupWidth = popupWidth(anchor)
         popup = PopupWindow(
             content,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            popupWidth,
             ViewGroup.LayoutParams.WRAP_CONTENT,
             true
         )
@@ -100,19 +107,15 @@ object IncludesPopupController {
         popup.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         popup.elevation = anchor.resources.displayMetrics.density * 8f
 
-        content.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
+        val widthSpec = View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY)
+        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        content.measure(widthSpec, heightSpec)
         val maxHeight = dp(anchor, MAX_POPUP_HEIGHT_DP)
         if (content.measuredHeight > maxHeight) {
             scroll.layoutParams = scroll.layoutParams.apply {
                 height = maxHeight - dp(anchor, 48)
             }
-            content.measure(
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-            )
+            content.measure(widthSpec, heightSpec)
         }
 
         // The popup rises from the action area, matching the existing Details
@@ -239,6 +242,10 @@ object IncludesPopupController {
 
     private fun iconFor(kind: IncludeKind): Int =
         if (kind.isImage()) R.drawable.ic_image else R.drawable.ic_file
+
+    /** Widest the popup may be: the screen less one side margin per edge. */
+    private fun popupWidth(anchor: View): Int =
+        anchor.resources.displayMetrics.widthPixels - (dp(anchor, POPUP_SIDE_MARGIN_DP) * 2)
 
     private fun dp(view: View, value: Int): Int =
         (value * view.resources.displayMetrics.density).toInt()
