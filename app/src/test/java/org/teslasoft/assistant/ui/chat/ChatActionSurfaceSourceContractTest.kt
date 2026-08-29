@@ -127,30 +127,31 @@ class ChatActionSurfaceSourceContractTest {
     }
 
     // chat-keyboard-behavior.md rule 8 (owner ruling, Aug 29 2026): a finished
-    // AI turn must not bring the keyboard up on its own. Focusing the composer
-    // runs the focus listener above, which shows the IME, so completion paths
-    // never focus the composer directly on a phone. They route through the
-    // desktop-guarded helper instead, which requests focus only when a hardware
-    // keyboard is in use and no on-screen keyboard would appear. The keyboard
-    // opening after a turn is a regression, not desired behavior.
+    // AI turn must never bring the keyboard up on its own, in any mode. Focusing
+    // the composer runs the focus listener above, which shows the IME, so no
+    // completion path may focus the message box. Every turn — chat or image,
+    // success or failure, and the hidden auto-title request that can follow —
+    // ends by hiding the progress ring; none of those points focuses the
+    // composer. The keyboard opens only when the user taps the composer. The
+    // keyboard opening after a turn is a regression, not desired behavior.
     @Test
     fun aFinishedTurnDoesNotOpenTheKeyboard() {
         val activity = source("main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
 
-        // The only turn-end focus lives in the helper, gated on Desktop mode.
-        assertTrue(
-            activity.contains(
-                "private fun focusComposerAfterTurnEnd() {\n" +
-                    "        if (preferences?.getDesktopMode() == true) {\n" +
-                    "            messageInput?.requestFocus()\n" +
-                    "        }\n" +
-                    "    }"
+        // Every turn end hides the progress ring. No such point may be followed
+        // by focusing the message box, which is what would open the keyboard.
+        var index = activity.indexOf("setGenerationProgressVisible(false)")
+        var checked = 0
+        while (index >= 0) {
+            val window = activity.substring(index, (index + 80).coerceAtMost(activity.length))
+            assertTrue(
+                "A finished turn must not focus the composer (rule 8): $window",
+                !window.contains("requestFocus")
             )
-        )
-
-        // Completion paths call the helper, never a bare focus that would open
-        // the keyboard on a phone.
-        assertTrue(activity.contains("setGenerationProgressVisible(false)\n        focusComposerAfterTurnEnd()"))
+            checked++
+            index = activity.indexOf("setGenerationProgressVisible(false)", index + 1)
+        }
+        assertTrue("Expected the turn-end hide-progress sites to still exist", checked >= 5)
     }
 
     @Test

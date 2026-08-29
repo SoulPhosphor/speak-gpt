@@ -833,24 +833,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnSend?.visibility = if (visible) View.INVISIBLE else View.VISIBLE
     }
 
-    /**
-     * A finished AI turn must never bring the software keyboard up on its own
-     * (chat-keyboard-behavior.md §8, owner ruling Aug 29 2026). Focusing the
-     * message box runs the composer's focus listener, which shows the keyboard,
-     * so a completed reply — chat or image, success or failure, and the hidden
-     * auto-title request that can follow — leaves the composer untouched. The
-     * keyboard opens only when the user taps the composer themselves.
-     *
-     * Desktop mode is the single exception: it drives the composer with a
-     * hardware keyboard, where keeping focus for the next message brings up no
-     * on-screen keyboard, so that existing convenience is preserved there only.
-     */
-    private fun focusComposerAfterTurnEnd() {
-        if (preferences?.getDesktopMode() == true) {
-            messageInput?.requestFocus()
-        }
-    }
-
     private fun restoreUIState() {
         runOnUiThread {
             setGenerationProgressVisible(false)
@@ -7528,7 +7510,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     btnMicro?.isEnabled = true
                     btnSend?.isEnabled = true
                     setGenerationProgressVisible(false)
-                    focusComposerAfterTurnEnd()
                 }
             }
             is ImageGenerationJobRegistry.Terminal.Failed -> {
@@ -7625,7 +7606,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
         setGenerationProgressVisible(false)
-        focusComposerAfterTurnEnd()
 
         val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(causeText)
@@ -8178,7 +8158,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
         setGenerationProgressVisible(false)
-        focusComposerAfterTurnEnd()
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
     }
 
@@ -9882,7 +9861,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
                 setGenerationProgressVisible(false)
-                focusComposerAfterTurnEnd()
             } else {
                 // The old Function Calling router — a hidden gpt-4o request
                 // choosing between its image and web-search functions — is
@@ -10154,7 +10132,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
                 setGenerationProgressVisible(false)
-                focusComposerAfterTurnEnd()
             }
         } finally {
             try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
@@ -11602,7 +11579,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
         setGenerationProgressVisible(false)
-        focusComposerAfterTurnEnd()
 
         // Put timestamp to chat to sort chats by last message
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
@@ -11615,7 +11591,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 btnMicro?.isEnabled = false
                 btnSend?.isEnabled = false
                 setGenerationProgressVisible(false)
-                focusComposerAfterTurnEnd()
 
                 // Preserve the normal leading System prefix byte-for-byte so providers
                 // can reuse any prompt cache already built for the conversation. The
