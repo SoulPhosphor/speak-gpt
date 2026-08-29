@@ -74,6 +74,7 @@ class Preferences internal constructor(
         private const val LAST_SUCCESS_MODEL = "last_success_model"
         private const val LAST_SUCCESS_ROUTING = "last_success_routing"
         private const val LAST_SUCCESS_PERSONA_ID = "last_success_persona_id"
+        private const val LAST_CHAT_ARCHIVE_ENABLED = "last_chat_archive_enabled"
 
         /** Clamp a max-entries value to [1, LOG_MAX_ENTRIES_LIMIT]. Pure, unit-tested. */
         fun coerceLogMaxEntries(value: Int): Int = value.coerceIn(1, LOG_MAX_ENTRIES_LIMIT)
@@ -1580,6 +1581,25 @@ class Preferences internal constructor(
     }
 
     /**
+     * Resolves the three Quick Settings values whose new-chat behavior is not
+     * inherited from another conversation. Each resolved value is written to
+     * the new chat immediately, including when it equals the global default,
+     * so later global changes cannot alter an existing chat. Direct writes
+     * also replace stale values left behind when a deleted chat ID is reused.
+     */
+    fun initializeNewChatQuickSettings() {
+        val memoryEnabled = resolveDefaultChatMemoryEnabled()
+        val applyModelRules = getAutoApplyModelRules()
+        val archiveEnabled = getLastChatArchiveEnabled()
+
+        preferences.edit()
+            .putString("memory_enabled", if (memoryEnabled) "true" else "false")
+            .putBoolean("apply_model_rules", applyModelRules)
+            .putBoolean("memory_excluded", !archiveEnabled)
+            .apply()
+    }
+
+    /**
      * The additional lorebooks currently checked for this chat. Memories from
      * these books (plus the persona's always-on core book) are matched against
      * messages and injected into the prompt. Stored comma-separated.
@@ -1647,9 +1667,12 @@ class Preferences internal constructor(
         return when (getString("memory_enabled", "")) {
             "true" -> true
             "false" -> false
-            else -> getMemoryEngine() in setOf("associative", "both") && getDefaultMemoryEnabled()
+            else -> resolveDefaultChatMemoryEnabled()
         }
     }
+
+    private fun resolveDefaultChatMemoryEnabled(): Boolean =
+        getMemoryEngine() in setOf("associative", "both") && getDefaultMemoryEnabled()
 
     fun getChatMemoryEnabledRaw() : String {
         return getString("memory_enabled", "")
@@ -1965,6 +1988,16 @@ class Preferences internal constructor(
     fun setChatExcludedFromMemory(excluded: Boolean) {
         putBoolean("memory_excluded", excluded)
     }
+
+    /** User-facing Archive choice. It remains per-chat and also seeds only the
+     * next chat's initial Archive value; it is not a separate global toggle. */
+    fun setChatArchiveEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean("memory_excluded", !enabled).apply()
+        putGlobalBoolean(LAST_CHAT_ARCHIVE_ENABLED, enabled, true)
+    }
+
+    private fun getLastChatArchiveEnabled(): Boolean =
+        getGlobalBoolean(LAST_CHAT_ARCHIVE_ENABLED, true)
 
     /* ---------------------------------------------------------------------- *
      * Conversation-level memory policy (canonical recovery plan §4.4/§4.5,
