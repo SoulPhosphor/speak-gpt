@@ -54,7 +54,10 @@ import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
 
 class VoiceBrowserActivity : FragmentActivity() {
-    companion object { const val EXTRA_CHAT_ID = "chatId" }
+    companion object {
+        const val EXTRA_CHAT_ID = "chatId"
+        const val EXTRA_SUPPRESS_INITIAL_PERMANENT_NOTICE = "suppressInitialPermanentTtsNotice"
+    }
 
     private lateinit var preferences: Preferences
     private lateinit var controller: VoiceBrowserController
@@ -77,6 +80,7 @@ class VoiceBrowserActivity : FragmentActivity() {
     private var notice: androidx.appcompat.app.AlertDialog? = null
     private var shownLoadFailure: Throwable? = null
     private var activating = false
+    private var suppressInitialPermanentNotice = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         if (Build.VERSION.SDK_INT >= 30) {
@@ -89,6 +93,8 @@ class VoiceBrowserActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_voice_browser)
+        suppressInitialPermanentNotice =
+            intent.getBooleanExtra(EXTRA_SUPPRESS_INITIAL_PERMANENT_NOTICE, false)
 
         val chatId = intent.getStringExtra(EXTRA_CHAT_ID).orEmpty()
         preferences = Preferences.getPreferences(this, chatId)
@@ -224,9 +230,11 @@ class VoiceBrowserActivity : FragmentActivity() {
                 }
                 val recovery = selections.reconcile(token)
                 token.deliver {
-                    recovery.exceptionOrNull()?.let { error ->
-                        (error as? TtsException)?.failure?.let { showTtsFailure(it) }
-                    }
+                    val failure = recovery.exceptionOrNull()?.let { (it as? TtsException)?.failure }
+                    val suppress = suppressInitialPermanentNotice &&
+                        failure?.kind == TtsFailureKind.PERMANENT_UNAVAILABLE
+                    suppressInitialPermanentNotice = false
+                    if (!suppress) failure?.let(::showTtsFailure)
                     render()
                 }
             } catch (_: java.util.concurrent.CancellationException) {

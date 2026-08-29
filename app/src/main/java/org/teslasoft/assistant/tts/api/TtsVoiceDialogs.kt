@@ -30,7 +30,8 @@ object TtsVoiceDialogs {
                 setOnClickListener {
                     dialog.dismiss()
                     if (permanent) activity.startActivity(Intent(activity, VoiceBrowserActivity::class.java)
-                        .putExtra(VoiceBrowserActivity.EXTRA_CHAT_ID, chatId)) else retry()
+                        .putExtra(VoiceBrowserActivity.EXTRA_CHAT_ID, chatId)
+                        .putExtra(VoiceBrowserActivity.EXTRA_SUPPRESS_INITIAL_PERMANENT_NOTICE, true)) else retry()
                 }
             }
         } else actions.findViewById<MaterialButton>(R.id.btn_dialog_action).apply {
