@@ -47,7 +47,7 @@ class TtsProviderPickerActivity : TtsPickerActivity() {
         }
         setContentView(R.layout.activity_tts_provider_picker)
         bindInsets()
-        findViewById<View>(R.id.btn_back).setOnClickListener { finish() }
+        findViewById<View>(R.id.btn_back).setOnClickListener { save() }
         findViewById<View>(R.id.btn_save).setOnClickListener { save() }
         findViewById<TextView>(R.id.tts_fixed_model).text = state.request.target.modelId
         findViewById<TextView>(R.id.field_routing_type).setOnClickListener { view ->
