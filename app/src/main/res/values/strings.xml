@@ -1115,7 +1115,11 @@
     <string name="saved_voice_unavailable_title">Saved Voice Unavailable</string>
     <string name="saved_voice_unavailable_message">The saved voice “%1$s” could not be used because %2$s.</string>
     <string name="voice_browser_provider_openai">OpenAI</string>
-    <string name="voice_browser_setting_title">Voice</string>
+    <string name="voice_browser_setting_title">Voice Picker</string>
+    <string name="voice_section_tts_title">Text to Speech</string>
+    <string name="voice_section_response_prefs_title">Response Preferences</string>
+    <string name="voice_section_stt_title">Speech to Text</string>
+    <string name="tile_ale_subtitle">Turning this on disables the transcription language selector.</string>
     <string name="voice_browser_setting_subtitle_google">Google Speech Services</string>
     <string name="voice_browser_setting_subtitle_provider">%1$s · %2$s</string>
     <string name="tile_voice_settings_title">Voice &amp; Speech</string>

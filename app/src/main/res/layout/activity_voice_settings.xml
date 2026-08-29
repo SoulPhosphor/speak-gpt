@@ -54,6 +54,13 @@
             android:orientation="vertical"
             android:paddingBottom="24dp">
 
+            <!-- Section: Text to Speech -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/voice_section_tts_title" />
+
             <LinearLayout
                 android:id="@+id/row_voice_browser"
                 style="@style/Widget.App.Row.WithSubtitle"
@@ -67,6 +74,97 @@
                 <ImageView
                     style="@style/Widget.App.Row.Chevron"
                     android:contentDescription="@string/voice_browser_title" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/row_api_voice_models" style="@style/Widget.App.Row.TitleOnly"
+                android:paddingHorizontal="20dp">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/tts_manager_title" />
+                </LinearLayout>
+                <ImageView style="@style/Widget.App.Row.Chevron" android:contentDescription="@string/tts_manager_title" />
+            </LinearLayout>
+
+            <!-- Section: Response Preferences -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/voice_section_response_prefs_title" />
+
+            <LinearLayout
+                style="@style/Widget.App.Row.Toggle"
+                android:paddingHorizontal="20dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/always_speak_responses" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_always_speak"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <LinearLayout
+                style="@style/Widget.App.Row.Toggle"
+                android:paddingHorizontal="20dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/read_formatting_language_toggle" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_read_formatting"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <!-- Section: Speech to Text -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:text="@string/voice_section_stt_title" />
+
+            <LinearLayout
+                style="@style/Widget.App.Row.Toggle"
+                android:paddingHorizontal="20dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_autosend_title" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_auto_send"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <LinearLayout
+                style="@style/Widget.App.Row.Toggle"
+                android:paddingHorizontal="20dp">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/tile_ale_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="2"
+                        android:text="@string/tile_ale_subtitle" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_auto_lang_detect"
+                    style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
             <androidx.constraintlayout.widget.ConstraintLayout
@@ -94,54 +192,6 @@
             </androidx.constraintlayout.widget.ConstraintLayout>
 
             <LinearLayout
-                style="@style/Widget.App.Row.Toggle"
-                android:paddingHorizontal="20dp">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/always_speak_responses" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_always_speak"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <LinearLayout
-                style="@style/Widget.App.Row.Toggle"
-                android:paddingHorizontal="20dp">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/tile_autosend_title" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_auto_send"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <LinearLayout
-                style="@style/Widget.App.Row.Toggle"
-                android:paddingHorizontal="20dp">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/read_formatting_language_toggle" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_read_formatting"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"
@@ -156,22 +206,6 @@
                     android:layout_height="match_parent"
                     android:layout_marginHorizontal="4dp"
                     android:layout_weight="1" />
-            </LinearLayout>
-
-            <LinearLayout
-                style="@style/Widget.App.Row.Toggle"
-                android:paddingHorizontal="20dp">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/tile_ale_title" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_auto_lang_detect"
-                    style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
             <LinearLayout
@@ -197,14 +231,6 @@
                     android:layout_height="match_parent"
                     android:layout_marginHorizontal="4dp"
                     android:layout_weight="1" />
-            </LinearLayout>
-
-            <LinearLayout android:id="@+id/row_api_voice_models" style="@style/Widget.App.Row.TitleOnly"
-                android:paddingHorizontal="20dp">
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/tts_manager_title" />
-                </LinearLayout>
-                <ImageView style="@style/Widget.App.Row.Chevron" android:contentDescription="@string/tts_manager_title" />
             </LinearLayout>
 
             <LinearLayout
