@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" style="@style/Widget.App.Chart.Row" android:layout_width="match_parent">
+    <TextView android:id="@+id/tts_order_name" style="@style/Widget.App.Row.Title" android:layout_width="0dp" android:layout_weight="1" />
+    <ImageButton android:id="@+id/tts_order_up" style="@style/Widget.App.Include.Action" app:srcCompat="@drawable/ic_chevron_down" android:rotation="180" />
+    <ImageButton android:id="@+id/tts_order_down" style="@style/Widget.App.Include.Action" app:srcCompat="@drawable/ic_chevron_down" />
+    <ImageButton android:id="@+id/tts_order_remove" style="@style/Widget.App.Include.Action" app:srcCompat="@drawable/ic_close" />
+</LinearLayout>

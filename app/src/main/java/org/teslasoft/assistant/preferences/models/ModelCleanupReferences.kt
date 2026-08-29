@@ -20,6 +20,8 @@ import android.content.Context
 import org.json.JSONArray
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.tts.SavedTtsSource
+import org.teslasoft.assistant.preferences.tts.SavedTtsSourcesPreferences
 
 /** Current local references used to reconcile a saved cleanup report. */
 data class ModelCleanupReferences(
@@ -27,10 +29,20 @@ data class ModelCleanupReferences(
     val ruleTargetsByRuleId: Map<String, Set<ModelIdentity>>,
     val legacyRuleTargetCount: Int,
     /** False when local saved data could not be read conclusively. */
-    val isComplete: Boolean = true
+    val isComplete: Boolean = true,
+    val ttsTargets: Set<ModelIdentity> = emptySet(),
+    val ttsReadable: Boolean = true
 ) {
     val ruleTargets: Set<ModelIdentity> get() = ruleTargetsByRuleId.values.flatten().toSet()
-    val allTargets: Set<ModelIdentity> get() = favorites + ruleTargets
+    val allTargets: Set<ModelIdentity> get() = favorites + ruleTargets + ttsTargets
+
+    internal fun withTtsSources(result: Result<List<SavedTtsSource>>): ModelCleanupReferences =
+        result.fold(
+            onSuccess = { sources -> copy(ttsTargets = sources.map {
+                ModelIdentity(it.endpointId, it.modelId)
+            }.toSet()) },
+            onFailure = { copy(isComplete = false, ttsReadable = false) }
+        )
 }
 
 object ModelCleanupReferencesLoader {
@@ -69,5 +81,6 @@ object ModelCleanupReferencesLoader {
             }
         }
         return ModelCleanupReferences(favorites, byRule, legacyCount, complete)
+            .withTtsSources(SavedTtsSourcesPreferences.getPreferences(context).load())
     }
 }

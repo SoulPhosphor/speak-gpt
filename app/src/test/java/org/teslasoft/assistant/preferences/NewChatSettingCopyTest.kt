@@ -66,11 +66,14 @@ class NewChatSettingCopyTest {
             // FunctionCalling was removed from the copy list with the whole
             // feature (image-generation-rebuild-plan.md §15) — a deliberate
             // migration-era change, not drift.
-            "ImagineCommand",
+            // ImagineCommand was removed from the copy list once its
+            // per-chat value had no remaining reader anywhere in the app —
+            // likewise deliberate, not drift.
             "LogitBiasesConfigId",
             "MaxTokens",
             "Model",
-            "OpenAIVoice",
+            // Voice identity and engine compatibility are global; new chats
+            // must neither copy them nor write a cached default back.
             "Prefix",
             "PresencePenalty",
             "Prompt",
@@ -78,9 +81,7 @@ class NewChatSettingCopyTest {
             "Streaming",
             "SystemMessage",
             "Temperature",
-            "TopP",
-            "TtsEngine",
-            "Voice"
+            "TopP"
         )
 
         assertEquals(
@@ -96,10 +97,15 @@ class NewChatSettingCopyTest {
     fun inheritanceIsInitializedBeforeTheNewChatOpens() {
         val source = addChatDialogSource()
         val reset = source.indexOf("newPreferences.resetNewChatInheritance()")
+        val quickSettings = source.indexOf("newPreferences.initializeNewChatQuickSettings()")
         val lastSettingsWrite = source.indexOf("newPreferences.setAssistantName")
         val open = source.indexOf("listener?.onAdd")
 
         assertTrue("New-chat inheritance must be reset before opening the chat", reset >= 0 && reset < open)
+        assertTrue(
+            "New-chat Quick Settings must resolve after stale inheritance is reset and before the chat opens",
+            quickSettings > reset && quickSettings < open
+        )
         assertTrue("All new-chat settings must be in memory before opening the chat", lastSettingsWrite >= 0 && lastSettingsWrite < open)
     }
 

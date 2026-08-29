@@ -392,6 +392,8 @@
     <string name="api_endpoint_host_full">API Service Endpoint Base URL</string>
     <string name="api_endpoint_key_unchanged">API key</string>
     <string name="api_endpoint_chat_endpoint">Chat completions endpoint</string>
+    <string name="api_endpoint_speech_endpoint">Text to Speech Endpoint</string>
+    <string name="api_endpoint_speech_endpoint_help">Path added to the Base URL, e.g. /audio/speech.</string>
     <string name="api_endpoint_chat_endpoint_help">Path added to the Base URL, e.g. /chat/completions. Most OpenAI-compatible providers use this default.</string>
     <string name="api_endpoint_auth_mode">Auth mode</string>
     <string name="api_endpoint_auth_help">How your API key is sent. Bearer works for OpenAI, GLM/z.ai, OpenRouter and Groq.</string>
@@ -931,15 +933,25 @@
     <string name="gen_error_n2">Connection Timed Out: The app could not establish a connection to the server within the connection timeout. This usually points to a slow or unstable network rather than the model. Try again, or raise the connection timeout for this endpoint.</string>
     <string name="gen_error_n3">The app could not reach the server address. Check your connection or the Base URL, then try again.</string>
     <string name="gen_error_n4">Response Timed Out: The connection succeeded, but the server did not send a response within the response time. The model may be busy or slow to reply. Try again, switch models, or raise the response time for this endpoint.</string>
+    <string name="gen_error_c1">The client canceled the request before it completed.</string>
     <string name="gen_error_a1">The API key was rejected. Update the key in Settings.</string>
+    <string name="gen_error_a2">The service refused access to this request. Check the account and model permissions.</string>
     <string name="gen_error_m1">No model is set for this chat. Choose a model in this chat\'s settings.</string>
     <string name="gen_error_m2">The selected model is not available on this endpoint. Check the model name in this chat\'s settings, or choose another.</string>
     <string name="gen_error_m3">The conversation is too long for this model\'s limit. Start a new chat or shorten the input.</string>
+    <string name="gen_error_m4">The provider rejected an unsupported or invalid request parameter. The provider\'s exact explanation is shown below.</string>
+    <string name="gen_error_m5">The provider rejected the request and generated nothing. It did not say which part it objected to — its exact wording is below.</string>
     <string name="gen_error_q1">The account\'s quota or usage limit has been reached. Check the account\'s billing and usage limits.</string>
     <string name="gen_error_s1">The endpoint was not found (HTTP 404). Check the Base URL in this profile\'s settings.</string>
     <string name="gen_error_s2">The server returned a response the app could not read as a stream. Check whether this endpoint and model support streaming.</string>
-    <string name="gen_error_s3">The request was rejected as inappropriate content and could not be processed.</string>
-    <string name="gen_error_u0">An unexpected error occurred. The technical details were saved to the Error Log.</string>
+    <string name="gen_error_s3">Your message was blocked by the provider\'s content filter. The model never received it, and nothing was generated. You can edit the message and send it again.</string>
+    <string name="gen_error_s4">Your message went through. The provider\'s content filter stopped the model partway through writing its reply, so the answer is cut short. Nothing you sent was blocked.</string>
+    <string name="gen_error_s5">A content filter stopped this exchange, but the provider did not say whether it blocked your message or the model\'s reply. The provider\'s own words are below.</string>
+    <string name="gen_error_s6">The provider, upstream model service, or routing service failed while handling the request.</string>
+    <string name="gen_error_u0">An unexpected error occurred.</string>
+    <!-- Pointer to the Error Log. Appended only where the reader is NOT
+         already reading the Error Log; an entry never points at itself. -->
+    <string name="gen_error_u0_log_note">The technical details were saved to the Error Log.</string>
     <string name="provider_context_overflow">The provider rejected the complete request because it exceeded the selected model’s context limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose a model with a larger context window.</string>
     <string name="provider_input_limit">The provider rejected the request because the complete input exceeded the selected model’s input limit. Nothing was shortened or retried. Remove content or attachments, start a new chat, or choose another model.</string>
     <string name="provider_request_body_limit">The server rejected the request because the request body was larger than it accepts. This is a server request-size limit, not necessarily the model’s context limit. Nothing was shortened or retried.</string>
@@ -953,14 +965,23 @@
          "Not Reported" rather than blank. -->
     <string name="provider_error_line">Provider Error: %1$s</string>
     <string name="provider_api_provider_line">API Provider: %1$s</string>
+    <string name="provider_requested_service_line">Requested/Routed Model Provider: %1$s</string>
     <string name="provider_model_service_line">Model Service Provider: %1$s</string>
     <string name="provider_model_line">Model: %1$s</string>
     <string name="provider_function_line">Function: %1$s</string>
+    <string name="provider_outer_http_status_line">Outer HTTP Status: %1$s</string>
+    <string name="provider_embedded_status_line">Embedded Provider Status: %1$s</string>
+    <string name="provider_code_line">Provider Code: %1$s</string>
+    <string name="provider_type_line">Provider Type: %1$s</string>
+    <string name="provider_error_type_line">Provider Error Type: %1$s</string>
+    <string name="provider_filter_side_line">Content Filter Side: %1$s</string>
+    <string name="provider_warning_title">Provider Warning</string>
     <string name="provider_error_no_response">No response received from the server.</string>
     <string name="provider_error_none">None provided by the server.</string>
     <string name="provider_value_not_reported">Not Reported</string>
     <string name="provider_function_chat">Chat</string>
-    <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried. Technical details were saved to the Error Log.</string>
+    <string name="provider_unknown_limit">The server rejected the request but did not provide enough information to identify which limit was exceeded. Nothing was shortened or retried.</string>
+    <string name="provider_unknown_limit_log_note">Technical details were saved to the Error Log.</string>
     <string name="label_debug">Debug</string>
     <string name="label_permission_denied">Permission denied</string>
     <string name="label_use_camera">Use camera</string>
@@ -978,7 +999,7 @@
     <string name="label_error_fill_all_blanks">Please fill all blanks</string>
     <string name="label_server_error">Server error. Please try again later.</string>
     <string name="msg_failed_to_post_prompt">Failed to post prompt. Please check your Internet connection.</string>
-    <string name="btn_ok">OK</string>
+    <string name="btn_ok">Okay</string>
     <string name="btn_cancel">Cancel</string>
     <string name="btn_delete">Delete</string>
 
@@ -1052,6 +1073,51 @@
 
     <!-- Voice &amp; speech consolidated settings -->
     <string name="voice_settings_title">Voice &amp; Speech</string>
+    <string name="voice_browser_title">Select Voice</string>
+    <string name="voice_browser_provider">Provider</string>
+    <string name="voice_browser_provider_subtitle">Selected voice models and available device TTS systems are listed below.</string>
+    <string name="voice_browser_api_charges_notice">These voices are from an API. Associated charges will also apply to previewing voices.</string>
+    <string name="voice_browser_all">All</string>
+    <string name="voice_browser_on_device">On-device</string>
+    <string name="voice_browser_network">Network</string>
+    <string name="voice_browser_voices">Voices</string>
+    <string name="voice_browser_voice_row">%1$s. %2$s</string>
+    <string name="voice_browser_selected_voice">Selected %1$s</string>
+    <string name="voice_browser_count">%1$d Voices</string>
+    <string name="voice_browser_long_press_hint">Long press voice row to change voice identifiers.</string>
+    <string name="voice_browser_any">Any</string>
+    <string name="voice_browser_all_genders">All</string>
+    <string name="voice_browser_preview">Preview</string>
+    <string name="voice_browser_stop">Stop</string>
+    <string name="voice_browser_stop_desc">Stop preview of %1$s</string>
+    <string name="voice_browser_preview_text">Preview Text</string>
+    <string name="voice_browser_download">Download</string>
+    <string name="voice_browser_downloading">Downloading…</string>
+    <string name="voice_browser_downloaded">Downloaded</string>
+    <string name="voice_browser_preview_desc">Preview %1$s</string>
+    <string name="voice_browser_download_desc">Download %1$s</string>
+    <string name="voice_browser_downloading_desc">Downloading %1$s</string>
+    <string name="voice_browser_download_required">Download Required</string>
+    <string name="voice_browser_no_matches">No voices match these filters.</string>
+    <string name="voice_browser_provider_empty">No voices are available from this provider.</string>
+    <string name="voice_browser_load_failed">Voices could not be loaded.\n\n%1$s</string>
+    <string name="voice_browser_reset_filters">Reset Filters</string>
+    <string name="voice_browser_action_failed">Voice Action Failed</string>
+    <string name="voice_identity_preview_desc">Preview this voice</string>
+    <string name="voice_identity_gender">Gender</string>
+    <string name="voice_identity_female">Female</string>
+    <string name="voice_identity_male">Male</string>
+    <string name="voice_identity_neutral">Neutral</string>
+    <string name="voice_identity_original_name">Original app name</string>
+    <string name="voice_identity_provider_name">Phone or server name</string>
+    <string name="voice_identity_cancel">Cancel</string>
+    <string name="voice_identity_save">Save</string>
+    <string name="saved_voice_unavailable_title">Saved Voice Unavailable</string>
+    <string name="saved_voice_unavailable_message">The saved voice “%1$s” could not be used because %2$s.</string>
+    <string name="voice_browser_provider_openai">OpenAI</string>
+    <string name="voice_browser_setting_title">Voice</string>
+    <string name="voice_browser_setting_subtitle_google">Google Speech Services</string>
+    <string name="voice_browser_setting_subtitle_provider">%1$s · %2$s</string>
     <string name="tile_voice_settings_title">Voice &amp; Speech</string>
     <string name="tile_voice_settings_subtitle">Settings related to transcription and text to speech.</string>
     <string name="tile_voice_settings_desc">Everything related to speech in one place: text-to-speech voice and engine, speech-to-text (dictation) engine, hands-free mode, voice-activity detection, and audio feedback. Tap to open.</string>
@@ -1476,7 +1542,7 @@
     <string name="tile_memory_desc">Long-term companion memory: status, starter seed, backups (experimental)</string>
     <string name="memory_status_loading">Loading…</string>
     <string name="memory_status_not_provisioned">The memory store hasn\'t been created yet. Load the starter template, import a backup, or create companions from your personas to set it up.</string>
-    <string name="memory_status_integrity_ok">Store integrity: OK</string>
+    <string name="memory_status_integrity_ok">Store integrity: Okay</string>
     <string name="memory_status_integrity_bad">Store integrity: FAILED — %1$s. Restore from a backup export rather than continuing on a corrupt store.</string>
     <string name="memory_status_counts">Companions: %1$d · Memories: %2$d · Entities: %3$d · Modes: %4$d · Directives: %5$d</string>
     <string name="memory_status_counts2">Worlds: %1$d · User personas: %2$d · Roleplay characters: %3$d · Proposals: %4$d</string>
@@ -1642,7 +1708,7 @@
     <!-- User-triggered Model Cleanup. -->
     <string name="model_cleanup_title">Clean Up Models</string>
     <string name="model_cleanup_settings_subtitle">Checks for unavailable models associated with Favorites or Rules</string>
-    <string name="model_cleanup_explanation">This check looks at your saved Favorite Models and Model Rules to see whether their models are currently available from their saved API endpoints.\n\nA model marked unavailable was not available when this report was generated. This does not necessarily mean the model has been permanently removed.\n\nYou can delete unavailable items or leave them as they are. Items you keep will remain marked as unavailable until a future check finds the model available again. Availability can change, and a provider may not always return complete or reliable model information.</string>
+    <string name="model_cleanup_explanation">This check looks at your saved Favorite Models, Model Rules, and TTS models to see whether their models are currently available from their saved API endpoints.\n\nA model marked unavailable was not available when this report was generated. This does not necessarily mean the model has been permanently removed.\n\nYou can delete unavailable items or leave them as they are. Items you keep will remain marked as unavailable until a future check finds the model available again. Availability can change, and a provider may not always return complete or reliable model information.</string>
     <string name="model_cleanup_check">Check Available Models</string>
     <string name="model_cleanup_check_failed">Couldn’t check saved models. Try again later.</string>
     <string name="model_cleanup_unavailable">Unavailable</string>
@@ -1650,6 +1716,13 @@
     <string name="model_cleanup_no_report">No cleanup report has been generated yet.</string>
     <string name="model_cleanup_endpoint_unchecked">Models associated with %1$s were not available to be checked as endpoint was not available. Try again later.</string>
     <string name="model_cleanup_favorites_heading">Unavailable Model Favorites</string>
+    <string name="model_cleanup_tts_heading">Unavailable TTS Models</string>
+    <string name="model_cleanup_delete_tts_confirm_title">Remove Unavailable TTS Models?</string>
+    <string name="model_cleanup_delete_tts_confirm_message">Remove the saved TTS combinations whose models were reported unavailable by the last check? This removes them from Select API Voice Models and Select Voice.</string>
+    <plurals name="model_cleanup_removed_tts">
+        <item quantity="one">Removed %d saved TTS combination.</item>
+        <item quantity="other">Removed %d saved TTS combinations.</item>
+    </plurals>
     <string name="model_cleanup_rules_heading">Model Rules Using Unavailable Models</string>
     <string name="model_cleanup_none">None</string>
     <string name="model_cleanup_delete_all">Delete All</string>
@@ -2795,7 +2868,7 @@
     <string name="chat_unavailable_back">Back</string>
     <string name="chat_backup_unavailable_title">Chat backup unavailable</string>
     <string name="chat_backup_unavailable_body">The app cannot create a complete chat backup while encrypted chat storage is unavailable. Your existing backups have not been deleted.</string>
-    <string name="chat_backup_unavailable_ok">OK</string>
+    <string name="chat_backup_unavailable_ok">Okay</string>
 
     <!-- ============ Profile Images: Framing screen (owner-approved copy,
          July 19 2026 — verbatim from profile-images-plan.md; do not reword
@@ -3089,6 +3162,10 @@
     <string name="include_artifact_bookmark_desc">Edit removed document bookmarks</string>
     <string name="include_icon_desc">Attached file</string>
     <string name="btn_attach_document">Document</string>
+    <string name="composer_compact_action">Compact</string>
+    <string name="composer_create_image_action">Create Image</string>
+    <string name="manual_compaction_marker">Compacted</string>
+    <string name="summarizer_boundary_marker">──────── Summarized ────────</string>
     <string name="attach_option_image">Image</string>
 
     <!-- Save/Cancel pair on the Edit dialog, right-aligned in that order. -->
@@ -3150,6 +3227,9 @@
 
     <string name="summarizer_complete_messages">Complete Messages</string>
     <string name="summarizer_complete_messages_hint">Last number of complete messages sent to the model before summarizing.</string>
+    <string name="compacting_cancel_behavior_title">Compacting Cancel Behavior</string>
+    <string name="compacting_cancel_discard">Don’t Save Already Summarized Messages</string>
+    <string name="compacting_cancel_save">Save Already Summarized Messages</string>
     <string name="summarizer_new_chats_toggle">Use Summarizer for New Chats</string>
     <string name="summarizer_length">Summary Length</string>
     <string name="summarizer_length_hint">Maximum amount of words the summary can become.</string>
@@ -3173,6 +3253,40 @@
     <!-- Summary view (decision 11; wording owner-approved July 29 2026). -->
     <string name="summarizer_summary_title">Summary</string>
     <string name="summarizer_update_now">Update Now</string>
+    <string name="summarizer_send_entire_chat">Send Entire Chat</string>
+    <string name="summarizer_use_summary">Use Summary</string>
+    <string name="summarizer_use_compacted">Use Compacted Conversation</string>
+    <string name="summarizer_status_running">Summarizing conversation…</string>
+    <string name="compaction_status_running">Compacting messages…</string>
+    <string name="summarizer_status_complete">Summary updated</string>
+    <string name="compaction_status_complete">Compaction complete</string>
+    <string name="summarizer_status_timeout">Summarization model took too long to respond</string>
+    <string name="compaction_status_timeout">Compaction model took too long to respond</string>
+    <string name="summarizer_status_unreachable">Couldn’t reach the summarization model</string>
+    <string name="compaction_status_unreachable">Couldn’t reach the compaction model</string>
+    <string name="summarizer_status_too_large">Conversation was too large to summarize</string>
+    <string name="compaction_status_too_large">Conversation was too large to compact</string>
+    <string name="summarizer_status_save_failed">Couldn’t save the conversation summary</string>
+    <string name="compaction_status_save_failed">Couldn’t save the compacted conversation</string>
+    <string name="summarizer_status_failed">Summarization failed unexpectedly</string>
+    <string name="compaction_status_failed">Compaction failed unexpectedly</string>
+    <string name="summarizer_notification_channel">Summarization and Compaction</string>
+    <string name="summarizer_notification_text">Summarizing “%1$s”…</string>
+    <string name="compaction_notification_text">Compacting “%1$s”…</string>
+    <string name="summarizer_app_status_running">Summarizing “%1$s”…</string>
+    <string name="compaction_app_status_running">Compacting “%1$s”…</string>
+    <string name="summarizer_now_entire_chat">Now sending entire chat to the AI</string>
+    <string name="summarizer_now_compacted">Now sending the compacted chat version</string>
+    <string name="summarizer_now_summary">Now sending the summary. Summarizer will catch up to the current conversation.</string>
+    <string name="large_summarization_title">Large Summarization</string>
+    <string name="large_summarization_body">This operation is unusually large and is estimated to send about %1$s input tokens to the summarization model. It may require multiple requests and use significantly more API credits than usual.</string>
+    <string name="summarize_anyway">Summarize Anyway</string>
+    <string name="large_compaction_title">Large Compaction</string>
+    <string name="large_compaction_body">This operation is unusually large and is estimated to send about %1$s input tokens to the compaction model. It may require multiple requests and use significantly more API credits than usual.</string>
+    <string name="compact_anyway">Compact Anyway</string>
+    <string name="regenerate_unavailable_title">Regenerate Unavailable</string>
+    <string name="regenerate_unavailable_summary">This message is already part of the summary.</string>
+    <string name="regenerate_unavailable_compaction">This message is already part of the compacted conversation.</string>
     <string name="summarizer_icon_summary_desc">Summary</string>
     <string name="summarizer_icon_errors_desc">Summarizer Errors</string>
 
@@ -3235,7 +3349,14 @@
     <!-- Toggle: show or hide the per-message reasoning-effort glyph. No
          subtitle, by owner ruling. -->
     <string name="chat_settings_thinking_indicator">Thinking Indicator</string>
+    <!-- Toggle: show or hide the Thinking disclosure block on AI replies.
+         Display-only — reasoning is still requested and stored either way
+         (owner ruling, Aug 23 2026). No subtitle, matching the row above. -->
+    <string name="chat_settings_show_thinking">Show Thinking</string>
+    <string name="chat_settings_top_positioned_audio_control">Top Positioned Audio Control</string>
     <string name="appearance_section_message_display">Message Display</string>
+    <string name="appearance_staggered_responses">Staggered Responses</string>
+    <string name="appearance_staggered_responses_hint">Display user prompts on the opposite side from AI responses.</string>
     <string name="appearance_profile_images">Profile Images</string>
     <string name="appearance_profile_images_hint">Show speaker profile images in chat.</string>
     <string name="appearance_names">Names</string>
@@ -3336,4 +3457,21 @@
     <string name="companion_chat_name_style_hint">Optionally override the AI name style for this companion.</string>
     <string name="companion_chat_name_font">AI Name Font</string>
     <string name="companion_chat_name_size">AI Name Size</string>
+    <string name="tts_provider_picker_intro">Choose the provider settings for this text-to-speech model. Available providers and routing support depend on the endpoint.</string>
+    <string name="tts_provider_col_training">Training/Data Use</string>
+    <string name="tts_provider_col_price">Price</string>
+    <string name="tts_picker_ai_model">AI Model</string>
+    <string name="tts_no_matching_models">No models match the current search.</string>
+    <string name="tts_manager_title">Select API Voice Models</string>
+    <string name="tts_manager_endpoint">Endpoint</string>
+    <string name="tts_manager_model">Model</string>
+    <string name="tts_manager_select">Select</string>
+    <string name="tts_manager_provider_title">Select Provider</string>
+    <string name="tts_manager_provider_hint">Optional. This may not be available or necessary with all endpoints.</string>
+    <string name="tts_manager_selected_voice_models">Selected Voice Models</string>
+    <string name="tts_manager_remove_heading">X</string>
+    <string name="tts_manager_edit_provider">Edit Provider: %1$s, %2$s, %3$s</string>
+    <string name="tts_manager_remove">Remove TTS Selection: %1$s, %2$s, %3$s</string>
+    <string name="tts_voices_currently_unavailable">Voices currently not available.</string>
+    <string name="tts_select_new_voice">Select New Voice</string>
 </resources>

@@ -154,11 +154,11 @@ object MemoryExporter {
             val name = chat["name"] ?: continue
             val obj = JSONObject()
             obj.put("name", name)
-            obj.put("chat_id", Hash.hash(name))
+            obj.put("chat_id", ChatPreferences.storedChatId(chat))
             for ((key, value) in chat) {
                 if (key != "name" && key != "first_message") obj.put(key, value)
             }
-            val history = chatPreferences.getChatByIdResult(context, Hash.hash(name))
+            val history = chatPreferences.getChatByIdResult(context, ChatPreferences.storedChatId(chat))
             if (ChatStorageHealth.isAuthoritative(history.state)) {
                 obj.put("messages", JSONArray(gson.toJson(history.messages)))
             } else {

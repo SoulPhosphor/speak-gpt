@@ -821,6 +821,150 @@
         <item name="android:background">@drawable/bubble_in</item>
     </style>
 
+    <!-- Bare primary actions in the composer control row. Geometry, icon
+         tint, and the absence of a background remain centrally themeable. -->
+    <style name="Widget.App.Chat.ComposerAction" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:background">@color/transparent</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <!-- Shared camera/image/document and conversation-tools pop-up family. -->
+    <style name="Widget.App.Chat.ActionMenu.Popup" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">12dp</item>
+        <item name="android:layout_marginBottom">12dp</item>
+        <item name="android:elevation">12dp</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Card" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="cardBackgroundColor">@color/transparent</item>
+        <item name="cardCornerRadius">24dp</item>
+        <item name="strokeWidth">0dp</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Surface" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="blurOverlayColor">@color/blur_background</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Content" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingVertical">6dp</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingHorizontal">16dp</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Icon" parent="">
+        <item name="android:layout_width">24dp</item>
+        <item name="android:layout_height">24dp</item>
+        <item name="android:layout_marginEnd">12dp</item>
+        <item name="android:importantForAccessibility">no</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.App.Chat.ActionMenu.Label" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <!-- One manual-compaction boundary, centered between message units. -->
+    <style name="Widget.App.Chat.CompactionMarker" parent="Widget.App.Section.Title">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
+    </style>
+
+    <!-- One moving automatic-summary boundary in ordinary centered text. -->
+    <style name="Widget.App.Chat.SummaryMarker" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
+    <!-- Bare expand/collapse controls for the live chat composer. Their shared
+         style, not the layout or legacy per-screen theme code, owns the icon
+         geometry, transparent background, and theme-resolved tint. Placement
+         remains local because Expand is in the compact control row while
+         Collapse is anchored at the expanded editor's top end. -->
+    <style name="Widget.App.Chat.ComposerContentToggle" parent="">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:background">@color/transparent</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <!-- Provider-supplied Thinking disclosure. The layout owns only content,
+         ids, state, and constraints; this family owns its presentation so a
+         later appearance/theme pass can change it centrally. ChatAdapter may
+         replace label/body/chevron colors together with the resolved bubble
+         foreground for contrast, using its one shared bubble-foreground path. -->
+    <style name="Widget.App.Chat.Thinking.Container" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginBottom">6dp</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.Chat.Thinking.Header" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">32dp</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+
+    <style name="Widget.App.Chat.Thinking.Label" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.App.Chat.Thinking.Chevron" parent="">
+        <item name="android:layout_width">18dp</item>
+        <item name="android:layout_height">18dp</item>
+        <item name="android:layout_marginStart">4dp</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.App.Chat.Thinking.Body" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
     <!-- Regenerated-response pager (owner spec, Aug 16 2026): the far-right
          previous/next chevrons and the "n / m" count on an assistant message.
          Colors default to colorPrimary here but ChatAdapter recolors the glyphs
@@ -959,6 +1103,103 @@
         <item name="android:paddingEnd">38dp</item>
         <item name="android:textColor">?attr/appDropdownTextColor</item>
         <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- Voice Browser family. All colors resolve through the same semantic
+         theme roles as shared dropdowns and rows; the reference screenshot
+         supplies hierarchy only and contributes no literal palette values. -->
+    <style name="Widget.App.VoiceBrowser.Segment" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:backgroundTint">@color/voice_browser_segment_background</item>
+        <item name="android:textColor">@color/voice_browser_segment_text</item>
+        <item name="android:textSize">14sp</item>
+        <item name="strokeColor">?attr/appDropdownBorderColor</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
+
+    <style name="Widget.App.VoiceBrowser.Row" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:minHeight">72dp</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingVertical">8dp</item>
+    </style>
+
+    <style name="Widget.App.VoiceBrowser.SelectedIcon" parent="">
+        <item name="android:layout_width">28dp</item>
+        <item name="android:layout_height">28dp</item>
+        <item name="android:layout_marginEnd">32dp</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
+    <!-- Long-press voice identity editor. Geometry and typography live here so
+         the complete popup can be adjusted without changing activity code. -->
+    <style name="App.VoiceIdentityDialog" parent="App.MaterialAlertDialog" />
+
+    <style name="Widget.App.VoiceIdentityDialog.Content" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">24dp</item>
+        <item name="android:paddingTop">20dp</item>
+        <item name="android:paddingEnd">24dp</item>
+        <item name="android:paddingBottom">20dp</item>
+    </style>
+
+    <style name="Widget.App.VoiceIdentityDialog.Name" parent="Widget.App.Field.Box">
+        <item name="android:minHeight">56dp</item>
+        <item name="android:gravity">center_vertical|start</item>
+    </style>
+
+    <!-- Preview control sits beside the name field and matches its height so
+         the two read as one input row (owner ruling, Aug 26 2026: the preview
+         button must be about the same height as the writing box, not a tiny
+         square). -->
+    <style name="Widget.App.VoiceIdentityDialog.Preview" parent="Widget.Material3.Button.TextButton">
+        <item name="android:layout_width">56dp</item>
+        <item name="android:layout_height">56dp</item>
+        <item name="android:layout_marginStart">12dp</item>
+        <item name="android:minWidth">56dp</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:padding">0dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconTint">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.App.VoiceIdentityDialog.SectionLabel" parent="Widget.App.Field.Label">
+        <item name="android:layout_marginTop">20dp</item>
+    </style>
+
+    <style name="Widget.App.VoiceIdentityDialog.RadioButton" parent="Widget.Material3.CompoundButton.RadioButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:buttonTint">?attr/colorPrimary</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="Widget.App.VoiceIdentityDialog.IdentifierValue" parent="Widget.App.Row.Title">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_marginTop">20dp</item>
+    </style>
+
+    <style name="Widget.App.VoiceBrowser.Action" parent="Widget.Material3.Button.TextButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">56dp</item>
+        <item name="android:minWidth">72dp</item>
+        <item name="android:paddingHorizontal">8dp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="iconTint">?attr/colorPrimary</item>
     </style>
 
     <!-- Provider chart (Choose Provider screen, owner spec Aug 2 2026): a

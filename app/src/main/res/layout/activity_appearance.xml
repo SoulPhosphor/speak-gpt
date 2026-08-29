@@ -57,6 +57,16 @@
 
             <LinearLayout style="@style/Widget.App.Row.Toggle">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_staggered_responses" />
+                    <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_staggered_responses_hint" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_staggered_responses"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/appearance_profile_images" />
                     <TextView style="@style/Widget.App.Row.Subtitle" android:maxLines="10" android:text="@string/appearance_profile_images_hint" />
                 </LinearLayout>

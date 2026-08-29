@@ -35,7 +35,6 @@ import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import java.text.NumberFormat
-import java.util.Locale
 
 /**
  * The single post-send Includes management surface used by message and
@@ -55,6 +54,7 @@ object IncludesPopupController {
     private const val MENU_REMOVE = 2
     private const val MENU_CONDENSE = 3
     private const val MAX_POPUP_HEIGHT_DP = 400
+    private const val POPUP_SIDE_MARGIN_DP = 16
 
     fun show(
         anchor: View,
@@ -79,20 +79,40 @@ object IncludesPopupController {
         for (include in current) {
             val row = inflater.inflate(R.layout.view_includes_popup_item, list, false)
             bindRow(row, include)
-            row.findViewById<ImageButton>(R.id.includes_popup_item_action)?.setOnClickListener {
-                showItemMenu(
-                    it,
-                    include,
-                    onAction = { popup.dismiss() },
-                    callbacks = callbacks
-                )
+            val action = row.findViewById<ImageButton>(R.id.includes_popup_item_action)
+            if (include.form == IncludeForm.ARTIFACT) {
+                // The attachment itself is gone, so there is nothing left to
+                // condense or remove. The row's control opens the sentence or
+                // two that stands in for it instead of a menu.
+                action?.setImageResource(R.drawable.ic_edit_square)
+                action?.contentDescription = row.context.getString(R.string.include_action_edit)
+                action?.setOnClickListener {
+                    popup.dismiss()
+                    callbacks.onIncludeEdit(include.id)
+                }
+            } else {
+                action?.setImageResource(R.drawable.ic_more_vert)
+                action?.setOnClickListener {
+                    showItemMenu(
+                        it,
+                        include,
+                        onAction = { popup.dismiss() },
+                        callbacks = callbacks
+                    )
+                }
             }
             list.addView(row)
         }
 
+        // The popup is given a definite width instead of wrapping its content.
+        // A wrapped row measures the file name at its full natural length, so a
+        // long name grows the row past the screen edge and takes the three-dot
+        // menu with it. At a definite width the name ellipsizes in place and the
+        // menu stays on screen at the far right of every row.
+        val popupWidth = popupWidth(anchor)
         popup = PopupWindow(
             content,
-            ViewGroup.LayoutParams.WRAP_CONTENT,
+            popupWidth,
             ViewGroup.LayoutParams.WRAP_CONTENT,
             true
         )
@@ -100,19 +120,15 @@ object IncludesPopupController {
         popup.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         popup.elevation = anchor.resources.displayMetrics.density * 8f
 
-        content.measure(
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        )
+        val widthSpec = View.MeasureSpec.makeMeasureSpec(popupWidth, View.MeasureSpec.EXACTLY)
+        val heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        content.measure(widthSpec, heightSpec)
         val maxHeight = dp(anchor, MAX_POPUP_HEIGHT_DP)
         if (content.measuredHeight > maxHeight) {
             scroll.layoutParams = scroll.layoutParams.apply {
                 height = maxHeight - dp(anchor, 48)
             }
-            content.measure(
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-            )
+            content.measure(widthSpec, heightSpec)
         }
 
         // The popup rises from the action area, matching the existing Details
@@ -129,9 +145,9 @@ object IncludesPopupController {
         row.findViewById<ImageView>(R.id.includes_popup_item_icon)
             ?.setImageResource(iconFor(include.kind))
         row.findViewById<TextView>(R.id.includes_popup_item_name)?.text = include.fileName
-        row.findViewById<TextView>(R.id.includes_popup_item_kind)?.text =
-            include.kind.key.uppercase(Locale.ROOT)
-        row.findViewById<TextView>(R.id.includes_popup_item_state)?.text = stateLabel(include)
+        // currentTokens() reads the form the item is in right now, so a
+        // condensed document or a reduced image shows its new, smaller
+        // estimate here rather than what it weighed when it was sent.
         row.findViewById<TextView>(R.id.includes_popup_item_weight)?.text =
             row.context.getString(
                 R.string.include_weight,
@@ -178,11 +194,9 @@ object IncludesPopupController {
                 popup.menu.add(0, MENU_REMOVE, 1, R.string.include_action_remove)
             }
 
-            IncludeForm.ARTIFACT -> {
-                // An Artifact is already removed from model-facing content;
-                // its established action is editing the retained bookmark.
-                popup.menu.add(0, MENU_EDIT, 0, R.string.include_action_edit)
-            }
+            // A removed attachment never reaches this menu: its row carries the
+            // edit control directly.
+            IncludeForm.ARTIFACT -> return
         }
 
         popup.setOnMenuItemClickListener { item ->
@@ -204,12 +218,6 @@ object IncludesPopupController {
             true
         }
         popup.show()
-    }
-
-    private fun stateLabel(include: ChatInclude): String = when (include.form) {
-        IncludeForm.FULL -> "Full"
-        IncludeForm.CONDENSED -> if (include.kind.isImage()) "Reduced" else "Condensed"
-        IncludeForm.ARTIFACT -> "Artifact"
     }
 
     private fun noticeText(row: View, notice: IncludeNotice): String? {
@@ -239,6 +247,10 @@ object IncludesPopupController {
 
     private fun iconFor(kind: IncludeKind): Int =
         if (kind.isImage()) R.drawable.ic_image else R.drawable.ic_file
+
+    /** Widest the popup may be: the screen less one side margin per edge. */
+    private fun popupWidth(anchor: View): Int =
+        anchor.resources.displayMetrics.widthPixels - (dp(anchor, POPUP_SIDE_MARGIN_DP) * 2)
 
     private fun dp(view: View, value: Int): Int =
         (value * view.resources.displayMetrics.density).toInt()

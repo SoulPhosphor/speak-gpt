@@ -522,7 +522,7 @@ class MemoryBrowserActivity : MemoryScreenActivity() {
                 MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                     .setTitle(R.string.memory_history_title)
                     .setMessage(text)
-                    .setPositiveButton(android.R.string.ok) { _, _ -> }
+                    .setPositiveButton(R.string.btn_ok) { _, _ -> }
                     .show()
             }
         }

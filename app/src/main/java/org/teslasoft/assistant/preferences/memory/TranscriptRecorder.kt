@@ -177,7 +177,7 @@ object TranscriptRecorder {
             var allSucceeded = true
             for (chat in listResult.chats) {
                 val name = chat["name"] ?: continue
-                val chatId = Hash.hash(name)
+                val chatId = ChatPreferences.storedChatId(chat)
                 if (store.hasAnyTranscriptForChat(chatId)) continue
 
                 val prefs = Preferences.getPreferences(context, chatId)

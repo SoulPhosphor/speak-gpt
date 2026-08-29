@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    style="@style/Widget.App.VoiceIdentityDialog.Content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/voice_identity_name"
+            style="@style/Widget.App.VoiceIdentityDialog.Name"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:inputType="textCapWords"
+            android:maxLines="1"
+            android:selectAllOnFocus="true" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/voice_identity_preview"
+            style="@style/Widget.App.VoiceIdentityDialog.Preview"
+            android:contentDescription="@string/voice_identity_preview_desc"
+            app:icon="@drawable/ic_play" />
+    </LinearLayout>
+
+    <TextView
+        style="@style/Widget.App.VoiceIdentityDialog.SectionLabel"
+        android:text="@string/voice_identity_gender" />
+
+    <RadioGroup
+        android:id="@+id/voice_identity_gender_group"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <com.google.android.material.radiobutton.MaterialRadioButton
+            android:id="@+id/voice_identity_female"
+            style="@style/Widget.App.VoiceIdentityDialog.RadioButton"
+            android:text="@string/voice_identity_female" />
+
+        <com.google.android.material.radiobutton.MaterialRadioButton
+            android:id="@+id/voice_identity_male"
+            style="@style/Widget.App.VoiceIdentityDialog.RadioButton"
+            android:text="@string/voice_identity_male" />
+
+        <com.google.android.material.radiobutton.MaterialRadioButton
+            android:id="@+id/voice_identity_neutral"
+            style="@style/Widget.App.VoiceIdentityDialog.RadioButton"
+            android:text="@string/voice_identity_neutral" />
+    </RadioGroup>
+
+    <TextView
+        android:id="@+id/voice_identity_identifiers"
+        style="@style/Widget.App.VoiceIdentityDialog.IdentifierValue"
+        android:textIsSelectable="true" />
+</LinearLayout>

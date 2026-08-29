@@ -355,7 +355,7 @@
     <string name="label_error_fill_all_blanks">Prosím, vyplňte všetky prázdne miesta</string>
     <string name="label_server_error">Chyba servera. Skúste to prosím neskôr znova.</string>
     <string name="msg_failed_to_post_prompt">Nepodarilo sa odoslať výzvu. Skontrolujte prosím svoje internetové pripojenie.</string>
-    <string name="btn_ok">OK</string>
+    <string name="btn_ok">Okay</string>
     <string name="btn_cancel">Zrušiť</string>
     <string name="btn_delete">Vymazať</string>
     <string name="label_confirm_deletion">Potvrďte zmazanie</string>

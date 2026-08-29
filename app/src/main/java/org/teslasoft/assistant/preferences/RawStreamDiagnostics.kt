@@ -16,6 +16,7 @@
 
 package org.teslasoft.assistant.preferences
 
+import org.teslasoft.assistant.providers.ProviderDiagnosticEvent
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
@@ -28,6 +29,8 @@ import java.util.concurrent.ConcurrentHashMap
 data class RawStreamObservation(
     val sseDataEvents: Int = 0,
     val rawContentChunks: Int = 0,
+    /** Count only; provider reasoning text is never retained in diagnostics. */
+    val reasoningCharacters: Int = 0,
     val providerErrorReceived: Boolean = false,
     val providerErrorSummary: String? = null,
     val finishReason: String? = null,
@@ -48,7 +51,15 @@ data class RawStreamObservation(
     val generationId: String? = null,
     val malformedDataEvents: Int = 0,
     val flowEndedNormally: Boolean = false,
-    val flowException: String? = null
+    val flowException: String? = null,
+    /** Highest-authority response-derived serving provider observed anywhere
+     * in this stream. Never populated from configured/request settings. */
+    val actualServingProvider: String? = null,
+    /** Structured provider-authored errors/warnings observed in raw SSE. The
+     * exact message and raw payload live on each event. This field deliberately
+     * stays out of the legacy String envelope; request-scoped consumers receive
+     * the [RawStreamObservation] object directly. */
+    val providerDiagnostics: List<ProviderDiagnosticEvent> = emptyList()
 )
 
 /**
@@ -130,6 +141,7 @@ object RawStreamObservationCodec {
 internal data class LifecycleDiagnosticEvidence(
     var requestDispatchedObserved: Boolean? = null,
     var httpSuccessful: Boolean? = null,
+    var outerHttpStatus: Int? = null,
     var nonStreamingResponse: Boolean = false,
     var typedChunks: Int = 0,
     var typedContentChunks: Int = 0,
@@ -188,14 +200,16 @@ internal object LifecycleDiagnosticEvidenceStore {
         if (usageReceived) it.typedUsageReceived = true
     }
 
-    fun noteSuccessfulHttpResponse(attemptId: String): Boolean = mutate(attemptId) {
+    fun noteSuccessfulHttpResponse(attemptId: String, status: Int = 200): Boolean = mutate(attemptId) {
         it.requestDispatchedObserved = true
         it.httpSuccessful = true
+        it.outerHttpStatus = status
     }
 
     fun noteNonStreamingResponse(attemptId: String): Boolean = mutate(attemptId) {
         it.requestDispatchedObserved = true
         it.httpSuccessful = true
+        it.outerHttpStatus = 200
         it.nonStreamingResponse = true
     }
 

@@ -120,7 +120,7 @@ class ChatListAdapter(
                     ) return@runOnUiThread
                     val changedRows = ArrayList<Int>()
                     dataArray.forEachIndexed { position, chat ->
-                        val chatId = Hash.hash(chat["name"].toString())
+                        val chatId = ChatPreferences.storedChatId(chat)
                         if (!boundMemoryStates.containsKey(chatId)) return@forEachIndexed
 
                         val previousState = boundMemoryStates[chatId]
@@ -170,7 +170,7 @@ class ChatListAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val chatId = Hash.hash(dataArray[position]["name"].toString())
+        val chatId = ChatPreferences.storedChatId(dataArray[position])
         holder.bind(
             dataArray[position],
             selectorProjection[position],
@@ -221,9 +221,8 @@ class ChatListAdapter(
         }
     }
 
-    private fun requestPreview(chatName: String) {
+    private fun requestPreview(chatId: String) {
         if (disposed.get()) return
-        val chatId = Hash.hash(chatName)
         synchronized(previewRequests) {
             if (!previewRequests.add(chatId)) return
         }
@@ -244,7 +243,7 @@ class ChatListAdapter(
                 mContext.activity?.runOnUiThread {
                     if (disposed.get()) return@runOnUiThread
                     val position = dataArray.indexOfFirst {
-                        Hash.hash(it["name"].toString()) == chatId
+                        ChatPreferences.storedChatId(it) == chatId
                     }
                     if (position < 0) return@runOnUiThread
 
@@ -304,7 +303,7 @@ class ChatListAdapter(
     }
 
     fun edit(position: Int, name: String) {
-        listener?.onRename(position, name, Hash.hash(name))
+        listener?.onRename(position, name, ChatPreferences.storedChatId(dataArray[position]))
     }
 
     private var listener: OnInteractionListener? = null
@@ -359,10 +358,10 @@ class ChatListAdapter(
         ) {
             preferences = Preferences.getPreferences(mContext.requireActivity(), "")
 
-            if (preferences?.getAvatarTypeByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity()) == "builtin") {
-                icon.setImageResource(StaticAvatarParser.parse(preferences?.getAvatarIdByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity())!!))
+            if (preferences?.getAvatarTypeByChatId(ChatPreferences.storedChatId(chatMessage), mContext.requireActivity()) == "builtin") {
+                icon.setImageResource(StaticAvatarParser.parse(preferences?.getAvatarIdByChatId(ChatPreferences.storedChatId(chatMessage), mContext.requireActivity())!!))
             } else {
-                val legacyAvatarId = preferences?.getAvatarIdByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity())
+                val legacyAvatarId = preferences?.getAvatarIdByChatId(ChatPreferences.storedChatId(chatMessage), mContext.requireActivity())
                 val legacyAvatarFile = if (legacyAvatarId != null) LegacyAvatarResolver.resolve(mContext.requireActivity().getExternalFilesDir("images"), legacyAvatarId) else null
 
                 if (legacyAvatarFile != null) {
@@ -380,10 +379,10 @@ class ChatListAdapter(
 
             bindPreview(chatMessage)
             if (!chatMessage.containsKey("first_message")) {
-                requestPreview(chatMessage["name"].toString())
+                requestPreview(ChatPreferences.storedChatId(chatMessage))
             }
 
-            val chatHash = Hash.hash(chatMessage["name"].toString())
+            val chatHash = ChatPreferences.storedChatId(chatMessage)
             val chatPreferences = Preferences.getPreferences(mContext.requireActivity(), chatHash)
             val model: String = chatPreferences.getModel()
 
@@ -434,7 +433,7 @@ class ChatListAdapter(
                     ).setAction(Intent.ACTION_VIEW)
 
                     i.putExtra("name", chatMessage["name"].toString())
-                    i.putExtra("chatId", Hash.hash(chatMessage["name"].toString()))
+                    i.putExtra("chatId", ChatPreferences.storedChatId(chatMessage))
 
                     mContext.requireActivity().startActivity(i, options.toBundle())
                 }
@@ -462,7 +461,7 @@ class ChatListAdapter(
         }
 
         fun bindMemoryMarker(chatMessage: HashMap<String, String>) {
-            val chatHash = Hash.hash(chatMessage["name"].toString())
+            val chatHash = ChatPreferences.storedChatId(chatMessage)
             if (!showMemoryStatus) {
                 boundMemoryExclusions.remove(chatHash)
                 boundMemoryStates.remove(chatHash)
@@ -477,7 +476,7 @@ class ChatListAdapter(
             chatMessage: HashMap<String, String>,
             chatPreferences: Preferences
         ) {
-            val chatHash = Hash.hash(chatMessage["name"].toString())
+            val chatHash = ChatPreferences.storedChatId(chatMessage)
             if (!showMemoryStatus) {
                 boundMemoryExclusions.remove(chatHash)
                 boundMemoryStates.remove(chatHash)
@@ -629,7 +628,7 @@ class ChatListAdapter(
 
             DrawableCompat.setTint(pin.getDrawable(), ContextCompat.getColor(mContext.requireActivity(), iconColor))
 
-            if (preferences?.getAvatarTypeByChatId(Hash.hash(chatMessage["name"].toString()), mContext.requireActivity()) == "builtin") {
+            if (preferences?.getAvatarTypeByChatId(ChatPreferences.storedChatId(chatMessage), mContext.requireActivity()) == "builtin") {
                 DrawableCompat.setTint(icon.getDrawable(), ContextCompat.getColor(mContext.requireActivity(), iconColor))
             }
 

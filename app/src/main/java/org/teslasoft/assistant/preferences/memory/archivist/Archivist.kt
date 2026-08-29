@@ -1612,7 +1612,7 @@ object Archivist {
         val out = HashMap<String, String>()
         for (chat in ChatPreferences.getChatPreferences().getChatList(context)) {
             val name = chat["name"] ?: continue
-            out[Hash.hash(name)] = name
+            out[ChatPreferences.storedChatId(chat)] = name
         }
         return out
     }

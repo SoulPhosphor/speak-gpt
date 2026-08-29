@@ -26,9 +26,10 @@ import org.junit.Test
  * migration seeds the app-wide configuration from the default settings
  * profile — generator endpoint and model carried over, legacy resolution
  * mapped to the closest shape, quality starting AUTOMATIC (a new setting
- * with no legacy value), the `/imagine` toggle preserved, and Let the AI
- * Create Images following the old Function Calling state only so the
- * user's current choice is preserved.
+ * with no legacy value), and Let the AI Create Images following the old
+ * Function Calling state only so the user's current choice is preserved.
+ * The `/imagine` toggle has no legacy source any more (its per-chat copy
+ * was removed outright) and is no longer part of the seed.
  */
 class ImageGenerationMigrationTest {
 
@@ -59,17 +60,15 @@ class ImageGenerationMigrationTest {
     }
 
     @Test
-    fun seedCarriesEndpointModelAndImagineToggleUnchanged() {
+    fun seedCarriesEndpointAndModelUnchanged() {
         val seed = ImageGenerationMigration.seedFromLegacy(
             legacyEndpointId = "endpoint-123",
             legacyImageModel = "gpt-image-1",
             legacyResolution = "1024x1024",
-            legacyImagineCommand = false,
             legacyFunctionCalling = false
         )
         assertEquals("endpoint-123", seed.endpointId)
         assertEquals("gpt-image-1", seed.model)
-        assertFalse(seed.imagineCommand)
     }
 
     @Test
@@ -78,7 +77,6 @@ class ImageGenerationMigrationTest {
             legacyEndpointId = "e",
             legacyImageModel = "m",
             legacyResolution = "1792x1024",
-            legacyImagineCommand = true,
             legacyFunctionCalling = true
         )
         assertEquals(ImageQuality.AUTOMATIC, seed.quality)
@@ -89,12 +87,12 @@ class ImageGenerationMigrationTest {
     fun aiImageCreationPreservesTheOldFunctionCallingChoice() {
         assertTrue(
             ImageGenerationMigration.seedFromLegacy(
-                "e", "m", "1024x1024", true, legacyFunctionCalling = true
+                "e", "m", "1024x1024", legacyFunctionCalling = true
             ).aiCreateImages
         )
         assertFalse(
             ImageGenerationMigration.seedFromLegacy(
-                "e", "m", "1024x1024", true, legacyFunctionCalling = false
+                "e", "m", "1024x1024", legacyFunctionCalling = false
             ).aiCreateImages
         )
     }

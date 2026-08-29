@@ -319,7 +319,7 @@ class MemoryAssistantActivity : FragmentActivity() {
                     MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                         .setTitle(R.string.mem_arch_deleted_badge)
                         .setMessage(R.string.mem_arch_deleted_explain)
-                        .setPositiveButton(android.R.string.ok) { _, _ -> }
+                        .setPositiveButton(R.string.btn_ok) { _, _ -> }
                         .show()
                 }
             }

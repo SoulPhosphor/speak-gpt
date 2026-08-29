@@ -34,6 +34,10 @@
     <!-- Widget.App.Row.ProfileImage's leading preview size (profile-images-plan.md). -->
     <dimen name="row_profile_image_size">48dp</dimen>
 
+    <!-- Shared BlurView radius for the composer action pop-ups. Kept outside
+         ChatActivity so appearance work can tune both menus centrally. -->
+    <dimen name="chat_action_menu_blur_radius">16dp</dimen>
+
     <!-- Current adaptable chat presentation geometry. These values match the
          owner-approved visual target tuned on Aug 13 2026. -->
     <dimen name="chat_message_speaker_inset">25dp</dimen>
@@ -59,6 +63,7 @@
     <!-- Horizontal breathing room between the portrait and the text it
          clears (owner ask, Aug 14 2026: the first pass hugged too tight). -->
     <dimen name="chat_portrait_text_gap">9dp</dimen>
+    <dimen name="chat_portrait_name_gap">14dp</dimen>
 
     <!-- Name begins/ends 102dp inward from the tuned 25dp bubble edge. -->
     <dimen name="chat_name_portrait_edge_inset">127dp</dimen>
@@ -70,4 +75,5 @@
          Aug 14 2026). With a painted bubble the name instead aligns with the
          message content (one content-padding in), computed in ChatAdapter. -->
     <dimen name="chat_name_bubble_edge_offset">1dp</dimen>
+    <dimen name="tts_manager_action_height">48dp</dimen>
 </resources>

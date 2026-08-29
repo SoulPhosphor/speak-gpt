@@ -84,6 +84,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.util.summarizer.SummarizerController
+import org.teslasoft.assistant.util.summarizer.CondensedRegenerationLock
 import com.google.android.material.elevation.SurfaceColors
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.core.spans.CodeBlockSpan
@@ -95,6 +96,7 @@ import java.text.NumberFormat
 import java.util.Date
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.includes.ChatInclude
+import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
@@ -108,8 +110,12 @@ import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
 import org.teslasoft.assistant.ui.chat.ChatMarkdownRenderer
+import org.teslasoft.assistant.ui.chat.ChatMessagePlacement
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
+import org.teslasoft.assistant.ui.chat.MessageMetadataView
+import org.teslasoft.assistant.ui.chat.PortraitAwareMessageTextView
+import org.teslasoft.assistant.ui.chat.PortraitExclusionGeometry
 import org.teslasoft.assistant.ui.fragments.dialogs.EditMessageDialogFragment
 import org.teslasoft.assistant.ui.util.IncludesPopupController
 import org.teslasoft.assistant.util.LegacyAvatarResolver
@@ -131,6 +137,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     private val generatedImageDataUrls = HashMap<String, String>()
     private var listener: OnUpdateListener? = null
     private var bulkActionMode = false
+    private var manualCompactionBoundary = 0
+    private var summaryRegenerationLockBoundary = 0
+    private var compactionRegenerationLockBoundary = 0
 
     // Assistant-side picture, already cascaded by ChatActivity off the main
     // thread (the active Companion's own picture, else the Default AI Avatar).
@@ -305,7 +314,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             KEY_ACTIVE_MEMORY_ATTRIBUTION,
             MessageCompletionState.KEY_STATE,
             MessageCompletionState.KEY_STATE_DETAIL,
-            MessageCompletionState.KEY_ERROR_TEXT
+            MessageCompletionState.KEY_ERROR_TEXT,
+            MessageCompletionState.KEY_PROVIDER_WARNING_TEXT
         )
 
         /** Parse the stored version list, or an empty list when a turn has none. */
@@ -358,6 +368,48 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     fun setChatId(chatId: String) {
         this.chatId = chatId
     }
+
+    /**
+     * Places the one manual Compact marker after the message at
+     * [boundaryCount] - 1. This is display-only; canonical messages and adapter
+     * positions remain unchanged.
+     */
+    fun setManualCompactionBoundary(boundaryCount: Int) {
+        val previous = manualCompactionBoundary
+        val next = boundaryCount.coerceAtLeast(0)
+        if (previous == next) return
+        manualCompactionBoundary = next
+        if (previous > 0 && previous <= itemCount) notifyItemChanged(previous - 1)
+        if (manualCompactionBoundary > 0 && manualCompactionBoundary <= itemCount) {
+            notifyItemChanged(manualCompactionBoundary - 1)
+        }
+    }
+
+    /**
+     * Regeneration locks are durable history, separate from the currently used
+     * summary/compaction projection. Rebinding keeps recycled rows honest when
+     * a background batch advances either prefix.
+     */
+    fun setCondensedRegenerationLockBoundaries(
+        summaryBoundary: Int,
+        compactionBoundary: Int
+    ) {
+        val nextSummary = summaryBoundary.coerceAtLeast(0)
+        val nextCompaction = compactionBoundary.coerceAtLeast(0)
+        if (summaryRegenerationLockBoundary == nextSummary &&
+            compactionRegenerationLockBoundary == nextCompaction
+        ) return
+        summaryRegenerationLockBoundary = nextSummary
+        compactionRegenerationLockBoundary = nextCompaction
+        notifyDataSetChanged()
+    }
+
+    private fun regenerationLockKind(position: Int): CondensedRegenerationLock.Kind? =
+        CondensedRegenerationLock.kindAt(
+            position,
+            summaryRegenerationLockBoundary,
+            compactionRegenerationLockBoundary
+        )
 
     /**
      * Which messages currently have their "Includes" record opened. Held on
@@ -507,6 +559,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             dataArray[position][MessageCompletionState.KEY_STATE] = MessageCompletionState.DONE
             dataArray[position].remove(MessageCompletionState.KEY_STATE_DETAIL)
             dataArray[position].remove(MessageCompletionState.KEY_ERROR_TEXT)
+            dataArray[position].remove(MessageCompletionState.KEY_PROVIDER_WARNING_TEXT)
         }
         listener?.onMessageEdited()
     }
@@ -573,7 +626,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val iconInitialPaddingRight = icon.paddingRight
         private val iconInitialPaddingBottom = icon.paddingBottom
         private val iconInitialScaleType = icon.scaleType
-        private val message: TextView = itemView.findViewById(R.id.message)
+        private val message: PortraitAwareMessageTextView = itemView.findViewById(R.id.message)
         private val username: TextView = itemView.findViewById(R.id.username)
         private val bubbleBg: ConstraintLayout = itemView.findViewById(R.id.bubble_bg)
         private val imageFrame: View = itemView.findViewById(R.id.image_frame)
@@ -600,6 +653,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private val btnRetry: ImageButton = itemView.findViewById(R.id.btn_retry)
         private val btnShare: ImageButton = itemView.findViewById(R.id.btn_share)
         private val btnSpeak: ImageButton = itemView.findViewById(R.id.btn_speak)
+        private val btnSpeakTop: ImageButton? = itemView.findViewById(R.id.btn_speak_top)
         private val btnActiveMemories: ImageButton? =
             itemView.findViewById(R.id.btn_active_memories)
         // Message Details action on both layouts. Active Memories may precede
@@ -611,12 +665,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             itemView.findViewById(R.id.btn_persistent_includes)
         // Compact model/token line under the identity. Present only on the
         // assistant layout (model/tokens are AI-side), so nullable.
-        private val messageMeta: TextView? = itemView.findViewById(R.id.message_meta)
+        private val messageMeta: MessageMetadataView? = itemView.findViewById(R.id.message_meta)
         // Provider-supplied reasoning disclosure (§7.1). Present only on the
         // assistant layout, so nullable.
         private val reasoningContainer: LinearLayout? = itemView.findViewById(R.id.reasoning_container)
         private val reasoningHeader: LinearLayout? = itemView.findViewById(R.id.reasoning_header)
-        private val reasoningText: TextView? = itemView.findViewById(R.id.reasoning_text)
+        private val reasoningLabel: TextView? = itemView.findViewById(R.id.reasoning_label)
+        private val reasoningText: PortraitAwareMessageTextView? = itemView.findViewById(R.id.reasoning_text)
         private val reasoningChevron: ImageView? = itemView.findViewById(R.id.reasoning_chevron)
         // Per-message reasoning indicator glyph in the action bar, right of the
         // info button (owner design, Aug 2026). Assistant layout only, so
@@ -638,6 +693,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // The "Includes" record of what this message carried. Absent from the
         // assistant bubble (attachments are user-side only), so nullable.
         private val includeSummary: LinearLayout? = itemView.findViewById(R.id.include_summary)
+        private val includeBookmarks: View? = itemView.findViewById(R.id.include_bookmarks)
         private val includeSummaryHeader: LinearLayout? = itemView.findViewById(R.id.include_summary_header)
         private val includeSummaryLabel: TextView? = itemView.findViewById(R.id.include_summary_label)
         private val includeSummaryChevron: ImageView? = itemView.findViewById(R.id.include_summary_chevron)
@@ -648,9 +704,36 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // nullable like includeSummary. Lets the tray swap sides of Message
         // Actions depending on whether the message also carries text.
         private val messageActionsRow: View? = itemView.findViewById(R.id.message_actions_row)
+        private val compactionMarker: TextView =
+            itemView.findViewById(R.id.compaction_marker)
+        private val summaryMarker: TextView =
+            itemView.findViewById(R.id.summary_marker)
+
+        private var boundIsBot = false
+        private var boundShowsPortrait = false
+        private var boundShowsName = false
+        private var boundIsGeneratedImage = false
+        private var actionIconForeground: Int? = null
+
+        init {
+            ui.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                updatePortraitFlowGeometry()
+            }
+        }
 
         @SuppressLint("SetTextI18n", "SetJavaScriptEnabled")
         open fun bind(chatMessage: HashMap<String, Any>, position: Int) {
+
+            compactionMarker.visibility = if (position + 1 == manualCompactionBoundary) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+            summaryMarker.visibility = if (position + 1 == summaryRegenerationLockBoundary) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
 
             // The version the pager is currently showing. For a turn with one
             // version (or none regenerated) this is just chatMessage itself; when
@@ -697,6 +780,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             } else {
                 updatePresentation(chatMessage)
             }
+            updatePortraitFlowGeometry()
 
             ui.setOnLongClickListener {
                 switchBulkActionState(position)
@@ -844,12 +928,21 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             if (chatMessage["isBot"] == true) return
 
-            val inheritedIds = PersistentIncludeContext
+            val inherited = PersistentIncludeContext
                 .earlierForUserMessage(dataArray, position)
-                .map { it.id }
-            if (inheritedIds.isEmpty()) return
+            if (inherited.isEmpty()) return
 
             action.visibility = View.VISIBLE
+            // Once every shared attachment has been removed, all that survives
+            // is the sentence or two each one left behind, so the paperclip
+            // becomes a bookmark. Set on every bind, because rows are recycled.
+            action.setImageResource(
+                if (inherited.all { it.form == IncludeForm.ARTIFACT }) {
+                    R.drawable.ic_bookmark
+                } else {
+                    R.drawable.ic_attach
+                }
+            )
             action.contentDescription = context.getString(R.string.message_includes_action)
             action.setOnClickListener { anchor ->
                 val currentPosition = bindingAdapterPosition
@@ -899,7 +992,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * The compact metadata line beneath the identity (chat-redesign-plan.md
          * §4.3). Present only on the assistant layout. Shows the producing model
          * when Model Names is on, the provider token total when Token Usage is
-         * on, joined by a centered dot when both are present and both enabled.
+         * on, joined by a centered dot when both are present and both enabled
+         * and the two fit on one line. When a long model name would otherwise
+         * push the token count past the row's edge, the token count drops to
+         * its own line directly beneath the model name instead (owner spec,
+         * Aug 23 2026), still starting at the same edge as the model name.
          * Anything not enabled or not stored on this turn is simply omitted; the
          * whole line is GONE when nothing remains. Never invents a value.
          */
@@ -911,24 +1008,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // presentation, so the compact line never appears there.
             if (chatMessage["isBot"] != true || isGeneratedImage) {
                 meta.visibility = View.GONE
-                meta.text = ""
+                meta.setMetadata(null, null)
                 return
             }
 
-            val parts = mutableListOf<String>()
-            if (preferences.getShowModelNames()) {
+            val modelPart = if (preferences.getShowModelNames()) {
                 chatMessage[KEY_MESSAGE_MODEL]?.toString()?.takeIf { it.isNotBlank() }
-                    ?.let { parts.add(it) }
-            }
-            if (preferences.getShowTokenUsage()) {
-                tokenCountLabel(chatMessage)?.let { parts.add(it) }
-            }
+            } else null
+            val tokenPart = if (preferences.getShowTokenUsage()) tokenCountLabel(chatMessage) else null
 
-            if (parts.isEmpty()) {
+            if (modelPart == null && tokenPart == null) {
                 meta.visibility = View.GONE
-                meta.text = ""
+                meta.setMetadata(null, null)
             } else {
-                meta.text = parts.joinToString("  ·  ")
+                meta.setMetadata(modelPart, tokenPart)
                 meta.visibility = View.VISIBLE
             }
         }
@@ -1104,6 +1197,13 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // shown version is already canonical; resume when it is not, tapping
             // which makes the shown version the canonical response.
             btnVersionPromote?.let { promote ->
+                if (regenerationLockKind(position) != null) {
+                    promote.visibility = View.GONE
+                    promote.setOnClickListener(null)
+                    promote.isClickable = false
+                    return@let
+                }
+                promote.visibility = View.VISIBLE
                 if (current == canonical) {
                     promote.setImageResource(R.drawable.ic_check_circle)
                     promote.contentDescription = context.getString(R.string.version_current_desc)
@@ -1289,12 +1389,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * its own row between the identity/metadata line and the answer; tapping
          * only expands/collapses the already-received text and never regenerates
          * or alters the answer. Absent reasoning collapses the row to nothing.
-         * Every branch sets visibility explicitly because rows are recycled.
+         * Chat Settings → Show Thinking (owner spec, Aug 23 2026) gates only
+         * this display: turning it off hides the row on every reply, current
+         * and past alike, but never touches the stored reasoning text — the
+         * app still requests and stores it exactly as before, and turning the
+         * setting back on shows it again. Every branch sets visibility
+         * explicitly because rows are recycled.
          */
         private fun updateReasoning(chatMessage: HashMap<String, Any>, position: Int) {
             val container = reasoningContainer ?: return
             val text = chatMessage[KEY_MESSAGE_REASONING]?.toString()?.takeIf { it.isNotBlank() }
-            if (chatMessage["isBot"] != true || text == null) {
+            if (chatMessage["isBot"] != true || text == null || !preferences.getShowThinking()) {
                 container.visibility = View.GONE
                 reasoningText?.text = ""
                 reasoningHeader?.setOnClickListener(null)
@@ -1309,8 +1414,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             reasoningText?.text = text
             reasoningText?.visibility = if (expanded) View.VISIBLE else View.GONE
-            // Chevron: right when collapsed, rotated to point down when expanded.
-            reasoningChevron?.rotation = if (expanded) 90f else 0f
+            reasoningChevron?.setImageResource(
+                if (expanded) R.drawable.ic_chevron_down else R.drawable.ic_chevron_up
+            )
 
             reasoningHeader?.setOnClickListener {
                 if (!expandedReasoning.add(key)) expandedReasoning.remove(key)
@@ -1617,6 +1723,15 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private fun updateStatusMarker(chatMessage: HashMap<String, Any>) {
             val marker = statusMarker ?: return
             val state = chatMessage[MessageCompletionState.KEY_STATE]?.toString()
+            val providerWarning = chatMessage[MessageCompletionState.KEY_PROVIDER_WARNING_TEXT]
+                ?.toString().orEmpty()
+            if (chatMessage["isBot"] == true && providerWarning.isNotBlank() &&
+                state != MessageCompletionState.STREAMING
+            ) {
+                marker.text = context.getString(R.string.provider_warning_title) + "\n" + providerWarning
+                marker.visibility = View.VISIBLE
+                return
+            }
             // A deliberate user Stop is not an error and shows no marker at all
             // (owner ruling, Aug 8 2026); a complete or still-streaming reply
             // never shows one either.
@@ -1665,15 +1780,68 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val isLast = position == dataArray.size - 1
             if (isBot && (!isImage || isLast)) {
                 btnRetry.visibility = View.VISIBLE
-                btnRetry.setOnClickListener {
-                    if (!bulkActionMode) {
-                        val pos = bindingAdapterPosition
-                        listener?.onRegenerate(if (pos != RecyclerView.NO_POSITION) pos else position)
+                val lockKind = regenerationLockKind(position)
+                if (lockKind != null) {
+                    btnRetry.setImageResource(R.drawable.ic_rule_settings)
+                    btnRetry.contentDescription =
+                        context.getString(R.string.regenerate_unavailable_title)
+                    btnRetry.tooltipText = context.getString(R.string.regenerate_unavailable_title)
+                    btnRetry.setOnClickListener { anchor ->
+                        if (!bulkActionMode) showRegenerateUnavailablePopup(anchor, lockKind)
+                    }
+                } else {
+                    btnRetry.setImageResource(R.drawable.ic_retry)
+                    btnRetry.contentDescription = context.getString(R.string.btn_msg_retry)
+                    btnRetry.tooltipText = context.getString(R.string.btn_msg_retry)
+                    btnRetry.setOnClickListener {
+                        if (!bulkActionMode) {
+                            val pos = bindingAdapterPosition
+                            listener?.onRegenerate(
+                                if (pos != RecyclerView.NO_POSITION) pos else position
+                            )
+                        }
                     }
                 }
             } else {
                 btnRetry.visibility = View.GONE
+                btnRetry.setOnClickListener(null)
             }
+        }
+
+        /** Small anchored, outside-dismissed explanation for immutable history. */
+        private fun showRegenerateUnavailablePopup(
+            anchor: View,
+            kind: CondensedRegenerationLock.Kind
+        ) {
+            val content = LayoutInflater.from(context)
+                .inflate(R.layout.view_regenerate_unavailable_popup, null)
+            content.findViewById<TextView>(R.id.regenerate_unavailable_body).setText(
+                when (kind) {
+                    CondensedRegenerationLock.Kind.SUMMARY ->
+                        R.string.regenerate_unavailable_summary
+                    CondensedRegenerationLock.Kind.COMPACTION ->
+                        R.string.regenerate_unavailable_compaction
+                }
+            )
+            val popup = PopupWindow(
+                content,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                true
+            )
+            popup.isOutsideTouchable = true
+            popup.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            popup.elevation = anchor.resources.displayMetrics.density * 8f
+            content.measure(
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+            )
+            popup.showAsDropDown(
+                anchor,
+                0,
+                -(anchor.height + content.measuredHeight),
+                Gravity.START
+            )
         }
 
         /**
@@ -1691,6 +1859,15 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             } else {
                 preferences.getShowUserBubble()
             }
+            val placeOnStart = ChatMessagePlacement.usesLogicalStart(
+                isBot = isBot,
+                staggeredResponses = preferences.getStaggeredResponses()
+            )
+
+            boundIsBot = isBot
+            boundShowsPortrait = showPortrait
+            boundShowsName = showName
+            boundIsGeneratedImage = isImage
 
             ui.setBackgroundColor(0x00000000)
 
@@ -1717,7 +1894,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 if (isBot) displayAvatar() else displayUserAvatar()
             }
 
-            updateIdentityGeometry(isBot, showPortrait, showName, showBubble, isImage)
+            updateSpeakerPlacement(placeOnStart)
+            updateIdentityGeometry(
+                placeOnStart,
+                showPortrait,
+                showName,
+                showBubble,
+                isImage
+            )
             updateBubbleDecoration(isBot, showBubble)
         }
 
@@ -1775,6 +1959,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * updateSpeakButton, which owns its speaking-state color.
          */
         private fun tintActionIcons(foreground: Int) {
+            actionIconForeground = foreground
             btnActiveMemories?.setColorFilter(foreground)
             btnDetails.setColorFilter(foreground)
             btnPersistentIncludes?.setColorFilter(foreground)
@@ -1783,6 +1968,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             btnCopy.setColorFilter(foreground)
             btnEdit.setColorFilter(foreground)
             btnMore?.setColorFilter(foreground)
+            btnSpeakTop?.setColorFilter(foreground)
             // The version pager sits on the same bar and follows the same
             // bubble foreground so its glyphs and count read on any theme.
             btnVersionPrev?.setColorFilter(foreground)
@@ -1792,6 +1978,16 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             // The reasoning indicator rides the same bar and follows the same
             // bubble foreground so its glyph reads on any theme.
             reasoningIndicator?.setColorFilter(foreground)
+            // The Thinking chevron was only ever tinted by its authored XML
+            // ?attr/colorPrimary, the same bug class described above — against
+            // some bubble/theme combinations that left it the same color as
+            // its background, effectively invisible. It now follows the same
+            // live bubble foreground as every other glyph here. The complete
+            // Thinking disclosure uses the same resolved foreground so its
+            // label, chevron, and revealed body move together across themes.
+            reasoningChevron?.setColorFilter(foreground)
+            reasoningLabel?.setTextColor(foreground)
+            reasoningText?.setTextColor(foreground)
         }
 
         /** Bind the response-version-local Active Memories action. */
@@ -1815,6 +2011,80 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         }
 
         /**
+         * Moves every user-only child to the same logical edge used by the
+         * assistant renderer while preserving user colors, actions, and data.
+         * Logical start/end lets Android mirror the complete arrangement in RTL.
+         */
+        private fun updateSpeakerPlacement(placeOnStart: Boolean) {
+            messageRow?.let { row ->
+                val params = row.layoutParams as ViewGroup.MarginLayoutParams
+                params.marginStart = dimensionPixelSize(
+                    if (placeOnStart) {
+                        R.dimen.chat_message_speaker_inset
+                    } else {
+                        R.dimen.chat_message_user_left_inset
+                    }
+                )
+                params.marginEnd = dimensionPixelSize(
+                    if (placeOnStart) {
+                        R.dimen.chat_message_ai_right_inset
+                    } else {
+                        R.dimen.chat_message_speaker_inset
+                    }
+                )
+                row.layoutParams = params
+                row.gravity = if (placeOnStart) Gravity.START else Gravity.END
+            }
+
+            message.tag = if (placeOnStart) "ai" else "user"
+            constrainToSpeakerEdge(message, placeOnStart)
+            constrainToSpeakerEdge(includeBookmarks, placeOnStart)
+            constrainToSpeakerEdge(messageActionsRow, placeOnStart)
+            constrainToSpeakerEdge(includeSummary, placeOnStart)
+
+            val imageParams = imageFrame.layoutParams as? ConstraintLayout.LayoutParams
+            if (imageParams != null) {
+                imageParams.startToStart = if (placeOnStart) {
+                    ConstraintLayout.LayoutParams.PARENT_ID
+                } else {
+                    ConstraintLayout.LayoutParams.UNSET
+                }
+                imageParams.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+                imageFrame.layoutParams = imageParams
+            }
+
+            val iconParams = icon.layoutParams as ConstraintLayout.LayoutParams
+            iconParams.startToStart = ConstraintLayout.LayoutParams.UNSET
+            iconParams.endToEnd = ConstraintLayout.LayoutParams.UNSET
+            iconParams.setMarginStart(0)
+            iconParams.setMarginEnd(0)
+            val portraitEdge = dimensionPixelSize(R.dimen.chat_portrait_edge_inset)
+            if (placeOnStart) {
+                iconParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+                iconParams.setMarginStart(portraitEdge)
+            } else {
+                iconParams.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+                iconParams.setMarginEnd(portraitEdge)
+            }
+            icon.layoutParams = iconParams
+        }
+
+        private fun constrainToSpeakerEdge(view: View?, placeOnStart: Boolean) {
+            val params = view?.layoutParams as? ConstraintLayout.LayoutParams ?: return
+            params.startToStart = if (placeOnStart) {
+                ConstraintLayout.LayoutParams.PARENT_ID
+            } else {
+                ConstraintLayout.LayoutParams.UNSET
+            }
+            params.endToEnd = if (placeOnStart) {
+                ConstraintLayout.LayoutParams.UNSET
+            } else {
+                ConstraintLayout.LayoutParams.PARENT_ID
+            }
+            view.layoutParams = params
+        }
+
+        /**
          * Places the portrait, speaker name, and bubble.
          *
          * Generated images use the same horizontal assistant-message geometry
@@ -1829,7 +2099,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          * keeps its original placement untouched.
          */
         private fun updateIdentityGeometry(
-            isBot: Boolean,
+            placeOnStart: Boolean,
             showPortrait: Boolean,
             showName: Boolean,
             showBubble: Boolean,
@@ -1854,9 +2124,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             }
             bubbleBg.layoutParams = bubbleParams
 
-            // The bubble remains on the same speaker side as a normal response.
-            // Only the generated image inside it is centered.
-            messageRow?.gravity = if (isBot) Gravity.START else Gravity.END
+            // The bubble follows the selected logical speaker edge. Only a
+            // generated image inside it is centered.
+            messageRow?.gravity = if (placeOnStart) Gravity.START else Gravity.END
 
             bubbleBg.setPadding(
                 contentPadding,
@@ -1876,9 +2146,9 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             nameParams.setMarginEnd(0)
 
             if (showPortrait) {
-                val edge = dimensionPixelSize(R.dimen.chat_name_portrait_edge_inset)
+                val edge = portraitNameInsetPx(placeOnStart)
                 nameParams.topMargin = dimensionPixelSize(R.dimen.chat_name_portrait_top)
-                if (isBot) {
+                if (placeOnStart) {
                     nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
                     nameParams.setMarginStart(edge)
                 } else {
@@ -1891,7 +2161,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 // a label above the message instead of sitting on the border.
                 val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) + contentPadding
                 nameParams.topMargin = contentPadding
-                if (isBot) {
+                if (placeOnStart) {
                     nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
                     nameParams.setMarginStart(edge)
                 } else {
@@ -1902,7 +2172,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 val edge = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
                     dimensionPixelSize(R.dimen.chat_name_bubble_edge_offset)
                 nameParams.topMargin = 0
-                if (isBot) {
+                if (placeOnStart) {
                     nameParams.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
                     nameParams.setMarginStart(edge)
                 } else {
@@ -1911,6 +2181,29 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 }
             }
             username.layoutParams = nameParams
+
+            // The compact metadata line lives inside the bubble and normally
+            // starts at the bubble's own content edge, which already lines up
+            // with the name when there is no portrait (both are inset by the
+            // same speaker margin). With a portrait, the name is pushed right
+            // to clear it while the bubble is not, so the metadata line needs
+            // its own extra start margin to keep lining up under the name
+            // (owner spec, Aug 23 2026). Only applies when the name is
+            // actually shown beside the portrait; otherwise the metadata line
+            // keeps its default bubble-edge position.
+            messageMeta?.let { meta ->
+                val metaParams = meta.layoutParams as ConstraintLayout.LayoutParams
+                metaParams.marginStart = if (showPortrait) {
+                    preliminaryMetaPortraitStartPx(placeOnStart)
+                } else {
+                    0
+                }
+                // The first visible content block receives the measured name
+                // clearance in updatePortraitFlowGeometry after metadata and
+                // Thinking visibility are known.
+                metaParams.topMargin = 0
+                meta.layoutParams = metaParams
+            }
 
             // When there is no portrait, reserve the same name-to-body gap as a
             // normal response before the image begins. With a portrait the whole
@@ -1978,28 +2271,206 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val msg = chatMessage["message"].toString()
             val speakable = chatMessage["isBot"] == true &&
                     !msg.contains("~file:")
-            if (speakable) {
-                btnSpeak.visibility = View.VISIBLE
-                if (position == speakingPosition) {
-                    btnSpeak.setColorFilter(
-                        ResourcesCompat.getColor(context.resources, R.color.mic_listening_green, context.theme)
+            val useTopControl = preferences.getTopPositionedAudioControl() && btnSpeakTop != null
+            btnSpeak.visibility = if (speakable && !useTopControl) View.VISIBLE else View.GONE
+            btnSpeakTop?.visibility = if (speakable && useTopControl) View.VISIBLE else View.GONE
+
+            val click = View.OnClickListener {
+                if (!bulkActionMode) {
+                    val pos = bindingAdapterPosition
+                    listener?.onSpeakClick(
+                        msg,
+                        if (pos != RecyclerView.NO_POSITION) pos else position
                     )
-                } else {
-                    btnSpeak.clearColorFilter()
                 }
-                btnSpeak.setOnClickListener {
-                    if (!bulkActionMode) {
-                        val pos = bindingAdapterPosition
-                        listener?.onSpeakClick(msg, if (pos != RecyclerView.NO_POSITION) pos else position)
-                    }
-                }
-            } else {
-                btnSpeak.visibility = View.GONE
+            }
+            val speakingColor = ResourcesCompat.getColor(
+                context.resources,
+                R.color.mic_listening_green,
+                context.theme
+            )
+            val normalColor = actionIconForeground
+                ?: ResourcesCompat.getColor(context.resources, R.color.text, context.theme)
+
+            listOfNotNull(btnSpeak, btnSpeakTop).forEach { button ->
+                button.setOnClickListener(if (speakable) click else null)
+                button.setColorFilter(if (position == speakingPosition) speakingColor else normalColor)
             }
         }
 
+        /**
+         * Treats the rendered portrait as a temporary exclusion rectangle.
+         * Vertical margins select the first visible block after the optional
+         * name. Horizontal margins are applied only while each block actually
+         * intersects the portrait. Opened Thinking content and the answer then
+         * remeasure themselves line by line against the same live bounds.
+         */
+        private fun updatePortraitFlowGeometry() {
+            val metaVisible = messageMeta?.visibility == View.VISIBLE
+            val reasoningVisible = reasoningContainer?.visibility == View.VISIBLE
+            val nameVisible = boundShowsName && username.visibility == View.VISIBLE
+            val topAudioVisible = btnSpeakTop?.visibility == View.VISIBLE
+            val identityVisible = nameVisible || topAudioVisible
+
+            val metaNameClearance = if (identityVisible) measuredIdentityClearancePx(0) else 0
+            val bodyNameClearance = if (identityVisible) {
+                measuredIdentityClearancePx(dimensionPixelSize(R.dimen.chat_name_body_gap))
+            } else {
+                0
+            }
+
+            setTopMargin(messageMeta, if (metaVisible) metaNameClearance else 0)
+            setTopMargin(
+                reasoningContainer,
+                if (!reasoningVisible) {
+                    0
+                } else if (metaVisible) {
+                    // One intentionally blank metadata line before Thinking.
+                    messageMeta?.lineHeight ?: 0
+                } else {
+                    bodyNameClearance
+                }
+            )
+            setTopMargin(
+                message,
+                if (boundIsGeneratedImage || metaVisible || reasoningVisible) 0
+                else bodyNameClearance
+            )
+
+            val portraitVisible = boundShowsPortrait && icon.visibility == View.VISIBLE &&
+                ui.width > 0 && icon.width > 0
+            if (portraitVisible) {
+                val portraitBounds = boundsInRow(icon)
+                if (nameVisible) updateMeasuredNameInset(portraitBounds)
+                setPortraitSideMargin(
+                    messageMeta,
+                    if (metaVisible) portraitBounds else null,
+                    dimensionPixelSize(R.dimen.chat_portrait_name_gap)
+                )
+                setPortraitSideMargin(
+                    reasoningHeader,
+                    if (reasoningVisible) portraitBounds else null,
+                    dimensionPixelSize(R.dimen.chat_portrait_text_gap)
+                )
+            } else if (!boundShowsPortrait || icon.visibility != View.VISIBLE) {
+                setSideMargins(messageMeta, portraitOnStart = true, desired = 0)
+                setSideMargins(reasoningHeader, portraitOnStart = true, desired = 0)
+            }
+
+            message.requestPortraitGeometryUpdate()
+            reasoningText?.requestPortraitGeometryUpdate()
+        }
+
+        private fun measuredIdentityClearancePx(afterNameGap: Int): Int {
+            if (ui.width > 0 && bubbleBg.height > 0 &&
+                (username.height > 0 || (btnSpeakTop?.height ?: 0) > 0)
+            ) {
+                val identityBottom = listOfNotNull(
+                    username.takeIf { it.visibility == View.VISIBLE }?.let(::boundsInRow)?.bottom,
+                    btnSpeakTop?.takeIf { it.visibility == View.VISIBLE }?.let(::boundsInRow)?.bottom
+                ).maxOrNull() ?: 0
+                val bubbleBounds = boundsInRow(bubbleBg)
+                return (identityBottom + afterNameGap -
+                    (bubbleBounds.top + bubbleBg.paddingTop)).coerceAtLeast(0)
+            }
+
+            val nameParams = username.layoutParams as ViewGroup.MarginLayoutParams
+            val bubbleParams = bubbleBg.layoutParams as ViewGroup.MarginLayoutParams
+            val identityHeight = maxOf(
+                username.measuredHeight.coerceAtLeast(username.lineHeight),
+                btnSpeakTop?.measuredHeight ?: 0
+            )
+            return (nameParams.topMargin + identityHeight + afterNameGap -
+                bubbleParams.topMargin - bubbleBg.paddingTop).coerceAtLeast(0)
+        }
+
+        private fun updateMeasuredNameInset(portraitBounds: Rect) {
+            val gap = dimensionPixelSize(R.dimen.chat_portrait_name_gap)
+            val portraitOnLeft = portraitIsOnLeft(portraitBounds)
+            val portraitOnStart = physicalLeftIsStart() == portraitOnLeft
+            val desired = if (portraitOnLeft) {
+                portraitBounds.right + gap
+            } else {
+                ui.width - portraitBounds.left + gap
+            }
+            setSideMargins(username, portraitOnStart, desired)
+        }
+
+        private fun setPortraitSideMargin(view: View?, portrait: Rect?, gap: Int) {
+            if (view == null || portrait == null || view.visibility != View.VISIBLE ||
+                view.width <= 0 || view.height <= 0) {
+                setSideMargins(view, portraitOnStart = true, desired = 0)
+                return
+            }
+            val bounds = boundsInRow(view)
+            if (!PortraitExclusionGeometry.overlaps(
+                    portrait.top, portrait.bottom, bounds.top, bounds.bottom
+                )) {
+                setSideMargins(view, portraitOnStart = true, desired = 0)
+                return
+            }
+
+            val portraitOnLeft = portraitIsOnLeft(portrait)
+            val portraitOnStart = physicalLeftIsStart() == portraitOnLeft
+            val params = view.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+            val currentMargin = if (portraitOnStart) params.marginStart else params.marginEnd
+            val desired = if (portraitOnLeft) {
+                val naturalLeft = bounds.left - currentMargin
+                portrait.right + gap - naturalLeft
+            } else {
+                val naturalRight = bounds.right + currentMargin
+                naturalRight - portrait.left + gap
+            }
+            setSideMargins(view, portraitOnStart, desired.coerceAtLeast(0))
+        }
+
+        private fun portraitIsOnLeft(portrait: Rect): Boolean =
+            portrait.left + portrait.right <= ui.width
+
+        private fun physicalLeftIsStart(): Boolean =
+            ui.layoutDirection != View.LAYOUT_DIRECTION_RTL
+
+        private fun setSideMargins(view: View?, portraitOnStart: Boolean, desired: Int) {
+            val params = view?.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+            val start = if (portraitOnStart) desired else 0
+            val end = if (portraitOnStart) 0 else desired
+            if (params.marginStart == start && params.marginEnd == end) return
+            params.marginStart = start
+            params.marginEnd = end
+            view.layoutParams = params
+        }
+
+        private fun setTopMargin(view: View?, desired: Int) {
+            val params = view?.layoutParams as? ViewGroup.MarginLayoutParams ?: return
+            if (params.topMargin == desired) return
+            params.topMargin = desired
+            view.layoutParams = params
+        }
+
+        private fun boundsInRow(view: View): Rect {
+            val bounds = Rect(0, 0, view.width, view.height)
+            ui.offsetDescendantRectToMyCoords(view, bounds)
+            return bounds
+        }
         private fun dimensionPixelSize(resource: Int): Int =
             context.resources.getDimensionPixelSize(resource)
+
+        /** Initial bind geometry; measured row bounds replace it after layout. */
+        private fun portraitNameInsetPx(placeOnStart: Boolean): Int {
+            val params = icon.layoutParams as ViewGroup.MarginLayoutParams
+            val edge = if (placeOnStart) params.marginStart else params.marginEnd
+            val portraitWidth = icon.measuredWidth.takeIf { it > 0 }
+                ?: params.width.takeIf { it > 0 }
+                ?: dimensionPixelSize(R.dimen.chat_portrait_size)
+            return edge + portraitWidth +
+                dimensionPixelSize(R.dimen.chat_portrait_name_gap)
+        }
+
+        private fun preliminaryMetaPortraitStartPx(placeOnStart: Boolean): Int {
+            val bubbleContentStart = dimensionPixelSize(R.dimen.chat_message_speaker_inset) +
+                dimensionPixelSize(R.dimen.chat_message_content_padding)
+            return (portraitNameInsetPx(placeOnStart) - bubbleContentStart).coerceAtLeast(0)
+        }
 
         private fun resolveThemeColor(attribute: Int): Int {
             val value = TypedValue()

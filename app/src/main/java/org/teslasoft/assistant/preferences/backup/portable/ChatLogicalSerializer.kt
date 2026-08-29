@@ -117,7 +117,7 @@ object ChatLogicalSerializer {
             for (chat in listResult.chats) {
                 val storedName = chat["name"]
                 val name = storedNameForId(storedName)
-                val chatId = Hash.hash(name)
+                val chatId = ChatPreferences.storedChatId(chat)
 
                 val history = chatPreferences.getChatByIdResult(context, chatId)
                 if (!ChatStorageHealth.isAuthoritative(history.state)) {

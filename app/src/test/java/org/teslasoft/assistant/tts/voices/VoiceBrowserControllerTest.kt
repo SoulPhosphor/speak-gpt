@@ -1,0 +1,305 @@
+package org.teslasoft.assistant.tts.voices
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class VoiceBrowserControllerTest {
+    private val googleVoice = BrowserVoice(
+        providerId = "google",
+        providerVoiceId = "en-us-x-iom-network",
+        displayName = "Voice 1",
+        language = VoiceFacetValue("en", "English"),
+        region = VoiceFacetValue("US", "United States"),
+        quality = VoiceFacetValue("high", "High"),
+        requiresNetwork = true,
+        canPreview = true
+    )
+
+    @Test fun existingStoredGoogleIdStillResolvesExactly() {
+        val google = FakeProvider("google", listOf(googleVoice), activeId = googleVoice.providerVoiceId)
+        val controller = VoiceBrowserController(listOf(google), "google")
+        controller.load { }
+        assertEquals(googleVoice.providerVoiceId, controller.provider.activeVoiceId())
+        assertEquals(googleVoice.providerVoiceId, controller.visibleVoices().single().providerVoiceId)
+    }
+
+    @Test fun browsingAnotherProviderDoesNotActivateIt() {
+        val google = FakeProvider("google", listOf(googleVoice), activeId = googleVoice.providerVoiceId)
+        val openAi = FakeProvider("openai", listOf(googleVoice.copy(providerId = "openai", providerVoiceId = "nova")))
+        val controller = VoiceBrowserController(listOf(google, openAi), "google")
+        controller.browse("openai") { }
+        assertEquals(0, openAi.activations)
+        assertEquals(googleVoice.providerVoiceId, google.activeVoiceId())
+    }
+
+    @Test fun locationLanguageAndRegionFiltersUseNormalizedProperties() {
+        val local = googleVoice.copy(providerVoiceId = "local", requiresNetwork = false)
+        val uk = googleVoice.copy(
+            providerVoiceId = "uk",
+            region = VoiceFacetValue("GB", "United Kingdom"),
+            requiresNetwork = false
+        )
+        val state = VoiceFilterState(VoiceLocation.ON_DEVICE, mutableMapOf(VoiceFacet.REGION to "GB"))
+        assertEquals(listOf("uk"), VoiceBrowserFilters.apply(listOf(googleVoice, local, uk), state).map { it.providerVoiceId })
+    }
+
+    @Test fun unsupportedFiltersAreNotDefined() {
+        val definitions = VoiceBrowserFilters.definitions(listOf(googleVoice.copy(quality = null)))
+        assertFalse(definitions.any { it.facet == VoiceFacet.GENDER })
+        assertFalse(definitions.any { it.facet == VoiceFacet.QUALITY })
+        assertTrue(definitions.any { it.facet == VoiceFacet.LANGUAGE })
+    }
+
+    @Test fun opaqueGoogleCodesNeverProduceGuessedGender() {
+        assertNull(GoogleVoiceMetadata.explicitGender(listOf("en-us-x-iom-network", "sfg", "tpf")))
+        assertEquals("female", GoogleVoiceMetadata.explicitGender(listOf("en-US-language#female_1-local"))?.id)
+        assertEquals("male", GoogleVoiceMetadata.explicitGender(listOf("gender=male"))?.id)
+    }
+
+    @Test fun androidQualityConstantsMapToReadableLabels() {
+        assertEquals("Very Low", VoiceQualityLabels.fromAndroidQuality(100)?.label)
+        assertEquals("Normal", VoiceQualityLabels.fromAndroidQuality(300)?.label)
+        assertEquals("Very High", VoiceQualityLabels.fromAndroidQuality(500)?.label)
+        assertNull(VoiceQualityLabels.fromAndroidQuality(123))
+    }
+
+    @Test fun googleNumberingNeverRenumbersOrReusesMissingAssignments() {
+        val first = GoogleVoiceNumberRegistry.assign(emptyMap(), 1, listOf("voice-z", "voice-a"))
+        assertEquals(1, first.assignments["voice-a"])
+        assertEquals(2, first.assignments["voice-z"])
+        val afterPackChange = GoogleVoiceNumberRegistry.assign(first.assignments, first.nextNumber, listOf("voice-new"))
+        assertEquals(1, afterPackChange.assignments["voice-a"])
+        assertEquals(2, afterPackChange.assignments["voice-z"])
+        assertEquals(3, afterPackChange.assignments["voice-new"])
+    }
+
+    @Test fun onlyMissingLocalDataRequiresDownload() {
+        assertTrue(GoogleVoiceMetadata.isDownloadRequired(false, setOf("notInstalled"), "notInstalled"))
+        assertFalse(GoogleVoiceMetadata.isDownloadRequired(false, emptySet(), "notInstalled"))
+        assertFalse(GoogleVoiceMetadata.isDownloadRequired(true, setOf("notInstalled"), "notInstalled"))
+    }
+
+    @Test fun exactGoogleVoiceDownloadAcceptsSuccessAndTemporaryNotInstalledResults() {
+        assertTrue(GoogleVoiceDownloadPolicy.targetAccepted(android.speech.tts.TextToSpeech.SUCCESS))
+        assertTrue(GoogleVoiceDownloadPolicy.targetAccepted(android.speech.tts.TextToSpeech.ERROR_NOT_INSTALLED_YET))
+        assertFalse(GoogleVoiceDownloadPolicy.targetAccepted(android.speech.tts.TextToSpeech.ERROR))
+    }
+
+    @Test fun exactGoogleVoiceDownloadConfirmsTheMissingFeatureDisappeared() {
+        val missing = setOf(android.speech.tts.TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)
+        assertTrue(GoogleVoiceDownloadPolicy.isNotInstalled(
+            missing,
+            android.speech.tts.TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED
+        ))
+        assertFalse(GoogleVoiceDownloadPolicy.isNotInstalled(
+            emptySet(),
+            android.speech.tts.TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED
+        ))
+    }
+
+    @Test fun onlyAnActiveGoogleVoiceWithMissingLocalDataRequiresExitWarning() {
+        val missingGoogleVoice = googleVoice.copy(
+            requiresNetwork = false,
+            installedLocally = false,
+            downloadable = true,
+            canPreview = false
+        )
+        assertTrue(VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(missingGoogleVoice))
+        assertFalse(VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(
+            missingGoogleVoice.copy(installedLocally = true, downloadable = false, canPreview = true)
+        ))
+        assertFalse(VoiceSelectionExitPolicy.requiresUnavailableVoiceWarning(
+            missingGoogleVoice.copy(providerId = "openai")
+        ))
+    }
+
+    @Test fun userIdentityOverrideReplacesDisplayNameAndProviderGenderWithoutLosingOriginals() {
+        val providerGender = VoiceFacetValue("female", "Female")
+        val original = googleVoice.copy(
+            displayName = "Voice 500",
+            originalDisplayName = "Voice 500",
+            gender = providerGender,
+            providerGender = providerGender
+        )
+        val renamed = VoiceIdentityRegistry.applyOverride(
+            original,
+            VoiceIdentityRegistry.VoiceIdentityOverride("Fred", "neutral")
+        )
+
+        assertEquals("Fred", renamed.displayName)
+        assertEquals("neutral", renamed.gender?.id)
+        assertEquals("neutral", renamed.userAssignedGender?.id)
+        assertEquals("female", renamed.providerGender?.id)
+        assertEquals("Voice 500", renamed.originalDisplayName)
+        assertEquals(original.providerVoiceId, renamed.providerVoiceId)
+    }
+
+    @Test fun identityOverrideCodecRoundTripsProviderScopedVoiceKeys() {
+        val id = VoiceIdentityRegistry.key("openai", "server-voice-name")
+        val expected = mapOf(id to VoiceIdentityRegistry.VoiceIdentityOverride("Fred", "male"))
+        assertEquals(expected, VoiceIdentityRegistry.decode(VoiceIdentityRegistry.encode(expected)))
+    }
+
+    @Test fun userAssignedGenderCreatesOnlyTheAvailableGenderFilterOption() {
+        val neutral = VoiceIdentityRegistry.applyOverride(
+            googleVoice.copy(gender = null, providerGender = null),
+            VoiceIdentityRegistry.VoiceIdentityOverride("Voice 1", "neutral")
+        )
+        val gender = VoiceBrowserFilters.definitions(listOf(neutral)).single { it.facet == VoiceFacet.GENDER }
+        assertEquals(listOf("neutral"), gender.options.map { it.id })
+    }
+
+    @Test fun previewDoesNotSelectButRowSelectionDoes() {
+        val google = FakeProvider("google", listOf(googleVoice))
+        val controller = VoiceBrowserController(listOf(google), "google")
+        controller.preview(googleVoice, VoicePreviewText.DEFAULT, onFailure = { error(it) })
+        assertEquals(1, google.previews)
+        assertEquals(0, google.activations)
+        controller.select(googleVoice)
+        assertEquals(1, google.activations)
+        assertEquals(googleVoice.providerVoiceId, google.activeVoiceId())
+    }
+
+    @Test fun filterEmptyAndProviderFailureRemainDifferentStates() {
+        val google = FakeProvider("google", listOf(googleVoice))
+        val failed = FakeProvider("failed", emptyList(), failure = IllegalStateException("engine unavailable"))
+        val controller = VoiceBrowserController(listOf(google, failed), "google")
+        controller.load { }
+        controller.filterState.selectedFacetValues[VoiceFacet.REGION] = "AU"
+        assertTrue(controller.visibleVoices().isEmpty())
+        assertTrue(controller.loadState is VoiceLoadState.Ready)
+        controller.browse("failed") { }
+        assertTrue(controller.loadState is VoiceLoadState.Failed)
+    }
+
+    @Test fun closingBrowserShutsDownEveryProvider() {
+        val first = FakeProvider("google", listOf(googleVoice))
+        val second = FakeProvider("openai", emptyList())
+        VoiceBrowserController(listOf(first, second), "google").shutdown()
+        assertTrue(first.closed)
+        assertTrue(second.closed)
+    }
+
+    @Test fun lateResultFromPreviousProviderIsIgnored() {
+        val google = DelayedProvider("google")
+        val openAi = DelayedProvider("openai")
+        val controller = VoiceBrowserController(listOf(google, openAi), "google")
+        controller.load { }
+        controller.browse("openai") { }
+        openAi.complete(listOf(googleVoice.copy(providerId = "openai", providerVoiceId = "river")))
+        google.complete(listOf(googleVoice))
+        assertEquals("openai", controller.browsedProviderId)
+        assertEquals("river", controller.visibleVoices().single().providerVoiceId)
+    }
+
+    @Test fun voicesStillRequiringDownloadAreHiddenFromTheList() {
+        val installed = googleVoice.copy(
+            providerVoiceId = "installed",
+            requiresNetwork = false,
+            downloadable = false,
+            canPreview = true
+        )
+        val needsDownload = googleVoice.copy(
+            providerVoiceId = "needs-download",
+            requiresNetwork = false,
+            downloadable = true,
+            canPreview = false
+        )
+        val google = FakeProvider("google", listOf(installed, needsDownload))
+        val controller = VoiceBrowserController(listOf(google), "google")
+        controller.load { }
+        assertEquals(listOf("installed"), controller.visibleVoices().map { it.providerVoiceId })
+    }
+
+    @Test fun replacingSavedRegistrationsKeepsStableBrowseIdentityAndDropsOldCallbacks() {
+        val google = FakeProvider("google", listOf(googleVoice))
+        val old = DelayedProvider("api-tts:a")
+        val controller = VoiceBrowserController(listOf(google, old), "api-tts:a")
+        controller.load { }
+        val replacement = FakeProvider("api-tts:a", listOf(googleVoice.copy(providerId = "api-tts:a", providerVoiceId = "new")))
+        val second = FakeProvider("api-tts:b", emptyList())
+        controller.replaceProviders(listOf(google, replacement, second)) { }
+        old.complete(listOf(googleVoice.copy(providerId = "api-tts:a", providerVoiceId = "stale")))
+        assertEquals("api-tts:a", controller.browsedProviderId)
+        assertEquals(listOf("google", "api-tts:a", "api-tts:b"), controller.availableProviders.map { it.id })
+        assertEquals("new", controller.visibleVoices().single().providerVoiceId)
+        controller.replaceProviders(listOf(google, second)) { }
+        assertTrue(replacement.closed)
+        assertEquals("google", controller.browsedProviderId)
+        assertEquals(0, google.activations)
+    }
+
+    @Test fun pausedOrDestroyedBrowserRejectsLateLoads() {
+        val source = DelayedProvider("api-tts:a")
+        val controller = VoiceBrowserController(listOf(source), "api-tts:a")
+        controller.load { }
+        controller.suspendLoads()
+        source.complete(listOf(googleVoice.copy(providerId = source.id)))
+        assertEquals(VoiceLoadState.Loading, controller.loadState)
+    }
+
+    @Test fun failedApiListRemainsRegisteredAndReopeningCanRecover() {
+        val source = DelayedProvider("api-tts:a")
+        val controller = VoiceBrowserController(listOf(source), source.id)
+        controller.load { }
+        source.fail(IllegalStateException("No supported voice source"))
+        assertTrue(controller.loadState is VoiceLoadState.Failed)
+        assertEquals(listOf(source), controller.availableProviders)
+        controller.browse(source.id) { }
+        source.complete(listOf(googleVoice.copy(providerId = source.id)))
+        assertEquals(1, controller.visibleVoices().size)
+    }
+
+    @Test fun sameVoiceIdsUnderDifferentSavedSourcesHaveSeparateOverridesAndLoadedLists() {
+        val a = googleVoice.copy(providerId = "api-tts:a", providerVoiceId = "same")
+        val b = a.copy(providerId = "api-tts:b")
+        assertFalse(VoiceIdentityRegistry.key(a.providerId, a.providerVoiceId) == VoiceIdentityRegistry.key(b.providerId, b.providerVoiceId))
+        val controller = VoiceBrowserController(listOf(FakeProvider(a.providerId, listOf(a)), FakeProvider(b.providerId, listOf(b))), a.providerId)
+        controller.load { }
+        controller.updateVoice(a.copy(displayName = "Custom"))
+        controller.browse(b.providerId) { }
+        assertEquals(b.displayName, controller.visibleVoices().single().displayName)
+        assertEquals("Custom", controller.loadedVoice(a.providerId, "same")?.displayName)
+    }
+
+    private class FakeProvider(
+        override val id: String,
+        private val voices: List<BrowserVoice>,
+        private var activeId: String? = null,
+        private val failure: Throwable? = null
+    ) : VoiceBrowserProvider {
+        override val displayName = id
+        override val exposesLocationFilter = id == "google"
+        var activations = 0
+        var previews = 0
+        var closed = false
+
+        override fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit) {
+            onResult(failure?.let { Result.failure(it) } ?: Result.success(voices))
+        }
+        override fun activeVoiceId(): String? = activeId
+        override fun activate(voice: BrowserVoice) { activations++; activeId = voice.providerVoiceId }
+        override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit, onPlaybackChanged: (String?) -> Unit) { previews++ }
+        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
+        override fun stopPreview() = Unit
+        override fun shutdown() { closed = true }
+    }
+
+    private class DelayedProvider(override val id: String) : VoiceBrowserProvider {
+        override val displayName = id
+        override val exposesLocationFilter = false
+        private val callbacks = mutableListOf<(Result<List<BrowserVoice>>) -> Unit>()
+        override fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit) { callbacks += onResult }
+        fun complete(voices: List<BrowserVoice>) = callbacks.removeAt(0)(Result.success(voices))
+        fun fail(error: Throwable) = callbacks.removeAt(0)(Result.failure(error))
+        override fun activeVoiceId(): String? = null
+        override fun activate(voice: BrowserVoice) = Unit
+        override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit, onPlaybackChanged: (String?) -> Unit) = Unit
+        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
+        override fun stopPreview() = Unit
+        override fun shutdown() = Unit
+    }
+}

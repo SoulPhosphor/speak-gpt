@@ -167,7 +167,7 @@ class MainActivity : FragmentActivity() {
                 if (debuggerWindow?.visibility == View.VISIBLE) {
                     debuggerWindow?.visibility = View.GONE
                 } else {
-                    MaterialAlertDialogBuilder(this@MainActivity)
+                    MaterialAlertDialogBuilder(this@MainActivity, R.style.App_MaterialAlertDialog)
                         .setTitle(R.string.label_confirm_exit)
                         .setMessage(R.string.msg_confirm_exit)
                         .setPositiveButton(R.string.yes) { _, _ ->
@@ -183,7 +183,7 @@ class MainActivity : FragmentActivity() {
                     if (debuggerWindow?.visibility == View.VISIBLE) {
                         debuggerWindow?.visibility = View.GONE
                     } else {
-                        MaterialAlertDialogBuilder(this@MainActivity)
+                        MaterialAlertDialogBuilder(this@MainActivity, R.style.App_MaterialAlertDialog)
                             .setTitle(R.string.label_confirm_exit)
                             .setMessage(R.string.msg_confirm_exit)
                             .setPositiveButton(R.string.yes) { _, _ ->

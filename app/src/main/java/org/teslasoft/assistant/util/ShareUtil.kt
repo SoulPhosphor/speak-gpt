@@ -68,10 +68,10 @@ class ShareUtil {
                 context.startActivity(Intent.createChooser(shareIntent, "Share Image"))
             } catch (e: Exception) {
                 (context as Activity).runOnUiThread {
-                    MaterialAlertDialogBuilder(context)
+                    MaterialAlertDialogBuilder(context, org.teslasoft.assistant.R.style.App_MaterialAlertDialog)
                         .setTitle("Debug: Error")
                         .setMessage("Failed to share image: ${e.stackTraceToString()}")
-                        .setPositiveButton("OK") { dialog, _ -> dialog.dismiss() }
+                        .setPositiveButton(context.getString(org.teslasoft.assistant.R.string.btn_ok)) { dialog, _ -> dialog.dismiss() }
                         .show()
                 }
                 e.printStackTrace()

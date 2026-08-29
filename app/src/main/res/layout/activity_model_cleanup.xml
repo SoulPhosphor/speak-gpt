@@ -125,6 +125,32 @@
                 android:layout_marginTop="12dp"
                 android:text="@string/model_cleanup_delete_all"
                 android:visibility="gone" />
+
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/model_cleanup_tts_heading" />
+
+            <LinearLayout
+                android:id="@+id/container_unavailable_tts"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/text_no_unavailable_tts"
+                style="@style/Widget.App.Row.Subtitle"
+                android:layout_marginTop="8dp"
+                android:text="@string/model_cleanup_none" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_delete_all_tts"
+                style="@style/AppButton.Destructive"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:layout_marginTop="12dp"
+                android:text="@string/model_cleanup_delete_all"
+                android:visibility="gone" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -114,6 +114,16 @@ object ReportedProviderParser {
     }
 
     internal fun providerFromRoot(root: JsonObject): String? {
+        selectedProviderFromRoot(root)?.let { return it }
+        return root.get("provider")
+            ?.takeUnless { it.isJsonNull }
+            ?.takeIf { it.isJsonPrimitive }
+            ?.asString
+            ?.trim()
+            ?.ifBlank { null }
+    }
+
+    internal fun selectedProviderFromRoot(root: JsonObject): String? {
         val available = root.get("openrouter_metadata")
             ?.takeUnless { it.isJsonNull }
             ?.takeIf { it.isJsonObject }
@@ -143,13 +153,7 @@ object ReportedProviderParser {
                 }
             }
         }
-
-        return root.get("provider")
-            ?.takeUnless { it.isJsonNull }
-            ?.takeIf { it.isJsonPrimitive }
-            ?.asString
-            ?.trim()
-            ?.ifBlank { null }
+        return null
     }
 }
 
@@ -157,6 +161,7 @@ object ReportedProviderParser {
 internal class RawSseInspector {
     private var sseDataEvents = 0
     private var rawContentChunks = 0
+    private var reasoningCharacters = 0
     private var providerErrorReceived = false
     private var providerErrorSummary: String? = null
     private var finishReason: String? = null
@@ -172,6 +177,9 @@ internal class RawSseInspector {
     private var model: String? = null
     private var generationId: String? = null
     private var malformedDataEvents = 0
+    private val providerDiagnostics = mutableListOf<ProviderDiagnosticEvent>()
+    private var actualServingProvider: String? = null
+    private var providerAuthority: Int = 0
 
     /** Returns an API-reported provider if this line contains one. */
     fun acceptLine(line: String): String? {
@@ -193,6 +201,32 @@ internal class RawSseInspector {
         } catch (_: Exception) {
             malformedDataEvents++
             return null
+        }
+
+        val diagnostics = ProviderDiagnosticParser.parseSsePayload(payload)
+        if (diagnostics.isNotEmpty()) {
+            providerDiagnostics.addAll(diagnostics)
+            diagnostics.firstOrNull { it.isError }?.let { event ->
+                providerErrorReceived = true
+                event.message?.let { providerErrorSummary = it }
+            }
+        }
+        val selectedProvider = ReportedProviderParser.selectedProviderFromRoot(root)
+        val eventProvider = diagnostics.firstNotNullOfOrNull { it.actualServingProvider }
+        val topProvider = ReportedProviderParser.providerFromRoot(root)
+        when {
+            selectedProvider != null -> {
+                actualServingProvider = selectedProvider
+                providerAuthority = 3
+            }
+            eventProvider != null && providerAuthority < 2 -> {
+                actualServingProvider = eventProvider
+                providerAuthority = 2
+            }
+            topProvider != null && providerAuthority < 1 -> {
+                actualServingProvider = topProvider
+                providerAuthority = 1
+            }
         }
 
         if (generationId == null) {
@@ -225,6 +259,9 @@ internal class RawSseInspector {
             if (type.equals("response.done", ignoreCase = true)) {
                 protocolTerminalMarker = "response.done"
             }
+            if (type.contains("reasoning", ignoreCase = true)) {
+                root.stringOrNull("delta")?.let { reasoningCharacters += it.length }
+            }
         }
 
         root.get("choices")?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonArray }?.asJsonArray?.let { choices ->
@@ -240,6 +277,15 @@ internal class RawSseInspector {
                     ?.takeIf { it.isJsonObject }?.asJsonObject
                 val content = delta?.stringOrNull("content")
                 if (!content.isNullOrEmpty()) hasContent = true
+                if (delta != null) {
+                    listOf("reasoning", "reasoning_content", "reasoning_summary", "summary")
+                        .forEach { field ->
+                            delta.stringOrNull(field)?.let { reasoningCharacters += it.length }
+                        }
+                    delta.get("reasoning_details")?.let {
+                        reasoningCharacters += reasoningTextLength(it)
+                    }
+                }
             }
             if (hasContent) rawContentChunks++
         }
@@ -254,6 +300,7 @@ internal class RawSseInspector {
         }
 
         return ReportedProviderParser.providerFromRoot(root)
+            ?: diagnostics.firstNotNullOfOrNull { it.actualServingProvider }
     }
 
     fun finishNormally(): RawStreamObservation = snapshot(
@@ -273,6 +320,7 @@ internal class RawSseInspector {
         RawStreamObservation(
             sseDataEvents = sseDataEvents,
             rawContentChunks = rawContentChunks,
+            reasoningCharacters = reasoningCharacters,
             providerErrorReceived = providerErrorReceived,
             providerErrorSummary = providerErrorSummary,
             finishReason = finishReason,
@@ -289,7 +337,9 @@ internal class RawSseInspector {
             generationId = generationId,
             malformedDataEvents = malformedDataEvents,
             flowEndedNormally = flowEndedNormally,
-            flowException = flowException
+            flowException = flowException,
+            actualServingProvider = actualServingProvider,
+            providerDiagnostics = providerDiagnostics.toList()
         )
 
     private fun summarizeError(error: JsonObject): String {
@@ -303,6 +353,22 @@ internal class RawSseInspector {
         }
         return parts.joinToString("; ").ifBlank { "provider error event received" }
     }
+}
+
+/** Count provider reasoning strings without retaining them. */
+private fun reasoningTextLength(element: com.google.gson.JsonElement): Int = when {
+    element.isJsonNull -> 0
+    element.isJsonPrimitive -> 0
+    element.isJsonArray -> element.asJsonArray.sumOf(::reasoningTextLength)
+    element.isJsonObject -> element.asJsonObject.entrySet().sumOf { (key, value) ->
+        when {
+            key.equals("text", true) || key.equals("summary", true) || key.equals("content", true) ->
+                try { value.takeIf { it.isJsonPrimitive }?.asString?.length ?: reasoningTextLength(value) }
+                catch (_: Exception) { 0 }
+            else -> reasoningTextLength(value)
+        }
+    }
+    else -> 0
 }
 
 private fun JsonObject.stringOrNull(name: String): String? = try {

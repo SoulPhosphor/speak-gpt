@@ -33,6 +33,11 @@ class ChatPreferences private constructor() {
     companion object {
         private var preferences: ChatPreferences? = null
 
+        /** Existing IDs are authoritative. The fallback only reads legacy entries
+         *  with no ID; it never rewrites or migrates them. */
+        fun storedChatId(chat: Map<String, String>): String =
+            chat["id"] ?: Hash.hash(chat["name"].toString())
+
         fun getChatPreferences() : ChatPreferences {
             if (preferences == null) preferences = ChatPreferences()
             return preferences!!
@@ -124,12 +129,16 @@ class ChatPreferences private constructor() {
 
     /**
      * Summarizer state keys inside `settings.<chatId>`: the rolling summary,
-     * its fold-in bookmark, the over-length marker, the failure episode, and
-     * the per-chat error log.
+     * its projection contract, fold-in bookmark, over-length marker, failure
+     * episode, and per-chat error log.
      */
     private val summarizerContentKeys = arrayOf(
-        "summarizer_summary", "summarizer_folded", "summarizer_over_length",
-        "summarizer_episode", "summarizer_errors"
+        "summarizer_summary", "summarizer_projection_version", "summarizer_folded",
+        "summarizer_over_length", "summarizer_episode", "summarizer_errors",
+        "manual_compaction_boundary", "use_summarized_conversation_projection",
+        "condensed_conversation_kind", "summarizer_catch_up_pending",
+        "summary_regeneration_lock_boundary", "compaction_regeneration_lock_boundary",
+        "condensed_regeneration_lock_migrated"
     )
 
     /**
@@ -157,9 +166,12 @@ class ChatPreferences private constructor() {
      */
     fun deleteChat(context: Context, chatName: String) {
         if (chatWriteBlocked(context, "chat_list", "delete a chat")) return
+        val chatId: String
         synchronized(CHAT_LIST_LOCK) {
             val list = getChatMetadataList(context)
 
+            val entry = list.firstOrNull { it["name"] == chatName } ?: return
+            chatId = storedChatId(entry)
             for (map: HashMap<String, String> in list) {
                 if (map["name"] == chatName) {
                     list.remove(map)
@@ -173,25 +185,25 @@ class ChatPreferences private constructor() {
             settings.edit { putString("data", json) }
         }
 
-        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
+        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
         settings2.edit { clear() }
 
         // The summary and all summarizer state die with the chat (decision 9).
-        clearSummarizerState(context, Hash.hash(chatName))
+        clearSummarizerState(context, chatId)
 
         // Locally stored attachment images belong to this chat only; a delete
         // takes them with it (owner ruling). The user's ORIGINAL files are
         // never touched — only the app's private extracted copies.
         try {
             org.teslasoft.assistant.preferences.includes.ImageImporter
-                .deleteChatImages(context, Hash.hash(chatName))
+                .deleteChatImages(context, chatId)
         } catch (_: Exception) { /* best-effort; reconciliation is the backstop */ }
 
         // A user-confirmed delete settles this chat's unreadable-value state
         // (the preserved ciphertext copy under files/storage_recovery/ is
         // never touched); without this the journal row would keep reporting
         // degraded chat storage forever.
-        ChatStorageHealth.clearReadFailure(context, "chat_${Hash.hash(chatName)}")
+        ChatStorageHealth.clearReadFailure(context, "chat_$chatId")
     }
 
     /**
@@ -257,7 +269,7 @@ class ChatPreferences private constructor() {
         // freezing the UI past the ANR threshold once histories grew large.
         if (includeFirstMessage) {
             for (chat in list) {
-                val messagesList = getChatById(context, Hash.hash(chat["name"].toString()))
+                val messagesList = getChatById(context, storedChatId(chat))
 
                 if (messagesList.isNotEmpty()) {
                     val firstMessage = messagesList[0]["message"].toString()
@@ -301,7 +313,7 @@ class ChatPreferences private constructor() {
             val list = getChatMetadataList(context)
 
             for (map in list) {
-                if (Hash.hash(map["name"].toString()) == chatId) {
+                if (storedChatId(map) == chatId) {
                     if (map["pinned"] == "true") {
                         map["pinned"] = "false"
                     } else {
@@ -330,7 +342,7 @@ class ChatPreferences private constructor() {
             val list = getChatMetadataList(context)
 
             for (map in list) {
-                if (Hash.hash(map["name"].toString()) == chatId) {
+                if (storedChatId(map) == chatId) {
                     map[key] = value
                     break
                 }
@@ -604,9 +616,42 @@ class ChatPreferences private constructor() {
         try {
             val chatSettings = SecurePrefs.get(context, "settings.$chatId")
             val folded = chatSettings.getString("summarizer_folded", "0")?.toIntOrNull() ?: 0
-            if (position < folded && folded > 0) {
+            val manualBoundary = chatSettings
+                .getString("manual_compaction_boundary", "0")?.toIntOrNull() ?: 0
+            val summaryLock = chatSettings
+                .getString("summary_regeneration_lock_boundary", null)?.toIntOrNull()
+                ?: folded
+            val compactionLock = chatSettings
+                .getString("compaction_regeneration_lock_boundary", null)?.toIntOrNull()
+                ?: manualBoundary
+            if ((position < folded && folded > 0) ||
+                (position < manualBoundary && manualBoundary > 0) ||
+                (position < summaryLock && summaryLock > 0) ||
+                (position < compactionLock && compactionLock > 0)
+            ) {
                 chatSettings.edit(commit = true) {
-                    putString("summarizer_folded", (folded - 1).toString())
+                    if (position < folded && folded > 0) {
+                        putString("summarizer_folded", (folded - 1).toString())
+                    }
+                    if (position < manualBoundary && manualBoundary > 0) {
+                        putString(
+                            "manual_compaction_boundary",
+                            (manualBoundary - 1).toString()
+                        )
+                    }
+                    if (position < summaryLock && summaryLock > 0) {
+                        putString(
+                            "summary_regeneration_lock_boundary",
+                            (summaryLock - 1).toString()
+                        )
+                    }
+                    if (position < compactionLock && compactionLock > 0) {
+                        putString(
+                            "compaction_regeneration_lock_boundary",
+                            (compactionLock - 1).toString()
+                        )
+                    }
+                    putString("condensed_regeneration_lock_migrated", "true")
                 }
             }
         } catch (_: Exception) { /* clamped at read time as a backstop */ }
@@ -632,7 +677,8 @@ class ChatPreferences private constructor() {
         while (true) {
             var isFound = false
             for (map: HashMap<String, String> in list) {
-                if (map["name"] == "_autoname_$x") {
+                if (map["name"] == "_autoname_$x" ||
+                    storedChatId(map) == Hash.hash("_autoname_$x")) {
                     isFound = true
                     break
                 }
@@ -682,12 +728,14 @@ class ChatPreferences private constructor() {
      * @param chatName The name of the chat to check for duplicates.
      * @return True if a chat with the given name already exists in the chat list, false otherwise.
      */
-    fun checkDuplicate(context: Context, chatName: String) : Boolean {
+    fun checkDuplicate(context: Context, chatName: String, renamingChatId: String? = null) : Boolean {
         val list = getChatMetadataList(context)
 
         var isFound = false
         for (map: HashMap<String, String> in list) {
-            if (map["id"] == Hash.hash(chatName)) {
+            if (storedChatId(map) != renamingChatId &&
+                (map["name"] == chatName ||
+                    (renamingChatId == null && storedChatId(map) == Hash.hash(chatName)))) {
                 isFound = true
                 break
             }
@@ -710,31 +758,16 @@ class ChatPreferences private constructor() {
         return name
     }
 
-    /**
-     * Renames a chat: moves the message history AND the whole per-chat
-     * settings file to the new chat id, then flips the chat-list pointer.
-     *
-     * Runs through [ChatRenameTransaction] — write-new → verify → copy
-     * settings wholesale → verify → flip pointer → clear old, every write a
-     * synchronous commit. The old implementation cleared the old history
-     * file BEFORE the new one was written (both async), so a process kill
-     * mid-rename silently destroyed the conversation; and it did not move
-     * the settings at all, leaving that to two hand-maintained copy blocks
-     * in callers that had drifted out of sync with the real per-chat key
-     * set (see PerChatSettingKeys).
-     *
-     * @return true when the rename fully applied. false means NOTHING
-     *         changed — the chat is intact under [previousName] and callers
-     *         must keep using the old id. Never partially applied.
-     */
-    fun editChat(context: Context, chatName: String, previousName: String): Boolean {
+    /** Changes only the title. The caller supplies the chat's existing ID.
+     *  History, settings, attachments and memory records stay at that ID. */
+    fun editChat(context: Context, chatName: String, previousName: String, chatId: String): Boolean {
         if (chatName == previousName) return true
 
-        val oldId = Hash.hash(previousName)
-        val newId = Hash.hash(chatName)
+        val oldId = chatId
+        val newId = oldId
 
-        // A rename touches the list pointer and both chat files: refuse the
-        // whole operation if any of them is locked or preserved-corrupt.
+        // Preserve the existing write gates for the list and chat history.
+        // A title-only rename writes only the list.
         // Refusal is the documented "nothing changed" contract (returns
         // false, chat intact under the old name).
         if (chatWriteBlocked(context, "chat_list", "rename a chat") ||
@@ -747,12 +780,12 @@ class ChatPreferences private constructor() {
         val outcome: ChatRenameTransaction.Outcome
         synchronized(CHAT_LIST_LOCK) {
             val list = getChatMetadataList(context)
-            val entry = list.firstOrNull { it["id"] == oldId } ?: return false
+            val entry = list.firstOrNull { storedChatId(it) == oldId } ?: return false
+            if (entry["name"] != previousName) return false
 
-            // Renaming onto an id another chat already owns would silently
-            // overwrite that chat's history. Refuse instead (the rename dialog
-            // pre-checks duplicates; auto-naming may retry with another title).
-            if (list.any { it !== entry && it["id"] == newId }) {
+            // Preserve unique titles, independently of the existing IDs.
+            // Auto-naming may retry with another title.
+            if (list.any { it !== entry && it["name"] == chatName }) {
                 Logger.log(
                     context, "crash", "ChatPreferences", "error",
                     "Rename refused: a chat named \"$chatName\" already exists; \"$previousName\" was left unchanged."
@@ -761,21 +794,10 @@ class ChatPreferences private constructor() {
             }
 
             entry["name"] = chatName
-            entry["id"] = newId
             val newListJson: String = Gson().toJson(list)
 
-            // Journal the rename BEFORE touching prefs. The prefs pointer flip is
-            // the authoritative moment, but a process death right after it would
-            // leave the memory re-point (a separate store) undone and the chat's
-            // transcripts stranded under the old id. The journal makes that window
-            // recoverable at next start; recovery consults the live chat list, so
-            // an entry written for a rename that then fails pre-flip is safely
-            // discarded (the old id is still live). Committed synchronously to
-            // encrypted prefs, outside the memory DB, so it survives even when the
-            // DB is the thing failing. (Lock ordering: CHAT_LIST_LOCK →
-            // RenameJournal's monitor; RenameJournal.reconcile never takes
-            // CHAT_LIST_LOCK, so there is no inversion.)
-            RenameJournal.record(context, oldId, newId)
+            // Only the retained legacy ID-move path needs a recovery journal.
+            if (oldId != newId) RenameJournal.record(context, oldId, newId)
 
             outcome = try {
                 ChatRenameTransaction.rename(securePrefsFileAccess(context), oldId, newId, newListJson)
@@ -788,7 +810,7 @@ class ChatPreferences private constructor() {
             // The pointer never flipped: the old chat is still authoritative,
             // so the journal entry would drive no re-point anyway (recovery
             // sees the old id live) — drop it now to keep the journal clean.
-            RenameJournal.clear(context, oldId, newId)
+            if (oldId != newId) RenameJournal.clear(context, oldId, newId)
             // Never silent: a failed rename is recorded in the user-facing
             // Error Log even though the data itself is safe.
             Logger.log(
@@ -801,6 +823,10 @@ class ChatPreferences private constructor() {
         for (warning in outcome.warnings) {
             Logger.log(context, "crash", "ChatPreferences", "warning", "Chat rename: $warning")
         }
+
+        // Title-only renames never enter the legacy cross-ID move path below.
+        // Keep that path untouched here; no migration or cleanup is performed.
+        if (oldId == newId) return true
 
         // Attachment image bytes live in a directory keyed by chat id. The
         // rename copied the include records (with their image hashes) to the

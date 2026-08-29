@@ -33,15 +33,22 @@ class ReasoningRequestSerializerTest {
     // ---- OpenRouter shape --------------------------------------------------
 
     @Test
-    fun openRouterExplicitEffortWithShowReasoningOnRequestsEffortAndSummary() {
+    fun openRouterExplicitEffortWithShowReasoningOnRequestsOnlyEffort() {
         val reasoning = ReasoningRequestSerializer.requestFields(
             resolved(ReasoningEffort.HIGH), isOpenRouter = true, reasoningCapable = true
         )!!.getAsJsonObject("reasoning")
         assertEquals("high", reasoning.get("effort").asString)
-        // Show Reasoning On → positively request the visible summary alongside
-        // the explicit effort, not just the effort.
-        assertEquals("auto", reasoning.get("summary").asString)
+        assertFalse(reasoning.has("summary"))
         assertFalse(reasoning.has("exclude"))
+    }
+
+    @Test
+    fun openRouterLowWithShowReasoningOnRequestsOnlyLow() {
+        val reasoning = ReasoningRequestSerializer.requestFields(
+            resolved(ReasoningEffort.LOW), isOpenRouter = true, reasoningCapable = true
+        )!!.getAsJsonObject("reasoning")
+        assertEquals(setOf("effort"), reasoning.keySet())
+        assertEquals("low", reasoning.get("effort").asString)
     }
 
     @Test
@@ -56,26 +63,22 @@ class ReasoningRequestSerializerTest {
     }
 
     @Test
-    fun openRouterShowReasoningOffExcludesReturnKeepsEffortAndOmitsSummary() {
+    fun openRouterLowWithShowReasoningOffExcludesReturnKeepsEffortAndOmitsSummary() {
         val reasoning = ReasoningRequestSerializer.requestFields(
-            resolved(ReasoningEffort.MEDIUM, show = false), isOpenRouter = true, reasoningCapable = true
+            resolved(ReasoningEffort.LOW, show = false), isOpenRouter = true, reasoningCapable = true
         )!!.getAsJsonObject("reasoning")
-        assertEquals("medium", reasoning.get("effort").asString)
+        assertEquals("low", reasoning.get("effort").asString)
         assertTrue(reasoning.get("exclude").asBoolean)
         assertFalse(reasoning.has("summary"))
     }
 
     @Test
-    fun openRouterAutoWithShowReasoningOnRequestsSummaryWithoutForcingEffort() {
-        // The observed regression: Auto surfaced reasoning while explicit effort
-        // did not. Auto now positively requests the summary too, without forcing
-        // an effort level (Auto still sends no effort).
-        val reasoning = ReasoningRequestSerializer.requestFields(
-            resolved(ReasoningEffort.AUTO), isOpenRouter = true, reasoningCapable = true
-        )!!.getAsJsonObject("reasoning")
-        assertEquals("auto", reasoning.get("summary").asString)
-        assertFalse(reasoning.has("effort"))
-        assertFalse(reasoning.has("exclude"))
+    fun openRouterAutoWithShowReasoningOnEmitsNothing() {
+        assertNull(
+            ReasoningRequestSerializer.requestFields(
+                resolved(ReasoningEffort.AUTO), isOpenRouter = true, reasoningCapable = true
+            )
+        )
     }
 
     @Test
@@ -178,13 +181,12 @@ class ReasoningRequestSerializerTest {
 
     @Test
     fun augmentBodyNoOpWhenNothingToAdd() {
-        // Generic Auto sends no effort and has no summary field, so there is
-        // genuinely nothing to add. (OpenRouter Auto now adds a summary request.)
+        // Auto with visible reasoning sends no request field on either path.
         val body = """{"model":"x/y"}"""
         assertEquals(
             body,
             ReasoningRequestSerializer.augmentBody(
-                body, resolved(ReasoningEffort.AUTO), isOpenRouter = false, reasoningCapable = true
+                body, resolved(ReasoningEffort.AUTO), isOpenRouter = true, reasoningCapable = true
             )
         )
     }

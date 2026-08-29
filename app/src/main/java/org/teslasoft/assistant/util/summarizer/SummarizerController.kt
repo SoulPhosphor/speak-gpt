@@ -32,8 +32,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
@@ -75,6 +77,29 @@ class SummarizerController(
     private val chatIdProvider: () -> String
 ) {
 
+    enum class OperationKind { SUMMARIZING, COMPACTING }
+
+    sealed interface OperationState {
+        data object Idle : OperationState
+        data class Running(
+            val kind: OperationKind,
+            val chatName: String,
+            val requestedMessages: Int,
+            val successfulMessages: Int
+        ) : OperationState
+        data class Succeeded(val kind: OperationKind, val chatName: String) : OperationState
+        data class Failed(
+            val kind: OperationKind,
+            val chatName: String,
+            val category: SummarizerErrorCategory
+        ) : OperationState
+        data class Cancelled(
+            val kind: OperationKind,
+            val chatName: String,
+            val savedMessages: Int
+        ) : OperationState
+    }
+
     /** Callbacks arrive on the main thread. */
     interface Listener {
         /** Summary, bookmark, or error log changed — refresh icons/badge. */
@@ -82,6 +107,8 @@ class SummarizerController(
 
         /** A new failure episode began — play the dedicated sound once. */
         fun onSummarizerErrorEpisode()
+
+        fun onSummarizerOperationChanged(state: OperationState) {}
     }
 
     /**
@@ -94,10 +121,33 @@ class SummarizerController(
 
     data class Snapshot(val entries: List<Entry>, val window: Int)
 
+    private data class FoldRuntime(
+        val prefs: Preferences,
+        val endpoint: ApiEndpointObject,
+        val model: String,
+        val providerJson: com.google.gson.JsonObject?,
+        val prompt: String,
+        val lengthWords: Int
+    )
+
+    private sealed interface FoldBatchResult {
+        data class Advanced(
+            val summary: String,
+            val foldedCount: Int,
+            val overLength: Boolean
+        ) : FoldBatchResult
+
+        data object Failed : FoldBatchResult
+    }
+
     var listener: Listener? = null
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
+    private var manualCompactionRunning = false
+    @Volatile private var operationState: OperationState = OperationState.Idle
+    private var lastFailureCategory: SummarizerErrorCategory? = null
+    private var terminalClearJob: Job? = null
 
     companion object {
         /** Internal fold-in batch size (decision 15) — not a user setting. */
@@ -159,6 +209,10 @@ class SummarizerController(
 
     fun isRunning(): Boolean = job?.isActive == true
 
+    fun isManualCompactionRunning(): Boolean = manualCompactionRunning
+
+    fun currentOperationState(): OperationState = operationState
+
     /**
      * Deliberate cancellation (leaving the chat, turning the toggle off, a
      * settings change) — never an error, never a log entry, bookmark
@@ -177,16 +231,128 @@ class SummarizerController(
      * too (Update Now / completing a catch-up); otherwise the cycle stops
      * when fewer than [BATCH_SIZE] messages wait past the window.
      */
-    fun runCycle(force: Boolean, snapshotProvider: () -> Snapshot?) {
-        if (isRunning()) return
+    fun runCycle(
+        force: Boolean,
+        chatName: String = "",
+        snapshotProvider: () -> Snapshot?,
+        onFinished: ((Boolean) -> Unit)? = null
+    ) {
+        if (manualCompactionRunning || isRunning()) return
         job = scope.launch {
+            var advancedAny = false
+            val initialSnapshot = snapshotProvider()
+            val initialPrefs = chatIdProvider().takeIf { it.isNotBlank() }?.let {
+                Preferences.getPreferences(appContext, it)
+            }
+            val initialSummary = initialPrefs?.getSummarizerSummary().orEmpty()
+            val initialFolded = initialPrefs?.getSummarizerFoldedCount() ?: 0
+            val initialOverLength = initialPrefs?.getSummarizerOverLength() == true
+            val initialEpisode = initialPrefs?.getSummarizerEpisode().orEmpty()
+            val initialKind = initialPrefs?.getCondensedConversationKind().orEmpty()
             try {
                 while (true) {
-                    val advanced = foldOneBatch(force, snapshotProvider)
+                    val advanced = foldOneBatch(force, chatName, snapshotProvider)
                     if (!advanced) break
+                    advancedAny = true
                 }
             } catch (_: CancellationException) {
                 // Deliberate cancellation — not a Summarizer Error (§4).
+                val running = operationState as? OperationState.Running
+                if (running?.requestedMessages?.let { it >= 21 } == true &&
+                    initialPrefs?.getSavePartialCompactionOnCancel() != true
+                ) {
+                    withContext(NonCancellable) {
+                        initialPrefs?.restoreSummarizerState(
+                            initialSummary,
+                            initialFolded.coerceAtMost(initialSnapshot?.entries?.size ?: initialFolded),
+                            initialOverLength,
+                            initialEpisode,
+                            initialKind
+                        )
+                    }
+                    notifyStateChanged()
+                }
+                setOperationState(
+                    OperationState.Cancelled(
+                        OperationKind.SUMMARIZING,
+                        chatName,
+                        (operationState as? OperationState.Running)?.successfulMessages ?: 0
+                    )
+                )
+            } finally {
+                if (operationState is OperationState.Running) {
+                    setOperationState(
+                        if (lastFailureCategory == null) {
+                            OperationState.Succeeded(OperationKind.SUMMARIZING, chatName)
+                        } else {
+                            OperationState.Failed(
+                                OperationKind.SUMMARIZING,
+                                chatName,
+                                lastFailureCategory!!
+                            )
+                        }
+                    )
+                }
+                onFinished?.invoke(advancedAny && lastFailureCategory == null)
+            }
+        }
+    }
+
+    /**
+     * Compacts one immutable conversation snapshot through its final stored
+     * message, whether or not automatic Summarizer mode is enabled. Every
+     * intermediate batch remains in memory; persisted summary state and the
+     * visible manual boundary are committed together only after the complete
+     * operation succeeds and [stillCurrent] confirms the frozen prefix has not
+     * been edited or removed. New messages appended after the snapshot are
+     * allowed and remain outside this manual checkpoint.
+     */
+    fun runManualCompaction(
+        snapshot: Snapshot,
+        chatName: String,
+        savePartialOnCancel: Boolean,
+        stillCurrent: () -> Boolean,
+        onFinished: (Boolean) -> Unit
+    ) {
+        if (manualCompactionRunning) return
+        cancel()
+        manualCompactionRunning = true
+        lastFailureCategory = null
+        setOperationState(
+            OperationState.Running(
+                OperationKind.COMPACTING,
+                chatName,
+                snapshot.entries.size,
+                0
+            )
+        )
+        job = scope.launch {
+            var committed = false
+            try {
+                committed = compactSnapshot(
+                    snapshot,
+                    chatName,
+                    savePartialOnCancel,
+                    stillCurrent
+                )
+            } catch (_: CancellationException) {
+                // compactSnapshot owns the optional partial commit.
+            } finally {
+                manualCompactionRunning = false
+                if (operationState is OperationState.Running) {
+                    setOperationState(
+                        if (committed) {
+                            OperationState.Succeeded(OperationKind.COMPACTING, chatName)
+                        } else {
+                            OperationState.Failed(
+                                OperationKind.COMPACTING,
+                                chatName,
+                                lastFailureCategory ?: SummarizerErrorCategory.UNEXPECTED
+                            )
+                        }
+                    )
+                }
+                onFinished(committed)
             }
         }
     }
@@ -255,13 +421,167 @@ class SummarizerController(
         }
     }
 
+    private suspend fun compactSnapshot(
+        snapshot: Snapshot,
+        chatName: String,
+        savePartialOnCancel: Boolean,
+        stillCurrent: () -> Boolean
+    ): Boolean {
+        val chatId = chatIdProvider()
+        if (chatId.isBlank() || snapshot.entries.isEmpty()) return false
+        val prefs = Preferences.getPreferences(appContext, chatId)
+        if (!prefs.ensureSummarizerProjectionCompatibility()) {
+            val configuredModel = prefs.getSummarizerModel()
+            recordFailure(
+                prefs,
+                SummarizerErrorCategory.SAVE_FAILED,
+                appContext.getString(R.string.summarizer_unknown_profile),
+                if (configuredModel.isBlank()) {
+                    appContext.getString(R.string.summarizer_unknown_model)
+                } else configuredModel,
+                null,
+                "The app could not establish a compatible persisted summary projection before compaction."
+            )
+            return false
+        }
+
+        val target = snapshot.entries.size
+        val startingSummary = prefs.getSummarizerSummary()
+        val startingFolded = prefs.getSummarizerFoldedCount()
+        val startingOverLength = prefs.getSummarizerOverLength()
+        val startingVersion = prefs.getSummarizerProjectionVersion()
+        val operationStartFolded = startingFolded.coerceAtMost(target)
+
+        setOperationState(
+            OperationState.Running(
+                OperationKind.COMPACTING,
+                chatName,
+                (target - operationStartFolded).coerceAtLeast(0),
+                0
+            )
+        )
+
+        var summary = startingSummary
+        var folded = operationStartFolded
+        var overLength = startingOverLength
+
+        try {
+            if (folded < target) {
+                val runtime = resolveFoldRuntime(prefs) ?: return false
+                while (folded < target) {
+                    when (val result = foldBatch(
+                        runtime = runtime,
+                        entries = snapshot.entries,
+                        folded = folded,
+                        pending = target - folded,
+                        summary = summary,
+                        priorOverLength = overLength
+                    )) {
+                        is FoldBatchResult.Advanced -> {
+                            summary = result.summary
+                            folded = result.foldedCount
+                            overLength = result.overLength
+                            if (!prefs.advanceCompactionRegenerationLockBoundary(folded)) {
+                                recordFailure(
+                                    prefs,
+                                    SummarizerErrorCategory.SAVE_FAILED,
+                                    runtime.endpoint.label,
+                                    runtime.model,
+                                    null,
+                                    "The compacted batch was usable, but its permanent regeneration lock could not be saved."
+                                )
+                                return false
+                            }
+                            notifyStateChanged()
+                            setOperationState(
+                                OperationState.Running(
+                                    OperationKind.COMPACTING,
+                                    chatName,
+                                    (target - operationStartFolded).coerceAtLeast(0),
+                                    folded - operationStartFolded
+                                )
+                            )
+                        }
+                        FoldBatchResult.Failed -> return false
+                    }
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            val completedThisRun = folded - startingFolded.coerceAtMost(target)
+            val saved = if (savePartialOnCancel && completedThisRun > 0 && stillCurrent()) {
+                withContext(NonCancellable) {
+                    prefs.commitManualCompaction(summary, folded, overLength, folded)
+                }
+            } else false
+            setOperationState(
+                OperationState.Cancelled(
+                    OperationKind.COMPACTING,
+                    chatName,
+                    if (saved) completedThisRun else 0
+                )
+            )
+            if (saved) notifyStateChanged()
+            throw cancelled
+        }
+
+        // Do not overwrite a summary edit, automatic fold-in, or changed
+        // canonical prefix that landed while the manual API calls were in
+        // flight. Appended messages are intentionally outside this checkpoint.
+        if (chatIdProvider() != chatId ||
+            !stillCurrent() ||
+            prefs.getSummarizerSummary() != startingSummary ||
+            prefs.getSummarizerFoldedCount() != startingFolded ||
+            prefs.getSummarizerOverLength() != startingOverLength ||
+            prefs.getSummarizerProjectionVersion() != startingVersion
+        ) {
+            val configuredModel = prefs.getSummarizerModel()
+            recordFailure(
+                prefs,
+                SummarizerErrorCategory.UNEXPECTED,
+                appContext.getString(R.string.summarizer_unknown_profile),
+                if (configuredModel.isBlank()) {
+                    appContext.getString(R.string.summarizer_unknown_model)
+                } else configuredModel,
+                null,
+                "Compaction finished generating, but its frozen conversation prefix or saved summary state changed before the atomic commit. Generated work was discarded."
+            )
+            return false
+        }
+
+        if (!prefs.commitManualCompaction(summary, target, overLength, target)) {
+            val configuredModel = prefs.getSummarizerModel()
+            recordFailure(
+                prefs,
+                SummarizerErrorCategory.SAVE_FAILED,
+                appContext.getString(R.string.summarizer_unknown_profile),
+                if (configuredModel.isBlank()) {
+                    appContext.getString(R.string.summarizer_unknown_model)
+                } else configuredModel,
+                null,
+                null
+            )
+            return false
+        }
+        notifyStateChanged()
+        return true
+    }
+
     /** @return true when a batch was folded and committed (keep looping). */
-    private suspend fun foldOneBatch(force: Boolean, snapshotProvider: () -> Snapshot?): Boolean {
+    private suspend fun foldOneBatch(
+        force: Boolean,
+        chatName: String,
+        snapshotProvider: () -> Snapshot?
+    ): Boolean {
         val snapshot = snapshotProvider() ?: return false
         val chatId = chatIdProvider()
         if (chatId.isBlank()) return false
         val prefs = Preferences.getPreferences(appContext, chatId)
         if (!prefs.getChatUseSummarizer()) return false
+        // Phase 6.2: never fold onto or advance from a rolling summary that
+        // may already contain old inline Include payload material. A failed
+        // compatibility commit leaves canonical history intact and simply
+        // postpones this cycle.
+        if (!prefs.ensureSummarizerProjectionCompatibility()) return false
 
         val entries = snapshot.entries
         val folded = prefs.getSummarizerFoldedCount().coerceAtMost(entries.size)
@@ -270,10 +590,66 @@ class SummarizerController(
         if (pending <= 0) return false
         if (!force && pending < BATCH_SIZE) return false
 
-        val summary = prefs.getSummarizerSummary()
-        val lengthWords = prefs.getSummarizerLength()
+        if (operationState !is OperationState.Running) {
+            lastFailureCategory = null
+            setOperationState(
+                OperationState.Running(OperationKind.SUMMARIZING, chatName, pending, 0)
+            )
+        }
 
-        // Resolve the Summary Model locally before any request (§2.1).
+        val runtime = resolveFoldRuntime(prefs) ?: return false
+        val result = foldBatch(
+            runtime = runtime,
+            entries = entries,
+            folded = folded,
+            pending = pending,
+            summary = prefs.getSummarizerSummary(),
+            priorOverLength = prefs.getSummarizerOverLength()
+        )
+        if (result !is FoldBatchResult.Advanced) return false
+        // A usable batch permanently fixes the processed prefix even if the
+        // user later discards, pauses, or otherwise undoes its derived summary.
+        if (!prefs.advanceSummaryRegenerationLockBoundary(result.foldedCount)) {
+            recordFailure(
+                prefs,
+                SummarizerErrorCategory.SAVE_FAILED,
+                runtime.endpoint.label,
+                runtime.model,
+                null,
+                "The summary batch was usable, but its permanent regeneration lock could not be saved."
+            )
+            return false
+        }
+        if (!prefs.commitSummarizerFoldIn(
+                result.summary,
+                result.foldedCount,
+                result.overLength
+            )
+        ) {
+            recordFailure(
+                prefs,
+                SummarizerErrorCategory.SAVE_FAILED,
+                runtime.endpoint.label,
+                runtime.model,
+                null,
+                null
+            )
+            return false
+        }
+        notifyStateChanged()
+        val running = operationState as? OperationState.Running
+        if (running?.kind == OperationKind.SUMMARIZING) {
+            setOperationState(
+                running.copy(successfulMessages = running.successfulMessages +
+                    (result.foldedCount - folded))
+            )
+        }
+        return true
+    }
+
+    /** Resolve the configured Summary Model and routing once per cycle. */
+    private fun resolveFoldRuntime(prefs: Preferences): FoldRuntime? {
+        val lengthWords = prefs.getSummarizerLength()
         val endpointId = prefs.getSummarizerEndpointId()
         val endpoint = if (endpointId.isBlank()) null else try {
             ApiEndpointPreferences.getApiEndpointPreferences(appContext)
@@ -292,7 +668,7 @@ class SummarizerController(
                 model.ifBlank { appContext.getString(R.string.summarizer_unknown_model) },
                 httpStatus = null, detail = null
             )
-            return false
+            return null
         }
 
         val routingMode = prefs.getSummarizerRoutingType()
@@ -306,7 +682,7 @@ class SummarizerController(
                 httpStatus = null,
                 detail = appContext.getString(R.string.summarizer_routing_not_configured_detail)
             )
-            return false
+            return null
         }
         val requestFavorite = if (endpoint.isOpenRouterRouting()) {
             DedicatedModelRoutingPolicy.favoriteForRequest(
@@ -324,11 +700,29 @@ class SummarizerController(
                 httpStatus = null,
                 detail = appContext.getString(R.string.summarizer_routing_not_configured_detail)
             )
-            return false
+            return null
         }
 
+        return FoldRuntime(
+            prefs = prefs,
+            endpoint = endpoint,
+            model = model,
+            providerJson = routingResolution.providerJson,
+            prompt = SummarizerPrompts.render(effectivePrompt(prefs), lengthWords),
+            lengthWords = lengthWords
+        )
+    }
+
+    /** Fold one bounded batch without persisting it. */
+    private suspend fun foldBatch(
+        runtime: FoldRuntime,
+        entries: List<Entry>,
+        folded: Int,
+        pending: Int,
+        summary: String,
+        priorOverLength: Boolean
+    ): FoldBatchResult {
         var batch = pending.coerceAtMost(BATCH_SIZE)
-        val prompt = SummarizerPrompts.render(effectivePrompt(prefs), lengthWords)
 
         // §2.9: on a too-large rejection, split the batch and retry, down to
         // one message; only then is the error stored.
@@ -338,24 +732,25 @@ class SummarizerController(
                 .filter { it.second.isNotBlank() }
 
             if (departing.isEmpty()) {
-                // Nothing model-facing in this span (e.g. blank placeholders):
-                // advance the bookmark without an API call.
-                if (!prefs.commitSummarizerFoldIn(summary, folded + batch, prefs.getSummarizerOverLength())) {
-                    recordFailure(prefs, SummarizerErrorCategory.SAVE_FAILED, endpoint.label, model, null, null)
-                    return false
-                }
-                notifyStateChanged()
-                return true
+                return FoldBatchResult.Advanced(
+                    summary,
+                    folded + batch,
+                    priorOverLength
+                )
             }
 
-            val body = SummarizerPrompts.foldInRequestBody(prompt, summary, departing)
+            val body = SummarizerPrompts.foldInRequestBody(
+                runtime.prompt,
+                summary,
+                departing
+            )
             val text: String
             try {
                 text = withContext(Dispatchers.IO) {
-                    val client = buildClient(endpoint, routingResolution.providerJson)
+                    val client = buildClient(runtime.endpoint, runtime.providerJson)
                     val request = ChatCompletionRequest(
-                        model = ModelId(model),
-                        maxTokens = responseTokenBudget(lengthWords),
+                        model = ModelId(runtime.model),
+                        maxTokens = responseTokenBudget(runtime.lengthWords),
                         messages = listOf(ChatMessage(role = ChatRole.User, content = body))
                     )
                     client.chatCompletion(request)
@@ -376,28 +771,34 @@ class SummarizerController(
                     e.message
                 }
                 recordFailure(
-                    prefs, category, endpoint.label, model,
-                    classified.httpStatus, SummarizerDetailSanitizer.sanitize(detail)
+                    runtime.prefs, category, runtime.endpoint.label, runtime.model,
+                    classified.httpStatus, SummarizerDetailSanitizer.sanitize(detail),
+                    rawProviderError = e.message
                 )
-                return false
+                return FoldBatchResult.Failed
             }
 
             if (text.isBlank()) {
-                recordFailure(prefs, SummarizerErrorCategory.RESPONSE_UNREADABLE, endpoint.label, model, null, null)
-                return false
+                recordFailure(
+                    runtime.prefs,
+                    SummarizerErrorCategory.RESPONSE_UNREADABLE,
+                    runtime.endpoint.label,
+                    runtime.model,
+                    null,
+                    null
+                )
+                return FoldBatchResult.Failed
             }
 
             // Owner ruling: count the words ourselves, allow 10% over, and
             // beyond that save unchanged but flag for compression on the
             // next regular fold-in. Never truncated, never discarded, never
             // a separate corrective call.
-            val overLength = SummarizerLengthPolicy.isOverLength(text, lengthWords)
-            if (!prefs.commitSummarizerFoldIn(text, folded + batch, overLength)) {
-                recordFailure(prefs, SummarizerErrorCategory.SAVE_FAILED, endpoint.label, model, null, null)
-                return false
-            }
-            notifyStateChanged()
-            return true
+            val overLength = SummarizerLengthPolicy.isOverLength(
+                text,
+                runtime.lengthWords
+            )
+            return FoldBatchResult.Advanced(text, folded + batch, overLength)
         }
     }
 
@@ -407,8 +808,10 @@ class SummarizerController(
         profile: String,
         model: String,
         httpStatus: Int?,
-        detail: String?
+        detail: String?,
+        rawProviderError: String? = null
     ) {
+        lastFailureCategory = category
         val decorated = if (httpStatus != null) {
             "HTTP status: $httpStatus" + (detail?.let { "\n$it" } ?: "")
         } else {
@@ -422,6 +825,18 @@ class SummarizerController(
         prefs.setSummarizerErrors(SummarizerErrorLog.toJson(result.entries))
         prefs.setSummarizerEpisode(category.name)
 
+        val running = operationState as? OperationState.Running
+        if (running?.kind == OperationKind.COMPACTING) {
+            recordCompactionDiagnostics(
+                prefs = prefs,
+                state = running,
+                category = category,
+                model = model,
+                rawProviderError = rawProviderError,
+                technicalDetail = decorated
+            )
+        }
+
         // Owner ruling (July 29 2026): summarizer failures are recorded ONLY
         // in the per-chat Summarizer Errors log. No app-wide Error Log entry
         // is written for this feature.
@@ -432,8 +847,105 @@ class SummarizerController(
         notifyStateChanged()
     }
 
+    private fun recordCompactionDiagnostics(
+        prefs: Preferences,
+        state: OperationState.Running,
+        category: SummarizerErrorCategory,
+        model: String,
+        rawProviderError: String?,
+        technicalDetail: String?
+    ) {
+        val endpointId = prefs.getSummarizerEndpointId()
+        val endpoint = try {
+            ApiEndpointPreferences.getApiEndpointPreferences(appContext)
+                .getApiEndpoint(appContext, endpointId)
+        } catch (_: Exception) { null }
+        val favorite = FavoriteModelsPreferences.getPreferences(appContext)
+            .getFavorite(model, endpointId)
+        val provider = when (prefs.getSummarizerRoutingType()) {
+            org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_ONLY ->
+                favorite?.selectedProvider.orEmpty().ifBlank { "Not Reported" }
+            org.teslasoft.assistant.preferences.dto.FavoriteModelObject.ROUTING_PREFERRED ->
+                favorite?.providerOrder?.joinToString(", ").orEmpty().ifBlank { "Automatic" }
+            else -> "Automatic"
+        }
+        val outcome = if (state.successfulMessages > 0) "Partially Failed" else "Failed Completely"
+        val explanation = when (category) {
+            SummarizerErrorCategory.RESPONSE_TIMEOUT,
+            SummarizerErrorCategory.CONNECT_TIMEOUT -> "The configured timeout expired before a usable compacted summary was saved."
+            SummarizerErrorCategory.SERVICE_UNREACHABLE -> "The app could not reach the configured compaction endpoint."
+            SummarizerErrorCategory.REQUEST_TOO_LARGE -> "The compaction request exceeded a provider or model input limit."
+            SummarizerErrorCategory.SAVE_FAILED -> "The model returned usable work, but the app could not save the compacted state."
+            else -> "The compaction operation stopped before the requested range could be committed."
+        }
+        val body = buildString {
+            append("Function: Compacting\n")
+            append("Conversation: ").append(state.chatName.ifBlank { "Untitled chat" }).append('\n')
+            append("Summarizer Model: ").append(model).append('\n')
+            append("Summarizer Endpoint: ")
+                .append(endpoint?.label.orEmpty().ifBlank { "Not Reported" })
+                .append(" (").append(endpoint?.host.orEmpty().ifBlank { "Not Reported" }).append(")\n")
+            append("Summarizer Provider: ").append(provider).append('\n')
+            append("Messages Requested: ").append(state.requestedMessages).append('\n')
+            append("Outcome: ").append(outcome).append('\n')
+            if (state.successfulMessages > 0) {
+                append("Messages Successfully Processed: ").append(state.successfulMessages).append('\n')
+            }
+            rawProviderError?.takeIf { it.isNotBlank() }?.let {
+                append("Provider Error: ").append(it).append('\n')
+            }
+            technicalDetail?.takeIf { it.isNotBlank() && it != rawProviderError }?.let {
+                append("Technical Detail: ").append(it).append('\n')
+            }
+            append("Explanation: ").append(explanation)
+        }
+        org.teslasoft.assistant.preferences.Logger.logAsync(
+            appContext, "crash", "Compaction", "error", body
+        )
+        if (rawProviderError != null && prefs.getLogChatFailures()) {
+            scope.launch(Dispatchers.IO) {
+                org.teslasoft.assistant.preferences.Logger.logProviderFailure(
+                    appContext,
+                    endpoint?.label.orEmpty().ifBlank { "Not Reported" },
+                    provider,
+                    model,
+                    "Compacting",
+                    rawProviderError
+                )
+            }
+        }
+    }
+
     private fun notifyStateChanged() {
         listener?.onSummarizerStateChanged()
+    }
+
+    private fun setOperationState(state: OperationState) {
+        terminalClearJob?.cancel()
+        val previous = operationState
+        operationState = state
+        if (state is OperationState.Running) {
+            if (previous !is OperationState.Running) {
+                org.teslasoft.assistant.service.SummarizerForegroundService.begin(
+                    appContext,
+                    chatIdProvider(),
+                    state.chatName,
+                    state.kind
+                )
+            }
+        } else if (previous is OperationState.Running) {
+            org.teslasoft.assistant.service.SummarizerForegroundService.end(
+                appContext,
+                chatIdProvider()
+            )
+        }
+        listener?.onSummarizerOperationChanged(state)
+        if (state is OperationState.Succeeded || state is OperationState.Cancelled) {
+            terminalClearJob = scope.launch {
+                delay(if (state is OperationState.Succeeded) 3500L else 250L)
+                if (operationState == state) setOperationState(OperationState.Idle)
+            }
+        }
     }
 
     /**

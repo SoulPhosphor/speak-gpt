@@ -141,6 +141,16 @@ class ReportedProviderParserTest {
         assertTrue(RawStreamObservationCodec.isEncoded(signals.last()))
     }
 
+    @Test fun terminalObservationPromotesOfficialSelectedProviderOverEarlierTopLevelValue() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine("data: {\"provider\":\"Early Hint\",\"choices\":[]}")
+        inspector.acceptLine(
+            "data: {\"openrouter_metadata\":{\"endpoints\":{\"available\":[" +
+                "{\"provider\":\"AtlasCloud\",\"selected\":true}]}},\"choices\":[]}"
+        )
+        assertEquals("AtlasCloud", inspector.finishNormally().actualServingProvider)
+    }
+
     @Test fun noProviderStillProducesTerminalEvidenceAndDrains() = runBlocking {
         val channel = ByteChannel(autoFlush = true)
         channel.writeStringUtf8("data: {\"id\":\"gen-3\",\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n")

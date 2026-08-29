@@ -87,6 +87,107 @@ class ChatPresentationContractTest {
     }
 
     @Test
+    fun thinkingAndComposerTogglesUseCentralThemeReadyStyles() {
+        val themes = source("src/main/res/values/themes.xml")
+        val assistantLayout = source("src/main/res/layout/view_assistant_bot_message.xml")
+        val chatLayout = source("src/main/res/layout/activity_chat.xml")
+        val chatActivity = source(
+            "src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt"
+        )
+        val expandIcon = source("src/main/res/drawable/ic_expand_content.xml")
+        val collapseIcon = source("src/main/res/drawable/ic_collapse_content.xml")
+
+        listOf("Container", "Header", "Label", "Chevron", "Body").forEach { part ->
+            assertTrue(
+                "Thinking $part style is missing",
+                themes.contains("name=\"Widget.App.Chat.Thinking.$part\"")
+            )
+            assertTrue(
+                "Thinking $part is not using its shared style",
+                assistantLayout.contains("style=\"@style/Widget.App.Chat.Thinking.$part\"")
+            )
+        }
+        assertTrue(
+            themes.contains("name=\"Widget.App.Chat.ComposerContentToggle\"")
+        )
+        assertTrue(
+            chatLayout.split("style=\"@style/Widget.App.Chat.ComposerContentToggle\"").size - 1 == 2
+        )
+        assertFalse(chatActivity.contains("btnExpandContent?.background"))
+        assertFalse(chatActivity.contains("btnCollapseContent?.background"))
+        assertFalse(expandIcon.contains("android:tint="))
+        assertFalse(collapseIcon.contains("android:tint="))
+        val adapter = source(
+            "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
+        )
+        assertTrue(adapter.contains("reasoningChevron?.setColorFilter(foreground)"))
+        assertTrue(adapter.contains("reasoningLabel?.setTextColor(foreground)"))
+        assertTrue(adapter.contains("reasoningText?.setTextColor(foreground)"))
+        assertTrue(adapter.contains("R.drawable.ic_chevron_up"))
+        assertTrue(adapter.contains("R.drawable.ic_chevron_down"))
+        assertFalse(adapter.contains("reasoningChevron?.rotation"))
+    }
+
+    @Test
+    fun modelAndTokenMetadataWrapsAgainstItsMeasuredMessageWidth() {
+        val layout = source("src/main/res/layout/view_assistant_bot_message.xml")
+        val metadataView = source(
+            "src/main/java/org/teslasoft/assistant/ui/chat/MessageMetadataView.kt"
+        )
+        val adapter = source(
+            "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
+        )
+
+        assertTrue(layout.contains("org.teslasoft.assistant.ui.chat.MessageMetadataView"))
+        assertTrue(metadataView.contains("Layout.getDesiredWidth"))
+        assertTrue(metadataView.contains("MeasureSpec.getSize(widthMeasureSpec)"))
+        assertTrue(metadataView.contains("\"\$model\\n\$tokens\""))
+        assertTrue(adapter.contains("meta.setMetadata(modelPart, tokenPart)"))
+        assertFalse(adapter.contains("availableMetaWidthPx"))
+        assertTrue(adapter.contains("setPortraitSideMargin("))
+        assertTrue(adapter.contains("measuredIdentityClearancePx("))
+        assertTrue(adapter.contains("messageMeta?.lineHeight ?: 0"))
+    }
+
+    @Test
+    fun portraitFlowUsesMeasuredBoundsAcrossThinkingAndReply() {
+        val layout = source("src/main/res/layout/view_assistant_bot_message.xml")
+        val adapter = source(
+            "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
+        )
+        val portraitAwareText = source(
+            "src/main/java/org/teslasoft/assistant/ui/chat/PortraitAwareMessageTextView.kt"
+        )
+
+        assertTrue(
+            viewTag(layout, "reasoning_text")
+                .contains("org.teslasoft.assistant.ui.chat.PortraitAwareMessageTextView")
+        )
+        assertTrue(adapter.contains("ui.offsetDescendantRectToMyCoords(view, bounds)"))
+        assertTrue(adapter.contains("reasoningText?.requestPortraitGeometryUpdate()"))
+        assertTrue(adapter.contains("message.requestPortraitGeometryUpdate()"))
+        assertTrue(adapter.contains("updateMeasuredNameInset(portraitBounds)"))
+        assertTrue(adapter.contains("portraitIsOnLeft(portraitBounds)"))
+        assertTrue(adapter.contains("ui.layoutDirection != View.LAYOUT_DIRECTION_RTL"))
+        assertTrue(portraitAwareText.contains("PortraitExclusionGeometry.horizontalExclusion("))
+        assertTrue(portraitAwareText.contains("horizontal.portraitOnLeft"))
+        assertTrue(portraitAwareText.contains("portrait?.layoutParams?.width"))
+        assertFalse(
+            portraitAwareText.contains(
+                "dimen(R.dimen.chat_portrait_top_offset) + dimen(R.dimen.chat_portrait_size)"
+            )
+        )
+    }
+
+    private fun viewTag(layout: String, id: String): String {
+        val idAt = layout.indexOf("android:id=\"@+id/$id\"")
+        if (idAt < 0) return ""
+        val start = layout.lastIndexOf('<', idAt)
+        val end = layout.indexOf('>', idAt)
+        return if (start >= 0 && end >= 0) layout.substring(start, end + 1) else ""
+    }
+
+    @Test
     fun layoutsUseApprovedGeometryResourcesAndKeepExistingActions() {
         val dimens = source("src/main/res/values/dimens.xml")
         assertTrue(dimens.contains("name=\"chat_message_speaker_inset\">25dp"))
@@ -133,11 +234,9 @@ class ChatPresentationContractTest {
         val portraitAwareText = source(
             "src/main/java/org/teslasoft/assistant/ui/chat/PortraitAwareMessageTextView.kt"
         )
-        assertTrue(
-            portraitAwareText.contains(
-                "dimen(R.dimen.chat_portrait_top_offset) + dimen(R.dimen.chat_portrait_size)"
-            )
-        )
+        assertTrue(portraitAwareText.contains("boundsInRow(row, portrait)"))
+        assertTrue(portraitAwareText.contains("portraitBounds.bottom"))
+        assertTrue(portraitAwareText.contains("contentBounds.top"))
     }
 
     @Test
@@ -169,4 +268,56 @@ class ChatPresentationContractTest {
         assertTrue(Regex("useFullPortraitSlot\\(\\)").findAll(adapter).count() >= 5)
         assertTrue(Regex("restorePortraitGlyphSlot\\(\\)").findAll(adapter).count() >= 4)
     }
+
+    @Test
+    fun staggeredResponsesDefaultsOnAndMovesUserRowsToAssistantPlacement() {
+        val appearanceLayout = source("src/main/res/layout/activity_appearance.xml")
+        val appearanceActivity = source(
+            "src/main/java/org/teslasoft/assistant/ui/activities/AppearanceActivity.kt"
+        )
+        val preferences = source(
+            "src/main/java/org/teslasoft/assistant/preferences/Preferences.kt"
+        )
+        val adapter = source(
+            "src/main/java/org/teslasoft/assistant/ui/adapters/chat/ChatAdapter.kt"
+        )
+        val chatActivity = source(
+            "src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt"
+        )
+        val strings = source("src/main/res/values/strings.xml")
+
+        val staggered = appearanceLayout.indexOf("@+id/switch_staggered_responses")
+        val profileImages = appearanceLayout.indexOf("@+id/switch_profile_images")
+        assertTrue(
+            "Staggered Responses must be the first Appearance toggle",
+            staggered in 0 until profileImages
+        )
+
+        val textColumnStart = appearanceLayout.lastIndexOf("<LinearLayout", staggered)
+        val rowStart = appearanceLayout.lastIndexOf("<LinearLayout", textColumnStart - 1)
+        val rowEnd = appearanceLayout.indexOf("</LinearLayout>", staggered)
+        val row = appearanceLayout.substring(rowStart, rowEnd)
+        assertTrue(row.contains("style=\"@style/Widget.App.Row.Toggle\""))
+        assertTrue(row.contains("@string/appearance_staggered_responses"))
+        assertTrue(row.contains("@string/appearance_staggered_responses_hint"))
+        assertTrue(row.contains("style=\"@style/Widget.App.Row.Switch\""))
+
+        assertTrue(strings.contains(
+            "<string name=\"appearance_staggered_responses\">Staggered Responses</string>"
+        ))
+        assertTrue(preferences.contains(
+            "getGlobalBoolean(\"chat_staggered_responses\", true)"
+        ))
+        assertTrue(appearanceActivity.contains(
+            "bindSwitch(R.id.switch_staggered_responses, preferences.getStaggeredResponses())"
+        ))
+        assertTrue(adapter.contains("ChatMessagePlacement.usesLogicalStart("))
+        assertTrue(adapter.contains("updateSpeakerPlacement(placeOnStart)"))
+        assertTrue(adapter.contains("constrainToSpeakerEdge(message, placeOnStart)"))
+        assertTrue(adapter.contains("iconParams.setMarginStart(portraitEdge)"))
+        assertTrue(chatActivity.contains(
+            "Rebind existing rows so Staggered Responses takes effect at once."
+        ))
+    }
+
 }

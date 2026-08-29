@@ -55,14 +55,25 @@ class ChatComposerLayout @JvmOverloads constructor(
     private lateinit var messageInput: EditText
     private lateinit var btnExpand: ImageButton
     private lateinit var btnCollapse: ImageButton
+    private lateinit var controlsSpacer: View
 
     private var expanded = false
     private var active = false
     private var movingFocusedEditor = false
     private var expansionListener: ((Boolean) -> Unit)? = null
+    private var beforeResize: (() -> Unit)? = null
+    private var afterResize: (() -> Unit)? = null
 
     private val edgeMargin = dp(8)
     private val textBottomGap = dp(4)
+
+    /** The editor's own bottom padding while it sits above the control row,
+     * captured from the layout's authored value and restored when the
+     * editor returns to the single-line control row. Trimmed relative to
+     * that authored value so the gap above the icon row is tighter once the
+     * editor is promoted. */
+    private var controlsBottomPadding = 0
+    private var contentBottomPadding = 0
 
     override fun onFinishInflate() {
         super.onFinishInflate()
@@ -71,8 +82,11 @@ class ChatComposerLayout @JvmOverloads constructor(
         messageInput = findViewById(R.id.message_input)
         btnExpand = findViewById(R.id.btn_expand_content)
         btnCollapse = findViewById(R.id.btn_collapse_content)
+        controlsSpacer = findViewById(R.id.composer_controls_spacer)
 
         active = messageInput.text?.isNotBlank() == true
+        controlsBottomPadding = messageInput.paddingBottom
+        contentBottomPadding = dp(4)
 
         messageInput.setOnFocusChangeListener { _, hasFocus ->
             if (movingFocusedEditor) return@setOnFocusChangeListener
@@ -122,11 +136,56 @@ class ChatComposerLayout @JvmOverloads constructor(
         listener?.invoke(expanded)
     }
 
+    /** Lets ChatActivity pin the transcript's current scroll anchor around a
+     * composer mode change. The composer resizing (promoting, collapsing,
+     * expanding) should never itself move already-visible transcript
+     * content — only the keyboard's own arrival/departure should. `before`
+     * runs synchronously right before this composer's geometry changes;
+     * `after` runs once the resulting layout pass has settled. */
+    fun setResizeAnchorListener(before: (() -> Unit)?, after: (() -> Unit)?) {
+        beforeResize = before
+        afterResize = after
+    }
+
     fun isExpanded(): Boolean = expanded
 
     fun collapseIfExpanded(): Boolean {
         if (!expanded) return false
         setExpanded(false)
+        return true
+    }
+
+    /** Sending ends the current editing gesture even while request preflight
+     * continues. Keeping this inside the composer makes focus and IME ownership
+     * explicit instead of relying on a text clear to happen later. */
+    fun dismissImeForSend() {
+        if (!::messageInput.isInitialized) return
+        messageInput.clearFocus()
+        ViewCompat.getWindowInsetsController(messageInput)?.hide(WindowInsetsCompat.Type.ime())
+    }
+
+    /** Once the draft has been committed and cleared, restore the compact
+     * single-row composer in the same resize transaction used by every other
+     * composer mode change. */
+    fun resetAfterSend() {
+        if (!::messageInput.isInitialized) return
+        expanded = false
+        active = false
+        applyMode()
+        expansionListener?.invoke(false)
+    }
+
+    /** A tap outside the composer while its draft is blank should return it
+     * to the single-line control row instead of leaving an empty, promoted
+     * editor focused. Expanded mode keeps its own explicit Collapse control
+     * and is left alone here. */
+    fun collapseIfEmptyOutsideTap(): Boolean {
+        if (!::messageInput.isInitialized) return false
+        if (expanded) return false
+        if (!messageInput.hasFocus()) return false
+        if (!messageInput.text.isNullOrBlank()) return false
+        messageInput.clearFocus()
+        ViewCompat.getWindowInsetsController(messageInput)?.hide(WindowInsetsCompat.Type.ime())
         return true
     }
 
@@ -141,7 +200,38 @@ class ChatComposerLayout @JvmOverloads constructor(
 
     private fun applyMode() {
         if (!::messageInput.isInitialized) return
+        beforeResize?.invoke()
+        // removeView() synchronously reports focus loss before clearing the
+        // editor's parent. A focus callback must not start another move while
+        // that removal is still in progress, including during posted restore
+        // and send/reset transitions (not just the initial focus tap).
+        val wasMovingFocusedEditor = movingFocusedEditor
+        val keepEditorFocus = messageInput.hasFocus() && (expanded || active)
+        val selectionStart = messageInput.selectionStart
+        val selectionEnd = messageInput.selectionEnd
+        movingFocusedEditor = true
+        try {
+            applyModeInternal()
+            // Keep an existing editing gesture, but never focus a background
+            // composer or reopen the keyboard when returning to compact mode.
+            if (keepEditorFocus) {
+                messageInput.requestFocus()
+                // Regaining focus can move the caret to the end of the draft.
+                if (selectionStart >= 0 && selectionEnd >= 0) {
+                    val length = messageInput.length()
+                    messageInput.setSelection(
+                        selectionStart.coerceAtMost(length),
+                        selectionEnd.coerceAtMost(length)
+                    )
+                }
+            }
+        } finally {
+            movingFocusedEditor = wasMovingFocusedEditor
+        }
+        afterResize?.let { after -> post { after.invoke() } }
+    }
 
+    private fun applyModeInternal() {
         if (expanded || active) {
             moveEditorToContent()
         } else {
@@ -168,6 +258,7 @@ class ChatComposerLayout @JvmOverloads constructor(
     }
 
     private fun moveEditorToContent() {
+        controlsSpacer.visibility = View.VISIBLE
         if (messageInput.parent !== composerContent) {
             (messageInput.parent as? ViewGroup)?.removeView(messageInput)
             composerContent.addView(messageInput, 0)
@@ -181,9 +272,16 @@ class ChatComposerLayout @JvmOverloads constructor(
             setMargins(edgeMargin, 0, edgeMargin, textBottomGap)
         }
         messageInput.layoutParams = params
+        messageInput.setPadding(
+            messageInput.paddingLeft,
+            messageInput.paddingTop,
+            messageInput.paddingRight,
+            contentBottomPadding
+        )
     }
 
     private fun moveEditorToControls() {
+        controlsSpacer.visibility = View.GONE
         if (messageInput.parent !== composerControls) {
             (messageInput.parent as? ViewGroup)?.removeView(messageInput)
             val persistent = composerControls.findViewById<View>(R.id.btn_persistent_includes)
@@ -199,6 +297,12 @@ class ChatComposerLayout @JvmOverloads constructor(
             gravity = Gravity.CENTER_VERTICAL
         }
         messageInput.layoutParams = params
+        messageInput.setPadding(
+            messageInput.paddingLeft,
+            messageInput.paddingTop,
+            messageInput.paddingRight,
+            controlsBottomPadding
+        )
     }
 
     private fun updateExpandVisibility() {
@@ -227,8 +331,16 @@ class ChatComposerLayout @JvmOverloads constructor(
             expanded = state.expanded
             active = state.active
             if (::messageInput.isInitialized) {
-                applyMode()
-                expansionListener?.invoke(expanded)
+                // ViewGroup is still walking the saved child hierarchy while this
+                // callback runs. Moving the editor to its restored mode here can
+                // race that traversal and make addView() see the editor's previous
+                // parent even after removeView(), crashing activity recreation.
+                // Run the reparenting after the complete hierarchy restore instead.
+                post {
+                    if (!::messageInput.isInitialized) return@post
+                    applyMode()
+                    expansionListener?.invoke(expanded)
+                }
             }
         } else {
             super.onRestoreInstanceState(state)
@@ -285,13 +397,50 @@ class ChatImeInsetLayout @JvmOverloads constructor(
     private val baseRight = paddingRight
     private val baseBottom = paddingBottom
 
+    /**
+     * Reports that the keyboard is about to arrive or leave, immediately
+     * before this container takes up or gives back that space and the chat
+     * viewport above it resizes.
+     *
+     * ChatActivity uses the callback to note where the conversation is
+     * sitting while the viewport still has its old size, so it can hold the
+     * same content against the composer's top edge across the change. This is
+     * the last moment that geometry can be read.
+     *
+     * `keyboardOpen` is the state the change is moving to, not the one it is
+     * leaving. `retreating` says the keyboard is on its way out: a close can
+     * take several frames, and the early ones still report the keyboard as
+     * present, so `keyboardOpen` alone cannot tell an arrival from a close in
+     * progress.
+     */
+    var onBottomInsetChanging: ((keyboardOpen: Boolean, retreating: Boolean) -> Unit)? = null
+
+    /**
+     * Whether the software keyboard is currently taking space.
+     *
+     * An open keyboard means the user is holding a place in the conversation,
+     * so ChatActivity leaves the transcript alone for as long as this is true:
+     * a reply arriving or growing does not move it. Their own scrolling is
+     * unaffected.
+     */
+    var isKeyboardOpen: Boolean = false
+        private set
+
+    /** Tracked on every inset pass, not only the ones that change padding, so
+     *  the reported direction cannot miss a frame. */
+    private var lastImeBottom = 0
+
     init {
         ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
             val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
             val imeBottom = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
             val targetBottom = baseBottom + max(navBottom, imeBottom)
+            val retreating = imeBottom < lastImeBottom
+            lastImeBottom = imeBottom
+            isKeyboardOpen = imeBottom > 0
 
             if (view.paddingBottom != targetBottom) {
+                onBottomInsetChanging?.invoke(isKeyboardOpen, retreating)
                 view.setPadding(baseLeft, baseTop, baseRight, targetBottom)
             }
             insets

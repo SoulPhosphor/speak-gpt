@@ -169,6 +169,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var labelError: TextView? = null
     private var hostError: TextView? = null
     private var fieldChatEndpoint: TextInputEditText? = null
+    private var fieldSpeechEndpoint: TextInputEditText? = null
     private var fieldApiKey: TextInputEditText? = null
     private var fieldAuthType: TextInputEditText? = null
 
@@ -291,6 +292,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldHost = findViewById(R.id.field_host)
         hostError = findViewById(R.id.text_field_host_error)
         fieldChatEndpoint = findViewById(R.id.field_chat_endpoint)
+        fieldSpeechEndpoint = findViewById(R.id.field_speech_endpoint)
         fieldApiKey = findViewById(R.id.field_api_key)
         fieldAuthType = findViewById(R.id.field_auth_type)
         rowChooseProvider = findViewById(R.id.row_choose_provider)
@@ -370,6 +372,8 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         fieldChatEndpoint?.setText(
             endpoint.chatEndpoint.ifBlank { ApiEndpointObject.DEFAULT_CHAT_ENDPOINT }
         )
+
+        fieldSpeechEndpoint?.setText(ApiEndpointObject.normalizedSpeechEndpoint(endpoint.speechEndpoint))
 
         selectedAuthType = endpoint.authType.ifBlank { ApiEndpointObject.AUTH_BEARER }
         fieldAuthType?.setText(authLabel(selectedAuthType))
@@ -501,6 +505,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         bindFloatingLabel(fieldPrefix, R.id.label_prefix)
         bindFloatingLabel(fieldHost, R.id.label_host)
         bindFloatingLabel(fieldChatEndpoint, R.id.label_chat_endpoint)
+        bindFloatingLabel(fieldSpeechEndpoint, R.id.label_speech_endpoint)
         bindFloatingLabel(fieldApiKey, R.id.label_api_key)
         bindFloatingLabel(fieldAuthType, R.id.label_auth)
     }
@@ -599,6 +604,9 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         return value.ifEmpty { ApiEndpointObject.DEFAULT_CHAT_ENDPOINT }
     }
 
+    private fun normalizedSpeechEndpoint(): String =
+        ApiEndpointObject.normalizedSpeechEndpoint(fieldSpeechEndpoint?.text.toString())
+
     /** The API key to persist: the stored key unless the user typed a new one. */
     private fun effectiveApiKey(): String {
         val typed = fieldApiKey?.text.toString()
@@ -620,6 +628,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             host = host,
             apiKey = effectiveApiKey(),
             chatEndpoint = chatEndpoint,
+            speechEndpoint = normalizedSpeechEndpoint(),
             authType = selectedAuthType,
             model = selectedModel,
             temperature = (sliderTemperature?.value ?: (ApiEndpointObject.DEFAULT_TEMPERATURE * 10f)) / 10f,
@@ -893,6 +902,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             fieldLabel?.text.toString(),
             fieldHost?.text.toString(),
             normalizedChatEndpoint(),
+            normalizedSpeechEndpoint(),
             selectedAuthType,
             selectedModel,
             sliderTemperature?.value.toString(),

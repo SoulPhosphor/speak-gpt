@@ -34,24 +34,6 @@
             android:textSize="14sp" />
 
         <TextView
-            android:id="@+id/includes_popup_item_kind"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:maxLines="1"
-            android:textColor="?attr/appSubtleTextColor"
-            android:textSize="11sp" />
-
-        <TextView
-            android:id="@+id/includes_popup_item_state"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:maxLines="1"
-            android:textColor="?attr/colorPrimary"
-            android:textSize="11sp" />
-
-        <TextView
             android:id="@+id/includes_popup_item_weight"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

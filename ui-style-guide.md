@@ -240,6 +240,17 @@ Ordinary Yes/No or similar dialogs may use the text action buttons supplied by `
 
 Use the custom button layouts above when the approved design calls for filled, outlined, or specially arranged actions.
 
+### The affirmative word is always "Okay", never "OK" (owner ruling, Aug 26 2026)
+
+Every affirmative confirmation label in the app is spelled out as **Okay**.
+The two-letter form **OK** is never used, anywhere — dialog buttons, banners,
+toasts, helper text, or any other user-facing string, in any language.
+
+Use the shared `@string/btn_ok` string (its value is `Okay`) for affirmative
+dialog buttons rather than the platform `android.R.string.ok`, so a single
+resource carries the approved spelling everywhere. Do not hardcode the literal
+`OK` in a layout, a Kotlin string, or a translation.
+
 ## Navigation and settings rows
 
 A navigation row is assembled from shared pieces. Do not copy a completed row's raw XML into another screen.
@@ -654,6 +665,28 @@ or override dropdown colors, border, background, height, internal padding,
 chevron, sizing rules, open-state behavior, disabled treatment, or touch
 feedback in the QuickTile family.
 
+## Voice Browser
+
+The full-screen Voice Browser composes the existing `Widget.App.ActionBar`,
+`Widget.App.Dropdown.CanonicalLabel`/`.CanonicalValue`, `Widget.App.Section.*`,
+and `Widget.App.Row.*` families. Its provider and metadata filters use the
+canonical dropdown behavior; no provider owns a separate selector layout.
+
+The few controls unique to browsing voices use one documented family:
+
+- `Widget.App.VoiceBrowser.Segment` — the equal-width All / On-device / Network
+  single-choice group. Checked and unchecked colors come from theme roles via
+  `voice_browser_segment_*` state lists.
+- `Widget.App.VoiceBrowser.Row` — the selectable voice row container and its
+  minimum accessible height.
+- `Widget.App.VoiceBrowser.SelectedIcon` — the independent selected-state mark.
+- `Widget.App.VoiceBrowser.Action` — the independent 56dp Preview or Download
+  action target. Selection never replaces or absorbs this control.
+
+These styles deliberately contain no screenshot-derived literal colors. New
+provider metadata may add canonical dropdown fields without adding another
+Voice Browser style or provider-specific screen.
+
 ## Provider chart
 
 `Widget.App.Chart.Row`
@@ -692,10 +725,41 @@ Use:
 
 - `Widget.App.Chat.ComposerHost` on the outer bottom composer host. It keeps the space behind the floating oblong transparent.
 - `Widget.App.Chat.ComposerSurface` on the live composer surface. It uses `@drawable/bubble_in`, so the editor and its controls resolve the same app-owned theme surface as the incoming AI bubble.
+- `Widget.App.Chat.ComposerAction` on bare primary composer actions such as Add and the conditional conversation-tools gear. It owns their 48dp geometry, transparent background, centered icon, and theme-resolved tint.
+- `Widget.App.Chat.ComposerContentToggle` on both Expand Content and Collapse Content. It owns their 48dp icon-button geometry, transparent background, centered icon, and theme-resolved tint. The layout owns only their different placement and visibility. Do not replace this background in Kotlin, including legacy theme handling.
 
-The initial empty composer keeps the one-row editor between the bottom controls. Focusing it moves that same editor above the controls and allows natural growth up to eight lines. The expand control is shown only for an active non-empty draft; expanded mode uses the bounded space below the app header and the collapse control restores the previous mode. Keep the controls in this order: Add, conditional persistent Includes, Expand content, microphone, Send.
+The initial empty composer keeps the one-row editor between the bottom controls. Focusing it moves that same editor above the controls and allows natural growth up to eight lines. The expand control is shown only for an active non-empty draft; expanded mode uses the bounded space below the app header and the collapse control restores the previous mode. Keep the controls in this order: Add, conditional conversation tools, conditional persistent Includes, Expand content, microphone, Send.
 
 Do not assign phone/dynamic-system colors or a second local composer palette in XML or Kotlin. The host remains transparent and the surface resolves through the shared drawable/theme roles.
+
+### Chat action pop-ups
+
+Use the complete `Widget.App.Chat.ActionMenu.*` family for the labeled action pop-ups above the composer:
+
+- `Popup` for placement and elevation;
+- `Card` and `Surface` for the rounded transparent/blurred container;
+- `Content` for the vertical action stack;
+- `Row`, `Icon`, and `Label` for every available action.
+
+Camera/Image/Document and the conditional Compact/Create Image menu share this family. Availability and click behavior remain in the owning chat screen; appearance must not be restated or recolored there.
+
+Their shared runtime blur radius is `@dimen/chat_action_menu_blur_radius`; keep it centralized with this family rather than placing a numeric radius in `ChatActivity`.
+
+### Manual compaction marker
+
+`Widget.App.Chat.CompactionMarker` is the centered **Compacted** title between message units. It inherits the shared section-title typography and owns its spacing and alignment. Both user and assistant row layouts carry the same normally hidden marker slot; the adapter shows exactly one slot at the persisted manual boundary without inserting a synthetic conversation message.
+
+## Chat Thinking disclosure
+
+Use the complete `Widget.App.Chat.Thinking.*` family for the provider-supplied Thinking disclosure on assistant replies:
+
+- `Container` for the disclosure block;
+- `Header` for the tappable label/chevron row;
+- `Label` for the bold Thinking label;
+- `Chevron` for its outline expand/collapse glyph;
+- `Body` for the selectable reasoning text.
+
+The family owns the component's size, spacing, typography, default theme colors, and borderless header interaction. Message layouts must not repeat those attributes inline. `ChatAdapter` may recolor the label, body, and chevron together through its single bubble-foreground path so they retain contrast when bubble appearance changes; that path resolves semantic theme attributes rather than fixed palette colors. Expanded/collapsed rotation and visibility remain behavior owned by `ChatAdapter`.
 
 ## Attached-document strip
 

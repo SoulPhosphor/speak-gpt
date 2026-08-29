@@ -271,6 +271,10 @@ class EditApiEndpointDialogFragment : DialogFragment() {
             host = fieldHost?.text.toString(),
             apiKey = fieldApiKey?.text.toString(),
             chatEndpoint = normalizedChatEndpoint(),
+            speechEndpoint = org.teslasoft.assistant.preferences.ApiEndpointPreferences
+                .getApiEndpointPreferences(requireContext())
+                .getApiEndpoint(requireContext(), requireArguments().getString("id").orEmpty())
+                .speechEndpoint,
             authType = selectedAuthType,
             model = selectedModel.ifBlank { ApiEndpointObject.DEFAULT_MODEL },
             temperature = (sliderTemperature?.value ?: (ApiEndpointObject.DEFAULT_TEMPERATURE * 10f)) / 10f,

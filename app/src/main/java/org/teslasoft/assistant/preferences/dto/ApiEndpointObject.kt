@@ -128,7 +128,9 @@ class ApiEndpointObject(
      * [org.teslasoft.assistant.reasoning.RejectedReasoningLevelStore].
      * Kept at the END of the constructor so existing positional callers stay valid.
      */
-    var reasoningRejectedLevelsByModel: String = ""
+    var reasoningRejectedLevelsByModel: String = "",
+    /** Independent speech request path. Trailing for positional-call compatibility. */
+    var speechEndpoint: String = DEFAULT_SPEECH_ENDPOINT
 ) {
     /** True when this endpoint carries OpenRouter routing identity. */
     fun isOpenRouterRouting(): Boolean = identity == IDENTITY_OPENROUTER
@@ -166,6 +168,15 @@ class ApiEndpointObject(
         val DEFAULT_ENDPOINT_ID: String = Hash.hash("Default")
 
         const val DEFAULT_CHAT_ENDPOINT = "/chat/completions"
+        const val DEFAULT_SPEECH_ENDPOINT = "/audio/speech"
+
+        /** Same trim/blank convention as the profile editor's chat path. */
+        fun normalizedSpeechEndpoint(path: String): String =
+            path.trim().ifBlank { DEFAULT_SPEECH_ENDPOINT }
+
+        /** Append, rather than URI-resolve, so /api/v1/ is never discarded. */
+        fun composeSpeechUrl(host: String, path: String): String =
+            host.trim().trimEnd('/') + "/" + normalizedSpeechEndpoint(path).trimStart('/')
         /** OpenRouter's provider-discovery path; {model} → the model id. */
         const val DEFAULT_PROVIDER_DISCOVERY_PATH = "/models/{model}/endpoints"
         const val AUTH_BEARER = "bearer"

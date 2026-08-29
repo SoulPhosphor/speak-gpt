@@ -1129,7 +1129,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
         switchChatExcluded?.setOnCheckedChangeListener { _, archive ->
             val excluded = !archive
-            preferences?.setChatExcludedFromMemory(excluded)
+            preferences?.setChatArchiveEnabled(archive)
             val appContext = context?.applicationContext ?: return@setOnCheckedChangeListener
             Thread {
                 try {
@@ -1524,6 +1524,12 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
         switchUseSummarizer?.setOnCheckedChangeListener { _, checked ->
             preferences?.setChatUseSummarizer(checked)
+            if (checked) {
+                preferences?.setSummarizerCatchUpPending(true)
+            } else {
+                org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
+                    .cancel(arguments?.getString("chatId").orEmpty())
+            }
             rowSummarizerWindow?.visibility = if (checked) View.VISIBLE else View.GONE
             if (checked) {
                 setSummarizerWindowFieldText(preferences?.getChatSummarizerWindow()?.toString() ?: "")
@@ -1616,7 +1622,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             .setTitle(R.string.rp_continue_title)
             .setMessage(R.string.rp_continue_msg)
             .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
+            .setPositiveButton(R.string.btn_ok) { _, _ ->
                 applyWorldMove(
                     campaign, newWorldId,
                     reasonInput.text?.toString()?.trim().orEmpty(),
@@ -1682,7 +1688,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                     // (owner ruling, spec §8b).
                     MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
                         .setMessage(getString(R.string.memory_operation_failed, e.message ?: e.javaClass.simpleName))
-                        .setPositiveButton(android.R.string.ok) { _, _ -> }
+                        .setPositiveButton(R.string.btn_ok) { _, _ -> }
                         .show()
                 }
             }
@@ -1696,7 +1702,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         if (selectedCampaign()?.roleplayCharacterId != null) {
             MaterialAlertDialogBuilder(requireContext(), R.style.App_MaterialAlertDialog)
                 .setMessage(R.string.rp_character_locked_msg)
-                .setPositiveButton(android.R.string.ok) { _, _ -> }
+                .setPositiveButton(R.string.btn_ok) { _, _ -> }
                 .show()
             return
         }
@@ -1725,6 +1731,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             host = currentProfile.host,
             apiKey = currentProfile.apiKey,
             chatEndpoint = currentProfile.chatEndpoint,
+            speechEndpoint = currentProfile.speechEndpoint,
             authType = currentProfile.authType,
             model = preferences?.getModel() ?: currentProfile.model,
             temperature = preferences?.getTemperature() ?: currentProfile.temperature,

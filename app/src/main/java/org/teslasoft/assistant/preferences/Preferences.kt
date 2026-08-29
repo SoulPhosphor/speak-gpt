@@ -18,14 +18,18 @@ package org.teslasoft.assistant.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.teslasoft.assistant.preferences.includes.SummarizerProjectionContract
 import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
+import org.teslasoft.assistant.preferences.tts.AppTtsVoicePreferences
+import org.teslasoft.assistant.tts.voices.VoicePreviewText
 
 class Preferences internal constructor(
     private var preferences: SharedPreferences,
     private var gp: SharedPreferences,
     private var chatId: String,
-    private var defaultPreferences: SharedPreferences? = preferences
+    private var defaultPreferences: SharedPreferences? = preferences,
+    private val ttsVoicePreferences: AppTtsVoicePreferences = AppTtsVoicePreferences(gp)
 ) {
     companion object {
         fun getPreferences(context: Context, xchatId: String) : Preferences {
@@ -39,7 +43,8 @@ class Preferences internal constructor(
                     null
                 } else {
                     SecurePrefs.get(context, "settings.")
-                }
+                },
+                AppTtsVoicePreferences.getPreferences(context)
             )
         }
 
@@ -62,11 +67,14 @@ class Preferences internal constructor(
         const val LOG_MAX_DAYS_LIMIT = 30
         const val LOG_DEFAULT_MAX_ENTRIES = 50
         const val LOG_DEFAULT_MAX_DAYS = 7
+        const val CONDENSED_KIND_SUMMARY = "summary"
+        const val CONDENSED_KIND_COMPACTION = "compaction"
 
         private const val LAST_SUCCESS_ENDPOINT_ID = "last_success_endpoint_id"
         private const val LAST_SUCCESS_MODEL = "last_success_model"
         private const val LAST_SUCCESS_ROUTING = "last_success_routing"
         private const val LAST_SUCCESS_PERSONA_ID = "last_success_persona_id"
+        private const val LAST_CHAT_ARCHIVE_ENABLED = "last_chat_archive_enabled"
 
         /** Clamp a max-entries value to [1, LOG_MAX_ENTRIES_LIMIT]. Pure, unit-tested. */
         fun coerceLogMaxEntries(value: Int): Int = value.coerceIn(1, LOG_MAX_ENTRIES_LIMIT)
@@ -429,24 +437,6 @@ class Preferences internal constructor(
     }
 
     /**
-     * Retrieves the imagine command status from the shared preferences.
-     *
-     * @return The imagine command status, true if enabled or false otherwise.
-     */
-    fun getImagineCommand() : Boolean {
-        return getBoolean("imagine_command", true)
-    }
-
-    /**
-     * Enable/disable imagine command.
-     *
-     * @param mode mode.
-     */
-    fun setImagineCommand(mode: Boolean) {
-        putBoolean("imagine_command", mode)
-    }
-
-    /**
      * Retrieves the auto language detection status in the shared preferences.
      *
      * @return uto language detection status to be stored (true for enabled, false otherwise).
@@ -517,6 +507,13 @@ class Preferences internal constructor(
     }
 
     /** Appearance controls for the adaptable chat message shell. */
+    fun getStaggeredResponses(): Boolean =
+        getGlobalBoolean("chat_staggered_responses", true)
+
+    fun setStaggeredResponses(state: Boolean) {
+        putGlobalBoolean("chat_staggered_responses", state, true)
+    }
+
     fun getShowChatProfileImages(): Boolean =
         getGlobalBoolean("chat_show_profile_images", true)
 
@@ -577,7 +574,27 @@ class Preferences internal constructor(
     fun getShowThinkingIndicator(): Boolean = getGlobalBoolean("chat_show_thinking_indicator", true)
 
     fun setShowThinkingIndicator(state: Boolean) {
-        putGlobalBoolean("chat_show_thinking_indicator", state)
+        putGlobalBoolean("chat_show_thinking_indicator", state, true)
+    }
+
+    /** Whether the Thinking disclosure (the collapsible reasoning block under
+     *  an AI reply) is shown at all, on current and past chats alike (Chat
+     *  Settings → Show Thinking). Default on. This gates display only — the
+     *  reasoning text itself is still requested and stored exactly as before,
+     *  so turning this back on restores it everywhere unchanged. */
+    fun getShowThinking(): Boolean = getGlobalBoolean("chat_show_thinking", true)
+
+    fun setShowThinking(state: Boolean) {
+        putGlobalBoolean("chat_show_thinking", state, true)
+    }
+
+    /** Places the per-response read-aloud control beside the assistant name.
+     * Default on. Off preserves the original action-row placement. */
+    fun getTopPositionedAudioControl(): Boolean =
+        getGlobalBoolean("chat_top_positioned_audio_control", true)
+
+    fun setTopPositionedAudioControl(state: Boolean) {
+        putGlobalBoolean("chat_top_positioned_audio_control", state, true)
     }
 
     /** Renamed presentation of Desktop Mode; the stored key and behavior stay intact. */
@@ -851,58 +868,37 @@ class Preferences internal constructor(
         putGlobalString("lang", lang)
     }
 
-    /**
-     * Retrieves the voice model.
-     *
-     * @return voice model.
-     */
-    fun getVoice() : String {
-        return getString("voice", "en-us-x-iom-network")
+    // Voice identity is app-wide even when this Preferences instance belongs to a chat.
+    fun getVoice(): String = ttsVoicePreferences.getVoice()
+    fun setVoice(model: String) = ttsVoicePreferences.setVoice(model)
+    fun getTtsEngine(): String = ttsVoicePreferences.getTtsEngine()
+    fun setTtsEngine(engine: String) = ttsVoicePreferences.setTtsEngine(engine)
+    fun getOpenAIVoice(): String = ttsVoicePreferences.getOpenAIVoice()
+    fun setOpenAIVoice(voice: String) = ttsVoicePreferences.setOpenAIVoice(voice)
+    fun getOpenAITtsModel(): String = ttsVoicePreferences.getOpenAITtsModel()
+    fun setOpenAITtsModel(model: String) = ttsVoicePreferences.setOpenAITtsModel(model)
+    fun getSelectedTtsVoice() = ttsVoicePreferences.getSelectedTtsVoice()
+    fun saveSelectedTtsVoice(selection: org.teslasoft.assistant.preferences.tts.TtsVoiceSelection): Boolean =
+        ttsVoicePreferences.saveSelectedTtsVoice(selection)
+    fun isTtsVoicePermanentlyUnavailable(selection: org.teslasoft.assistant.preferences.tts.TtsVoiceSelection): Boolean =
+        ttsVoicePreferences.isTtsVoicePermanentlyUnavailable(selection)
+    fun markTtsVoicePermanentlyUnavailable(selection: org.teslasoft.assistant.preferences.tts.TtsVoiceSelection) =
+        ttsVoicePreferences.markTtsVoicePermanentlyUnavailable(selection)
+
+    /** Voice dialogs always open the app-wide selector. */
+    fun ttsPreferenceScope(): String = ""
+
+    fun getVoicePreviewText(): String = getGlobalString("voice_preview_text", VoicePreviewText.DEFAULT)
+
+    fun setVoicePreviewText(text: String) {
+        putGlobalString("voice_preview_text", text, VoicePreviewText.DEFAULT)
     }
 
-    /**
-     * Sets the voice model.
-     *
-     * @param model voice model.
-     */
-    fun setVoice(model: String) {
-        putString("voice", model)
-    }
+    fun getVoiceBrowserFilters(providerId: String): String =
+        getGlobalString("voice_browser_filters_$providerId", "")
 
-    /**
-     * Set TTS engine
-     *
-     * @param engine - TTS engine (google or openai)
-     * */
-    fun setTtsEngine(engine: String) {
-        putString("tts_engine", engine)
-    }
-
-    /**
-     * Get TTS engine
-     *
-     * @return TTS engine (google or openai)
-     * */
-    fun getTtsEngine() : String {
-        return getString("tts_engine", "google")
-    }
-
-    /**
-     * Set OpenAI voice
-     *
-     * @param voice - voice name
-     * */
-    fun setOpenAIVoice(voice: String) {
-        putString("openai_voice", voice)
-    }
-
-    /**
-     * Get OpenAI voice
-     *
-     * @return voice name
-     * */
-    fun getOpenAIVoice() : String {
-        return getString("openai_voice", "alloy")
+    fun setVoiceBrowserFilters(providerId: String, encoded: String) {
+        putGlobalString("voice_browser_filters_$providerId", encoded, "")
     }
 
     /**
@@ -1585,6 +1581,25 @@ class Preferences internal constructor(
     }
 
     /**
+     * Resolves the three Quick Settings values whose new-chat behavior is not
+     * inherited from another conversation. Each resolved value is written to
+     * the new chat immediately, including when it equals the global default,
+     * so later global changes cannot alter an existing chat. Direct writes
+     * also replace stale values left behind when a deleted chat ID is reused.
+     */
+    fun initializeNewChatQuickSettings() {
+        val memoryEnabled = resolveDefaultChatMemoryEnabled()
+        val applyModelRules = getAutoApplyModelRules()
+        val archiveEnabled = getLastChatArchiveEnabled()
+
+        preferences.edit()
+            .putString("memory_enabled", if (memoryEnabled) "true" else "false")
+            .putBoolean("apply_model_rules", applyModelRules)
+            .putBoolean("memory_excluded", !archiveEnabled)
+            .apply()
+    }
+
+    /**
      * The additional lorebooks currently checked for this chat. Memories from
      * these books (plus the persona's always-on core book) are matched against
      * messages and injected into the prompt. Stored comma-separated.
@@ -1652,9 +1667,12 @@ class Preferences internal constructor(
         return when (getString("memory_enabled", "")) {
             "true" -> true
             "false" -> false
-            else -> getMemoryEngine() in setOf("associative", "both") && getDefaultMemoryEnabled()
+            else -> resolveDefaultChatMemoryEnabled()
         }
     }
+
+    private fun resolveDefaultChatMemoryEnabled(): Boolean =
+        getMemoryEngine() in setOf("associative", "both") && getDefaultMemoryEnabled()
 
     fun getChatMemoryEnabledRaw() : String {
         return getString("memory_enabled", "")
@@ -1679,7 +1697,7 @@ class Preferences internal constructor(
 
     /**
      * The persistent "Use Importance Ratings" master toggle (canonical recovery
-     * plan §7.1). Off by default: while Off, importance controls are hidden,
+     * plan §7.1). On by default: while Off, importance controls are hidden,
      * retrieval ignores every importance value, and new memories store the
      * neutral 0 — but stored values are never erased, so turning it back On
      * restores them. Enforcement lands in later phases; Phase 1 only persists
@@ -1690,7 +1708,7 @@ class Preferences internal constructor(
     }
 
     fun setUseImportanceRatings(enabled: Boolean) {
-        putGlobalBoolean("use_importance_ratings", enabled, false)
+        putGlobalBoolean("use_importance_ratings", enabled, true)
     }
 
     /**
@@ -1970,6 +1988,16 @@ class Preferences internal constructor(
     fun setChatExcludedFromMemory(excluded: Boolean) {
         putBoolean("memory_excluded", excluded)
     }
+
+    /** User-facing Archive choice. It remains per-chat and also seeds only the
+     * next chat's initial Archive value; it is not a separate global toggle. */
+    fun setChatArchiveEnabled(enabled: Boolean) {
+        preferences.edit().putBoolean("memory_excluded", !enabled).apply()
+        putGlobalBoolean(LAST_CHAT_ARCHIVE_ENABLED, enabled, true)
+    }
+
+    private fun getLastChatArchiveEnabled(): Boolean =
+        getGlobalBoolean(LAST_CHAT_ARCHIVE_ENABLED, true)
 
     /* ---------------------------------------------------------------------- *
      * Conversation-level memory policy (canonical recovery plan §4.4/§4.5,
@@ -2343,9 +2371,10 @@ class Preferences internal constructor(
      * like the Summarizer settings: one configuration for the whole app.
      * ImageGenerationMigration seeds these once from the default settings
      * profile; the legacy per-chat copies (imageModel, resolution,
-     * imagine_command, function_calling) stop being read
-     * as the rebuild rewires each path, and are removed only after
-     * migration tests plus a stable release (§14).
+     * function_calling) stop being read as the rebuild rewires each path,
+     * and are removed only after migration tests plus a stable release
+     * (§14). The legacy imagine_command copy was removed outright — it had
+     * no remaining reader anywhere in the app.
      * ------------------------------------------------------------------ */
 
     /** Let the AI Create Images: whether the create_image tool is offered
@@ -2403,8 +2432,8 @@ class Preferences internal constructor(
         putGlobalString("image_gen_default_quality", quality.storedValue, "automatic")
     }
 
-    /** App-wide Enable `/imagine` (default on). Replaces the per-chat
-     *  imagine_command once the rebuild rewires the command path. */
+    /** App-wide Enable `/imagine` (default on). The only reader of this
+     *  feature's on/off state; the old per-chat copy is gone. */
     fun getImagineCommandGlobal(): Boolean =
         getGlobalBoolean("image_gen_imagine_command", true)
 
@@ -2589,6 +2618,15 @@ class Preferences internal constructor(
         putGlobalString("image_summary_prompt", prompt)
     }
 
+    /** Manual compaction cancellation policy. False is the conservative,
+     * atomic default: cancelling discards every result from that operation. */
+    fun getSavePartialCompactionOnCancel(): Boolean =
+        getGlobalString("save_partial_compaction_on_cancel", "false") == "true"
+
+    fun setSavePartialCompactionOnCancel(value: Boolean) {
+        putGlobalString("save_partial_compaction_on_cancel", value.toString())
+    }
+
     /** Per-chat Use Summarizer state: "" = never stamped, else "true"/"false".
      *  Stamped once per chat (see ChatActivity) so flipping the new-chats
      *  default later never silently changes what an existing chat sends. */
@@ -2605,6 +2643,34 @@ class Preferences internal constructor(
         putString("use_summarizer", if (enabled) "true" else "false")
     }
 
+    /** Whether regular requests currently use the persisted summary/compacted
+     * projection. Turning this off sends the complete canonical transcript but
+     * deliberately preserves the summary, bookmark, and compaction marker. */
+    fun getUseSummarizedConversationProjection(): Boolean =
+        getString("use_summarized_conversation_projection", "true") != "false"
+
+    fun setUseSummarizedConversationProjection(enabled: Boolean) {
+        putString("use_summarized_conversation_projection", enabled.toString())
+    }
+
+    fun getSummarizerCatchUpPending(): Boolean =
+        getString("summarizer_catch_up_pending", "false") == "true"
+
+    fun setSummarizerCatchUpPending(value: Boolean) {
+        putString("summarizer_catch_up_pending", value.toString())
+    }
+
+    /** Last condensed form written for the summary-window action label. */
+    fun getCondensedConversationKind(): String =
+        getString("condensed_conversation_kind", CONDENSED_KIND_SUMMARY)
+
+    fun setCondensedConversationKind(kind: String) {
+        putString(
+            "condensed_conversation_kind",
+            if (kind == CONDENSED_KIND_COMPACTION) kind else CONDENSED_KIND_SUMMARY
+        )
+    }
+
     /** Per-chat Complete Messages window; "" = follow the global default. */
     fun getChatSummarizerWindow(): Int {
         val raw = getString("summarizer_window", "")
@@ -2618,6 +2684,117 @@ class Preferences internal constructor(
     /** The chat's rolling summary text ("" = none yet). */
     fun getSummarizerSummary(): String =
         getString("summarizer_summary", "")
+
+    /** Projection contract that produced the persisted rolling summary. */
+    fun getSummarizerProjectionVersion(): Int =
+        getString("summarizer_projection_version", "0").toIntOrNull() ?: 0
+
+    /**
+     * One-time bridge for conversations condensed before regeneration locks
+     * existed. Capture the live summary/compaction bookmarks before a future
+     * projection migration is allowed to clear them.
+     */
+    private fun ensureCondensedRegenerationLockMigration(): Boolean {
+        if (getString("condensed_regeneration_lock_migrated", "false") == "true") {
+            return true
+        }
+        val summaryBoundary = maxOf(
+            getString("summary_regeneration_lock_boundary", "0").toIntOrNull() ?: 0,
+            getSummarizerFoldedCount()
+        )
+        val compactionBoundary = maxOf(
+            getString("compaction_regeneration_lock_boundary", "0").toIntOrNull() ?: 0,
+            getManualCompactionBoundary()
+        )
+        return try {
+            preferences.edit()
+                .putString("summary_regeneration_lock_boundary", summaryBoundary.toString())
+                .putString("compaction_regeneration_lock_boundary", compactionBoundary.toString())
+                .putString("condensed_regeneration_lock_migrated", "true")
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun getSummaryRegenerationLockBoundary(): Int {
+        ensureCondensedRegenerationLockMigration()
+        return getString("summary_regeneration_lock_boundary", "0")
+            .toIntOrNull()?.coerceAtLeast(0) ?: 0
+    }
+
+    fun getCompactionRegenerationLockBoundary(): Int {
+        ensureCondensedRegenerationLockMigration()
+        return getString("compaction_regeneration_lock_boundary", "0")
+            .toIntOrNull()?.coerceAtLeast(0) ?: 0
+    }
+
+    /** A usable batch permanently fixes its processed prefix into history. */
+    fun advanceSummaryRegenerationLockBoundary(value: Int): Boolean =
+        advanceCondensedRegenerationLockBoundary(
+            "summary_regeneration_lock_boundary", value
+        )
+
+    /** A usable manual batch permanently fixes its processed prefix. */
+    fun advanceCompactionRegenerationLockBoundary(value: Int): Boolean =
+        advanceCondensedRegenerationLockBoundary(
+            "compaction_regeneration_lock_boundary", value
+        )
+
+    private fun advanceCondensedRegenerationLockBoundary(key: String, value: Int): Boolean {
+        if (!ensureCondensedRegenerationLockMigration()) return false
+        val current = getString(key, "0").toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val next = maxOf(current, value.coerceAtLeast(0))
+        if (next == current) return true
+        return try {
+            preferences.edit().putString(key, next.toString()).commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Direct realignment after canonical messages inside a locked prefix are deleted. */
+    fun setSummaryRegenerationLockBoundary(value: Int) {
+        ensureCondensedRegenerationLockMigration()
+        putString("summary_regeneration_lock_boundary", value.coerceAtLeast(0).toString())
+    }
+
+    fun setCompactionRegenerationLockBoundary(value: Int) {
+        ensureCondensedRegenerationLockMigration()
+        putString("compaction_regeneration_lock_boundary", value.coerceAtLeast(0).toString())
+    }
+
+    /**
+     * Invalidates only incompatible derived Summarizer state. Canonical chat
+     * history and its Include ownership are untouched, so the next cycle
+     * safely rebuilds from conversation text alone. The independently projected
+     * Include layer and its user-selected forms remain untouched.
+     * A failed commit is reported to the caller, which must omit the stale
+     * summary and use a zero bookmark rather than risk duplicate payloads.
+     */
+    fun ensureSummarizerProjectionCompatibility(): Boolean {
+        // VERSION 3 keeps attachment payloads out of summary/compaction. Lock
+        // the already-condensed history before invalidating older derived text.
+        if (!ensureCondensedRegenerationLockMigration()) return false
+        if (getSummarizerProjectionVersion() == SummarizerProjectionContract.VERSION) {
+            return true
+        }
+        return try {
+            preferences.edit()
+                .putString("summarizer_summary", "")
+                .putString("summarizer_folded", "0")
+                .putString("summarizer_over_length", "false")
+                .putString("summarizer_episode", "")
+                .putString("manual_compaction_boundary", "0")
+                .putString(
+                    "summarizer_projection_version",
+                    SummarizerProjectionContract.VERSION.toString()
+                )
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     /** The fold-in bookmark: how many of the chat's oldest stored messages
      *  are already folded into the summary. */
@@ -2662,19 +2839,98 @@ class Preferences internal constructor(
                 .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
                 .putString("summarizer_over_length", if (overLength) "true" else "false")
                 .putString("summarizer_episode", "")
+                .putString("condensed_conversation_kind", CONDENSED_KIND_SUMMARY)
+                .putString(
+                    "summarizer_projection_version",
+                    SummarizerProjectionContract.VERSION.toString()
+                )
                 .commit()
         } catch (_: Exception) {
             false
         }
     }
 
+    /** Restores the exact pre-operation derived state after an atomic cancel. */
+    fun restoreSummarizerState(
+        summary: String,
+        foldedCount: Int,
+        overLength: Boolean,
+        episode: String,
+        condensedKind: String
+    ): Boolean = try {
+        preferences.edit()
+            .putString("summarizer_summary", summary)
+            .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
+            .putString("summarizer_over_length", overLength.toString())
+            .putString("summarizer_episode", episode)
+            .putString("condensed_conversation_kind", condensedKind)
+            .putString(
+                "summarizer_projection_version",
+                SummarizerProjectionContract.VERSION.toString()
+            )
+            .commit()
+    } catch (_: Exception) {
+        false
+    }
+
+    /**
+     * Commits a user-requested Compact operation as one unit. The rolling
+     * summary, fold bookmark, and visible manual boundary must never describe
+     * different snapshots after a failure or cancellation.
+     */
+    fun commitManualCompaction(
+        summary: String,
+        foldedCount: Int,
+        overLength: Boolean,
+        boundaryCount: Int
+    ): Boolean {
+        return try {
+            preferences.edit()
+                .putString("summarizer_summary", summary)
+                .putString("summarizer_folded", foldedCount.coerceAtLeast(0).toString())
+                .putString("summarizer_over_length", if (overLength) "true" else "false")
+                .putString("summarizer_episode", "")
+                .putString("manual_compaction_boundary", boundaryCount.coerceAtLeast(0).toString())
+                .putString("condensed_conversation_kind", CONDENSED_KIND_COMPACTION)
+                .putString(
+                    "summarizer_projection_version",
+                    SummarizerProjectionContract.VERSION.toString()
+                )
+                .commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Number of oldest canonical messages through the latest manual marker. */
+    fun getManualCompactionBoundary(): Int =
+        getString("manual_compaction_boundary", "0")
+            .toIntOrNull()?.coerceAtLeast(0) ?: 0
+
+    /** Direct boundary realignment after a canonical-history deletion. */
+    fun setManualCompactionBoundary(value: Int) {
+        putString("manual_compaction_boundary", value.coerceAtLeast(0).toString())
+    }
+
     /** User edit of the summary text (bookmark untouched), committed
      *  synchronously so a hand correction is never lost to a process kill. */
     fun commitSummarizerSummaryEdit(summary: String): Boolean {
+        // Never let text loaded from a pre-6.2 summary editor session bless
+        // stale attachment-derived material as current. The UI establishes
+        // compatibility before loading the field; any other caller that did
+        // not do so gets a safe invalidation and must retry from fresh text.
+        if (getSummarizerProjectionVersion() != SummarizerProjectionContract.VERSION) {
+            ensureSummarizerProjectionCompatibility()
+            return false
+        }
         return try {
             preferences.edit()
                 .putString("summarizer_summary", summary)
                 .putString("summarizer_over_length", "false")
+                .putString(
+                    "summarizer_projection_version",
+                    SummarizerProjectionContract.VERSION.toString()
+                )
                 .commit()
         } catch (_: Exception) {
             false

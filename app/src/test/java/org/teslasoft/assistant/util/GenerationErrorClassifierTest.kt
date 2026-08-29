@@ -179,11 +179,14 @@ class GenerationErrorClassifierTest {
     }
 
     @Test fun explicit400StatusPreventsRateLimitClassGuess() {
+        // The exception class says rate limit; the concrete 400 says otherwise.
+        // It must not become Q1 or carry a provider limit. A client-error status
+        // is reported as a refusal (M5), never as a rate limit by class name.
         val result = GenerationErrorClassifier.classify(
             RateLimitException(statusCode = 400, message = "ERROR")
         )
         assertEquals(400, result.httpStatus)
-        assertEquals(GenErrorCode.U0, result.code)
+        assertEquals(GenErrorCode.M5, result.code)
         assertNull(result.providerLimit)
     }
 
@@ -200,11 +203,14 @@ class GenerationErrorClassifierTest {
     }
 
     @Test fun literal400ErrorStillWorksAsLastResortWhenNoStatusPropertyExists() {
+        // The status must still be recovered from bare text, and the recovered
+        // client-error status is enough to report a refusal rather than an
+        // unexplained failure. No limit may be invented from it.
         val result = GenerationErrorClassifier.classify(
             RuntimeException("400 ERROR")
         )
         assertEquals(400, result.httpStatus)
-        assertEquals(GenErrorCode.U0, result.code)
+        assertEquals(GenErrorCode.M5, result.code)
         assertNull(result.providerLimit)
     }
 
@@ -215,7 +221,7 @@ class GenerationErrorClassifierTest {
             RuntimeException("400 Bad Request: maximum value for temperature is 2")
         )
         assertEquals(400, result.httpStatus)
-        assertEquals(GenErrorCode.U0, result.code)
+        assertEquals(GenErrorCode.M5, result.code)
         assertNull(result.providerLimit)
     }
 

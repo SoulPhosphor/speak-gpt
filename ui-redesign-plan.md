@@ -622,11 +622,15 @@ Ship A, then B, then C — never as one PR.
   **Never** implement in-place chat swapping inside a live ChatActivity in
   this redesign — the voice loop, streaming state, and per-chat preferences
   all assume one chat per activity instance.
-- The **auto-naming** flow renames the chat *in place* (changes the chat id
-  without relaunching the activity — relaunching kills readback and the
-  hands-free loop). The drawer's chat list must therefore refresh its data
+- Manual renaming and **auto-naming** change only the chat title, *in place*.
+  The existing stored chat ID never changes, and the activity is not relaunched
+  (relaunching kills readback and the hands-free loop). Refresh the drawer's list
   when opened (re-read `ChatPreferences` in `onDrawerStateChanged`/
-  `onDrawerOpened`), not cache ids from activity start.
+  `onDrawerOpened`) so titles and membership are current. Use stored chat IDs;
+  never recompute an ID from a title or move chat data during a rename.
+- TTS default selection, previous-selection recovery history and last-known-good
+  voice are app-wide. Drawer chat switching must not copy, reset or rebind these
+  records to a chat ID. Companion-specific voices remain separate future work.
 - Opening/closing the drawer must not touch mic state, keyboard insets
   handling (`keyboard_frame`), or `restoreUIState()` logic.
 - Drawer pane must apply status-bar insets (edge-to-edge: content starts

@@ -42,7 +42,7 @@ import org.teslasoft.assistant.util.Hash
 
 class AddChatDialogFragment : DialogFragment() {
     companion object {
-        fun newInstance(isEdit: Boolean, name: String, fromFile: Boolean, disableAutoName: Boolean, saveChat: Boolean, endpointId: String, model: String, avatarType: String, avatarId: String, assistantName: String, position: Int) : AddChatDialogFragment {
+        fun newInstance(isEdit: Boolean, name: String, fromFile: Boolean, disableAutoName: Boolean, saveChat: Boolean, endpointId: String, model: String, avatarType: String, avatarId: String, assistantName: String, position: Int, chatId: String = "") : AddChatDialogFragment {
             val addChatDialogFragment = AddChatDialogFragment()
 
             val args = Bundle()
@@ -57,6 +57,7 @@ class AddChatDialogFragment : DialogFragment() {
             args.putString("avatarId", avatarId)
             args.putString("assistantName", assistantName)
             args.putInt("position", position)
+            args.putString("chatId", chatId)
 
             addChatDialogFragment.arguments = args
 
@@ -206,7 +207,8 @@ class AddChatDialogFragment : DialogFragment() {
     }
 
     private fun createChat() {
-        if (chatPreferences?.checkDuplicate(requireActivity(), nameInput?.text.toString()) == false) {
+        if (chatPreferences?.checkDuplicate(requireActivity(), nameInput?.text.toString(),
+                if (isEdit) requireArguments().getString("chatId") else null) == false) {
             val chatName = if (autoName?.isChecked!! && requireArguments().getString("name") == "") "_autoname_${chatPreferences?.getAvailableChatIdForAutoname(requireActivity())}" else nameInput?.text.toString()
 
             if (isEdit) {
@@ -215,38 +217,24 @@ class AddChatDialogFragment : DialogFragment() {
                 if (renameSubmitted) return
                 renameSubmitted = true
 
-                // A rename must never re-derive or overwrite the chat's own
-                // settings: editChat moves the history AND copies every
-                // per-chat settings key atomically (ChatRenameTransaction).
-                // The re-derivation block this branch used to run reset the
-                // chat's persona, lorebooks, memory scene and per-chat tuning
-                // to endpoint-profile defaults on every manual rename.
-                //
-                // editChat does encrypted I/O, synchronous commits and a
-                // SQLCipher re-point, so it runs OFF the main thread. The work
-                // is hosted on the ACTIVITY's lifecycle scope, not this
-                // dialog's: the dialog auto-dismisses on the button tap (as
-                // before — no new wording, no progress UI), and the rename +
-                // list refresh complete in the background, cancelling cleanly
-                // if the activity is destroyed. Everything the continuation
-                // needs is captured up front so no destroyed-fragment state is
-                // touched afterwards.
+                // Persist only the title on IO, using the ID passed by the list.
+                // No settings or history files move when the dialog saves.
                 val act = requireActivity()
                 val cp = chatPreferences ?: ChatPreferences.getChatPreferences()
                 val l = listener
                 val newName = nameInput?.text.toString()
                 val oldName = requireArguments().getString("name").toString()
                 val position = arguments?.getInt("position") ?: -1
-                val newId = Hash.hash(newName)
+                val chatId = requireArguments().getString("chatId").orEmpty()
 
                 act.lifecycleScope.launch {
                     val renamed = withContext(Dispatchers.IO) {
-                        cp.editChat(act, newName, oldName)
+                        cp.editChat(act, newName, oldName, chatId)
                     }
                     // Resumes on Main. Only touch UI if the activity is alive.
                     if (act.isFinishing || act.isDestroyed) return@launch
                     if (renamed) {
-                        l?.onEdit(newName, newId, position)
+                        l?.onEdit(newName, chatId, position)
                     } else {
                         // false = nothing changed; the chat is intact under its
                         // old name. Say so persistently (dialog, never a toast).
@@ -271,10 +259,6 @@ class AddChatDialogFragment : DialogFragment() {
             val activationPrompt = preferences.getPrompt()
             val systemMessage = preferences.getSystemMessage()
             val autoLanguageDetect = preferences.getAutoLangDetect()
-            val slashCommands = preferences.getImagineCommand()
-            val ttsEngine = preferences.getTtsEngine()
-            val opeAIVoice: String = preferences.getOpenAIVoice()
-            val voice: String = preferences.getVoice()
             val apiEndpointId = if (requireArguments().getString("endpointId") != "") requireArguments().getString("endpointId") else preferences.getApiEndpointId()
             val logitBiasConfigId = preferences.getLogitBiasesConfigId()
 
@@ -298,6 +282,7 @@ class AddChatDialogFragment : DialogFragment() {
 
             newPreferences.setPreferences(Hash.hash(chatName), requireActivity())
             newPreferences.resetNewChatInheritance()
+            newPreferences.initializeNewChatQuickSettings()
             newPreferences.setResolution(resolution)
             newPreferences.setAudioModel(speech)
             newPreferences.setModel(model)
@@ -307,10 +292,6 @@ class AddChatDialogFragment : DialogFragment() {
             newPreferences.setPrompt(activationPrompt)
             newPreferences.setSystemMessage(systemMessage)
             newPreferences.setAutoLangDetect(autoLanguageDetect)
-            newPreferences.setImagineCommand(slashCommands)
-            newPreferences.setTtsEngine(ttsEngine)
-            newPreferences.setOpenAIVoice(opeAIVoice)
-            newPreferences.setVoice(voice)
             newPreferences.setApiEndpointId(apiEndpointId!!)
             newPreferences.setLogitBiasesConfigId(logitBiasConfigId)
             newPreferences.setTemperature(temperature)

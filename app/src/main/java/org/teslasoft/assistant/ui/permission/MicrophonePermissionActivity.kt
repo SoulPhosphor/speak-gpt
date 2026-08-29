@@ -44,7 +44,7 @@ class MicrophonePermissionActivity : FragmentActivity() {
                     .setTitle(R.string.label_permission_denied)
                     .setMessage(R.string.msg_microphone_denied)
                     .setCancelable(false)
-                    .setPositiveButton(android.R.string.ok) { _: DialogInterface?, _: Int ->
+                    .setPositiveButton(R.string.btn_ok) { _: DialogInterface?, _: Int ->
                         this.setResult(RESULT_CANCELED)
                         finish()
                     }.show()

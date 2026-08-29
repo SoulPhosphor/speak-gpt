@@ -358,7 +358,7 @@
     <string name="label_error_fill_all_blanks">Пожалуйста, заполните все поля</string>
     <string name="label_server_error">Ошибка сервера. Пожалуйста, попробуйте позже.</string>
     <string name="msg_failed_to_post_prompt">Не удалось отправить запрос. Пожалуйста, проверьте ваше интернет-соединение.</string>
-    <string name="btn_ok">OK</string>
+    <string name="btn_ok">Okay</string>
     <string name="btn_cancel">Отмена</string>
     <string name="btn_delete">Удалить</string>
     <string name="label_confirm_deletion">Подтвердите удаление</string>

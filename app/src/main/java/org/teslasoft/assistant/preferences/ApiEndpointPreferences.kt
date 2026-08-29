@@ -21,6 +21,7 @@ import android.content.SharedPreferences
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.util.StableId
 import androidx.core.content.edit
+import org.json.JSONArray
 
 class ApiEndpointPreferences private constructor(
     private var preferences: SharedPreferences,
@@ -74,6 +75,22 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { putString(key, value) }
     }
 
+    fun getRejectedTtsVoices(endpointId: String): Set<String> = try {
+        val values = JSONArray(getString(endpointId + "_tts_rejected_voices", "[]"))
+        buildSet {
+            for (index in 0 until values.length()) {
+                values.optString(index).takeIf(String::isNotBlank)?.let(::add)
+            }
+        }
+    } catch (_: Throwable) {
+        emptySet()
+    }
+
+    fun rejectTtsVoice(endpointId: String, voiceId: String) {
+        val rejected = getRejectedTtsVoices(endpointId) + voiceId
+        putString(endpointId + "_tts_rejected_voices", JSONArray(rejected.sorted()).toString())
+    }
+
     // The public methods keep their `context` parameter for source
     // compatibility with the many call sites, but the API key now flows through
     // the [secrets] seam (which captured its context at construction), so the
@@ -86,6 +103,7 @@ class ApiEndpointPreferences private constructor(
         val label = getString(id + "_label", "")
         val host = getString(id + "_host", "")
         val chatEndpoint = getString(id + "_chat_endpoint", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT)
+        val speechEndpoint = getString(id + "_speech_endpoint", ApiEndpointObject.DEFAULT_SPEECH_ENDPOINT)
         val authType = getString(id + "_auth_type", ApiEndpointObject.AUTH_BEARER)
         val apiKey: String = secrets.get(id + "_api_key")
         val model = getString(id + "_model", ApiEndpointObject.DEFAULT_MODEL)
@@ -140,7 +158,7 @@ class ApiEndpointPreferences private constructor(
             contextWindowTokens, storedContextModel,
             imageCapabilityByModel, toolCapabilityByModel,
             providerDiscoveryPath, identity,
-            reasoningCapabilityByModel, reasoningRejectedLevelsByModel
+            reasoningCapabilityByModel, reasoningRejectedLevelsByModel, speechEndpoint
         )
     }
 
@@ -150,6 +168,7 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_label") }
         preferences.edit { remove(id + "_host") }
         preferences.edit { remove(id + "_chat_endpoint") }
+        preferences.edit { remove(id + "_speech_endpoint") }
         preferences.edit { remove(id + "_auth_type") }
         preferences.edit { remove(id + "_model") }
         preferences.edit { remove(id + "_temperature") }
@@ -170,6 +189,7 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_reasoning_rejected_levels_by_model") }
         preferences.edit { remove(id + "_provider_discovery_path") }
         preferences.edit { remove(id + "_identity") }
+        preferences.edit { remove(id + "_tts_rejected_voices") }
         secrets.set(id + "_api_key", "null")
 
         for (listener in listeners) {
@@ -193,6 +213,7 @@ class ApiEndpointPreferences private constructor(
         putString(id + "_label", endpoint.label)
         putString(id + "_host", endpoint.host)
         putString(id + "_chat_endpoint", endpoint.chatEndpoint)
+        putString(id + "_speech_endpoint", endpoint.speechEndpoint)
         putString(id + "_auth_type", endpoint.authType)
         putString(id + "_model", endpoint.model)
         putString(id + "_temperature", endpoint.temperature.toString())
