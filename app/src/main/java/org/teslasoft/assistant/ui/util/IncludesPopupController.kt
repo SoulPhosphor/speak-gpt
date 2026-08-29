@@ -35,7 +35,6 @@ import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.preferences.includes.IncludeNotice
 import java.text.NumberFormat
-import java.util.Locale
 
 /**
  * The single post-send Includes management surface used by message and
@@ -132,9 +131,9 @@ object IncludesPopupController {
         row.findViewById<ImageView>(R.id.includes_popup_item_icon)
             ?.setImageResource(iconFor(include.kind))
         row.findViewById<TextView>(R.id.includes_popup_item_name)?.text = include.fileName
-        row.findViewById<TextView>(R.id.includes_popup_item_kind)?.text =
-            include.kind.key.uppercase(Locale.ROOT)
-        row.findViewById<TextView>(R.id.includes_popup_item_state)?.text = stateLabel(include)
+        // currentTokens() reads the form the item is in right now, so a
+        // condensed document or a reduced image shows its new, smaller
+        // estimate here rather than what it weighed when it was sent.
         row.findViewById<TextView>(R.id.includes_popup_item_weight)?.text =
             row.context.getString(
                 R.string.include_weight,
@@ -207,12 +206,6 @@ object IncludesPopupController {
             true
         }
         popup.show()
-    }
-
-    private fun stateLabel(include: ChatInclude): String = when (include.form) {
-        IncludeForm.FULL -> "Full"
-        IncludeForm.CONDENSED -> if (include.kind.isImage()) "Reduced" else "Condensed"
-        IncludeForm.ARTIFACT -> "Artifact"
     }
 
     private fun noticeText(row: View, notice: IncludeNotice): String? {
