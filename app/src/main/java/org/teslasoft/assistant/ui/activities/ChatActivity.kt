@@ -9604,7 +9604,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ): FrozenConversationProjection = withContext(Dispatchers.IO) {
         val projected = SummarizerSafeIncludeProjectionBuilder.build(
             messages = canonical,
-            summarizerActive = summarizerState.active,
             foldedCount = summarizerState.foldedCount
         )
         val cid = chatId
@@ -10836,11 +10835,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
-        // Phase 6.2: one user-authority payload unit per active Include, in
-        // original activation order. These immutable messages were resolved
-        // from the same snapshot measured and transmitted below.
-        msgs.addAll(conversationProjection.persistentIncludes)
-
         val loreBooksEnabled = preferences?.getChatLoreBooksEnabled() == true
         val allLoreMatches = ArrayList<LoreBookMatch>()
         var activeLoreBookCount = -1
@@ -10958,6 +10952,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // it on every single turn).
         val resolvedHistory = conversationProjection.conversation
         msgs.addAll(resolvedHistory.dropLast(1))
+
+        // One payload unit per attachment, in original activation order,
+        // carrying whatever form the user has it in right now. It sits AFTER
+        // the history on purpose (owner ruling, Aug 29 2026): the history above
+        // it only carries permanent markers, so reducing, condensing, editing
+        // or removing an attachment can no longer rewrite the conversation the
+        // provider has already cached. Memory and Lorebook follow, since those
+        // are rebuilt every turn regardless.
+        msgs.addAll(conversationProjection.persistentIncludes)
 
         memoryAssemblyResult?.let { assembly ->
             msgs.add(ChatMessage(role = ChatRole.System, content = assembly.prompt))
@@ -11189,8 +11192,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
-        legacyConversationProjection?.persistentIncludes?.let(msgs::addAll)
-
         // QUICK SETTINGS IS AUTHORITATIVE (owner ruling, July 10 2026): the
         // per-chat "Use lore books" and "Use memory" switches decide, each on
         // its own, what this chat injects — any combination works. The global
@@ -11325,6 +11326,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // same fix as the frozen path above).
         val legacyResolvedHistory = legacyConversationProjection?.conversation.orEmpty()
         msgs.addAll(legacyResolvedHistory.dropLast(1))
+
+        // Attachment payloads after the history, before memory and Lorebook —
+        // the same placement as the frozen builder above.
+        legacyConversationProjection?.persistentIncludes?.let(msgs::addAll)
 
         memoryAssemblyResult?.let { assembly ->
             msgs.add(

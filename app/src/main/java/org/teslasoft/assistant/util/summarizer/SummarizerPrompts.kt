@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.util.summarizer
 
+import org.teslasoft.assistant.preferences.includes.SummarizerSafeIncludeProjectionBuilder
+
 /**
  * The two shipped summarizer prompts (conversation-summary-plan.md §5,
  * decision 5 — owner-authored, July 29 2026) and the fold-in request
@@ -96,6 +98,21 @@ Use brief bullet points, with one fact per bullet. Keep the complete list under 
         prompt.replace("{length}", lengthWords.toString())
 
     /**
+     * Added to a fold-in call only when the departing messages carry an
+     * attachment marker. Folding deletes the original message, so the summary
+     * becomes the only place left that can record where an attachment entered
+     * the conversation and why it mattered. Its contents are deliberately
+     * excluded: those travel in their own block, in whatever form the user has
+     * them in now, and duplicating them here would send them twice.
+     *
+     * This is app scaffolding, not one of the editable slot prompts, so the
+     * rule holds whichever prompt the user has selected.
+     */
+    val ATTACHMENT_RULE = """
+Some messages below contain an <attachment-reference> marker recording that a file was attached at that point in the conversation. For each marker, the updated summary must keep three things: that the attachment was introduced there, its id copied exactly as written, and the surrounding discussion explaining why it mattered or what was being said about it. Never copy, quote, or describe the attachment's own contents — those are provided separately and must not appear in the summary.
+    """.trimIndent()
+
+    /**
      * The complete user-message body of one fold-in call: the rendered slot
      * prompt, the current summary, and the departing messages under plain
      * "Existing summary:" / "New messages to add to the summary:" labels.
@@ -106,6 +123,12 @@ Use brief bullet points, with one fact per bullet. Keep the complete list under 
         departingMessages: List<Pair<String, String>>
     ): String {
         val sb = StringBuilder(renderedPrompt)
+        if (departingMessages.any { (_, text) ->
+                SummarizerSafeIncludeProjectionBuilder.containsAttachmentReference(text)
+            }
+        ) {
+            sb.append("\n\n").append(ATTACHMENT_RULE)
+        }
         sb.append("\n\nExisting summary:\n")
         sb.append(existingSummary.ifBlank { "None yet." })
         sb.append("\n\nNew messages to add to the summary:\n")

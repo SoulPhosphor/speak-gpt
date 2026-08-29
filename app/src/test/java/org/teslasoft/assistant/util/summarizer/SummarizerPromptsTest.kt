@@ -56,6 +56,31 @@ class SummarizerPromptsTest {
     }
 
     @Test
+    fun theAttachmentRuleRidesAlongOnlyWhenAMarkerIsFolding() {
+        val marker = "<attachment-reference>{\"id\":\"a\"}</attachment-reference>"
+        val withMarker = SummarizerPrompts.foldInRequestBody(
+            renderedPrompt = "PROMPT",
+            existingSummary = "",
+            departingMessages = listOf(Pair("User", "Read this $marker"))
+        )
+        val withoutMarker = SummarizerPrompts.foldInRequestBody(
+            renderedPrompt = "PROMPT",
+            existingSummary = "",
+            departingMessages = listOf(Pair("User", "Just talking"))
+        )
+
+        assertTrue(withMarker.contains(SummarizerPrompts.ATTACHMENT_RULE))
+        assertFalse(withoutMarker.contains(SummarizerPrompts.ATTACHMENT_RULE))
+    }
+
+    @Test
+    fun theAttachmentRuleForbidsCopyingTheAttachmentItself() {
+        assertTrue(SummarizerPrompts.ATTACHMENT_RULE.contains("id copied exactly"))
+        assertTrue(SummarizerPrompts.ATTACHMENT_RULE.contains("why it mattered"))
+        assertTrue(SummarizerPrompts.ATTACHMENT_RULE.contains("Never copy"))
+    }
+
+    @Test
     fun anEmptySummaryIsNamedRatherThanBlank() {
         val body = SummarizerPrompts.foldInRequestBody("PROMPT", "", listOf(Pair("User", "Hi")))
         assertTrue(body.contains("None yet."))

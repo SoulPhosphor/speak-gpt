@@ -17,9 +17,14 @@
 package org.teslasoft.assistant.preferences.includes
 
 /**
- * Phase 6.2's projection contract version. A persisted rolling summary made
- * before this version may contain attachment payload text and is therefore
- * incompatible with the separate persistent-Include layer.
+ * The projection contract version. A persisted rolling summary made before
+ * this version may contain attachment payload text and is therefore
+ * incompatible with the separate attachment payload layer.
+ *
+ * Deliberately NOT bumped when attachment markers began reaching the
+ * summarizer: an older summary simply lacks those references, which is a
+ * missing improvement rather than wrong or duplicated content. Bumping would
+ * erase every chat's rolling summary, including any the user hand-edited.
  */
 object SummarizerProjectionContract {
     const val VERSION = 3
@@ -36,7 +41,9 @@ data class CanonicalConversationMessage(
 data class ProjectedConversationMessage(
     val isBot: Boolean,
     val text: String,
-    /** Non-empty only on the Summarizer-off inline path, for FULL images. */
+    /** Always empty now that every send carries attachment payloads in their
+     *  own later block. Retained so a caller can still ask a conversation
+     *  message for its inline attachments and correctly get none. */
     val inlineIncludes: List<ChatInclude> = emptyList()
 )
 
@@ -54,23 +61,18 @@ data class SummarizerSafeIncludeProjection(
 )
 
 /**
- * Builds the Summarizer-safe dual projection from one immutable canonical
- * snapshot. Summarizer-off deliberately retains the pre-6.2 inline behavior.
+ * Builds the dual projection from one immutable canonical snapshot. Every
+ * send uses it, whether or not the Summarizer is running: history carries
+ * only the permanent attachment marker, and the attachment's current payload
+ * travels in its own later block. That split is what keeps a Reduce, Condense,
+ * Edit or Remove from rewriting the conversation the model already has.
  */
 object SummarizerSafeIncludeProjectionBuilder {
 
     fun build(
         messages: List<CanonicalConversationMessage>,
-        summarizerActive: Boolean,
         foldedCount: Int
     ): SummarizerSafeIncludeProjection {
-        if (!summarizerActive) {
-            return SummarizerSafeIncludeProjection(
-                persistentIncludes = emptyList(),
-                conversation = messages.mapNotNull(::inlineMessage).toList()
-            )
-        }
-
         // The first canonical occurrence owns the logical slot. Rebuilding
         // after a form change replaces that slot's payload without moving it.
         val ownerById = owners(messages)
@@ -95,17 +97,37 @@ object SummarizerSafeIncludeProjectionBuilder {
      */
     fun summarizerConversation(
         messages: List<CanonicalConversationMessage>
-    ): List<ProjectedConversationMessage> = messages.map { message ->
-        // Attachments remain exclusively in the independently projected,
-        // user-controlled Include layer. Neither their payload nor even an
-        // attachment reference is material for summary/compaction.
-        ProjectedConversationMessage(
-            isBot = message.isBot,
-            // Generated-image rows are attachment references too. Retain the
-            // blank slot for bookmark alignment without exposing the local file.
-            text = message.text.takeUnless { it.startsWith("~file:") }.orEmpty()
-        )
+    ): List<ProjectedConversationMessage> {
+        val ownerById = owners(messages)
+        return messages.mapIndexed { messageIndex, message ->
+            // Attachment payloads stay exclusively in the independently
+            // projected, user-controlled layer and are never summarized. The
+            // permanent marker does travel here: folding removes the original
+            // message, so the summary is the only thing left that can say an
+            // attachment entered at this point and why it mattered.
+            //
+            // A generated-image row is a local file reference, not conversation.
+            // Keep its blank slot so bookmark indexes stay aligned.
+            val text = message.text.takeUnless { it.startsWith("~file:") }.orEmpty()
+            if (message.isBot) {
+                ProjectedConversationMessage(isBot = true, text = text)
+            } else {
+                val ownedHere = message.includes.filter { include ->
+                    ownerById[include.id]?.first == messageIndex
+                }
+                ProjectedConversationMessage(
+                    isBot = false,
+                    text = StableAttachmentReference.renderUserMessage(text, ownedHere)
+                )
+            }
+        }
     }
+
+    /** True when a fold-in batch carries at least one attachment marker, so
+     *  the fold-in call only spends tokens on the attachment rule when the
+     *  batch actually contains one. */
+    fun containsAttachmentReference(text: String): Boolean =
+        text.contains(StableAttachmentReference.OPEN_TAG)
 
     private fun owners(
         messages: List<CanonicalConversationMessage>
@@ -136,23 +158,6 @@ object SummarizerSafeIncludeProjectionBuilder {
             )
         }
     }
-
-    private fun inlineMessage(
-        message: CanonicalConversationMessage
-    ): ProjectedConversationMessage? {
-        if (message.isBot) {
-            return message.text.takeIf { it.isNotBlank() }
-                ?.let { ProjectedConversationMessage(isBot = true, text = it) }
-        }
-        val text = IncludeRenderer.renderUserMessage(message.text, message.includes)
-        val hasImage = message.includes.any { it.hasLiveImageBytes() }
-        if (text.isBlank() && !hasImage) return null
-        return ProjectedConversationMessage(
-            isBot = false,
-            text = text,
-            inlineIncludes = message.includes.toList()
-        )
-    }
 }
 
 /**
@@ -161,6 +166,8 @@ object SummarizerSafeIncludeProjectionBuilder {
  * only and is encoded so arbitrary characters cannot alter the wrapper.
  */
 object StableAttachmentReference {
+
+    const val OPEN_TAG = "<attachment-reference>"
 
     fun renderUserMessage(text: String, includes: List<ChatInclude>): String {
         if (includes.isEmpty()) return text
@@ -174,8 +181,12 @@ object StableAttachmentReference {
     }
 
     fun serialize(include: ChatInclude): String = buildString {
-        append("<attachment-reference>{\"id\":\"")
+        append(OPEN_TAG).append("{\"id\":\"")
         append(jsonString(include.id))
+        // "type" states plainly whether this was a picture or a text
+        // document; "kind" keeps the specific file type behind it.
+        append("\",\"type\":\"")
+        append(if (include.kind.isImage()) "image" else "document")
         append("\",\"kind\":\"")
         append(jsonString(include.kind.key))
         append("\",\"name\":\"")

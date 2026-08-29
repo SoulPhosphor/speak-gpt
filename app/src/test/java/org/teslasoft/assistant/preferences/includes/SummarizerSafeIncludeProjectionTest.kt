@@ -58,7 +58,6 @@ class SummarizerSafeIncludeProjectionTest {
         val source = include("stable-1", full = "SECRET DOCUMENT BODY")
         val projection = SummarizerSafeIncludeProjectionBuilder.build(
             listOf(CanonicalConversationMessage(false, "Read this.", listOf(source))),
-            summarizerActive = true,
             foldedCount = 0
         )
 
@@ -76,7 +75,6 @@ class SummarizerSafeIncludeProjectionTest {
         val source = include("first")
         val projection = SummarizerSafeIncludeProjectionBuilder.build(
             listOf(CanonicalConversationMessage(false, "", listOf(source))),
-            summarizerActive = true,
             foldedCount = 0
         )
 
@@ -97,7 +95,6 @@ class SummarizerSafeIncludeProjectionTest {
         )
         val projection = SummarizerSafeIncludeProjectionBuilder.build(
             canonical,
-            summarizerActive = true,
             foldedCount = 2
         )
 
@@ -187,33 +184,72 @@ class SummarizerSafeIncludeProjectionTest {
     }
 
     @Test
-    fun summarizerOffPreservesInlineFullHistoryBehavior() {
+    fun payloadNeverRidesInHistoryEvenWithNothingFolded() {
         val source = include("inline", full = "INLINE BODY")
         val projection = SummarizerSafeIncludeProjectionBuilder.build(
             listOf(CanonicalConversationMessage(false, "Question", listOf(source))),
-            summarizerActive = false,
-            foldedCount = 1
+            foldedCount = 0
         )
 
-        assertTrue(projection.persistentIncludes.isEmpty())
+        assertEquals("INLINE BODY", projection.persistentIncludes.single().include.modelText())
         assertEquals(1, projection.conversation.size)
-        assertTrue(projection.conversation.single().text.contains("INLINE BODY"))
-        assertEquals(listOf("inline"), projection.conversation.single().inlineIncludes.map { it.id })
+        assertFalse(projection.conversation.single().text.contains("INLINE BODY"))
+        assertTrue(projection.conversation.single().text.contains("\"id\":\"inline\""))
+        assertTrue(projection.conversation.single().inlineIncludes.isEmpty())
     }
 
     @Test
-    fun togglingSummarizerChangesOnlyProjectionNotCanonicalOwnership() {
+    fun repeatedProjectionOfOneSnapshotIsByteIdentical() {
         val source = include("toggle")
         val canonical = listOf(CanonicalConversationMessage(false, "question", listOf(source)))
-        val off = SummarizerSafeIncludeProjectionBuilder.build(canonical, false, 0)
-        val on = SummarizerSafeIncludeProjectionBuilder.build(canonical, true, 0)
-        val offAgain = SummarizerSafeIncludeProjectionBuilder.build(canonical, false, 0)
+        val first = SummarizerSafeIncludeProjectionBuilder.build(canonical, 0)
+        val second = SummarizerSafeIncludeProjectionBuilder.build(canonical, 0)
 
-        assertTrue(off.conversation.single().text.contains("PAYLOAD-toggle"))
-        assertFalse(on.conversation.single().text.contains("PAYLOAD-toggle"))
-        assertEquals("PAYLOAD-toggle", on.persistentIncludes.single().include.modelText())
-        assertEquals(off, offAgain)
+        assertFalse(first.conversation.single().text.contains("PAYLOAD-toggle"))
+        assertEquals("PAYLOAD-toggle", first.persistentIncludes.single().include.modelText())
+        assertEquals(first, second)
         assertEquals(listOf("toggle"), canonical.single().includes.map { it.id })
+    }
+
+    @Test
+    fun markerNamesWhetherTheAttachmentWasAnImageOrADocument() {
+        val projection = SummarizerSafeIncludeProjectionBuilder.build(
+            listOf(
+                CanonicalConversationMessage(
+                    false,
+                    "Look",
+                    listOf(include("doc-1"), fullImage("pic-1"))
+                )
+            ),
+            foldedCount = 0
+        )
+
+        val text = projection.conversation.single().text
+        assertTrue(text.contains("\"id\":\"doc-1\",\"type\":\"document\""))
+        assertTrue(text.contains("\"id\":\"pic-1\",\"type\":\"image\""))
+    }
+
+    @Test
+    fun summarizerInputKeepsTheMarkerButNeverThePayload() {
+        val entries = SummarizerSafeIncludeProjectionBuilder.summarizerConversation(
+            listOf(
+                CanonicalConversationMessage(
+                    false,
+                    "Why this matters",
+                    listOf(include("folded", full = "FOLDED BODY"))
+                ),
+                CanonicalConversationMessage(true, "Understood")
+            )
+        )
+
+        val userEntry = entries.first().text
+        assertTrue(userEntry.contains("Why this matters"))
+        assertTrue(userEntry.contains("\"id\":\"folded\""))
+        assertFalse(userEntry.contains("FOLDED BODY"))
+        assertTrue(SummarizerSafeIncludeProjectionBuilder.containsAttachmentReference(userEntry))
+        assertFalse(
+            SummarizerSafeIncludeProjectionBuilder.containsAttachmentReference(entries[1].text)
+        )
     }
 
     @Test
@@ -223,8 +259,8 @@ class SummarizerSafeIncludeProjectionTest {
             CanonicalConversationMessage(true, "reply"),
             CanonicalConversationMessage(false, "two", listOf(include("c")))
         )
-        val wide = SummarizerSafeIncludeProjectionBuilder.build(canonical, true, 0)
-        val narrow = SummarizerSafeIncludeProjectionBuilder.build(canonical, true, 2)
+        val wide = SummarizerSafeIncludeProjectionBuilder.build(canonical, 0)
+        val narrow = SummarizerSafeIncludeProjectionBuilder.build(canonical, 2)
 
         assertEquals(wide.persistentIncludes, narrow.persistentIncludes)
         assertEquals(
@@ -263,8 +299,8 @@ class SummarizerSafeIncludeProjectionTest {
         val before = listOf(CanonicalConversationMessage(false, "old turn", listOf(old)))
         val after = before + CanonicalConversationMessage(false, "", listOf(fresh))
 
-        val firstBuild = SummarizerSafeIncludeProjectionBuilder.build(after, true, 0)
-        val retryBuild = SummarizerSafeIncludeProjectionBuilder.build(after, true, 0)
+        val firstBuild = SummarizerSafeIncludeProjectionBuilder.build(after, 0)
+        val retryBuild = SummarizerSafeIncludeProjectionBuilder.build(after, 0)
 
         assertEquals(listOf("old", "fresh"), firstBuild.persistentIncludes.map { it.include.id })
         assertEquals(firstBuild, retryBuild)
@@ -349,7 +385,7 @@ class SummarizerSafeIncludeProjectionTest {
             CanonicalConversationMessage(false, "later", listOf(duplicate))
         )
 
-        val projection = SummarizerSafeIncludeProjectionBuilder.build(canonical, true, 0)
+        val projection = SummarizerSafeIncludeProjectionBuilder.build(canonical, 0)
 
         assertEquals(1, projection.persistentIncludes.size)
         assertEquals("FIRST OWNER", projection.persistentIncludes.single().include.modelText())
@@ -360,12 +396,12 @@ class SummarizerSafeIncludeProjectionTest {
     fun failedOrCancelledBuildCannotCreateOrphanedOwnership() {
         val source = include("owned")
         val canonical = listOf(CanonicalConversationMessage(false, "turn", listOf(source)))
-        val snapshot = SummarizerSafeIncludeProjectionBuilder.build(canonical, true, 0)
+        val snapshot = SummarizerSafeIncludeProjectionBuilder.build(canonical, 0)
 
         // A request projection is derived data. Discarding it leaves canonical
         // ownership unchanged; a retry deterministically recreates one unit.
         assertEquals(listOf("owned"), canonical.single().includes.map { it.id })
-        assertEquals(snapshot, SummarizerSafeIncludeProjectionBuilder.build(canonical, true, 0))
+        assertEquals(snapshot, SummarizerSafeIncludeProjectionBuilder.build(canonical, 0))
         assertEquals(1, snapshot.persistentIncludes.size)
     }
 
@@ -375,7 +411,7 @@ class SummarizerSafeIncludeProjectionTest {
         val canonicalAtDispatch = listOf(
             CanonicalConversationMessage(false, "turn", listOf(source))
         )
-        val frozen = SummarizerSafeIncludeProjectionBuilder.build(canonicalAtDispatch, true, 0)
+        val frozen = SummarizerSafeIncludeProjectionBuilder.build(canonicalAtDispatch, 0)
         val nextCanonical = listOf(
             CanonicalConversationMessage(
                 false,
@@ -383,7 +419,7 @@ class SummarizerSafeIncludeProjectionTest {
                 listOf(source.copy(form = IncludeForm.ARTIFACT, artifactLine = "NEW BOOKMARK"))
             )
         )
-        val next = SummarizerSafeIncludeProjectionBuilder.build(nextCanonical, true, 0)
+        val next = SummarizerSafeIncludeProjectionBuilder.build(nextCanonical, 0)
 
         assertEquals("OLD PAYLOAD", frozen.persistentIncludes.single().include.modelText())
         assertEquals("NEW BOOKMARK", next.persistentIncludes.single().include.modelText())
@@ -391,7 +427,7 @@ class SummarizerSafeIncludeProjectionTest {
     }
 
     @Test
-    fun summarizerConversationKeepsAlignmentAndIsCompletelyAttachmentBlind() {
+    fun summarizerConversationKeepsAlignmentAndCarriesMarkersWithoutPayload() {
         val source = include("reference", full = "NEVER SUMMARIZE THIS BODY")
         val entries = SummarizerSafeIncludeProjectionBuilder.summarizerConversation(
             listOf(
@@ -404,8 +440,8 @@ class SummarizerSafeIncludeProjectionTest {
 
         assertEquals(4, entries.size)
         assertEquals("", entries.first().text)
-        assertEquals("attached", entries[1].text)
-        assertFalse(entries[1].text.contains("\"id\":\"reference\""))
+        assertTrue(entries[1].text.contains("attached"))
+        assertTrue(entries[1].text.contains("\"id\":\"reference\""))
         assertFalse(entries[1].text.contains("NEVER SUMMARIZE THIS BODY"))
         assertEquals("", entries[2].text)
         assertEquals("reply", entries.last().text)

@@ -45,6 +45,34 @@ class SummarizerSafeIncludeWiringContractTest {
     }
 
     @Test
+    fun attachmentPayloadsFollowTheHistoryOnBothRequestPaths() {
+        val frozenHistory = activity.indexOf("msgs.addAll(resolvedHistory.dropLast(1))")
+        val frozenPayload = activity.indexOf("msgs.addAll(conversationProjection.persistentIncludes)")
+        assertTrue(frozenHistory > 0 && frozenPayload > frozenHistory)
+
+        val legacyHistory = activity.indexOf("msgs.addAll(legacyResolvedHistory.dropLast(1))")
+        val legacyPayload = activity.indexOf(
+            "legacyConversationProjection?.persistentIncludes?.let(msgs::addAll)"
+        )
+        assertTrue(legacyHistory > 0 && legacyPayload > legacyHistory)
+
+        // Memory and Lorebook are rebuilt every turn, so the payload block must
+        // land ahead of them and keep its own cacheable position.
+        assertTrue(activity.indexOf("assembly.prompt", frozenPayload) > frozenPayload)
+    }
+
+    @Test
+    fun everySendSplitsMarkerFromPayloadWithNoSummarizerOptOut() {
+        assertFalse(activity.contains("summarizerActive ="))
+        val projection = source(
+            "src/main/java/org/teslasoft/assistant/preferences/includes/" +
+                "SummarizerSafeIncludeProjection.kt"
+        )
+        assertFalse(projection.contains("summarizerActive"))
+        assertFalse(projection.contains("inlineMessage"))
+    }
+
+    @Test
     fun visibleFullImageCannotBeSilentlyOmittedFromOutboundProjection() {
         assertTrue(activity.contains("is visible but has no outbound image file"))
         assertTrue(activity.contains("is visible but its outbound image file is missing"))
