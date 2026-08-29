@@ -1129,7 +1129,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
         switchChatExcluded?.setOnCheckedChangeListener { _, archive ->
             val excluded = !archive
-            preferences?.setChatExcludedFromMemory(excluded)
+            preferences?.setChatArchiveEnabled(archive)
             val appContext = context?.applicationContext ?: return@setOnCheckedChangeListener
             Thread {
                 try {
