@@ -114,7 +114,6 @@ class SummarizerSafeIncludeProjectionTest {
                 CanonicalConversationMessage(true, "seen"),
                 CanonicalConversationMessage(false, "continue")
             ),
-            true,
             foldedCount = 2
         )
 
@@ -130,7 +129,6 @@ class SummarizerSafeIncludeProjectionTest {
         val neighbor = include("b")
         val before = SummarizerSafeIncludeProjectionBuilder.build(
             listOf(CanonicalConversationMessage(false, "turn", listOf(original, neighbor))),
-            true,
             0
         )
         val changed = original.copy(
@@ -139,7 +137,6 @@ class SummarizerSafeIncludeProjectionTest {
         )
         val after = SummarizerSafeIncludeProjectionBuilder.build(
             listOf(CanonicalConversationMessage(false, "turn", listOf(changed, neighbor))),
-            true,
             0
         )
 
@@ -156,7 +153,6 @@ class SummarizerSafeIncludeProjectionTest {
         val right = include("right")
         fun project(changed: ChatInclude) = SummarizerSafeIncludeProjectionBuilder.build(
             listOf(CanonicalConversationMessage(false, "turn", listOf(left, changed, right))),
-            true,
             0
         )
 
@@ -282,7 +278,6 @@ class SummarizerSafeIncludeProjectionTest {
                 CanonicalConversationMessage(true, "reply"),
                 CanonicalConversationMessage(false, "two", listOf(include("c"), include("d")))
             ),
-            true,
             1
         )
 
@@ -314,7 +309,6 @@ class SummarizerSafeIncludeProjectionTest {
         val fresh = include("fresh", full = "LARGE NEW BODY")
         val projection = SummarizerSafeIncludeProjectionBuilder.build(
             listOf(CanonicalConversationMessage(false, "Please compare it.", listOf(fresh))),
-            true,
             0
         )
 
@@ -330,7 +324,6 @@ class SummarizerSafeIncludeProjectionTest {
         val second = include("id-2", name = "same.txt")
         val projection = SummarizerSafeIncludeProjectionBuilder.build(
             listOf(CanonicalConversationMessage(false, "", listOf(first, second))),
-            true,
             0
         )
 
