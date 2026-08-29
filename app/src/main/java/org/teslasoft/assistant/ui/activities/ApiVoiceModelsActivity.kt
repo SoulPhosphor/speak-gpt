@@ -1,9 +1,14 @@
 package org.teslasoft.assistant.ui.activities
 
+import android.content.res.ColorStateList
+import android.graphics.Typeface
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.google.android.material.color.MaterialColors
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -98,9 +103,18 @@ class ApiVoiceModelsActivity : TtsPickerActivity() {
     private fun renderTable(ui: TtsManagerUi) {
         val chart = findViewById<LinearLayout>(R.id.tts_saved_table)
         chart.removeAllViews()
-        fun row() = layoutInflater.inflate(R.layout.view_tts_chart_row, chart, false) as LinearLayout
+        // Top-align cells so a wrapped value never leaves the other columns
+        // floating at mid-height; every column reads on the same top line.
+        // Baseline alignment is off: the taller tap-target cells (provider,
+        // remove) would otherwise pull the shorter cells off that top line.
+        fun row() = (layoutInflater.inflate(R.layout.view_tts_chart_row, chart, false) as LinearLayout)
+            .apply { gravity = Gravity.TOP; isBaselineAligned = false }
         val header = row()
-        columns.forEach { (label, width) -> header.addView(cell(getString(label), width, true)) }
+        columns.forEachIndexed { index, (label, width) ->
+            // The remove column's heading is a trash can so the row X's read as delete.
+            if (index == columns.lastIndex) header.addView(headerTrashIcon(width))
+            else header.addView(cell(getString(label), width, true))
+        }
         chart.addView(header)
         for (source in ui.rows) {
             val row = row()
@@ -115,6 +129,9 @@ class ApiVoiceModelsActivity : TtsPickerActivity() {
                 setOnClickListener { model.openProvider(source)?.let(providerPicker::launch) }
             })
             row.addView(cell(getString(R.string.tts_manager_remove_heading), columns[3].second).apply {
+                // Bold like the heading, red to read as a deletion.
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(MaterialColors.getColor(this, androidx.appcompat.R.attr.colorError))
                 isClickable = true; isFocusable = true; isEnabled = !ui.busy
                 minimumHeight = resources.getDimensionPixelSize(R.dimen.tts_manager_action_height)
                 contentDescription = getString(R.string.tts_manager_remove, endpoint, source.modelId,
@@ -123,6 +140,17 @@ class ApiVoiceModelsActivity : TtsPickerActivity() {
             })
             chart.addView(row)
         }
+    }
+
+    // Trash-can heading for the remove column, tinted like the other headings
+    // and left-aligned in the same column width so it sits above the row X's.
+    private fun headerTrashIcon(width: Int) = ImageView(this).apply {
+        setImageResource(R.drawable.ic_delete)
+        imageTintList = ColorStateList.valueOf(MaterialColors.getColor(this, R.attr.appTextColor))
+        scaleType = ImageView.ScaleType.FIT_START
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        val density = resources.displayMetrics.density
+        layoutParams = LinearLayout.LayoutParams((width * density).toInt(), (18 * density).toInt())
     }
 
     private fun cell(value: String, width: Int, header: Boolean = false) = TextView(this, null, 0,

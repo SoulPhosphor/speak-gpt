@@ -128,21 +128,7 @@ class VoiceBrowserActivity : FragmentActivity() {
         adapter = VoiceListAdapter(
             onSelect = ::activateVoice,
             onLongPress = ::showVoiceIdentityDialog,
-            onPreview = { voice ->
-                adapter.setPreviewing(voice.providerId, voice.providerVoiceId)
-                controller.preview(
-                    voice,
-                    previewText.text?.toString()?.takeIf(String::isNotBlank) ?: VoicePreviewText.DEFAULT,
-                    onFailure = { message ->
-                        adapter.setPreviewing(null, null)
-                        showActionError(message)
-                    },
-                    onChanged = ::renderOnMainThread,
-                    onPlaybackChanged = { playingVoiceId ->
-                        if (!isFinishing && !isDestroyed) adapter.setPreviewing(voice.providerId, playingVoiceId)
-                    }
-                )
-            },
+            onPreview = ::previewVoice,
             onStopPreview = {
                 adapter.setPreviewing(null, null)
                 controller.stopPreview()
@@ -185,7 +171,35 @@ class VoiceBrowserActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // A preview left mid-load when the screen went away must not stay stuck
+        // green (and blocking new taps) on return.
+        adapter.setLoading(null, null)
         refreshSources()
+    }
+
+    // While a preview is loading, its row shows a green Preview and further taps
+    // are dropped so a rapid double-tap can't fire a second synthesis request.
+    // The loading mark clears when playback starts, on any failure, or on resume.
+    private fun previewVoice(voice: BrowserVoice) {
+        if (adapter.isLoading()) return
+        adapter.setPreviewing(null, null)
+        adapter.setLoading(voice.providerId, voice.providerVoiceId)
+        controller.preview(
+            voice,
+            previewText.text?.toString()?.takeIf(String::isNotBlank) ?: VoicePreviewText.DEFAULT,
+            onFailure = { message ->
+                adapter.setLoading(null, null)
+                adapter.setPreviewing(null, null)
+                showActionError(message)
+            },
+            onChanged = ::renderOnMainThread,
+            onPlaybackChanged = { playingVoiceId ->
+                if (!isFinishing && !isDestroyed) {
+                    adapter.setLoading(null, null)
+                    adapter.setPreviewing(voice.providerId, playingVoiceId)
+                }
+            }
+        )
     }
 
     override fun onPause() {
@@ -270,6 +284,9 @@ class VoiceBrowserActivity : FragmentActivity() {
     }
 
     private fun showTtsFailure(failure: TtsFailure, retry: () -> Unit = {}) {
+        // An API preview failure surfaces here rather than through the preview
+        // callback, so clear any loading mark it left behind.
+        adapter.setLoading(null, null)
         if (isFinishing || isDestroyed || !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
         if (failure.kind in setOf(TtsFailureKind.VOICE_DELETED, TtsFailureKind.SOURCE_MISSING, TtsFailureKind.PROFILE_MISSING) &&
             preferences.getSelectedTtsVoice()?.let { it.sourceId == failure.target.sourceId && it.voiceId == failure.target.voiceId } == true) {

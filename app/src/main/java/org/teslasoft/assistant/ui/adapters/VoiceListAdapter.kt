@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.content.ContextCompat
 import androidx.core.widget.ImageViewCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
@@ -29,6 +30,8 @@ class VoiceListAdapter(
     private var filters = VoiceFilterState()
     private var previewingProviderId: String? = null
     private var previewingVoiceId: String? = null
+    private var loadingProviderId: String? = null
+    private var loadingVoiceId: String? = null
 
     /** Marks the voice currently sounding so its row shows Stop instead of Preview. */
     fun setPreviewing(providerId: String?, voiceId: String?) {
@@ -37,6 +40,20 @@ class VoiceListAdapter(
         previewingVoiceId = voiceId
         notifyDataSetChanged()
     }
+
+    /**
+     * Marks the voice whose preview was requested but has not started sounding yet.
+     * That row shows a green Preview so the user sees the request landed, and
+     * [isLoading] lets the caller drop further taps until this clears.
+     */
+    fun setLoading(providerId: String?, voiceId: String?) {
+        if (loadingProviderId == providerId && loadingVoiceId == voiceId) return
+        loadingProviderId = providerId
+        loadingVoiceId = voiceId
+        notifyDataSetChanged()
+    }
+
+    fun isLoading(): Boolean = loadingVoiceId != null
 
     fun submit(voices: List<BrowserVoice>, selectedProviderId: String?, selectedVoiceId: String?, filters: VoiceFilterState) {
         this.voices = voices
@@ -93,6 +110,10 @@ class VoiceListAdapter(
             true
         }
 
+        // Reset first so a recycled row that showed the green loading state never
+        // leaks that tint into a download or idle Preview button; the loading
+        // branch re-applies green when it applies.
+        setActionForeground(holder.action, primaryColor(holder.action))
         when {
             voice.downloadInProgress -> {
                 holder.action.visibility = View.VISIBLE
@@ -117,16 +138,30 @@ class VoiceListAdapter(
                 holder.action.visibility = View.VISIBLE
                 holder.action.isEnabled = true
                 val previewing = previewingProviderId == voice.providerId && previewingVoiceId == voice.providerVoiceId
-                if (previewing) {
-                    holder.action.text = holder.itemView.context.getString(R.string.voice_browser_stop)
-                    holder.action.setIconResource(R.drawable.ic_stop)
-                    holder.action.contentDescription = holder.itemView.context.getString(R.string.voice_browser_stop_desc, voice.displayName)
-                    holder.action.setOnClickListener { onStopPreview(voice) }
-                } else {
-                    holder.action.text = holder.itemView.context.getString(R.string.voice_browser_preview)
-                    holder.action.setIconResource(R.drawable.ic_play)
-                    holder.action.contentDescription = holder.itemView.context.getString(R.string.voice_browser_preview_desc, voice.displayName)
-                    holder.action.setOnClickListener { onPreview(voice) }
+                val loading = loadingProviderId == voice.providerId && loadingVoiceId == voice.providerVoiceId
+                when {
+                    previewing -> {
+                        setActionForeground(holder.action, primaryColor(holder.action))
+                        holder.action.text = holder.itemView.context.getString(R.string.voice_browser_stop)
+                        holder.action.setIconResource(R.drawable.ic_stop)
+                        holder.action.contentDescription = holder.itemView.context.getString(R.string.voice_browser_stop_desc, voice.displayName)
+                        holder.action.setOnClickListener { onStopPreview(voice) }
+                    }
+                    loading -> {
+                        // Requested but not sounding yet: green Preview signals the tap landed.
+                        setActionForeground(holder.action, ContextCompat.getColor(holder.itemView.context, R.color.mic_listening_green))
+                        holder.action.text = holder.itemView.context.getString(R.string.voice_browser_preview)
+                        holder.action.setIconResource(R.drawable.ic_play)
+                        holder.action.contentDescription = holder.itemView.context.getString(R.string.voice_browser_preview_desc, voice.displayName)
+                        holder.action.setOnClickListener { onPreview(voice) }
+                    }
+                    else -> {
+                        setActionForeground(holder.action, primaryColor(holder.action))
+                        holder.action.text = holder.itemView.context.getString(R.string.voice_browser_preview)
+                        holder.action.setIconResource(R.drawable.ic_play)
+                        holder.action.contentDescription = holder.itemView.context.getString(R.string.voice_browser_preview_desc, voice.displayName)
+                        holder.action.setOnClickListener { onPreview(voice) }
+                    }
                 }
             }
             else -> {
@@ -135,6 +170,15 @@ class VoiceListAdapter(
                 holder.action.setOnClickListener(null)
             }
         }
+    }
+
+    private fun primaryColor(view: View): Int =
+        MaterialColors.getColor(view, androidx.appcompat.R.attr.colorPrimary)
+
+    /** Tints both the label and the leading icon of the preview/stop button together. */
+    private fun setActionForeground(button: MaterialButton, color: Int) {
+        button.setTextColor(color)
+        button.iconTint = ColorStateList.valueOf(color)
     }
 
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {

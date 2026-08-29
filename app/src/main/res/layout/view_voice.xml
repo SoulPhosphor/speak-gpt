@@ -11,10 +11,13 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+    <!-- The gap before the text lives here as marginStart: voice_selected has no
+         end constraint, so a marginEnd on the icon itself has no effect. -->
     <LinearLayout
         android:id="@+id/voice_text"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="24dp"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toStartOf="@id/voice_action"
