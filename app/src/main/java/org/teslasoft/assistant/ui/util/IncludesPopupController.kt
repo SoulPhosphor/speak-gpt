@@ -79,13 +79,27 @@ object IncludesPopupController {
         for (include in current) {
             val row = inflater.inflate(R.layout.view_includes_popup_item, list, false)
             bindRow(row, include)
-            row.findViewById<ImageButton>(R.id.includes_popup_item_action)?.setOnClickListener {
-                showItemMenu(
-                    it,
-                    include,
-                    onAction = { popup.dismiss() },
-                    callbacks = callbacks
-                )
+            val action = row.findViewById<ImageButton>(R.id.includes_popup_item_action)
+            if (include.form == IncludeForm.ARTIFACT) {
+                // The attachment itself is gone, so there is nothing left to
+                // condense or remove. The row's control opens the sentence or
+                // two that stands in for it instead of a menu.
+                action?.setImageResource(R.drawable.ic_edit_square)
+                action?.contentDescription = row.context.getString(R.string.include_action_edit)
+                action?.setOnClickListener {
+                    popup.dismiss()
+                    callbacks.onIncludeEdit(include.id)
+                }
+            } else {
+                action?.setImageResource(R.drawable.ic_more_vert)
+                action?.setOnClickListener {
+                    showItemMenu(
+                        it,
+                        include,
+                        onAction = { popup.dismiss() },
+                        callbacks = callbacks
+                    )
+                }
             }
             list.addView(row)
         }
@@ -180,11 +194,9 @@ object IncludesPopupController {
                 popup.menu.add(0, MENU_REMOVE, 1, R.string.include_action_remove)
             }
 
-            IncludeForm.ARTIFACT -> {
-                // An Artifact is already removed from model-facing content;
-                // its established action is editing the retained bookmark.
-                popup.menu.add(0, MENU_EDIT, 0, R.string.include_action_edit)
-            }
+            // A removed attachment never reaches this menu: its row carries the
+            // edit control directly.
+            IncludeForm.ARTIFACT -> return
         }
 
         popup.setOnMenuItemClickListener { item ->

@@ -96,6 +96,7 @@ import java.text.NumberFormat
 import java.util.Date
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.includes.ChatInclude
+import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeHistoryPresentation
 import org.teslasoft.assistant.preferences.includes.IncludeKind
 import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
@@ -927,12 +928,21 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             if (chatMessage["isBot"] == true) return
 
-            val inheritedIds = PersistentIncludeContext
+            val inherited = PersistentIncludeContext
                 .earlierForUserMessage(dataArray, position)
-                .map { it.id }
-            if (inheritedIds.isEmpty()) return
+            if (inherited.isEmpty()) return
 
             action.visibility = View.VISIBLE
+            // Once every shared attachment has been removed, all that survives
+            // is the sentence or two each one left behind, so the paperclip
+            // becomes a bookmark. Set on every bind, because rows are recycled.
+            action.setImageResource(
+                if (inherited.all { it.form == IncludeForm.ARTIFACT }) {
+                    R.drawable.ic_bookmark
+                } else {
+                    R.drawable.ic_attach
+                }
+            )
             action.contentDescription = context.getString(R.string.message_includes_action)
             action.setOnClickListener { anchor ->
                 val currentPosition = bindingAdapterPosition

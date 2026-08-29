@@ -3315,7 +3315,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun refreshPersistentIncludeControls() {
         val button = btnPersistentIncludes ?: return
-        val visible = persistentIncludeIds().isNotEmpty()
+        // The composer control exists to manage sent attachments. Once every
+        // one of them has been removed there is nothing left for it to manage —
+        // only the sentence or two each left behind, which the transcript's own
+        // bookmark opens — so this control goes away rather than changing icon.
+        val visible = PersistentIncludeContext
+            .allSent(messages, INCLUDES_KEY)
+            .any { it.form != IncludeForm.ARTIFACT }
         button.visibility = if (visible) View.VISIBLE else View.GONE
         button.isEnabled = visible
     }
