@@ -21,17 +21,13 @@
                     android:layout_width="0dp" android:layout_weight="1" android:layout_marginStart="16dp"
                     android:text="@string/tts_manager_select" />
             </LinearLayout>
-            <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/tts_model_row"
-                style="@style/Widget.App.Row.Selector" android:layout_marginTop="16dp"
-                android:background="@drawable/btn_accent_top">
-                <TextView android:id="@+id/tts_model_label" style="@style/Widget.App.Row.Selector.Label"
-                    android:text="@string/tts_picker_ai_model" app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" app:layout_constraintBottom_toBottomOf="parent" />
-                <TextView android:id="@+id/tts_model_value" style="@style/Widget.App.Row.Selector.Value"
-                    android:text="@string/tts_manager_select" app:layout_constraintStart_toEndOf="@id/tts_model_label"
-                    app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent"
-                    app:layout_constraintBottom_toBottomOf="parent" />
-            </androidx.constraintlayout.widget.ConstraintLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="16dp" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView style="@style/Widget.App.Dropdown.CanonicalLabel" android:text="@string/tts_picker_ai_model" />
+                <TextView android:id="@+id/tts_model_value" style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp" android:layout_weight="1" android:layout_marginStart="16dp"
+                    android:text="@string/tts_manager_select" />
+            </LinearLayout>
             <TextView android:id="@+id/tts_provider_title" style="@style/Widget.App.Section.Title"
                 android:text="@string/tts_manager_provider_title" />
             <TextView style="@style/Widget.App.Section.Hint" android:text="@string/tts_manager_provider_hint" />

@@ -21,6 +21,10 @@ data class TtsManagerUi(
     val rows: List<SavedTtsSource> = emptyList(),
     val endpoints: List<TtsEndpointChoice> = emptyList(),
     val busy: Boolean = false,
+    // True only while a save/remove is writing to storage. A read-only refresh
+    // sets busy (progress + re-entrancy guard) but not this, so the pickers stay
+    // live and openable while the list reloads.
+    val mutating: Boolean = false,
     val notice: TtsFailure? = null
 )
 
@@ -40,14 +44,14 @@ class ApiVoiceModelsViewModel(application: Application, private val saved: Saved
         publish()
     }
 
-    private fun publish(busy: Boolean = false, notice: TtsFailure? = null) {
+    private fun publish(busy: Boolean = false, mutating: Boolean = false, notice: TtsFailure? = null) {
         saved["draft"] = TtsPickerCodec.encode(session.draft)
         saved["model"] = session.modelRequest?.target?.let(TtsPickerCodec::encode)
         saved["provider"] = session.providerRequest?.target?.let(TtsPickerCodec::encode)
         saved["committed"] = session.committedAdd?.let(TtsPickerCodec::encode)
         saved["edit"] = pendingEdit?.let(TtsPickerCodec::encode)
         mutableUi.value = mutableUi.value.copy(draft = session.draft, rows = session.rows,
-            busy = busy, notice = notice)
+            busy = busy, mutating = mutating, notice = notice)
     }
 
     private fun endpoints(): List<TtsEndpointChoice> = try {
@@ -65,7 +69,7 @@ class ApiVoiceModelsViewModel(application: Application, private val saved: Saved
 
     fun refresh() {
         if (ui.value.busy || ui.value.notice != null) return
-        run(TtsFailureKind.STORAGE, ::refresh) {
+        run(TtsFailureKind.STORAGE, ::refresh, mutating = false) {
             // Keep endpoint and saved-source failures separate. A broken profile list cannot
             // turn the saved table into an empty writable list.
             session.refresh()
@@ -74,10 +78,10 @@ class ApiVoiceModelsViewModel(application: Application, private val saved: Saved
     }
 
     private fun run(fallback: TtsFailureKind, retryAction: () -> Unit,
-        work: () -> List<TtsEndpointChoice>?) {
+        mutating: Boolean = true, work: () -> List<TtsEndpointChoice>?) {
         if (ui.value.busy) return
         retry = null
-        publish(busy = true)
+        publish(busy = true, mutating = mutating)
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) { runCatching(work) }
             result.onSuccess { choices ->
@@ -94,8 +98,8 @@ class ApiVoiceModelsViewModel(application: Application, private val saved: Saved
         }
     }
 
-    fun endpoint(id: String) { if (!ui.value.busy) { pendingEdit = null; session.endpoint(id); publish() } }
-    fun mode(mode: TtsRoutingMode) { if (!ui.value.busy) { session.mode(mode); publish() } }
+    fun endpoint(id: String) { if (!ui.value.mutating) { pendingEdit = null; session.endpoint(id); publish(busy = ui.value.busy) } }
+    fun mode(mode: TtsRoutingMode) { if (!ui.value.mutating) { session.mode(mode); publish(busy = ui.value.busy) } }
     fun openModel(): TtsPickerRequest? = navigation { session.openModel() }
     fun openProvider(row: SavedTtsSource? = null): TtsPickerRequest? = navigation {
         val request = session.openProvider(row)
@@ -106,16 +110,18 @@ class ApiVoiceModelsViewModel(application: Application, private val saved: Saved
     }
 
     private fun navigation(action: () -> TtsPickerRequest): TtsPickerRequest? {
-        if (ui.value.busy) return null
-        return try { action().also { publish() } } catch (error: TtsException) {
-            publish(notice = error.failure); null
+        // A read-only refresh no longer blocks opening a picker; only an in-flight
+        // write does. Preserve busy so a concurrent refresh keeps its guard/spinner.
+        if (ui.value.mutating) return null
+        return try { action().also { publish(busy = ui.value.busy) } } catch (error: TtsException) {
+            publish(busy = ui.value.busy, notice = error.failure); null
         }
     }
 
-    fun modelResult(target: TtsTarget?) { session.acceptModel(target); publish(busy = ui.value.busy) }
+    fun modelResult(target: TtsTarget?) { session.acceptModel(target); publish(busy = ui.value.busy, mutating = ui.value.mutating) }
     fun providerResult(target: TtsTarget?) {
         val selection = session.acceptProvider(target)
-        publish(busy = ui.value.busy)
+        publish(busy = ui.value.busy, mutating = ui.value.mutating)
         if (selection != null) {
             pendingEdit = selection
             if (ui.value.busy) queuedEdit = selection else edit(selection)

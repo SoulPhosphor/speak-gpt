@@ -305,6 +305,9 @@ class VoiceBrowserActivity : FragmentActivity() {
 
     private fun render() {
         providerDropdown.text = controller.provider.displayName
+        // API sources carry the "api-tts:" id prefix; the on-device provider is "google".
+        findViewById<TextView>(R.id.provider_api_charges_notice).visibility =
+            if (controller.browsedProviderId.startsWith("api-tts:")) View.VISIBLE else View.GONE
         locationSegments.visibility = if (controller.provider.exposesLocationFilter) View.VISIBLE else View.GONE
         if (controller.provider.exposesLocationFilter) {
             val checked = when (controller.filterState.location) {

@@ -1075,6 +1075,8 @@
     <string name="voice_settings_title">Voice &amp; Speech</string>
     <string name="voice_browser_title">Select Voice</string>
     <string name="voice_browser_provider">Provider</string>
+    <string name="voice_browser_provider_subtitle">Selected voice models and available device TTS systems are listed below.</string>
+    <string name="voice_browser_api_charges_notice">These voices are from an API. Associated charges will also apply to previewing voices.</string>
     <string name="voice_browser_all">All</string>
     <string name="voice_browser_on_device">On-device</string>
     <string name="voice_browser_network">Network</string>
