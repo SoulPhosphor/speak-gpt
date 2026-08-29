@@ -74,10 +74,14 @@ class SummarizerPromptsTest {
     }
 
     @Test
-    fun theAttachmentRuleForbidsCopyingTheAttachmentItself() {
-        assertTrue(SummarizerPrompts.ATTACHMENT_RULE.contains("id copied exactly"))
-        assertTrue(SummarizerPrompts.ATTACHMENT_RULE.contains("why it mattered"))
-        assertTrue(SummarizerPrompts.ATTACHMENT_RULE.contains("Never copy"))
+    fun theAttachmentRuleKeepsTheAnchorWithoutReproducingTheAttachment() {
+        val rule = SummarizerPrompts.ATTACHMENT_RULE
+        assertTrue(rule.contains("copy its ID exactly"))
+        assertTrue(rule.contains("why it mattered"))
+        assertTrue(rule.contains("Do not independently summarize or reproduce the attachment"))
+        // Facts about the attachment that were actually discussed are ordinary
+        // conversation and must still be summarized.
+        assertTrue(rule.contains("explicitly discussed in the conversation"))
     }
 
     @Test

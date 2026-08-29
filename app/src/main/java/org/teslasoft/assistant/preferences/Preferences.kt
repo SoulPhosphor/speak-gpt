@@ -2740,7 +2740,8 @@ class Preferences internal constructor(
      * summary and use a zero bookmark rather than risk duplicate payloads.
      */
     fun ensureSummarizerProjectionCompatibility(): Boolean {
-        // VERSION 3 makes summary/compaction completely attachment-blind. Lock
+        // VERSION 4 lets the permanent attachment marker reach summary and
+        // compaction while still keeping attachment payloads out of them. Lock
         // the already-condensed history before invalidating older derived text.
         if (!ensureCondensedRegenerationLockMigration()) return false
         if (getSummarizerProjectionVersion() == SummarizerProjectionContract.VERSION) {

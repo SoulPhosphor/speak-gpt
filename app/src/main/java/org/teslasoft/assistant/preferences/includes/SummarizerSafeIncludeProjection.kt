@@ -17,17 +17,16 @@
 package org.teslasoft.assistant.preferences.includes
 
 /**
- * The projection contract version. A persisted rolling summary made before
- * this version may contain attachment payload text and is therefore
- * incompatible with the separate attachment payload layer.
+ * The projection contract version. A persisted rolling summary made under an
+ * older version was written to different rules and is discarded once, so the
+ * next fold rebuilds it under the current ones.
  *
- * Deliberately NOT bumped when attachment markers began reaching the
- * summarizer: an older summary simply lacks those references, which is a
- * missing improvement rather than wrong or duplicated content. Bumping would
- * erase every chat's rolling summary, including any the user hand-edited.
+ * VERSION 4: attachment markers now reach the summarizer, so a summary can
+ * record where an attachment entered the conversation. A version 3 summary was
+ * written completely attachment-blind and can never carry that anchor.
  */
 object SummarizerProjectionContract {
-    const val VERSION = 3
+    const val VERSION = 4
 }
 
 /** One canonical stored conversation message before request projection. */
