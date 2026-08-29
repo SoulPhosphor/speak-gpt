@@ -79,7 +79,7 @@ class ApiVoiceModelsActivity : TtsPickerActivity() {
         findViewById<TextView>(R.id.tts_routing_mode).apply {
             text = modeLabel(ui.draft.routing.mode)
             AppDropdown.sizeToOptions(this, modes.map(::modeLabel)) {
-                findViewById<View>(R.id.tts_provider_row).width / 2
+                (findViewById<View?>(R.id.tts_provider_row)?.width ?: 0) / 2
             }
         }
         findViewById<TextView>(R.id.tts_provider_value).text = TtsManagerProviderDisplay.label(ui.draft.routing, select)
