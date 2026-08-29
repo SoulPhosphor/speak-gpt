@@ -72,6 +72,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.activities.PersonasListActivity
 import org.teslasoft.assistant.ui.activities.SystemPromptsListActivity
 import org.teslasoft.assistant.ui.widgets.AppDropdown
+import org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+import org.teslasoft.assistant.ui.widgets.SamplingParameterSpec
 import org.teslasoft.assistant.ui.activities.TokenPricingDetailsActivity
 import org.teslasoft.assistant.usage.ConversationUsageSummary
 import org.teslasoft.assistant.usage.QuickSettingsUsagePresentation
@@ -154,10 +156,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var textLoreBook: TextView? = null
     private var lorebookCheckList: LinearLayout? = null
 
-    private var temperatureSeekbar: com.google.android.material.slider.Slider? = null
-    private var topPSeekbar: com.google.android.material.slider.Slider? = null
-    private var frequencyPenaltySeekbar: com.google.android.material.slider.Slider? = null
-    private var presencePenaltySeekbar: com.google.android.material.slider.Slider? = null
+    private var temperatureSeekbar: SamplingParameterControl? = null
+    private var topPSeekbar: SamplingParameterControl? = null
+    private var frequencyPenaltySeekbar: SamplingParameterControl? = null
+    private var presencePenaltySeekbar: SamplingParameterControl? = null
     private var fieldSeed: TextInputEditText? = null
     private var btnSaveToProfile: MaterialButton? = null
     private var switchChatMemory: com.google.android.material.materialswitch.MaterialSwitch? = null
@@ -1207,10 +1209,22 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             btnCostInfo?.visibility = View.GONE
         }
 
-        temperatureSeekbar?.value = preferences?.getTemperature()!! * 10
-        topPSeekbar?.value = preferences?.getTopP()!! * 10
-        frequencyPenaltySeekbar?.value = preferences?.getFrequencyPenalty()!! * 10
-        presencePenaltySeekbar?.value = preferences?.getPresencePenalty()!! * 10
+        temperatureSeekbar?.configure(
+            SamplingParameterSpec.TEMPERATURE,
+            preferences?.getTemperature() ?: ApiEndpointObject.DEFAULT_TEMPERATURE
+        ) { preferences?.setTemperature(it) }
+        topPSeekbar?.configure(
+            SamplingParameterSpec.TOP_P,
+            preferences?.getTopP() ?: ApiEndpointObject.DEFAULT_TOP_P
+        ) { preferences?.setTopP(it) }
+        frequencyPenaltySeekbar?.configure(
+            SamplingParameterSpec.FREQUENCY_PENALTY,
+            preferences?.getFrequencyPenalty() ?: ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY
+        ) { preferences?.setFrequencyPenalty(it) }
+        presencePenaltySeekbar?.configure(
+            SamplingParameterSpec.PRESENCE_PENALTY,
+            preferences?.getPresencePenalty() ?: ApiEndpointObject.DEFAULT_PRESENCE_PENALTY
+        ) { preferences?.setPresencePenalty(it) }
         fieldSeed?.setText(preferences?.getSeed())
         checkStreaming?.isChecked = preferences?.getStreaming() ?: true
 
@@ -1266,38 +1280,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
         fieldSeed?.addTextChangedListener { text ->
             preferences?.setSeed(text.toString())
-        }
-
-        temperatureSeekbar?.addOnChangeListener { _, value, _ ->
-            preferences?.setTemperature(value / 10.0f)
-        }
-
-        temperatureSeekbar?.setLabelFormatter {
-            return@setLabelFormatter "${it/10.0}"
-        }
-
-        topPSeekbar?.addOnChangeListener { _, value, _ ->
-            preferences?.setTopP(value / 10.0f)
-        }
-
-        topPSeekbar?.setLabelFormatter {
-            return@setLabelFormatter "${it/10.0}"
-        }
-
-        frequencyPenaltySeekbar?.addOnChangeListener { _, value, _ ->
-            preferences?.setFrequencyPenalty(value / 10.0f)
-        }
-
-        frequencyPenaltySeekbar?.setLabelFormatter {
-            return@setLabelFormatter "${it/10.0}"
-        }
-
-        presencePenaltySeekbar?.addOnChangeListener { _, value, _ ->
-            preferences?.setPresencePenalty(value / 10.0f)
-        }
-
-        presencePenaltySeekbar?.setLabelFormatter {
-            return@setLabelFormatter "${it/10.0}"
         }
 
         btnSelectLogitBias?.setOnClickListener {

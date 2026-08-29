@@ -38,6 +38,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.snackbar.Snackbar
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -392,7 +393,12 @@ class ModelRuleEditorActivity : FragmentActivity() {
             val willBeActive = prior == null || prior.status == "active" || activate
             if (willBeActive && targets.isEmpty()) {
                 runOnUiThread {
-                    Toast.makeText(this, R.string.model_rule_edit_model_required, Toast.LENGTH_SHORT).show()
+                    val message = if (hasUnaddedModelSelection(selectedEndpointId, selectedModelId)) {
+                        R.string.model_rule_edit_add_selected_model
+                    } else {
+                        R.string.model_rule_edit_model_required
+                    }
+                    showValidationSnackbar(message)
                 }
                 return@runOffThread
             }
@@ -430,6 +436,14 @@ class ModelRuleEditorActivity : FragmentActivity() {
                 finish()
             }
         }
+    }
+
+    /** Persistent validation notice using the app's canonical snackbar action. */
+    private fun showValidationSnackbar(messageRes: Int) {
+        val root = findViewById<View>(R.id.root) ?: return
+        Snackbar.make(root, getString(messageRes), Snackbar.LENGTH_INDEFINITE)
+            .setAction(R.string.okay) { /* dismiss */ }
+            .show()
     }
 
     private fun runOffThread(work: () -> Unit) {
@@ -507,3 +521,7 @@ class ModelRuleEditorActivity : FragmentActivity() {
 
     private fun pxToDp(px: Int): Int = (px * resources.displayMetrics.density).toInt()
 }
+
+/** True only when both halves of the editor's not-yet-added target are visible. */
+internal fun hasUnaddedModelSelection(endpointId: String, modelId: String): Boolean =
+    endpointId.isNotBlank() && modelId.isNotBlank()
