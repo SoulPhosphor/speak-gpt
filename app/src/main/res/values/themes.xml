@@ -431,6 +431,26 @@
         <item name="android:layout_marginStart">0dp</item>
     </style>
 
+    <!-- Stacked single-choice radio row for a settings screen: a full-width,
+         tappable RadioButton whose label matches the shared row-title
+         typography (16sp, appRowTitleColor) and whose control tint resolves
+         from the theme (colorPrimary). Put the RadioButtons directly in a
+         vertical RadioGroup so it handles single-selection; the group supplies
+         the horizontal padding that aligns the rows with the screen's other
+         rows. Nothing here is hard-coded in the layout — size, color, and
+         geometry all live in this style so a future theme pass changes them in
+         one place. -->
+    <style name="Widget.App.Row.Radio" parent="Widget.Material3.CompoundButton.RadioButton">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">8dp</item>
+        <item name="android:buttonTint">?attr/colorPrimary</item>
+        <item name="android:textColor">?attr/appRowTitleColor</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
     <!-- Pick-one-item list row (owner request, Aug 13 2026): the "checked
          tile" row used by a single-select list opened from a
          Widget.App.Row.Selector (or, later, from any other picker needing

@@ -189,22 +189,61 @@
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
-            <LinearLayout
+            <!-- Voice input engine: stacked single-choice radios. Google
+                 Dictation is last so its language selector appears at the
+                 bottom of the group and pushes no radios down. -->
+            <TextView
+                style="@style/Widget.App.Field.Label"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
+                android:layout_marginTop="8dp"
+                android:text="@string/tile_voice_input_title" />
+
+            <RadioGroup
+                android:id="@+id/group_voice_input"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:layout_marginEnd="12dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal"
-                android:weightSum="1">
+                android:orientation="vertical"
+                android:paddingHorizontal="20dp">
 
-                <androidx.constraintlayout.widget.ConstraintLayout
-                    android:id="@+id/tile_stt"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginHorizontal="4dp"
-                    android:layout_weight="1" />
-            </LinearLayout>
+                <RadioButton
+                    android:id="@+id/radio_voice_input_whisper_cloud"
+                    style="@style/Widget.App.Row.Radio"
+                    android:text="@string/voice_engine_whisper_cloud" />
+
+                <RadioButton
+                    android:id="@+id/radio_voice_input_whisper_local"
+                    style="@style/Widget.App.Row.Radio"
+                    android:text="@string/voice_engine_whisper_local" />
+
+                <RadioButton
+                    android:id="@+id/radio_voice_input_google"
+                    style="@style/Widget.App.Row.Radio"
+                    android:text="@string/voice_engine_google" />
+            </RadioGroup>
+
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/row_dictation_language"
+                style="@style/Widget.App.Row.Selector.Flush"
+                android:paddingHorizontal="20dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/label_dictation_language"
+                    style="@style/Widget.App.Row.Selector.Label.Flush"
+                    android:text="@string/voice_dictation_language_label"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <TextView
+                    android:id="@+id/value_dictation_language"
+                    style="@style/Widget.App.Row.Selector.Value"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toEndOf="@+id/label_dictation_language"
+                    app:layout_constraintTop_toTopOf="parent" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"

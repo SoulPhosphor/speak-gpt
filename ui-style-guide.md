@@ -723,6 +723,24 @@ Use for a checkbox option where the whole line is the tap target but must read a
 
 Distinct from `Widget.App.Row.Toggle`, which is a switch row with a subtitle.
 
+## Stacked single-choice radio row
+
+`Widget.App.Row.Radio`
+
+Use for a stacked, single-choice list of options shown as radio buttons on a
+settings screen — the whole row is a tappable `RadioButton` whose label matches
+the shared row-title typography (16sp, `appRowTitleColor`) and whose control
+tint resolves from the theme (`colorPrimary`). Put the `RadioButton`s directly
+in a vertical `RadioGroup` so it manages single-selection; the group supplies
+the horizontal padding that aligns the rows with the screen's other rows. All
+size, color, and geometry live in the style, never in the layout or Kotlin.
+First use: the Voice Input engine choice on Voice & Speech.
+
+This is for a persistent on-screen choice. It is not the "checked tile"
+pick-list (`Widget.App.PickList.Row`) used inside a Select pop-up, and it is
+not the equal-width horizontal segmented control
+(`Widget.App.VoiceBrowser.Segment`).
+
 ## Chat composer host and surface
 
 ### Chat composer host and surface

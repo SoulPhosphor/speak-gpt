@@ -23,6 +23,7 @@ import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
 import org.teslasoft.assistant.preferences.tts.AppTtsVoicePreferences
 import org.teslasoft.assistant.tts.voices.VoicePreviewText
+import java.util.Locale
 
 class Preferences internal constructor(
     private var preferences: SharedPreferences,
@@ -867,6 +868,30 @@ class Preferences internal constructor(
     fun setLanguage(lang: String) {
         putGlobalString("lang", lang)
     }
+
+    /**
+     * The language used for Google speech-to-text dictation, kept separate
+     * from the spoken-voice language. When the user has not chosen one, it
+     * falls back to the device's primary language if that language is one the
+     * picker supports, otherwise English. The stored value persists across
+     * dictation-engine changes.
+     */
+    fun getDictationLanguage(): String {
+        val stored = getGlobalString("dictation_lang", "")
+        if (stored.isNotEmpty()) return stored
+        val device = Locale.getDefault().language
+        return if (supportedDictationLanguages.contains(device)) device else "en"
+    }
+
+    fun setDictationLanguage(lang: String) {
+        putGlobalString("dictation_lang", lang)
+    }
+
+    // Language codes the Select Language picker offers; used to decide whether
+    // the device's primary language is a usable default for Google dictation.
+    private val supportedDictationLanguages = setOf(
+        "en", "fr", "de", "it", "ja", "ko", "zh_CN", "zh_TW", "es", "uk", "ru", "pl", "tr"
+    )
 
     // Voice identity is app-wide even when this Preferences instance belongs to a chat.
     fun getVoice(): String = ttsVoicePreferences.getVoice()

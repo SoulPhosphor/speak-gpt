@@ -24,9 +24,11 @@ import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
@@ -78,7 +80,9 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var valueVoiceBrowser: TextView? = null
     private var rowVoiceLanguage: ConstraintLayout? = null
     private var valueVoiceLanguage: TextView? = null
-    private var tileSTT: TileFragment? = null
+    private var groupVoiceInput: RadioGroup? = null
+    private var rowDictationLanguage: ConstraintLayout? = null
+    private var valueDictationLanguage: TextView? = null
     private var tileHandsFreeTiming: TileFragment? = null
     private var tileVadMethod: TileFragment? = null
     private var rowVoiceAdvanced: LinearLayout? = null
@@ -109,6 +113,20 @@ class VoiceSettingsActivity : FragmentActivity() {
             val languageSelectorDialogFragment: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(name, chatId)
             languageSelectorDialogFragment.setStateChangedListener(this)
             languageSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "LanguageSelectorDialog")
+        }
+    }
+
+    private var dictationLanguageListener: LanguageSelectorDialogFragment.StateChangesListener = object : LanguageSelectorDialogFragment.StateChangesListener {
+        override fun onSelected(name: String) {
+            preferences?.setDictationLanguage(name)
+            valueDictationLanguage?.text = Locale.forLanguageTag(name).displayLanguage
+        }
+
+        override fun onFormError(name: String) {
+            Toast.makeText(this@VoiceSettingsActivity, getString(R.string.language_error_empty), Toast.LENGTH_SHORT).show()
+            val dialog: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(name, chatId)
+            dialog.setStateChangedListener(this)
+            dialog.show(supportFragmentManager.beginTransaction(), "DictationLanguageDialog")
         }
     }
 
@@ -212,19 +230,6 @@ class VoiceSettingsActivity : FragmentActivity() {
     }
 
     private fun createTiles() {
-        tileSTT = TileFragment.newInstance(
-            checked = false,
-            checkable = false,
-            enabledText = getString(R.string.tile_voice_input_title),
-            disabledText = null,
-            enabledDesc = voiceInputSubtitle(),
-            disabledDesc = null,
-            icon = R.drawable.ic_microphone,
-            disabled = false,
-            chatId = chatId,
-            functionDesc = getString(R.string.tile_voice_input_desc)
-        )
-
         tileHandsFreeTiming = TileFragment.newInstance(
             checked = false,
             checkable = false,
@@ -259,7 +264,6 @@ class VoiceSettingsActivity : FragmentActivity() {
 
     private fun placeTiles() {
         supportFragmentManager.beginTransaction()
-            .replace(R.id.tile_stt, tileSTT!!)
             .replace(R.id.tile_hands_free_timing, tileHandsFreeTiming!!)
             .replace(R.id.tile_vad_method, tileVadMethod!!)
             .commitNow()
@@ -293,8 +297,29 @@ class VoiceSettingsActivity : FragmentActivity() {
             preferences?.setAutoSend(checked)
         }
 
-        tileSTT?.setOnTileClickListener {
-            showVoiceInputEnginePicker()
+        groupVoiceInput = findViewById(R.id.group_voice_input)
+        rowDictationLanguage = findViewById(R.id.row_dictation_language)
+        valueDictationLanguage = findViewById(R.id.value_dictation_language)
+
+        val currentEngine = preferences?.getAudioModel() ?: "google"
+        groupVoiceInput?.check(voiceInputRadioId(currentEngine))
+        rowDictationLanguage?.visibility = if (currentEngine == "google") View.VISIBLE else View.GONE
+        valueDictationLanguage?.text = Locale.forLanguageTag(preferences?.getDictationLanguage() ?: "en").displayLanguage
+
+        groupVoiceInput?.setOnCheckedChangeListener { _, checkedId ->
+            val picked = voiceInputEngineId(checkedId)
+            preferences?.setAudioModel(picked)
+            rowDictationLanguage?.visibility = if (picked == "google") View.VISIBLE else View.GONE
+            if (picked == "whisper-local") {
+                startActivity(Intent(this, LocalWhisperModelsActivity::class.java))
+            }
+        }
+
+        rowDictationLanguage?.setOnClickListener {
+            val current = preferences?.getDictationLanguage() ?: "en"
+            val dialog = LanguageSelectorDialogFragment.newInstance(current, chatId)
+            dialog.setStateChangedListener(dictationLanguageListener)
+            dialog.show(supportFragmentManager.beginTransaction(), "DictationLanguageDialog")
         }
 
         switchAutoLangDetect = findViewById(R.id.switch_auto_lang_detect)
@@ -386,20 +411,16 @@ class VoiceSettingsActivity : FragmentActivity() {
             .show()
     }
 
-    private fun voiceInputSubtitle(): String {
-        val engine = preferences?.getAudioModel() ?: "google"
-        return when (engine) {
-            "whisper" -> getString(R.string.voice_engine_whisper_cloud)
-            "whisper-local" -> {
-                val model = preferences?.getActiveLocalWhisperModel() ?: ""
-                if (model.isNotEmpty()) {
-                    getString(R.string.voice_engine_whisper_local) + " · " + model
-                } else {
-                    getString(R.string.voice_engine_whisper_local)
-                }
-            }
-            else -> getString(R.string.voice_engine_google)
-        }
+    private fun voiceInputRadioId(engine: String): Int = when (engine) {
+        "whisper" -> R.id.radio_voice_input_whisper_cloud
+        "whisper-local" -> R.id.radio_voice_input_whisper_local
+        else -> R.id.radio_voice_input_google
+    }
+
+    private fun voiceInputEngineId(radioId: Int): String = when (radioId) {
+        R.id.radio_voice_input_whisper_cloud -> "whisper"
+        R.id.radio_voice_input_whisper_local -> "whisper-local"
+        else -> "google"
     }
 
     // Voice-activity-detection method picker. Only applies to on-device
@@ -582,34 +603,9 @@ class VoiceSettingsActivity : FragmentActivity() {
         }
     }
 
-    private fun showVoiceInputEnginePicker() {
-        val engines = arrayOf("google", "whisper", "whisper-local")
-        val labels = arrayOf(
-            getString(R.string.voice_engine_google),
-            getString(R.string.voice_engine_whisper_cloud),
-            getString(R.string.voice_engine_whisper_local)
-        )
-        val current = engines.indexOf(preferences?.getAudioModel() ?: "google").coerceAtLeast(0)
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.voice_engine_picker_title)
-            .setSingleChoiceItems(labels, current) { dialog, which ->
-                val picked = engines[which]
-                preferences?.setAudioModel(picked)
-                tileSTT?.updateSubtitle(voiceInputSubtitle())
-                dialog.dismiss()
-                if (picked == "whisper-local") {
-                    startActivity(Intent(this, LocalWhisperModelsActivity::class.java))
-                }
-            }
-            .setNegativeButton(android.R.string.cancel) { _, _ -> }
-            .show()
-    }
-
     override fun onResume() {
         super.onResume()
         updateVoiceBrowserRow()
-        tileSTT?.updateSubtitle(voiceInputSubtitle())
     }
 
     private fun isDarkThemeEnabled(): Boolean {
