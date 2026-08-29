@@ -48,10 +48,7 @@ class ApiVoiceModelsActivity : TtsPickerActivity() {
                 model.mode(modes[it])
             }
         }
-        findViewById<View>(R.id.tts_provider_value).setOnClickListener {
-            if (model.ui.value.draft.modelId.isBlank()) showSelectModelSnackbar()
-            else model.openProvider()?.let(providerPicker::launch)
-        }
+        findViewById<View>(R.id.tts_provider_value).setOnClickListener { model.openProvider()?.let(providerPicker::launch) }
         findViewById<View>(R.id.tts_add_model).setOnClickListener { model.add() }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -64,16 +61,6 @@ class ApiVoiceModelsActivity : TtsPickerActivity() {
     }
 
     override fun onStart() { super.onStart(); model.refresh() }
-
-    /** Snackbar with an Okay button that stays until the user dismisses it. */
-    private fun showSelectModelSnackbar() {
-        val root = findViewById<View>(R.id.root) ?: return
-        com.google.android.material.snackbar.Snackbar.make(root,
-            getString(R.string.tts_manager_select_model_required),
-            com.google.android.material.snackbar.Snackbar.LENGTH_INDEFINITE)
-            .setAction(R.string.okay) { /* dismiss */ }
-            .show()
-    }
 
     private fun modeLabel(mode: TtsRoutingMode) = getString(when (mode) {
         TtsRoutingMode.AUTOMATIC -> R.string.choose_provider_routing_automatic

@@ -3469,7 +3469,6 @@
     <string name="tts_manager_provider_title">Select Provider</string>
     <string name="tts_manager_provider_hint">Optional. This may not be available or necessary with all endpoints.</string>
     <string name="tts_manager_selected_voice_models">Selected Voice Models</string>
-    <string name="tts_manager_select_model_required">Please select a model.</string>
     <string name="tts_manager_remove_heading">X</string>
     <string name="tts_manager_edit_provider">Edit Provider: %1$s, %2$s, %3$s</string>
     <string name="tts_manager_remove">Remove TTS Selection: %1$s, %2$s, %3$s</string>
