@@ -169,14 +169,12 @@
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/row_voice_language"
-                style="@style/Widget.App.Row.Selector.VoiceLanguage"
-                android:layout_marginStart="12dp"
-                android:layout_marginTop="8dp"
-                android:layout_marginEnd="12dp">
+                style="@style/Widget.App.Row.Selector.Flush"
+                android:paddingHorizontal="20dp">
 
                 <TextView
                     android:id="@+id/label_voice_language"
-                    style="@style/Widget.App.Row.Selector.Label"
+                    style="@style/Widget.App.Row.Selector.Label.Flush"
                     android:text="@string/tile_voice_lang_title"
                     app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintStart_toStartOf="parent"

@@ -412,6 +412,25 @@
         <item name="android:textColor">?attr/appTextColor</item>
     </style>
 
+    <!-- Flush variant of Widget.App.Row.Selector for plain settings screens.
+         Removes the tonal pill background and the label's leading inset so the
+         selector reads as an ordinary row: its label starts at the same
+         leading edge as the screen's other row text instead of being indented
+         like the Quick Settings card version. The screen supplies its own
+         horizontal padding to line the label up with its rows; this style only
+         drops the pill and the inset. Quick Settings keeps the indented,
+         pill-backed base Widget.App.Row.Selector. -->
+    <style name="Widget.App.Row.Selector.Flush" parent="Widget.App.Row.Selector">
+        <item name="android:background">@null</item>
+    </style>
+
+    <!-- Label for Widget.App.Row.Selector.Flush: same bold accent typography
+         as Widget.App.Row.Selector.Label, with the leading inset removed so it
+         aligns with the screen's other row titles. -->
+    <style name="Widget.App.Row.Selector.Label.Flush" parent="Widget.App.Row.Selector.Label">
+        <item name="android:layout_marginStart">0dp</item>
+    </style>
+
     <!-- Pick-one-item list row (owner request, Aug 13 2026): the "checked
          tile" row used by a single-select list opened from a
          Widget.App.Row.Selector (or, later, from any other picker needing

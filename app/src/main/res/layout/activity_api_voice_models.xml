@@ -22,9 +22,8 @@
                     android:text="@string/tts_manager_select" />
             </LinearLayout>
             <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/tts_model_row"
-                style="@style/Widget.App.Row.Selector" android:layout_marginTop="16dp"
-                android:background="@null">
-                <TextView android:id="@+id/tts_model_label" style="@style/Widget.App.Row.Selector.Label"
+                style="@style/Widget.App.Row.Selector.Flush" android:layout_marginTop="16dp">
+                <TextView android:id="@+id/tts_model_label" style="@style/Widget.App.Row.Selector.Label.Flush"
                     android:text="@string/tts_picker_ai_model" app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toTopOf="parent" app:layout_constraintBottom_toBottomOf="parent" />
                 <TextView android:id="@+id/tts_model_value" style="@style/Widget.App.Row.Selector.Value"

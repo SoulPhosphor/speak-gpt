@@ -320,7 +320,13 @@ A toggle may exist on only one screen. Its use of shared row and switch styling 
 
 `Widget.App.Row.Selector.VoiceLanguage`
 
+`Widget.App.Row.Selector.Flush`
+
+`Widget.App.Row.Selector.Label.Flush`
+
 Use for a row that shows the current value of a setting and opens a picker (a dialog or another screen) when tapped. The label sits at the start (bold, `colorPrimary`); the current value sits at the end, ellipsizing with a marquee. There is no chevron — the value itself is the affordance.
+
+Use the `.Flush` row style (with `.Label.Flush` for its label) on a plain settings screen where the selector should read as an ordinary row rather than a card tile: it drops the tonal pill background and the label's leading inset, so the label lines up with the screen's other row text. The screen still supplies its own horizontal padding to match its rows. The base `Widget.App.Row.Selector` (indented, pill-backed) stays reserved for the Quick Settings card. Current `.Flush` examples: the AI Model row on Select API Voice Models and the language selector on Voice & Speech.
 
 Distinct from the Dropdown family, which opens an anchored inline menu in place rather than a separate picker.
 
