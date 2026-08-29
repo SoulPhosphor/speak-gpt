@@ -42,7 +42,7 @@ class ApiVoiceModelsActivity : TtsPickerActivity() {
             AppDropdown.show(view as TextView, ui.endpoints.map { it.label },
                 ui.endpoints.indexOfFirst { it.id == ui.draft.endpointId }) { model.endpoint(ui.endpoints[it].id) }
         }
-        findViewById<View>(R.id.tts_model_value).setOnClickListener { model.openModel()?.let(modelPicker::launch) }
+        findViewById<View>(R.id.tts_model_row).setOnClickListener { model.openModel()?.let(modelPicker::launch) }
         findViewById<TextView>(R.id.tts_routing_mode).setOnClickListener { view ->
             AppDropdown.show(view as TextView, modes.map(::modeLabel), modes.indexOf(model.ui.value.draft.routing.mode)) {
                 model.mode(modes[it])
@@ -98,7 +98,7 @@ class ApiVoiceModelsActivity : TtsPickerActivity() {
         }
         findViewById<TextView>(R.id.tts_provider_value).text = TtsManagerProviderDisplay.label(ui.draft.routing, select)
         // A read-only refresh keeps the pickers live; only a save/remove disables them.
-        for (id in listOf(R.id.tts_model_value, R.id.tts_routing_mode, R.id.tts_provider_value))
+        for (id in listOf(R.id.tts_model_row, R.id.tts_routing_mode, R.id.tts_provider_value))
             findViewById<View>(id).isEnabled = !ui.mutating
         findViewById<View>(R.id.tts_add_model).isEnabled = !ui.busy
         findViewById<View>(R.id.tts_manager_progress).visibility = if (ui.busy) View.VISIBLE else View.GONE
