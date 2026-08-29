@@ -279,16 +279,10 @@
                 android:layout_marginEnd="24dp"
                 android:text="@string/sampling_hint_temperature" />
 
-            <com.google.android.material.slider.Slider
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
                 android:id="@+id/slider_temperature"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="20dp"
-                android:layout_marginEnd="20dp"
-                android:stepSize="1.0"
-                android:value="7.0"
-                android:valueFrom="0.0"
-                android:valueTo="20.0" />
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/set_temperature" />
 
             <!-- Top P -->
             <TextView
@@ -304,16 +298,10 @@
                 android:layout_marginEnd="24dp"
                 android:text="@string/sampling_hint_top_p" />
 
-            <com.google.android.material.slider.Slider
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
                 android:id="@+id/slider_top_p"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="20dp"
-                android:layout_marginEnd="20dp"
-                android:stepSize="1.0"
-                android:value="10.0"
-                android:valueFrom="0.0"
-                android:valueTo="10.0" />
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/set_top_p" />
 
             <!-- Frequency Penalty -->
             <TextView
@@ -329,16 +317,10 @@
                 android:layout_marginEnd="24dp"
                 android:text="@string/sampling_hint_frequency_penalty" />
 
-            <com.google.android.material.slider.Slider
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
                 android:id="@+id/slider_frequency_penalty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="20dp"
-                android:layout_marginEnd="20dp"
-                android:stepSize="1.0"
-                android:value="0.0"
-                android:valueFrom="-20.0"
-                android:valueTo="20.0" />
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/set_frequency_penalty" />
 
             <!-- Presence Penalty -->
             <TextView
@@ -354,16 +336,10 @@
                 android:layout_marginEnd="24dp"
                 android:text="@string/sampling_hint_presence_penalty" />
 
-            <com.google.android.material.slider.Slider
+            <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
                 android:id="@+id/slider_presence_penalty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="20dp"
-                android:layout_marginEnd="20dp"
-                android:stepSize="1.0"
-                android:value="0.0"
-                android:valueFrom="-20.0"
-                android:valueTo="20.0" />
+                style="@style/Widget.App.SamplingSlider.Container"
+                android:contentDescription="@string/set_presence_penalty" />
 
             <!-- Maximum response tokens. Pre-filled with the profile's value. -->
             <LinearLayout
