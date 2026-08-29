@@ -199,7 +199,8 @@
                     android:layout_weight="1" />
             </LinearLayout>
 
-            <LinearLayout android:id="@+id/row_api_voice_models" style="@style/Widget.App.Row.TitleOnly">
+            <LinearLayout android:id="@+id/row_api_voice_models" style="@style/Widget.App.Row.TitleOnly"
+                android:paddingHorizontal="20dp">
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
                     <TextView style="@style/Widget.App.Row.Title" android:text="@string/tts_manager_title" />
                 </LinearLayout>
