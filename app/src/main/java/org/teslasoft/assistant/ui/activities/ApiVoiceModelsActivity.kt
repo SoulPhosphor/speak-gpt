@@ -68,6 +68,9 @@ class ApiVoiceModelsActivity : TtsPickerActivity() {
         TtsRoutingMode.ONLY -> R.string.choose_provider_routing_only
     })
 
+    private fun availableWidth(anchor: TextView): Int =
+        (anchor.parent as? View)?.width ?: resources.displayMetrics.widthPixels
+
     private fun render(ui: TtsManagerUi) {
         val select = getString(R.string.tts_manager_select)
         findViewById<TextView>(R.id.tts_endpoint).apply {
@@ -78,9 +81,7 @@ class ApiVoiceModelsActivity : TtsPickerActivity() {
         findViewById<TextView>(R.id.tts_model_value).text = ui.draft.modelId.ifBlank { select }
         findViewById<TextView>(R.id.tts_routing_mode).apply {
             text = modeLabel(ui.draft.routing.mode)
-            AppDropdown.sizeToOptions(this, modes.map(::modeLabel)) {
-                (findViewById<View?>(R.id.tts_provider_row)?.width ?: 0) / 2
-            }
+            AppDropdown.sizeToOptions(this, modes.map(::modeLabel)) { availableWidth(this) }
         }
         findViewById<TextView>(R.id.tts_provider_value).text = TtsManagerProviderDisplay.label(ui.draft.routing, select)
         for (id in listOf(R.id.tts_model_row, R.id.tts_routing_mode, R.id.tts_provider_value, R.id.tts_add_model))
