@@ -7510,7 +7510,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     btnMicro?.isEnabled = true
                     btnSend?.isEnabled = true
                     setGenerationProgressVisible(false)
-                    messageInput?.requestFocus()
                 }
             }
             is ImageGenerationJobRegistry.Terminal.Failed -> {
@@ -7607,7 +7606,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
         setGenerationProgressVisible(false)
-        messageInput?.requestFocus()
 
         val builder = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(causeText)
@@ -8160,7 +8158,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
         setGenerationProgressVisible(false)
-        messageInput?.requestFocus()
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
     }
 
@@ -9864,7 +9861,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
                 setGenerationProgressVisible(false)
-                messageInput?.requestFocus()
             } else {
                 // The old Function Calling router — a hidden gpt-4o request
                 // choosing between its image and web-search functions — is
@@ -10136,7 +10132,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 btnMicro?.isEnabled = true
                 btnSend?.isEnabled = true
                 setGenerationProgressVisible(false)
-                messageInput?.requestFocus()
             }
         } finally {
             try { generationNetworkMonitor?.close() } catch (_: Throwable) {}
@@ -11584,7 +11579,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnMicro?.isEnabled = true
         btnSend?.isEnabled = true
         setGenerationProgressVisible(false)
-        messageInput?.requestFocus()
 
         // Put timestamp to chat to sort chats by last message
         ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
@@ -11597,7 +11591,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 btnMicro?.isEnabled = false
                 btnSend?.isEnabled = false
                 setGenerationProgressVisible(false)
-                messageInput?.requestFocus()
 
                 // Preserve the normal leading System prefix byte-for-byte so providers
                 // can reuse any prompt cache already built for the conversation. The

@@ -118,6 +118,22 @@ this lock for the new turn as described in rule 2. If the keyboard is opened
 again while that reply is still streaming, automatic follow stops immediately
 and the position hold takes over again.
 
+### 8. A finished AI turn never opens the keyboard (owner ruling, Aug 29 2026)
+
+When an AI turn ends, the app must not bring the keyboard up on its own. This
+is required behavior, not a preference, and it holds in every mode with no
+exception, Desktop mode included.
+
+"Ends" covers every finish: a streamed reply, a non-streamed reply, an image
+result, and every failure of those, plus the hidden auto-title request that can
+run right after a reply. In all of these the composer is left exactly as it was
+and the keyboard stays closed. The keyboard comes up only when the user taps the
+composer themselves, which is rule 4.
+
+A finished turn must not focus the message box at all. Focusing it is what runs
+the composer's focus listener and raises the keyboard, so no completion path
+requests focus on the composer, in any mode.
+
 ## Important event distinctions
 
 These cases are intentionally different and must not be collapsed into one
@@ -131,6 +147,7 @@ These cases are intentionally different and must not be collapsed into one
 | User presses Send | Release hold and start automatic follow for the new reply |
 | User touches/scrolls during generation | Stop automatic follow for the rest of that reply |
 | User opens keyboard during generation | Stop automatic follow for the rest of that reply, and hold current position; closing the keyboard again does not resume it |
+| AI turn ends (reply or image finishes or fails, including the auto-title request after it) | Keyboard stays down; do not focus the composer to open it, in any mode |
 
 ## Why this matters
 
@@ -149,6 +166,7 @@ carefully or composing a message.
 | The lock, and the Send exception | `ChatActivity.scroll()` and `imeClosingForSend` |
 | The finger-wins flag | `ChatActivity.disableAutoScroll` |
 | Where a growing reply stops | `StreamingBubbleScrollPolicy` |
+| A finished turn stops after hiding the progress ring, never focuses the composer | `ChatActivity` completion paths (each `setGenerationProgressVisible(false)` end) |
 
 ## What breaks it
 
@@ -185,10 +203,21 @@ but it also stacks a short conversation against the composer instead of
 starting it at the top. That is a visible change to every new chat and is not
 approved.
 
+**Focusing the composer when a turn finishes.** Calling `requestFocus()` on the
+message box at the end of a turn runs the composer's focus listener, which shows
+the keyboard. No completion path may focus the composer, in any mode. Putting a
+`messageInput?.requestFocus()` back into a completion path is exactly what makes
+the keyboard pop up on its own again (rule 8).
+
 ## The test that holds it
 
 `ChatActionSurfaceSourceContractTest`
 -> `everyViewportResizePinsTranscriptWithoutFightingTheImeConstraint`
+
+Rule 8 has its own guard in the same class:
+`ChatActionSurfaceSourceContractTest` -> `aFinishedTurnDoesNotOpenTheKeyboard`.
+It fails the build if any completion path focuses the composer, so a keyboard
+that pops up after a turn cannot be mistaken for intended behavior.
 
 It asserts that the mechanism above is present, and the build fails without it.
 It is a source-contract test, not a full device-level simulation of keyboard
