@@ -31,4 +31,17 @@ object GeneratedImageStorage {
     fun cacheFileName(bytes: ByteArray, imageType: String = "png"): String {
         return Hash.hash(java.util.Base64.getEncoder().encodeToString(bytes)) + "." + imageType
     }
+
+    /** One physical file per stable generation identity. Content hashes remain
+     * integrity/reference metadata; they no longer make two separate outputs
+     * destructively share one new file. */
+    fun catalogFileName(imageId: String, imageType: String): String? {
+        val safeId = imageId.takeIf {
+            it.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,127}"))
+        } ?: return null
+        val safeType = imageType.lowercase().takeIf {
+            it.matches(Regex("[a-z0-9]{2,8}"))
+        } ?: return null
+        return "$safeId.$safeType"
+    }
 }

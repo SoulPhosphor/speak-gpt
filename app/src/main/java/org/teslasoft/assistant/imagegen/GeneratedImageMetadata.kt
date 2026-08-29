@@ -60,7 +60,12 @@ class GeneratedImageMetadata(
     /** The user's edited image summary from the prompt box. When present it
      *  overrides [imageSummary] both in the box and in the text sent to the
      *  model. Null unless the user has saved an edit. */
-    val summaryEdited: String? = null
+    val summaryEdited: String? = null,
+    /** Relative app-owned file name for catalog-managed images. Keeping this
+     * on the message lets chat render the asset during a temporary catalog
+     * lock without storing an absolute/device-specific path. Legacy records
+     * omit it and continue resolving by [fileHash]. */
+    val assetFileName: String? = null
 ) {
 
     /** True when this image was produced by the user's `/imagine` command
@@ -88,7 +93,7 @@ class GeneratedImageMetadata(
     ): GeneratedImageMetadata = GeneratedImageMetadata(
         imageId, fileHash, mimeType, width, height, endpointId, modelId,
         prompt, description, createdAt, status, failureCode,
-        imageSummary, summaryEdited
+        imageSummary, summaryEdited, assetFileName
     )
 
     fun toJson(): String {
@@ -107,6 +112,7 @@ class GeneratedImageMetadata(
         if (failureCode != null) json.put("failureCode", failureCode)
         if (imageSummary != null) json.put("imageSummary", imageSummary)
         if (summaryEdited != null) json.put("summaryEdited", summaryEdited)
+        if (assetFileName != null) json.put("assetFileName", assetFileName)
         return json.toString()
     }
 
@@ -142,7 +148,8 @@ class GeneratedImageMetadata(
                     status = json.optString("status"),
                     failureCode = json.optString("failureCode").ifBlank { null },
                     imageSummary = json.optString("imageSummary").ifBlank { null },
-                    summaryEdited = json.optString("summaryEdited").ifBlank { null }
+                    summaryEdited = json.optString("summaryEdited").ifBlank { null },
+                    assetFileName = json.optString("assetFileName").ifBlank { null }
                 )
             } catch (_: Exception) {
                 null

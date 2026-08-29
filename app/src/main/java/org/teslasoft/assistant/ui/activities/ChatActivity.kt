@@ -7474,7 +7474,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // after onCreate must still receive the terminal state here.
         ImageGenerationJobRegistry.attach(chatId, this)
         ImageGenerationJobRegistry.start(
-            this, chatId, request, ImageGenerationJobRegistry.Origin.IMAGINE
+            this, chatId, chatName, request, ImageGenerationJobRegistry.Origin.IMAGINE
         )
     }
 
@@ -8006,7 +8006,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // assigned after onCreate must still receive the terminal state.
             ImageGenerationJobRegistry.attach(chatId, this@ChatActivity)
             ImageGenerationJobRegistry.start(
-                this@ChatActivity, chatId, request, ImageGenerationJobRegistry.Origin.TOOL
+                this@ChatActivity, chatId, chatName, request, ImageGenerationJobRegistry.Origin.TOOL
             )
         }
         return when (val terminal = job.await()) {

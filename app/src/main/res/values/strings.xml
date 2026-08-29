@@ -659,6 +659,7 @@
     <string name="image_gen_creating_title">Creating Image</string>
     <string name="image_gen_loading_result">Loading Image…</string>
     <string name="image_gen_load_failed">The generated image could not be displayed.</string>
+    <string name="image_gen_no_longer_available">Image No Longer Available</string>
     <string name="image_gen_prompt_title">Image Prompt</string>
     <string name="image_gen_prompt_action">Prompt</string>
     <string name="image_gen_prompt_unavailable">The prompt is unavailable for this older image.</string>

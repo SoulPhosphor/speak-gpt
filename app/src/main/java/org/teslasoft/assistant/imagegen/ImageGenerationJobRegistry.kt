@@ -32,10 +32,15 @@ import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.MessageCompletionState
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecord
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStorageState
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
 import org.teslasoft.assistant.service.ImageGenerationForegroundService
+import org.teslasoft.assistant.util.AtomicFileWriter
 import org.teslasoft.assistant.util.GeneratedImageStorage
 import org.teslasoft.assistant.util.Hash
 import java.io.File
+import java.util.UUID
 
 /** The chat message resource for each §13 failure cause. Every cause has
  *  its own message — an umbrella code must never conceal the specific
@@ -145,6 +150,12 @@ object ImageGenerationJobRegistry {
 
     class ActiveJob internal constructor(
         chatId: String,
+        /** Immutable ownership identity. Chat titles never participate in it. */
+        val originChatId: String,
+        originChatName: String?,
+        /** Allocated once and never recalculated from a label, chat name, file
+         * hash, extension, or future image title. */
+        val imageId: String,
         val request: ImageGenerationRequest,
         val origin: Origin,
         internal val terminal: CompletableDeferred<Terminal>
@@ -152,6 +163,9 @@ object ImageGenerationJobRegistry {
         /** Mutable because a placeholder chat can be auto-renamed (and
          *  re-keyed) while its first turn is still generating. */
         var chatId: String = chatId
+            internal set
+
+        var originChatName: String? = originChatName
             internal set
 
         internal var job: Job? = null
@@ -204,18 +218,32 @@ object ImageGenerationJobRegistry {
         listeners.remove(oldChatId)?.let { listeners[newChatId] = it }
     }
 
+    /** A successful title-only chat rename changes only the catalog label. */
+    fun updateOriginChatName(chatId: String, newName: String) {
+        jobs[chatId]?.takeIf { it.originChatId == chatId }?.originChatName = newName
+    }
+
     /** Starts (or returns the already-running) generation for this chat —
      *  idempotent per chat, which is what makes recreation unable to start
      *  a second image. */
     fun start(
         context: Context,
         chatId: String,
+        originChatName: String?,
         request: ImageGenerationRequest,
         origin: Origin
     ): ActiveJob {
         jobs[chatId]?.let { return it }
         val app = context.applicationContext
-        val record = ActiveJob(chatId, request, origin, CompletableDeferred())
+        val record = ActiveJob(
+            chatId = chatId,
+            originChatId = chatId,
+            originChatName = originChatName,
+            imageId = UUID.randomUUID().toString(),
+            request = request,
+            origin = origin,
+            terminal = CompletableDeferred()
+        )
         // LAZY so the record is registered before the first suspension can run.
         val job = scope.launch(start = CoroutineStart.LAZY) {
             // Direct /imagine requests do not pass through ChatActivity's
@@ -226,10 +254,10 @@ object ImageGenerationJobRegistry {
             val keepAliveStarted = ImageGenerationForegroundService.begin(app, chatId)
             val terminal = try {
                 try {
-                    runGeneration(app, request)
+                    runGeneration(app, record)
                 } catch (_: CancellationException) {
                     Terminal.Cancelled(
-                        metadataFor(request, GeneratedImageMetadata.STATUS_CANCELLED)
+                        metadataFor(record, GeneratedImageMetadata.STATUS_CANCELLED)
                     )
                 } catch (_: Exception) {
                     // Without this catch, a local file-write/decode failure
@@ -237,7 +265,7 @@ object ImageGenerationJobRegistry {
                     Terminal.Failed(
                         ImageErrorCause.PROVIDER_ERROR,
                         metadataFor(
-                            request,
+                            record,
                             GeneratedImageMetadata.STATUS_FAILED,
                             failureCode = ImageErrorCause.PROVIDER_ERROR.name
                         )
@@ -260,21 +288,22 @@ object ImageGenerationJobRegistry {
 
     private suspend fun runGeneration(
         app: Context,
-        request: ImageGenerationRequest
-    ): Terminal = when (val outcome = ImageGeneratorCoordinator.generate(app, request)) {
+        record: ActiveJob
+    ): Terminal = when (val outcome = ImageGeneratorCoordinator.generate(app, record.request)) {
         is ImageGeneratorCoordinator.Outcome.Success -> {
-            // Marker id and stored file name derive from the same encoded
-            // bytes (GeneratedImageStorage), so the saved message keeps
-            // resolving to its file; the real detected type decides the
-            // extension (§4.5).
             val bytes = outcome.image.bytes
-            val marker = withContext(Dispatchers.IO) {
-                File(
-                    app.getExternalFilesDir("images"),
-                    GeneratedImageStorage.cacheFileName(bytes, outcome.image.fileExtension)
-                ).writeBytes(bytes)
-                Hash.hash(java.util.Base64.getEncoder().encodeToString(bytes))
-            }
+            val marker = Hash.hash(java.util.Base64.getEncoder().encodeToString(bytes))
+            val assetFileName = GeneratedImageStorage.catalogFileName(
+                record.imageId,
+                outcome.image.fileExtension
+            ) ?: return Terminal.Failed(
+                ImageErrorCause.PROVIDER_ERROR,
+                metadataFor(
+                    record,
+                    GeneratedImageMetadata.STATUS_FAILED,
+                    failureCode = ImageErrorCause.PROVIDER_ERROR.name
+                )
+            )
             // §12 width and height, read from the actual bytes without
             // decoding the full bitmap.
             val bounds = android.graphics.BitmapFactory.Options()
@@ -282,18 +311,73 @@ object ImageGenerationJobRegistry {
             try {
                 android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             } catch (_: Exception) { /* dimensions stay absent */ }
-            ImageGenerationEventLog.recordSuccess(app, outcome.diagnostics)
-            Terminal.Complete(
-                marker,
-                metadataFor(
-                    request,
+            val metadata = metadataFor(
+                    record,
                     GeneratedImageMetadata.STATUS_COMPLETE,
                     fileHash = marker,
                     mimeType = outcome.image.mimeType,
                     width = bounds.outWidth.takeIf { it > 0 },
-                    height = bounds.outHeight.takeIf { it > 0 }
+                    height = bounds.outHeight.takeIf { it > 0 },
+                    assetFileName = assetFileName
                 )
-            )
+            val registration = withContext(Dispatchers.IO) {
+                val imagesDir = app.getExternalFilesDir("images")
+                    ?: return@withContext false
+                val target = File(imagesDir, assetFileName)
+                val fileResult = AtomicFileWriter.writeBytesAndVerify(target, bytes)
+                if (fileResult == AtomicFileWriter.ByteWriteResult.FAILED) {
+                    return@withContext false
+                }
+                val catalogResult = GeneratedImageCatalogStore.register(
+                    app,
+                    GeneratedImageCatalogRecord(
+                        imageId = record.imageId,
+                        fileHash = marker,
+                        assetFileName = assetFileName,
+                        mimeType = outcome.image.mimeType,
+                        width = bounds.outWidth.takeIf { it > 0 },
+                        height = bounds.outHeight.takeIf { it > 0 },
+                        createdAt = metadata.createdAt,
+                        originChatId = record.originChatId.takeIf { it.isNotBlank() },
+                        originChatName = record.originChatName?.takeIf { it.isNotBlank() },
+                        // imageId is also the stable exact-image locator until
+                        // messages gain a separate durable message UUID.
+                        originMessageId = record.imageId,
+                        locked = false,
+                        source = GeneratedImageCatalogRecord.Source.GENERATED
+                    )
+                )
+                if (catalogResult.success) return@withContext true
+
+                // A commit can report an exception after becoming durable.
+                // Re-read before cleaning our new file; never remove a file an
+                // active row may already own.
+                val lookup = GeneratedImageCatalogStore.lookup(app, record.imageId)
+                if (lookup.state == GeneratedImageCatalogStorageState.AVAILABLE &&
+                    lookup.record?.assetFileName == assetFileName
+                ) {
+                    return@withContext true
+                }
+                if (fileResult == AtomicFileWriter.ByteWriteResult.WRITTEN &&
+                    lookup.state == GeneratedImageCatalogStorageState.AVAILABLE &&
+                    lookup.record == null
+                ) {
+                    target.delete()
+                }
+                false
+            }
+            if (!registration) {
+                return Terminal.Failed(
+                    ImageErrorCause.PROVIDER_ERROR,
+                    metadataFor(
+                        record,
+                        GeneratedImageMetadata.STATUS_FAILED,
+                        failureCode = ImageErrorCause.PROVIDER_ERROR.name
+                    )
+                )
+            }
+            ImageGenerationEventLog.recordSuccess(app, outcome.diagnostics)
+            Terminal.Complete(marker, metadata)
         }
         is ImageGeneratorCoordinator.Outcome.Failure -> {
             ImageGenerationEventLog.recordFailure(
@@ -302,7 +386,7 @@ object ImageGenerationJobRegistry {
             Terminal.Failed(
                 outcome.errorCause,
                 metadataFor(
-                    request,
+                    record,
                     GeneratedImageMetadata.STATUS_FAILED,
                     failureCode = outcome.errorCause.name
                 ),
@@ -317,26 +401,28 @@ object ImageGenerationJobRegistry {
      *  the request and the detected result — no credential or signed URL
      *  can enter it. */
     private fun metadataFor(
-        request: ImageGenerationRequest,
+        record: ActiveJob,
         status: String,
         fileHash: String? = null,
         mimeType: String? = null,
         width: Int? = null,
         height: Int? = null,
-        failureCode: String? = null
+        failureCode: String? = null,
+        assetFileName: String? = null
     ) = GeneratedImageMetadata(
-        imageId = java.util.UUID.randomUUID().toString(),
+        imageId = record.imageId,
         fileHash = fileHash,
         mimeType = mimeType,
         width = width,
         height = height,
-        endpointId = request.endpointId,
-        modelId = request.modelId,
-        prompt = request.prompt,
-        description = request.description,
+        endpointId = record.request.endpointId,
+        modelId = record.request.modelId,
+        prompt = record.request.prompt,
+        description = record.request.description,
         createdAt = System.currentTimeMillis(),
         status = status,
-        failureCode = failureCode
+        failureCode = failureCode,
+        assetFileName = assetFileName
     )
 
     private suspend fun finish(app: Context, record: ActiveJob, terminal: Terminal) {

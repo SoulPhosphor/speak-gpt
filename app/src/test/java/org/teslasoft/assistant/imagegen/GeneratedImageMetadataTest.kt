@@ -47,7 +47,16 @@ class GeneratedImageMetadataTest {
 
     @Test
     fun completeRecordSurvivesARoundTrip() {
-        val restored = GeneratedImageMetadata.fromJson(completeRecord().toJson())!!
+        val restored = GeneratedImageMetadata.fromJson(
+            completeRecord().let {
+                GeneratedImageMetadata(
+                    it.imageId, it.fileHash, it.mimeType, it.width, it.height,
+                    it.endpointId, it.modelId, it.prompt, it.description,
+                    it.createdAt, it.status, it.failureCode,
+                    assetFileName = "id-123.webp"
+                )
+            }.toJson()
+        )!!
         assertEquals("id-123", restored.imageId)
         assertEquals("abcdef", restored.fileHash)
         assertEquals("image/webp", restored.mimeType)
@@ -60,6 +69,7 @@ class GeneratedImageMetadataTest {
         assertEquals(1722268800000L, restored.createdAt)
         assertEquals(GeneratedImageMetadata.STATUS_COMPLETE, restored.status)
         assertNull(restored.failureCode)
+        assertEquals("id-123.webp", restored.assetFileName)
     }
 
     @Test

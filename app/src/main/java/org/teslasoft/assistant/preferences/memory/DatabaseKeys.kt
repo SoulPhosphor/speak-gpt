@@ -45,6 +45,10 @@ object DatabaseKeys {
     /** lorebook.db (encrypted in place by LoreBookEncryption on first open). */
     const val KEY_LOREBOOK = "lorebook_db_key_hex"
 
+    /** generated_images.db — independent from chats and profile images so a
+     * gallery asset remains indexed after its origin conversation is gone. */
+    const val KEY_GENERATED_IMAGES = "generated_images_db_key_hex"
+
     fun getOrCreate(context: Context, keyName: String, databaseExists: Boolean): ByteArray? {
         val existing = EncryptedPreferences.getEncryptedPreference(context, PREF_FILE, keyName)
         if (existing.isNotEmpty()) return decodeHex(existing)

@@ -26,6 +26,7 @@ import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.imagegen.ImageGenerationMigration
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogMaintenance
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
@@ -119,6 +120,19 @@ class MainApplication : Application() {
                 ImageGenerationMigration.runIfNeeded(this)
             } catch (e: Exception) {
                 MemoryLog.log(this, "ImageGeneration", "error", "Image-generation settings seeding at startup failed: ${e.message}")
+            }
+            try {
+                // Durable generated-image catalog maintenance is resumable and
+                // deliberately stays on this worker: reconcile interrupted
+                // registrations, then backfill only authoritative histories.
+                GeneratedImageCatalogMaintenance.run(this)
+            } catch (e: Exception) {
+                MemoryLog.log(
+                    this,
+                    "GeneratedImageCatalog",
+                    "error",
+                    "Generated-image catalog maintenance at startup failed: ${e.message}"
+                )
             }
             try {
                 // Finish (or discard) a chat recovery restore interrupted by

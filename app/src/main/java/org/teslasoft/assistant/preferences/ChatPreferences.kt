@@ -826,7 +826,18 @@ class ChatPreferences private constructor() {
 
         // Title-only renames never enter the legacy cross-ID move path below.
         // Keep that path untouched here; no migration or cleanup is performed.
-        if (oldId == newId) return true
+        if (oldId == newId) {
+            // The image UUID/ownership stays immutable. Only its retained
+            // origin-chat display label follows a successful title rename.
+            // Startup maintenance re-synchronizes it after a catalog outage.
+            try {
+                org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
+                    .updateOriginChatName(oldId, chatName)
+                org.teslasoft.assistant.preferences.generatedimages
+                    .GeneratedImageCatalogStore.renameOriginChat(context, oldId, chatName)
+            } catch (_: Exception) { }
+            return true
+        }
 
         // Attachment image bytes live in a directory keyed by chat id. The
         // rename copied the include records (with their image hashes) to the
