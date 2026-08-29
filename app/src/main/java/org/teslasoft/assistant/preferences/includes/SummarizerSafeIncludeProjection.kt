@@ -17,16 +17,19 @@
 package org.teslasoft.assistant.preferences.includes
 
 /**
- * The projection contract version. A persisted rolling summary made under an
- * older version was written to different rules and is discarded once, so the
- * next fold rebuilds it under the current ones.
+ * The projection contract version. A persisted rolling summary made before
+ * this version may contain attachment payload text and is therefore
+ * incompatible with the separate attachment payload layer.
  *
- * VERSION 4: attachment markers now reach the summarizer, so a summary can
- * record where an attachment entered the conversation. A version 3 summary was
- * written completely attachment-blind and can never carry that anchor.
+ * NOT bumped for the attachment-marker change (owner ruling, Aug 29 2026).
+ * Existing summaries, hand edits and fold boundaries stay exactly as they are;
+ * an older summary simply lacks the new attachment references, which is
+ * acceptable. The new rules apply only to summary and compaction work done
+ * from here on. Bumping would erase that state and spend summarizer tokens
+ * reprocessing conversations that were already finished.
  */
 object SummarizerProjectionContract {
-    const val VERSION = 4
+    const val VERSION = 3
 }
 
 /** One canonical stored conversation message before request projection. */
