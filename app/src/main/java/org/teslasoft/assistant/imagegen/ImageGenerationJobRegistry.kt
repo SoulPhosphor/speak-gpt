@@ -289,7 +289,8 @@ object ImageGenerationJobRegistry {
     private suspend fun runGeneration(
         app: Context,
         record: ActiveJob
-    ): Terminal = when (val outcome = ImageGeneratorCoordinator.generate(app, record.request)) {
+    ): Terminal {
+        return when (val outcome = ImageGeneratorCoordinator.generate(app, record.request)) {
         is ImageGeneratorCoordinator.Outcome.Success -> {
             val bytes = outcome.image.bytes
             val marker = Hash.hash(java.util.Base64.getEncoder().encodeToString(bytes))
@@ -394,6 +395,7 @@ object ImageGenerationJobRegistry {
                 reportedProvider = outcome.reportedProvider,
                 diagnostics = outcome.diagnostics
             )
+        }
         }
     }
 
