@@ -185,7 +185,8 @@
                 android:layout_marginTop="8dp"
                 android:text="@string/tile_voice_input_title" />
 
-            <LinearLayout
+            <RadioGroup
+                android:id="@+id/group_voice_input"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
@@ -198,8 +199,10 @@
 
                 <!-- On-device Whisper gets a trailing cog that opens the
                      on-device Whisper screen. The cog is a separate control:
-                     tapping it navigates without changing the selected engine,
-                     so the radio and the cog manage their own containers. -->
+                     tapping it navigates without changing the selected engine.
+                     The radio's row is a horizontal wrapper so the cog can sit
+                     beside it; engine selection is managed in code, so the
+                     wrapped radio does not need RadioGroup's auto-exclusion. -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -228,7 +231,7 @@
                     android:id="@+id/radio_voice_input_google"
                     style="@style/Widget.App.Row.Radio"
                     android:text="@string/voice_engine_google" />
-            </LinearLayout>
+            </RadioGroup>
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/row_dictation_language"
