@@ -713,7 +713,7 @@
     <string name="voice_engine_whisper_cloud">OpenAI Whisper (Cloud, Paid)</string>
     <string name="voice_engine_whisper_local">On-Device Whisper</string>
     <string name="voice_engine_picker_title">Voice Input Engine</string>
-    <string name="title_local_whisper">On-device Whisper</string>
+    <string name="title_local_whisper">On-Device Whisper</string>
     <string name="title_manage_downloaded_models">Manage downloaded models</string>
     <string name="btn_manage_downloaded_models">Manage downloaded models</string>
     <string name="btn_download">Download</string>

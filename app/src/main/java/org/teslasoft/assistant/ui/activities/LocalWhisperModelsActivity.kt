@@ -16,7 +16,6 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.os.Bundle
@@ -59,7 +58,6 @@ class LocalWhisperModelsActivity : FragmentActivity() {
     private var root: ConstraintLayout? = null
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
-    private var btnManage: MaterialButton? = null
     private var activeModelLabel: TextView? = null
     private var storageUsedLabel: TextView? = null
     private var modelsContainer: LinearLayout? = null
@@ -89,15 +87,11 @@ class LocalWhisperModelsActivity : FragmentActivity() {
         root = findViewById(R.id.root)
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
-        btnManage = findViewById(R.id.btn_manage_models)
         activeModelLabel = findViewById(R.id.active_model_label)
         storageUsedLabel = findViewById(R.id.storage_used_label)
         modelsContainer = findViewById(R.id.models_container)
 
         btnBack?.setOnClickListener { finish() }
-        btnManage?.setOnClickListener {
-            startActivity(Intent(this, LocalWhisperManageActivity::class.java))
-        }
 
         buildModelRows()
         refreshAll()
