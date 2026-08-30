@@ -148,9 +148,10 @@ class VoiceListAdapter(
                         holder.action.setOnClickListener { onStopPreview(voice) }
                     }
                     loading -> {
-                        // Requested but not sounding yet: green Preview signals the tap landed.
+                        // Requested but not sounding yet: green plus a "Loading…"
+                        // label so the tap clearly registered as something happening.
                         setActionForeground(holder.action, ContextCompat.getColor(holder.itemView.context, R.color.mic_listening_green))
-                        holder.action.text = holder.itemView.context.getString(R.string.voice_browser_preview)
+                        holder.action.text = holder.itemView.context.getString(R.string.voice_browser_loading)
                         holder.action.setIconResource(R.drawable.ic_play)
                         holder.action.contentDescription = holder.itemView.context.getString(R.string.voice_browser_preview_desc, voice.displayName)
                         holder.action.setOnClickListener { onPreview(voice) }

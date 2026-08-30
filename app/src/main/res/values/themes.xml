@@ -424,11 +424,17 @@
         <item name="android:background">@null</item>
     </style>
 
-    <!-- Label for Widget.App.Row.Selector.Flush: same bold accent typography
-         as Widget.App.Row.Selector.Label, with the leading inset removed so it
-         aligns with the screen's other row titles. -->
+    <!-- Label for Widget.App.Row.Selector.Flush: ordinary row-title typography
+         (normal weight, appRowTitleColor — the same as Widget.App.Row.Title),
+         with the leading inset removed so it aligns with the screen's other
+         rows. The bold accent label is kept only by the pill-backed base
+         Widget.App.Row.Selector.Label on Quick Settings, where the compact card
+         surface needs it; in the middle of a plain settings list the accent
+         read as out of place. -->
     <style name="Widget.App.Row.Selector.Label.Flush" parent="Widget.App.Row.Selector.Label">
         <item name="android:layout_marginStart">0dp</item>
+        <item name="android:textColor">?attr/appRowTitleColor</item>
+        <item name="android:textStyle">normal</item>
     </style>
 
     <!-- Stacked single-choice radio row for a settings screen: a full-width,

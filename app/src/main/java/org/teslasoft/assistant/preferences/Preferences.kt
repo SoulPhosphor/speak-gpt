@@ -22,7 +22,6 @@ import org.teslasoft.assistant.preferences.includes.SummarizerProjectionContract
 import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
 import org.teslasoft.assistant.preferences.tts.AppTtsVoicePreferences
-import org.teslasoft.assistant.tts.voices.VoicePreviewText
 import java.util.Locale
 
 class Preferences internal constructor(
@@ -912,12 +911,6 @@ class Preferences internal constructor(
 
     /** Voice dialogs always open the app-wide selector. */
     fun ttsPreferenceScope(): String = ""
-
-    fun getVoicePreviewText(): String = getGlobalString("voice_preview_text", VoicePreviewText.DEFAULT)
-
-    fun setVoicePreviewText(text: String) {
-        putGlobalString("voice_preview_text", text, VoicePreviewText.DEFAULT)
-    }
 
     fun getVoiceBrowserFilters(providerId: String): String =
         getGlobalString("voice_browser_filters_$providerId", "")

@@ -14,7 +14,6 @@ import android.widget.TextView
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
-import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
@@ -111,8 +110,10 @@ class VoiceBrowserActivity : FragmentActivity() {
         stateMessage = findViewById(R.id.voice_state_message)
         resetFilters = findViewById(R.id.reset_filters)
         previewText = findViewById(R.id.voice_preview_text)
-        previewText.setText(preferences.getVoicePreviewText())
-        previewText.doAfterTextChanged { preferences.setVoicePreviewText(it?.toString().orEmpty()) }
+        // The preview text is a scratch field, not a saved setting: start each
+        // visit from the default sample and never persist edits, so leaving the
+        // screen discards whatever was typed.
+        previewText.setText(VoicePreviewText.DEFAULT)
         findViewById<ImageButton>(R.id.btn_back).setOnClickListener { attemptChevronExit() }
 
         controller = VoiceBrowserController(
