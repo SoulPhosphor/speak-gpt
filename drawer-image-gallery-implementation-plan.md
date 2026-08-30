@@ -6,12 +6,7 @@
 
 `drawer-design-spec.md` and `image-gallery-spec.md` are the source of truth for product behavior, hierarchy, exact visible wording, action order, icons, accessibility names, defaults, and acceptance behavior. This plan provides repository-specific sequencing and architecture; it does not supersede or paraphrase those specifications. If this plan conflicts with either specification, follow the specification.
 
-This plan was mapped against:
-
-- specification branch commit `1e48b8dcd57331d01ae7f873ad38fa135f8f886d`;
-- current `main` commit `21e1a362778ec88b232ecd13d2213a5deb075e39` (August 29, 2026).
-
-The specification branch intentionally contains an older application snapshot. Each coding session must start from the latest integration commit containing all prior phases, re-read both specifications and `CLAUDE.md`, and re-inspect the named call sites before editing. Do not implement a phase against the stale application files on the specification branch, and do not copy line numbers from this plan. Preserve the specification files unchanged unless the owner separately changes the product decision.
+This Phase 6 preparation was re-mapped after Phases 1-5 and the current `main` merge at integration commit `fcb11b2ba493796d394ab66472c197460ffd15da` (August 30, 2026). Each coding session must still fetch and start from the latest `agent/update-drawer-plan`, re-read both specifications and `CLAUDE.md`, and re-inspect the named call sites before editing. Do not copy line numbers from this plan. Preserve the specification files unchanged unless the owner separately changes the product decision.
 
 Every phase below is intended to be one independently reviewable coding session/merge. A phase is complete only when its acceptance criteria and checks pass. An intermediate merge may leave a new destination dormant or retain legacy navigation, but it must never introduce a destructive bypass or expose an incomplete destructive action.
 
@@ -19,15 +14,14 @@ Every phase below is intended to be one independently reviewable coding session/
 
 | Concern | Current implementation and constraint |
 | --- | --- |
-| Launch/navigation | `MainActivity` hosts `ChatsListFragment` and `PlaygroundFragment` through `activity_main.xml` and `bottom_menu.xml`. It normally opens the Chats tab. Keep this as a fallback until Phase 7. |
-| Live chat | `ChatActivity` is one activity per chat. `activity_chat.xml` already has the approved double-left-chevron asset through `btn_back`, but it currently finishes the activity. `ChatActivity` owns fragile streaming, voice/hands-free, TTS, composer, Includes, attachment, IME, and configuration-change state. The drawer must overlay this activity rather than rebuild or swap the live chat. |
-| Chat index/storage | `ChatPreferences` stores the encrypted `chat_list` metadata JSON and per-chat encrypted history/settings. `getChatListResult(context, includeFirstMessage = false)` is the existing lightweight authoritative read. `storedChatId` preserves legacy ID fallback. All list mutations serialize through `CHAT_LIST_LOCK`; storage health states must never be treated as an empty list. |
-| New chats | `AddChatDialogFragment` currently creates a saved placeholder chat immediately, copies settings/defaults, and opens `ChatActivity`. `NewChatProviderRestore` and `NewChatSettingCopyTest` protect provider/settings behavior. Phase 5 must extract and reuse this initialization rather than create a parallel settings lifecycle. |
-| Playground | `PlaygroundFragment` currently owns its input/output UI and request construction directly. Its request/provider/tokenize/report semantics must be reused, not reimplemented differently, when hosted as a blank-conversation mode. |
-| Generated images | `ImageGenerationJobRegistry` writes completed bytes to `getExternalFilesDir("images")`, constructs `GeneratedImageMetadata`, and delivers the result either to `ChatActivity` or directly to stored history. It currently has no independent gallery catalog. `GeneratedImageFiles.deleteIfUnreferenced` scans authoritative histories and is deliberately conservative. |
-| Existing image UI | `ImageBrowserActivity` already provides zooming and `ACTION_CREATE_DOCUMENT`. `ProfileImagesActivity`, `ProfileImageGalleryAdapter`, `ProfileImageFramingActivity`, and `ProfileImageStore` provide the established gallery selection, Show Labels, framing, atomic-file, and catalog patterns to reuse. |
-| Existing deletion | `ChatDeleteDialog` is currently a two-action wrapper. Reachable delete paths also exist in `ChatActivity`, `ChatsListFragment`, `ChatListAdapter`/edit flows, swipe, and bulk selection, with direct `ChatPreferences.deleteChat*` calls. They must move together in Phase 3. |
-| Shared UI | `ui-style-guide.md` defines shared headers, buttons, rows, dropdowns, and two-action dialogs. There is no shared compact management-popup pattern, shared folder name-entry dialog, or readable three-action dialog yet. Add each once when first needed and record adoption in `ui-style-adoption.md`. Do not extend the parked AMOLED work. |
+| Launch/navigation | `MainActivity` still hosts `ChatsListFragment` and `PlaygroundFragment` through `activity_main.xml` and `bottom_menu.xml`. Keep it reachable as the rollback path until Phase 7. |
+| Live chat | `ChatActivity` remains one activity per chat and now hosts Phase 5's provisional Chat/Playground lifecycle through `ConversationModeSelector` and `NewConversationCoordinator`. It also owns fragile streaming, voice/hands-free, TTS, composer, Includes, attachment, IME, and configuration-change state. The drawer must overlay this activity rather than rebuild or swap the live chat. |
+| Chat navigation/storage | `ChatPreferences` remains authoritative for encrypted `chat_list` metadata and per-chat encrypted history/settings. Phase 2 added `ChatNavigationRepository`, stable folder UUIDs, `folder_id`, pinning, expansion state, and a complete lightweight `ChatNavigationSnapshot`. `storedChatId` preserves legacy ID fallback. All list mutations serialize through `CHAT_LIST_LOCK`; storage-health failures must never become an empty list. |
+| Existing search | `ChatsListFragment` currently filters only chat names with a case-insensitive arbitrary substring check. It neither searches message bodies nor supports Whole Words/Match Case. Phase 6 replaces this behavior; it must not be copied as the new matching policy. |
+| New conversations | Phase 5 added `ConversationMode`, `PendingConversationState`, and `NewConversationCoordinator`; a blank provisional conversation becomes discoverable only after its first committed user action. New Chat in the drawer must reuse that exact path. |
+| Generated images/gallery | Phases 1 and 4 added the SQLCipher `GeneratedImageCatalogStore`, stable image UUID/asset resolution, safe backfill/reconciliation, `ImageGalleryActivity`, `GeneratedImageGalleryAdapter`, selection/lock/delete flows, and viewer/save/avatar integration. Phase 6 only wires the destination. |
+| Deletion | Phase 3 added `ChatDeletionCoordinator`, `ChatDeletionJournal`, policy models, and `ChatDeletionRequestCoordinator`; reachable legacy paths route through the image-safe coordinator. Folder deletion in Phase 6 must submit one stable aggregate target to it. |
+| Shared UI | Phase 4 added the reusable `CompactActionPopup` and shared three-action dialog treatment. Phase 6 reuses them, adds the shared folder name-entry treatment, and records all new drawer/Search styles in `ui-style-guide.md` and `ui-style-adoption.md`. Do not extend the parked AMOLED work. |
 | Verification | `.github/workflows/android-checks.yml` runs `./gradlew --no-daemon test`, `assembleDebug`, and `assembleDebugAndroidTest`. Instrumentation execution requires an arm64 device; CI compiles those tests but does not run them. |
 
 ## Merge order
@@ -47,6 +41,7 @@ Every phase below is intended to be one independently reviewable coding session/
 - Do not migrate only some currently reachable chat-deletion entry points. The setting, decision policy, three-action dialog, ownership query, lock veto, legacy swipe/bulk/current-chat wiring, and deterministic storage coordinator ship together in Phase 3. Until then, no new `Delete All` action is exposed.
 - Do not split nonempty folder deletion between removing the folder record and removing its member chat-list rows. The visible hierarchy mutation must be one committed metadata operation; the deletion journal may finish safe cleanup afterward. If the aggregate image-choice step is cancelled, no mutation may have begun.
 - Do not hide the Chat/Playground selector or start a network request before the first user turn and chosen mode have crossed the same durable commit boundary. Typed, voice/hands-free, `/imagine`, and Playground Run entry paths must share that rule.
+- Do not expose message-body Search until the encrypted FTS index, Unicode/token-prefix verifier, write/delete/rename/restore synchronization, stale-result suppression, exact-message navigation, and rebuild/recovery path ship together. A title-only or silently partial intermediate Search is not an acceptable merge state.
 - Do not change ordinary launch to a blank chat or remove the old bottom navigation until the drawer can reach Image Gallery, folders/chats, Search, Settings, and New Chat, and saved Playground-mode conversations can reopen correctly. Phase 7 is the activation gate.
 
 ---
@@ -363,13 +358,17 @@ Introduce one reusable pending/new-conversation lifecycle that defaults to Chat,
 
 ### Goal
 
-Build the complete drawer/search navigation surface over the live `ChatActivity`, including all folder management and image-safe deletion integrations, while deliberately retaining the legacy `MainActivity` navigation as a fallback until the final activation phase.
+Build the complete drawer over the live `ChatActivity` and ship the owner-approved encrypted full-text Search system with token-prefix/Whole Words/Match Case behavior, exact-message results, synchronization, and recovery. Retain legacy `MainActivity` navigation as a fallback until Phase 7; do not perform the launcher cutover here.
 
 ### Dependencies/prerequisites
 
 - Phases 1-5 merged.
-- Re-read all of `drawer-design-spec.md` and the gallery specification's drawer/menu/deletion sections.
-- Confirm Image Gallery, New Conversation, deletion, and navigation repositories are independently functional before adding their drawer entry points.
+- Start from the latest `agent/update-drawer-plan` containing the current `main` merge and the Phase 5 selector. Re-read all of `drawer-design-spec.md`, especially its newly owner-approved Sections 5-7 and Search acceptance items, plus the gallery specification's drawer/menu/deletion sections.
+- Confirm `ImageGalleryActivity`, `NewConversationCoordinator`, `ChatDeletionCoordinator`, and `ChatNavigationRepository` are independently functional before adding their drawer entry points.
+- Treat `ChatPreferences`/`SecurePrefs` chat histories as authoritative. The Search database is derived and disposable: it may be rebuilt, but it may never become the only copy of title/message text.
+- Upgrade `net.zetetic:sqlcipher-android` from 4.16.0 to 4.17.0 before exposing FTS Search. SQLCipher 4.17.0 moves to the SQLite 3.53.3 baseline containing the upstream FTS5 memory-corruption fixes; 4.18.0 raises its own Android `compileSdk` to 37, so do not combine that later toolchain bump with Phase 6 without a fresh compatibility decision. The 4.17 upgrade must reopen and exercise every existing app SQLCipher database before Search work relies on it.
+- Before depending on FTS in production code, add and run an arm64 instrumentation capability test against the repository's actual `net.zetetic:sqlcipher-android` build. It must create and query an FTS5 table successfully. Do not assume the host/JVM SQLite feature set proves the APK's native SQLCipher feature set.
+- Implementation references: [SQLite FTS5](https://www.sqlite.org/fts5.html), [Android ICU `BreakIterator`](https://developer.android.com/reference/android/icu/text/BreakIterator), [SQLCipher for Android](https://www.zetetic.net/sqlcipher/sqlcipher-for-android/), and [SQLCipher 4.17.0 release/security notes](https://www.zetetic.net/blog/2026/07/08/sqlcipher-4.17.0-release/).
 
 ### Files/components likely involved
 
@@ -378,12 +377,21 @@ Build the complete drawer/search navigation surface over the live `ChatActivity`
 - Phase 2 `ChatNavigationRepository` and Phase 3 `ChatDeletionCoordinator`
 - Phase 4 `CompactActionPopup` and `ImageGalleryActivity`
 - Phase 5 `NewConversationCoordinator`
-- New `SearchActivity`/layout and a shared flat `ChatRowAdapter`/binder
+- New `SearchActivity`/layout, `SearchResultAdapter`, and a shared flat chat-identity row binder
+- New `preferences/chatsearch/` package containing at least `ChatSearchStore`, `ChatSearchIndexManager`, `ChatSearchIndexJournal`, `SearchTextPolicy`, `SearchableMessageProjection`, `SearchQueryCompiler`, `SearchResult`, and typed health/result models
+- `ChatPreferences.kt` and every authoritative history mutation path; `ChatDeletionCoordinator`/journal; `ChatRestoreManager` and import/restore completion hooks
+- `DatabaseKeys.kt` for an independent Search database key and the existing SQLCipher/database health utilities where applicable
+- `app/build.gradle` for the narrowly scoped SQLCipher 4.17.0 dependency update (no incidental Android toolchain/`compileSdk` change)
+- `ChatAdapter.kt`/message creation paths for future immutable message IDs and verified search-target navigation
+- A unique background worker or equivalent process-resilient single-flight rebuild coordinator
 - `ChatSettingsActivity.kt` / `activity_chat_settings.xml` for the companion-image toggle
-- Shared folder name-entry dialog layout/controller, folder chooser, strings, icons, styles
+- Shared folder name-entry dialog layout/controller, folder chooser, Search checkbox/result/status styles, strings, icons, and theme attributes
 - `AndroidManifest.xml`, `ui-style-guide.md`, and `ui-style-adoption.md`
+- Focused JVM/Robolectric tests plus arm64 SQLCipher/FTS instrumentation tests
 
 ### Implementation instructions
+
+#### Drawer and folder surface
 
 1. Wrap/host `activity_chat.xml` in a full-screen `DrawerLayout` or equivalent overlay whose drawer child explicitly measures to 100% of available width. Disable edge-drag/open gestures with the drawer lock/gesture API while retaining programmatic animation. Change the existing top double-left-chevron from `finishActivity()` to open; add the specified right double-chevron to close. System Back closes the drawer before other navigation. Do not recreate `ChatActivity`, reparent the composer, or add competing IME/inset listeners.
 2. Implement the three fixed/scroll/fixed zones and exact hierarchy from `drawer-design-spec.md` Section 2. The middle is one virtualized RecyclerView. Use shared theme/inset roles and verify status/navigation bars without accepting the framework's default partial-width drawer margin.
@@ -392,17 +400,77 @@ Build the complete drawer/search navigation surface over the live `ChatActivity`
 5. Reuse Phase 4's `CompactActionPopup` for the top-level Folders menu, folder menu, and saved-chat menu. Add one shared name-entry dialog/controller for Add/Rename Folder, backed by `FolderNamePolicy`, and document it in the shared style files. Read exact titles, field labels, actions, menu order, and validation behavior from the specification.
 6. Implement Move to Folder with No Folder and the same folder ordering as the hierarchy. Choose popup versus shared scrollable selector based on current list size/available space, without clipping. Mutation is metadata-only and refreshes by stable ID.
 7. Implement empty and nonempty folder deletion through Phase 3. The nonempty path presents the folder warning first, then one aggregate image decision if required; neither step writes early. Pass the stable folder target to the coordinator so it re-reads membership and performs the atomic folder/chat-list commit. Never loop per-chat dialogs.
-8. Add a reusable flat chat-row binder for drawer and Search. Do not reuse the old `ChatListAdapter` card/preview layout. Preserve model-name and memory-status preferences; memory work remains asynchronous, off-main, enabled-only, and keyed to stable chat ID. Add the exact companion-image toggle in Chat Settings with default Off; when Off, inflate/reserve no image column. Reuse current `ProfileImageResolver`/binder behavior only for visible rows.
-9. Add full-screen Search with the shared action bar, no visual header buttons, the existing search-box visual assets, and existing chat matching semantics. Search the complete lightweight snapshot independently of expansion/folder visibility; folder names are not new targets. Use the same flat row binder and stable saved-chat navigation.
-10. Wire destinations: Image Gallery opens Phase 4; Settings opens the current Settings activity; New Chat calls Phase 5; Search opens the new screen. Selecting a saved chat uses the existing one-chat-per-`ChatActivity` intent/lifecycle rather than mutating the live activity in place. Re-check the current activity's stop/finish conventions so a navigation tap does not leak voice/TTS resources.
-11. Refresh the snapshot when the drawer opens and when returning/resuming so auto-name, rename, timestamps, pin state, folder changes, origin label updates, current selection, and deletion are never stale. A failed/non-authoritative index read shows the established unavailable/error state and offers no destructive actions.
-12. Keep `MainActivity`, `ChatsListFragment`, and the bottom navigation reachable in this phase. They are the rollback path until Phase 7 proves destination reachability and startup behavior.
+8. Add a reusable flat chat-identity binder for drawer rows and the identity portion of Search results. Do not reuse the old `ChatListAdapter` card/preview layout. Preserve model-name and memory-status preferences; memory work remains asynchronous, off-main, enabled-only, and keyed to stable chat ID. Add the exact companion-image toggle in Chat Settings with default Off; when Off, inflate/reserve no image column. Reuse current `ProfileImageResolver`/binder behavior only for bound/visible rows.
+
+#### Search UX and matching contract
+
+9. Implement a full-screen `SearchActivity` exactly as `drawer-design-spec.md` Section 5 now specifies: shared header titled Search with no visual header buttons; the existing theme-ready search-box assets; field focused and keyboard shown on entry; live search without a required submit; and plain Whole Words / Match Case checkbox rows directly below the field. Both options start Off for each newly opened screen, survive recreation with the query, and are not persisted as global defaults. Do not insert an options/confirmation screen.
+10. Use one lifecycle-aware cancellable query pipeline off the main thread. Debounce typing with one documented constant, cancel/supersede older generations, and deliver results only when the query text, option state, and activity generation still match. Empty or punctuation-only tokenization clears results without opening histories. Search/Enter may hide the keyboard but cannot be the only trigger.
+11. Implement one pure `SearchTextPolicy` as the final authority for both matching and highlight ranges:
+    - segment query and document text with Android ICU `BreakIterator.getWordInstance` for the active locale;
+    - normalize tokens to NFC; preserve diacritics;
+    - use ICU case folding only when Match Case is Off;
+    - default comparison is document-token `startsWith(queryToken)`;
+    - Whole Words changes it to token equality;
+    - all query tokens must match within the same title or same message, in any order.
+    This must enforce the complete `search` truth table in the specification, particularly that default Search matches `Search`/`searching` but not `research`. Store a match-policy version and locale tag so a policy/locale change requests a rebuild.
+12. Compile FTS `MATCH` expressions only from tokens emitted by `SearchTextPolicy`. Quote/escape every token as data, add `*` only for the approved prefix mode, and join multiple tokens with explicit AND. Never pass the raw field value through as FTS operators. Boolean, regex, user wildcards, and phrase syntax are non-goals. The exact ICU verifier must run over original text after FTS candidate retrieval because FTS candidate folding cannot by itself enforce Match Case or return authoritative highlight ranges.
+13. Render one result for a title hit and one result for each matching message hit. A message result contains the shared chat identity, a short plain-text matching-context snippet with `Spannable`/equivalent highlights from verified ranges, and the real stored message date when present. Collapse display whitespace without changing the indexed original, do not interpret result text as HTML, and do not substitute the old unrelated first-message preview. Multiple hits in one chat remain reachable.
+
+#### Encrypted FTS storage and query execution
+
+14. Add a narrow `ChatSearchStore` backed by a separate `chat_search.db` SQLCipher database and independent `DatabaseKeys.KEY_CHAT_SEARCH` key. Reuse the repository's `net.zetetic.database.sqlcipher.SQLiteOpenHelper` pattern; do not add Room, a plaintext sidecar, or a network search service. At minimum create:
+    - `search_documents` with `row_id`, build `generation`, stable `chat_id`, unique per-generation `document_key`, `document_kind` (`title`/`message`), nullable stable `message_id`, nullable legacy ordinal/time/role, original `raw_text`, ICU-derived case-folded `index_text`, content fingerprint, source revision, and chat/message ordering timestamps;
+    - an external-content `search_documents_fts` table over `index_text` using FTS5 `unicode61 remove_diacritics 0` with `prefix='2 3 4'`; single-character and longer prefixes still query the normal term index and must remain supported/tested;
+    - insert/update/delete triggers that keep the external-content index synchronized, following the official FTS5 ordering rules;
+    - `search_meta` for schema, match-policy/tokenizer version, locale, active/build generation, corpus state, and rebuild progress;
+    - ordinary indexes/uniqueness on generation + chat/document identity.
+    Keep ranking column-size data enabled. Never use the trigram tokenizer: arbitrary inside-word substring behavior was explicitly rejected.
+15. First update only `sqlcipher-android` to 4.17.0 and run existing arm64 create/reopen/migration/wrong-key/recovery tests for `companion_memory.db`, `lorebook.db`, `generated_images.db`, and every other SQLCipher store before creating Search data. Then assert FTS5 availability by actually creating/inserting/querying a throwaway encrypted FTS database, and exercise `PRAGMA integrity_check` plus the FTS5 integrity/rebuild command. If the shipped native library lacks FTS5, stop and surface the dependency blocker; do not silently fall back to 4.16.0 or parse all histories on each keystroke.
+16. Query only the active complete/degraded generation. Fetch bounded candidate pages, apply `SearchTextPolicy` to original text, and continue fetching candidates until the requested verified-result page is full or candidates are exhausted; Match Case filtering must not cause false “end of results.” RecyclerView scrolling automatically requests subsequent pages—no visible Load More and no permanent first-page truncation.
+17. Rank deterministically in the approved order: exact full-title; other exact title-token; title-prefix; exact-token message; message-prefix. Within a class use FTS5 `bm25`/term coverage, then stored message/chat recency, then stable row identity. Do not rank purely by recency. Put scoring in a pure policy test rather than scattering numeric weights through `SearchActivity`.
+18. Before displaying any candidate, intersect its chat ID with a fresh authoritative `ChatNavigationSnapshot.allChats`, reject dirty/source-revision-mismatched documents, and use the current navigation title/metadata for display. This prevents a failed cleanup from exposing a deleted chat or stale title. Never treat a failed navigation read as an empty corpus.
+
+#### Searchable projection, identity, and exact-message navigation
+
+19. Add one `SearchableMessageProjection` used by bootstrap and incremental indexing. Index only persisted user-visible `message["message"]` content for user/assistant rows. Exclude transient image confirmation/progress rows, streaming assistant fragments until they reach a terminal state, hidden Includes/attachment bodies, internal `~file:` directives and file paths, generated-image bytes, error/provider diagnostics, reasoning/model metadata, system/settings prompts not displayed as messages, and every other auxiliary map field. Do not call model-facing projection helpers that expand hidden attachment content.
+20. Give every newly created persisted message an immutable UUID field (for example `message_id`) at the common message-creation boundary, including first pending turns and detached completion paths. Message edits change text, not this ID; use the composite chat ID + message ID in the Search index so copied/imported chats cannot collide across chats. Validate duplicate/malformed imported IDs and fall back safely rather than re-keying an existing result.
+21. Do not eagerly rewrite the owner's approximately 150 legacy chat histories merely to add message IDs. During the normal first rebuild, derive an index-only legacy locator from chat ID + ordinal + role + stored timestamp when present + content fingerprint. On tap, `ChatActivity` first resolves a stable message ID; otherwise it verifies the legacy ordinal/fingerprint and may scan for the same fingerprint if positions shifted. If no unique authoritative target remains, open the chat normally. Never scroll to an unverified ordinal. A future temporary owner-only ID backfill may be written separately, but it is not permanent Phase 6 runtime machinery.
+22. Add optional Search-target intent extras to the existing one-chat-per-`ChatActivity` launch contract. Resolve them only after the authoritative history has loaded, then position the transcript at the row and apply a short theme-ready row emphasis without changing message text/Markdown, selection, read-aloud state, or composer/IME behavior. With no extras, preserve current open-at-bottom behavior exactly. A stale target follows the normal-open fallback and must not crash.
+
+#### Synchronization, bootstrap, and recovery
+
+23. Centralize Search synchronization behind `ChatSearchIndexManager`; do not let activities execute SQL directly. For every searchable body mutation, generate one opaque revision token, synchronously record that chat ID/token in encrypted `ChatSearchIndexJournal`, and write the same token as `search_revision` in the **same `SharedPreferences.Editor` operation as the authoritative `chat` JSON**. For a title mutation, place the corresponding title revision in the same committed chat-list row update. Only after the source operation succeeds may the manager update/delete derived rows off-main; clear only the exact journal token after the index transaction commits with that same revision. An index failure never turns a successfully saved chat into a failed chat, but Search excludes dirty/revision-mismatched documents rather than displaying stale text. Legacy histories with no revision are valid only through a completed rebuild generation; their first later content mutation creates the revision.
+24. Audit and wire every searchable mutation, not only typed sends: first pending-conversation commit; imported chat creation; user message persistence; terminal assistant completion/failure/cancellation; generated-image message completion; edit; delete; regenerate/Make Current/branch truncation; title auto-name/manual rename; whole-chat/folder deletion; restore/import replacement; and any detached background history write. Refactor `ChatPreferences.editMessage`/`deleteMessage` through the guarded history-save path rather than leaving unobservable direct `SharedPreferences` writes. Add source-contract tests so new direct history writes cannot bypass the index coordinator.
+25. Do not rewrite the index for every streaming token. Index a user message once its authoritative send/first commit succeeds; exclude the changing assistant streaming row; index that assistant row once it reaches a persisted terminal state. A structural mutation to legacy rows may replace that chat's entire index transactionally; new stable-ID rows should use targeted upsert/delete operations.
+26. Deletion/rename rules are fail-safe:
+    - title rename updates only the title document after the stable-ID rename commits;
+    - message/chat deletion removes index rows after the authoritative deletion commits;
+    - a failed cleanup leaves the dirty marker, and authoritative chat-list intersection suppresses the stale result;
+    - cancelled deletion changes neither source nor index;
+    - restore/import never trusts a bundled Search database and requests reconciliation/full rebuild after authoritative data is installed.
+    The derived Search database and its key are excluded from chat/recovery backups.
+27. Implement first-use legacy bootstrap and Rebuild Search Index through the same permanent, idempotent, single-flight rebuild pipeline. Do not create a separate permanent “legacy migration” subsystem. Build into a new generation while any prior active generation remains queryable; activate the new generation only after its corpus scan and validation complete, then remove old/incomplete generations. A first install with no active generation shows Preparing Search; an interrupted build resumes or restarts without exposing its partial generation. Re-run dirty journal entries that changed during the scan before declaring caught up.
+28. If the chat list is unavailable, abort rebuild and keep Search unavailable rather than publishing empty. If individual histories are locked/corrupt, omit their body documents from the new generation, record the exact known-incomplete corpus state without message text, suppress any old body rows for those chats, and show the explicit incomplete state from the specification. Retry when storage recovers.
+29. Keep **Rebuild Search Index** permanently reachable from Chat Settings and reuse the same action in Search's unavailable/corrupt state. It may close/delete and recreate only the derived `chat_search.db` and its derived state; it cannot edit histories, folder assignments, images, memory, settings, or message IDs. Corrupt/wrong-version derived databases are disposable after safe close; a delete/recreate failure leaves Search unavailable and is logged without raw queries or message text.
+30. Never store query history, snippets, or raw queries outside the encrypted Search database/activity state; never log query text, indexed message text, or result snippets. Verify database, journal, WAL/SHM, temporary rebuild artifacts, and deletion all remain in app-private storage. Search works fully offline.
+
+#### Integration and rollback boundary
+
+31. Wire destinations: Image Gallery opens Phase 4; Settings opens the current Settings activity; New Chat calls Phase 5; Search opens the new screen. Selecting a drawer row or Search title result uses the existing one-chat-per-`ChatActivity` lifecycle rather than mutating the live activity in place. Re-check stop/finish conventions so navigation does not leak voice/TTS resources.
+32. Refresh the drawer snapshot when it opens and when returning/resuming so auto-name, timestamps, pin/folder changes, origin labels, selection, and deletion are current. Search independently refreshes the authoritative all-chat metadata and index health; folder expansion never limits its corpus.
+33. Keep `MainActivity`, `ChatsListFragment`, and bottom navigation reachable in this phase. They are the rollback path until Phase 7. The old inline title filter may remain only inside that rollback screen; it is not a reusable Search implementation or authority.
 
 ### Explicit non-goals
 
 - No ordinary-launch cutover or deletion of legacy navigation classes/resources.
-- No edge swipe, partial-width drawer, hamburger, inline drawer search, Playground drawer row, Projects, nested folders, or chat preview snippets.
+- No edge swipe, partial-width drawer, hamburger, inline drawer search, Playground drawer row, Projects, nested folders, or unrelated first-message preview snippets in drawer rows.
 - No in-place live-chat switching and no folder-induced changes to memory, model/provider, Includes, image generation, Summarizer, or Compact behavior.
+- No arbitrary inside-word substring/trigram behavior: `search` does not match `research`.
+- No semantic/vector/AI/network search, attachment/document-body search, folder-name search, generated-image-byte/path search, regex, Boolean language, user wildcards, quoted phrases, search history, or recent-query suggestions.
+- No eager permanent migration rewriting all legacy histories and no permanent owner-only backfill code. The derived rebuild indexes legacy data without modifying it.
+- No indexing of per-token streaming fragments and no Search-database inclusion in backup/restore payloads.
+- No redesign or weakening of the just-corrected chat keyboard/IME anchoring, TTS/readback Stop behavior, streaming lifecycle, or chat storage-health gates.
 - No unrelated Settings transition/animation or AMOLED expansion.
 
 ### Acceptance criteria
@@ -410,18 +478,32 @@ Build the complete drawer/search navigation surface over the live `ChatActivity`
 - Drawer geometry, controls, fixed zones, exact hierarchy, and Back behavior match `drawer-design-spec.md` Sections 1-2; open/close preserves every listed live-chat state.
 - Folder creation/rename/pin/expand/move/delete behavior, ordering, wording, and validation match Section 4, including aggregate image-safe deletion and cancellation atomicity.
 - Pinned/current/folder/unfiled chat projections are complete, correctly ordered, never duplicated, and update after all relevant mutations.
-- Drawer and Search use the approved flat row, no previews, correct optional metadata, companion-image preference, and recycling resets.
-- Search sees all chats regardless of collapsed state and preserves current matching semantics.
+- Drawer uses the approved flat no-preview row. Search reuses its identity/optional-metadata treatment but adds only the verified match snippet/date; recycling leaks no snippet, highlight, companion image, bookmark, selection, or metadata state.
+- Search has no intermediate options screen, starts with both options Off, searches while typing, and passes all four `search` truth-table combinations. Default token-prefix matching never matches inside `research`.
+- Search covers titles and visible persisted messages in every saved chat regardless of folder/accordion state; folders, hidden Includes/attachments, metadata, transient rows, and streaming fragments are not false targets.
+- Results are deterministic and fully pageable; exact/title/exact-token matches outrank weaker prefixes, Match Case filtering cannot truncate later valid pages, and one chat may expose multiple separately navigable message hits.
+- Tapping a new-ID result lands on the exact message. Legacy results verify ordinal/fingerprint; stale results safely open the chat normally and never land on unrelated text.
+- `chat_search.db` is encrypted and offline, the old arbitrary-substring title filter is not reused, and ordinary queries do not parse all histories on the UI thread.
+- The owner's approximately 150 legacy chats bootstrap through the rebuild path without rewriting source histories, duplicates, silent omissions, or a permanently required legacy-only migration.
+- Send/terminal response/edit/delete/rename/truncate/chat deletion/import/restore all update or invalidate Search. A forced index failure leaves a visible dirty/unavailable state rather than stale/deleted text.
+- Interrupted first build/rebuild keeps the prior generation active or shows Preparing Search, never partial empty truth; locked/corrupt source rows are explicitly disclosed; Rebuild Search Index cannot modify authoritative chats.
 - Image Gallery, New Chat, Search, Settings, and saved chats all open their correct destinations; Playground is absent from the drawer.
-- Drawer construction does not open full histories, tokenize/summarize, decode full generated images, or block the UI on memory work.
+- Drawer construction and ordinary Search queries do not open every full history, tokenize/summarize chats, decode full generated images, or block the UI on memory/index work. Only explicit off-main indexing scans histories.
 
 ### Tests/build checks
 
-- Add `DrawerHierarchyProjectionTest`, `FolderInteractionPolicyTest`, `FolderDeleteFlowTest`, `FlatChatRowBindingTest`, `SearchProjectionTest`, and drawer destination/source contracts.
+- Add `DrawerHierarchyProjectionTest`, `FolderInteractionPolicyTest`, `FolderDeleteFlowTest`, `FlatChatRowBindingTest`, and drawer destination/source contracts.
+- Add pure tests for `SearchTextPolicy`, `SearchQueryCompiler`, `SearchRankingPolicy`, `SearchSnippetPolicy`, and `SearchableMessageProjection`. Cover the complete `search` matrix; multi-token AND; exact versus prefix rank; accents/case; apostrophes, hyphens, non-Latin text and ICU boundaries; punctuation-only input; embedded quotes/`*`/`OR`/`-` escaping; and highlight ranges.
+- Add store/index tests for title and per-message documents, stable/duplicate message IDs, legacy locators, incremental upsert/delete, external-content trigger consistency, candidate pagination after case filtering, active-generation switching, dirty revision mismatch, interrupted rebuild, locale/policy-version rebuild, and known-incomplete corpus state.
+- Add arm64 instrumentation tests that first prove SQLCipher 4.17.0 reopens every pre-upgrade encrypted store, then create/reopen the real Search FTS5 database, prove single-/multi-character prefix and exact query behavior, verify wrong-key/corrupt handling, run integrity/rebuild commands, and inspect raw database/WAL bytes to ensure a unique indexed sentence is not plaintext.
+- Add synchronization/source-contract tests covering first commit, typed/voice/hands-free user turns, terminal success/failure/stop, generated images, edit, message deletion, regeneration/truncation, auto/manual rename, single/folder delete cancellation and commit, import, restore, and process death between source commit/index update.
+- Add Search result-navigation tests for stable UUID, shifted-but-verifiable legacy target, duplicate legacy text, deleted/edited stale target, normal-open fallback, and absence of target extras preserving current chat open/IME/TTS behavior.
+- Add Robolectric/activity tests for initial focus, no header buttons, checkbox defaults and recreation, live-query debounce/cancellation, keyboard Search action, empty/preparing/incomplete/error states, automatic next-page loading, snippet recycling, and the permanent rebuild action.
 - Add Robolectric/activity tests for full-width measurement, disabled edge gesture, Back-first close, fixed-zone scrolling, current selection, state refresh, dialog validation, folder chooser, and adapter recycling.
 - Add a lifecycle regression harness/manual checklist for streaming, TTS, mic/hands-free, draft, open IME, pending attachments, Includes, selected model/provider, and blank mode while opening/closing the drawer.
-- Load-test hundreds of chats/folders with slow memory metadata and companion images both Off and On; assert no full-history reads on the drawer/Search hot path.
-- Run `./gradlew --no-daemon test assembleDebug assembleDebugAndroidTest`.
+- Load-test the owner's 150-chat legacy corpus and synthetic hundreds/thousands of chats with common one-character/prefix terms, many hits in one chat, long messages, slow memory metadata, and companion images Off/On. Assert cancellability, bounded result pages, no UI-thread disk/SQL work, no all-history reads on the ordinary Search/drawer hot path, and no permanently hidden matches.
+- Manual arm64 acceptance: run every matching-option matrix row; title and message hits; collapsed-folder coverage; exact-message navigation; live send then Search; edit/delete/rename; app kill during bootstrap/rebuild; Search DB corruption/rebuild; locked chat disclosure; light/dark/large text/TalkBack; and re-check keyboard anchoring plus both visible TTS Stop controls.
+- Run `./gradlew --no-daemon test assembleDebug assembleDebugAndroidTest`, push the Phase 6 commit, and require a green `Android Checks` workflow before considering the phase complete.
 
 ---
 
@@ -442,7 +524,7 @@ Activate the new navigation as the ordinary app experience, retire the old lower
 - `MainActivity.kt`, `activity_main.xml`, `bottom_menu.xml`, and `AndroidManifest.xml`
 - Phase 5 `NewConversationCoordinator` and pending-session journal
 - `ChatsListFragment`, `PlaygroundFragment`, and legacy resources only where navigation wiring can now be removed safely
-- Startup hooks for generated catalog backfill, chat-deletion recovery, pending-conversation recovery, and folder metadata health
+- Startup hooks for generated catalog backfill, chat-deletion recovery, pending-conversation recovery, folder metadata health, and Search dirty/rebuild recovery
 - Cross-feature unit, Robolectric, instrumentation, source-contract, and performance tests
 - `ui-style-adoption.md` completion entries
 
@@ -452,10 +534,10 @@ Activate the new navigation as the ordinary app experience, retire the old lower
 2. Make ordinary cold/warm launch deterministic: it creates or restores the one appropriate blank provisional session, never reopens the last saved chat, never flashes the Chats tab, and never creates duplicate blank chat rows. Existing saved chats remain reachable only through the drawer/Search.
 3. Remove the bottom-navigation wiring and permanent Playground/Chats destinations only after automated/manual reachability proves New Chat, saved chats, Search, Image Gallery, Settings, and blank Playground selection. Retain reusable `PlaygroundFragment`/controller code needed by Phase 5. Delete old adapters/resources only when `rg` proves they have no remaining compatibility/test caller; unreachable code cleanup must not reopen a deletion bypass.
 4. Establish deterministic Back/task behavior across drawer, selection/bulk modes, viewer, Search, Settings, saved chats, and the blank startup chat. Drawer closes first. Do not accidentally reveal the retired `MainActivity` tab host beneath `ChatActivity`.
-5. Run all idempotent recovery in a safe order before enabling destructive actions: storage outage reconciliation; generated catalog/open/backfill; deletion journals; pending first-commit journal; folder/index health. A locked/corrupt dependency disables the affected mutation and surfaces established error handling; it never becomes empty state.
-6. Test and tune scale paths with realistic large datasets. Drawer/Search reads the complete lightweight index, Gallery reads only its catalog, adapters decode thumbnails only, and optional memory/companion work remains cancellable/stable-ID keyed. Add instrumentation/counters or source contracts rather than relying only on visual impressions.
+5. Run all idempotent recovery in a safe order before enabling destructive actions: storage outage reconciliation; generated catalog/open/backfill; deletion journals; pending first-commit journal; folder/navigation health; then Search dirty-journal replay or rebuild scheduling. Search remains derived and must not delay safe chat recovery or turn an unavailable history into an empty indexed chat.
+6. Test and tune scale paths with realistic large datasets. Drawer reads the complete lightweight navigation index, ordinary Search queries read the complete active encrypted FTS generation, Gallery reads only its catalog, adapters decode thumbnails only, and optional memory/companion work remains cancellable/stable-ID keyed. Add instrumentation/counters or source contracts rather than relying only on visual impressions.
 7. Complete accessibility, localization, theme, and state-restoration review against every numbered acceptance item in both specifications. Verify Title Caps and exact owner-approved strings directly from the spec files. Update `ui-style-adoption.md` for the new shared compact popup, name-entry dialog, three-action dialog, segmented selector, drawer, Search, Gallery, and flat rows.
-8. Preserve compatibility fallbacks: missing chat mode means Chat; missing folder assignment means unfiled; missing expansion/settings keys use specification defaults; legacy generated-image ownership remains conservative; last-known gallery labels survive origin deletion; old copied references never gain ownership. Do not add an eager destructive migration or delete legacy metadata merely because the new path is active.
+8. Preserve compatibility fallbacks: missing chat mode means Chat; missing folder assignment means unfiled; missing expansion/settings keys use specification defaults; legacy generated-image ownership remains conservative; last-known gallery labels survive origin deletion; old copied references never gain ownership; legacy Search hits use verified ordinal/fingerprint fallback without rewriting source histories. Do not add an eager destructive migration or delete legacy metadata merely because the new path is active.
 
 ### Explicit non-goals
 
@@ -470,17 +552,17 @@ Activate the new navigation as the ordinary app experience, retire the old lower
 - Every approved destination remains reachable after bottom-navigation retirement; Playground exists only through the blank-mode selector.
 - Back/task navigation cannot reveal or recreate the retired tab surface and still honors drawer-first close behavior.
 - All legacy/default/migration cases above work without guessed ownership/folder assignment or destructive reset.
-- Recovery after process death at image registration, chat/folder deletion, first-chat commit, and catalog backfill is idempotent and safe.
+- Recovery after process death at image registration, chat/folder deletion, first-chat commit, catalog backfill, Search index synchronization, and Search rebuild generation activation is idempotent and safe.
 - The full acceptance lists in `drawer-design-spec.md` Section 14 and `image-gallery-spec.md` Section 15 pass, including live-chat preservation and large-list recycling/performance.
 
 ### Tests/build checks
 
 - Add launcher/navigation reachability and task-stack source/Robolectric tests, plus cold/warm/process-restored startup tests.
 - Add an end-to-end policy matrix covering legacy chats/images, copied references, renamed/deleted origins, pinned assigned chats, folders with mixed locked/unlocked ownership, and cancellation at every dialog boundary.
-- Run instrumentation on an arm64 device for SQLCipher catalog migration, encrypted metadata commits, journal recovery, configuration/process restoration, and large RecyclerViews.
+- Run instrumentation on an arm64 device for SQLCipher catalog/Search migration and FTS5 behavior, encrypted metadata commits, journal/rebuild recovery, configuration/process restoration, and large RecyclerViews.
 - Manually execute every numbered acceptance item from both specifications on light/dark themes and with accessibility services/large text where practical. Record failures against the specification item number, not a paraphrased checklist.
 - Required final gate: `./gradlew --no-daemon test assembleDebug assembleDebugAndroidTest`, followed by a green `Android Checks` workflow on the merged integration commit.
 
 ## Final release rule
 
-The feature is not product-complete merely because the drawer or gallery renders. It is complete only after Phase 7, when all specification acceptance items pass and no reachable deletion path can bypass ownership, explicit choice, Lock, storage-health, or missing-image safety.
+The feature is not product-complete merely because the drawer, Search screen, or gallery renders. It is complete only after Phase 7, when all specification acceptance items pass, no reachable deletion path can bypass ownership/explicit choice/Lock/storage-health/missing-image safety, and Search cannot silently expose stale, deleted, partial, or unencrypted conversation text.

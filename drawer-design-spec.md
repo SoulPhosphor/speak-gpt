@@ -1,8 +1,8 @@
 # Drawer Design Specification
 
-**Status:** Owner-approved drawer/navigation design, August 23, 2026.
+**Status:** Owner-approved drawer/navigation/Search design, updated August 30, 2026.
 
-**Authority:** This file is the current product/UI authority for the drawer, folder organization, new-chat Chat/Playground mode selector, and related chat-list interactions. It supersedes conflicting drawer-specific details in `ui-redesign-plan.md` Section 5 and its Phase 3 summary, including the older no-header drawer, inline drawer search, hamburger control, last-chat startup, partial-width drawer assumptions, fixed-bottom Playground row, and the earlier three-row New Chat/Search top block.
+**Authority:** This file is the current product/UI authority for the drawer, folder organization, new-chat Chat/Playground mode selector, full-text Search, and related chat-list interactions. It supersedes conflicting drawer-specific details in `ui-redesign-plan.md` Section 5 and its Phase 3 summary, including the older no-header drawer, inline drawer search, hamburger control, last-chat startup, partial-width drawer assumptions, fixed-bottom Playground row, the earlier three-row New Chat/Search top block, and the legacy title-only arbitrary-substring Search behavior.
 
 The general repository safety, theme, voice, lifecycle, accessibility, and shared-style rules in `ui-redesign-plan.md`, `ui-style-guide.md`, `ui-style-adoption.md`, `image-gallery-spec.md`, and `CLAUDE.md` still apply. When this specification and `image-gallery-spec.md` overlap on image-safe chat/folder deletion, the image-safety rules remain binding.
 
@@ -468,16 +468,59 @@ Use the existing shared header family:
 
 The Search screen still participates in normal system Back/gesture navigation.
 
-### 5.2 Search Box And Existing Search Semantics
+### 5.2 Search Box And Quick Options
 
 - Place the search box directly under the header.
 - Its visual style should match/reuse the current Chats-list search system (`bg_search`, `field_search`, `btn_search`, `ic_search`) through shared/theme-ready styling.
-- Do **not** redesign matching semantics as part of drawer/folder work.
-- Search continues to search **all chats**, including chats inside collapsed folders and chats whose Folders accordion is collapsed.
-- Folder membership must never remove a chat from Search.
-- Do not limit Search to the currently expanded/visible drawer rows.
-- Folder names are not automatically new search targets; preserve the existing chat-search semantics unless separately approved.
-- Search results use the same approved flat chat-row presentation in Section 6.
+- Opening Search focuses the field and opens the keyboard. A nonblank query searches as the user types; no submit step or separate options screen is required. The keyboard Search/Enter action may dismiss the keyboard but must not be required to run the query.
+- Put two plain checkbox options directly below the field, using the shared `Widget.App.CheckOption.*` family rather than button/tile styling:
+  1. **Whole Words**
+  2. **Match Case**
+- Both options default **Off** every time a new Search screen is opened. Preserve the current query and option values across that screen's activity/configuration recreation, but do not silently turn either option into a persistent app-wide default.
+- Changing either option reruns the current query immediately.
+- Trimming the field to empty clears the results. Do not populate unrelated recent searches or suggestions in the empty state.
+
+### 5.3 Authoritative Matching Semantics
+
+The old Chats-list implementation only did a case-insensitive substring check against chat titles. It is **not** the behavior to preserve. The owner-approved Search behavior is:
+
+- Search both saved chat titles and persisted, user-visible user/assistant message text.
+- Default matching is **case-insensitive token-prefix matching**. A query token must begin at a Unicode word boundary. It may match the beginning of a longer word, but never the middle of one.
+- **Whole Words** changes token-prefix comparison to complete-token equality.
+- **Match Case** makes the same comparison case-sensitive. It does not imply Whole Words.
+- With more than one query token, every token must match within the same title or the same message result. Their order need not match. Boolean operators, wildcard syntax, and quoted-phrase syntax are not part of this phase; typed punctuation is data/separation, not executable query syntax.
+- Use Unicode-aware word boundaries. Do not implement Whole Words with ASCII-only `\b`, spaces, or a hand-written English regex.
+
+Required truth table for the query `search`:
+
+| Options | Must Match | Must Not Match |
+| --- | --- | --- |
+| Default | `search`, `Search`, `searching` | `research` |
+| Whole Words | `search`, `Search` | `searching`, `research` |
+| Match Case | `search`, `searching` | `Search`, `research` |
+| Whole Words + Match Case | lowercase whole-token `search` | `Search`, `searching`, `research` |
+
+Searchable message text is the text the chat presents as the persisted user or assistant message. Do not index hidden Includes/document bodies, internal file directives, generated-image paths or bytes, provider diagnostics, error/debug fields, reasoning metadata, system/settings prompts, transient progress/confirmation rows, or any other non-message metadata merely because it shares the history map.
+
+Search continues to cover **all saved chats**, including chats inside collapsed folders and chats whose Folders accordion is collapsed. Folder membership must never remove a chat from Search, and Search must not be limited to currently inflated/visible drawer rows. Folder names are not search targets in this phase.
+
+### 5.4 Results, Ranking, And Message Navigation
+
+- A matching title produces one chat-title result. A matching message produces one message result; multiple matching messages in one chat remain separately reachable.
+- Every result identifies the chat. A message result also shows a short plain-text context snippet with the actual matched range(s) highlighted and shows the stored message date when one exists. Do not invent a message timestamp for legacy rows that have none. A title result may use the chat's last-used date.
+- The snippet is match context, not the removed unrelated first-message preview. Collapse display whitespace safely and never interpret arbitrary result text as HTML.
+- Rank an exact full-title match first, then other title token matches, then exact-token message matches, then longer token-prefix message matches. Use full-text relevance within those classes and recency only as a deterministic tie-breaker; do not let recency bury a clearly stronger textual match.
+- Selecting a title result opens the saved chat normally. Selecting a message result opens that saved chat at the matching message and gives the target a restrained temporary theme-ready emphasis so the user can identify it.
+- Message navigation must use a stable message ID when one exists. For a legacy result without one, verify its saved ordinal/fingerprint against the authoritative history before scrolling. If the result became stale because the message was edited/deleted, open the chat normally instead of crashing, scrolling to an unrelated message, or silently manufacturing a match.
+- Search results reuse the approved flat chat identity/optional-metadata presentation from Section 6, extended only with the required match snippet/date. They do not inherit the old card layout, swipe gestures, bulk-selection UI, or unrelated first-message preview.
+
+### 5.5 Index Readiness, Recovery, And Privacy
+
+- Message search is backed by a derived encrypted on-device index. Search must not send queries or conversation text to a network service.
+- First-use/legacy indexing, rebuilding, and reconciliation run off the main thread. While no complete generation is available, show an explicit preparing/rebuilding state rather than empty results that pretend no matches exist.
+- If specific locked/corrupt chats cannot be indexed, any available results must be accompanied by an explicit incomplete/unavailable state. Never silently represent skipped chats as no matches.
+- Keep a permanent **Rebuild Search Index** recovery action. Rebuilding may discard and regenerate the derived index, but it must never alter or delete authoritative chat histories.
+- Ordinary queries read the index and lightweight chat metadata; they do not parse every full conversation. The index may be paged internally, but scrolling must continue loading results automatically rather than imposing a visible Load More button or permanently hiding older matches.
 
 ---
 
@@ -490,7 +533,7 @@ Reuse the existing chat-list data/behavior, but **do not copy the old chat-list 
 - Chat entries are **not cards, pills, or tiles**.
 - Do not put a filled rounded rectangle/elevation behind each chat row.
 - Separation comes from whitespace and typography.
-- Remove the old message-preview/snippet line from drawer and Search results.
+- Remove the old unrelated first-message preview/snippet line from drawer rows. Search message results are the explicit exception: they show only the matching context required by Section 5.4.
 - Chat name is one line, end-ellipsized when needed.
 - Chat-name text is only slightly larger than ordinary body text and is controlled by a shared style.
 - Leave approximately one full text-line of empty vertical rhythm between chat entries.
@@ -569,7 +612,7 @@ Build the drawer from lightweight metadata required for identity/order/display, 
 - folder ID/name/pinned state;
 - persisted folder/Folders accordion expansion state.
 
-**Do not load/parse complete conversation histories merely to build the drawer or folders.**
+**Do not load/parse complete conversation histories merely to build the drawer or folders.** An explicit off-main Search index build/rebuild may scan authoritative histories; opening the drawer and running an ordinary Search query may not.
 
 Do not perform tokenization, summarization, attachment loading, generated-image decoding, or transcript parsing simply to open the drawer.
 
@@ -589,14 +632,14 @@ Folder rename/move/pin should not require rewriting conversation history.
 
 ### 7.4 No Arbitrary Partial Truth
 
-Prefer a lightweight index covering the whole accessible chat set so:
+Prefer a lightweight navigation index plus a complete derived encrypted Search index covering the whole accessible chat set so:
 
 - Search sees all chats;
 - pinned ordering is complete;
 - folder membership is complete;
 - folder deletion knows which chats actually belong to the folder.
 
-Do not show only an arbitrary first page if that makes older chats disappear from Search or folder membership.
+Do not show only an arbitrary first page if that makes older chats disappear from Search or folder membership. Search may retrieve bounded pages internally only when subsequent pages load automatically and the full corpus remains reachable.
 
 Future storage paging is allowed only if global semantics stay correct. No visible Load More control is required by this spec.
 
@@ -737,11 +780,16 @@ At minimum verify:
 28. A chat may be both folder-assigned and pinned; while pinned it appears only in Pinned Chats and returns to its retained folder when unpinned.
 29. Pinning a folder never pins its chats; pinning a chat never pins its folder.
 30. Chat current-selection treatment remains correct in Pinned Chats, folder children, and unfiled rows.
-31. Search finds chats regardless of folder assignment or accordion expansion state and retains existing search matching semantics.
+31. Search finds titles and persisted visible message text regardless of folder assignment or accordion expansion state; default `search` matches `Search` and `searching` but not `research`.
 32. Existing model-name, memory-status, and companion-image display preferences continue to work in all chat locations.
 33. RecyclerView recycling never leaks folder indentation, bookmark state, companion images, selected state, or optional metadata to another row.
-34. Drawer/folder construction does not load full conversations, tokenize histories, summarize chats, or decode full-resolution generated images.
+34. Drawer construction and ordinary Search queries do not load every full conversation, tokenize histories, summarize chats, or decode full-resolution generated images; only an explicit off-main Search index build/rebuild may scan histories.
 35. Existing chats migrate as unfiled with no guessed folder membership.
 36. Folder rename/move/pin does not change chat last-used timestamps, transcript data, memory, Summarizer/Compact state, Includes, or provider settings.
 37. Ordinary app launch opens a blank Chat-mode conversation rather than the last viewed chat.
 38. Opening/closing drawer preserves voice/hands-free, streaming, draft, keyboard/IME, pending attachments, Includes, selected model/provider, and blank-chat mode state.
+39. Search opens with the field focused, runs while typing, and keeps Whole Words and Match Case directly on the same screen with both Off by default.
+40. The four `search` truth-table combinations in Section 5.3 pass, including Unicode-aware word-boundary coverage and safe punctuation/query escaping.
+41. Title matches and individual message matches are ranked deterministically; message results show highlighted matching context and navigate to the verified message rather than merely opening the chat at an arbitrary location.
+42. New message IDs remain immutable through edits, while legacy ordinal/fingerprint navigation verifies before scrolling and safely falls back when stale.
+43. First-use indexing, interrupted rebuild, rename/edit/delete, restore/import, and index corruption never produce silently stale/partial results or modify authoritative chat histories; Rebuild Search Index remains available.
