@@ -1,20 +1,20 @@
 package org.teslasoft.assistant.preferences.generatedimages
 
 import android.content.Context
-import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 
 @RunWith(RobolectricTestRunner::class)
 class ImageGalleryPresentationPreferencesTest {
     private lateinit var context: Context
 
     @Before fun clear() {
-        context = ApplicationProvider.getApplicationContext()
+        context = RuntimeEnvironment.getApplication()
         context.getSharedPreferences("settings", Context.MODE_PRIVATE).edit().clear().commit()
     }
 
