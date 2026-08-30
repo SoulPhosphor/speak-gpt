@@ -40,7 +40,6 @@ import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.snackbar.Snackbar
-import com.google.android.material.slider.Slider
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.imagegen.ToolCapability
@@ -57,6 +56,8 @@ import org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.fragments.dialogs.AdvancedModelSelectorDialogFragment
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
+import org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+import org.teslasoft.assistant.ui.widgets.SamplingParameterSpec
 
 /**
  * Full-page editor for a single API chat endpoint profile (replaced the old
@@ -182,10 +183,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
     private var fieldProviderDiscoveryPath: TextInputEditText? = null
     /** Sticky routing identity of the profile being edited (see loadValues). */
     private var loadedIdentity: String = ApiEndpointObject.IDENTITY_GENERIC
-    private var sliderTemperature: Slider? = null
-    private var sliderTopP: Slider? = null
-    private var sliderFrequencyPenalty: Slider? = null
-    private var sliderPresencePenalty: Slider? = null
+    private var sliderTemperature: SamplingParameterControl? = null
+    private var sliderTopP: SamplingParameterControl? = null
+    private var sliderFrequencyPenalty: SamplingParameterControl? = null
+    private var sliderPresencePenalty: SamplingParameterControl? = null
     private var rowStreaming: View? = null
     private var checkStreaming: MaterialCheckBox? = null
 
@@ -394,14 +395,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             endpoint.providerDiscoveryPath.ifBlank { ApiEndpointObject.DEFAULT_PROVIDER_DISCOVERY_PATH }
         )
 
-        sliderTemperature?.value = (endpoint.temperature * 10f).coerceIn(0f, 20f)
-        sliderTemperature?.setLabelFormatter { "${it / 10.0}" }
-        sliderTopP?.value = (endpoint.topP * 10f).coerceIn(0f, 10f)
-        sliderTopP?.setLabelFormatter { "${it / 10.0}" }
-        sliderFrequencyPenalty?.value = (endpoint.frequencyPenalty * 10f).coerceIn(-20f, 20f)
-        sliderFrequencyPenalty?.setLabelFormatter { "${it / 10.0}" }
-        sliderPresencePenalty?.value = (endpoint.presencePenalty * 10f).coerceIn(-20f, 20f)
-        sliderPresencePenalty?.setLabelFormatter { "${it / 10.0}" }
+        sliderTemperature?.configure(SamplingParameterSpec.TEMPERATURE, endpoint.temperature)
+        sliderTopP?.configure(SamplingParameterSpec.TOP_P, endpoint.topP)
+        sliderFrequencyPenalty?.configure(SamplingParameterSpec.FREQUENCY_PENALTY, endpoint.frequencyPenalty)
+        sliderPresencePenalty?.configure(SamplingParameterSpec.PRESENCE_PENALTY, endpoint.presencePenalty)
 
         streamingDefault = preferences?.getStreaming() ?: true
         checkStreaming?.isChecked = streamingDefault
@@ -631,10 +628,10 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             speechEndpoint = normalizedSpeechEndpoint(),
             authType = selectedAuthType,
             model = selectedModel,
-            temperature = (sliderTemperature?.value ?: (ApiEndpointObject.DEFAULT_TEMPERATURE * 10f)) / 10f,
-            topP = (sliderTopP?.value ?: (ApiEndpointObject.DEFAULT_TOP_P * 10f)) / 10f,
-            frequencyPenalty = (sliderFrequencyPenalty?.value ?: (ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY * 10f)) / 10f,
-            presencePenalty = (sliderPresencePenalty?.value ?: (ApiEndpointObject.DEFAULT_PRESENCE_PENALTY * 10f)) / 10f,
+            temperature = sliderTemperature?.value ?: ApiEndpointObject.DEFAULT_TEMPERATURE,
+            topP = sliderTopP?.value ?: ApiEndpointObject.DEFAULT_TOP_P,
+            frequencyPenalty = sliderFrequencyPenalty?.value ?: ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY,
+            presencePenalty = sliderPresencePenalty?.value ?: ApiEndpointObject.DEFAULT_PRESENCE_PENALTY,
             maxTokens = fieldMaxTokens?.text.toString().toIntOrNull() ?: ApiEndpointObject.DEFAULT_MAX_TOKENS,
             endSeparator = fieldEndSeparator?.text.toString(),
             prefix = fieldPrefix?.text.toString(),

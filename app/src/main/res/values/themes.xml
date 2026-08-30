@@ -428,6 +428,51 @@
         <item name="android:textColor">?attr/appTextColor</item>
     </style>
 
+    <!-- Flush variant of Widget.App.Row.Selector for plain settings screens.
+         Removes the tonal pill background and the label's leading inset so the
+         selector reads as an ordinary row: its label starts at the same
+         leading edge as the screen's other row text instead of being indented
+         like the Quick Settings card version. The screen supplies its own
+         horizontal padding to line the label up with its rows; this style only
+         drops the pill and the inset. Quick Settings keeps the indented,
+         pill-backed base Widget.App.Row.Selector. -->
+    <style name="Widget.App.Row.Selector.Flush" parent="Widget.App.Row.Selector">
+        <item name="android:background">@null</item>
+    </style>
+
+    <!-- Label for Widget.App.Row.Selector.Flush: ordinary row-title typography
+         (normal weight, appRowTitleColor — the same as Widget.App.Row.Title),
+         with the leading inset removed so it aligns with the screen's other
+         rows. The bold accent label is kept only by the pill-backed base
+         Widget.App.Row.Selector.Label on Quick Settings, where the compact card
+         surface needs it; in the middle of a plain settings list the accent
+         read as out of place. -->
+    <style name="Widget.App.Row.Selector.Label.Flush" parent="Widget.App.Row.Selector.Label">
+        <item name="android:layout_marginStart">0dp</item>
+        <item name="android:textColor">?attr/appRowTitleColor</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
+    <!-- Stacked single-choice radio row for a settings screen: a full-width,
+         tappable RadioButton whose label matches the shared row-title
+         typography (16sp, appRowTitleColor) and whose control tint resolves
+         from the theme (colorPrimary). Put the RadioButtons directly in a
+         vertical RadioGroup so it handles single-selection; the group supplies
+         the horizontal padding that aligns the rows with the screen's other
+         rows. Nothing here is hard-coded in the layout — size, color, and
+         geometry all live in this style so a future theme pass changes them in
+         one place. -->
+    <style name="Widget.App.Row.Radio" parent="Widget.Material3.CompoundButton.RadioButton">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">8dp</item>
+        <item name="android:buttonTint">?attr/colorPrimary</item>
+        <item name="android:textColor">?attr/appRowTitleColor</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
     <!-- Pick-one-item list row (owner request, Aug 13 2026): the "checked
          tile" row used by a single-select list opened from a
          Widget.App.Row.Selector (or, later, from any other picker needing
@@ -519,9 +564,8 @@
          (activity_settings.xml, main Settings screen), restructured same
          day so the header pins above the ScrollView instead of scrolling
          away with it (see the CLAUDE.md rollout-status note for the
-         restructure details); LocalWhisperManageActivity and
-         LocalWhisperModelsActivity (activity_local_whisper_manage.xml/
-         activity_local_whisper_models.xml - the old floating-title-no-bar
+         restructure details); LocalWhisperModelsActivity
+         (activity_local_whisper_models.xml - the old floating-title-no-bar
          look, now gets the colored bar for the first time);
          LoreBookEntriesActivity and LoreBooksListActivity
          (activity_lorebook_entries.xml/activity_lorebooks_list.xml,
@@ -1296,6 +1340,40 @@
         <item name="android:layout_marginTop">6dp</item>
         <item name="android:background">@drawable/bg_field_box</item>
         <item name="android:padding">12dp</item>
+    </style>
+
+    <!-- Reusable sampling parameter control: a centered, directly editable
+         current-value box above the slider. Layouts provide only the control
+         id and constraints; this family owns its appearance and spacing. -->
+    <style name="Widget.App.SamplingSlider.Container" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/sampling_slider_section_gap</item>
+        <item name="android:gravity">center_horizontal</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.SamplingSlider.Value" parent="Widget.App.Field.Box">
+        <item name="android:layout_width">@dimen/sampling_slider_value_width</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:layout_marginBottom">@dimen/sampling_slider_value_gap</item>
+        <item name="android:minHeight">@dimen/sampling_slider_value_min_height</item>
+        <item name="android:gravity">center</item>
+        <item name="android:inputType">numberDecimal|numberSigned</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:selectAllOnFocus">true</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">@dimen/sampling_slider_value_text_size</item>
+    </style>
+
+    <style name="Widget.App.SamplingSlider.Control" parent="Widget.Material3.Slider">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">@dimen/sampling_slider_horizontal_margin</item>
+        <item name="android:layout_marginEnd">@dimen/sampling_slider_horizontal_margin</item>
+        <item name="labelBehavior">gone</item>
     </style>
 
     <!-- A small, right-sized numeric input blank (owner spec, July 23 2026 —

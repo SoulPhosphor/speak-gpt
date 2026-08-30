@@ -53,6 +53,13 @@
                 <RadioButton
                     android:button="@null"
                     style="@style/Widget.App.PickList.Row"
+                    android:id="@+id/lngAuto"
+                    android:visibility="gone"
+                    android:text="@string/voice_language_automatic" />
+
+                <RadioButton
+                    android:button="@null"
+                    style="@style/Widget.App.PickList.Row"
                     android:id="@+id/lngEn"
                     android:text=" English" />
 

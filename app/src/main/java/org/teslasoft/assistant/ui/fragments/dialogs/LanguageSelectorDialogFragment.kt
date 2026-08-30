@@ -38,12 +38,13 @@ import org.teslasoft.assistant.R
  */
 class LanguageSelectorDialogFragment : DialogFragment() {
     companion object {
-        fun newInstance(name: String, chatId: String) : LanguageSelectorDialogFragment {
+        fun newInstance(name: String, chatId: String, showAutomatic: Boolean = false) : LanguageSelectorDialogFragment {
             val languageSelectorDialogFragment = LanguageSelectorDialogFragment()
 
             val args = Bundle()
             args.putString("name", name)
             args.putString("chatId", chatId)
+            args.putBoolean("showAutomatic", showAutomatic)
 
             languageSelectorDialogFragment.arguments = args
 
@@ -65,6 +66,7 @@ class LanguageSelectorDialogFragment : DialogFragment() {
         val view: View = this.layoutInflater.inflate(R.layout.fragment_select_language, null)
 
         radios = mapOf(
+            "auto" to view.findViewById(R.id.lngAuto),
             "en" to view.findViewById(R.id.lngEn),
             "fr" to view.findViewById(R.id.lngFr),
             "de" to view.findViewById(R.id.lngDe),
@@ -86,6 +88,10 @@ class LanguageSelectorDialogFragment : DialogFragment() {
             .setNegativeButton(R.string.btn_cancel) { _, _ ->  }
 
         language = requireArguments().getString("name").toString()
+
+        if (requireArguments().getBoolean("showAutomatic", false)) {
+            radios["auto"]?.visibility = View.VISIBLE
+        }
 
         radios.forEach { (code, radio) ->
             radio?.isChecked = language == code

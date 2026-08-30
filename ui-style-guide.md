@@ -336,7 +336,13 @@ A toggle may exist on only one screen. Its use of shared row and switch styling 
 
 `Widget.App.Row.Selector.VoiceLanguage`
 
-Use for a row that shows the current value of a setting and opens a picker (a dialog or another screen) when tapped. The label sits at the start (bold, `colorPrimary`); the current value sits at the end, ellipsizing with a marquee. There is no chevron — the value itself is the affordance.
+`Widget.App.Row.Selector.Flush`
+
+`Widget.App.Row.Selector.Label.Flush`
+
+Use for a row that shows the current value of a setting and opens a picker (a dialog or another screen) when tapped. The current value sits at the end, ellipsizing with a marquee. There is no chevron — the value itself is the affordance. The label's typography depends on the variant: the base `Widget.App.Row.Selector.Label` is bold `colorPrimary`, reserved for the Quick Settings card where the compact surface needs the accent; `.Label.Flush` uses ordinary row-title typography (normal weight, `appRowTitleColor`, matching `Widget.App.Row.Title`).
+
+Use the `.Flush` row style (with `.Label.Flush` for its label) on a plain settings screen where the selector should read as an ordinary row rather than a card tile: it drops the tonal pill background and the label's leading inset, and the label matches the screen's other row titles in weight and color, so the row does not stand out mid-list. The screen still supplies its own horizontal padding to match its rows. The base `Widget.App.Row.Selector` (indented, pill-backed, bold-accent label) stays reserved for the Quick Settings card. Current `.Flush` examples: the AI Model row on Select API Voice Models and the language selectors on Voice & Speech.
 
 Distinct from the Dropdown family, which opens an anchored inline menu in place rather than a separate picker.
 
@@ -453,6 +459,38 @@ Set `minLines`/`maxLines` and `android:scrollbars="vertical"` (plus `android:isS
 Use for a short whole-number input that sits on the same line as its label.
 
 Set `android:ems` and `android:maxLength` on the individual field according to the digits it must accept.
+
+### Editable sampling slider
+
+Use `SamplingParameterControl` for model sampling values that need both direct
+numeric entry and slider adjustment. It renders a centered value box above the
+slider; typing a valid number moves the slider, and sliding updates the box.
+Direct input is normalized on Done or focus loss and cannot leave the control
+outside its parameter's supported range.
+
+The shared appearance family is:
+
+- `Widget.App.SamplingSlider.Container`
+- `Widget.App.SamplingSlider.Value`
+- `Widget.App.SamplingSlider.Control`
+
+The component skin lives in `values/themes.xml`; its reusable width, height,
+spacing, and text-size tokens live together under `sampling_slider_*` in
+`values/dimens.xml`. The value box inherits the canonical `Field.Box` outline,
+uses `appTextColor`, and the Material slider continues to resolve its colors
+from the active theme. Screens must not restate those dimensions, colors,
+padding, slider label behavior, or field typography.
+
+Parameter ranges and numeric precision are behavior, not appearance. They live
+in `SamplingParameterSpec` / `SamplingParameterValuePolicy`: Temperature
+0–2, Top P 0–1, both penalties -2–2, with 0.01 steps and at most two displayed
+decimal places. Add or reuse a spec there rather than multiplying values in a
+screen controller or placing range/default numbers in layout XML.
+
+Current canonical uses are the four model controls in Quick Settings and both
+API Endpoint editor layouts. Each host supplies only a view id, the shared
+container style, constraints if required, and an accessibility description;
+its controller calls `configure(spec, initialValue, onValueChanged)`.
 
 ## Removable form chips
 
@@ -732,6 +770,24 @@ The Ignore control at a row's end uses `bg_ignore_square_off` / `bg_ignore_squar
 Use for a checkbox option where the whole line is the tap target but must read as a normal line of text — no background, no tile or button look (owner spec, Aug 2 2026; first use: the provider Filters panel's capability checkboxes).
 
 Distinct from `Widget.App.Row.Toggle`, which is a switch row with a subtitle.
+
+## Stacked single-choice radio row
+
+`Widget.App.Row.Radio`
+
+Use for a stacked, single-choice list of options shown as radio buttons on a
+settings screen — the whole row is a tappable `RadioButton` whose label matches
+the shared row-title typography (16sp, `appRowTitleColor`) and whose control
+tint resolves from the theme (`colorPrimary`). Put the `RadioButton`s directly
+in a vertical `RadioGroup` so it manages single-selection; the group supplies
+the horizontal padding that aligns the rows with the screen's other rows. All
+size, color, and geometry live in the style, never in the layout or Kotlin.
+First use: the Voice Input engine choice on Voice & Speech.
+
+This is for a persistent on-screen choice. It is not the "checked tile"
+pick-list (`Widget.App.PickList.Row`) used inside a Select pop-up, and it is
+not the equal-width horizontal segmented control
+(`Widget.App.VoiceBrowser.Segment`).
 
 ## Chat composer host and surface
 

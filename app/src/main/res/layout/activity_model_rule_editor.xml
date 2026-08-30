@@ -95,7 +95,7 @@
 
             <TextView
                 style="@style/Widget.App.Section.Title"
-                android:text="@string/model_rule_edit_add_model" />
+                android:text="@string/model_rule_edit_select_endpoint" />
 
             <TextView
                 android:id="@+id/field_model_endpoint"
@@ -148,6 +148,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:baselineAligned="false"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 

@@ -14,7 +14,6 @@ import android.widget.TextView
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
-import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
@@ -111,8 +110,10 @@ class VoiceBrowserActivity : FragmentActivity() {
         stateMessage = findViewById(R.id.voice_state_message)
         resetFilters = findViewById(R.id.reset_filters)
         previewText = findViewById(R.id.voice_preview_text)
-        previewText.setText(preferences.getVoicePreviewText())
-        previewText.doAfterTextChanged { preferences.setVoicePreviewText(it?.toString().orEmpty()) }
+        // The preview text is a scratch field, not a saved setting: start each
+        // visit from the default sample and never persist edits, so leaving the
+        // screen discards whatever was typed.
+        previewText.setText(VoicePreviewText.DEFAULT)
         findViewById<ImageButton>(R.id.btn_back).setOnClickListener { attemptChevronExit() }
 
         controller = VoiceBrowserController(
@@ -330,6 +331,11 @@ class VoiceBrowserActivity : FragmentActivity() {
 
     private fun render() {
         providerDropdown.text = controller.provider.displayName
+        // With only one provider there is nothing to pick, so drop the dropdown
+        // chevron — it otherwise implies a choice that isn't there.
+        providerDropdown.setCompoundDrawablesRelativeWithIntrinsicBounds(
+            0, 0, if (controller.availableProviders.size > 1) R.drawable.ic_chevron_down else 0, 0
+        )
         // API sources carry the "api-tts:" id prefix; the on-device provider is "google".
         findViewById<TextView>(R.id.provider_api_charges_notice).visibility =
             if (controller.browsedProviderId.startsWith("api-tts:")) View.VISIBLE else View.GONE
@@ -348,9 +354,16 @@ class VoiceBrowserActivity : FragmentActivity() {
 
     private fun renderFilters(definitions: List<VoiceFilterDefinition>) {
         filterGrid.removeAllViews()
-        definitions.chunked(2).forEach { pair ->
+        // Each filter cell already carries an 8dp top margin; the first row also
+        // sits 8dp below the location selector via filter_grid's own top margin,
+        // so that gap reads as 16dp. Give every row after the first a matching
+        // extra 8dp so the second row's labels aren't cramped under the first.
+        val extraRowGap = (8 * resources.displayMetrics.density).toInt()
+        definitions.chunked(2).forEachIndexed { index, pair ->
             val row = LinearLayout(this).apply {
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { if (index > 0) topMargin = extraRowGap }
                 orientation = LinearLayout.HORIZONTAL
                 weightSum = 2f
             }

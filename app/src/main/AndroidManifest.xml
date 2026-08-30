@@ -540,13 +540,6 @@
             android:label="@string/mem_world_campaign_detail_title" />
 
         <activity
-            android:name=".ui.activities.LocalWhisperManageActivity"
-            android:exported="false"
-            android:label="@string/title_manage_downloaded_models"
-            android:launchMode="singleTask">
-        </activity>
-
-        <activity
             android:name=".ui.activities.LogsActivity"
             android:exported="false"
             android:label="@string/title_logs"
