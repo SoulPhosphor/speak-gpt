@@ -8,11 +8,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.ConscryptMode
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.conversation.ConversationMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, sdk = [28], application = Application::class)
+@ConscryptMode(ConscryptMode.Mode.OFF)
 class ConversationModeSelectorTest {
     @Test
     fun defaultsToChatAndChangesImmediately() {
