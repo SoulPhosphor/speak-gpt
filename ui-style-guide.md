@@ -819,6 +819,27 @@ Do not assign an id to an XML `<include>` tag that includes these layouts. Andro
 
 ## Maintaining this guide
 
+## Conversation mode segmented selector
+
+`Widget.App.ConversationModeSelector`
+
+Use this named style with `ConversationModeSelector` for a mutually exclusive
+Chat / Playground choice on an unsaved conversation. Do not recreate its pill,
+capsule, text colors, spacing, or animation in an activity layout.
+
+The complete theme/palette mapping is:
+
+- outer pill: `colorSurfaceContainerHigh`;
+- selected capsule: `colorSecondaryContainer`;
+- selected label: `colorOnSecondaryContainer`;
+- unselected label: `colorOnSurfaceVariant`.
+
+Geometry and motion are centralized in
+`conversation_mode_selector_*` resources in `dimens.xml` and `integers.xml`.
+The custom view owns the sliding/resizing selected capsule and exposes the two
+labels as mutually exclusive accessible choices. A host supplies only current
+mode, visibility, and a selection listener.
+
 ## Compact action popup
 
 Use `CompactActionPopup` for small anchored management menus. It applies

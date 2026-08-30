@@ -17,6 +17,11 @@
 **************************************************************************/
 -->
 <resources>
+    <dimen name="conversation_mode_selector_height">56dp</dimen>
+    <dimen name="conversation_mode_selector_radius">28dp</dimen>
+    <dimen name="conversation_mode_selector_inset">4dp</dimen>
+    <dimen name="conversation_mode_selector_choice_min_width">104dp</dimen>
+    <dimen name="conversation_mode_selector_choice_padding">22dp</dimen>
     <!-- The vertical gap that separates the Zone 2 sections on every roleplay
          card (character, NPC, world, campaign share view_card_section). One
          place to tune the line spacing for all of them (owner ask, July 10

@@ -28,6 +28,8 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.Toast
+import android.text.Editable
+import android.text.TextWatcher
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.DrawableCompat
@@ -70,11 +72,18 @@ import org.teslasoft.assistant.ui.fragments.dialogs.QuickSettingsBottomSheetDial
 import org.teslasoft.assistant.ui.fragments.dialogs.ReportAIContentBottomSheet
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import org.teslasoft.assistant.util.connectionAbortMessage
+import org.teslasoft.assistant.playground.PlaygroundRunner
+import org.teslasoft.assistant.playground.PlaygroundSessionStore
 import java.util.EnumSet
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
 class PlaygroundFragment : Fragment() {
+
+    interface PendingCommitHost {
+        /** Called before Run changes UI or starts network work. */
+        fun commitPendingPlaygroundTurn(input: String): Boolean
+    }
 
     private var btnSettings: ImageButton? = null
     private var layoutBottom: ConstraintLayout? = null
@@ -98,7 +107,11 @@ class PlaygroundFragment : Fragment() {
 
     private var mContext: Context? = null
 
-    private var ai: OpenAI? = null
+    private var runner: PlaygroundRunner? = null
+    private var sessionStore: PlaygroundSessionStore? = null
+    private var chatId: String = ""
+    private var embedded: Boolean = false
+    private var pendingConversation: Boolean = false
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -115,6 +128,9 @@ class PlaygroundFragment : Fragment() {
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
+        chatId = arguments?.getString(ARG_CHAT_ID).orEmpty()
+        embedded = arguments?.getBoolean(ARG_EMBEDDED, false) == true
+        pendingConversation = arguments?.getBoolean(ARG_PENDING, false) == true
         return inflater.inflate(R.layout.fragment_playground, container, false)
     }
 
@@ -123,7 +139,9 @@ class PlaygroundFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         rootView = view
-        WindowInsetsUtil.adjustPaddings((mContext as Activity?) ?: return, rootView, R.id.root, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS))
+        if (!embedded) {
+            WindowInsetsUtil.adjustPaddings((mContext as Activity?) ?: return, rootView, R.id.root, EnumSet.of(WindowInsetsUtil.Companion.Flags.STATUS_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS))
+        }
 
         btnRun = view.findViewById(R.id.btn_run)
         btnStop = view.findViewById(R.id.btn_stop)
@@ -155,10 +173,23 @@ class PlaygroundFragment : Fragment() {
 
     @SuppressLint("SetTextI18n")
     private fun initialize(context: Context) {
-        preferences = Preferences.getPreferences(context, "")
+        preferences = Preferences.getPreferences(context, chatId)
         apiEndpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(context)
         logitBiasPreferences = LogitBiasPreferences(context, preferences?.getLogitBiasesConfigId() ?: return)
         apiEndpoint = apiEndpointPreferences?.getApiEndpoint(context, preferences?.getApiEndpointId() ?: return)
+        sessionStore = PlaygroundSessionStore(context, chatId)
+
+        (mContext as Activity?)?.runOnUiThread {
+            editTextIn?.setText(sessionStore?.input().orEmpty())
+            editTextOut?.setText(sessionStore?.output().orEmpty())
+            editTextIn?.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    sessionStore?.saveInput(s?.toString().orEmpty())
+                }
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
+        }
 
         btnSettings?.background = getDisabledDrawable(ResourcesCompat.getDrawable(context.resources, R.drawable.btn_accent_tonal, context.theme)!!)
         btnReport?.background = getDisabledDrawable(ResourcesCompat.getDrawable(context.resources, R.drawable.btn_accent_tonal, context.theme)!!)
@@ -174,7 +205,7 @@ class PlaygroundFragment : Fragment() {
         btnSettings?.setOnClickListener {
             val quickSettingsBottomSheetDialogFragment = QuickSettingsBottomSheetDialogFragment
                 .newInstance(
-                    "",
+                    chatId,
                     -1,
                     -1,
                     0.0f,
@@ -193,6 +224,13 @@ class PlaygroundFragment : Fragment() {
         }
 
         btnRun?.setOnClickListener {
+            val input = editTextIn?.text?.toString().orEmpty()
+            if (pendingConversation) {
+                val committed = (activity as? PendingCommitHost)
+                    ?.commitPendingPlaygroundTurn(input) == true
+                if (!committed) return@setOnClickListener
+                pendingConversation = false
+            }
             runLoader?.visibility = View.VISIBLE
             btnStop?.visibility = View.VISIBLE
             btnRun?.visibility = View.GONE
@@ -269,78 +307,19 @@ class PlaygroundFragment : Fragment() {
             Toast.makeText(requireActivity(), "Output cleared", Toast.LENGTH_SHORT).show()
         }
 
-        val config = OpenAIConfig(
-            token = apiEndpoint?.apiKey!!,
-            logging = LoggingConfig(LogLevel.None, Logger.Simple),
-            timeout = Timeout(socket = 30.seconds),
-            organization = null,
-            headers = emptyMap(),
-            host = OpenAIHost(apiEndpoint?.host!!),
-            proxy = null,
-            retry = RetryStrategy()
-        )
-        ai = OpenAI(config)
+        runner = PlaygroundRunner(preferences!!, logitBiasPreferences!!, apiEndpoint!!)
     }
 
     private suspend fun runAIRequest() {
         output = ""
         try {
-            val msgs: ArrayList<ChatMessage> = arrayListOf()
-
-            val systemMessage = preferences!!.getSystemMessage()
-            if (systemMessage != "") {
-                msgs.add(
-                    ChatMessage(
-                        role = ChatRole.System,
-                        content = systemMessage
-                    )
-                )
+            output = runner!!.run(editTextIn?.text.toString()) { streamed ->
+                output = streamed
+                editTextOut?.setText(streamed)
+                sessionStore?.saveOutput(streamed)
             }
-
-            msgs.add(
-                ChatMessage(
-                    role = ChatRole.User,
-                    content = editTextIn?.text.toString()
-                )
-            )
-
-            val chatCompletionRequest = if (preferences?.getLogitBiasesConfigId() == null || preferences?.getLogitBiasesConfigId() == "null" || preferences?.getLogitBiasesConfigId() == "") {
-                ChatCompletionRequest(
-                    model = ModelId(model),
-                    temperature = if (model.contains("gpt-5") || model.contains("o3")) 1.0 else if (preferences?.getTemperature()?.toDouble() == 0.7) null else preferences?.getTemperature()?.toDouble(),
-                    topP = if (preferences?.getTopP()?.toDouble() == 1.0) null else preferences?.getTopP()?.toDouble(),
-                    frequencyPenalty = if (preferences?.getFrequencyPenalty()?.toDouble() == 0.0) null else preferences?.getFrequencyPenalty()?.toDouble(),
-                    presencePenalty = if (preferences?.getPresencePenalty()?.toDouble() == 0.0) null else preferences?.getPresencePenalty()?.toDouble(),
-                    seed = if (preferences?.getSeed() != "") preferences?.getSeed()?.toInt() else null,
-                    logitBias = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) null else logitBiasPreferences?.getLogitBiasesMap(),
-                    messages = msgs
-                )
-            } else {
-                ChatCompletionRequest(
-                    model = ModelId(model),
-                    temperature = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) 1.0 else if (preferences?.getTemperature()?.toDouble() == 0.7) null else preferences?.getTemperature()?.toDouble(),
-                    topP = if (preferences?.getTopP()?.toDouble() == 1.0) null else preferences?.getTopP()?.toDouble(),
-                    frequencyPenalty = if (preferences?.getFrequencyPenalty()?.toDouble() == 0.0) null else preferences?.getFrequencyPenalty()?.toDouble(),
-                    presencePenalty = if (preferences?.getPresencePenalty()?.toDouble() == 0.0) null else preferences?.getPresencePenalty()?.toDouble(),
-                    seed = if (preferences?.getSeed() != "") preferences?.getSeed()?.toInt() else null,
-                    messages = msgs
-                )
-            }
-
-            val completions: Flow<ChatCompletionChunk> =
-                ai!!.chatCompletions(chatCompletionRequest)
-
-            completions.collect { v ->
-                run {
-                    if (!currentCoroutineContext().isActive) throw CancellationException()
-                    else if (v.choices[0].delta?.content != null) {
-                        output += v.choices[0].delta?.content
-                        editTextOut?.setText(output)
-                    }
-                }
-            }
-
             editTextOut?.setText(output)
+            sessionStore?.saveOutput(output)
 
             runLoader?.visibility = View.GONE
             btnStop?.visibility = View.GONE
@@ -388,6 +367,7 @@ class PlaygroundFragment : Fragment() {
             // A failed run always shows its error — never hidden.
             output = "${output}\n\n${getString(R.string.prompt_show_error)}\n\n$response"
             editTextOut?.setText(output)
+            sessionStore?.saveOutput(output)
 
             (mContext as Activity?)?.runOnUiThread {
                 runLoader?.visibility = View.GONE
@@ -430,5 +410,20 @@ class PlaygroundFragment : Fragment() {
             Configuration.UI_MODE_NIGHT_UNDEFINED -> false
             else -> false
         }
+    }
+
+    companion object {
+        private const val ARG_CHAT_ID = "chatId"
+        private const val ARG_EMBEDDED = "embedded"
+        private const val ARG_PENDING = "pendingConversation"
+
+        fun embedded(chatId: String, pending: Boolean): PlaygroundFragment =
+            PlaygroundFragment().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_CHAT_ID, chatId)
+                    putBoolean(ARG_EMBEDDED, true)
+                    putBoolean(ARG_PENDING, pending)
+                }
+            }
     }
 }

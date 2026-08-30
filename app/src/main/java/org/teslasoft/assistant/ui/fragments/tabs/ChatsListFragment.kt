@@ -63,6 +63,9 @@ import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.ui.activities.SettingsActivity
 import org.teslasoft.assistant.ui.adapters.ChatListAdapter
 import org.teslasoft.assistant.ui.fragments.dialogs.AddChatDialogFragment
+import org.teslasoft.assistant.conversation.ConversationMode
+import org.teslasoft.assistant.conversation.NewConversationCoordinator
+import org.teslasoft.assistant.conversation.PendingConversationState
 import org.teslasoft.assistant.ui.util.ChatDeletePrompt
 import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
 import org.teslasoft.assistant.util.Hash
@@ -126,11 +129,23 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
     private var chatListUpdatedListener: AddChatDialogFragment.StateChangesListener = object : AddChatDialogFragment.StateChangesListener {
         override fun onAdd(name: String, id: String, fromFile: Boolean) {
             initSettings()
+            var launchPending = !fromFile
 
             if (fromFile && selectedFile.replace("null", "") != "") {
                 val chat = mContext?.let { SecurePrefs.get(it, "chat_$id") }
-                chat?.edit {
-                    putString("chat", selectedFile)
+                val imported = chat?.edit()?.putString("chat", selectedFile)?.commit() == true
+                val context = mContext ?: return
+                val history = ChatPreferences.getChatPreferences()
+                    .getChatByIdResult(context, id).messages
+                launchPending = history.isEmpty()
+                val committed = imported && (history.isEmpty() ||
+                    NewConversationCoordinator(context).commitPendingConversation(
+                        PendingConversationState(id, name, ConversationMode.CHAT),
+                        history
+                    ).succeeded)
+                if (!committed) {
+                    Toast.makeText(context, R.string.new_conversation_create_failed, Toast.LENGTH_LONG).show()
+                    return
                 }
             }
 
@@ -141,6 +156,7 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
 
             i.putExtra("name", name)
             i.putExtra("chatId", id)
+            i.putExtra("pendingConversation", launchPending)
 
             startActivity(i)
         }

@@ -35,12 +35,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
-import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.conversation.NewConversationCoordinator
 import org.teslasoft.assistant.ui.util.ChatDeletePrompt
 import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
-import org.teslasoft.assistant.util.Hash
 
 class AddChatDialogFragment : DialogFragment() {
     companion object {
@@ -250,64 +248,29 @@ class AddChatDialogFragment : DialogFragment() {
                 return
             }
 
-            chatPreferences?.addChat(requireActivity(), chatName)
+            val state = try {
+                NewConversationCoordinator(requireActivity()).createPendingConversation(
+                    NewConversationCoordinator.StartRequest(
+                        name = chatName,
+                        endpointId = requireArguments().getString("endpointId").orEmpty(),
+                        model = requireArguments().getString("model").orEmpty(),
+                        avatarType = requireArguments().getString("avatarType").orEmpty(),
+                        avatarId = requireArguments().getString("avatarId").orEmpty(),
+                        assistantName = requireArguments().getString("assistantName").orEmpty()
+                    )
+                )
+            } catch (_: Exception) {
+                MaterialAlertDialogBuilder(requireActivity(), R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.label_error)
+                    .setMessage(R.string.new_conversation_create_failed)
+                    .setPositiveButton(R.string.btn_ok, null)
+                    .show()
+                return
+            }
 
-            // Copy settings from default
-            val preferences: Preferences = Preferences.getPreferences(requireActivity(), "")
-
-            // Write settings
-            val resolution = preferences.getResolution()
-            val speech = preferences.getAudioModel()
-            val activationPrompt = preferences.getPrompt()
-            val systemMessage = preferences.getSystemMessage()
-            val autoLanguageDetect = preferences.getAutoLangDetect()
-            val apiEndpointId = if (requireArguments().getString("endpointId") != "") requireArguments().getString("endpointId") else preferences.getApiEndpointId()
-            val logitBiasConfigId = preferences.getLogitBiasesConfigId()
-
-            // Model + generation settings come from the active profile.
-            val profile = ApiEndpointPreferences.getApiEndpointPreferences(requireActivity())
-                .getApiEndpoint(requireActivity(), apiEndpointId!!)
-            val model = if (requireArguments().getString("model") != "") requireArguments().getString("model")!! else profile.model
-            val maxTokens = profile.maxTokens
-            val prefix = profile.prefix
-            val endSeparator = profile.endSeparator
-            val temperature = profile.temperature
-            val topP = profile.topP
-            val frequencyPenalty = profile.frequencyPenalty
-            val presencePenalty = profile.presencePenalty
-            val streaming = preferences.getStreaming()
-            val avatarType = if (requireArguments().getString("avatarType") != "") requireArguments().getString("avatarType") else preferences.getAvatarType()
-            val avatarId = if (requireArguments().getString("avatarId") != "") requireArguments().getString("avatarId") else preferences.getAvatarId()
-            val assistantName = if (requireArguments().getString("assistantName") != "") requireArguments().getString("assistantName") else preferences.getAssistantName()
-
-            val newPreferences: Preferences = Preferences.getPreferences(requireActivity(), Hash.hash(chatName))
-
-            newPreferences.setPreferences(Hash.hash(chatName), requireActivity())
-            newPreferences.resetNewChatInheritance()
-            newPreferences.initializeNewChatQuickSettings()
-            newPreferences.setResolution(resolution)
-            newPreferences.setAudioModel(speech)
-            newPreferences.setModel(model)
-            newPreferences.setMaxTokens(maxTokens)
-            newPreferences.setPrefix(prefix)
-            newPreferences.setEndSeparator(endSeparator)
-            newPreferences.setPrompt(activationPrompt)
-            newPreferences.setSystemMessage(systemMessage)
-            newPreferences.setAutoLangDetect(autoLanguageDetect)
-            newPreferences.setApiEndpointId(apiEndpointId!!)
-            newPreferences.setLogitBiasesConfigId(logitBiasConfigId)
-            newPreferences.setTemperature(temperature)
-            newPreferences.setTopP(topP)
-            newPreferences.setFrequencyPenalty(frequencyPenalty)
-            newPreferences.setPresencePenalty(presencePenalty)
-            newPreferences.setStreaming(streaming)
-            newPreferences.setAvatarType(avatarType!!)
-            newPreferences.setAvatarId(avatarId!!)
-            newPreferences.setAssistantName(assistantName!!)
-
-            // SharedPreferences.apply() has already updated process memory; this
-            // opens immediately without waiting for disk and cannot race startup.
-            listener?.onAdd(chatName, Hash.hash(chatName), arguments?.getBoolean("fromFile") == true)
+            // The provisional UUID and settings are durable before the screen
+            // opens, but no chat-list row exists until its first user action.
+            listener?.onAdd(chatName, state.id, arguments?.getBoolean("fromFile") == true)
         } else {
             listener?.onDuplicate(arguments?.getInt("position")!!)
         }

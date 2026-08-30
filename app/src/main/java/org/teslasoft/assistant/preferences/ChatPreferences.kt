@@ -30,6 +30,8 @@ import org.teslasoft.assistant.util.Hash
 import java.lang.Exception
 import java.lang.reflect.Type
 import androidx.core.content.edit
+import org.teslasoft.assistant.conversation.ConversationMode
+import org.teslasoft.assistant.conversation.PendingConversationCommitResult
 
 class ChatPreferences private constructor() {
     companion object {
@@ -671,6 +673,94 @@ class ChatPreferences private constructor() {
 
         val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
         settings2.edit { putString("chat", "[]") }
+    }
+
+    /**
+     * Phase 5's one first-user-action transaction. The provisional history and
+     * per-chat settings already exist, but the conversation is not discoverable
+     * until this method synchronously commits the first payload, durable mode,
+     * and chat-list row. The journal makes retries/process-death recovery
+     * idempotent; a row with the same stable UUID is never appended twice.
+     */
+    fun commitPendingConversation(
+        context: Context,
+        chatId: String,
+        chatName: String,
+        mode: ConversationMode,
+        messages: ArrayList<HashMap<String, Any>>
+    ): PendingConversationCommitResult {
+        if (chatId.isBlank() || chatName.isBlank() || messages.isEmpty()) {
+            return PendingConversationCommitResult.CommitFailed
+        }
+        val historyName = "chat_$chatId"
+        val settingsName = "settings.$chatId"
+        if (chatWriteBlocked(context, "chat_list", "commit a new conversation") ||
+            chatWriteBlocked(context, historyName, "commit a new conversation") ||
+            chatWriteBlocked(context, settingsName, "commit a new conversation")
+        ) {
+            return PendingConversationCommitResult.StorageUnavailable
+        }
+
+        synchronized(CHAT_LIST_LOCK) {
+            val listResult = getChatListResult(context, includeFirstMessage = false)
+            if (!ChatStorageHealth.isAuthoritative(listResult.state)) {
+                return PendingConversationCommitResult.StorageUnavailable
+            }
+            val existing = listResult.chats.firstOrNull { storedChatId(it) == chatId }
+            if (existing != null) {
+                if (existing["name"] != chatName) {
+                    return PendingConversationCommitResult.CommitFailed
+                }
+                SecurePrefs.get(context, "pending_conversation_journal")
+                    .edit().remove(chatId).commit()
+                return PendingConversationCommitResult.AlreadyCommitted
+            }
+            if (listResult.chats.any { it["name"] == chatName }) {
+                return PendingConversationCommitResult.CommitFailed
+            }
+
+            val journal = SecurePrefs.get(context, "pending_conversation_journal")
+            val journalPayload = Gson().toJson(
+                mapOf("id" to chatId, "name" to chatName, "mode" to mode.storedValue)
+            )
+            if (!journal.edit().putString(chatId, journalPayload).commit()) {
+                return PendingConversationCommitResult.CommitFailed
+            }
+
+            val historyCommitted = SecurePrefs.get(context, historyName).edit()
+                .putString("chat", Gson().toJson(messages)).commit()
+            if (!historyCommitted) return PendingConversationCommitResult.CommitFailed
+
+            val settings = SecurePrefs.get(context, settingsName)
+            val settingsCommitted = settings.edit()
+                .putString(ConversationMode.MODE_KEY, mode.storedValue)
+                .putInt(ConversationMode.MODE_VERSION_KEY, ConversationMode.SCHEMA_VERSION)
+                .putBoolean(ConversationMode.PENDING_KEY, false)
+                .commit()
+            if (!settingsCommitted) return PendingConversationCommitResult.CommitFailed
+
+            val row = hashMapOf(
+                "name" to chatName,
+                "id" to chatId,
+                "timestamp" to System.currentTimeMillis().toString(),
+                "pinned" to "false",
+                ConversationMode.MODE_KEY to mode.storedValue,
+                ConversationMode.MODE_VERSION_KEY to ConversationMode.SCHEMA_VERSION.toString()
+            )
+            val updated = ArrayList(listResult.chats)
+            updated.add(row)
+            val listCommitted = SecurePrefs.get(context, "chat_list").edit()
+                .putString("data", Gson().toJson(updated)).commit()
+            if (!listCommitted) {
+                // Keep the payload/settings for a safe retry, but make the
+                // provisional state explicit again because no visible row exists.
+                settings.edit().putBoolean(ConversationMode.PENDING_KEY, true).commit()
+                return PendingConversationCommitResult.CommitFailed
+            }
+
+            journal.edit().remove(chatId).commit()
+            return PendingConversationCommitResult.Ok
+        }
     }
 
     /**

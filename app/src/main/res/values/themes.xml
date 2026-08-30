@@ -831,6 +831,14 @@
         <item name="android:background">@color/transparent</item>
     </style>
 
+    <!-- Phase 5 shared blank-conversation selector. Palette comes from
+         Material roles in ConversationModeSelector; geometry is centralized. -->
+    <style name="Widget.App.ConversationModeSelector" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">@dimen/conversation_mode_selector_height</item>
+        <item name="android:layout_gravity">center_horizontal</item>
+    </style>
+
     <!-- Chat composer surface: the editor and control row use the same
          theme-resolved surface as the incoming AI bubble. -->
     <style name="Widget.App.Chat.ComposerSurface" parent="">

@@ -24,7 +24,7 @@ import java.io.File
 
 /**
  * Drift guard for the settings new-chat creation copies from the default
- * profile (AddChatDialogFragment), in the same source-scan style as
+ * profile (NewConversationCoordinator), in the same source-scan style as
  * PerChatSettingKeysTest. Pinned before the image generation rebuild
  * (image-generation-rebuild-plan.md, step 1): the rebuild's migration work
  * (plan sections 4.7 and 14) changes this list deliberately, and this test
@@ -32,14 +32,14 @@ import java.io.File
  */
 class NewChatSettingCopyTest {
 
-    private fun addChatDialogSource(): String {
+    private fun coordinatorSource(): String {
         val candidates = listOf(
-            File("src/main/java/org/teslasoft/assistant/ui/fragments/dialogs/AddChatDialogFragment.kt"),
-            File("app/src/main/java/org/teslasoft/assistant/ui/fragments/dialogs/AddChatDialogFragment.kt")
+            File("src/main/java/org/teslasoft/assistant/conversation/NewConversationCoordinator.kt"),
+            File("app/src/main/java/org/teslasoft/assistant/conversation/NewConversationCoordinator.kt")
         )
         val file = candidates.firstOrNull { it.exists() }
             ?: throw AssertionError(
-                "AddChatDialogFragment.kt not found relative to the test working directory " +
+                "NewConversationCoordinator.kt not found relative to the test working directory " +
                     File(".").absolutePath
             )
         return file.readText()
@@ -47,8 +47,8 @@ class NewChatSettingCopyTest {
 
     @Test
     fun newChatCopyListMatchesTheCurrentInventory() {
-        val source = addChatDialogSource()
-        val copied = Regex("""newPreferences\.set(\w+)\(""")
+        val source = coordinatorSource()
+        val copied = Regex("""created\.set(\w+)\(""")
             .findAll(source)
             .map { it.groupValues[1] }
             .filter { it != "Preferences" } // setPreferences binds the chat id, it copies nothing
@@ -95,18 +95,28 @@ class NewChatSettingCopyTest {
 
     @Test
     fun inheritanceIsInitializedBeforeTheNewChatOpens() {
-        val source = addChatDialogSource()
-        val reset = source.indexOf("newPreferences.resetNewChatInheritance()")
-        val quickSettings = source.indexOf("newPreferences.initializeNewChatQuickSettings()")
-        val lastSettingsWrite = source.indexOf("newPreferences.setAssistantName")
-        val open = source.indexOf("listener?.onAdd")
+        val source = coordinatorSource()
+        val createBody = source.substringAfter("fun createPendingConversation(")
+            .substringBefore("fun commitPendingConversation(")
+        val initialize = createBody.indexOf("initializeSettings(chatId, request)")
+        val pendingMarker = createBody.indexOf("ConversationMode.PENDING_KEY")
+        val open = createBody.indexOf("return PendingConversationState")
 
-        assertTrue("New-chat inheritance must be reset before opening the chat", reset >= 0 && reset < open)
+        val initializeBody = source.substringAfter("private fun initializeSettings(")
+        val reset = initializeBody.indexOf("created.resetNewChatInheritance()")
+        val quickSettings = initializeBody.indexOf("created.initializeNewChatQuickSettings()")
+        val lastSettingsWrite = initializeBody.indexOf("created.setAssistantName")
+
+        assertTrue("New-chat inheritance must be reset during initialization", reset >= 0)
         assertTrue(
-            "New-chat Quick Settings must resolve after stale inheritance is reset and before the chat opens",
-            quickSettings > reset && quickSettings < open
+            "New-chat Quick Settings must resolve after stale inheritance is reset",
+            quickSettings > reset
         )
-        assertTrue("All new-chat settings must be in memory before opening the chat", lastSettingsWrite >= 0 && lastSettingsWrite < open)
+        assertTrue("All copied settings must follow inheritance initialization", lastSettingsWrite > quickSettings)
+        assertTrue(
+            "Settings initialization and the pending marker must finish before the provisional chat opens",
+            initialize >= 0 && pendingMarker > initialize && open > pendingMarker
+        )
     }
 
     /** The known gap the rebuild's app-wide settings make moot (plan 4.7):
@@ -114,6 +124,6 @@ class NewChatSettingCopyTest {
      *  never the selected image model. */
     @Test
     fun imageModelIsNotCopiedToNewChats() {
-        assertFalse(addChatDialogSource().contains("newPreferences.setImageModel("))
+        assertFalse(coordinatorSource().contains("created.setImageModel("))
     }
 }
