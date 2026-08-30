@@ -259,6 +259,7 @@ import org.teslasoft.assistant.ui.chat.ChatExportMessage
 import org.teslasoft.assistant.ui.chat.ChatExportOptions
 import org.teslasoft.assistant.ui.chat.ChatExportPdfWriter
 import org.teslasoft.assistant.ui.chat.ChatImeInsetLayout
+import org.teslasoft.assistant.ui.chat.ChatTranscriptRecyclerView
 import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
@@ -415,7 +416,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var btnSettings: ImageButton? = null
     private var btnChatMenu: ImageButton? = null
     private var progress: CircularProgressIndicator? = null
-    private var chat: RecyclerView? = null
+    private var chat: ChatTranscriptRecyclerView? = null
     private var activityTitle: TextView? = null
     private var btnQuickSettings: ImageButton? = null
     private var fileContents: ByteArray? = null
@@ -846,6 +847,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnSend?.visibility = if (visible) View.INVISIBLE else View.VISIBLE
     }
 
+    /**
+     * Blocks new mic/send work without disabling whichever control currently
+     * owns Stop. Android does not dispatch click or touch listeners to a
+     * disabled View, so a visible red stop control must remain enabled even
+     * while generation cleanup or the hidden auto-title request is still busy.
+     */
+    private fun disableTurnControlsUnlessTheyAreStops() {
+        btnMicro?.isEnabled = readbackKeepAliveActive && !isHandsFreeEngaged()
+        btnSend?.isEnabled = isHandsFreeEngaged()
+    }
+
     private fun restoreUIState() {
         runOnUiThread {
             setGenerationProgressVisible(false)
@@ -962,6 +974,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun micReadbackStop() {
         btnMicro?.apply {
+            isEnabled = true
             visibility = View.VISIBLE
             setImageResource(R.drawable.ic_stop_recording)
             background = null
@@ -987,6 +1000,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun micHandsFreeActive(listening: Boolean) {
         btnSend?.apply {
+            isEnabled = true
             setImageResource(R.drawable.ic_stop_recording)
             setBackgroundResource(R.drawable.btn_accent_tonal_v5)
             setColorFilter(ResourcesCompat.getColor(resources, R.color.white, theme))
@@ -2812,8 +2826,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         keyboardInput?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
-        chat?.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
-            if (bottom - top != oldBottom - oldTop) restoreTranscriptAnchorAfterResize()
+        chat?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
         composerSurface?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -3340,13 +3353,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         button.isEnabled = visible
     }
 
-    /** The transcript row nearest the composer, and where its top edge sat
-     *  measured up from the bottom of the chat viewport — the edge that moves
-     *  when the keyboard arrives or leaves. */
-    private var transcriptAnchorPosition = RecyclerView.NO_POSITION
-    private var transcriptAnchorTopFromBottom = 0
-    private var transcriptAnchorPending = false
-
     /**
      * Notes where the conversation is sitting, measured from the composer's
      * top edge, while the chat viewport is still its old size.
@@ -3357,54 +3363,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * moment the pre-resize geometry can still be read.
      */
     private fun captureTranscriptAnchor() {
-        val recycler = chat ?: return
-        if (recycler.height <= 0) return
-        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
-        val position = layoutManager.findLastVisibleItemPosition()
-        if (position == RecyclerView.NO_POSITION) return
-        val anchor = layoutManager.findViewByPosition(position) ?: return
-        transcriptAnchorPosition = position
-        transcriptAnchorTopFromBottom = anchor.top - recycler.height
-        transcriptAnchorPending = true
-    }
-
-    /**
-     * Puts the noted row back the same distance up from the viewport's new
-     * bottom edge, so the conversation travels with the composer instead of
-     * standing still while the composer moves.
-     *
-     * Whatever line sat immediately above the message box is still there once
-     * the keyboard is up, and the same lines come back down with the box when
-     * the keyboard goes away. It runs on the viewport's own resize rather than
-     * on a timer or an inset animation callback, so it cannot land before the
-     * resize it is compensating for.
-     *
-     * Restoring the noted position rather than shifting by the height
-     * difference is what makes it exact in both directions: a growing viewport
-     * is already partly corrected by the transcript itself, and a blind shift
-     * would double that correction and push the newest message under the
-     * composer.
-     */
-    private fun restoreTranscriptAnchorAfterResize() {
-        if (!transcriptAnchorPending) return
-        transcriptAnchorPending = false
-        val recycler = chat ?: return
-        val position = transcriptAnchorPosition
-        // A reply arriving or growing never takes this over: the noted position
-        // wins, so the conversation cannot be moved out from under the user
-        // while they have the keyboard open.
-        if (position == RecyclerView.NO_POSITION ||
-            position >= (adapter?.itemCount ?: 0)
-        ) {
-            return
-        }
-        recycler.post {
-            val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return@post
-            layoutManager.scrollToPositionWithOffset(
-                position,
-                recycler.height + transcriptAnchorTopFromBottom
-            )
-        }
+        chat?.captureResizeAnchor()
     }
 
     /**
@@ -4291,11 +4250,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
-        // Touch interceptor: lets a tap during AI generation cancel everything
-        // even though the click handler is otherwise disabled by isEnabled=false
-        // in the generation/TTS code paths. OnTouchListener fires regardless of
-        // View.isEnabled, so a stop tap always lands. Excludes hands-free: during
-        // a conversation the conversation button is the stop control, not the mic.
+        // Secondary stop interceptor for the enabled readback control. Android
+        // does not dispatch this listener while a View is disabled, so every
+        // busy-state disable goes through disableTurnControlsUnlessTheyAreStops()
+        // and preserves the button that currently owns Stop. Excludes
+        // hands-free: there the conversation button owns Stop, not the mic.
         btnMicro?.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_UP && isAiCurrentlyBusy() &&
                 !isRecording && !isHandsFreeEngaged()
@@ -4343,10 +4302,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             onConversationButtonTapped()
         }
 
-        // Mirror of the mic's touch interceptor: while the button is disabled
-        // (during generation/readback) a tap still lands here so the user can
-        // stop a live conversation or cancel a busy turn. When enabled, returns
-        // false so the click listener above handles the normal tap.
+        // Legacy mirror of the mic interceptor. Live hands-free Stop is kept
+        // enabled and therefore uses the normal click listener above; this
+        // remains only as a defensive route for an older disabled busy state.
         btnSend?.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_UP && btnSend?.isEnabled == false) {
                 onConversationButtonTapped()
@@ -5471,8 +5429,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         recorder = null
 
-        btnMicro?.isEnabled = false
-        btnSend?.isEnabled = false
+        disableTurnControlsUnlessTheyAreStops()
         setGenerationProgressVisible(true)
 
         if (!cancelState) {
@@ -5530,8 +5487,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                     saveSettings()
 
-                    btnMicro?.isEnabled = false
-                    btnSend?.isEnabled = false
+                    disableTurnControlsUnlessTheyAreStops()
                     setGenerationProgressVisible(true)
 
                     processRecordingScope = CoroutineScope(Dispatchers.Main)
@@ -6046,8 +6002,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // so if it moves before transcription finishes the user stopped mid-way
         // and the result must be discarded (see the guard below).
         val turnToken = whisperTurnToken
-        btnMicro?.isEnabled = false
-        btnSend?.isEnabled = false
+        disableTurnControlsUnlessTheyAreStops()
         setGenerationProgressVisible(true)
 
         if (cancelState) {
@@ -6157,8 +6112,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
             saveSettings()
 
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
+            disableTurnControlsUnlessTheyAreStops()
             setGenerationProgressVisible(true)
 
             processRecordingScope = CoroutineScope(Dispatchers.Main)
@@ -7189,8 +7143,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     )
                 )
 
-                btnMicro?.isEnabled = false
-                btnSend?.isEnabled = false
+                disableTurnControlsUnlessTheyAreStops()
                 setGenerationProgressVisible(true)
 
                 setupScope = CoroutineScope(Dispatchers.Main)
@@ -7469,8 +7422,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 savePendingIncludes(synchronous = true)
             }
 
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
+            disableTurnControlsUnlessTheyAreStops()
             setGenerationProgressVisible(true)
 
             // Rebuilt /imagine (image-generation-rebuild-plan.md §2.1): the
@@ -7622,8 +7574,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the busy state; the single terminal state arrives through
      *  [onImageJobFinished]. */
     private fun sendCoordinatorImageRequest(request: ImageGenerationRequest) {
-        btnMicro?.isEnabled = false
-        btnSend?.isEnabled = false
+        disableTurnControlsUnlessTheyAreStops()
         setGenerationProgressVisible(true)
         progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
         showImageProgressCard()
@@ -7736,8 +7687,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val activeJob = ImageGenerationJobRegistry.activeJob(chatId) ?: return
         showImageProgressCard()
         if (activeJob.origin == ImageGenerationJobRegistry.Origin.IMAGINE) {
-            btnMicro?.isEnabled = false
-            btnSend?.isEnabled = false
+            disableTurnControlsUnlessTheyAreStops()
             setGenerationProgressVisible(true)
             progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
         }
@@ -8810,8 +8760,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val summarizerState = frozenSummarizerState()
         protectRequestImagePayloads(canonical)
 
-        btnMicro?.isEnabled = false
-        btnSend?.isEnabled = false
+        disableTurnControlsUnlessTheyAreStops()
         setGenerationProgressVisible(true)
 
         parseMessageScope = CoroutineScope(Dispatchers.Main)
@@ -11745,8 +11694,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             if (placeholderName.trim().contains("_autoname_")) {
                 autoNameAttempts++
-                btnMicro?.isEnabled = false
-                btnSend?.isEnabled = false
+                disableTurnControlsUnlessTheyAreStops()
                 setGenerationProgressVisible(false)
 
                 // Preserve the normal leading System prefix byte-for-byte so providers

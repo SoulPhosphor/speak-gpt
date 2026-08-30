@@ -586,7 +586,7 @@
         <!-- The message viewport now ends at the live composer instead of
              extending behind it with a guessed fixed bottom padding. As the
              composer grows, or as its IME inset grows, the viewport follows. -->
-        <androidx.recyclerview.widget.RecyclerView
+        <org.teslasoft.assistant.ui.chat.ChatTranscriptRecyclerView
             android:id="@+id/messages"
             android:layout_width="match_parent"
             android:layout_height="0dp"

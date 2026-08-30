@@ -65,6 +65,8 @@ class ChatActionSurfaceSourceContractTest {
     fun everyViewportResizePinsTranscriptWithoutFightingTheImeConstraint() {
         val activity = source("main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
         val composer = source("main/java/org/teslasoft/assistant/ui/chat/ChatComposerLayout.kt")
+        val transcript = source("main/java/org/teslasoft/assistant/ui/chat/ChatTranscriptRecyclerView.kt")
+        val layout = source("main/res/layout/activity_chat.xml")
 
         // The keyboard resizes the chat viewport exactly as the composer does,
         // so it has to report before it takes or gives back that space.
@@ -73,19 +75,22 @@ class ChatActionSurfaceSourceContractTest {
         assertTrue(composer.contains("onBottomInsetChanging?.invoke(isKeyboardOpen, retreating)"))
         assertTrue(activity.contains("keyboardInput?.onBottomInsetChanging = { keyboardOpen, retreating ->"))
         assertTrue(activity.contains("before = ::captureTranscriptAnchor"))
+        assertTrue(layout.contains("org.teslasoft.assistant.ui.chat.ChatTranscriptRecyclerView"))
 
-        // Captured while the viewport still has its old size, restored on the
-        // viewport's own resize so it cannot land before the resize it is
-        // compensating for.
-        assertTrue(activity.contains("findLastVisibleItemPosition()"))
-        assertTrue(activity.contains("transcriptAnchorTopFromBottom = anchor.top - recycler.height"))
-        assertTrue(activity.contains("if (bottom - top != oldBottom - oldTop) restoreTranscriptAnchorAfterResize()"))
+        // Capture happens with the old size. The absolute anchor is armed from
+        // onSizeChanged, before RecyclerView lays out the new height; it must not
+        // be posted for later, where a composer promotion and the next IME frame
+        // can overwrite or overtake it.
+        assertTrue(transcript.contains("findLastVisibleItemPosition()"))
+        assertTrue(transcript.contains("resizeAnchorTopFromBottom = anchor.top - height"))
+        assertTrue(transcript.contains("override fun onSizeChanged"))
+        assertTrue(!transcript.contains("post {"))
 
         // An absolute position, not a shift by the height difference: a growing
         // viewport is already partly corrected by the transcript itself, and a
         // blind shift would double that and hide the newest message.
-        assertTrue(activity.contains("recycler.height + transcriptAnchorTopFromBottom"))
-        assertTrue(activity.contains("scrollToPositionWithOffset("))
+        assertTrue(transcript.contains("h + resizeAnchorTopFromBottom"))
+        assertTrue(transcript.contains("scrollToPositionWithOffset("))
 
         // An open keyboard locks the conversation in place. A reply arriving or
         // growing must never move it out from under the user, so nothing here
@@ -115,6 +120,32 @@ class ChatActionSurfaceSourceContractTest {
         assertTrue(!activity.contains("WindowInsetsAnimationCompat.Callback"))
         assertTrue(activity.contains("composerSurface?.dismissImeForSend()"))
         assertTrue(activity.contains("composerSurface?.resetAfterSend()"))
+    }
+
+    @Test
+    fun visibleReadbackStopControlsCannotBeDisabledByBusyWork() {
+        val activity = source("main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
+
+        // Android does not dispatch click/touch listeners to disabled views.
+        // Every busy path therefore uses the stop-aware helper instead of raw
+        // false assignments, including the hidden auto-title work that overlaps
+        // typed-turn readback.
+        assertTrue(activity.contains("private fun disableTurnControlsUnlessTheyAreStops()"))
+        assertTrue(activity.contains(
+            "btnMicro?.isEnabled = readbackKeepAliveActive && !isHandsFreeEngaged()"
+        ))
+        assertTrue(activity.contains("btnSend?.isEnabled = isHandsFreeEngaged()"))
+        assertTrue(!activity.contains("btnMicro?.isEnabled = false"))
+        assertTrue(!activity.contains("btnSend?.isEnabled = false"))
+
+        // The state painter also enables the control immediately, closing the
+        // short gap between readback start and the generation-finally cleanup.
+        assertTrue(activity.contains(
+            "private fun micReadbackStop() {\n        btnMicro?.apply {\n            isEnabled = true"
+        ))
+        assertTrue(activity.contains(
+            "private fun micHandsFreeActive(listening: Boolean) {\n        btnSend?.apply {\n            isEnabled = true"
+        ))
     }
 
     @Test
