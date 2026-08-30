@@ -1139,41 +1139,41 @@ class Preferences internal constructor(
      * Voice-activity-detection method used to decide when a hands-free turn
      * has ended when on-device Whisper is the STT engine. One of the ids in
      * [org.teslasoft.assistant.stt.VadMethods] ("energy", "webrtc", ...).
-     * Defaults to Energy: it is dependency-free and reliable across devices,
-     * whereas WebRTC depends on a native lib that isn't available everywhere
-     * (and silently falls back to energy when it isn't). Users who want
-     * noise-rejection can opt into WebRTC in settings.
+     * Defaults to Silero: a neural detector that is the most accurate at
+     * telling speech from background noise. When its runtime can't load on a
+     * device it transparently falls back to Energy, so hands-free always works.
      *
      * @return VAD method id
      * */
     fun getVadMethod() : String {
-        return getGlobalString("vad_method", "energy")
+        return getGlobalString("vad_method", "silero")
     }
 
     /**
      * Set the hands-free voice-activity-detection method.
      * */
     fun setVadMethod(method: String) {
-        putGlobalString("vad_method", method, "energy")
+        putGlobalString("vad_method", method, "silero")
     }
 
     /**
      * WebRTC VAD aggressiveness (libfvad mode) used when [getVadMethod] is
-     * "webrtc". 0 = most sensitive (hears the most speech, default), 3 = most
-     * aggressive (rejects the most noise, may miss quiet/distant speech). See
+     * "webrtc". 0 = most sensitive (hears the most speech), 3 = most
+     * aggressive (rejects the most noise, may miss quiet/distant speech).
+     * Defaults to 1 (medium-high). See
      * [org.teslasoft.assistant.stt.VadMethods].
      *
-     * @return fvad mode 0..3 (default 0)
+     * @return fvad mode 0..3 (default 1)
      * */
     fun getVadWebRtcMode() : Int {
-        return (getGlobalString("vad_webrtc_mode", "0").toIntOrNull() ?: 0).coerceIn(0, 3)
+        return (getGlobalString("vad_webrtc_mode", "1").toIntOrNull() ?: 1).coerceIn(0, 3)
     }
 
     /**
      * Set the WebRTC VAD aggressiveness (clamped to 0..3).
      * */
     fun setVadWebRtcMode(mode: Int) {
-        putGlobalString("vad_webrtc_mode", mode.coerceIn(0, 3).toString(), "0")
+        putGlobalString("vad_webrtc_mode", mode.coerceIn(0, 3).toString(), "1")
     }
 
     fun getVadLoggingEnergy() : Boolean {
