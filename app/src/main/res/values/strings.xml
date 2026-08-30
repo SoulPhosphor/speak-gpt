@@ -1121,6 +1121,8 @@
     <string name="voice_section_response_prefs_title">Response Preferences</string>
     <string name="voice_section_stt_title">Speech to Text</string>
     <string name="tile_ale_subtitle">Turning this on disables the transcription language selector.</string>
+    <string name="voice_language_subtitle">This setting only applies to TTS performed by your phone. It helps pronunciation quality.</string>
+    <string name="voice_language_automatic">" Automatic"</string>
     <string name="voice_browser_setting_subtitle_google">Google Speech Services</string>
     <string name="voice_browser_setting_subtitle_provider">%1$s · %2$s</string>
     <string name="tile_voice_settings_title">Voice &amp; Speech</string>

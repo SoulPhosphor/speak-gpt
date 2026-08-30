@@ -84,6 +84,35 @@
                 <ImageView style="@style/Widget.App.Row.Chevron" android:contentDescription="@string/tts_manager_title" />
             </LinearLayout>
 
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/row_voice_language"
+                style="@style/Widget.App.Row.Selector.Flush"
+                android:paddingHorizontal="20dp">
+
+                <TextView
+                    android:id="@+id/label_voice_language"
+                    style="@style/Widget.App.Row.Selector.Label.Flush"
+                    android:text="@string/tile_voice_lang_title"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toTopOf="parent" />
+
+                <TextView
+                    android:id="@+id/value_voice_language"
+                    style="@style/Widget.App.Row.Selector.Value"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintStart_toEndOf="@+id/label_voice_language"
+                    app:layout_constraintTop_toTopOf="parent" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <TextView
+                style="@style/Widget.App.Row.Subtitle"
+                android:layout_marginBottom="4dp"
+                android:paddingHorizontal="20dp"
+                android:maxLines="2"
+                android:text="@string/voice_language_subtitle" />
+
             <!-- Section: Response Preferences -->
             <TextView
                 style="@style/Widget.App.Section.Title"
@@ -122,49 +151,6 @@
                     android:id="@+id/switch_read_formatting"
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
-
-            <LinearLayout
-                style="@style/Widget.App.Row.Toggle"
-                android:paddingHorizontal="20dp">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/tile_ale_title" />
-
-                    <TextView
-                        style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="2"
-                        android:text="@string/tile_ale_subtitle" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_auto_lang_detect"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <androidx.constraintlayout.widget.ConstraintLayout
-                android:id="@+id/row_voice_language"
-                style="@style/Widget.App.Row.Selector.Flush"
-                android:paddingHorizontal="20dp">
-
-                <TextView
-                    android:id="@+id/label_voice_language"
-                    style="@style/Widget.App.Row.Selector.Label.Flush"
-                    android:text="@string/tile_voice_lang_title"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toTopOf="parent" />
-
-                <TextView
-                    android:id="@+id/value_voice_language"
-                    style="@style/Widget.App.Row.Selector.Value"
-                    app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintStart_toEndOf="@+id/label_voice_language"
-                    app:layout_constraintTop_toTopOf="parent" />
-            </androidx.constraintlayout.widget.ConstraintLayout>
 
             <!-- Section: Speech to Text -->
             <TextView

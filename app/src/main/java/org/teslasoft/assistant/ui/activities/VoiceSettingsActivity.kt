@@ -89,7 +89,6 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var rowVoiceDebugging: LinearLayout? = null
     private var switchAlwaysSpeak: MaterialSwitch? = null
     private var switchAutoSend: MaterialSwitch? = null
-    private var switchAutoLangDetect: MaterialSwitch? = null
     private var switchReadFormatting: MaterialSwitch? = null
 
     private var btnBack: ImageButton? = null
@@ -103,14 +102,19 @@ class VoiceSettingsActivity : FragmentActivity() {
 
     private var languageChangedListener: LanguageSelectorDialogFragment.StateChangesListener = object : LanguageSelectorDialogFragment.StateChangesListener {
         override fun onSelected(name: String) {
-            preferences?.setLanguage(name)
-            language = name
-            valueVoiceLanguage?.text = Locale.forLanguageTag(name).displayLanguage
+            if (name == "auto") {
+                preferences?.setAutoLangDetect(true)
+            } else {
+                preferences?.setAutoLangDetect(false)
+                preferences?.setLanguage(name)
+                language = name
+            }
+            updateVoiceLanguageValue()
         }
 
         override fun onFormError(name: String) {
             Toast.makeText(this@VoiceSettingsActivity, getString(R.string.language_error_empty), Toast.LENGTH_SHORT).show()
-            val languageSelectorDialogFragment: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(name, chatId)
+            val languageSelectorDialogFragment: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(name, chatId, showAutomatic = true)
             languageSelectorDialogFragment.setStateChangedListener(this)
             languageSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "LanguageSelectorDialog")
         }
@@ -278,9 +282,10 @@ class VoiceSettingsActivity : FragmentActivity() {
 
         rowVoiceLanguage = findViewById(R.id.row_voice_language)
         valueVoiceLanguage = findViewById(R.id.value_voice_language)
-        valueVoiceLanguage?.text = Locale.forLanguageTag(language).displayLanguage
+        updateVoiceLanguageValue()
         rowVoiceLanguage?.setOnClickListener {
-            val languageSelectorDialogFragment: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(language, chatId)
+            val current = if (preferences?.getAutoLangDetect() == true) "auto" else language
+            val languageSelectorDialogFragment: LanguageSelectorDialogFragment = LanguageSelectorDialogFragment.newInstance(current, chatId, showAutomatic = true)
             languageSelectorDialogFragment.setStateChangedListener(languageChangedListener)
             languageSelectorDialogFragment.show(supportFragmentManager.beginTransaction(), "LanguageSelectorDialog")
         }
@@ -320,12 +325,6 @@ class VoiceSettingsActivity : FragmentActivity() {
             val dialog = LanguageSelectorDialogFragment.newInstance(current, chatId)
             dialog.setStateChangedListener(dictationLanguageListener)
             dialog.show(supportFragmentManager.beginTransaction(), "DictationLanguageDialog")
-        }
-
-        switchAutoLangDetect = findViewById(R.id.switch_auto_lang_detect)
-        switchAutoLangDetect?.isChecked = preferences?.getAutoLangDetect() == true
-        switchAutoLangDetect?.setOnCheckedChangeListener { _, checked ->
-            preferences?.setAutoLangDetect(checked)
         }
 
         tileHandsFreeTiming?.setOnTileClickListener {
@@ -409,6 +408,14 @@ class VoiceSettingsActivity : FragmentActivity() {
             }
             .setNegativeButton(android.R.string.cancel) { _, _ -> }
             .show()
+    }
+
+    private fun updateVoiceLanguageValue() {
+        valueVoiceLanguage?.text = if (preferences?.getAutoLangDetect() == true) {
+            getString(R.string.voice_language_automatic)
+        } else {
+            Locale.forLanguageTag(preferences?.getLanguage() ?: "en").displayLanguage
+        }
     }
 
     private fun voiceInputRadioId(engine: String): Int = when (engine) {
