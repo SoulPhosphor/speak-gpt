@@ -76,4 +76,13 @@
          message content (one content-padding in), computed in ChatAdapter. -->
     <dimen name="chat_name_bubble_edge_offset">1dp</dimen>
     <dimen name="tts_manager_action_height">48dp</dimen>
+
+    <!-- Shared editable-value + slider control. Appearance and spacing for
+         every sampling-parameter control live here rather than in screens. -->
+    <dimen name="sampling_slider_value_width">96dp</dimen>
+    <dimen name="sampling_slider_value_min_height">48dp</dimen>
+    <dimen name="sampling_slider_value_text_size">16sp</dimen>
+    <dimen name="sampling_slider_section_gap">12dp</dimen>
+    <dimen name="sampling_slider_value_gap">4dp</dimen>
+    <dimen name="sampling_slider_horizontal_margin">20dp</dimen>
 </resources>

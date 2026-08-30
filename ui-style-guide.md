@@ -444,6 +444,38 @@ Use for a short whole-number input that sits on the same line as its label.
 
 Set `android:ems` and `android:maxLength` on the individual field according to the digits it must accept.
 
+### Editable sampling slider
+
+Use `SamplingParameterControl` for model sampling values that need both direct
+numeric entry and slider adjustment. It renders a centered value box above the
+slider; typing a valid number moves the slider, and sliding updates the box.
+Direct input is normalized on Done or focus loss and cannot leave the control
+outside its parameter's supported range.
+
+The shared appearance family is:
+
+- `Widget.App.SamplingSlider.Container`
+- `Widget.App.SamplingSlider.Value`
+- `Widget.App.SamplingSlider.Control`
+
+The component skin lives in `values/themes.xml`; its reusable width, height,
+spacing, and text-size tokens live together under `sampling_slider_*` in
+`values/dimens.xml`. The value box inherits the canonical `Field.Box` outline,
+uses `appTextColor`, and the Material slider continues to resolve its colors
+from the active theme. Screens must not restate those dimensions, colors,
+padding, slider label behavior, or field typography.
+
+Parameter ranges and numeric precision are behavior, not appearance. They live
+in `SamplingParameterSpec` / `SamplingParameterValuePolicy`: Temperature
+0–2, Top P 0–1, both penalties -2–2, with 0.01 steps and at most two displayed
+decimal places. Add or reuse a spec there rather than multiplying values in a
+screen controller or placing range/default numbers in layout XML.
+
+Current canonical uses are the four model controls in Quick Settings and both
+API Endpoint editor layouts. Each host supplies only a view id, the shared
+container style, constraints if required, and an accessibility description;
+its controller calls `configure(spec, initialValue, onValueChanged)`.
+
 ## Removable form chips
 
 `Widget.App.Chip.Removable`

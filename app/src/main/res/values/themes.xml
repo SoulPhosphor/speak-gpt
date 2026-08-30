@@ -1306,6 +1306,40 @@
         <item name="android:padding">12dp</item>
     </style>
 
+    <!-- Reusable sampling parameter control: a centered, directly editable
+         current-value box above the slider. Layouts provide only the control
+         id and constraints; this family owns its appearance and spacing. -->
+    <style name="Widget.App.SamplingSlider.Container" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/sampling_slider_section_gap</item>
+        <item name="android:gravity">center_horizontal</item>
+        <item name="android:orientation">vertical</item>
+    </style>
+
+    <style name="Widget.App.SamplingSlider.Value" parent="Widget.App.Field.Box">
+        <item name="android:layout_width">@dimen/sampling_slider_value_width</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">0dp</item>
+        <item name="android:layout_marginBottom">@dimen/sampling_slider_value_gap</item>
+        <item name="android:minHeight">@dimen/sampling_slider_value_min_height</item>
+        <item name="android:gravity">center</item>
+        <item name="android:inputType">numberDecimal|numberSigned</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:selectAllOnFocus">true</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">@dimen/sampling_slider_value_text_size</item>
+    </style>
+
+    <style name="Widget.App.SamplingSlider.Control" parent="Widget.Material3.Slider">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">@dimen/sampling_slider_horizontal_margin</item>
+        <item name="android:layout_marginEnd">@dimen/sampling_slider_horizontal_margin</item>
+        <item name="labelBehavior">gone</item>
+    </style>
+
     <!-- A small, right-sized numeric input blank (owner spec, July 23 2026 —
          the per-log "Maximum Logs Saved" / "Maximum Days Saved" fields on
          Alerts, Errors & Logs). Same bg_field_box skin as Widget.App.Field.Box
