@@ -1,30 +1,31 @@
 package org.teslasoft.assistant.ui.chat
 
-import android.app.Application
-import android.view.ContextThemeWrapper
+import android.app.Activity
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.ConscryptMode
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.conversation.ConversationMode
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE, sdk = [28], application = Application::class)
+@Config(manifest = Config.NONE, sdk = [28])
 @ConscryptMode(ConscryptMode.Mode.OFF)
 class ConversationModeSelectorTest {
     @Test
     fun defaultsToChatAndChangesImmediately() {
-        val context = ContextThemeWrapper(
-            RuntimeEnvironment.getApplication(),
-            R.style.Theme_App
-        )
-        val selector = ConversationModeSelector(context)
-        assertEquals(ConversationMode.CHAT, selector.selectedMode())
-        selector.setMode(ConversationMode.PLAYGROUND, animate = false)
-        assertEquals(ConversationMode.PLAYGROUND, selector.selectedMode())
+        val controller = Robolectric.buildActivity(Activity::class.java).setup()
+        try {
+            val activity = controller.get().apply { setTheme(R.style.Theme_App) }
+            val selector = ConversationModeSelector(activity)
+            assertEquals(ConversationMode.CHAT, selector.selectedMode())
+            selector.setMode(ConversationMode.PLAYGROUND, animate = false)
+            assertEquals(ConversationMode.PLAYGROUND, selector.selectedMode())
+        } finally {
+            controller.pause().stop().destroy()
+        }
     }
 }
