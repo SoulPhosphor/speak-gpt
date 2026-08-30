@@ -186,7 +186,6 @@
                 android:text="@string/tile_voice_input_title" />
 
             <LinearLayout
-                android:id="@+id/group_voice_input"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
