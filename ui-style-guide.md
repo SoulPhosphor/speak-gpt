@@ -195,6 +195,22 @@ use or add an appropriate shared centered variant rather than reversing the
 approved button order. For the approved cancel-first order, use
 `layout/dialog_two_actions_cancel_first.xml`.
 
+### Three dialog actions
+
+`AppButton.Primary.DialogStacked`
+
+`AppButton.Destructive.DialogStacked`
+
+Use `layout/dialog_three_actions_cancel_first.xml` when three complete action
+labels would be cramped in one horizontal row. The shared layout stacks the
+actions in their approved top-to-bottom order: cancel/back-out first, alternate
+commitment second, final commitment third. It owns spacing and constraints;
+the shared styles own width, shape, typography, and theme color roles.
+
+The chat/image deletion choice is the first consumer: **Cancel**, **Delete Chat
+Only**, **Delete All**. Do not reorder those actions or reproduce the stacked
+geometry in a feature-local layout.
+
 ### Inline actions
 
 `AppButton.Primary.Inline`

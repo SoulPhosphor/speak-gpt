@@ -72,6 +72,7 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
     private var textDefaultShape: TextView? = null
     private var textDefaultQuality: TextView? = null
     private var switchImagineCommand: MaterialSwitch? = null
+    private var switchDeleteImagesWithChat: MaterialSwitch? = null
 
     private val endpointLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -115,6 +116,7 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
         textDefaultShape = findViewById(R.id.text_default_shape)
         textDefaultQuality = findViewById(R.id.text_default_quality)
         switchImagineCommand = findViewById(R.id.switch_imagine_command)
+        switchDeleteImagesWithChat = findViewById(R.id.switch_delete_images_with_chat)
     }
 
     private fun applyTheme() {
@@ -158,6 +160,12 @@ class ImageGenerationSettingsActivity : FragmentActivity() {
         switchImagineCommand?.isChecked = preferences?.getImagineCommandGlobal() ?: true
         switchImagineCommand?.setOnCheckedChangeListener { _, checked ->
             preferences?.setImagineCommandGlobal(checked)
+        }
+
+        switchDeleteImagesWithChat?.isChecked =
+            preferences?.getDeleteImagesWithChat() ?: false
+        switchDeleteImagesWithChat?.setOnCheckedChangeListener { _, checked ->
+            preferences?.setDeleteImagesWithChat(checked)
         }
     }
 

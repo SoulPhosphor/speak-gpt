@@ -130,82 +130,32 @@ class ChatPreferences private constructor() {
     }
 
     /**
-     * Summarizer state keys inside `settings.<chatId>`: the rolling summary,
-     * its projection contract, fold-in bookmark, over-length marker, failure
-     * episode, and per-chat error log.
+     * Phase 3 storage-only cleanup. Visible chat-list/folder metadata is
+     * removed by ChatNavigationRepository before this runs. Keeping this
+     * operation free of UI and name lookups makes every deletion caller go
+     * through the shared ownership/Lock decision coordinator.
      */
-    private val summarizerContentKeys = arrayOf(
-        "summarizer_summary", "summarizer_projection_version", "summarizer_folded",
-        "summarizer_over_length", "summarizer_episode", "summarizer_errors",
-        "manual_compaction_boundary", "use_summarized_conversation_projection",
-        "condensed_conversation_kind", "summarizer_catch_up_pending",
-        "summary_regeneration_lock_boundary", "compaction_regeneration_lock_boundary",
-        "condensed_regeneration_lock_migrated"
-    )
-
-    /**
-     * Deletion companion for decision 9 (conversation-summary-plan.md): the
-     * summary and ALL summarizer state die with the chat on every deletion
-     * path. The chat's settings file itself is (historically) left behind by
-     * deletion, so the summarizer keys — which hold condensed conversation
-     * content — are removed explicitly, including the toggle and window.
-     */
-    private fun clearSummarizerState(context: Context, chatId: String) {
-        try {
-            SecurePrefs.get(context, "settings.$chatId").edit(commit = true) {
-                for (key in summarizerContentKeys) remove(key)
-                remove("use_summarizer")
-                remove("summarizer_window")
+    internal fun cleanupDeletedChatData(context: Context, chatId: String): Boolean {
+        if (chatId.isBlank()) return false
+        val historyName = "chat_$chatId"
+        val settingsName = "settings.$chatId"
+        return try {
+            val history = SecurePrefs.get(context, historyName)
+            val settings = SecurePrefs.get(context, settingsName)
+            if (SecurePrefs.isLockedName(historyName) || SecurePrefs.isLockedName(settingsName)) {
+                return false
             }
-        } catch (_: Exception) { /* best-effort; content keys carry no plaintext outside SecurePrefs */ }
-    }
-
-    /**
-     * Deletes a chat, including all messages, from the chat list.
-     *
-     * @param context The context of the application.
-     * @param chatName The name of the chat to delete.
-     */
-    fun deleteChat(context: Context, chatName: String) {
-        if (chatWriteBlocked(context, "chat_list", "delete a chat")) return
-        val chatId: String
-        synchronized(CHAT_LIST_LOCK) {
-            val list = getChatMetadataList(context)
-
-            val entry = list.firstOrNull { it["name"] == chatName } ?: return
-            chatId = storedChatId(entry)
-            for (map: HashMap<String, String> in list) {
-                if (map["name"] == chatName) {
-                    list.remove(map)
-                    break
-                }
-            }
-
-            val json: String = Gson().toJson(list)
-
-            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-            settings.edit { putString("data", json) }
+            org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry.cancel(chatId)
+            val historyCleared = history.edit().clear().commit()
+            val settingsCleared = settings.edit().clear().commit()
+            val includesCleared = org.teslasoft.assistant.preferences.includes.ImageImporter
+                .deleteChatImagesForDeletion(context, chatId)
+            if (historyCleared) ChatStorageHealth.clearReadFailure(context, historyName)
+            if (settingsCleared) ChatStorageHealth.clearReadFailure(context, settingsName)
+            historyCleared && settingsCleared && includesCleared
+        } catch (_: Exception) {
+            false
         }
-
-        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
-        settings2.edit { clear() }
-
-        // The summary and all summarizer state die with the chat (decision 9).
-        clearSummarizerState(context, chatId)
-
-        // Locally stored attachment images belong to this chat only; a delete
-        // takes them with it (owner ruling). The user's ORIGINAL files are
-        // never touched — only the app's private extracted copies.
-        try {
-            org.teslasoft.assistant.preferences.includes.ImageImporter
-                .deleteChatImages(context, chatId)
-        } catch (_: Exception) { /* best-effort; reconciliation is the backstop */ }
-
-        // A user-confirmed delete settles this chat's unreadable-value state
-        // (the preserved ciphertext copy under files/storage_recovery/ is
-        // never touched); without this the journal row would keep reporting
-        // degraded chat storage forever.
-        ChatStorageHealth.clearReadFailure(context, "chat_$chatId")
     }
 
     /**
@@ -915,38 +865,4 @@ class ChatPreferences private constructor() {
             SecurePrefs.get(context, fileName).edit().clear().commit()
     }
 
-    fun deleteChatById(context: Context, chatId: String) {
-        if (chatWriteBlocked(context, "chat_list", "delete a chat")) return
-        synchronized(CHAT_LIST_LOCK) {
-            val list = getChatMetadataList(context)
-
-            for (map: HashMap<String, String> in list) {
-                if (map["id"] == chatId) {
-                    list.remove(map)
-                    break
-                }
-            }
-
-            val json: String = Gson().toJson(list)
-
-            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-            settings.edit { putString("data", json) }
-        }
-
-        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
-        settings2.edit { clear() }
-
-        // The summary and all summarizer state die with the chat (decision 9).
-        clearSummarizerState(context, chatId)
-
-        // Locally stored attachment images go with the chat (owner ruling);
-        // the user's original files are untouched.
-        try {
-            org.teslasoft.assistant.preferences.includes.ImageImporter
-                .deleteChatImages(context, chatId)
-        } catch (_: Exception) { /* best-effort; reconciliation is the backstop */ }
-
-        // Same journal settlement as deleteChat — see the comment there.
-        ChatStorageHealth.clearReadFailure(context, "chat_$chatId")
-    }
 }

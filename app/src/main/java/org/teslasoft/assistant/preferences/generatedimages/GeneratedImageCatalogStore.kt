@@ -40,6 +40,24 @@ data class GeneratedImageCatalogBooleanResult(
     val value: Boolean = false
 )
 
+data class GeneratedImageCatalogDeletionResult(
+    val state: GeneratedImageCatalogStorageState,
+    val removed: List<GeneratedImageCatalogRecord> = emptyList(),
+    val lockedImageIds: Set<String> = emptySet(),
+    val success: Boolean = false
+)
+
+enum class GeneratedImageAssetDeletionDisposition {
+    DELETED_OR_ABSENT,
+    RETAINED_ACTIVE_REFERENCE,
+    FAILED
+}
+
+data class GeneratedImageAssetDeletionResult(
+    val state: GeneratedImageCatalogStorageState,
+    val disposition: GeneratedImageAssetDeletionDisposition
+)
+
 /**
  * Narrow SQLCipher-backed index for generated images. UUID [imageId] is the
  * immutable primary key. Display labels, origin-chat names and file metadata
@@ -227,6 +245,84 @@ class GeneratedImageCatalogStore private constructor(
         "SELECT COUNT(*) FROM $TABLE_IMAGES WHERE $COL_ASSET_FILE_NAME = ?",
         arrayOf(assetFileName)
     ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    fun ownedByChats(chatIds: Set<String>): List<GeneratedImageCatalogRecord> {
+        if (chatIds.isEmpty()) return emptyList()
+        return allActive().filter { it.originChatId in chatIds }
+    }
+
+    /**
+     * Explicit, user-confirmed deletion primitive. Every candidate is looked
+     * up again inside this transaction; UUID, origin ownership, and Lock are
+     * authoritative here rather than in the UI snapshot.
+     */
+    fun tombstoneUnlockedOwned(
+        chatIds: Set<String>,
+        candidateImageIds: Set<String>
+    ): Pair<List<GeneratedImageCatalogRecord>, Set<String>> {
+        if (chatIds.isEmpty() || candidateImageIds.isEmpty()) return emptyList<GeneratedImageCatalogRecord>() to emptySet()
+        val db = writableDatabase
+        db.beginTransaction()
+        return try {
+            val removed = ArrayList<GeneratedImageCatalogRecord>()
+            val locked = LinkedHashSet<String>()
+            for (imageId in candidateImageIds) {
+                val current = findActiveTx(db, imageId) ?: continue
+                if (current.originChatId !in chatIds) continue
+                if (current.locked) {
+                    locked.add(current.imageId)
+                    continue
+                }
+                val tombstone = ContentValues().apply {
+                    put(COL_IMAGE_ID, current.imageId)
+                    put(COL_ASSET_FILE_NAME, current.assetFileName)
+                    put("deleted_at", System.currentTimeMillis())
+                    put("reason", "chat_delete_all")
+                }
+                val tombstoneId = db.insertWithOnConflict(
+                    TABLE_TOMBSTONES,
+                    null,
+                    tombstone,
+                    SQLiteDatabase.CONFLICT_REPLACE
+                )
+                check(tombstoneId != -1L) { "Unable to persist generated-image tombstone" }
+                check(
+                    db.delete(TABLE_IMAGES, "$COL_IMAGE_ID = ?", arrayOf(current.imageId)) == 1
+                ) { "Unable to remove active generated-image identity" }
+                removed.add(current)
+            }
+            db.setTransactionSuccessful()
+            removed to locked
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Re-check every active catalog reference while the catalog write lock is
+     * held, then remove the physical file only when no active identity uses it. */
+    fun deleteAssetIfUnreferenced(assetFileName: String, deleteFile: () -> Boolean): GeneratedImageAssetDeletionDisposition {
+        val db = writableDatabase
+        db.beginTransaction()
+        return try {
+            val references = db.rawQuery(
+                "SELECT COUNT(*) FROM $TABLE_IMAGES WHERE $COL_ASSET_FILE_NAME = ?",
+                arrayOf(assetFileName)
+            ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+            val disposition = if (references > 0) {
+                GeneratedImageAssetDeletionDisposition.RETAINED_ACTIVE_REFERENCE
+            } else if (deleteFile()) {
+                GeneratedImageAssetDeletionDisposition.DELETED_OR_ABSENT
+            } else {
+                GeneratedImageAssetDeletionDisposition.FAILED
+            }
+            if (disposition != GeneratedImageAssetDeletionDisposition.FAILED) {
+                db.setTransactionSuccessful()
+            }
+            disposition
+        } finally {
+            db.endTransaction()
+        }
+    }
 
     fun renameOriginChat(chatId: String, newName: String): Boolean {
         val values = ContentValues().apply { put(COL_ORIGIN_CHAT_NAME, newName) }
@@ -434,6 +530,75 @@ class GeneratedImageCatalogStore private constructor(
                 GeneratedImageCatalogListResult(GeneratedImageCatalogStorageState.AVAILABLE, store.allActive())
             } catch (_: Exception) {
                 GeneratedImageCatalogListResult(failureState(context))
+            }
+        }
+
+        fun listOwnedByChats(context: Context, chatIds: Set<String>): GeneratedImageCatalogListResult {
+            val (store, state) = access(context)
+            if (store == null) return GeneratedImageCatalogListResult(state)
+            return try {
+                GeneratedImageCatalogListResult(
+                    GeneratedImageCatalogStorageState.AVAILABLE,
+                    store.ownedByChats(chatIds)
+                )
+            } catch (_: Exception) {
+                GeneratedImageCatalogListResult(failureState(context))
+            }
+        }
+
+        fun tombstoneUnlockedOwned(
+            context: Context,
+            chatIds: Set<String>,
+            candidateImageIds: Set<String>
+        ): GeneratedImageCatalogDeletionResult {
+            val (store, state) = access(context)
+            if (store == null) return GeneratedImageCatalogDeletionResult(state = state)
+            return try {
+                val (removed, locked) = store.tombstoneUnlockedOwned(chatIds, candidateImageIds)
+                GeneratedImageCatalogDeletionResult(
+                    state = GeneratedImageCatalogStorageState.AVAILABLE,
+                    removed = removed,
+                    lockedImageIds = locked,
+                    success = true
+                )
+            } catch (_: Exception) {
+                GeneratedImageCatalogDeletionResult(state = failureState(context))
+            }
+        }
+
+        fun deleteAssetIfUnreferenced(
+            context: Context,
+            assetFileName: String
+        ): GeneratedImageAssetDeletionResult {
+            val safeName = assetFileName.takeIf {
+                it.isNotBlank() && !it.contains('/') && !it.contains('\\')
+            } ?: return GeneratedImageAssetDeletionResult(
+                GeneratedImageCatalogStorageState.AVAILABLE,
+                GeneratedImageAssetDeletionDisposition.RETAINED_ACTIVE_REFERENCE
+            )
+            val imagesDir = context.applicationContext.getExternalFilesDir("images")
+                ?: return GeneratedImageAssetDeletionResult(
+                    GeneratedImageCatalogStorageState.UNAVAILABLE,
+                    GeneratedImageAssetDeletionDisposition.FAILED
+                )
+            val (store, state) = access(context)
+            if (store == null) return GeneratedImageAssetDeletionResult(
+                state,
+                GeneratedImageAssetDeletionDisposition.FAILED
+            )
+            return try {
+                val file = java.io.File(imagesDir, safeName)
+                GeneratedImageAssetDeletionResult(
+                    GeneratedImageCatalogStorageState.AVAILABLE,
+                    store.deleteAssetIfUnreferenced(safeName) {
+                        !file.exists() || (file.delete() && !file.exists())
+                    }
+                )
+            } catch (_: Exception) {
+                GeneratedImageAssetDeletionResult(
+                    failureState(context),
+                    GeneratedImageAssetDeletionDisposition.FAILED
+                )
             }
         }
 

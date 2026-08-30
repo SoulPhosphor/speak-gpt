@@ -44,11 +44,13 @@ class GeneratedImageCatalogInstrumentedTest {
         hash: String = "hash",
         chatId: String? = "chat-id",
         chatName: String? = "Chat Name",
-        source: GeneratedImageCatalogRecord.Source = GeneratedImageCatalogRecord.Source.GENERATED
+        source: GeneratedImageCatalogRecord.Source = GeneratedImageCatalogRecord.Source.GENERATED,
+        locked: Boolean = false,
+        assetFileName: String = "$id.png"
     ) = GeneratedImageCatalogRecord(
         imageId = id,
         fileHash = hash,
-        assetFileName = "$id.png",
+        assetFileName = assetFileName,
         mimeType = "image/png",
         width = 100,
         height = 100,
@@ -56,7 +58,7 @@ class GeneratedImageCatalogInstrumentedTest {
         originChatId = chatId,
         originChatName = chatName,
         originMessageId = id,
-        locked = false,
+        locked = locked,
         source = source
     )
 
@@ -126,6 +128,44 @@ class GeneratedImageCatalogInstrumentedTest {
             assertNull(lookup.record)
             assertTrue(lookup.tombstoned)
             assertFalse(store.hasActiveFileHash("hash"))
+        }
+    }
+
+    @Test
+    fun explicitChatDeletionRechecksOwnershipAndLockInsideTheTransaction() {
+        GeneratedImageCatalogStore.openForTest(context, name(), key).use { store ->
+            assertTrue(store.register(record("owned-unlocked", chatId = "target")))
+            assertTrue(store.register(record("owned-locked", chatId = "target", locked = true)))
+            assertTrue(store.register(record("referenced-only", chatId = "other")))
+
+            val (removed, locked) = store.tombstoneUnlockedOwned(
+                setOf("target"),
+                setOf("owned-unlocked", "owned-locked", "referenced-only")
+            )
+            assertEquals(setOf("owned-unlocked"), removed.mapTo(HashSet()) { it.imageId })
+            assertEquals(setOf("owned-locked"), locked)
+            assertTrue(store.lookup("owned-unlocked").tombstoned)
+            assertTrue(store.lookup("owned-locked").record!!.locked)
+            assertEquals("other", store.lookup("referenced-only").record!!.originChatId)
+        }
+    }
+
+    @Test
+    fun sharedLegacyFileIsRetainedWhileAnyActiveIdentityStillReferencesIt() {
+        GeneratedImageCatalogStore.openForTest(context, name(), key).use { store ->
+            assertTrue(store.register(record("delete-me", chatId = "target", assetFileName = "shared.png")))
+            assertTrue(store.register(record("keep-me", chatId = "other", locked = true, assetFileName = "shared.png")))
+            store.tombstoneUnlockedOwned(setOf("target"), setOf("delete-me"))
+            var fileDeleteCalled = false
+            val disposition = store.deleteAssetIfUnreferenced("shared.png") {
+                fileDeleteCalled = true
+                true
+            }
+            assertEquals(
+                GeneratedImageAssetDeletionDisposition.RETAINED_ACTIVE_REFERENCE,
+                disposition
+            )
+            assertFalse(fileDeleteCalled)
         }
     }
 

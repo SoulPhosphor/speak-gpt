@@ -63,6 +63,8 @@ import org.teslasoft.assistant.ui.activities.ChatActivity
 import org.teslasoft.assistant.ui.activities.SettingsActivity
 import org.teslasoft.assistant.ui.adapters.ChatListAdapter
 import org.teslasoft.assistant.ui.fragments.dialogs.AddChatDialogFragment
+import org.teslasoft.assistant.ui.util.ChatDeletePrompt
+import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
 import org.teslasoft.assistant.util.Hash
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -298,16 +300,25 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
 
         override fun onSwiped(viewHolder: RecyclerView.ViewHolder, swipeDir: Int) {
             val position = viewHolder.bindingAdapterPosition
+            if (position == RecyclerView.NO_POSITION) return
+            val target = chats.getOrNull(position)
 
             viewHolder.itemView.post {
                 adapter?.notifyItemChanged(position)
 
                 if (swipeDir == ItemTouchHelper.RIGHT) {
-                    ChatPreferences.getChatPreferences().switchPinState(mContext ?: return@post, ChatPreferences.storedChatId(chats[position]))
+                    val chatId = target?.let { ChatPreferences.storedChatId(it) } ?: return@post
+                    ChatPreferences.getChatPreferences().switchPinState(mContext ?: return@post, chatId)
                     initSettings()
                 } else {
-                    ChatPreferences.getChatPreferences().deleteChat(mContext ?: return@post, chats[position]["name"].toString())
-                    initSettings()
+                    val activity = mContext as? FragmentActivity ?: return@post
+                    val chatId = target?.let { ChatPreferences.storedChatId(it) } ?: return@post
+                    ChatDeletionRequestCoordinator.requestChats(
+                        activity = activity,
+                        chatIds = setOf(chatId),
+                        onCommitted = { initSettings() },
+                        onCancelled = { adapter?.notifyItemChanged(position) }
+                    )
                 }
 
             }
@@ -820,20 +831,22 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
     }
 
     private fun deleteSelected() {
-        MaterialAlertDialogBuilder(mContext ?: return, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.label_confirm_deletion)
-            .setMessage("Would you like to delete selected chats?")
-            .setPositiveButton(R.string.btn_delete) { _, _ -> run {
-                val selected = selectionProjection.filter { it["selected"] == "true" }
-
-                for (item in selected) {
-                    ChatPreferences.getChatPreferences().deleteChat(mContext ?: return@run, item["name"] ?: "")
-                    selectionProjection.remove(item)
-                }
-
+        val activity = mContext as? FragmentActivity ?: return
+        val selectedIds = selectionProjection
+            .filter { it["selected"] == "true" }
+            .mapTo(LinkedHashSet()) { ChatPreferences.storedChatId(it) }
+        if (selectedIds.isEmpty()) return
+        ChatDeletionRequestCoordinator.requestChats(
+            activity = activity,
+            chatIds = selectedIds,
+            prompt = ChatDeletePrompt(
+                titleRes = R.string.label_confirm_deletion,
+                ordinaryMessageRes = R.string.chat_delete_selected_message
+            ),
+            onCommitted = {
+                onChangeBulkActionMode(false)
                 initSettings()
-            }}
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
+            }
+        )
     }
 }

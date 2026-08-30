@@ -208,7 +208,9 @@ import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
 import org.teslasoft.assistant.preferences.includes.SummarizerSafeIncludeProjectionBuilder
 import org.teslasoft.assistant.preferences.includes.StableAttachmentReference
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatFormats
-import org.teslasoft.assistant.ui.util.ChatDeleteDialog
+import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
+import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
+import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
 import org.teslasoft.assistant.ui.util.ChatExportDialog
 import org.teslasoft.assistant.ui.util.EditChatTitleDialog
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
@@ -4434,31 +4436,58 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun showChatOptionsMenu(anchor: View) {
-        PopupMenu(this, anchor).apply {
-            menu.add(Menu.NONE, 1, 0, R.string.chat_menu_export)
-            menu.add(Menu.NONE, 2, 1, R.string.alert_debug_section_logs)
-            menu.add(Menu.NONE, 3, 2, R.string.btn_delete)
-            setOnMenuItemClickListener { item ->
-                when (item.itemId) {
-                    1 -> {
-                        showChatExportDialog()
-                        true
-                    }
-                    2 -> {
-                        startActivity(
-                            Intent(this@ChatActivity, LogCabinActivity::class.java)
-                                .putExtra("chatId", chatId)
-                        )
-                        true
-                    }
-                    3 -> {
-                        showChatDeleteDialog()
-                        true
-                    }
-                    else -> false
+        lifecycleScope.launch {
+            val savedChat = withContext(Dispatchers.IO) {
+                when (val result = ChatNavigationRepository.get(this@ChatActivity).snapshot()) {
+                    is ChatNavigationResult.Success ->
+                        result.value.allChats.firstOrNull { it.id == chatId }
+                    is ChatNavigationResult.Failure -> null
                 }
             }
-            show()
+            if (isFinishing || isDestroyed) return@launch
+            PopupMenu(this@ChatActivity, anchor).apply {
+                savedChat?.let {
+                    menu.add(
+                        Menu.NONE,
+                        4,
+                        0,
+                        if (it.pinned) R.string.chat_menu_unpin else R.string.chat_menu_pin
+                    )
+                }
+                menu.add(Menu.NONE, 1, 1, R.string.chat_menu_export)
+                menu.add(Menu.NONE, 2, 2, R.string.alert_debug_section_logs)
+                menu.add(Menu.NONE, 3, 3, R.string.btn_delete)
+                setOnMenuItemClickListener { item ->
+                    when (item.itemId) {
+                        4 -> {
+                            savedChat?.let { chat ->
+                                lifecycleScope.launch(Dispatchers.IO) {
+                                    ChatNavigationRepository.get(this@ChatActivity)
+                                        .setChatPinned(chat.id, !chat.pinned)
+                                }
+                            }
+                            true
+                        }
+                        1 -> {
+                            showChatExportDialog()
+                            true
+                        }
+                        2 -> {
+                            startActivity(
+                                Intent(this@ChatActivity, LogCabinActivity::class.java)
+                                    .putExtra("chatId", chatId)
+                            )
+                            true
+                        }
+                        3 -> {
+                            showChatDeleteDialog()
+                            true
+                        }
+                        else -> false
+                    }
+                }
+                show()
+            }
         }
     }
 
@@ -4469,9 +4498,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun showChatDeleteDialog() {
-        ChatDeleteDialog.show(this) {
-            deleteCurrentChat()
-        }
+        if (chatId.isBlank() || deletingChat) return
+        ChatDeletionRequestCoordinator.requestChats(
+            activity = this,
+            chatIds = setOf(chatId),
+            beforeExecution = {
+                deletingChat = true
+                pendingChatExportBytes = null
+                cancelAllAiActivity("chat deletion")
+            },
+            onCommitted = { finishActivity() },
+            onFailed = { deletingChat = false }
+        )
     }
 
     private fun exportChat(options: ChatExportOptions) {
@@ -4561,15 +4599,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             chatExportFileSaveIntentLauncher.launch(intent)
         }
-    }
-
-    private fun deleteCurrentChat() {
-        if (chatId.isBlank() || deletingChat) return
-        deletingChat = true
-        pendingChatExportBytes = null
-        cancelAllAiActivity("chat deletion")
-        ChatPreferences.getChatPreferences().deleteChatById(this, chatId)
-        finishActivity()
     }
 
     /* ==================== Conversation summarizer ====================

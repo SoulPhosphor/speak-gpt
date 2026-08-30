@@ -2441,6 +2441,16 @@ class Preferences internal constructor(
         putGlobalBoolean("image_gen_imagine_command", value, true)
     }
 
+    /** Image Gallery spec section 9. Off is the fail-safe default. Turning it
+     * on only offers Delete All in a later confirmation; it never deletes by
+     * itself. */
+    fun getDeleteImagesWithChat(): Boolean =
+        getGlobalBoolean("image_gen_delete_images_with_chat", false)
+
+    fun setDeleteImagesWithChat(value: Boolean) {
+        putGlobalBoolean("image_gen_delete_images_with_chat", value)
+    }
+
     /** §14 seeding marker: stamped only after every global value above has
      *  been written by ImageGenerationMigration. */
     fun getImageGenerationSeeded(): Boolean =

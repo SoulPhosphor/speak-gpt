@@ -38,6 +38,8 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.ui.util.ChatDeletePrompt
+import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
 import org.teslasoft.assistant.util.Hash
 
 class AddChatDialogFragment : DialogFragment() {
@@ -134,7 +136,7 @@ class AddChatDialogFragment : DialogFragment() {
             builder!!.setView(view)
                     .setCancelable(false)
                     .setPositiveButton(R.string.btn_save) { _, _ -> validateForm() }
-                    .setNeutralButton(R.string.btn_delete) { _, _ -> confirmDeletion(requireActivity()) }
+                    .setNeutralButton(R.string.btn_delete) { _, _ -> confirmDeletion() }
                     .setNegativeButton(R.string.btn_cancel) { _, _ -> listener?.onCanceled() }
 
             isEdit = true
@@ -311,18 +313,20 @@ class AddChatDialogFragment : DialogFragment() {
         }
     }
 
-    private fun confirmDeletion(context: Context) {
-        MaterialAlertDialogBuilder(requireActivity(), R.style.App_MaterialAlertDialog)
-                .setTitle(R.string.label_confirm_deletion)
-                .setMessage(R.string.msg_confirm_deletion_chat)
-                .setPositiveButton(R.string.btn_delete) { _, _ -> delete(context) }
-                .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-                .show()
-    }
-
-    private fun delete(context: Context) {
-        chatPreferences?.deleteChat(context, requireArguments().getString("name").toString())
-        listener?.onDelete(arguments?.getInt("position")!!)
+    private fun confirmDeletion() {
+        val activity = requireActivity()
+        val chatId = requireArguments().getString("chatId").orEmpty()
+        if (chatId.isBlank()) return
+        val position = requireArguments().getInt("position")
+        ChatDeletionRequestCoordinator.requestChats(
+            activity = activity,
+            chatIds = setOf(chatId),
+            prompt = ChatDeletePrompt(
+                titleRes = R.string.label_confirm_deletion,
+                ordinaryMessageRes = R.string.msg_confirm_deletion_chat
+            ),
+            onCommitted = { listener?.onDelete(position) }
+        )
     }
 
     fun setStateChangedListener(listener: StateChangesListener) {

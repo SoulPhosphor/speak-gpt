@@ -27,6 +27,7 @@ import org.conscrypt.Conscrypt
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.imagegen.ImageGenerationMigration
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogMaintenance
+import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionCoordinator
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
@@ -167,6 +168,15 @@ class MainApplication : Application() {
                 SecurePrefs.reconcileOutageAtStartup(this)
             } catch (e: Exception) {
                 MemoryLog.log(this, "SecurePrefs", "error", "Storage-outage reconciliation at startup failed: ${e.message}")
+            }
+            try {
+                // Phase 3: the outage pass above must restore authoritative
+                // chat storage before a committed deletion journal is resumed.
+                // Fail-safe retries retain bytes and keep the journal pending.
+                ChatDeletionCoordinator.get(this).recover()
+            } catch (_: Exception) {
+                // No mutation follows a failed recovery attempt; the durable
+                // journal is retried at the next startup/deletion request.
             }
             try {
                 // Finish any chat rename whose memory re-point didn't complete

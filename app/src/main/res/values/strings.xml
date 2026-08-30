@@ -175,6 +175,16 @@
     <string name="chat_export_cancel">Cancel Export</string>
     <string name="chat_export_action">Export</string>
     <string name="chat_delete_title">Delete Chat</string>
+    <string name="chat_delete_selected_message">Would you like to delete selected chats?</string>
+    <string name="chat_delete_images_keep_message">Images created in this chat will still be available in the Image Gallery.</string>
+    <string name="chat_delete_images_all_message">Any images created in this chat will be deleted also.</string>
+    <string name="chat_delete_images_unlocked_message">Any unlocked images created in this chat will be deleted also. Locked images will be kept.</string>
+    <string name="chat_delete_chat_only">Delete Chat Only</string>
+    <string name="chat_delete_all">Delete All</string>
+    <string name="chat_menu_pin">Pin</string>
+    <string name="chat_menu_unpin">Unpin</string>
+    <string name="folder_delete_title">Delete Folder?</string>
+    <string name="folder_delete_message">Deleting this folder will permanently delete all chats inside it. This cannot be undone.</string>
     <string name="control_center_general">General</string>
     <string name="control_center_image_generation">Image generation</string>
     <string name="control_center_appearance">Appearance</string>
@@ -625,6 +635,8 @@
     <string name="image_gen_row_shape">Default Shape</string>
     <string name="image_gen_row_quality">Default Quality</string>
     <string name="image_gen_enable_imagine">Enable /imagine</string>
+    <string name="image_gen_delete_with_chat">Delete Images with Chat?</string>
+    <string name="image_gen_delete_with_chat_desc">When deleting a chat, choose whether to keep or delete images created in it.</string>
     <string name="image_gen_option_automatic">Automatic</string>
     <string name="image_gen_shape_square">Square</string>
     <string name="image_gen_shape_portrait">Portrait</string>

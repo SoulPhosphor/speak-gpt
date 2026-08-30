@@ -118,6 +118,22 @@
         <item name="layout_constraintWidth_percent">0.42</item>
     </style>
 
+    <!-- Readable shared vertical-dialog actions. Width lives in this family;
+         dialog_three_actions_cancel_first owns only the three-button order. -->
+    <style name="AppButton.Primary.DialogStacked" parent="AppButton.Primary">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="layout_constraintWidth_default">percent</item>
+        <item name="layout_constraintWidth_percent">0.72</item>
+    </style>
+
+    <style name="AppButton.Destructive.DialogStacked" parent="AppButton.Destructive">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="layout_constraintWidth_default">percent</item>
+        <item name="layout_constraintWidth_percent">0.72</item>
+    </style>
+
     <!-- Inline action button (owner ruling, July 24 2026): a primary button
          that sizes to its OWN text (wrap_content width) so a pair can sit
          side by side, each only as wide as its label — deliberately NOT equal

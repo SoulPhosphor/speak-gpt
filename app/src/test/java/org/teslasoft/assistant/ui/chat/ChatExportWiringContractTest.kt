@@ -56,21 +56,24 @@ class ChatExportWiringContractTest {
         )
         val strings = source("src/main/res/values/strings.xml")
 
-        assertTrue(activity.contains("PopupMenu(this, anchor)"))
+        assertTrue(activity.contains("PopupMenu(this@ChatActivity, anchor)"))
+        assertTrue(activity.contains("R.string.chat_menu_unpin else R.string.chat_menu_pin"))
         assertTrue(activity.contains("R.string.chat_menu_export"))
         assertTrue(activity.contains("R.string.alert_debug_section_logs"))
         assertTrue(activity.contains("R.string.btn_delete"))
         assertOrdered(
             activity,
-            "menu.add(Menu.NONE, 1, 0, R.string.chat_menu_export)",
-            "menu.add(Menu.NONE, 2, 1, R.string.alert_debug_section_logs)",
-            "menu.add(Menu.NONE, 3, 2, R.string.btn_delete)"
+            "R.string.chat_menu_unpin else R.string.chat_menu_pin",
+            "menu.add(Menu.NONE, 1, 1, R.string.chat_menu_export)",
+            "menu.add(Menu.NONE, 2, 2, R.string.alert_debug_section_logs)",
+            "menu.add(Menu.NONE, 3, 3, R.string.btn_delete)"
         )
         assertTrue(activity.contains("Intent(this@ChatActivity, LogCabinActivity::class.java)"))
         assertFalse(activity.contains("updateDebugLogButtonVisibility"))
         assertTrue(activity.contains("ChatExportDialog.show(this)"))
-        assertTrue(activity.contains("ChatDeleteDialog.show(this)"))
-        assertTrue(activity.contains("deleteChatById(this, chatId)"))
+        assertTrue(activity.contains("ChatDeletionRequestCoordinator.requestChats("))
+        assertTrue(activity.contains("chatIds = setOf(chatId)"))
+        assertFalse(activity.contains("deleteChatById("))
         assertTrue(activity.contains("chatExportFileSaveIntentLauncher"))
         assertTrue(dialog.contains("MaterialSwitch"))
         assertTrue(deleteDialog.contains("R.string.chat_delete_title"))
@@ -141,7 +144,7 @@ class ChatExportWiringContractTest {
         )
         assertTrue(
             deleteDialog.indexOf("cancel.setText(R.string.btn_cancel)") <
-                deleteDialog.indexOf("okay.setText(R.string.okay)")
+            deleteDialog.indexOf("okay.setText(R.string.btn_ok)")
         )
         val destructivePosition = cancelFirstLayout.indexOf(
             "android:id=\"@+id/btn_dialog_destructive_action\""
