@@ -44,6 +44,7 @@ import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageTransform
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageAssetResolver
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.views.FramingView
 import org.teslasoft.assistant.ui.views.RotationDialView
@@ -67,6 +68,9 @@ class ProfileImageFramingActivity : FragmentActivity() {
     companion object {
         /** Input: the picked source image (content:// URI string). */
         const val EXTRA_SOURCE_URI = "source_uri"
+        /** App-private generated-image source; the activity resolves this
+         * identity itself and never accepts or exposes its raw storage path. */
+        const val EXTRA_GENERATED_IMAGE_ID = "generated_image_id"
         /** Output (RESULT_OK): absolute path of the 512x512 JPEG temp result. */
         const val EXTRA_RESULT_TEMP_PATH = "result_temp_path"
 
@@ -149,12 +153,13 @@ class ProfileImageFramingActivity : FragmentActivity() {
 
         val restored = savedInstanceState != null && restoreSession(savedInstanceState)
         if (!restored) {
+            val generatedImageId = intent.getStringExtra(EXTRA_GENERATED_IMAGE_ID)
             val uriString = intent.getStringExtra(EXTRA_SOURCE_URI)
-            if (uriString.isNullOrEmpty()) {
-                showLoadError()
-                return
+            when {
+                !generatedImageId.isNullOrBlank() -> startFreshGeneratedImageSession(generatedImageId)
+                !uriString.isNullOrEmpty() -> startFreshSession(Uri.parse(uriString))
+                else -> showLoadError()
             }
-            startFreshSession(Uri.parse(uriString))
         }
     }
 
@@ -209,6 +214,33 @@ class ProfileImageFramingActivity : FragmentActivity() {
                 }
             }
         }
+    }
+
+    private fun startFreshGeneratedImageSession(imageId: String) {
+        val sessionDir = store!!.newFramingSessionDir()
+        sessionToken = sessionDir.name
+        ioScope.launch {
+            val source = when (val result = GeneratedImageAssetResolver.resolveCatalogImage(
+                this@ProfileImageFramingActivity, imageId
+            )) {
+                is GeneratedImageAssetResolver.Result.Available -> result.file
+                else -> null
+            }
+            val bitmap = source?.let { copyAndDecodeFile(it, sessionDir) }
+            withContext(Dispatchers.Main) {
+                if (isFinishing || isDestroyed) return@withContext
+                if (bitmap == null) showLoadError() else framingView?.setBitmap(bitmap)
+            }
+        }
+    }
+
+    private fun copyAndDecodeFile(source: File, sessionDir: File): Bitmap? = try {
+        val copy = File(sessionDir, "source")
+        source.inputStream().use { input -> FileOutputStream(copy).use { output -> input.copyTo(output) } }
+        sourceCopy = copy
+        decodeUpright(copy)
+    } catch (_: Exception) {
+        null
     }
 
     private fun restoreSession(state: Bundle): Boolean {

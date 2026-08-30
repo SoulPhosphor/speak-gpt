@@ -103,6 +103,24 @@ object GeneratedImageAssetResolver {
             .firstOrNull { it.isFile }
     }
 
+    /** Resolves a current catalog identity without accepting a raw path. */
+    fun resolveCatalogImage(context: Context, imageId: String): Result {
+        val lookup = GeneratedImageCatalogStore.lookup(context, imageId)
+        if (lookup.state != GeneratedImageCatalogStorageState.AVAILABLE) {
+            return Result.CatalogUnavailable(lookup.state)
+        }
+        val record = lookup.record ?: return Result.Missing(lookup.tombstoned)
+        val dir = context.applicationContext.getExternalFilesDir("images")
+            ?: return Result.Missing(explicitlyDeleted = false)
+        val file = safeChild(dir, record.assetFileName)
+            ?: return Result.Missing(explicitlyDeleted = false)
+        return if (file.isFile) {
+            Result.Available(file, record.mimeType ?: mimeTypeFor(file), catalogManaged = true)
+        } else {
+            Result.Missing(explicitlyDeleted = false)
+        }
+    }
+
     private fun safeChild(parent: File, name: String): File? {
         if (name.isBlank() || name.contains('/') || name.contains('\\')) return null
         return File(parent, name)

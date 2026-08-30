@@ -298,6 +298,59 @@ class GeneratedImageCatalogStore private constructor(
         }
     }
 
+    /** Gallery lock is mutable state on an immutable image identity. */
+    fun setLocked(imageId: String, locked: Boolean): Boolean {
+        val values = ContentValues().apply { put(COL_LOCKED, if (locked) 1 else 0) }
+        return writableDatabase.update(
+            TABLE_IMAGES,
+            values,
+            "$COL_IMAGE_ID = ?",
+            arrayOf(imageId)
+        ) == 1
+    }
+
+    /**
+     * Explicit Gallery Delete. Lock is re-read while the catalog transaction
+     * is held so a stale selection can never remove an image that was locked
+     * after it was displayed.
+     */
+    fun tombstoneUnlockedExplicit(candidateImageIds: Set<String>): Pair<List<GeneratedImageCatalogRecord>, Set<String>> {
+        if (candidateImageIds.isEmpty()) return emptyList<GeneratedImageCatalogRecord>() to emptySet()
+        val db = writableDatabase
+        db.beginTransaction()
+        return try {
+            val removed = ArrayList<GeneratedImageCatalogRecord>()
+            val locked = LinkedHashSet<String>()
+            for (imageId in candidateImageIds) {
+                val current = findActiveTx(db, imageId) ?: continue
+                if (current.locked) {
+                    locked.add(imageId)
+                    continue
+                }
+                val tombstone = ContentValues().apply {
+                    put(COL_IMAGE_ID, current.imageId)
+                    put(COL_ASSET_FILE_NAME, current.assetFileName)
+                    put("deleted_at", System.currentTimeMillis())
+                    put("reason", "gallery_delete")
+                }
+                check(db.insertWithOnConflict(
+                    TABLE_TOMBSTONES,
+                    null,
+                    tombstone,
+                    SQLiteDatabase.CONFLICT_REPLACE
+                ) != -1L) { "Unable to persist generated-image tombstone" }
+                check(db.delete(TABLE_IMAGES, "$COL_IMAGE_ID = ?", arrayOf(imageId)) == 1) {
+                    "Unable to remove active generated-image identity"
+                }
+                removed.add(current)
+            }
+            db.setTransactionSuccessful()
+            removed to locked
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /** Re-check every active catalog reference while the catalog write lock is
      * held, then remove the physical file only when no active identity uses it. */
     fun deleteAssetIfUnreferenced(assetFileName: String, deleteFile: () -> Boolean): GeneratedImageAssetDeletionDisposition {
@@ -555,6 +608,44 @@ class GeneratedImageCatalogStore private constructor(
             if (store == null) return GeneratedImageCatalogDeletionResult(state = state)
             return try {
                 val (removed, locked) = store.tombstoneUnlockedOwned(chatIds, candidateImageIds)
+                GeneratedImageCatalogDeletionResult(
+                    state = GeneratedImageCatalogStorageState.AVAILABLE,
+                    removed = removed,
+                    lockedImageIds = locked,
+                    success = true
+                )
+            } catch (_: Exception) {
+                GeneratedImageCatalogDeletionResult(state = failureState(context))
+            }
+        }
+
+        fun setLocked(context: Context, imageId: String, locked: Boolean): GeneratedImageCatalogWriteResult =
+            write(context) { it.setLocked(imageId, locked) }
+
+        fun tombstoneUnlockedExplicit(
+            context: Context,
+            candidateImageIds: Set<String>
+        ): GeneratedImageCatalogDeletionResult {
+            val (store, state) = access(context)
+            if (store == null) return GeneratedImageCatalogDeletionResult(state = state)
+            return try {
+                val (removed, locked) = store.tombstoneUnlockedExplicit(candidateImageIds)
+                // A generated asset normally has one active identity. The
+                // reference check keeps legacy/shared-file edge cases safe.
+                for (record in removed) {
+                    store.deleteAssetIfUnreferenced(record.assetFileName) {
+                        val safeName = record.assetFileName.takeIf {
+                            it.isNotBlank() && !it.contains('/') && !it.contains('\\')
+                        }
+                        val dir = context.applicationContext.getExternalFilesDir("images")
+                        if (safeName == null || dir == null) {
+                            false
+                        } else {
+                            val file = java.io.File(dir, safeName)
+                            !file.exists() || (file.delete() && !file.exists())
+                        }
+                    }
+                }
                 GeneratedImageCatalogDeletionResult(
                     state = GeneratedImageCatalogStorageState.AVAILABLE,
                     removed = removed,

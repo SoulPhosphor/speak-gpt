@@ -819,6 +819,15 @@ Do not assign an id to an XML `<include>` tag that includes these layouts. Andro
 
 ## Maintaining this guide
 
+## Compact action popup
+
+Use `CompactActionPopup` for small anchored management menus. It applies
+`Widget.App.CompactActionPopup`, which owns the shared surface treatment.
+Callers provide only ordered actions and enabled state; they must not set a
+screen-local popup background, palette, spacing, or typography. Generated
+Image Gallery long-press actions are the reference composition, and the drawer
+chat/folder menus reuse the same component.
+
 Keep this file as a current reference, not a development log.
 
 For each style family, document only:

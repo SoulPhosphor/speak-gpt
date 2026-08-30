@@ -164,6 +164,11 @@
             android:label="@string/title_profile_images" />
 
         <activity
+            android:name=".ui.activities.ImageGalleryActivity"
+            android:exported="false"
+            android:label="@string/image_gallery_title" />
+
+        <activity
             android:name=".ui.activities.ProfileImagePropertiesActivity"
             android:exported="false"
             android:label="@string/tile_profile_image_properties_title" />

@@ -1108,6 +1108,13 @@
         <item name="android:textColorHint">?attr/appDropdownLabelColor</item>
     </style>
 
+    <!-- One centrally themed compact anchored menu. Gallery and drawer
+         management actions use CompactActionPopup rather than screen-local
+         popup backgrounds, colors, padding, or typography. -->
+    <style name="Widget.App.CompactActionPopup" parent="">
+        <item name="android:popupBackground">?attr/colorSurfaceContainerHigh</item>
+    </style>
+
     <style name="Widget.App.Dropdown.Option" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">40dp</item>

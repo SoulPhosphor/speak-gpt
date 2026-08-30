@@ -170,6 +170,24 @@ class GeneratedImageCatalogInstrumentedTest {
     }
 
     @Test
+    fun galleryDeletionRechecksLatestLockAndTombstonesOnlyUnlockedImages() {
+        GeneratedImageCatalogStore.openForTest(context, name(), key).use { store ->
+            assertTrue(store.register(record("selected", locked = false)))
+            assertTrue(store.register(record("stale-selection", locked = false)))
+            assertTrue(store.setLocked("stale-selection", true))
+
+            val (removed, locked) = store.tombstoneUnlockedExplicit(
+                setOf("selected", "stale-selection")
+            )
+
+            assertEquals(setOf("selected"), removed.mapTo(HashSet()) { it.imageId })
+            assertEquals(setOf("stale-selection"), locked)
+            assertTrue(store.lookup("selected").tombstoned)
+            assertTrue(store.lookup("stale-selection").record!!.locked)
+        }
+    }
+
+    @Test
     fun versionOneCatalogMigratesWithoutRekeyingExistingImage() {
         val dbName = name()
         val file = context.getDatabasePath(dbName)

@@ -135,6 +135,7 @@ Do not guess its status from appearance or old documentation.
 | Photo Variations | `activity_variations.xml` | Unconverted | None | Unconverted | — |
 | Fine-tune (Jobs, New Job, Job Info) | `activity_fine_tune_jobs.xml`, `activity_fine_tune_new_job.xml`, `activity_fine_tune_job_info.xml` | Unconverted | None | Unconverted | — |
 | Profile Image Framing | `activity_profile_image_framing.xml` | Unconverted | None | Unconverted | Its rotation dialog is also unconverted. |
+| Generated Image Gallery | `activity_image_gallery.xml`, `view_generated_image_gallery_tile.xml` | Shared | `ActionBar`, canonical gallery dropdowns, compact Show Labels switch, Profile Images selection vocabulary, `CompactActionPopup`, shared cancel-first confirmation | Shared | Drawer navigation is intentionally deferred to drawer implementation Phase 6. |
 | Component gallery (developer) | `activity_material.xml` | Custom approved | Developer-only Material component gallery | Custom approved | Redesign plan §7.3: leave untouched. |
 | Chats List tab | `fragment_chats_list.xml` | N/A | Chat rows (`view_chat_name*.xml`), search, FABs | Unconverted | Row design is reused by the future drawer — convert together with the drawer work. |
 | Playground tab | `fragment_playground.xml` | N/A | Fields | Unconverted | — |
