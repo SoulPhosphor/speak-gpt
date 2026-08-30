@@ -542,9 +542,8 @@
          (activity_settings.xml, main Settings screen), restructured same
          day so the header pins above the ScrollView instead of scrolling
          away with it (see the CLAUDE.md rollout-status note for the
-         restructure details); LocalWhisperManageActivity and
-         LocalWhisperModelsActivity (activity_local_whisper_manage.xml/
-         activity_local_whisper_models.xml - the old floating-title-no-bar
+         restructure details); LocalWhisperModelsActivity
+         (activity_local_whisper_models.xml - the old floating-title-no-bar
          look, now gets the colored bar for the first time);
          LoreBookEntriesActivity and LoreBooksListActivity
          (activity_lorebook_entries.xml/activity_lorebooks_list.xml,

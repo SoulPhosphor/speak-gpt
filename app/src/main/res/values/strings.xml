@@ -714,8 +714,6 @@
     <string name="voice_engine_whisper_local">On-Device Whisper</string>
     <string name="voice_engine_picker_title">Voice Input Engine</string>
     <string name="title_local_whisper">On-Device Whisper</string>
-    <string name="title_manage_downloaded_models">Manage downloaded models</string>
-    <string name="btn_manage_downloaded_models">Manage downloaded models</string>
     <string name="btn_download">Download</string>
     <string name="btn_cancel_download">Cancel</string>
     <string name="btn_make_active">Make active</string>
@@ -725,11 +723,7 @@
     <string name="local_whisper_active_model_fmt">Active model: %1$s</string>
     <string name="local_whisper_no_active_model">No model installed yet</string>
     <string name="local_whisper_storage_used_fmt">Storage used: %1$d MB</string>
-    <string name="local_whisper_storage_total_fmt">Total: %1$d MB</string>
-    <string name="local_whisper_size_mb_fmt">%1$d MB</string>
     <string name="local_whisper_progress_fmt">%1$d MB / %2$d MB</string>
-    <string name="local_whisper_no_downloads">No models downloaded yet. Tap a model on the previous screen to download it.</string>
-    <string name="local_whisper_active_cannot_delete">Active — pick another to delete</string>
     <string name="local_whisper_pick_to_download">Pick a model below to download. The download is one-time and stays on your phone until you delete it.</string>
     <string name="local_whisper_download_failed_fmt">Download failed: %1$s</string>
     <string name="local_whisper_delete_confirm_title">Delete this model?</string>
