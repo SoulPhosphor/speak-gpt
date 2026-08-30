@@ -185,7 +185,7 @@
                 android:layout_marginTop="8dp"
                 android:text="@string/tile_voice_input_title" />
 
-            <RadioGroup
+            <LinearLayout
                 android:id="@+id/group_voice_input"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -197,16 +197,39 @@
                     style="@style/Widget.App.Row.Radio"
                     android:text="@string/voice_engine_whisper_cloud" />
 
-                <RadioButton
-                    android:id="@+id/radio_voice_input_whisper_local"
-                    style="@style/Widget.App.Row.Radio"
-                    android:text="@string/voice_engine_whisper_local" />
+                <!-- On-device Whisper gets a trailing cog that opens the
+                     on-device Whisper screen. The cog is a separate control:
+                     tapping it navigates without changing the selected engine,
+                     so the radio and the cog manage their own containers. -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:baselineAligned="false"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <RadioButton
+                        android:id="@+id/radio_voice_input_whisper_local"
+                        style="@style/Widget.App.Row.Radio"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:text="@string/voice_engine_whisper_local" />
+
+                    <ImageButton
+                        android:id="@+id/cog_voice_input_whisper_local"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="@string/title_local_whisper"
+                        android:src="@drawable/ic_settings"
+                        android:tint="?attr/colorControlNormal" />
+                </LinearLayout>
 
                 <RadioButton
                     android:id="@+id/radio_voice_input_google"
                     style="@style/Widget.App.Row.Radio"
                     android:text="@string/voice_engine_google" />
-            </RadioGroup>
+            </LinearLayout>
 
             <androidx.constraintlayout.widget.ConstraintLayout
                 android:id="@+id/row_dictation_language"

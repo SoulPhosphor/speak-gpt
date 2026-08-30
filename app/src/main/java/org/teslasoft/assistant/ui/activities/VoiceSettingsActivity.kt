@@ -28,7 +28,6 @@ import android.view.View
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.RadioButton
-import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
 import android.window.OnBackInvokedDispatcher
@@ -54,6 +53,8 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.ui.fragments.TileFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.LanguageSelectorDialogFragment
+import org.teslasoft.assistant.stt.LocalWhisperModels
+import org.teslasoft.assistant.stt.LocalWhisperStorage
 import org.teslasoft.assistant.util.WindowInsetsUtil
 import java.util.EnumSet
 import java.util.Locale
@@ -80,7 +81,10 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var valueVoiceBrowser: TextView? = null
     private var rowVoiceLanguage: ConstraintLayout? = null
     private var valueVoiceLanguage: TextView? = null
-    private var groupVoiceInput: RadioGroup? = null
+    private var radioVoiceInputWhisperCloud: RadioButton? = null
+    private var radioVoiceInputWhisperLocal: RadioButton? = null
+    private var radioVoiceInputGoogle: RadioButton? = null
+    private var cogVoiceInputWhisperLocal: ImageButton? = null
     private var rowDictationLanguage: ConstraintLayout? = null
     private var valueDictationLanguage: TextView? = null
     private var tileHandsFreeTiming: TileFragment? = null
@@ -302,22 +306,29 @@ class VoiceSettingsActivity : FragmentActivity() {
             preferences?.setAutoSend(checked)
         }
 
-        groupVoiceInput = findViewById(R.id.group_voice_input)
+        radioVoiceInputWhisperCloud = findViewById(R.id.radio_voice_input_whisper_cloud)
+        radioVoiceInputWhisperLocal = findViewById(R.id.radio_voice_input_whisper_local)
+        radioVoiceInputGoogle = findViewById(R.id.radio_voice_input_google)
+        cogVoiceInputWhisperLocal = findViewById(R.id.cog_voice_input_whisper_local)
         rowDictationLanguage = findViewById(R.id.row_dictation_language)
         valueDictationLanguage = findViewById(R.id.value_dictation_language)
 
-        val currentEngine = preferences?.getAudioModel() ?: "google"
-        groupVoiceInput?.check(voiceInputRadioId(currentEngine))
-        rowDictationLanguage?.visibility = if (currentEngine == "google") View.VISIBLE else View.GONE
+        applyVoiceInputSelection(preferences?.getAudioModel() ?: "google")
         valueDictationLanguage?.text = Locale.forLanguageTag(preferences?.getDictationLanguage() ?: "en").displayLanguage
 
-        groupVoiceInput?.setOnCheckedChangeListener { _, checkedId ->
-            val picked = voiceInputEngineId(checkedId)
-            preferences?.setAudioModel(picked)
-            rowDictationLanguage?.visibility = if (picked == "google") View.VISIBLE else View.GONE
-            if (picked == "whisper-local") {
-                startActivity(Intent(this, LocalWhisperModelsActivity::class.java))
-            }
+        // The radios manage mutual exclusion by hand because the on-device
+        // Whisper row carries a trailing cog and so isn't a direct RadioGroup
+        // child. Picking on-device Whisper opens its screen only when no model
+        // is active yet, so a user is never stranded with nothing to transcribe
+        // with; once a model is active, picking it just selects the engine.
+        radioVoiceInputWhisperCloud?.setOnClickListener { onVoiceInputPicked("whisper") }
+        radioVoiceInputWhisperLocal?.setOnClickListener { onVoiceInputPicked("whisper-local") }
+        radioVoiceInputGoogle?.setOnClickListener { onVoiceInputPicked("google") }
+
+        // The cog is a plain link into the on-device Whisper screen. It does
+        // not select the engine.
+        cogVoiceInputWhisperLocal?.setOnClickListener {
+            startActivity(Intent(this, LocalWhisperModelsActivity::class.java))
         }
 
         rowDictationLanguage?.setOnClickListener {
@@ -418,16 +429,31 @@ class VoiceSettingsActivity : FragmentActivity() {
         }
     }
 
-    private fun voiceInputRadioId(engine: String): Int = when (engine) {
-        "whisper" -> R.id.radio_voice_input_whisper_cloud
-        "whisper-local" -> R.id.radio_voice_input_whisper_local
-        else -> R.id.radio_voice_input_google
+    // Reflect the selected engine in the radios and the dictation-language
+    // row without persisting or navigating — used both on load and on tap.
+    private fun applyVoiceInputSelection(engine: String) {
+        radioVoiceInputWhisperCloud?.isChecked = engine == "whisper"
+        radioVoiceInputWhisperLocal?.isChecked = engine == "whisper-local"
+        radioVoiceInputGoogle?.isChecked = engine == "google"
+        rowDictationLanguage?.visibility = if (engine == "google") View.VISIBLE else View.GONE
     }
 
-    private fun voiceInputEngineId(radioId: Int): String = when (radioId) {
-        R.id.radio_voice_input_whisper_cloud -> "whisper"
-        R.id.radio_voice_input_whisper_local -> "whisper-local"
-        else -> "google"
+    private fun onVoiceInputPicked(engine: String) {
+        applyVoiceInputSelection(engine)
+        preferences?.setAudioModel(engine)
+        if (engine == "whisper-local" && !hasActiveLocalWhisperModel()) {
+            startActivity(Intent(this, LocalWhisperModelsActivity::class.java))
+        }
+    }
+
+    // True only when the stored active model is one we know and its file is
+    // actually on disk, so a stale selection pointing at a deleted model still
+    // sends the user to the screen to pick one.
+    private fun hasActiveLocalWhisperModel(): Boolean {
+        val activeId = preferences?.getActiveLocalWhisperModel() ?: ""
+        if (activeId.isEmpty()) return false
+        val model = LocalWhisperModels.byId(activeId) ?: return false
+        return LocalWhisperStorage.isInstalled(this, model)
     }
 
     // Voice-activity-detection method picker. Only applies to on-device
