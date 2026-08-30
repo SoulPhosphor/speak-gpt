@@ -5,7 +5,7 @@
 
 package org.teslasoft.assistant.ui.adapters.generatedimages
 
-import android.content.ColorStateList
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
