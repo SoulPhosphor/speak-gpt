@@ -91,7 +91,6 @@ class VoiceSettingsActivity : FragmentActivity() {
     private var fieldHandsFreeSilence: TextInputEditText? = null
     private var fieldHandsFreeNoSpeech: TextInputEditText? = null
     private var rowVoiceAdvanced: LinearLayout? = null
-    private var rowVoiceDebugging: LinearLayout? = null
     private var switchAlwaysSpeak: MaterialSwitch? = null
     private var switchAutoSend: MaterialSwitch? = null
     private var switchReadFormatting: MaterialSwitch? = null
@@ -310,14 +309,9 @@ class VoiceSettingsActivity : FragmentActivity() {
             startActivity(Intent(this, ApiVoiceModelsActivity::class.java).putExtra("chatId", chatId))
         }
         rowVoiceAdvanced = findViewById(R.id.tile_voice_advanced)
-        rowVoiceDebugging = findViewById(R.id.tile_voice_debugging)
 
         rowVoiceAdvanced?.setOnClickListener {
             startActivity(Intent(this, VoiceAdvancedSettingsActivity::class.java))
-        }
-
-        rowVoiceDebugging?.setOnClickListener {
-            startActivity(Intent(this, AudioDebuggingActivity::class.java).putExtra("chatId", chatId))
         }
     }
 

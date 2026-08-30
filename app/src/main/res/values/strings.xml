@@ -1132,9 +1132,6 @@
     <string name="tile_voice_advanced_subtitle">Finetune Whisper and VAD settings.</string>
     <string name="tile_voice_advanced_desc">Tune how speech is detected, how on-device Whisper decodes it, and how replies are spoken. Includes plain-language hints for fixing “it never hears me” and “it cuts me off mid-sentence”. (Diagnostic logging lives in Voice Debugging.)</string>
     <string name="title_audio_debugging">Audio Debugging</string>
-    <string name="tile_voice_debugging_title">Voice Debugging</string>
-    <string name="tile_voice_debugging_subtitle">Choose voice diagnostics.</string>
-    <string name="tile_voice_debugging_desc">Everything microphone/voice related in one place: turn on detector logging (Energy, WebRTC, Silero) and microphone Audio Health before reporting a voice bug, and toggle the chime that plays once your speech is transcribed.</string>
     <string name="audio_debugging_intro">Everything to do with the microphone, voice detection, and transcription. Turn the logging switches on before reporting a voice problem, then reproduce it and open the Event log.</string>
     <string name="audio_debugging_section_sounds">Sounds</string>
     <string name="adv_intro">Defaults match the app’s long-standing behaviour — you only need this screen when voice misbehaves on your device. Changes apply from the next turn. Settings marked on-device only do not affect Google voice input or cloud Whisper.</string>

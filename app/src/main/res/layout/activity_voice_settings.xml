@@ -380,28 +380,6 @@
                     android:contentDescription="@string/tile_voice_advanced_title" />
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/tile_voice_debugging"
-                style="@style/Widget.App.Row.WithSubtitle"
-                android:paddingHorizontal="20dp">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/tile_voice_debugging_title" />
-
-                    <TextView
-                        style="@style/Widget.App.Row.Subtitle"
-                        android:maxLines="3"
-                        android:text="@string/tile_voice_debugging_subtitle" />
-                </LinearLayout>
-
-                <ImageView
-                    style="@style/Widget.App.Row.Chevron"
-                    android:contentDescription="@string/tile_voice_debugging_title" />
-            </LinearLayout>
-
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>
