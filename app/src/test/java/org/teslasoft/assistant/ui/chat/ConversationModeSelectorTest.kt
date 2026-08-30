@@ -12,8 +12,8 @@ class ConversationModeSelectorTest {
     @Test
     fun defaultsToChatAndChangesImmediately() {
         assertTrue(source.contains("private var mode = ConversationMode.CHAT"))
-        assertTrue(source.contains("fun setMode(selectedMode: ConversationMode"))
-        assertTrue(source.contains("mode = selectedMode"))
+        assertTrue(source.contains("fun setMode(value: ConversationMode"))
+        assertTrue(source.contains("mode = value"))
     }
 
     @Test
