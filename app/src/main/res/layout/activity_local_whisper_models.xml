@@ -69,13 +69,6 @@
             android:textSize="13sp"
             tools:text="Storage used: 142 MB"
             xmlns:tools="http://schemas.android.com/tools" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_manage_models"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/btn_manage_downloaded_models" />
     </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

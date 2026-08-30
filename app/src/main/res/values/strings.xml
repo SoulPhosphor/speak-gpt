@@ -713,9 +713,7 @@
     <string name="voice_engine_whisper_cloud">OpenAI Whisper (Cloud, Paid)</string>
     <string name="voice_engine_whisper_local">On-Device Whisper</string>
     <string name="voice_engine_picker_title">Voice Input Engine</string>
-    <string name="title_local_whisper">On-device Whisper</string>
-    <string name="title_manage_downloaded_models">Manage downloaded models</string>
-    <string name="btn_manage_downloaded_models">Manage downloaded models</string>
+    <string name="title_local_whisper">On-Device Whisper</string>
     <string name="btn_download">Download</string>
     <string name="btn_cancel_download">Cancel</string>
     <string name="btn_make_active">Make active</string>
@@ -725,11 +723,7 @@
     <string name="local_whisper_active_model_fmt">Active model: %1$s</string>
     <string name="local_whisper_no_active_model">No model installed yet</string>
     <string name="local_whisper_storage_used_fmt">Storage used: %1$d MB</string>
-    <string name="local_whisper_storage_total_fmt">Total: %1$d MB</string>
-    <string name="local_whisper_size_mb_fmt">%1$d MB</string>
     <string name="local_whisper_progress_fmt">%1$d MB / %2$d MB</string>
-    <string name="local_whisper_no_downloads">No models downloaded yet. Tap a model on the previous screen to download it.</string>
-    <string name="local_whisper_active_cannot_delete">Active — pick another to delete</string>
     <string name="local_whisper_pick_to_download">Pick a model below to download. The download is one-time and stays on your phone until you delete it.</string>
     <string name="local_whisper_download_failed_fmt">Download failed: %1$s</string>
     <string name="local_whisper_delete_confirm_title">Delete this model?</string>
@@ -752,27 +746,17 @@
     <string name="tile_always_speak_desc">This feature allows you let the app always pronounce answers.</string>
     <string name="tile_hands_free_title">Hands-free conversation</string>
     <string name="tile_hands_free_desc">After the assistant speaks, the microphone reopens automatically so you can reply without tapping. Uses Google speech recognition and spoken (auto-send) replies. Long-press the mic to stop.</string>
-    <string name="tile_hands_free_timing_title">Hands-free timing</string>
-    <string name="tile_hands_free_timing_desc">Set how many seconds the mic tolerates a pause while you think, and how long it waits for you to start talking.</string>
-    <string name="tile_hands_free_timing_value">Pause %1$d s · Start %2$d s</string>
-    <string name="tile_vad_method_title">Voice detection method</string>
-    <string name="tile_vad_method_desc">How hands-free decides you\'ve stopped talking (on-device Whisper only).</string>
-    <string name="vad_method_webrtc">WebRTC (noise rejection)</string>
-    <string name="vad_method_energy">Energy (recommended)</string>
-    <string name="vad_method_options_cd">Options</string>
+    <string name="voice_detection_method_label">Voice Detection Method</string>
+    <string name="vad_method_webrtc">WebRTC (Noise Rejection)</string>
+    <string name="vad_method_energy">Energy (Volume Threshold)</string>
     <string name="vad_webrtc_unavailable">WebRTC voice detection isn\'t available on this device, so Energy will be used instead. Switch to Energy to avoid this.</string>
-    <string name="vad_sensitivity_title">Detection sensitivity</string>
-    <string name="vad_sensitivity_high">High — hear everything (default)</string>
+    <string name="vad_sensitivity_high">High — hear everything</string>
     <string name="vad_sensitivity_medium_high">Medium-high</string>
     <string name="vad_sensitivity_medium_low">Medium-low</string>
     <string name="vad_sensitivity_low">Low — strict noise rejection</string>
-    <string name="vad_sensitivity_short_high">High</string>
-    <string name="vad_sensitivity_short_medium_high">Medium-high</string>
-    <string name="vad_sensitivity_short_medium_low">Medium-low</string>
-    <string name="vad_sensitivity_short_low">Low</string>
-    <string name="vad_method_subtitle_webrtc">%1$s · %2$s</string>
-    <string name="tile_hands_free_silence_title">Silence wait (seconds)</string>
-    <string name="tile_hands_free_no_speech_title">Wait for speech (seconds)</string>
+    <string name="voice_hands_free_timers_label">Hands Free Timers</string>
+    <string name="tile_hands_free_silence_title">Silence Wait (Seconds)</string>
+    <string name="tile_hands_free_no_speech_title">Wait for Speech (Seconds)</string>
     <string name="hands_free_channel_name">Hands-free conversation</string>
     <string name="hands_free_channel_desc">Shown while a hands-free conversation is active so the system keeps the mic open with the screen off.</string>
     <string name="hands_free_notification_title">Hands-free conversation active</string>
@@ -1089,6 +1073,7 @@
     <string name="voice_browser_any">Any</string>
     <string name="voice_browser_all_genders">All</string>
     <string name="voice_browser_preview">Preview</string>
+    <string name="voice_browser_loading">Loading…</string>
     <string name="voice_browser_stop">Stop</string>
     <string name="voice_browser_stop_desc">Stop preview of %1$s</string>
     <string name="voice_browser_preview_text">Preview Text</string>
@@ -1147,9 +1132,6 @@
     <string name="tile_voice_advanced_subtitle">Finetune Whisper and VAD settings.</string>
     <string name="tile_voice_advanced_desc">Tune how speech is detected, how on-device Whisper decodes it, and how replies are spoken. Includes plain-language hints for fixing “it never hears me” and “it cuts me off mid-sentence”. (Diagnostic logging lives in Voice Debugging.)</string>
     <string name="title_audio_debugging">Audio Debugging</string>
-    <string name="tile_voice_debugging_title">Voice Debugging</string>
-    <string name="tile_voice_debugging_subtitle">Choose voice diagnostics.</string>
-    <string name="tile_voice_debugging_desc">Everything microphone/voice related in one place: turn on detector logging (Energy, WebRTC, Silero) and microphone Audio Health before reporting a voice bug, and toggle the chime that plays once your speech is transcribed.</string>
     <string name="audio_debugging_intro">Everything to do with the microphone, voice detection, and transcription. Turn the logging switches on before reporting a voice problem, then reproduce it and open the Event log.</string>
     <string name="audio_debugging_section_sounds">Sounds</string>
     <string name="adv_intro">Defaults match the app’s long-standing behaviour — you only need this screen when voice misbehaves on your device. Changes apply from the next turn. Settings marked on-device only do not affect Google voice input or cloud Whisper.</string>
@@ -1206,7 +1188,7 @@
     <string name="adv_tts_pitch_title">Pitch</string>
     <string name="adv_tts_pitch_desc">1.0 = the voice’s natural pitch.</string>
 
-    <string name="vad_method_silero">Silero (neural, recommended)</string>
+    <string name="vad_method_silero">Silero (Neural)</string>
     <string name="vad_silero_unavailable">The Silero detector couldn’t load on this device. Energy detection will be used instead.</string>
 
     <string name="adv_section_diag">Voice Diagnostics</string>
