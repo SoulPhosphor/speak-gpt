@@ -19,7 +19,8 @@ class PendingConversationCommitTest {
         assertOrdered(
             body,
             "pending_conversation_journal",
-            "putString(\"chat\", Gson().toJson(messages)).commit()",
+            "putString(\"chat\", Gson().toJson(messages))",
+            "ChatSearchIndexManager.SEARCH_REVISION_KEY",
             "ConversationMode.MODE_KEY",
             "updated.add(row)",
             "putString(\"data\", Gson().toJson(updated)).commit()",

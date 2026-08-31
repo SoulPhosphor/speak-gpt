@@ -61,7 +61,7 @@ class ChatPreferencesHotPathTest {
         assertTrue(rename.contains("entry[\"name\"] = chatName"))
         assertTrue(rename.contains("val oldId = chatId"))
         assertTrue(rename.contains("val newId = oldId"))
-        assertTrue(rename.contains("if (oldId == newId) return true"))
+        assertTrue(rename.contains("if (oldId == newId) {"))
         val autoName = source.substringAfter("fun getAvailableChatIdForAutoname(")
             .substringBefore("fun addChat(")
         assertTrue(autoName.contains("storedChatId(map) == Hash.hash(\"_autoname_\$x\")"))
