@@ -1484,7 +1484,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val icon: Int
             val desc: Int
             when (indicator) {
-                ReasoningIndicator.OFF -> { icon = R.drawable.ic_signal_wifi_off; desc = R.string.reasoning_indicator_off_desc }
+                // Off uses the empty-bars glyph so it reads as "no signal" within
+                // the same Wi-Fi strength family, rather than the struck-through
+                // "disconnected" glyph (owner ruling, Aug 31 2026). It shares the
+                // empty-bars icon with Minimal; accessibility text still says "Off".
+                ReasoningIndicator.OFF -> { icon = R.drawable.ic_signal_wifi_0_bar; desc = R.string.reasoning_indicator_off_desc }
                 ReasoningIndicator.MINIMAL -> { icon = R.drawable.ic_signal_wifi_0_bar; desc = R.string.reasoning_indicator_minimal_desc }
                 ReasoningIndicator.LOW -> { icon = R.drawable.ic_network_wifi_1_bar; desc = R.string.reasoning_indicator_low_desc }
                 ReasoningIndicator.MEDIUM -> { icon = R.drawable.ic_network_wifi_2_bar; desc = R.string.reasoning_indicator_medium_desc }
