@@ -1,5 +1,18 @@
 # Database Health & Backups — Build Plan (Build Phases 0–5), Revision 2
 
+> ⚠️ **RESTORE PLAN SUPERSEDED AFTER PHASE 7 — August 31, 2026.** This
+> document remains historical authority for already approved backup wording
+> and earlier Build Phase decisions, but it predates immutable chat UUIDs,
+> `generated_images.db`, and derived `chat_search.db`. Its chat restore/import
+> implementation instructions are superseded where they conflict with
+> **“Phase 8+ — Stable Chat Identity, Database, Backup, and Restore Safety
+> Review”** in `drawer-image-gallery-implementation-plan.md`. In particular,
+> `ChatRestoreManager` is still engine-only, portable chat restore is still
+> unimplemented, and neither restore path may be enabled until the Phase 9
+> whole-chat-set replacement boundary is complete. Do not add a legacy-data
+> migration or discard legacy data from this old plan; obtain owner approval
+> for the decision gates in Phases 8–11.
+
 > ⚠️ **NAMING NOTE — read this first.** This plan numbers its own steps
 > **"Build Phase 0" through "Build Phase 5."** These are UNRELATED to the
 > app's historical **"Round 1" through "Round 5"** series tracked in
