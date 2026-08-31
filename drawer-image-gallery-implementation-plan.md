@@ -635,8 +635,8 @@ The existing `legacy/database_health_build_plan.md` restore sections are superse
 
 1. Re-read `CLAUDE.md`, this Phase 8 section, and the top supersession notice in `legacy/database_health_build_plan.md`.
 2. Confirm the working branch still contains Phase 7 and has not diverged from Main in storage code since this review. If it has, redo the relevant diff before editing.
-3. Allowed without a new product decision: compatibility-reader fixes, fail-safe prevention of unproven file deletion, tests, and runtime verification.
-4. Stop and ask the owner before:
+3. This review authorizes documentation only. Before any Phase 8 code edit, present the exact numbered item and expected files and obtain owner approval. Do not treat publication of this plan as approval to alter legacy behavior or data.
+4. After the owner approves a scoped Phase 8 implementation, stop and ask again before any additional change that would:
    - writing an explicit `id` into a legacy row that previously lacked it;
    - changing which legacy images are considered owned or deletable;
    - discarding any existing metadata/file;
