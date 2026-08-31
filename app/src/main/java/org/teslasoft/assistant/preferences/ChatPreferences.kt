@@ -25,6 +25,9 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
+import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexJournal
+import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
+import org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.util.Hash
 import java.lang.Exception
@@ -368,6 +371,18 @@ class ChatPreferences private constructor() {
     fun getChatById(context: Context, chatId: String) : ArrayList<HashMap<String, Any>> =
         getChatByIdResult(context, chatId).messages
 
+    /** Validates an imported transcript, then routes it through the guarded
+     * source/revision commit so Search never has an unobservable import path. */
+    fun importChatHistoryJson(context: Context, chatId: String, json: String): Boolean {
+        val messages = try {
+            val type: Type = TypeToken.getParameterized(ArrayList::class.java, HashMap::class.java).type
+            @Suppress("UNCHECKED_CAST")
+            (Gson().fromJson<Any>(json, type) as? ArrayList<HashMap<String, Any>>) ?: arrayListOf()
+        } catch (_: Exception) { return false }
+        return saveChatHistory(context, chatId, messages, synchronous = true) ==
+            ChatStorageHealth.WriteOutcome.OK
+    }
+
     /**
      * Shared handling for a value that exists but cannot be decrypted even
      * though its file opened (Keystore valid, ciphertext damaged — storage
@@ -435,17 +450,29 @@ class ChatPreferences private constructor() {
             return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
         }
         return try {
-            val editor = SecurePrefs.get(context, name)
-                .edit()
-                .putString("chat", Gson().toJson(messages))
-            if (synchronous) {
-                if (editor.commit()) {
-                    ChatStorageHealth.WriteOutcome.OK
-                } else {
-                    ChatStorageHealth.WriteOutcome.FAILED
-                }
-            } else {
+            val prefs = SecurePrefs.get(context, name)
+            val fingerprint = SearchableMessageProjection.projectionFingerprint(messages)
+            val previousFingerprint = prefs.getString(
+                ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, null
+            )
+            val searchableChanged = fingerprint != previousFingerprint
+            val revision = if (searchableChanged) ChatSearchIndexManager.newRevision() else null
+            if (revision != null && !ChatSearchIndexJournal.get(context).record(chatId, revision)) {
+                return ChatStorageHealth.WriteOutcome.FAILED
+            }
+            val editor = prefs.edit().putString("chat", Gson().toJson(messages))
+            if (revision != null) editor
+                .putString(ChatSearchIndexManager.SEARCH_REVISION_KEY, revision)
+                .putString(ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, fingerprint)
+            val committed = if (synchronous || searchableChanged) editor.commit() else {
                 editor.apply()
+                true
+            }
+            if (!committed) {
+                revision?.let { ChatSearchIndexJournal.get(context).clearExact(chatId, it) }
+                ChatStorageHealth.WriteOutcome.FAILED
+            } else {
+                if (revision != null) ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision)
                 ChatStorageHealth.WriteOutcome.OK
             }
         } catch (_: Exception) {
@@ -539,10 +566,7 @@ class ChatPreferences private constructor() {
             list[position].remove(MessageCompletionState.KEY_ERROR_TEXT)
         }
 
-        val json: String = Gson().toJson(list)
-
-        val settings: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
-        settings.edit { putString("chat", json) }
+        saveChatHistory(context, chatId, list, synchronous = true)
     }
 
     fun deleteMessage(context: Context, chatId: String, position: Int) {
@@ -556,10 +580,7 @@ class ChatPreferences private constructor() {
 
         list.removeAt(position)
 
-        val json: String = Gson().toJson(list)
-
-        val settings: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
-        settings.edit { putString("chat", json) }
+        saveChatHistory(context, chatId, list, synchronous = true)
 
         // Summarizer bookmark alignment: the fold-in bookmark counts the
         // chat's oldest stored messages. Deleting one of THOSE shifts every
@@ -654,25 +675,36 @@ class ChatPreferences private constructor() {
      */
     fun addChat(context: Context, chatName: String) {
         if (chatWriteBlocked(context, "chat_list", "create a chat")) return
+        val chatId = Hash.hash(chatName)
+        val titleRevision = ChatSearchIndexManager.newRevision()
+        if (!ChatSearchIndexJournal.get(context).record(chatId, titleRevision)) return
+        var listCommitted = false
         synchronized(CHAT_LIST_LOCK) {
             val list = getChatMetadataList(context)
 
             val map: HashMap<String, String> = HashMap()
 
             map["name"] = chatName
-            map["id"] = Hash.hash(chatName)
+            map["id"] = chatId
             map["timestamp"] = System.currentTimeMillis().toString()
             map["pinned"] = "false"
+            map["search_title_revision"] = titleRevision
 
             list.add(map)
             val json: String = Gson().toJson(list)
 
             val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-            settings.edit { putString("data", json) }
+            listCommitted = settings.edit().putString("data", json).commit()
         }
 
-        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
+        if (!listCommitted) {
+            ChatSearchIndexJournal.get(context).clearExact(chatId, titleRevision)
+            return
+        }
+
+        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
         settings2.edit { putString("chat", "[]") }
+        ChatSearchIndexManager.get(context).scheduleTitleRefresh(chatId, titleRevision)
     }
 
     /**
@@ -727,8 +759,17 @@ class ChatPreferences private constructor() {
                 return PendingConversationCommitResult.CommitFailed
             }
 
+            val searchRevision = ChatSearchIndexManager.newRevision()
+            if (!ChatSearchIndexJournal.get(context).record(chatId, searchRevision)) {
+                return PendingConversationCommitResult.CommitFailed
+            }
             val historyCommitted = SecurePrefs.get(context, historyName).edit()
-                .putString("chat", Gson().toJson(messages)).commit()
+                .putString("chat", Gson().toJson(messages))
+                .putString(ChatSearchIndexManager.SEARCH_REVISION_KEY, searchRevision)
+                .putString(
+                    ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY,
+                    SearchableMessageProjection.projectionFingerprint(messages)
+                ).commit()
             if (!historyCommitted) return PendingConversationCommitResult.CommitFailed
 
             val settings = SecurePrefs.get(context, settingsName)
@@ -744,6 +785,7 @@ class ChatPreferences private constructor() {
                 "id" to chatId,
                 "timestamp" to System.currentTimeMillis().toString(),
                 "pinned" to "false",
+                "search_title_revision" to ChatSearchIndexManager.newRevision(),
                 ConversationMode.MODE_KEY to mode.storedValue,
                 ConversationMode.MODE_VERSION_KEY to ConversationMode.SCHEMA_VERSION.toString()
             )
@@ -759,6 +801,7 @@ class ChatPreferences private constructor() {
             }
 
             journal.edit().remove(chatId).commit()
+            ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, searchRevision)
             return PendingConversationCommitResult.Ok
         }
     }
@@ -820,6 +863,7 @@ class ChatPreferences private constructor() {
         }
 
         val outcome: ChatRenameTransaction.Outcome
+        var titleSearchRevision: String? = null
         synchronized(CHAT_LIST_LOCK) {
             val list = getChatMetadataList(context)
             val entry = list.firstOrNull { storedChatId(it) == oldId } ?: return false
@@ -835,7 +879,11 @@ class ChatPreferences private constructor() {
                 return false
             }
 
+            val revision = ChatSearchIndexManager.newRevision()
+            if (!ChatSearchIndexJournal.get(context).record(oldId, revision)) return false
+            titleSearchRevision = revision
             entry["name"] = chatName
+            entry["search_title_revision"] = revision
             val newListJson: String = Gson().toJson(list)
 
             // Only the retained legacy ID-move path needs a recovery journal.
@@ -849,6 +897,7 @@ class ChatPreferences private constructor() {
         }
 
         if (!outcome.success) {
+            titleSearchRevision?.let { ChatSearchIndexJournal.get(context).clearExact(oldId, it) }
             // The pointer never flipped: the old chat is still authoritative,
             // so the journal entry would drive no re-point anyway (recovery
             // sees the old id live) — drop it now to keep the journal clean.
@@ -875,7 +924,10 @@ class ChatPreferences private constructor() {
             ImageGenerationJobRegistry.updateOriginChatName(oldId, chatName)
             GeneratedImageCatalogStore.renameOriginChat(context, oldId, chatName)
         } catch (_: Exception) { }
-        if (oldId == newId) return true
+        if (oldId == newId) {
+            ChatSearchIndexManager.get(context).scheduleTitleRefresh(oldId, titleSearchRevision!!)
+            return true
+        }
 
         // Attachment image bytes live in a directory keyed by chat id. The
         // rename copied the include records (with their image hashes) to the

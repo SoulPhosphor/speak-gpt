@@ -86,6 +86,7 @@ import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.util.summarizer.SummarizerController
 import org.teslasoft.assistant.util.summarizer.CondensedRegenerationLock
 import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.color.MaterialColors
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.core.spans.CodeBlockSpan
 import kotlinx.coroutines.Dispatchers
@@ -138,6 +139,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
     private val generatedImageDataUrls = ConcurrentHashMap<String, String>()
     private var listener: OnUpdateListener? = null
+    private var searchTargetPosition = RecyclerView.NO_POSITION
     private var bulkActionMode = false
     private var manualCompactionBoundary = 0
     private var summaryRegenerationLockBoundary = 0
@@ -532,6 +534,20 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         this.listener = listener
     }
 
+    /** Brief, recycling-safe emphasis for an exact Search destination. */
+    fun emphasizeSearchTarget(position: Int) {
+        val previous = searchTargetPosition
+        searchTargetPosition = position
+        if (previous != RecyclerView.NO_POSITION) notifyItemChanged(previous)
+        notifyItemChanged(position)
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (searchTargetPosition == position) {
+                searchTargetPosition = RecyclerView.NO_POSITION
+                notifyItemChanged(position)
+            }
+        }, 1800L)
+    }
+
     fun setSpeakingPosition(position: Int) {
         if (position == speakingPosition) return
         val old = speakingPosition
@@ -782,6 +798,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 ui.setBackgroundColor(getSurface3Color(context))
             } else {
                 updatePresentation(chatMessage)
+            }
+            if (position == searchTargetPosition) {
+                ui.setBackgroundColor(
+                    MaterialColors.getColor(ui, com.google.android.material.R.attr.colorSecondaryContainer)
+                )
             }
             updatePortraitFlowGeometry()
 

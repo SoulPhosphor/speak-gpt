@@ -212,6 +212,7 @@ import org.teslasoft.assistant.preferences.includes.SummarizerSafeIncludeProject
 import org.teslasoft.assistant.preferences.includes.StableAttachmentReference
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatFormats
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
+import org.teslasoft.assistant.preferences.chatsearch.SearchTargetResolver
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
 import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
 import org.teslasoft.assistant.ui.util.ChatExportDialog
@@ -264,6 +265,7 @@ import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
 import org.teslasoft.assistant.ui.chat.ConversationModeSelector
+import org.teslasoft.assistant.ui.drawer.ChatDrawerController
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.QuickSettingsBottomSheetDialogFragment
 import org.teslasoft.assistant.ui.fragments.tabs.PlaygroundFragment
@@ -424,6 +426,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
     private var conversationModeSelector: ConversationModeSelector? = null
+    private var drawerController: ChatDrawerController? = null
     private var playgroundPanel: View? = null
     private var conversationMode: ConversationMode = ConversationMode.CHAT
     private var pendingConversation = false
@@ -1414,6 +1417,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // (an editor, Profile Image settings). Re-resolve both sides, display-only.
         refreshCompanionAvatar()
         refreshUserAvatar()
+        drawerController?.refresh()
     }
 
     /** Force the chat's top action bar and its buttons back to fully visible. */
@@ -2356,7 +2360,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
                 OnBackInvokedDispatcher.PRIORITY_DEFAULT
             ) {
-                if (includeStripController?.collapseIfExpanded() == true) {
+                if (drawerController?.isOpen() == true) {
+                    drawerController?.close()
+                } else if (includeStripController?.collapseIfExpanded() == true) {
                     // The expanded Includes overlay consumes Back first.
                 } else if (bulkSelectionMode) {
                     deselectAll()
@@ -2367,7 +2373,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } else {
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    if (includeStripController?.collapseIfExpanded() == true) {
+                    if (drawerController?.isOpen() == true) {
+                        drawerController?.close()
+                    } else if (includeStripController?.collapseIfExpanded() == true) {
                         // The expanded Includes overlay consumes Back first.
                     } else if (bulkSelectionMode) {
                         deselectAll()
@@ -2379,6 +2387,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         setContentView(R.layout.activity_chat)
+        drawerController = ChatDrawerController.install(
+            this,
+            findViewById(R.id.expandable_window_root)
+        ) { chatId }
 
         // Listen for the notification "Hang Up" action. Registered for the life of
         // the activity (not just the foreground window) so it still fires while the
@@ -2985,9 +2997,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )!!, this
         )
 
-        btnBack?.setOnClickListener {
-            finishActivity()
-        }
+        btnBack?.contentDescription = getString(R.string.drawer_open)
+        btnBack?.setOnClickListener { drawerController?.open() }
 
         activityTitle?.setOnClickListener {
             // While a chat is still waiting on its AI-generated name, chatName
@@ -3020,9 +3031,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // any refresh requested before this adapter was attached.
         onAvatarTargetReady()
 
-        chat?.post {
-            chat?.scrollToPosition(adapter?.itemCount!! - 1)
-        }
+        chat?.post { positionInitialTranscript() }
 
         chat?.setOnTouchListener { _, event -> run {
             if (event.action == MotionEvent.ACTION_DOWN ||
@@ -3052,6 +3061,34 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 override fun onAnimationRepeat(animation: Animation) { /* UNUSED */ }
             })
         }, 50)
+    }
+
+    private fun positionInitialTranscript() {
+        val hasTarget = intent.hasExtra(SearchTargetResolver.EXTRA_MESSAGE_ID) ||
+            intent.hasExtra(SearchTargetResolver.EXTRA_LEGACY_ORDINAL)
+        if (!hasTarget) {
+            chat?.scrollToPosition((adapter?.itemCount ?: 1) - 1)
+            return
+        }
+        val ordinal = if (intent.hasExtra(SearchTargetResolver.EXTRA_LEGACY_ORDINAL)) {
+            intent.getIntExtra(SearchTargetResolver.EXTRA_LEGACY_ORDINAL, -1).takeIf { it >= 0 }
+        } else null
+        val target = SearchTargetResolver.resolve(
+            messages = messages,
+            messageId = intent.getStringExtra(SearchTargetResolver.EXTRA_MESSAGE_ID),
+            legacyOrdinal = ordinal,
+            legacyRole = intent.getStringExtra(SearchTargetResolver.EXTRA_LEGACY_ROLE),
+            fingerprint = intent.getStringExtra(SearchTargetResolver.EXTRA_FINGERPRINT)
+        )
+        if (target == null) {
+            chat?.scrollToPosition((adapter?.itemCount ?: 1) - 1)
+            return
+        }
+        (chat?.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
+            target,
+            (chat?.height ?: 0) / 4
+        ) ?: chat?.scrollToPosition(target)
+        adapter?.emphasizeSearchTarget(target)
     }
 
     private val itemTouchCallback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
@@ -9300,6 +9337,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         map["message"] = message
         map["isBot"] = isBot
+        map[org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection.MESSAGE_ID_KEY] =
+            java.util.UUID.randomUUID().toString()
 
         // When this message was created, for the Message Details popup. Stored
         // as a string so it round-trips through the generic Gson history map

@@ -49,6 +49,10 @@ object DatabaseKeys {
      * gallery asset remains indexed after its origin conversation is gone. */
     const val KEY_GENERATED_IMAGES = "generated_images_db_key_hex"
 
+    /** chat_search.db — derived, disposable full-text index. It intentionally
+     * never shares a passphrase with authoritative chat or memory storage. */
+    const val KEY_CHAT_SEARCH = "chat_search_db_key_hex"
+
     fun getOrCreate(context: Context, keyName: String, databaseExists: Boolean): ByteArray? {
         val existing = EncryptedPreferences.getEncryptedPreference(context, PREF_FILE, keyName)
         if (existing.isNotEmpty()) return decodeHex(existing)

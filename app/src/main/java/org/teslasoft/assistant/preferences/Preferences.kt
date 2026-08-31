@@ -521,6 +521,13 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_show_profile_images", state, true)
     }
 
+    fun getShowCompanionImagesInChatList(): Boolean =
+        getGlobalBoolean("chat_list_companion_images", false)
+
+    fun setShowCompanionImagesInChatList(state: Boolean) {
+        putGlobalBoolean("chat_list_companion_images", state, false)
+    }
+
     fun getShowChatNames(): Boolean = getGlobalBoolean("chat_show_names", true)
 
     fun setShowChatNames(state: Boolean) {

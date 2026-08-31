@@ -11,6 +11,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
+import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageAssetDeletionDisposition
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecord
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStorageState
@@ -59,7 +60,8 @@ class ChatDeletionCoordinator internal constructor(
     private val catalog: ChatDeletionCatalogGateway,
     private val journal: ChatDeletionJournalStore,
     private val cleanup: ChatDeletionCleanupGateway,
-    private val deleteImagesWithChat: () -> Boolean
+    private val deleteImagesWithChat: () -> Boolean,
+    private val onChatsDeleted: (Set<String>) -> Unit = {}
 ) {
     companion object {
         private const val MAX_IMAGE_SETTLEMENT_PASSES = 3
@@ -135,7 +137,8 @@ class ChatDeletionCoordinator internal constructor(
                 },
                 deleteImagesWithChat = {
                     Preferences.getPreferences(app, "").getDeleteImagesWithChat()
-                }
+                },
+                onChatsDeleted = { ChatSearchIndexManager.get(app).scheduleChatsDeleted(it) }
             )
         }
     }
@@ -237,6 +240,8 @@ class ChatDeletionCoordinator internal constructor(
             journal.remove(entry.journalId)
             return failedExecution(ChatDeletionFailure.METADATA_COMMIT_FAILED)
         }
+
+        onChatsDeleted(currentChatIds)
 
         var cleanupEntry = entry.copy(stage = ChatDeletionJournalStage.CLEANUP_PENDING)
         journal.update(cleanupEntry)

@@ -132,9 +132,9 @@ class ChatsListFragment : Fragment(), ChatListAdapter.OnInteractionListener {
             var launchPending = !fromFile
 
             if (fromFile && selectedFile.replace("null", "") != "") {
-                val chat = mContext?.let { SecurePrefs.get(it, "chat_$id") }
-                val imported = chat?.edit()?.putString("chat", selectedFile)?.commit() == true
                 val context = mContext ?: return
+                val imported = ChatPreferences.getChatPreferences()
+                    .importChatHistoryJson(context, id, selectedFile)
                 val history = ChatPreferences.getChatPreferences()
                     .getChatByIdResult(context, id).messages
                 launchPending = history.isEmpty()

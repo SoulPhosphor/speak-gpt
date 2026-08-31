@@ -169,6 +169,12 @@
             android:label="@string/image_gallery_title" />
 
         <activity
+            android:name=".ui.activities.SearchActivity"
+            android:exported="false"
+            android:label="@string/search_title"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".ui.activities.ProfileImagePropertiesActivity"
             android:exported="false"
             android:label="@string/tile_profile_image_properties_title" />

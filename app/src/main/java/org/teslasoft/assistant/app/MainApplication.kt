@@ -28,6 +28,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.imagegen.ImageGenerationMigration
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogMaintenance
 import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionCoordinator
+import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
@@ -191,6 +192,9 @@ class MainApplication : Application() {
             } catch (e: Exception) {
                 MemoryLog.log(this, "RenameJournal", "error", "Rename reconciliation at startup failed: ${e.message}")
             }
+            // Search is derived and disposable. This idempotent call resumes a
+            // first-use or policy/locale rebuild after source restore/recovery.
+            ChatSearchIndexManager.get(this).ensureReady()
             try {
                 // Crash-triggered integrity checking (Build Phase 1 gate,
                 // Build Phase 3 response). The whole-database PRAGMA

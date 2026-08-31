@@ -20,6 +20,7 @@ import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
 import org.teslasoft.assistant.theme.ThemeManager
 
 /**
@@ -78,6 +79,20 @@ class ChatSettingsActivity : FragmentActivity() {
         findViewById<MaterialSwitch>(R.id.switch_show_thinking)?.apply {
             isChecked = preferences.getShowThinking()
             setOnCheckedChangeListener { _, value -> preferences.setShowThinking(value) }
+        }
+
+        findViewById<MaterialSwitch>(R.id.switch_chat_list_companion_images)?.apply {
+            isChecked = preferences.getShowCompanionImagesInChatList()
+            setOnCheckedChangeListener { _, value ->
+                preferences.setShowCompanionImagesInChatList(value)
+            }
+        }
+
+        findViewById<android.view.View>(R.id.rebuild_search_index)?.setOnClickListener { button ->
+            button.isEnabled = false
+            ChatSearchIndexManager.get(this).rebuild {
+                runOnUiThread { if (!isFinishing && !isDestroyed) button.isEnabled = true }
+            }
         }
     }
 

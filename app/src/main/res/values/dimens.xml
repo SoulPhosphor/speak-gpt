@@ -17,6 +17,8 @@
 **************************************************************************/
 -->
 <resources>
+    <dimen name="drawer_row_padding_start">20dp</dimen>
+    <dimen name="drawer_nested_indent">20dp</dimen>
     <dimen name="conversation_mode_selector_height">56dp</dimen>
     <dimen name="conversation_mode_selector_radius">28dp</dimen>
     <dimen name="conversation_mode_selector_inset">4dp</dimen>

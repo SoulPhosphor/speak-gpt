@@ -1334,6 +1334,63 @@
         <item name="android:textSize">15sp</item>
     </style>
 
+    <style name="Widget.App.CheckOption.CheckBox" parent="Widget.Material3.CompoundButton.CheckBox">
+        <item name="android:minHeight">40dp</item>
+        <item name="android:paddingVertical">4dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <!-- Flat identity rows shared by the drawer and Search. They deliberately
+         have no card/tile background; hierarchy comes from type and spacing. -->
+    <style name="Widget.App.FlatChatRow" parent="">
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+    </style>
+
+    <style name="Widget.App.FlatChatRow.Title" parent="">
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">17sp</item>
+    </style>
+
+    <style name="Widget.App.FlatChatRow.Metadata" parent="">
+        <item name="android:layout_marginTop">2dp</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="Widget.App.FlatChatRow.Snippet" parent="Widget.App.FlatChatRow.Metadata">
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="Widget.App.Search.Status" parent="">
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="Widget.App.NameEntry.Layout" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="android:layout_marginStart">24dp</item>
+        <item name="android:layout_marginTop">8dp</item>
+        <item name="android:layout_marginEnd">24dp</item>
+        <item name="boxCornerRadiusTopStart">12dp</item>
+        <item name="boxCornerRadiusTopEnd">12dp</item>
+        <item name="boxCornerRadiusBottomStart">12dp</item>
+        <item name="boxCornerRadiusBottomEnd">12dp</item>
+    </style>
+
+    <style name="Widget.App.NameEntry.Field" parent="Widget.Material3.TextInputEditText.OutlinedBox">
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
     <style name="Widget.App.Field.Box" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

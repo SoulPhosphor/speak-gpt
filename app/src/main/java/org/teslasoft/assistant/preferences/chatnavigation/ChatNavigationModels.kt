@@ -20,7 +20,8 @@ data class ChatNavigationItem(
     val name: String,
     val timestamp: Long,
     val pinned: Boolean,
-    val folderId: String?
+    val folderId: String?,
+    val titleRevision: String? = null
 )
 
 data class FolderNavigationGroup(

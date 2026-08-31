@@ -907,6 +907,36 @@ chat/folder menus reuse the same component.
 
 Keep this file as a current reference, not a development log.
 
+## Flat chat identity row
+
+Use the complete `Widget.App.FlatChatRow*` family with
+`layout/view_flat_chat_row.xml` for drawer chat rows and Search results:
+
+- `Widget.App.FlatChatRow` owns the flat, card-free row spacing and touch target;
+- `.Title` owns the one-line chat/folder identity;
+- `.Metadata` owns optional model, memory-state, and date lines;
+- `.Snippet` owns Search's matching-context line only.
+
+The shared layout has optional leading icon, companion-image, bookmark overlay,
+chevron, metadata, snippet, and date slots. Every adapter bind must reset every
+slot. When companion images are disabled the image frame is `GONE`, so the row
+reserves no empty column. Folder children add only the centralized
+`drawer_nested_indent`; they do not create a second row style.
+
+## Name-entry dialog
+
+Use `layout/dialog_name_entry.xml` with `Widget.App.NameEntry.Layout` and
+`Widget.App.NameEntry.Field` for simple Add/Rename name dialogs. The family owns
+outlined-field geometry, text appearance, padding, and inline error placement.
+The dialog host owns the title, current value, validation policy, and cancel-first
+actions. Add Folder and Rename Folder must use this one composition.
+
+## Search status
+
+`Widget.App.Search.Status` is the centered subordinate status text used for
+preparing, incomplete, unavailable, and empty Search states. It resolves through
+the shared subtle-text theme role and must not carry query text or snippets.
+
 For each style family, document only:
 
 - the exact style name;
