@@ -122,6 +122,7 @@ object PerChatSettingKeys {
         "summarizer_over_length",
         "summarizer_episode",
         "summarizer_errors",
+        "summarizer_errors_unseen",
         "manual_compaction_boundary",
         "use_summarized_conversation_projection",
         "condensed_conversation_kind",
