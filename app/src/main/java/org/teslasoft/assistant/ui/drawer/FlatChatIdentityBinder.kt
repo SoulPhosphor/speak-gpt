@@ -63,7 +63,7 @@ class FlatChatIdentityBinder(
             leading.visibility = View.VISIBLE
             leading.setImageResource(R.drawable.ic_bookmark)
             leading.imageTintList = ColorStateList.valueOf(
-                MaterialColors.getColor(leading, com.google.android.material.R.attr.colorPrimary)
+                MaterialColors.getColor(leading, androidx.appcompat.R.attr.colorPrimary)
             )
         }
         if (!displayPreferences.getHideModelNames()) {
@@ -83,7 +83,7 @@ class FlatChatIdentityBinder(
             }
         }
         if (current) {
-            title.setTextColor(MaterialColors.getColor(title, com.google.android.material.R.attr.colorPrimary))
+            title.setTextColor(MaterialColors.getColor(title, androidx.appcompat.R.attr.colorPrimary))
             title.setTypeface(null, android.graphics.Typeface.BOLD)
         }
     }

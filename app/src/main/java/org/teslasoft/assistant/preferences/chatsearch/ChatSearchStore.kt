@@ -334,7 +334,10 @@ class ChatSearchStore private constructor(
     }
 
     private object SearchCorruptionHandler : DatabaseErrorHandler {
-        override fun onCorruption(dbObj: SQLiteDatabase) {
+        override fun onCorruption(
+            dbObj: SQLiteDatabase,
+            exception: android.database.sqlite.SQLiteException?
+        ) {
             try { dbObj.close() } catch (_: Exception) { }
         }
     }

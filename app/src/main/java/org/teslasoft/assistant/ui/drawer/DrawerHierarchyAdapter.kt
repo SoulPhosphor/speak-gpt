@@ -119,7 +119,7 @@ class DrawerHierarchyAdapter(
             leading.visibility = View.VISIBLE
             leading.setImageResource(drawable)
             leading.imageTintList = ColorStateList.valueOf(
-                MaterialColors.getColor(leading, com.google.android.material.R.attr.colorPrimary)
+                MaterialColors.getColor(leading, androidx.appcompat.R.attr.colorPrimary)
             )
         }
 
