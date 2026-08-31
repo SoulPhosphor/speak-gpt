@@ -4691,16 +4691,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
                 summarizerStatusHandler.postDelayed(hideSummarizerStatus, 3000L)
             }
-            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed -> {
-                summarizerOperationChip?.visibility = View.VISIBLE
-                summarizerOperationSpinner?.visibility = View.GONE
-                summarizerOperationSuccess?.visibility = View.GONE
-                summarizerOperationCancel?.visibility = View.GONE
-                summarizerOperationText?.setText(
-                    org.teslasoft.assistant.util.summarizer.SummarizerOperationMessages
-                        .failureMessageRes(state.kind, state.category)
-                )
-            }
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed ->
+                // A failure is already recorded in this chat's Summarizer Errors
+                // log — badge, the dedicated error sound, and the errors dialog —
+                // so a transient failure chip here would only repeat it. Hide the
+                // chip and let the error log be the single record of the failure
+                // (owner ruling, Aug 31 2026).
+                summarizerOperationChip?.visibility = View.GONE
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Cancelled ->
                 if (!projectionStatusVisible) summarizerOperationChip?.visibility = View.GONE
         }
