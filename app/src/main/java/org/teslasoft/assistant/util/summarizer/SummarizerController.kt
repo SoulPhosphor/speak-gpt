@@ -765,8 +765,14 @@ class SummarizerController(
                     batch = (batch / 2).coerceAtLeast(1)
                     continue
                 }
+                // The Summarizer Errors entry keeps a short, readable cause —
+                // the exception type and its message — never the full stack
+                // trace, which read like a crash dump in the dialog (owner
+                // ruling, Aug 31 2026). The complete trace still lives in the
+                // app's own error/crash logs, which this deliberately leaves
+                // untouched.
                 val detail = if (category == SummarizerErrorCategory.UNEXPECTED) {
-                    e::class.qualifiedName + ": " + (e.message ?: "") + "\n" + e.stackTraceToString()
+                    e::class.qualifiedName + ": " + (e.message ?: "")
                 } else {
                     e.message
                 }
@@ -824,6 +830,9 @@ class SummarizerController(
         )
         prefs.setSummarizerErrors(SummarizerErrorLog.toJson(result.entries))
         prefs.setSummarizerEpisode(category.name)
+        // A fresh failure the user has not opened yet — the top-bar badge shows
+        // as an alert until they view the errors list (owner ruling, Aug 31 2026).
+        prefs.setSummarizerErrorsUnseen(true)
 
         val running = operationState as? OperationState.Running
         if (running?.kind == OperationKind.COMPACTING) {

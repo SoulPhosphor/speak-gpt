@@ -95,6 +95,17 @@ object SummarizerErrorLog {
 
     fun toJson(entries: List<SummarizerErrorEntry>): String = gson.toJson(entries)
 
+    /**
+     * Removes one stored entry by its position in the newest-first list — the
+     * per-entry Hide action. An out-of-range index returns the list unchanged.
+     */
+    fun removeAt(entries: List<SummarizerErrorEntry>, index: Int): List<SummarizerErrorEntry> =
+        if (index in entries.indices) {
+            entries.toMutableList().also { it.removeAt(index) }
+        } else {
+            entries
+        }
+
     data class RecordResult(
         val entries: List<SummarizerErrorEntry>,
         /** True when this failure starts a new episode — play the sound once. */

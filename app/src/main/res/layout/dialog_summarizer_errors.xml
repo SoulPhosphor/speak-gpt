@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Summarizer Errors dialog (conversation-summary-plan.md decision 16 +
-  conversation-summary-errors.md §1): exactly one status paragraph, then the
-  chat's stored errors (newest first, at most five), then the standard
-  two-action row — Copy (primary) and Delete (destructive). The entries are
-  built by ChatActivity from the stored log.
+  conversation-summary-errors.md §1): one status paragraph, then the chat's
+  stored errors (newest first, at most five, each with its own Copy and Hide),
+  then the whole-list actions Hide All / Copy All / Okay, top to bottom, via
+  the shared stacked three-action row (owner ruling, Aug 31 2026). The entries
+  are built by ChatActivity from the stored log.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -35,5 +36,5 @@
         </LinearLayout>
     </ScrollView>
 
-    <include layout="@layout/dialog_two_actions" />
+    <include layout="@layout/dialog_three_actions_cancel_first" />
 </LinearLayout>

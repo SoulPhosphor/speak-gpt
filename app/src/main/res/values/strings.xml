@@ -3298,10 +3298,18 @@
     <!-- Summarizer Errors dialog (decision 16 + errors addendum §1). -->
     <string name="summarizer_errors_title">Summarizer Errors</string>
     <string name="summarizer_errors_status_behind">The summary is behind because one or more updates failed. No messages were lost. Until it catches up, unsummarized messages are being sent to the AI in full.</string>
-    <string name="summarizer_errors_status_caught_up">The summarizer has caught up. No messages were lost. The errors below are kept for review until you delete them.</string>
-    <string name="summarizer_errors_status_off">The summarizer is off for this chat. No messages were lost. All messages are being sent to the AI in full. The errors below are kept for review until you delete them.</string>
+    <string name="summarizer_errors_status_caught_up">The summarizer has caught up. No messages were lost. The errors below are kept for review until you hide them.</string>
+    <string name="summarizer_errors_status_off">The summarizer is off for this chat. No messages were lost. All messages are being sent to the AI in full. The errors below are kept for review until you hide them.</string>
     <string name="summarizer_errors_copy">Copy</string>
     <string name="summarizer_errors_delete">Delete</string>
+    <!-- Per-entry and whole-list actions in the Summarizer Errors dialog
+         (owner ruling, Aug 31 2026). Hide removes that one entry; Hide All
+         clears the list and drops the top-bar badge until the next failure;
+         Okay just closes. Title Caps by owner standing rule. -->
+    <string name="summarizer_errors_hide">Hide</string>
+    <string name="summarizer_errors_hide_all">Hide All</string>
+    <string name="summarizer_errors_copy_all">Copy All</string>
+    <string name="summarizer_errors_okay">Okay</string>
     <string name="summarizer_errors_repeated">Repeated %1$d times.</string>
     <string name="summarizer_errors_profile_line">Profile: %1$s</string>
     <string name="summarizer_errors_model_line">Model: %1$s</string>

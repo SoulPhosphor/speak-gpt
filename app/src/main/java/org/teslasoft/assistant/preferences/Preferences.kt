@@ -2859,6 +2859,20 @@ class Preferences internal constructor(
     }
 
     /**
+     * Whether the chat has a summarizer/compaction failure the user has NOT yet
+     * opened. Drives the top-bar error badge's look: a new failure sets it so
+     * the badge shows as an alert (red number on white, theme-independent),
+     * opening the errors list clears it so the badge relaxes to its neutral
+     * reminder look while the log still has entries (owner ruling, Aug 31 2026).
+     */
+    fun getSummarizerErrorsUnseen(): Boolean =
+        getString("summarizer_errors_unseen", "false") == "true"
+
+    fun setSummarizerErrorsUnseen(value: Boolean) {
+        putString("summarizer_errors_unseen", if (value) "true" else "false")
+    }
+
+    /**
      * Commits a successful fold-in atomically: the updated summary, the
      * advanced bookmark, the over-length marker, and the episode reset are
      * one synchronous commit, so the summary and bookmark can never be saved

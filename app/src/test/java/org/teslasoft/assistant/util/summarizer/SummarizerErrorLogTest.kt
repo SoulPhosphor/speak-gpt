@@ -32,6 +32,25 @@ class SummarizerErrorLogTest {
     ) = SummarizerErrorLog.record(current, episode, category, time, "Work", "gpt-4o-mini", null)
 
     @Test
+    fun removeAtDropsThePickedEntryAndLeavesTheRest() {
+        val a = record(emptyList(), "", SummarizerErrorCategory.CONNECT_TIMEOUT, 1000L).entries
+        val b = record(a, SummarizerErrorCategory.CONNECT_TIMEOUT.name, SummarizerErrorCategory.QUOTA, 2000L).entries
+        // Newest first, so QUOTA is at index 0 and CONNECT_TIMEOUT at index 1.
+        assertEquals(2, b.size)
+        val afterHidingNewest = SummarizerErrorLog.removeAt(b, 0)
+        assertEquals(1, afterHidingNewest.size)
+        assertEquals(SummarizerErrorCategory.CONNECT_TIMEOUT.name, afterHidingNewest[0].category)
+        assertTrue(SummarizerErrorLog.removeAt(afterHidingNewest, 0).isEmpty())
+    }
+
+    @Test
+    fun removeAtIgnoresAnOutOfRangeIndex() {
+        val one = record(emptyList(), "", SummarizerErrorCategory.CONNECT_TIMEOUT).entries
+        assertEquals(one, SummarizerErrorLog.removeAt(one, 5))
+        assertEquals(one, SummarizerErrorLog.removeAt(one, -1))
+    }
+
+    @Test
     fun firstFailureStartsAnEpisodeAndPlaysTheSound() {
         val result = record(emptyList(), "", SummarizerErrorCategory.CONNECT_TIMEOUT)
         assertTrue(result.newEpisode)

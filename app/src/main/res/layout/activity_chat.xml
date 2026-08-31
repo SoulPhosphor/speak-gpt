@@ -452,7 +452,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/btn_summary"
                 app:layout_constraintTop_toTopOf="parent"
-                app:srcCompat="@drawable/ic_data_alert"
+                app:srcCompat="@drawable/ic_report"
                 tools:visibility="visible" />
 
             <TextView

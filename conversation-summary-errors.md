@@ -34,13 +34,13 @@ inside every stored error.
 ### Summarizer has caught up but old errors remain in the log
 
 > The summarizer has caught up. No messages were lost. The errors below are
-> kept for review until you delete them.
+> kept for review until you hide them.
 
 ### Summarizer is off for this chat
 
 > The summarizer is off for this chat. No messages were lost. All messages are
 > being sent to the AI in full. The errors below are kept for review until you
-> delete them.
+> hide them.
 
 Each stored error shows, in this order:
 
@@ -53,6 +53,11 @@ Each stored error shows, in this order:
 Never display or copy an API key, authorization header, complete request body,
 conversation text, or summary text. A provider's error message may be included
 only after those values are removed.
+
+Each stored error carries its own **Copy** and **Hide** (Hide removes that one
+entry). Beneath the list are the whole-list actions **Hide All**, **Copy All**,
+and **Okay** (Okay only closes), top to bottom, in Title Caps (owner ruling,
+Aug 31 2026).
 
 ---
 
@@ -198,8 +203,10 @@ the other.
 > The summary update failed for an unknown reason. The previous summary and
 > bookmark were kept. Copy this error when reporting the problem.
 
-Include the sanitized exception class, message, and stack trace in the copied
-technical detail for this category.
+Include the sanitized exception class and message in this entry's technical
+detail. The full stack trace is deliberately NOT stored here — it read like a
+crash dump in the dialog — and stays in the app's own error/crash logs instead
+(owner ruling, Aug 31 2026).
 
 ---
 
@@ -217,8 +224,23 @@ the count is greater than one:
 > Repeated %1$d times.
 
 A successful fold-in ends the episode. The old entry remains in the log until
-the user presses **Delete**, but later failures begin a new entry and may play
-the sound again.
+the user hides it, but later failures begin a new entry and may play the sound
+again.
+
+The top-bar count badge is the always-available failure indicator (owner
+ruling, Aug 31 2026), so a user can never mistake a silently failing summarizer
+for a working one. It shows whenever the log has entries, and carries a state:
+
+- **Alert** — a red number on a white, red-ringed circle, deliberately fixed
+  colors (not theme attributes) so a new, unacknowledged failure is
+  unmistakable in every theme. Set the moment a failure is recorded, including
+  a failure after the log was hidden.
+- **Neutral** — the ordinary badge look, shown once the user has opened the
+  errors list. It stays as a quiet reminder while entries remain and later
+  fold-ins succeed; a new failure returns it to Alert.
+
+**Hide All** clears the log and drops the badge until the next failure; a single
+**Hide** drops the badge only when it removes the last entry.
 
 Automatic retry occurs on the next eligible summarizer cycle. Do not run a
 rapid retry loop in the background.
