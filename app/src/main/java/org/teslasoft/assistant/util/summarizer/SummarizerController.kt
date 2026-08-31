@@ -765,17 +765,13 @@ class SummarizerController(
                     batch = (batch / 2).coerceAtLeast(1)
                     continue
                 }
-                // The Summarizer Errors entry keeps a short, readable cause —
-                // the exception type and its message — never the full stack
-                // trace, which read like a crash dump in the dialog (owner
-                // ruling, Aug 31 2026). The complete trace still lives in the
-                // app's own error/crash logs, which this deliberately leaves
-                // untouched.
-                val detail = if (category == SummarizerErrorCategory.UNEXPECTED) {
-                    e::class.qualifiedName + ": " + (e.message ?: "")
-                } else {
-                    e.message
-                }
+                // Keep the real error beneath the entry's plain-language
+                // message — the exception message and any distinct root cause,
+                // as the chat's own error passage shows — but never the
+                // multi-frame stack trace, which read like a crash dump (owner
+                // ruling, Aug 31 2026). The full trace still lives in the app's
+                // own error/crash logs, left untouched.
+                val detail = SummarizerErrorDetail.readable(e)
                 recordFailure(
                     runtime.prefs, category, runtime.endpoint.label, runtime.model,
                     classified.httpStatus, SummarizerDetailSanitizer.sanitize(detail),

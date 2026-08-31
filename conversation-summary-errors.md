@@ -203,10 +203,14 @@ the other.
 > The summary update failed for an unknown reason. The previous summary and
 > bookmark were kept. Copy this error when reporting the problem.
 
-Include the sanitized exception class and message in this entry's technical
-detail. The full stack trace is deliberately NOT stored here — it read like a
-crash dump in the dialog — and stays in the app's own error/crash logs instead
-(owner ruling, Aug 31 2026).
+Store the readable error beneath the entry's plain-language message — the
+exception message and any distinct root cause down the cause chain (or the
+exception type when a link has no message), the same "actual error under the
+explanation" a chat generation error shows. The full multi-frame stack trace is
+deliberately NOT stored here — it read like a crash dump in the dialog — and
+stays in the app's own error/crash logs instead (owner ruling, Aug 31 2026).
+This applies to every failure recorded from an exception, not only this
+category.
 
 ---
 

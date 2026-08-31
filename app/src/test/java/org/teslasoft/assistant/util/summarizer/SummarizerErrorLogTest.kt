@@ -32,6 +32,37 @@ class SummarizerErrorLogTest {
     ) = SummarizerErrorLog.record(current, episode, category, time, "Work", "gpt-4o-mini", null)
 
     @Test
+    fun readableDetailKeepsTheRealMessageWithoutStackFrames() {
+        val cause = IllegalStateException(
+            "Illegal input: Fields [id, created, model, choices] are required"
+        )
+        val wrapped = RuntimeException("Illegal input: Fields [id, created, model, choices] are required", cause)
+        val detail = SummarizerErrorDetail.readable(wrapped)!!
+        // The real error survives...
+        assertTrue(detail.contains("Fields [id, created, model, choices]"))
+        // ...deduplicated to a single line when the cause repeats it...
+        assertEquals(1, detail.lines().size)
+        // ...and never carries stack frames.
+        assertFalse(detail.contains("at "))
+    }
+
+    @Test
+    fun readableDetailKeepsDistinctCauseMessages() {
+        val root = IllegalArgumentException("underlying provider said no")
+        val top = RuntimeException("could not update the summary", root)
+        val detail = SummarizerErrorDetail.readable(top)!!
+        assertEquals(2, detail.lines().size)
+        assertTrue(detail.contains("could not update the summary"))
+        assertTrue(detail.contains("underlying provider said no"))
+    }
+
+    @Test
+    fun readableDetailFallsBackToTypeWhenNoMessage() {
+        assertEquals("java.lang.NullPointerException", SummarizerErrorDetail.readable(NullPointerException()))
+        assertEquals(null, SummarizerErrorDetail.readable(null))
+    }
+
+    @Test
     fun removeAtDropsThePickedEntryAndLeavesTheRest() {
         val a = record(emptyList(), "", SummarizerErrorCategory.CONNECT_TIMEOUT, 1000L).entries
         val b = record(a, SummarizerErrorCategory.CONNECT_TIMEOUT.name, SummarizerErrorCategory.QUOTA, 2000L).entries

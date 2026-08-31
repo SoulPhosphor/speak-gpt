@@ -160,6 +160,31 @@ object SummarizerErrorLog {
 }
 
 /**
+ * Builds the readable technical error shown under a Summarizer Errors entry's
+ * plain-language message — the "actual error beneath the explanation," matching
+ * how a chat generation error presents its provider error (owner ruling, Aug 31
+ * 2026). It keeps each distinct message down the exception's cause chain (or the
+ * exception type when a link carries no message), but never the multi-frame
+ * stack trace, which read like a crash dump in the dialog and still lives in the
+ * app's own error/crash logs. Returns null when there is nothing readable.
+ */
+object SummarizerErrorDetail {
+
+    fun readable(error: Throwable?): String? {
+        if (error == null) return null
+        val lines = LinkedHashSet<String>()
+        val seen = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Throwable, Boolean>())
+        var current: Throwable? = error
+        while (current != null && seen.add(current) && lines.size < 8) {
+            val message = current.message?.trim()?.ifBlank { null }
+            lines.add(message ?: current::class.qualifiedName ?: current::class.simpleName ?: "error")
+            current = current.cause
+        }
+        return lines.joinToString("\n").ifBlank { null }
+    }
+}
+
+/**
  * Maps a transport/provider failure — classified by the app's shared
  * [org.teslasoft.assistant.util.GenerationErrorClassifier] — onto the
  * summarizer's failure categories. Local conditions (missing model, blank
