@@ -127,7 +127,7 @@ Do not guess its status from appearance or old documentation.
 | About | `activity_about_new.xml` | Unconverted | None | Unconverted | Buttons rely on the theme-default `App.Button` shape only. |
 | Documentation | `activity_documentation.xml` | Unconverted | None | Unconverted | Header local. |
 | Lorebook Debug | `activity_lorebook_debug.xml` | Unconverted | None | Unconverted | Debug-only screen, low priority. |
-| Main (tab host) | `activity_main.xml` | Unconverted | None | Unconverted | Scheduled for structural replacement by the drawer (redesign plan Phase 3) — convert only what survives that change. |
+| Main launcher/router | No layout; `MainActivity` is a startup gate only | N/A | No visible components | Retired surface | The old Chats/Playground tab host and bottom navigation were removed at the drawer activation gate. Ordinary launch replaces the task with one blank Chat-mode conversation. |
 | Onboarding (Welcome, Purpose, Activation, Terms) | `activity_welcome.xml`, `activity_purpose.xml`, `activity_activation.xml`, `activity_terms.xml` | Unconverted | None | Unconverted | Keep the flow and manifest entries intact when converting. |
 | Crash Reporter | `activity_crash.xml` | Unconverted | None | Unconverted | Buttons rely on the theme default only. |
 | Chat Storage Locked | `activity_chat_storage_locked.xml` | Unconverted | None | Unconverted | Buttons rely on the theme default only. |

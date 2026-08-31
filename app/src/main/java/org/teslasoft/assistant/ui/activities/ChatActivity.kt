@@ -242,6 +242,7 @@ import org.teslasoft.assistant.stt.LocalWhisperStorage
 import org.teslasoft.assistant.service.GenerationForegroundService
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
 import org.teslasoft.assistant.usage.ConversationUsageSummary
 import org.teslasoft.assistant.usage.ProviderUsageAttempt
@@ -344,6 +345,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     ImageGenerationJobRegistry.Listener, PlaygroundFragment.PendingCommitHost {
 
     companion object {
+        /** Replace the current app task with exactly one conversation screen. */
+        fun rootIntent(
+            context: Context,
+            chatId: String,
+            chatName: String,
+            pendingConversation: Boolean = false
+        ): Intent = Intent(context, ChatActivity::class.java)
+            .setAction(Intent.ACTION_VIEW)
+            .putExtra("chatId", chatId)
+            .putExtra("name", chatName)
+            .putExtra("pendingConversation", pendingConversation)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+
         // Broadcast action posted by the keep-alive notifications' "Hang Up"
         // action and handled by the live ChatActivity. Package-scoped and
         // non-exported; see hangUpReceiver.
@@ -2440,6 +2454,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         chatStartupComplete = true
+        DatabaseRecoveryFlows.showPendingNoticeIfAny(this)
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {

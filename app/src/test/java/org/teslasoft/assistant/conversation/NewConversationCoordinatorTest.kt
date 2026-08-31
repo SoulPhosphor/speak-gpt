@@ -24,6 +24,14 @@ class NewConversationCoordinatorTest {
         assertFalse(dialog.contains("chatPreferences?.addChat"))
     }
 
+    @Test
+    fun launcherSessionCanBeRestoredWithoutCreatingAnotherBlankConversation() {
+        assertTrue(source.contains("fun createOrRestoreStartupPendingConversation()"))
+        assertTrue(source.contains("return PendingConversationState(id, name, readMode(id))"))
+        assertTrue(source.contains("if (result.succeeded) clearStartupSession(state.id)"))
+        assertTrue(source.contains("if (abandoned) clearStartupSession(chatId)"))
+    }
+
     private fun source(relative: String): String {
         val path = "src/main/java/org/teslasoft/assistant/$relative"
         return listOf(File(path), File("app/$path"))

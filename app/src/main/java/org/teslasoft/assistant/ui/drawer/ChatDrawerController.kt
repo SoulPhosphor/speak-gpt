@@ -22,7 +22,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.conversation.NewConversationCoordinator
-import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
 import org.teslasoft.assistant.ui.activities.ChatActivity
@@ -111,8 +110,7 @@ class ChatDrawerController private constructor(
             is DrawerRow.FoldersHeader -> { repository.setFoldersExpanded(!row.expanded); refresh() }
             is DrawerRow.Folder -> { repository.setFolderExpanded(row.value.id, !row.expanded); refresh() }
             is DrawerRow.Chat -> activity.startActivity(
-                Intent(activity, ChatActivity::class.java).setAction(Intent.ACTION_VIEW)
-                    .putExtra("name", row.value.name).putExtra("chatId", row.value.id)
+                ChatActivity.rootIntent(activity, row.value.id, row.value.name)
             )
             is DrawerRow.Section -> Unit
         }
@@ -195,13 +193,10 @@ class ChatDrawerController private constructor(
     private fun openNewChat() {
         activity.lifecycleScope.launch {
             val pending = withContext(Dispatchers.IO) {
-                val name = "_autoname_${ChatPreferences.getChatPreferences().getAvailableChatIdForAutoname(activity)}"
-                NewConversationCoordinator(activity).createPendingConversation(NewConversationCoordinator.StartRequest(name))
+                NewConversationCoordinator(activity).createDefaultPendingConversation()
             }
             activity.startActivity(
-                Intent(activity, ChatActivity::class.java).setAction(Intent.ACTION_VIEW)
-                    .putExtra("name", pending.name).putExtra("chatId", pending.id)
-                    .putExtra("pendingConversation", true)
+                ChatActivity.rootIntent(activity, pending.id, pending.name, pendingConversation = true)
             )
         }
     }

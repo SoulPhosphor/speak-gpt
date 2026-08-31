@@ -318,10 +318,7 @@ class ImageGalleryActivity : FragmentActivity(), GeneratedImageGalleryAdapter.Li
                     is ChatNavigationResult.Failure -> null
                 }
             } ?: return@launch
-            startActivity(Intent(this@ImageGalleryActivity, ChatActivity::class.java)
-                .setAction(Intent.ACTION_VIEW)
-                .putExtra("chatId", chatId)
-                .putExtra("name", current.name)
+            startActivity(ChatActivity.rootIntent(this@ImageGalleryActivity, chatId, current.name)
                 .putExtra("imageId", row.record.imageId)
                 .putExtra("originMessageId", row.record.originMessageId))
         }

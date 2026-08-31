@@ -1,6 +1,5 @@
 package org.teslasoft.assistant.ui.activities
 
-import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.view.inputmethod.InputMethodManager
@@ -164,10 +163,7 @@ class SearchActivity : FragmentActivity() {
     }
 
     private fun openResult(result: SearchResult) {
-        val intent = Intent(this, ChatActivity::class.java)
-            .setAction(Intent.ACTION_VIEW)
-            .putExtra("name", result.chatName)
-            .putExtra("chatId", result.chatId)
+        val intent = ChatActivity.rootIntent(this, result.chatId, result.chatName)
         if (result.kind == SearchDocumentKind.MESSAGE) {
             result.messageId?.let { intent.putExtra(SearchTargetResolver.EXTRA_MESSAGE_ID, it) }
             result.legacyOrdinal?.let { intent.putExtra(SearchTargetResolver.EXTRA_LEGACY_ORDINAL, it) }

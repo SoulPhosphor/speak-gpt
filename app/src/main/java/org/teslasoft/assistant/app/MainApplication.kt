@@ -29,6 +29,8 @@ import org.teslasoft.assistant.imagegen.ImageGenerationMigration
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogMaintenance
 import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionCoordinator
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
+import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
+import org.teslasoft.assistant.conversation.NewConversationCoordinator
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
@@ -191,6 +193,16 @@ class MainApplication : Application() {
                 RenameJournal.reconcile(this)
             } catch (e: Exception) {
                 MemoryLog.log(this, "RenameJournal", "error", "Rename reconciliation at startup failed: ${e.message}")
+            }
+            try {
+                NewConversationCoordinator(this).recoverPendingCommits()
+            } catch (_: Exception) {
+                // The encrypted journal remains authoritative and retries later.
+            }
+            try {
+                ChatNavigationRepository.get(this).migrateSchema()
+            } catch (_: Exception) {
+                // Folder metadata remains untouched and unavailable on failure.
             }
             // Search is derived and disposable. This idempotent call resumes a
             // first-use or policy/locale rebuild after source restore/recovery.
