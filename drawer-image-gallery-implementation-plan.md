@@ -566,3 +566,373 @@ Activate the new navigation as the ordinary app experience, retire the old lower
 ## Final release rule
 
 The feature is not product-complete merely because the drawer, Search screen, or gallery renders. It is complete only after Phase 7, when all specification acceptance items pass, no reachable deletion path can bypass ownership/explicit choice/Lock/storage-health/missing-image safety, and Search cannot silently expose stale, deleted, partial, or unencrypted conversation text.
+
+---
+
+# Phase 8+ — Stable Chat Identity, Database, Backup, and Restore Safety Review
+
+**Review date:** August 31, 2026
+
+**Reviewed branch:** `agent/update-drawer-plan` at `cf725716`
+
+**Main at review time:** `0d16b3c`
+
+**Branch relationship:** the reviewed branch is 37 commits ahead of Main and 0 commits behind. It is not equal to Main.
+
+**Phase 7 status:** complete. Nothing below reopens or renumbers Phase 7.
+
+## Review verdict
+
+**Do not merge this branch to Main yet.** Ordinary upgrade behavior for legacy chats is mostly sound: an existing stored chat ID remains the identity, a row with no explicit ID still derives the historical title hash, new chats receive UUIDs, and a title rename no longer moves history/settings or changes the ID. No eager rewrite of legacy chat histories is required or approved.
+
+The review nevertheless found three pre-Main safety blockers and one unfinished product boundary:
+
+| Priority | Finding | Consequence if left unchanged | Required point of completion |
+|---|---|---|---|
+| P0 | `GeneratedImageCatalogReconciler` deletes every UUID-named image file that is absent from the active catalog, and startup runs it before backfill. A missing/recreated-empty `generated_images.db` therefore looks like an authoritative empty catalog. | Existing generated-image bytes can be permanently deleted before chats can repopulate the catalog. Gallery-only images whose origin chat was deleted cannot be repopulated at all. | Phase 8 before Main |
+| P0 | A few code paths read `chat["id"]` directly instead of `ChatPreferences.storedChatId(chat)`. | A legacy row with no explicit `id` can be missed by auto-name, rename recovery, or image-reference protection. The last case can delete a still-referenced legacy image file. | Phase 8 before Main |
+| P0 | SQLCipher changed from 4.16.0 to 4.17.0, but CI only compiles instrumentation tests; it does not run them on Android. | Green CI does not prove that the owner's existing encrypted databases reopen on the shipped arm64 runtime. | Phase 8 before Main |
+| P1 | `ChatRestoreManager` is engine-only and has no supported UI caller. Its raw file replacement does not yet form a safe whole-app state-replacement transaction. | A future restore can mix restored chat files with cached pre-restore preferences, stale mutation journals, a stale Search index, and catalog backfill markers. | Phase 9 before any restore UI/caller is enabled |
+
+The existing `legacy/database_health_build_plan.md` restore sections are superseded by this review where they conflict. They predate stable UUIDs, `generated_images.db`, and `chat_search.db`.
+
+## Facts an implementation agent must preserve
+
+1. `ChatPreferences.storedChatId(chat)` is the single compatibility rule:
+   - use the stored `id` when the key is present;
+   - for an old row with no `id`, use the existing hash-of-stored-name behavior;
+   - do not change malformed/blank-ID behavior without a measured fixture and owner approval;
+   - do not silently rewrite the source row merely because it was read.
+2. A title is mutable display data. A chat ID is immutable storage identity. Renaming a chat must not rename/move history, settings, attachments, generated-image ownership, memory rows, or Search identity.
+3. UUIDs with hyphens and historical hash IDs are both valid. Restore/import validators must accept both and reject path traversal.
+4. `chat_search.db` is derived and disposable. It must never be treated as backup truth.
+5. `generated_images.db` is not fully derived. Locks, tombstones, origin metadata, backfill completion, and gallery records whose origin chat was deleted cannot all be reconstructed from chat histories.
+6. Human-Readable Chat Backup is preservation/export, not a full-fidelity restore artifact. It does not carry stable IDs, folder definitions, or per-chat settings.
+7. Same-install chat recovery ZIPs contain encrypted `chat_list`, histories, and per-chat settings. The folder catalog and assignments travel because they are in `chat_list`.
+8. Portable `chat-logical-v1` contains chat rows, histories, IDs, and per-chat settings, but not the separate folder catalog. A v1 row can therefore refer to a `folder_id` that is absent after restore.
+9. No legacy-data rewrite, compatibility removal, generated-image deletion-policy change, restore merge rule, new logging, or user-facing recovery wording may be implemented without owner approval. Tests and documentation may describe the required decision.
+10. The owner currently has no backups. Do not use the owner's only installed data set as the first restore/migration test.
+
+## What the owner is likely to keep or lose if nothing else is done
+
+| Scenario | Expected result now |
+|---|---|
+| Install this build over an existing installation; open and rename ordinary legacy chats | Expected to preserve messages/settings and keep their existing IDs. This is the healthy path already implemented. |
+| Legacy chat-list row has no explicit `id` | Most paths still derive the old hash, but the direct-reader exceptions listed in Phase 8 can miss it. No source rewrite is recommended. |
+| Create a new chat after upgrade | It receives a UUID that stays unchanged across rename. |
+| Lose/recreate `chat_search.db` | Search can rebuild from authoritative chats; no chat content should be lost. |
+| Restore chats without forcing Search replacement | Search can retain pre-restore rows/journal state; a legacy null-revision row can display stale pre-restore text. |
+| Lose/recreate `generated_images.db` while UUID-named image files remain | Current startup reconciliation can delete those files. Locks, tombstones, and gallery-only records are also lost. |
+| Use a same-install chat recovery ZIP | The engine exists, but there is no supported UI and the state-replacement hazards in Phase 9 remain. |
+| Use a portable recovery package on a fresh install | The package carries logical chats, but chat import/restore is not implemented. Folder definitions are missing from `chat-logical-v1`. |
+| Use Human-Readable Chat Backup | Message text is preserved for reading; it is not sufficient to recreate exact app state. |
+
+## Phase 8 — Pre-Main identity, catalog, and SQLCipher safety
+
+**This entire phase is a Main-merge blocker. Do not start a legacy migration.**
+
+### 8.0 Start gate and allowed scope
+
+1. Re-read `CLAUDE.md`, this Phase 8 section, and the top supersession notice in `legacy/database_health_build_plan.md`.
+2. Confirm the working branch still contains Phase 7 and has not diverged from Main in storage code since this review. If it has, redo the relevant diff before editing.
+3. Allowed without a new product decision: compatibility-reader fixes, fail-safe prevention of unproven file deletion, tests, and runtime verification.
+4. Stop and ask the owner before:
+   - writing an explicit `id` into a legacy row that previously lacked it;
+   - changing which legacy images are considered owned or deletable;
+   - discarding any existing metadata/file;
+   - changing logs or adding log content;
+   - changing visible backup/restore wording.
+
+### 8.1 Make stable identity use one compatibility helper
+
+Audit all chat-list consumers. For each consumer, prove whether it needs the stable identity. Replace direct `chat["id"]` reads with `ChatPreferences.storedChatId(chat)` when it does.
+
+Known required fixes at review time:
+
+- `ChatPreferences.getChatName`: locate the row through `storedChatId` so auto-name can find a missing-ID legacy row.
+- `GeneratedImageFiles.deleteIfUnreferenced`: scan the history of a missing-ID legacy row before deleting a candidate image file.
+- `RenameJournal.reconcile`: build `liveIds` through `storedChatId` so recovery does not misclassify a live legacy chat.
+
+Then handle the two stale hash-collision rules deliberately:
+
+- `ChatPreferences.checkDuplicate` currently treats a legacy ID equal to `Hash.hash(newTitle)` as a duplicate even when no chat currently has that title. With immutable IDs this can permanently reserve a former title. The recommended rule is title equality only, excluding the chat being renamed. Write a regression test first; ask the owner if any behavior ambiguity remains.
+- `getAvailableChatIdForAutoname` has the same historical ID-vs-title coupling. Availability should be based on current title, not an immutable old ID. Preserve the visible auto-name numbering contract with tests.
+
+`ChatPreferences.addChat` still creates a hash-derived ID and has no production caller. Do not leave a callable second creation contract. After `rg` and source-contract tests prove it is unused, either remove it or make it delegate to the UUID coordinator. Do not guess which option is source-compatible; choose the smallest proven change.
+
+Required tests:
+
+- a no-explicit-ID row can be opened, auto-named, renamed, and found after restart without writing a new ID;
+- renaming `Old` to `New` does not prevent a separate new chat from taking title `Old`;
+- two new chats never share a UUID and rename does not change either UUID;
+- image reference scanning includes missing-ID rows and cannot delete their referenced bytes;
+- rename-journal reconciliation treats a missing-ID row as live;
+- a source-contract test fails if a new chat-list identity reader bypasses `storedChatId` without an explicit documented reason;
+- a source-contract test fails if production calls the old hash-ID `addChat` path.
+
+### 8.2 Stop unproven generated-image deletion
+
+Files:
+
+- `preferences/generatedimages/GeneratedImageCatalogBackfill.kt`
+- `preferences/generatedimages/GeneratedImageCatalogStore.kt`
+- `imagegen/GeneratedImageFiles.kt`
+- the image-registration journal/atomic writer used by new image generation
+- `app/MainApplication.kt`
+
+Required behavior:
+
+1. An empty/new/recreated catalog is not proof that every UUID-named image is orphaned.
+2. Never delete a completed image merely because its catalog row is absent.
+3. Only delete a temporary file or interrupted registration when a durable transaction record proves that exact file was never committed. Filename shape alone is not proof.
+4. Backfill authoritative chats before any conservative orphan classification. Reordering alone is insufficient because gallery-only images may no longer have an origin chat.
+5. If catalog authority is uncertain, preserve bytes and report/hold an unavailable or needs-recovery state. Do not convert uncertainty into an empty gallery and do not silently create a new authoritative empty database over a missing old one.
+6. Use `SearchableMessageProjection.MESSAGE_ID_KEY`/`message_id` for a backfilled generated image's origin message ID. Do not read `message["id"]`, which is a different/nonexistent field for new persisted messages.
+7. Preserve locks, tombstones, last-known origin labels, and copied-reference ownership rules. This phase does not invent lost metadata.
+
+Required failure-injection tests:
+
+- catalog DB absent + UUID files + authoritative chat references: no file deleted; rows can be backfilled;
+- catalog DB absent + gallery-only UUID file: no file deleted;
+- empty catalog DB + UUID files: no file deleted;
+- locked/wrong-key/corrupt catalog: no image or metadata deletion;
+- interrupted `.catalogtmp`: only the proven temporary file is eligible for cleanup;
+- committed catalog row + missing file: existing tombstone behavior remains conservative;
+- process death before/after file rename and before/after catalog commit is idempotent;
+- backfill writes the real `message_id` when present.
+
+### 8.3 Prove SQLCipher 4.17.0 against pre-upgrade stores
+
+The green `Android Checks` run for `cf725716` ran unit tests, built the debug APK, and compiled instrumentation tests. It did **not** run `connectedAndroidTest`. Do not mark this item complete from CI alone.
+
+On a real or virtual **arm64** Android runtime using the same native packaging as release:
+
+1. With a build pinned to SQLCipher 4.16.0, create non-empty fixtures for:
+   - `companion_memory.db`;
+   - `lorebook.db`;
+   - `generated_images.db` where applicable;
+   - any other pre-existing SQLCipher store.
+2. Preserve the database files and their real app-managed keys in the same test installation. Do not export plaintext and call that an upgrade test.
+3. Install/upgrade to the 4.17.0 build without clearing app data.
+4. For each database, open it, query known rows, run `PRAGMA integrity_check`, close it, restart the process, and reopen it.
+5. Test wrong-key and corrupt-file handling without overwriting the original fixture.
+6. Separately prove encrypted FTS5 create/insert/query/reopen/integrity for `chat_search.db`.
+7. Confirm no unique fixture sentence appears as plaintext in the DB, WAL, SHM, or temporary files.
+8. Record device ABI, Android version, old/new app commits, row counts, and pass/fail. Do not record message contents or keys.
+
+### 8.4 Phase 8 exit gate
+
+Phase 8 is complete only when all of the following are true:
+
+- the three known direct-ID compatibility bugs are fixed and repository-wide audit results are recorded in the commit/PR;
+- the generated-image DB-loss tests prove UUID image bytes are preserved;
+- the real `message_id` is used for catalog origins;
+- 4.16.0-to-4.17.0 arm64 reopen tests pass for every existing encrypted database;
+- `./gradlew --no-daemon test assembleDebug assembleDebugAndroidTest` passes;
+- GitHub `Android Checks` is green on the exact candidate commit;
+- no legacy row/history was rewritten and no owner data was used as the only test copy.
+
+### 8.5 Separate-install Beta lane before owner testing
+
+**Owner requirement, August 31, 2026:** if the owner is asked to inspect or test any of this work before the future phases are complete, provide a **Beta** that installs beside the working pre-release. Never provide an APK that updates/replaces `com.soulphosphor.phosphorshines`.
+
+Current risk: `app/build.gradle` gives debug/release the same application ID, `com.soulphosphor.phosphorshines`, and `.github/workflows/release.yml` explicitly says its debug-signed test prerelease installs over prior debug builds. That existing artifact is not an acceptable owner-test vehicle.
+
+Before requesting owner testing:
+
+1. Add a dedicated Beta variant, preferably a `beta` build type derived from the current minified debug/test configuration, with an explicit `applicationIdSuffix ".beta"`. The resolved package must be `com.soulphosphor.phosphorshines.beta` or another owner-approved distinct ID.
+2. Give it an unmistakable app label such as `Phosphor Shines Beta` and a visible Beta version suffix. Do not rely on the icon alone.
+3. Keep `${applicationId}.fileprovider` and audit every provider authority, intent package, deep-link scheme, `PendingIntent`, WorkManager name, and exported component for package-safe placeholders. Remove/fix any hard-coded production package collision before distribution.
+4. Use a separate Beta workflow/release/tag and filename, for example `phosphor-shines-beta.apk`. It must not delete, replace, or retag the existing `latest` release and must not publish the production-ID APK under a Beta name.
+5. Add a workflow assertion that inspects the built APK and fails unless its manifest application ID is the Beta ID. Filename/title checks are not enough.
+6. On an Android test device, install the working pre-release first and the Beta second. Prove both package IDs remain installed, both launch independently, and uninstalling Beta leaves the pre-release and its data intact.
+7. Keep Beta app-private files, external app-specific files, notification channels, scheduled work, and preferences isolated by package. If the user selects a shared backup folder manually, Beta artifact names must not overwrite working-copy artifacts.
+8. Publish Beta installation/removal instructions that name the Beta label/package. Never instruct the owner to uninstall the working pre-release.
+
+Important limit: a side-by-side Beta has a different Android sandbox/UID and Keystore scope. It will **not** automatically see the working pre-release's private chats, encrypted preferences, or database keys. Beta can test clean-install behavior, UI, new-chat UUIDs, synthetic legacy fixtures, and backup/restore on Beta-owned data. It cannot by itself prove an in-place upgrade of the owner's working corpus. Do not solve that by copying private data or creating a hidden migration/import path without separate owner approval.
+
+Required Beta tests:
+
+- Gradle/task test proves the Beta manifest package and visible label differ from production;
+- source-contract test rejects a Beta artifact with the production application ID;
+- provider-authority uniqueness test;
+- side-by-side install/launch/uninstall smoke test on Android;
+- Beta release workflow leaves the `latest` working pre-release release/tag untouched.
+
+If no owner testing is requested before completion, this lane may be built immediately before the first requested owner test. Once the owner test is requested, it is a hard gate.
+
+## Phase 9 — Safe whole-chat-set replacement and restore engine
+
+**Required before any UI, activity, debug action, or import path can call `ChatRestoreManager.restoreFromArchive`.** If this phase is deferred beyond the Main merge, keep restore engine-only and add a test proving there is no reachable caller.
+
+### 9.1 Define one replacement boundary
+
+Implement one coordinator for “the authoritative chat set was replaced.” `ChatRestoreManager` must call it; future portable replace/import must reuse it. Do not scatter cleanup calls through an Activity.
+
+The coordinator must own this order:
+
+1. Block new chat reads/writes and wait for current chat mutations to settle.
+2. Refuse to start while any incompatible journal is pending: rename, chat deletion, pending first-conversation commit, startup provisional session, or Search update. Either settle it before staging or stop with a typed reason. Do not silently clear an unexamined journal.
+3. Validate archive and stage every byte.
+4. Durably commit the STAGED journal. If `commit()` fails, stop before quarantine/swap.
+5. Copy every current chat file to quarantine and verify every quarantine hash before replacing anything.
+6. Durably commit the SWAPPING journal. If `commit()` fails, stop before swap.
+7. Replace the complete file set.
+8. Verify the live file set exactly matches the manifest: required files present, hashes equal, and unlisted chat-storage files absent.
+9. Mark source replacement committed with a new opaque source generation.
+10. Invalidate all cached `SecurePrefs` handles for replaced names before any read. A controlled process restart is still required; cache invalidation is defense in depth, not permission to continue normal UI work.
+11. Invalidate/rebase every dependent store as described in 9.3.
+12. Clear the restore journal only after the live set and dependent invalidation markers are durable.
+13. Enter a restart-only state and perform the controlled restart. No chat UI or startup maintenance may run against mixed old/new state.
+
+### 9.2 Harden archive and crash validation
+
+In `ChatRestoreManager`:
+
+- require the supported `manifest_version` and reject unknown versions;
+- require exactly one `enc.chat_list.xml`;
+- cross-check the manifest chat array against the exact `enc.chat_<id>.xml` and `enc.settings.<id>.xml` set;
+- require unique IDs and safe filenames; accept historical hash IDs and UUIDs;
+- store expected hashes in the restore journal, not only filenames;
+- on startup, revalidate staged hashes and the manifest before resuming;
+- make journal writes return success/failure and never swallow a failed commit;
+- treat delete/copy failures as failures; verify the final active set;
+- do not clear an `UNRECOVERABLE` journal and continue launch on a possibly mixed chat set. Keep a fail-closed recovery state that offers only verified retry/quarantine choices after owner-approved wording exists;
+- retain and verify pre-restore quarantine files. Never overwrite a previous quarantine snapshot.
+
+### 9.3 Rebase dependent state after a committed replacement
+
+Search:
+
+- add an explicit `onAuthoritativeChatSetReplaced(sourceGeneration)` path;
+- close and discard/recreate `chat_search.db` only after safe source replacement;
+- clear/rebase `chat_search_journal` and force a full generation rebuild;
+- block query results until the rebuild is sourced from the new generation;
+- add a regression for legacy rows with null source revisions so stale indexed text can never appear after restore.
+
+Generated-image catalog:
+
+- do not discard `generated_images.db`; it contains non-derived locks/tombstones/gallery state;
+- synchronize origin names against the restored chat list;
+- clear/requeue backfill-completion markers for restored chat IDs so older restored histories are scanned;
+- preserve active rows, tombstones, locks, last-known labels, and gallery-only rows;
+- run this synchronization after restore commit, never before a pending restore resumes.
+
+Startup:
+
+- move `ChatRestoreManager.resumeIfPending` before generated-catalog maintenance and before any component can open/cache chat preferences;
+- if recovery cannot settle safely, stop chat-dependent startup rather than continuing through outage, deletion, rename, pending-conversation, navigation, catalog, or Search maintenance;
+- ensure no stale `chat_deletion_journal` can immediately re-delete a chat restored from an older snapshot.
+
+### 9.4 Required restore tests
+
+- restore a set containing only historical hash IDs;
+- restore a mixed set of historical hashes and UUIDs;
+- restore renamed chats and prove IDs, history/settings filenames, attachments, memory references, folder assignments, and generated-image origins stay coherent;
+- process death after each numbered step in 9.1, including failed journal commits, failed quarantine copy, failed deletion, partial live copy, and restart before derived rebuild;
+- stale deletion, rename, pending-conversation, startup-session, and Search journals each block or settle predictably;
+- cached `SecurePrefs` handles cannot write pre-restore state after swap;
+- old Search results never appear after restore, including null-revision legacy results;
+- catalog backfill markers do not suppress restored older histories;
+- malformed manifest version, missing chat list, extra file, missing settings/history, duplicate ID, unsafe filename, and hash mismatch all fail before mutation;
+- a failed restore leaves either the complete old set or the complete verified new set, never a mixed visible set.
+
+### 9.5 Phase 9 exit gate
+
+- Unit and instrumentation tests pass for the complete crash matrix.
+- A source-contract test proves the engine has no reachable caller until the approved UI is implemented.
+- A disposable installation completes backup → mutate → restore → restart → compare, with exact chat IDs, row counts, folder catalog, settings keys, and message fingerprints matching the snapshot.
+- The owner approves the recovery wording before UI is added. Do not infer approval from approval of this technical plan.
+
+## Phase 10 — Generated-image backup, health, and restore policy
+
+**Owner decision required before implementation.** Phase 8 only prevents destructive catalog-loss behavior; it does not choose what backups promise to preserve.
+
+### 10.1 Required owner choices
+
+Present these choices with estimated backup size from a read-only inventory. Do not change storage until the owner chooses.
+
+1. **Same-install recovery:** recommended—back up the encrypted `generated_images.db` and its required sidecars consistently, using its existing installation key. Restore it through the same verified/quarantined database machinery as other SQLCipher stores.
+2. **Generated-image bytes:** choose one:
+   - full: include all active gallery assets, including images retained after origin-chat deletion;
+   - referenced-only: include only bytes still referenced by chats and explicitly disclose that gallery-only images are not recoverable;
+   - metadata-only: smallest, but disclose that the catalog can restore records/placeholders, not missing image pixels.
+3. **Portable data:** recommended—use a logical, versioned catalog export rather than copying the SQLCipher DB/key. Decide whether bytes accompany it.
+4. **UI grouping/name:** decide whether generated images appear as their own Backup Status type or as an explicitly renamed image-data group. Do not silently fold them into the existing user/profile-image database label.
+
+### 10.2 Implementation invariants after approval
+
+- Add health/check/backup/restore coverage for `generated_images.db`; do not add such coverage for derived `chat_search.db`.
+- Snapshot SQLCipher through a transactionally consistent method and verify the staged copy with the same key and integrity check before publishing it.
+- A restore replaces catalog metadata and selected bytes as one journaled operation or rolls back both.
+- Never restore a catalog row pointing outside the app's image directory; validate hashes, UUIDs, file sizes, MIME/type sniffing, and duplicate identities.
+- Keep locks, tombstones, origin-deleted labels, and ownership semantics exactly unless separately approved.
+- Do not add log payloads or wording while implementing storage behavior without the corresponding owner approval.
+
+### 10.3 Required tests
+
+- backup/restore with locked and unlocked images, copied references, deleted origins, tombstones, and gallery-only images;
+- missing DB, wrong key, corrupt DB, missing byte, extra byte, partial package, interrupted snapshot, and interrupted restore;
+- exact disclosure/behavior for the owner-selected byte policy;
+- prove `chat_search.db`, its key, WAL, SHM, and journals are excluded from every backup and rebuilt after restore.
+
+## Phase 11 — Portable chat restore/import format
+
+**This phase is future work and requires owner approval of replacement/merge semantics. Do not implement it as part of legacy compatibility cleanup.**
+
+1. Define `chat-logical-v2`. It must include the folder catalog as well as each row's folder assignment, stable chat ID, title metadata, history, and per-chat settings. Continue excluding credentials such as `api_key`.
+2. Keep a documented v1 reader policy:
+   - preserve its chat IDs;
+   - treat absent folder definitions conservatively (recommended default: import affected chats as unfiled while retaining recoverable row metadata);
+   - never fabricate folders solely from IDs;
+   - report what could not be restored before committing.
+3. Ask the owner to choose separately:
+   - exact replacement of all current chats;
+   - merge into current chats;
+   - whether ID collisions with identical/different content are skipped, replaced, or copied to a new ID.
+4. A merge must validate duplicate/malformed message IDs and chat IDs without changing the identity of an existing chat. Never derive a new chat ID from a mutable title.
+5. Use the Phase 9 authoritative-set replacement coordinator for replacement. Build an equally journaled coordinator for merge; do not write directly from an Activity.
+6. Keep `chat_search.db` out of the package and rebuild it. Export generated-image data only according to the Phase 10 decision.
+7. Round-trip tests must cover v1, v2, hash IDs, UUIDs, missing names, duplicate titles, folder references, settings types, message IDs, generated-image metadata, locked/corrupt source files, cancellation, and process death.
+
+## Phase 12 — Owner-data rehearsal and final Main gate
+
+This is the first point at which the owner's installed corpus participates, and only after a verified backup exists.
+
+1. Any early owner inspection uses the separate-install Phase 8.5 Beta. Never install the reviewed branch over the working pre-release. Remember that the Beta cannot read or validate the working app's private corpus.
+2. Before any eventual in-place candidate upgrade over the owner's only data:
+   - create and verify a same-install Recovery Backup;
+   - create and verify a Human-Readable Chat Backup in JSON mode;
+   - if available after Phase 10/11, create and verify the portable artifact;
+   - copy at least one verified artifact off the phone/app-private storage.
+3. Never begin by restoring over the only copy. First restore a duplicate fixture/disposable installation and compare:
+   - chat count and stable IDs;
+   - per-chat message counts/fingerprints;
+   - names, pins, timestamps, modes, folders, and settings-key counts;
+   - generated-image catalog/file counts under the chosen policy;
+   - memory/lorebook/profile-image counts where included.
+   Do not record message contents, database keys, or credentials in test logs.
+4. On the owner's upgraded installation, test read-only/open behavior first. Rename one disposable test chat and create one new test chat; verify the legacy chat keeps its old ID and the new chat keeps its UUID across restart.
+5. Run Search rebuild and verify representative legacy/new title and message results without rewriting histories.
+6. Run the complete accepted restore rehearsal only when the owner chooses to do so and a second verified backup remains untouched.
+7. Final candidate gate:
+   - Phase 8 complete;
+   - Phase 9 complete if restore is reachable, otherwise reachability is mechanically blocked;
+   - Phase 10 behavior matches the recorded owner choice;
+   - all automated checks green on the exact candidate commit;
+   - arm64 runtime checks recorded;
+   - owner confirms the on-device acceptance result before Main.
+
+## Instructions for the next implementation session
+
+Use this exact order; do not jump to the restore UI:
+
+1. State which numbered Phase/item you are implementing.
+2. List the exact files you expect to change.
+3. Restate whether the item changes legacy data, deletion policy, logging, or visible wording.
+4. If it does, stop and obtain the specific owner approval before editing.
+5. Add/fail the named regression test first where practical.
+6. Make the smallest scoped code change.
+7. Run the item tests, then the full build gate.
+8. Report exact commands and results, including tests that were only compiled versus run on Android.
+9. Do not mark a phase complete while any exit-gate bullet is unproven.
