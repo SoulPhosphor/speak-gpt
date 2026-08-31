@@ -49,7 +49,9 @@ import org.teslasoft.assistant.providers.RoutingBlock
 import org.teslasoft.assistant.util.GenerationErrorClassifier
 import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
+import io.ktor.client.plugins.observer.ResponseObserver
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.content.TextContent
 import kotlin.time.Duration.Companion.seconds
@@ -744,10 +746,11 @@ class SummarizerController(
                 summary,
                 departing
             )
+            val rawResponse = java.util.concurrent.atomic.AtomicReference<String?>(null)
             val text: String
             try {
                 text = withContext(Dispatchers.IO) {
-                    val client = buildClient(runtime.endpoint, runtime.providerJson)
+                    val client = buildClient(runtime.endpoint, runtime.providerJson, rawResponse)
                     val request = ChatCompletionRequest(
                         model = ModelId(runtime.model),
                         maxTokens = responseTokenBudget(runtime.lengthWords),
@@ -775,7 +778,8 @@ class SummarizerController(
                 recordFailure(
                     runtime.prefs, category, runtime.endpoint.label, runtime.model,
                     classified.httpStatus, SummarizerDetailSanitizer.sanitize(detail),
-                    rawProviderError = e.message
+                    rawProviderError = e.message,
+                    rawResponseBody = rawResponse.get()
                 )
                 return FoldBatchResult.Failed
             }
@@ -811,7 +815,8 @@ class SummarizerController(
         model: String,
         httpStatus: Int?,
         detail: String?,
-        rawProviderError: String? = null
+        rawProviderError: String? = null,
+        rawResponseBody: String? = null
     ) {
         lastFailureCategory = category
         val decorated = if (httpStatus != null) {
@@ -838,7 +843,8 @@ class SummarizerController(
                 category = category,
                 model = model,
                 rawProviderError = rawProviderError,
-                technicalDetail = decorated
+                technicalDetail = decorated,
+                rawResponseBody = rawResponseBody
             )
         }
 
@@ -858,7 +864,8 @@ class SummarizerController(
         category: SummarizerErrorCategory,
         model: String,
         rawProviderError: String?,
-        technicalDetail: String?
+        technicalDetail: String?,
+        rawResponseBody: String? = null
     ) {
         val endpointId = prefs.getSummarizerEndpointId()
         val endpoint = try {
@@ -902,12 +909,25 @@ class SummarizerController(
             technicalDetail?.takeIf { it.isNotBlank() && it != rawProviderError }?.let {
                 append("Technical Detail: ").append(it).append('\n')
             }
+            // Owner-approved diagnostic (Aug 31 2026): the exact raw response
+            // body the provider returned, so a one-shot summary/compaction call
+            // that failed to parse shows what the AI service actually sent —
+            // e.g. an error notice returned in place of a completion.
+            SummarizerDetailSanitizer.sanitize(rawResponseBody)?.takeIf { it.isNotBlank() }?.let {
+                append("Raw Response: ").append(it).append('\n')
+            }
             append("Explanation: ").append(explanation)
         }
         org.teslasoft.assistant.preferences.Logger.logAsync(
             appContext, "crash", "Compaction", "error", body
         )
-        if (rawProviderError != null && prefs.getLogChatFailures()) {
+        if ((rawProviderError != null || rawResponseBody != null) && prefs.getLogChatFailures()) {
+            val providerLogMessage = buildString {
+                append(rawProviderError.orEmpty().ifBlank { "Not Reported" })
+                SummarizerDetailSanitizer.sanitize(rawResponseBody)?.takeIf { it.isNotBlank() }?.let {
+                    append("\nRaw Response: ").append(it)
+                }
+            }
             scope.launch(Dispatchers.IO) {
                 org.teslasoft.assistant.preferences.Logger.logProviderFailure(
                     appContext,
@@ -915,7 +935,7 @@ class SummarizerController(
                     provider,
                     model,
                     "Compacting",
-                    rawProviderError
+                    providerLogMessage
                 )
             }
         }
@@ -962,7 +982,12 @@ class SummarizerController(
      */
     private fun buildClient(
         endpoint: ApiEndpointObject,
-        providerRouting: com.google.gson.JsonObject?
+        providerRouting: com.google.gson.JsonObject?,
+        // Diagnostic capture (owner-approved, Aug 31 2026): when present, the
+        // exact raw response body the provider returned for this call is stored
+        // here, so a failure can log what the AI service actually sent back —
+        // e.g. an error notice returned in place of a completion.
+        rawResponseSink: java.util.concurrent.atomic.AtomicReference<String?>? = null
     ): OpenAI {
         val isBearerAuth = endpoint.authType == ApiEndpointObject.AUTH_BEARER
         val extraHeaders: Map<String, String> = when (endpoint.authType) {
@@ -988,6 +1013,19 @@ class SummarizerController(
                 proxy = null,
                 retry = RetryStrategy(maxRetries = 0),
                 httpClientConfig = {
+                    if (rawResponseSink != null) {
+                        install(ResponseObserver) {
+                            onResponse { response ->
+                                rawResponseSink.set(
+                                    try {
+                                        response.bodyAsText()
+                                    } catch (_: Exception) {
+                                        null
+                                    }
+                                )
+                            }
+                        }
+                    }
                     if (endpoint.isOpenRouterRouting() && providerRouting != null) {
                         // Each fold-in call and size-split retry is built through
                         // this client, so the selected Summarizer routing object
