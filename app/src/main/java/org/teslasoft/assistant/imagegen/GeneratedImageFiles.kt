@@ -72,7 +72,7 @@ object GeneratedImageFiles {
                     .getChatListResult(app, includeFirstMessage = false).chats
                 for (chat in chats) {
                     if (remaining.isEmpty()) break
-                    val chatId = chat["id"] ?: continue
+                    val chatId = ChatPreferences.storedChatId(chat)
                     val history = chatPreferences.getChatByIdResult(app, chatId)
                     // A LOCKED/CORRUPT/FAILED history might still reference
                     // the file — abort and keep everything rather than guess.

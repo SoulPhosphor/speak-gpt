@@ -29,5 +29,7 @@ class GeneratedImageFilesCatalogProtectionTest {
         assertTrue(catalogCheck < fileDelete)
         assertTrue(source.contains("state != GeneratedImageCatalogStorageState.AVAILABLE"))
         assertTrue(source.contains("return@launch"))
+        assertTrue(source.contains("ChatPreferences.storedChatId(chat)"))
+        assertTrue(source.indexOf("ChatPreferences.storedChatId(chat)") < fileDelete)
     }
 }

@@ -38,8 +38,6 @@ not by reading the whole folder.
   engine, priority ladder, cooldown, campaign wiring, and the roleplay
   card + tag system (Stage 3.6). Built; historical only. Still cited by
   path from a few technical specs describing what was built and why.
-- **`database_health_build_plan.md`** — design for the self-repairing
-  search / index-health feature. Built; historical only.
 - **`memory_health_round5_phase1_design.md`** — an earlier design pass for
   the same area. Superseded by the build; historical only.
 - **`memory_settings_reorg_spec.md`** — design for a Memory Settings

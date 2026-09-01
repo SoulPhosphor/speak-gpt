@@ -388,6 +388,20 @@ class GeneratedImageCatalogStore private constructor(
         return true
     }
 
+    fun repointOriginChat(oldChatId: String, newChatId: String, newName: String): Boolean {
+        val values = ContentValues().apply {
+            put(COL_ORIGIN_CHAT_ID, newChatId)
+            put(COL_ORIGIN_CHAT_NAME, newName)
+        }
+        writableDatabase.update(
+            TABLE_IMAGES,
+            values,
+            "$COL_ORIGIN_CHAT_ID = ?",
+            arrayOf(oldChatId)
+        )
+        return true
+    }
+
     fun synchronizeOriginNames(namesById: Map<String, String>) {
         if (namesById.isEmpty()) return
         val db = writableDatabase
@@ -540,21 +554,38 @@ class GeneratedImageCatalogStore private constructor(
         @Volatile private var instance: GeneratedImageCatalogStore? = null
         @Volatile private var libraryLoaded = false
 
-        private fun access(context: Context): Pair<GeneratedImageCatalogStore?, GeneratedImageCatalogStorageState> {
+        private fun access(
+            context: Context,
+            allowRecoveryBackfill: Boolean = false
+        ): Pair<GeneratedImageCatalogStore?, GeneratedImageCatalogStorageState> {
             val app = context.applicationContext
             if (GeneratedImageCatalogHealth.isCorrupt(app)) return null to GeneratedImageCatalogStorageState.CORRUPT
+            val databaseFile = app.getDatabasePath(DATABASE_NAME)
+            var recoveryState = GeneratedImageCatalogHealth.needsRecovery(app)
+            if (!databaseFile.exists() && GeneratedImageCatalogHealth.missingDatabaseRequiresRecovery(app)) {
+                GeneratedImageCatalogHealth.markNeedsRecovery(app)
+                recoveryState = true
+            }
+            if (recoveryState && !allowRecoveryBackfill) {
+                return null to GeneratedImageCatalogStorageState.NEEDS_RECOVERY
+            }
             return try {
                 val store = instance ?: synchronized(this) {
                     instance ?: run {
                         loadLibrary()
-                        val exists = app.getDatabasePath(DATABASE_NAME).exists()
+                        val exists = databaseFile.exists()
                         val key = DatabaseKeys.getOrCreate(app, DatabaseKeys.KEY_GENERATED_IMAGES, exists)
                             ?: return null to GeneratedImageCatalogStorageState.LOCKED
                         GeneratedImageCatalogStore(app, key).also { instance = it }
                     }
                 }
                 store.readableDatabase.rawQuery("SELECT 1", null).use { it.moveToFirst() }
-                store to GeneratedImageCatalogStorageState.AVAILABLE
+                GeneratedImageCatalogHealth.markProvisioned(app)
+                store to if (recoveryState) {
+                    GeneratedImageCatalogStorageState.NEEDS_RECOVERY
+                } else {
+                    GeneratedImageCatalogStorageState.AVAILABLE
+                }
             } catch (_: Exception) {
                 null to if (GeneratedImageCatalogHealth.isCorrupt(app)) {
                     GeneratedImageCatalogStorageState.CORRUPT
@@ -567,8 +598,13 @@ class GeneratedImageCatalogStore private constructor(
         fun register(context: Context, record: GeneratedImageCatalogRecord): GeneratedImageCatalogWriteResult =
             write(context) { it.register(record) }
 
+        fun ensureAvailableForRegistration(context: Context): GeneratedImageCatalogStorageState {
+            val (_, state) = access(context)
+            return state
+        }
+
         fun upsertBackfill(context: Context, record: GeneratedImageCatalogRecord): GeneratedImageCatalogWriteResult =
-            write(context) { it.upsertBackfill(record) }
+            write(context, allowRecoveryBackfill = true) { it.upsertBackfill(record) }
 
         fun lookup(context: Context, imageId: String): GeneratedImageCatalogLookup {
             val (store, state) = access(context)
@@ -706,24 +742,32 @@ class GeneratedImageCatalogStore private constructor(
         fun renameOriginChat(context: Context, chatId: String, newName: String): GeneratedImageCatalogWriteResult =
             write(context) { it.renameOriginChat(chatId, newName) }
 
+        fun repointOriginChat(
+            context: Context,
+            oldChatId: String,
+            newChatId: String,
+            newName: String
+        ): GeneratedImageCatalogWriteResult =
+            write(context) { it.repointOriginChat(oldChatId, newChatId, newName) }
+
         fun synchronizeOriginNames(context: Context, names: Map<String, String>): GeneratedImageCatalogWriteResult =
-            write(context) { it.synchronizeOriginNames(names); true }
+            write(context, allowRecoveryBackfill = true) { it.synchronizeOriginNames(names); true }
 
         fun tombstoneMissing(context: Context, imageId: String, assetFileName: String?): GeneratedImageCatalogWriteResult =
             write(context) { it.tombstoneMissing(imageId, assetFileName) }
 
         fun isBackfillChatComplete(context: Context, chatId: String): GeneratedImageCatalogBooleanResult {
-            val (store, state) = access(context)
+            val (store, state) = access(context, allowRecoveryBackfill = true)
             if (store == null) return GeneratedImageCatalogBooleanResult(state)
             return try {
-                GeneratedImageCatalogBooleanResult(GeneratedImageCatalogStorageState.AVAILABLE, store.isBackfillChatComplete(chatId))
+                GeneratedImageCatalogBooleanResult(state, store.isBackfillChatComplete(chatId))
             } catch (_: Exception) {
                 GeneratedImageCatalogBooleanResult(failureState(context))
             }
         }
 
         fun markBackfillChatComplete(context: Context, chatId: String): GeneratedImageCatalogWriteResult =
-            write(context) { it.markBackfillChatComplete(chatId); true }
+            write(context, allowRecoveryBackfill = true) { it.markBackfillChatComplete(chatId); true }
 
         fun getMeta(context: Context, key: String): Pair<GeneratedImageCatalogStorageState, String?> {
             val (store, state) = access(context)
@@ -735,11 +779,18 @@ class GeneratedImageCatalogStore private constructor(
         fun setMeta(context: Context, key: String, value: String): GeneratedImageCatalogWriteResult =
             write(context) { it.setMeta(key, value); true }
 
-        private fun write(context: Context, block: (GeneratedImageCatalogStore) -> Boolean): GeneratedImageCatalogWriteResult {
-            val (store, state) = access(context)
+        fun setBackfillMeta(context: Context, key: String, value: String): GeneratedImageCatalogWriteResult =
+            write(context, allowRecoveryBackfill = true) { it.setMeta(key, value); true }
+
+        private fun write(
+            context: Context,
+            allowRecoveryBackfill: Boolean = false,
+            block: (GeneratedImageCatalogStore) -> Boolean
+        ): GeneratedImageCatalogWriteResult {
+            val (store, state) = access(context, allowRecoveryBackfill)
             if (store == null) return GeneratedImageCatalogWriteResult(false, state)
             return try {
-                GeneratedImageCatalogWriteResult(block(store), GeneratedImageCatalogStorageState.AVAILABLE)
+                GeneratedImageCatalogWriteResult(block(store), state)
             } catch (_: Exception) {
                 GeneratedImageCatalogWriteResult(false, failureState(context))
             }
@@ -747,6 +798,7 @@ class GeneratedImageCatalogStore private constructor(
 
         private fun failureState(context: Context) =
             if (GeneratedImageCatalogHealth.isCorrupt(context)) GeneratedImageCatalogStorageState.CORRUPT
+            else if (GeneratedImageCatalogHealth.needsRecovery(context)) GeneratedImageCatalogStorageState.NEEDS_RECOVERY
             else GeneratedImageCatalogStorageState.UNAVAILABLE
 
         fun invalidateInstance() {

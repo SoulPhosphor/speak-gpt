@@ -594,7 +594,14 @@ The review nevertheless found three pre-Main safety blockers and one unfinished 
 | P0 | SQLCipher changed from 4.16.0 to 4.17.0, but CI only compiles instrumentation tests; it does not run them on Android. | Green CI does not prove that the owner's existing encrypted databases reopen on the shipped arm64 runtime. | Phase 8 before Main |
 | P1 | `ChatRestoreManager` is engine-only and has no supported UI caller. Its raw file replacement does not yet form a safe whole-app state-replacement transaction. | A future restore can mix restored chat files with cached pre-restore preferences, stale mutation journals, a stale Search index, and catalog backfill markers. | Phase 9 before any restore UI/caller is enabled |
 
-The existing `legacy/database_health_build_plan.md` restore sections are superseded by this review where they conflict. They predate stable UUIDs, `generated_images.db`, and `chat_search.db`.
+The retired database-health build plan predated stable UUIDs,
+`generated_images.db`, and `chat_search.db` and is not an active authority.
+Its still-relevant supersession facts are captured here: `ChatRestoreManager`
+remains engine-only, portable chat restore remains unimplemented, neither
+restore path may be enabled before Phase 9's whole-chat-set replacement
+boundary, and no legacy-data migration or discard is authorized by this plan.
+The old file was removed from `legacy/` so an active phase never depends on a
+trash/archive document.
 
 ## Facts an implementation agent must preserve
 
@@ -633,7 +640,7 @@ The existing `legacy/database_health_build_plan.md` restore sections are superse
 
 ### 8.0 Start gate and allowed scope
 
-1. Re-read `CLAUDE.md`, this Phase 8 section, and the top supersession notice in `legacy/database_health_build_plan.md`.
+1. Re-read `CLAUDE.md`, this Phase 8 section, and the inlined supersession facts above. Do not use a `legacy/` document as active planning authority.
 2. Confirm the working branch still contains Phase 7 and has not diverged from Main in storage code since this review. If it has, redo the relevant diff before editing.
 3. This review authorizes documentation only. Before any Phase 8 code edit, present the exact numbered item and expected files and obtain owner approval. Do not treat publication of this plan as approval to alter legacy behavior or data.
 4. After the owner approves a scoped Phase 8 implementation, stop and ask again before any additional change that would:

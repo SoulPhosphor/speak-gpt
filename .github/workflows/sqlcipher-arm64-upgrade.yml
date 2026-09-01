@@ -1,0 +1,89 @@
+name: SQLCipher arm64 upgrade proof
+
+on:
+  workflow_dispatch:
+    inputs:
+      disposable_device_confirmation:
+        description: Type DISPOSABLE to confirm the attached arm64 test device contains no owner data
+        required: true
+        type: string
+
+jobs:
+  upgrade-proof:
+    runs-on: [self-hosted, linux, ARM64, android]
+    timeout-minutes: 45
+
+    steps:
+      - name: Require disposable arm64 device
+        env:
+          CONFIRMATION: ${{ inputs.disposable_device_confirmation }}
+        run: |
+          test "$CONFIRMATION" = "DISPOSABLE"
+          test "$(adb shell getprop ro.product.cpu.abi | tr -d '\r')" = "arm64-v8a"
+
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install build dependencies
+        run: |
+          sdkmanager --install "ndk;26.3.11579264" "cmake;3.22.1"
+          chmod +x ./gradlew
+
+      - name: Build pinned 4.16.0 fixture producer
+        run: |
+          git worktree add "$RUNNER_TEMP/sqlcipher-416" 94d58f62efbfee90aa0f7963346f0912963ca194
+          mkdir -p "$RUNNER_TEMP/sqlcipher-416/app/src/androidTest/java/org/teslasoft/assistant/preferences/sqlcipher"
+          cp app/src/androidTest/java/org/teslasoft/assistant/preferences/sqlcipher/SqlCipherPreUpgradeFixtureInstrumentedTest.kt \
+            "$RUNNER_TEMP/sqlcipher-416/app/src/androidTest/java/org/teslasoft/assistant/preferences/sqlcipher/"
+          chmod +x "$RUNNER_TEMP/sqlcipher-416/gradlew"
+          cd "$RUNNER_TEMP/sqlcipher-416"
+          ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest
+
+      - name: Create 4.16.0 encrypted fixtures
+        run: |
+          adb uninstall com.soulphosphor.phosphorshines.test || true
+          adb uninstall com.soulphosphor.phosphorshines || true
+          adb install -t "$RUNNER_TEMP/sqlcipher-416/app/build/outputs/apk/debug/app-debug.apk"
+          adb install -t "$RUNNER_TEMP/sqlcipher-416/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+          adb shell am instrument -w \
+            -e phase8UpgradeStage pre \
+            -e class org.teslasoft.assistant.preferences.sqlcipher.SqlCipherPreUpgradeFixtureInstrumentedTest \
+            com.soulphosphor.phosphorshines.test/androidx.test.runner.AndroidJUnitRunner
+
+      - name: Build and install 4.17.0 candidate without clearing data
+        run: |
+          ./gradlew --no-daemon assembleDebug assembleDebugAndroidTest
+          adb install -r -t app/build/outputs/apk/debug/app-debug.apk
+          adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+
+      - name: Verify reopen, integrity, failure handling, and encrypted FTS5
+        run: |
+          adb shell am force-stop com.soulphosphor.phosphorshines
+          adb shell am instrument -w \
+            -e phase8UpgradeStage post \
+            -e class org.teslasoft.assistant.preferences.sqlcipher.SqlCipherPostUpgradeInstrumentedTest \
+            com.soulphosphor.phosphorshines.test/androidx.test.runner.AndroidJUnitRunner
+
+      - name: Record non-sensitive proof metadata
+        if: always()
+        run: |
+          {
+            echo "## SQLCipher arm64 upgrade proof"
+            echo "- Device ABI: $(adb shell getprop ro.product.cpu.abi | tr -d '\r')"
+            echo "- Android: $(adb shell getprop ro.build.version.release | tr -d '\r')"
+            echo "- 4.16.0 fixture commit: 94d58f62efbfee90aa0f7963346f0912963ca194"
+            echo "- 4.17.0 candidate commit: $GITHUB_SHA"
+            echo "- Fixture rows: companion_memory=1, lorebook=1, generated_images=1"
+          } >> "$GITHUB_STEP_SUMMARY"

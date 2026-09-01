@@ -35,6 +35,7 @@ import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecord
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStorageState
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageRegistrationJournal
 import org.teslasoft.assistant.service.ImageGenerationForegroundService
 import org.teslasoft.assistant.util.AtomicFileWriter
 import org.teslasoft.assistant.util.GeneratedImageStorage
@@ -150,8 +151,9 @@ object ImageGenerationJobRegistry {
 
     class ActiveJob internal constructor(
         chatId: String,
-        /** Immutable ownership identity. Chat titles never participate in it. */
-        val originChatId: String,
+        /** Stable ownership identity for explicit-ID chats. A pre-ID legacy
+         * row may follow its historical title-hash compatibility move. */
+        originChatId: String,
         originChatName: String?,
         /** Allocated once and never recalculated from a label, chat name, file
          * hash, extension, or future image title. */
@@ -163,6 +165,9 @@ object ImageGenerationJobRegistry {
         /** Mutable because a placeholder chat can be auto-renamed (and
          *  re-keyed) while its first turn is still generating. */
         var chatId: String = chatId
+            internal set
+
+        var originChatId: String = originChatId
             internal set
 
         var originChatName: String? = originChatName
@@ -213,6 +218,7 @@ object ImageGenerationJobRegistry {
         if (oldChatId == newChatId) return
         jobs.remove(oldChatId)?.let { record ->
             record.chatId = newChatId
+            if (record.originChatId == oldChatId) record.originChatId = newChatId
             jobs[newChatId] = record
         }
         listeners.remove(oldChatId)?.let { listeners[newChatId] = it }
@@ -322,13 +328,26 @@ object ImageGenerationJobRegistry {
                     assetFileName = assetFileName
                 )
             val registration = withContext(Dispatchers.IO) {
+                if (GeneratedImageCatalogStore.ensureAvailableForRegistration(app) !=
+                    GeneratedImageCatalogStorageState.AVAILABLE
+                ) return@withContext false
                 val imagesDir = app.getExternalFilesDir("images")
                     ?: return@withContext false
                 val target = File(imagesDir, assetFileName)
-                val fileResult = AtomicFileWriter.writeBytesAndVerify(target, bytes)
-                if (fileResult == AtomicFileWriter.ByteWriteResult.FAILED) {
+                if (!GeneratedImageRegistrationJournal.begin(app, record.imageId, assetFileName)) {
                     return@withContext false
                 }
+                val fileResult = AtomicFileWriter.writeBytesAndVerify(target, bytes)
+                if (fileResult == AtomicFileWriter.ByteWriteResult.FAILED) {
+                    GeneratedImageRegistrationJournal.complete(app, record.imageId)
+                    return@withContext false
+                }
+                if (!GeneratedImageRegistrationJournal.markFileReady(
+                        app,
+                        record.imageId,
+                        fileResult == AtomicFileWriter.ByteWriteResult.WRITTEN
+                    )
+                ) return@withContext false
                 val catalogResult = GeneratedImageCatalogStore.register(
                     app,
                     GeneratedImageCatalogRecord(
@@ -348,7 +367,10 @@ object ImageGenerationJobRegistry {
                         source = GeneratedImageCatalogRecord.Source.GENERATED
                     )
                 )
-                if (catalogResult.success) return@withContext true
+                if (catalogResult.success) {
+                    GeneratedImageRegistrationJournal.complete(app, record.imageId)
+                    return@withContext true
+                }
 
                 // A commit can report an exception after becoming durable.
                 // Re-read before cleaning our new file; never remove a file an
@@ -357,6 +379,7 @@ object ImageGenerationJobRegistry {
                 if (lookup.state == GeneratedImageCatalogStorageState.AVAILABLE &&
                     lookup.record?.assetFileName == assetFileName
                 ) {
+                    GeneratedImageRegistrationJournal.complete(app, record.imageId)
                     return@withContext true
                 }
                 if (fileResult == AtomicFileWriter.ByteWriteResult.WRITTEN &&
@@ -364,6 +387,7 @@ object ImageGenerationJobRegistry {
                     lookup.record == null
                 ) {
                     target.delete()
+                    GeneratedImageRegistrationJournal.complete(app, record.imageId)
                 }
                 false
             }

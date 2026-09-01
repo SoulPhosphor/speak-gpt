@@ -117,6 +117,14 @@ android {
             multiDexEnabled true
             signingConfig signingConfigs.debug
         }
+
+        beta {
+            initWith debug
+            applicationIdSuffix ".beta"
+            versionNameSuffix "-beta"
+            matchingFallbacks = ['debug']
+            signingConfig signingConfigs.debug
+        }
     }
 
     compileOptions {

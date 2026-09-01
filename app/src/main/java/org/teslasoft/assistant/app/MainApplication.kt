@@ -127,8 +127,9 @@ class MainApplication : Application() {
             }
             try {
                 // Durable generated-image catalog maintenance is resumable and
-                // deliberately stays on this worker: reconcile interrupted
-                // registrations, then backfill only authoritative histories.
+                // deliberately stays on this worker: backfill authoritative
+                // histories before reconciling only journal-proven interrupted
+                // registrations.
                 GeneratedImageCatalogMaintenance.run(this)
             } catch (e: Exception) {
                 MemoryLog.log(

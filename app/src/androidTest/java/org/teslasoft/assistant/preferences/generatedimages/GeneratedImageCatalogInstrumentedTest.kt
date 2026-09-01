@@ -120,6 +120,18 @@ class GeneratedImageCatalogInstrumentedTest {
     }
 
     @Test
+    fun legacyFallbackRenameRepointsSameCatalogOwnership() {
+        GeneratedImageCatalogStore.openForTest(context, name(), key).use { store ->
+            assertTrue(store.register(record("legacy-image", chatId = "old-hash", chatName = "Old")))
+            assertTrue(store.repointOriginChat("old-hash", "new-hash", "New"))
+            val restored = store.lookup("legacy-image").record!!
+            assertEquals("new-hash", restored.originChatId)
+            assertEquals("New", restored.originChatName)
+            assertEquals("legacy-image", restored.imageId)
+        }
+    }
+
+    @Test
     fun missingActiveRowBecomesNonActiveTombstone() {
         GeneratedImageCatalogStore.openForTest(context, name(), key).use { store ->
             assertTrue(store.register(record("missing-id")))

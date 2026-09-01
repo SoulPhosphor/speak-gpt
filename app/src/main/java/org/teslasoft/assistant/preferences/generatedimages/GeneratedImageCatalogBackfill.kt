@@ -11,6 +11,7 @@ import android.content.Context
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
+import org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection
 import java.io.File
 
 /** Resumable history scan. Each authoritative chat is stamped only after its
@@ -42,7 +43,9 @@ object GeneratedImageCatalogBackfill {
         for (chat in listResult.chats) {
             val chatId = ChatPreferences.storedChatId(chat)
             val already = GeneratedImageCatalogStore.isBackfillChatComplete(app, chatId)
-            if (already.state != GeneratedImageCatalogStorageState.AVAILABLE) {
+            if (already.state != GeneratedImageCatalogStorageState.AVAILABLE &&
+                already.state != GeneratedImageCatalogStorageState.NEEDS_RECOVERY
+            ) {
                 return Outcome(false, scanned, indexed, already.state)
             }
             if (already.value) continue
@@ -80,7 +83,8 @@ object GeneratedImageCatalogBackfill {
                         ?: 0L,
                     originChatId = chatId,
                     originChatName = chat["name"],
-                    originMessageId = message["id"]?.toString()?.takeIf { it.isNotBlank() }
+                    originMessageId = message[SearchableMessageProjection.MESSAGE_ID_KEY]
+                        ?.toString()?.takeIf { it.isNotBlank() }
                         ?: metadata?.imageId?.takeIf { it.isNotBlank() },
                     locked = false,
                     source = GeneratedImageCatalogRecord.Source.BACKFILL
@@ -96,7 +100,7 @@ object GeneratedImageCatalogBackfill {
         }
 
         if (allAuthoritative) {
-            val marked = GeneratedImageCatalogStore.setMeta(
+            val marked = GeneratedImageCatalogStore.setBackfillMeta(
                 app,
                 GeneratedImageCatalogStore.META_BACKFILL_VERSION,
                 GeneratedImageCatalogStore.BACKFILL_VERSION
@@ -107,23 +111,22 @@ object GeneratedImageCatalogBackfill {
             completed = allAuthoritative,
             scannedChats = scanned,
             indexedImages = indexed,
-            state = GeneratedImageCatalogStorageState.AVAILABLE
+            state = if (GeneratedImageCatalogHealth.needsRecovery(app)) {
+                GeneratedImageCatalogStorageState.NEEDS_RECOVERY
+            } else {
+                GeneratedImageCatalogStorageState.AVAILABLE
+            }
         )
     }
 }
 
 object GeneratedImageCatalogReconciler {
-    private val canonicalPattern = Regex(
-        "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\\.[A-Za-z0-9]{2,8}$"
-    )
-
     fun run(context: Context): GeneratedImageCatalogStorageState {
         val app = context.applicationContext
         val list = GeneratedImageCatalogStore.listActive(app)
         if (list.state != GeneratedImageCatalogStorageState.AVAILABLE) return list.state
         val imagesDir = app.getExternalFilesDir("images") ?: return GeneratedImageCatalogStorageState.UNAVAILABLE
 
-        val activeNames = list.records.mapTo(HashSet()) { it.assetFileName }
         for (record in list.records) {
             val file = safeChild(imagesDir, record.assetFileName)
             if (file == null || !file.isFile) {
@@ -133,24 +136,9 @@ object GeneratedImageCatalogReconciler {
                     record.assetFileName
                 )
                 if (!result.success) return result.state
-                activeNames.remove(record.assetFileName)
             }
         }
-
-        // These suffixes are created only by AtomicFileWriter's catalog byte
-        // path. A process death before rename leaves no durable asset.
-        imagesDir.listFiles()?.filter { it.name.endsWith(".catalogtmp") }?.forEach {
-            try { it.delete() } catch (_: Exception) { }
-        }
-
-        // A UUID-named file with no row can only be an interrupted new-image
-        // registration. Legacy hash-named files are deliberately untouched.
-        imagesDir.listFiles()?.filter {
-            it.isFile && canonicalPattern.matches(it.name) && it.name !in activeNames
-        }?.forEach {
-            try { it.delete() } catch (_: Exception) { }
-        }
-        return GeneratedImageCatalogStorageState.AVAILABLE
+        return GeneratedImageRegistrationJournal.recover(app)
     }
 
     private fun safeChild(parent: File, name: String): File? =
@@ -160,7 +148,7 @@ object GeneratedImageCatalogReconciler {
 /** One background maintenance entrypoint used at process start. */
 object GeneratedImageCatalogMaintenance {
     fun run(context: Context) {
-        GeneratedImageCatalogReconciler.run(context)
         GeneratedImageCatalogBackfill.run(context)
+        GeneratedImageCatalogReconciler.run(context)
     }
 }

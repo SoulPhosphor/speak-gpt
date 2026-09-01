@@ -45,6 +45,27 @@ class ChatPreferences private constructor() {
         fun storedChatId(chat: Map<String, String>): String =
             chat["id"] ?: Hash.hash(chat["name"].toString())
 
+        internal fun chatNameForId(
+            chats: List<Map<String, String>>,
+            chatId: String
+        ): String = chats.firstOrNull { storedChatId(it) == chatId }
+            ?.get("name")
+            .orEmpty()
+
+        internal fun hasChatTitle(
+            chats: List<Map<String, String>>,
+            title: String,
+            excludingChatId: String? = null
+        ): Boolean = chats.any {
+            storedChatId(it) != excludingChatId && it["name"] == title
+        }
+
+        internal fun nextAutonameNumber(chats: List<Map<String, String>>): String {
+            var number = 1
+            while (chats.any { it["name"] == "_autoname_$number" }) number++
+            return number.toString()
+        }
+
         fun getChatPreferences() : ChatPreferences {
             if (preferences == null) preferences = ChatPreferences()
             return preferences!!
@@ -639,8 +660,6 @@ class ChatPreferences private constructor() {
      * @return A unique chat ID as a String.
      */
     fun getAvailableChatIdForAutoname(context: Context) : String {
-        var x = 1
-
         var list = getChatMetadataList(context)
 
         // R8 Bugfix
@@ -649,62 +668,7 @@ class ChatPreferences private constructor() {
         // Dumb things goes gere
         if (list.isEmpty()) list = arrayListOf()
 
-        while (true) {
-            var isFound = false
-            for (map: HashMap<String, String> in list) {
-                if (map["name"] == "_autoname_$x" ||
-                    storedChatId(map) == Hash.hash("_autoname_$x")) {
-                    isFound = true
-                    break
-                }
-            }
-
-            if (!isFound) break
-
-            x++
-        }
-
-        return x.toString()
-    }
-
-    /**
-     * Adds a new chat to the chat list.
-     *
-     * @param context The context of the application.
-     * @param chatName The name of the chat to add.
-     */
-    fun addChat(context: Context, chatName: String) {
-        if (chatWriteBlocked(context, "chat_list", "create a chat")) return
-        val chatId = Hash.hash(chatName)
-        val titleRevision = ChatSearchIndexManager.newRevision()
-        if (!ChatSearchIndexJournal.get(context).record(chatId, titleRevision)) return
-        var listCommitted = false
-        synchronized(CHAT_LIST_LOCK) {
-            val list = getChatMetadataList(context)
-
-            val map: HashMap<String, String> = HashMap()
-
-            map["name"] = chatName
-            map["id"] = chatId
-            map["timestamp"] = System.currentTimeMillis().toString()
-            map["pinned"] = "false"
-            map["search_title_revision"] = titleRevision
-
-            list.add(map)
-            val json: String = Gson().toJson(list)
-
-            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-            listCommitted = settings.edit().putString("data", json).commit()
-        }
-
-        if (!listCommitted) {
-            ChatSearchIndexJournal.get(context).clearExact(chatId, titleRevision)
-            return
-        }
-
-        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
-        settings2.edit { putString("chat", "[]") }
-        ChatSearchIndexManager.get(context).scheduleTitleRefresh(chatId, titleRevision)
+        return nextAutonameNumber(list)
     }
 
     /**
@@ -814,42 +778,23 @@ class ChatPreferences private constructor() {
      * @return True if a chat with the given name already exists in the chat list, false otherwise.
      */
     fun checkDuplicate(context: Context, chatName: String, renamingChatId: String? = null) : Boolean {
-        val list = getChatMetadataList(context)
-
-        var isFound = false
-        for (map: HashMap<String, String> in list) {
-            if (storedChatId(map) != renamingChatId &&
-                (map["name"] == chatName ||
-                    (renamingChatId == null && storedChatId(map) == Hash.hash(chatName)))) {
-                isFound = true
-                break
-            }
-        }
-
-        return isFound
+        return hasChatTitle(getChatMetadataList(context), chatName, renamingChatId)
     }
 
     fun getChatName(context: Context, chatId: String) : String {
-        val list = getChatMetadataList(context)
-
-        var name = ""
-        for (map: HashMap<String, String> in list) {
-            if (map["id"] == chatId) {
-                name = map["name"].toString()
-                break
-            }
-        }
-
-        return name
+        return chatNameForId(getChatMetadataList(context), chatId)
     }
 
-    /** Changes only the title. The caller supplies the chat's existing ID.
-     *  History, settings, attachments and memory records stay at that ID. */
+    /** Changes only the title for every row with an explicit stable ID. The
+     * caller supplies that existing ID, so history, settings, attachments and
+     * memory records stay at it. A pre-ID legacy row remains on its historical
+     * title-hash compatibility path: its files move transactionally to the new
+     * title hash, without writing an ID into the row. */
     fun editChat(context: Context, chatName: String, previousName: String, chatId: String): Boolean {
         if (chatName == previousName) return true
 
         val oldId = chatId
-        val newId = oldId
+        var newId = oldId
 
         // Preserve the existing write gates for the list and chat history.
         // A title-only rename writes only the list.
@@ -868,6 +813,7 @@ class ChatPreferences private constructor() {
             val list = getChatMetadataList(context)
             val entry = list.firstOrNull { storedChatId(it) == oldId } ?: return false
             if (entry["name"] != previousName) return false
+            if (!entry.containsKey("id")) newId = Hash.hash(chatName)
 
             // Preserve unique titles, independently of the existing IDs.
             // Auto-naming may retry with another title.
@@ -928,6 +874,16 @@ class ChatPreferences private constructor() {
             ChatSearchIndexManager.get(context).scheduleTitleRefresh(oldId, titleSearchRevision!!)
             return true
         }
+
+        // A no-ID legacy row necessarily follows its historical title-hash
+        // storage contract. Keep the same live generation and the same catalog
+        // ownership attached while the compatibility transaction moves that
+        // one chat from the old fallback hash to the new fallback hash.
+        try {
+            ImageGenerationJobRegistry.rename(oldId, newId)
+            ImageGenerationJobRegistry.updateOriginChatName(newId, chatName)
+            GeneratedImageCatalogStore.repointOriginChat(context, oldId, newId, chatName)
+        } catch (_: Exception) { }
 
         // Attachment image bytes live in a directory keyed by chat id. The
         // rename copied the include records (with their image hashes) to the
