@@ -45,8 +45,10 @@ jobs:
         run: |
           ./gradlew --no-daemon assembleBeta
           APK=app/build/outputs/apk/beta/app-beta.apk
+          AAPT="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt -print | sort -V | tail -n 1)"
+          test -x "$AAPT"
           test "$(apkanalyzer manifest application-id "$APK")" = "com.soulphosphor.phosphorshines.beta"
-          aapt dump badging "$APK" | grep -F "application-label:'Phosphor Shines Beta'"
+          "$AAPT" dump badging "$APK" | grep -F "application-label:'Phosphor Shines Beta'"
 
       - name: Compile instrumentation tests
         # Compiles app/src/androidTest (the SQLCipher MemoryStore migration and

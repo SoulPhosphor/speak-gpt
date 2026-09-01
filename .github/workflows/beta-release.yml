@@ -40,8 +40,10 @@ jobs:
       - name: Assert Beta manifest identity and label
         run: |
           APK=app/build/outputs/apk/beta/app-beta.apk
+          AAPT="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt -print | sort -V | tail -n 1)"
+          test -x "$AAPT"
           test "$(apkanalyzer manifest application-id "$APK")" = "com.soulphosphor.phosphorshines.beta"
-          aapt dump badging "$APK" | grep -F "application-label:'Phosphor Shines Beta'"
+          "$AAPT" dump badging "$APK" | grep -F "application-label:'Phosphor Shines Beta'"
           cp "$APK" phosphor-shines-beta.apk
 
       - name: Upload candidate
