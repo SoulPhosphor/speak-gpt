@@ -118,6 +118,14 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
             FavoriteRoutingActions.buildRoutingIntent(requireActivity(), prefs, favPrefs, model, endpointId)
                 ?.let { chooseProviderLauncher.launch(it) }
         }
+
+        override fun onParametersClick(model: String, endpointId: String) {
+            startActivity(
+                org.teslasoft.assistant.ui.activities.ModelParametersActivity.createIntent(
+                    requireActivity(), model, endpointId, requireArguments().getString("chatId").orEmpty()
+                )
+            )
+        }
     }
 
     /** Rebuild the list from the store (used after a gear round-trip may have

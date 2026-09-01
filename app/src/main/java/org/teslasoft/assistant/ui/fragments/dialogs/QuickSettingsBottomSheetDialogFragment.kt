@@ -43,6 +43,7 @@ import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
+import org.teslasoft.assistant.preferences.FavoriteModelParameters
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.LogitBiasConfigPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
@@ -291,6 +292,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val savedModel = result.data?.getStringExtra(ChooseProviderActivity.EXTRA_MODEL)
         if (!savedModel.isNullOrBlank() && savedModel != preferences?.getModel()) {
             preferences?.setModel(savedModel)
+            applyFavoriteParametersForCurrentModel(savedModel)
             textModel?.text = savedModel
         }
         updateListener?.onUpdate()
@@ -804,6 +806,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
     private var modelSelectedListener: AdvancedModelSelectorDialogFragment.OnModelSelectedListener = AdvancedModelSelectorDialogFragment.OnModelSelectedListener { model ->
         preferences?.setModel(model)
+        // The model's saved parameters (Model Parameters screen) come along with
+        // it. Applied against the chat's own endpoint here; the visible sliders
+        // are refreshed so they show — and cannot later clobber — the new values.
+        applyFavoriteParametersForCurrentModel(model)
         updateListener?.onUpdate()
         shouldForceUpdate = true
         textModel?.text = model
@@ -817,6 +823,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         preferences?.setApiEndpointId(endpointId)
         android.widget.Toast.makeText(requireContext(), R.string.msg_api_compatibility_change, android.widget.Toast.LENGTH_SHORT).show()
         preferences?.setModel(model)
+        // Endpoint is now this favorite's own endpoint, so apply against it.
+        preferences?.let { FavoriteModelParameters.applyToChat(requireContext(), it, model, endpointId) }
+        refreshSamplingControlsFromPreferences()
         updateListener?.onUpdate()
         shouldForceUpdate = true
         textModel?.text = model
@@ -1698,6 +1707,36 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             preferences?.setChatRoleplayCharacterId(ids[which])
             updateChatRoleplayCharacterLabel()
         }
+    }
+
+    /** Apply the just-selected model's saved parameters against the chat's own
+     *  active endpoint, then refresh the visible controls to match. */
+    private fun applyFavoriteParametersForCurrentModel(model: String) {
+        val prefs = preferences ?: return
+        if (!isAdded) return
+        FavoriteModelParameters.applyToChat(requireContext(), prefs, model, prefs.getApiEndpointId())
+        refreshSamplingControlsFromPreferences()
+    }
+
+    /** Re-seed the streaming checkbox and the four sampling controls from the
+     *  chat's stored values. Used after a model selection applied a favorite's
+     *  saved parameters, so the open sheet shows the new values instead of a
+     *  stale slider position that a later drag would write back. */
+    private fun refreshSamplingControlsFromPreferences() {
+        val prefs = preferences ?: return
+        temperatureSeekbar?.configure(
+            SamplingParameterSpec.TEMPERATURE, prefs.getTemperature()
+        ) { prefs.setTemperature(it) }
+        topPSeekbar?.configure(
+            SamplingParameterSpec.TOP_P, prefs.getTopP()
+        ) { prefs.setTopP(it) }
+        frequencyPenaltySeekbar?.configure(
+            SamplingParameterSpec.FREQUENCY_PENALTY, prefs.getFrequencyPenalty()
+        ) { prefs.setFrequencyPenalty(it) }
+        presencePenaltySeekbar?.configure(
+            SamplingParameterSpec.PRESENCE_PENALTY, prefs.getPresencePenalty()
+        ) { prefs.setPresencePenalty(it) }
+        checkStreaming?.isChecked = prefs.getStreaming()
     }
 
     private fun saveCurrentSettingsToProfile() {

@@ -272,6 +272,14 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             FavoriteRoutingActions.buildRoutingIntent(requireActivity(), prefs, favPrefs, model, endpointId)
                 ?.let { chooseProviderLauncher.launch(it) }
         }
+
+        override fun onParametersClick(model: String, endpointId: String) {
+            startActivity(
+                org.teslasoft.assistant.ui.activities.ModelParametersActivity.createIntent(
+                    requireActivity(), model, endpointId, requireArguments().getString("chatId").orEmpty()
+                )
+            )
+        }
     }
 
     /** Finalize a normal model pick. Kept in one place so every resolution path

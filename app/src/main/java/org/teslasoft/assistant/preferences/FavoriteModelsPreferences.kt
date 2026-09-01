@@ -82,6 +82,7 @@ class FavoriteModelsPreferences private constructor(private val sharedPreference
         // new model is appended. The provider memory lives on the favorite so
         // removing the favorite removes it too (see removeFavoriteModel).
         val existingIndex = models.indexOfFirst { m -> m["modelId"] == model.modelId && m["endpointId"] == model.endpointId }
+        val existing = if (existingIndex >= 0) models[existingIndex] else null
         val entry = hashMapOf(
             "modelId" to model.modelId,
             "endpointId" to model.endpointId,
@@ -96,6 +97,18 @@ class FavoriteModelsPreferences private constructor(private val sharedPreference
             "reasoningEffort" to model.reasoningEffort,
             "showReasoning" to model.showReasoning.toString()
         )
+        // Sampling parameters ride on the favorite (Model Parameters screen).
+        // A write that does not carry them (e.g. saving routing from the gear,
+        // or reasoning from its screen) preserves whatever was saved before, so
+        // those unrelated saves never erase a model's parameters. Only the
+        // Model Parameters screen supplies non-null values, which overwrite.
+        // A brand-new favorite has neither, so the keys stay absent and read
+        // back all-null (see getFavorite).
+        (model.streaming?.toString() ?: existing?.get("streaming"))?.let { entry["streaming"] = it }
+        (model.temperature?.toString() ?: existing?.get("temperature"))?.let { entry["temperature"] = it }
+        (model.topP?.toString() ?: existing?.get("topP"))?.let { entry["topP"] = it }
+        (model.frequencyPenalty?.toString() ?: existing?.get("frequencyPenalty"))?.let { entry["frequencyPenalty"] = it }
+        (model.presencePenalty?.toString() ?: existing?.get("presencePenalty"))?.let { entry["presencePenalty"] = it }
         if (existingIndex >= 0) {
             models[existingIndex] = entry
         } else {
@@ -144,7 +157,16 @@ class FavoriteModelsPreferences private constructor(private val sharedPreference
             // Reasoning On (§7.9). A blank stored effort also falls to Auto.
             reasoningEffort = entry["reasoningEffort"]?.takeIf { it.isNotBlank() }
                 ?: FavoriteModelObject.REASONING_AUTO,
-            showReasoning = entry["showReasoning"] != "false"
+            showReasoning = entry["showReasoning"] != "false",
+            // Sampling parameters are null when the key is absent (favorite
+            // saved before this feature, or the user never saved parameters
+            // for it) — that null is what tells a model selection to leave the
+            // chat's own values alone.
+            streaming = entry["streaming"]?.toBooleanStrictOrNull(),
+            temperature = entry["temperature"]?.toFloatOrNull(),
+            topP = entry["topP"]?.toFloatOrNull(),
+            frequencyPenalty = entry["frequencyPenalty"]?.toFloatOrNull(),
+            presencePenalty = entry["presencePenalty"]?.toFloatOrNull()
         )
     }
 

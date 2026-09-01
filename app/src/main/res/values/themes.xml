@@ -1416,6 +1416,11 @@
         <item name="android:layout_marginTop">0dp</item>
         <item name="android:layout_marginBottom">@dimen/sampling_slider_value_gap</item>
         <item name="android:minHeight">@dimen/sampling_slider_value_min_height</item>
+        <!-- Compact padding: the value never exceeds two decimals, so the box
+             should be small and tidy rather than the full-field 12dp padding
+             it inherits. -->
+        <item name="android:paddingHorizontal">@dimen/sampling_slider_value_padding_horizontal</item>
+        <item name="android:paddingVertical">@dimen/sampling_slider_value_padding_vertical</item>
         <item name="android:gravity">center</item>
         <item name="android:inputType">numberDecimal|numberSigned</item>
         <item name="android:maxLines">1</item>
@@ -1431,6 +1436,31 @@
         <item name="android:layout_marginStart">@dimen/sampling_slider_horizontal_margin</item>
         <item name="android:layout_marginEnd">@dimen/sampling_slider_horizontal_margin</item>
         <item name="labelBehavior">gone</item>
+        <!-- A cleaner, less "clunky" slider: a slim continuous track with no
+             tick marks and a right-sized thumb, themed through the palette. -->
+        <item name="tickVisible">false</item>
+        <item name="trackHeight">@dimen/sampling_slider_track_height</item>
+        <item name="thumbRadius">@dimen/sampling_slider_thumb_radius</item>
+        <item name="trackCornerRadius">@dimen/sampling_slider_track_height</item>
+        <item name="trackColorActive">?attr/colorPrimary</item>
+        <item name="trackColorInactive">?attr/colorSurfaceVariant</item>
+        <item name="thumbColor">?attr/colorPrimary</item>
+        <item name="haloColor">?attr/colorPrimary</item>
+    </style>
+
+    <!-- One parameter's card on the Model Parameters screen: a fully rounded
+         surface tinted like the Quick Settings parameter tiles, so the two
+         screens read as the same design. -->
+    <style name="Widget.App.ParameterCard" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">12dp</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:background">@drawable/btn_accent_24</item>
+        <item name="android:backgroundTint">?attr/colorSecondaryContainer</item>
+        <item name="android:paddingHorizontal">16dp</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">16dp</item>
     </style>
 
     <!-- A small, right-sized numeric input blank (owner spec, July 23 2026 —

@@ -120,6 +120,12 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.ModelParametersActivity"
+            android:exported="false"
+            android:label="@string/model_parameters_title">
+        </activity>
+
+        <activity
             android:name=".ui.activities.ProviderFilterPanelActivity"
             android:exported="false"
             android:label="@string/provider_filters_title">

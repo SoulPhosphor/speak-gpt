@@ -74,9 +74,27 @@
             android:padding="12dp"
             android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@+id/btn_routing_settings"
+            app:layout_constraintEnd_toStartOf="@+id/btn_parameters"
             app:layout_constraintTop_toTopOf="parent"
             app:srcCompat="@drawable/ic_lightbulb" />
+
+        <!-- Model Parameters (Tune). Sits directly to the left of the routing
+             gear and opens this favorite's saved sampling parameters. Shown for
+             every favorite in the lists that show the gear (parameters apply to
+             any model, unlike routing); GONE by default so other uses of this
+             row are unchanged. -->
+        <ImageButton
+            android:id="@+id/btn_parameters"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@color/transparent"
+            android:contentDescription="@null"
+            android:padding="12dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_routing_settings"
+            app:layout_constraintTop_toTopOf="parent"
+            app:srcCompat="@drawable/ic_tune" />
 
         <!-- Provider-routing gear. Shown only for OpenRouter favorites
              (FavoriteModelListAdapter); a filled gear when routing is set up,
