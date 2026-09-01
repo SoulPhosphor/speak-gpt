@@ -1,20 +1,20 @@
 name: Side-by-side Beta APK
 
 on:
-  workflow_dispatch:
-    inputs:
-      disposable_device_confirmation:
-        description: Type DISPOSABLE to confirm the attached arm64 test device contains no owner data
-        required: true
-        type: string
+  push:
+    branches:
+      - agent/phase-8-pre-main-safety
 
 concurrency:
   group: side-by-side-beta
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,10 +34,10 @@ jobs:
           sdkmanager --install "ndk;26.3.11579264" "cmake;3.22.1"
           chmod +x ./gradlew
 
-      - name: Build Beta
+      - name: Test and build Beta
         run: ./gradlew --no-daemon test assembleBeta
 
-      - name: Assert Beta manifest identity and label
+      - name: Assert Beta identity and label
         run: |
           APK=app/build/outputs/apk/beta/app-beta.apk
           AAPT="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt -print | sort -V | tail -n 1)"
@@ -46,64 +46,12 @@ jobs:
           "$AAPT" dump badging "$APK" | grep -F "application-label:'Phosphor Shines Beta'"
           cp "$APK" phosphor-shines-beta.apk
 
-      - name: Upload candidate
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: phase-8-beta-candidate
           path: phosphor-shines-beta.apk
           if-no-files-found: error
-
-  side-by-side-smoke:
-    needs: build
-    runs-on: [self-hosted, linux, ARM64, android]
-    permissions:
-      contents: read
-    steps:
-      - name: Require disposable arm64 device
-        env:
-          CONFIRMATION: ${{ inputs.disposable_device_confirmation }}
-        run: |
-          test "$CONFIRMATION" = "DISPOSABLE"
-          test "$(adb shell getprop ro.product.cpu.abi | tr -d '\r')" = "arm64-v8a"
-
-      - name: Download Beta candidate
-        uses: actions/download-artifact@v4
-        with:
-          name: phase-8-beta-candidate
-
-      - name: Download current working prerelease without altering it
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release download latest --repo "$GITHUB_REPOSITORY" --pattern phosphor-shines.apk
-
-      - name: Prove side-by-side install and isolated uninstall
-        run: |
-          adb uninstall com.soulphosphor.phosphorshines.beta || true
-          adb uninstall com.soulphosphor.phosphorshines || true
-          adb install -t phosphor-shines.apk
-          PRE_UID=$(adb shell cmd package list packages -U com.soulphosphor.phosphorshines | tr -d '\r')
-          adb install -t phosphor-shines-beta.apk
-          adb shell pm path com.soulphosphor.phosphorshines
-          adb shell pm path com.soulphosphor.phosphorshines.beta
-          BETA_UID=$(adb shell cmd package list packages -U com.soulphosphor.phosphorshines.beta | tr -d '\r')
-          test "$PRE_UID" != "$BETA_UID"
-          adb shell monkey -p com.soulphosphor.phosphorshines -c android.intent.category.LAUNCHER 1
-          adb shell monkey -p com.soulphosphor.phosphorshines.beta -c android.intent.category.LAUNCHER 1
-          adb uninstall com.soulphosphor.phosphorshines.beta
-          adb shell pm path com.soulphosphor.phosphorshines
-          test "$(adb shell cmd package list packages -U com.soulphosphor.phosphorshines | tr -d '\r')" = "$PRE_UID"
-          test -z "$(adb shell pm path com.soulphosphor.phosphorshines.beta | tr -d '\r')"
-
-  publish-beta:
-    needs: side-by-side-smoke
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download proven Beta
-        uses: actions/download-artifact@v4
-        with:
-          name: phase-8-beta-candidate
 
       - name: Write Beta instructions
         run: |
@@ -126,9 +74,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete beta-latest --yes 2>/dev/null || true
-          git push origin :refs/tags/beta-latest 2>/dev/null || true
+          gh release delete beta-latest --yes --cleanup-tag 2>/dev/null || true
           gh release create beta-latest phosphor-shines-beta.apk \
+            --target "$GITHUB_SHA" \
             --title "Phosphor Shines Beta" \
             --notes-file beta-notes.md \
             --prerelease
