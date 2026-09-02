@@ -228,6 +228,24 @@ object SecurePrefs {
         }
     }
 
+    /**
+     * Logical names of every encrypted preferences file whose name starts with
+     * [prefix]. Recovery passes need this to find a store that no index points
+     * at any more — the same directory scan [listOutageNames] already relies on.
+     */
+    fun encryptedNamesStartingWith(context: Context, prefix: String): List<String> = try {
+        val dir = File(context.applicationContext.dataDir, "shared_prefs")
+        (dir.listFiles() ?: emptyArray())
+            .map { it.name }
+            .filter { it.startsWith(ENC_PREFIX + prefix) && it.endsWith(".xml") }
+            .map { it.removePrefix(ENC_PREFIX).removeSuffix(".xml") }
+            // Snapshot/backup copies carry an extra "." suffix segment; they are
+            // preserved evidence, never a live store to act on.
+            .filter { it.isNotBlank() && !it.removePrefix(prefix).contains('.') }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
     private fun encryptedFileExists(context: Context, name: String): Boolean = try {
         File(File(context.dataDir, "shared_prefs"), "$ENC_PREFIX$name.xml").exists()
     } catch (_: Exception) {

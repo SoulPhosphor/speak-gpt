@@ -64,7 +64,13 @@ class ChatDeletionCallSiteContractTest {
 
     @Test fun currentChatPinIsFirstAndUsesTheNavigationRepositoryIdentity() {
         val activity = source("java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
-        assertTrue(activity.contains("result.value.allChats.firstOrNull { it.id == chatId }"))
+        // Saved-chat identity comes from the chat list itself. Reading it from
+        // the whole navigation snapshot additionally required the folder
+        // catalog to be readable, so a folder-metadata problem removed Pin,
+        // Export Chat and Delete from a healthy saved chat's menu.
+        assertTrue(activity.contains("private fun readSavedChatRow(): SavedChatRow?"))
+        assertTrue(activity.contains("list.chats.firstOrNull { ChatPreferences.storedChatId(it) == chatId }"))
+        assertFalse(activity.contains("result.value.allChats.firstOrNull { it.id == chatId }"))
         assertTrue(activity.contains(".setChatPinned(chat.id, !chat.pinned)"))
         assertOrdered(
             activity,

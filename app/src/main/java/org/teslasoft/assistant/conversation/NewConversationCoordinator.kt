@@ -34,8 +34,27 @@ class NewConversationCoordinator(private val context: Context) {
     private val app = context.applicationContext
 
     fun createDefaultPendingConversation(): PendingConversationState {
-        val name = "_autoname_${ChatPreferences.getChatPreferences().getAvailableChatIdForAutoname(app)}"
-        return createPendingConversation(StartRequest(name))
+        return createPendingConversation(StartRequest(nextPlaceholderName()))
+    }
+
+    /**
+     * The next unused "_autoname_N" placeholder. A provisional conversation has
+     * no chat-list row yet, so the list alone is not enough: the startup blank
+     * chat and a drawer New Chat would both be handed "_autoname_1", and
+     * whichever committed second would be rejected as a duplicate title and
+     * then discarded with its messages. Live provisional titles count too.
+     */
+    private fun nextPlaceholderName(): String {
+        val taken = HashSet<String>()
+        ChatPreferences.getChatPreferences()
+            .getChatListResult(app, includeFirstMessage = false)
+            .chats.mapNotNullTo(taken) { it["name"] }
+        pendingConversationIds().mapNotNullTo(taken) { id ->
+            retainedName(id).takeIf { it.isNotBlank() }
+        }
+        var number = 1
+        while ("_autoname_$number" in taken) number++
+        return "_autoname_$number"
     }
 
     /** Reuse the same hidden blank session after launcher/task process restoration. */
@@ -48,8 +67,19 @@ class NewConversationCoordinator(private val context: Context) {
                 .getChatListResult(app, includeFirstMessage = false)
                 .chats.any { ChatPreferences.storedChatId(it) == id }
             val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, id)
-            if (!saved && ChatStorageHealth.isAuthoritative(history.state) && history.messages.isEmpty()) {
-                return PendingConversationState(id, name, readMode(id))
+            if (!saved && ChatStorageHealth.isAuthoritative(history.state)) {
+                if (history.messages.isEmpty()) {
+                    return PendingConversationState(id, name, readMode(id))
+                }
+                // The retained blank session ended up holding real turns (its
+                // first commit never ran, or failed). Releasing the pointer here
+                // used to leave that conversation on disk with no chat-list row
+                // and no way back to it. Finish its commit instead, then open a
+                // genuinely new blank chat.
+                commitPendingConversation(
+                    PendingConversationState(id, name, readMode(id)),
+                    history.messages
+                )
             }
         }
         session.edit().clear().commit()
@@ -70,7 +100,12 @@ class NewConversationCoordinator(private val context: Context) {
             .putString(ConversationMode.MODE_KEY, ConversationMode.CHAT.storedValue)
             .putInt(ConversationMode.MODE_VERSION_KEY, ConversationMode.SCHEMA_VERSION)
             .putBoolean(ConversationMode.PENDING_KEY, true)
+            // Stored with the chat, not only in the launching Intent, so a
+            // recovery pass can still finish this conversation's first commit
+            // under its real title after the screen and its Intent are gone.
+            .putString(ConversationMode.PENDING_NAME_KEY, request.name)
             .commit()
+        indexPendingConversation(chatId, request.name)
         check(initialized) { "Unable to initialize pending conversation settings" }
         check(
             SecurePrefs.get(app, "chat_$chatId").edit()
@@ -90,7 +125,10 @@ class NewConversationCoordinator(private val context: Context) {
             state.mode,
             messages
         )
-        if (result.succeeded) clearStartupSession(state.id)
+        if (result.succeeded) {
+            clearStartupSession(state.id)
+            clearPendingIndex(state.id)
+        }
         return result
     }
 
@@ -128,19 +166,132 @@ class NewConversationCoordinator(private val context: Context) {
                 history.messages
             )
         }
+        recoverOrphanedPendingConversations()
     }
 
-    /** Idempotent cleanup for a blank activity that is deliberately abandoned. */
-    fun abandonPendingConversation(chatId: String): Boolean {
+    /**
+     * Rescue conversations that hold real turns but never reached the journal.
+     *
+     * A provisional conversation writes its history under its own id from the
+     * first turn onward, but it only becomes a listed chat when its first
+     * commit runs. Any path that recorded turns without running that commit
+     * left a complete conversation on disk that no screen could reach. This
+     * pass finds those stores, commits them under their retained title, and
+     * touches nothing that is already listed, already blank, or unreadable.
+     */
+    private fun recoverOrphanedPendingConversations() {
+        adoptUnindexedPendingConversations()
+        val listed = ChatPreferences.getChatPreferences()
+            .getChatListResult(app, includeFirstMessage = false)
+        if (!ChatStorageHealth.isAuthoritative(listed.state)) return
+        val listedIds = listed.chats.mapTo(HashSet()) { ChatPreferences.storedChatId(it) }
+        pendingConversationIds().forEach { chatId ->
+            if (chatId in listedIds) return@forEach
+            val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId)
+            if (!ChatStorageHealth.isAuthoritative(history.state) || history.messages.isEmpty()) {
+                return@forEach
+            }
+            val name = retainedName(chatId).ifBlank { nextPlaceholderName() }
+            commitPendingConversation(
+                PendingConversationState(chatId, name, readMode(chatId)),
+                history.messages
+            )
+        }
+    }
+
+    /**
+     * Ids of the conversations that are still provisional.
+     *
+     * Read from a small index rather than by scanning every per-chat settings
+     * file: opening one encrypted store per chat would put the whole chat
+     * corpus on the app-start path. The index lists candidates; the per-chat
+     * flag stays the authority, so a stale entry is filtered out here.
+     */
+    private fun pendingConversationIds(): List<String> {
+        val indexed: List<String> = try {
+            pendingIndex().all.keys.toList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+        return indexed.filter { it.isNotBlank() && it != INDEX_BACKFILLED_KEY && isPending(it) }
+    }
+
+    private fun pendingIndex() = SecurePrefs.get(app, PENDING_INDEX_FILE)
+
+    private fun indexPendingConversation(chatId: String, name: String) {
+        try { pendingIndex().edit().putString(chatId, name).commit() } catch (_: Exception) { }
+    }
+
+    private fun clearPendingIndex(chatId: String) {
+        try { pendingIndex().edit().remove(chatId).commit() } catch (_: Exception) { }
+    }
+
+    /** The provisional title, from the index or from the chat's own settings. */
+    private fun retainedName(chatId: String): String {
+        val indexed = try {
+            pendingIndex().getString(chatId, "").orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        if (indexed.isNotBlank()) return indexed
+        return SecurePrefs.get(app, "$SETTINGS_PREFIX$chatId")
+            .getString(ConversationMode.PENDING_NAME_KEY, "").orEmpty()
+    }
+
+    /**
+     * One-time adoption of provisional conversations created before the index
+     * existed. Scans the per-chat settings stores once, records what is still
+     * provisional, and never runs again. Without it, a conversation orphaned by
+     * an earlier build would stay unreachable forever.
+     */
+    private fun adoptUnindexedPendingConversations() {
+        val index = pendingIndex()
+        if (index.getBoolean(INDEX_BACKFILLED_KEY, false)) return
+        SecurePrefs.encryptedNamesStartingWith(app, SETTINGS_PREFIX)
+            .map { it.removePrefix(SETTINGS_PREFIX) }
+            .filter { it.isNotBlank() && isPending(it) }
+            .forEach { chatId ->
+                val name = SecurePrefs.get(app, "$SETTINGS_PREFIX$chatId")
+                    .getString(ConversationMode.PENDING_NAME_KEY, "").orEmpty()
+                indexPendingConversation(chatId, name)
+            }
+        try { index.edit().putBoolean(INDEX_BACKFILLED_KEY, true).commit() } catch (_: Exception) { }
+    }
+
+    /**
+     * Idempotent cleanup for a blank activity that is deliberately abandoned.
+     *
+     * Only a conversation that is provably EMPTY is discarded. If it holds
+     * turns, its first commit is finished here instead, so leaving the screen
+     * can never destroy a conversation the user actually had. An unreadable
+     * store is left exactly as it is.
+     */
+    fun abandonPendingConversation(chatId: String, chatName: String = ""): Boolean {
         if (!isPending(chatId)) return false
         val stillSaved = ChatPreferences.getChatPreferences()
             .getChatListResult(app, includeFirstMessage = false)
             .chats.any { ChatPreferences.storedChatId(it) == chatId }
-        if (stillSaved) return false
+        if (stillSaved) {
+            clearPendingIndex(chatId)
+            return false
+        }
+        val stored = ChatPreferences.getChatPreferences().getChatByIdResult(app, chatId)
+        if (!ChatStorageHealth.isAuthoritative(stored.state)) return false
+        if (stored.messages.isNotEmpty()) {
+            val name = chatName.ifBlank { retainedName(chatId) }.ifBlank { nextPlaceholderName() }
+            commitPendingConversation(
+                PendingConversationState(chatId, name, readMode(chatId)),
+                stored.messages
+            )
+            return false
+        }
         val history = SecurePrefs.get(app, "chat_$chatId").edit().clear().commit()
-        val settings = SecurePrefs.get(app, "settings.$chatId").edit().clear().commit()
+        val settings = SecurePrefs.get(app, "$SETTINGS_PREFIX$chatId").edit().clear().commit()
         val abandoned = history && settings
-        if (abandoned) clearStartupSession(chatId)
+        if (abandoned) {
+            clearStartupSession(chatId)
+            clearPendingIndex(chatId)
+        }
         return abandoned
     }
 
@@ -183,6 +334,9 @@ class NewConversationCoordinator(private val context: Context) {
     }
 
     private companion object {
+        const val SETTINGS_PREFIX = "settings."
+        const val PENDING_INDEX_FILE = "pending_conversation_index"
+        const val INDEX_BACKFILLED_KEY = "index_backfilled"
         const val STARTUP_SESSION_FILE = "pending_startup_conversation"
         const val STARTUP_SESSION_ID = "id"
         const val STARTUP_SESSION_NAME = "name"

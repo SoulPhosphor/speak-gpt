@@ -60,6 +60,11 @@ class ChatPreferences private constructor() {
             storedChatId(it) != excludingChatId && it["name"] == title
         }
 
+        /** The internal placeholder title a chat carries until it is auto-titled.
+         *  Displayed as "Untitled chat"; interchangeable, so a collision may be
+         *  renumbered instead of refusing to save the conversation. */
+        internal val AUTONAME_PLACEHOLDER = Regex("^_autoname_\\d+$")
+
         internal fun nextAutonameNumber(chats: List<Map<String, String>>): String {
             var number = 1
             while (chats.any { it["name"] == "_autoname_$number" }) number++
@@ -704,20 +709,26 @@ class ChatPreferences private constructor() {
             }
             val existing = listResult.chats.firstOrNull { storedChatId(it) == chatId }
             if (existing != null) {
-                if (existing["name"] != chatName) {
-                    return PendingConversationCommitResult.CommitFailed
-                }
+                // The row is the commit. Its title may legitimately differ by
+                // now (auto-titling renames a placeholder), and identity is the
+                // id, so this is done rather than a failure to retry forever.
                 SecurePrefs.get(context, "pending_conversation_journal")
                     .edit().remove(chatId).commit()
                 return PendingConversationCommitResult.AlreadyCommitted
             }
-            if (listResult.chats.any { it["name"] == chatName }) {
-                return PendingConversationCommitResult.CommitFailed
-            }
+            // Two provisional conversations can be handed the same placeholder
+            // title before either owns a row. Take the next free placeholder
+            // instead of refusing the commit and stranding the conversation.
+            // A title the user actually chose still may not be duplicated.
+            val committedName =
+                if (!hasChatTitle(listResult.chats, chatName)) chatName
+                else if (AUTONAME_PLACEHOLDER.matches(chatName)) {
+                    "_autoname_${nextAutonameNumber(listResult.chats)}"
+                } else return PendingConversationCommitResult.CommitFailed
 
             val journal = SecurePrefs.get(context, "pending_conversation_journal")
             val journalPayload = Gson().toJson(
-                mapOf("id" to chatId, "name" to chatName, "mode" to mode.storedValue)
+                mapOf("id" to chatId, "name" to committedName, "mode" to mode.storedValue)
             )
             if (!journal.edit().putString(chatId, journalPayload).commit()) {
                 return PendingConversationCommitResult.CommitFailed
@@ -741,11 +752,12 @@ class ChatPreferences private constructor() {
                 .putString(ConversationMode.MODE_KEY, mode.storedValue)
                 .putInt(ConversationMode.MODE_VERSION_KEY, ConversationMode.SCHEMA_VERSION)
                 .putBoolean(ConversationMode.PENDING_KEY, false)
+                .remove(ConversationMode.PENDING_NAME_KEY)
                 .commit()
             if (!settingsCommitted) return PendingConversationCommitResult.CommitFailed
 
             val row = hashMapOf(
-                "name" to chatName,
+                "name" to committedName,
                 "id" to chatId,
                 "timestamp" to System.currentTimeMillis().toString(),
                 "pinned" to "false",

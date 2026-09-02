@@ -68,11 +68,11 @@ class ChatDrawerController private constructor(
                 drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, GravityCompat.START)
             }
         })
-        refresh()
+        refresh(userInitiated = false)
     }
 
     fun open() {
-        refresh()
+        refresh(userInitiated = true)
         drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.START)
         drawer.openDrawer(GravityCompat.START, true)
     }
@@ -84,7 +84,19 @@ class ChatDrawerController private constructor(
 
     fun isOpen(): Boolean = drawer.isDrawerOpen(GravityCompat.START)
 
-    fun refresh() {
+    /**
+     * Rebuild the drawer contents.
+     *
+     * [userInitiated] separates a refresh the user asked for (opening the
+     * drawer, or completing a folder/pin/move/delete action) from the automatic
+     * ones that run when the screen is created and on every resume. A failure
+     * during an automatic refresh used to raise the same generic failure toast,
+     * so one unreadable navigation store produced that toast on ordinary launch
+     * and again after returning from any other screen. An automatic refresh now
+     * leaves whatever the drawer is already showing and stays silent; a refresh
+     * the user asked for still reports that it failed.
+     */
+    fun refresh(userInitiated: Boolean = false) {
         activity.lifecycleScope.launch {
             val projection = withContext(Dispatchers.IO) {
                 when (val result = repository.snapshot()) {
@@ -99,7 +111,9 @@ class ChatDrawerController private constructor(
                 }
             }
             if (projection == null) {
-                Toast.makeText(activity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+                if (userInitiated) {
+                    Toast.makeText(activity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+                }
             } else adapter.submitList(projection)
         }
     }
@@ -107,8 +121,8 @@ class ChatDrawerController private constructor(
     private fun handleClick(row: DrawerRow) {
         when (row) {
             DrawerRow.Gallery -> activity.startActivity(Intent(activity, ImageGalleryActivity::class.java))
-            is DrawerRow.FoldersHeader -> { repository.setFoldersExpanded(!row.expanded); refresh() }
-            is DrawerRow.Folder -> { repository.setFolderExpanded(row.value.id, !row.expanded); refresh() }
+            is DrawerRow.FoldersHeader -> { repository.setFoldersExpanded(!row.expanded); refresh(userInitiated = true) }
+            is DrawerRow.Folder -> { repository.setFolderExpanded(row.value.id, !row.expanded); refresh(userInitiated = true) }
             is DrawerRow.Chat -> activity.startActivity(
                 ChatActivity.rootIntent(activity, row.value.id, row.value.name)
             )
@@ -130,12 +144,15 @@ class ChatDrawerController private constructor(
                         MENU_FOLDER_PIN -> {
                             activity.lifecycleScope.launch(Dispatchers.IO) {
                                 repository.setFolderPinned(row.value.id, !row.value.pinned)
-                                withContext(Dispatchers.Main) { refresh() }
+                                withContext(Dispatchers.Main) { refresh(userInitiated = true) }
                             }; true
                         }
                         MENU_FOLDER_RENAME -> { showRenameFolder(row); true }
                         MENU_FOLDER_DELETE -> {
-                            ChatDeletionRequestCoordinator.requestFolder(activity, row.value.id, ::refresh); true
+                            ChatDeletionRequestCoordinator.requestFolder(
+                                activity, row.value.id,
+                                onCommitted = { refresh(userInitiated = true) }
+                            ); true
                         }
                         else -> false
                     }
@@ -149,12 +166,12 @@ class ChatDrawerController private constructor(
                         MENU_CHAT_PIN -> {
                             activity.lifecycleScope.launch(Dispatchers.IO) {
                                 repository.setChatPinned(row.value.id, !row.value.pinned)
-                                withContext(Dispatchers.Main) { refresh() }
+                                withContext(Dispatchers.Main) { refresh(userInitiated = true) }
                             }; true
                         }
                         MENU_CHAT_MOVE -> { showMoveChooser(row); true }
                         MENU_CHAT_DELETE -> {
-                            ChatDeletionRequestCoordinator.requestChats(activity, setOf(row.value.id), onCommitted = ::refresh); true
+                            ChatDeletionRequestCoordinator.requestChats(activity, setOf(row.value.id), onCommitted = { refresh(userInitiated = true) }); true
                         }
                         else -> false
                     }
@@ -164,12 +181,12 @@ class ChatDrawerController private constructor(
     }
 
     private fun showAddFolder() = NameEntryDialog.show(
-        activity, R.string.folder_add_title, save = repository::createFolder, onSaved = ::refresh
+        activity, R.string.folder_add_title, save = repository::createFolder, onSaved = { refresh(userInitiated = true) }
     )
 
     private fun showRenameFolder(row: DrawerRow.Folder) = NameEntryDialog.show(
         activity, R.string.folder_rename_title, row.value.name,
-        save = { repository.renameFolder(row.value.id, it) }, onSaved = ::refresh
+        save = { repository.renameFolder(row.value.id, it) }, onSaved = { refresh(userInitiated = true) }
     )
 
     private fun showMoveChooser(row: DrawerRow.Chat) {
@@ -184,7 +201,7 @@ class ChatDrawerController private constructor(
                 .setSingleChoiceItems(labels.toTypedArray(), selected) { dialog, which ->
                     activity.lifecycleScope.launch(Dispatchers.IO) {
                         repository.moveChat(row.value.id, folders.getOrNull(which - 1)?.id)
-                        withContext(Dispatchers.Main) { dialog.dismiss(); refresh() }
+                        withContext(Dispatchers.Main) { dialog.dismiss(); refresh(userInitiated = true) }
                     }
                 }.setNegativeButton(R.string.btn_cancel, null).show()
         }

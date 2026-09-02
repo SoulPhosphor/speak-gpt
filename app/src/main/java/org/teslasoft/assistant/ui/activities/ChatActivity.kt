@@ -214,7 +214,6 @@ import org.teslasoft.assistant.preferences.includes.StableAttachmentReference
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatFormats
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
 import org.teslasoft.assistant.preferences.chatsearch.SearchTargetResolver
-import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
 import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
 import org.teslasoft.assistant.ui.util.ChatExportDialog
 import org.teslasoft.assistant.ui.util.EditChatTitleDialog
@@ -2660,7 +2659,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         imageImportScopes.clear()
 
         if (isFinishing && pendingConversation && chatId.isNotBlank()) {
-            NewConversationCoordinator(this).abandonPendingConversation(chatId)
+            // Only a conversation that is genuinely empty is discarded here;
+            // the coordinator finishes the first commit for one that holds
+            // turns rather than deleting it.
+            NewConversationCoordinator(this).abandonPendingConversation(chatId, chatName)
         }
         super.onDestroy()
     }
@@ -4474,15 +4476,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         initSummarizer()
     }
 
+    /**
+     * Whether this chat has a chat-list row, and whether that row is pinned.
+     *
+     * Read from the chat list itself rather than the whole navigation snapshot.
+     * The snapshot additionally requires the folder catalog to be readable, so
+     * a folder-metadata problem used to remove Pin, Export Chat and Delete from
+     * a perfectly healthy saved chat's menu. Folder organization has no bearing
+     * on whether a chat can be exported or deleted.
+     */
+    private data class SavedChatRow(val id: String, val pinned: Boolean)
+
+    private fun readSavedChatRow(): SavedChatRow? {
+        if (chatId.isBlank()) return null
+        val list = ChatPreferences.getChatPreferences()
+            .getChatListResult(this, includeFirstMessage = false)
+        if (!ChatStorageHealth.isAuthoritative(list.state)) return null
+        val row = list.chats.firstOrNull { ChatPreferences.storedChatId(it) == chatId }
+            ?: return null
+        return SavedChatRow(chatId, row["pinned"] == "true")
+    }
+
     private fun showChatOptionsMenu(anchor: View) {
         lifecycleScope.launch {
-            val savedChat = withContext(Dispatchers.IO) {
-                when (val result = ChatNavigationRepository.get(this@ChatActivity).snapshot()) {
-                    is ChatNavigationResult.Success ->
-                        result.value.allChats.firstOrNull { it.id == chatId }
-                    is ChatNavigationResult.Failure -> null
-                }
-            }
+            val savedChat = withContext(Dispatchers.IO) { readSavedChatRow() }
             if (isFinishing || isDestroyed) return@launch
             PopupMenu(this@ChatActivity, anchor).apply {
                 savedChat?.let {
@@ -9457,7 +9474,35 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         updateMessagesSelectionProjection()
 
+        commitPendingConversationIfNeeded()
+
         scroll(true)
+    }
+
+    /**
+     * A provisional conversation becomes a real, listed chat as soon as it
+     * holds a turn.
+     *
+     * The typed-send path commits its own first turn before recording it. Every
+     * other way a turn reaches this screen — voice auto-send through cloud or
+     * on-device transcription, an image turn, a hands-free turn — records the
+     * turn through putMessage and used to leave the conversation provisional
+     * indefinitely: its history was written under its id, but no chat-list row
+     * ever appeared, so it was missing from the drawer and was then discarded
+     * when the screen closed. Committing here covers those paths with the same
+     * durable write, and is a no-op once the conversation is committed.
+     *
+     * A failed commit deliberately leaves the conversation provisional: the
+     * turns stay on disk, the commit journal retries at the next start, and
+     * closing the screen no longer destroys them.
+     */
+    private fun commitPendingConversationIfNeeded() {
+        if (!pendingConversation || chatId.isBlank() || messages.isEmpty()) return
+        val committed = NewConversationCoordinator(this).commitPendingConversation(
+            PendingConversationState(chatId, chatName, conversationMode),
+            ArrayList(messages)
+        ).succeeded
+        if (committed) finishPendingCommit()
     }
 
     // ---- Streamed-reply completion state (Round 3) ------------------------

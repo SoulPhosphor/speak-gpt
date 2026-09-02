@@ -49,7 +49,15 @@
 
 -keep class com.google.android.gms.ads.** { *; }
 -keep class com.google.ads.** { *; }
--keep class com.teslasoft.assistant.** { *; }
+# The application's own package is org.teslasoft.assistant (namespace in
+# app/build.gradle). The keep rule below carried the upstream fork's old
+# com.teslasoft.assistant package, so it matched NOTHING and left every one of
+# this app's classes exposed to R8 shrinking. Obfuscation is already off, but
+# shrinking still removes members it cannot see used -- including fields that
+# exist only to be written/read reflectively by Gson. Those fields serialize as
+# {} at runtime, which no JVM unit test can reproduce because unit tests never
+# run R8. Keep the app's real package, and keep the stale rule out of the way.
+-keep class org.teslasoft.assistant.** { *; }
 -keep class org.teslasoft.core.** { *; }
 -keep class com.didalgo.gpt3.** { *; }
 -keep class com.theokanning.openai.** { *; }

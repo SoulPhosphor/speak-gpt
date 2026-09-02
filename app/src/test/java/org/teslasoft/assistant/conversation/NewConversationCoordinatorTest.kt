@@ -28,8 +28,8 @@ class NewConversationCoordinatorTest {
     fun launcherSessionCanBeRestoredWithoutCreatingAnotherBlankConversation() {
         assertTrue(source.contains("fun createOrRestoreStartupPendingConversation()"))
         assertTrue(source.contains("return PendingConversationState(id, name, readMode(id))"))
-        assertTrue(source.contains("if (result.succeeded) clearStartupSession(state.id)"))
-        assertTrue(source.contains("if (abandoned) clearStartupSession(chatId)"))
+        assertTrue(source.contains("clearStartupSession(state.id)"))
+        assertTrue(source.contains("clearStartupSession(chatId)"))
     }
 
     @Test

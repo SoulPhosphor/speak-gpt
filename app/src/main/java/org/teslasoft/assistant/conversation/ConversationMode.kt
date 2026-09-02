@@ -16,6 +16,10 @@ enum class ConversationMode(val storedValue: String) {
         const val MODE_VERSION_KEY = "conversation_mode_version"
         const val PENDING_KEY = "conversation_pending"
 
+        /** The provisional conversation's title, stored with the chat itself.
+         *  Recovery needs the real name when the launching Intent is gone. */
+        const val PENDING_NAME_KEY = "conversation_pending_name"
+
         fun fromStored(value: String?): ConversationMode =
             entries.firstOrNull { it.storedValue == value } ?: CHAT
     }
