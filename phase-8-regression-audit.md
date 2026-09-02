@@ -31,12 +31,12 @@ Other reports do not all have the same cause. Endpoint/model synchronization is 
 
 | ID | Area | Finding | Confidence | Action class |
 |---|---|---|---|---|
-| F1 | Launch/drawer/generic toast | Folder catalog may serialize as `{}` under R8, then every navigation snapshot is rejected | High | Approved repair |
-| F2 | Delete recovery | Deletion journal uses the same unsafe reflection-only wrapper | High | Approved repair |
+| F1 | Launch/drawer/generic toast | Folder catalog may serialize as `{}` under R8, then every navigation snapshot is rejected | High | **Implemented on this branch** |
+| F2 | Delete recovery | Deletion journal uses the same unsafe reflection-only wrapper | High | **Implemented on this branch** |
 | F3 | Drawer geometry/state | Standard `DrawerLayout` reserves a visible margin; approved spec requires 100% available width and state-preserving chevrons | High for width; runtime check for state | Investigate then narrow repair |
-| F4 | Endpoint/model | Endpoint editor saves one model while the active chat retains its previous per-chat model (commonly `gpt-4o`) | High | Approved repair |
+| F4 | Endpoint/model | Endpoint editor saves one model while the active chat retains its previous per-chat model (commonly `gpt-4o`) | High | **Implemented on this branch** |
 | F5 | Companion identity/prompt | Prompt assembly still exists in both normal request paths; persistence/selection failure is not yet localized | Medium | Reproduce first |
-| F6 | Message token line | Metadata view can measure wider than the bubble because it lacks an end constraint, clipping instead of wrapping | High | Approved repair |
+| F6 | Message token line | Metadata view can measure wider than the bubble because it lacks an end constraint, clipping instead of wrapping | High | **Implemented on this branch** |
 | F7 | Chat overflow menu | Menu hides saved-chat actions when navigation snapshot fails; actions themselves still exist | High | Re-test after F1 |
 | F8 | Profile image shape | Default is coded as Circle and principal portraits use the shape binder; gallery/history thumbnails intentionally stayed square under an older decision | Mixed | Needs owner decision after inventory |
 | F9 | Transcription | Start handlers still set Listening/stop state, but engine transition/cancellation can reset controls; exact failing engine/state is unknown | Medium | Reproduce first |
@@ -63,7 +63,7 @@ Why it appears during many actions:
 - New Chat returns through navigation state;
 - the overflow menu asks the navigation snapshot whether the current chat is saved.
 
-Approved repair:
+Implemented repair (commit `30128274`):
 
 - encode the persisted folder JSON explicitly, without reflection-only wrapper fields;
 - recognize only the known empty-object shrinker artifact when the matching schema marker proves it came from the installed schema;
@@ -78,7 +78,7 @@ Chat/image deletion spans more than one storage operation. The recovery journal 
 
 The journal used the same reflection-only Gson wrapper as the folder catalog. If it stored `{}`, there are no identities from which any deletion can safely be reconstructed.
 
-Approved repair:
+Implemented repair (commit `30128274`):
 
 - write the journal with explicit JSON keys;
 - continue reading the existing schema and field names;
@@ -110,7 +110,7 @@ There are two persisted values:
 
 The endpoint editor returns only the endpoint ID. Quick Settings reloaded the endpoint label but did not copy the endpoint's saved model into the active chat. Requests therefore continued using the stale chat value, often the legacy `gpt-4o` default. This behavior also exists on `main`; Phase 8 made it more visible but did not originate every part of it.
 
-Approved repair for the reported flow:
+Implemented repair for the reported flow (commit `30128274`):
 
 - after an endpoint is saved/selected from a chat, adopt its nonblank model as that chat's active model;
 - update the Quick Settings label immediately;
@@ -139,7 +139,7 @@ Then repair the first transition where the stable ID is lost. Do not log prompt 
 
 `MessageMetadataView` already contains the intended behavior: if model plus token usage cannot fit on one line, it renders tokens on a second line. The assistant layout gave that view `wrap_content` with only a start constraint, allowing it to measure beyond the usable bubble width and be clipped before its wrapping threshold was meaningful.
 
-Approved repair:
+Implemented repair (commit `30128274`):
 
 - constrain metadata from start to end and use constraint width (`0dp`), giving the custom view the real available width;
 - keep reasoning-token reporting in Message Details unchanged;
@@ -182,7 +182,7 @@ This history justifies a surface-by-surface regression pass, but it does not jus
 
 ### Slice 1 — Shared serialization safety
 
-**Approved now:** F1 and F2.
+**Implemented on this branch:** F1 and F2.
 
 - Replace reflection-only wrappers with explicit JSON contracts.
 - Preserve/recover only the identifiable `{}` shrinker artifact.
@@ -201,7 +201,7 @@ This history justifies a surface-by-surface regression pass, but it does not jus
 
 ### Slice 3 — Endpoint/model/request truth
 
-**Approved now:** F4.
+**Implemented on this branch:** F4.
 
 - Save a changed endpoint model from Quick Settings.
 - Verify Quick Settings displays it.
@@ -220,7 +220,7 @@ This history justifies a surface-by-surface regression pass, but it does not jus
 
 ### Slice 5 — Chat presentation and input controls
 
-**Approved now:** F6. **Reproduce/decide first:** F8 and F9.
+**Implemented on this branch:** F6. **Reproduce/decide first:** F8 and F9.
 
 - Verify token line wrapping at narrow widths, long model names, and portrait overlap.
 - Preserve reasoning-token details.
@@ -259,6 +259,10 @@ This history justifies a surface-by-surface regression pass, but it does not jus
 - Profile shapes match the final owner-approved surface rule.
 - Voice selection and playback still behave as before.
 
-## Current narrow repair set
+## Current repair status
 
-The repair accompanying this audit addresses F1, F2, F4, and F6 only: navigation storage recovery, safe deletion-journal persistence/recovery, endpoint-to-chat model synchronization, and token metadata width/wrapping. F3, F5, F8, and F9 remain deliberately gated by post-storage runtime evidence or an explicit product decision.
+F1, F2, F4, and F6 are **already implemented on this branch** in commit `30128274`: navigation storage recovery, safe deletion-journal persistence/recovery, endpoint-to-chat model synchronization, and token metadata width/wrapping. They are no longer suggestions for future work.
+
+The complete unit suite passed for that repair commit. The minified beta build and the remaining Android build gates were still running when this status paragraph was written; their final CI result must be checked before calling the APK verified.
+
+F3, F5, F8, and F9 are **not fixed yet** and remain deliberately gated by post-storage runtime evidence or an explicit product decision. The audit does not authorize speculative changes to those areas.
