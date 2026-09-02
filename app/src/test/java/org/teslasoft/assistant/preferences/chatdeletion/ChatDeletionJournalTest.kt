@@ -66,4 +66,30 @@ class ChatDeletionJournalTest {
         )
         assertEquals("not-json", prefs.getString("entries", null))
     }
+
+    @Test fun minifiedEmptyWrapperIsQuarantinedWithoutInventingDeletionWork() {
+        val prefs = FakeSharedPreferences().apply {
+            edit().putString("entries", "{}").commit()
+        }
+        val store = ChatDeletionJournalStore(
+            prefs,
+            idFactory = { first },
+            now = { 9L }
+        )
+
+        assertEquals(
+            emptyList<ChatDeletionJournalEntry>(),
+            (store.read() as ChatDeletionJournalRead.Available).entries
+        )
+        assertFalse(prefs.contains("entries"))
+        assertEquals("{}", prefs.getString("entries_shrinker_empty_v1", null))
+
+        assertTrue(
+            store.create(setOf("chat"), null, ChatDeletionDecision.DELETE_CHAT_ONLY) is
+                ChatDeletionJournalWrite.Success
+        )
+        val repaired = prefs.getString("entries", null).orEmpty()
+        assertTrue(repaired.contains("\"version\":1"))
+        assertTrue(repaired.contains("\"entries\":"))
+    }
 }

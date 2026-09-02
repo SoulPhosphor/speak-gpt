@@ -9,6 +9,8 @@ package org.teslasoft.assistant.preferences.chatnavigation
 import android.content.Context
 import android.content.SharedPreferences
 import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.util.Locale
 import java.util.UUID
@@ -86,8 +88,6 @@ class ChatNavigationRepository internal constructor(
         }
     }
 
-    private data class FolderCatalog(val version: Int, val folders: List<FolderRecord>)
-
     fun migrateSchema(): ChatNavigationResult<Unit> = synchronized(ChatPreferences.CHAT_LIST_LOCK) {
         readAuthoritativeChats() ?: return@synchronized unavailable()
         val marker = try { chatListPreferences.getInt(SCHEMA_VERSION_KEY, 0) } catch (_: Exception) {
@@ -101,6 +101,25 @@ class ChatNavigationRepository internal constructor(
         if (rawPresent) {
             when (val catalog = readFolders()) {
                 is FolderRead.Ok -> Unit
+                is FolderRead.ShrinkerEmpty -> {
+                    // The first minified drawer build could strip both fields
+                    // from its reflection-only Gson wrapper and persist `{}`.
+                    // That payload contains no folder identities to recover.
+                    // Preserve it through the existing corruption backup, then
+                    // replace only this exact known-bad shape with the valid
+                    // empty catalog so launch/drawer reads can recover.
+                    if (marker != SCHEMA_VERSION) {
+                        preserveCorruptFolders(catalog.raw)
+                        return@synchronized failure(ChatNavigationFailure.CORRUPT_FOLDERS)
+                    }
+                    preserveCorruptFolders(catalog.raw)
+                    val repaired = chatListPreferences.edit()
+                        .putString(FOLDERS_KEY, encodeFolders(emptyList()))
+                        .putInt(SCHEMA_VERSION_KEY, SCHEMA_VERSION)
+                        .commit()
+                    return@synchronized if (repaired) success(Unit)
+                    else failure(ChatNavigationFailure.COMMIT_FAILED)
+                }
                 FolderRead.Corrupt -> return@synchronized failure(ChatNavigationFailure.CORRUPT_FOLDERS)
                 FolderRead.Unsupported -> return@synchronized failure(ChatNavigationFailure.UNSUPPORTED_SCHEMA)
                 FolderRead.Unavailable -> return@synchronized unavailable()
@@ -310,6 +329,7 @@ class ChatNavigationRepository internal constructor(
 
     private sealed class FolderRead {
         data class Ok(val folders: List<FolderRecord>) : FolderRead()
+        data class ShrinkerEmpty(val raw: String) : FolderRead()
         data object Missing : FolderRead()
         data object Corrupt : FolderRead()
         data object Unsupported : FolderRead()
@@ -325,6 +345,7 @@ class ChatNavigationRepository internal constructor(
         } ?: return corruptFolders("null")
         return try {
             val root = JsonParser.parseString(raw).asJsonObject
+            if (root.size() == 0) return FolderRead.ShrinkerEmpty(raw)
             val version = root.get("version")?.asInt ?: return corruptFolders(raw)
             if (version > SCHEMA_VERSION) return FolderRead.Unsupported
             if (version != SCHEMA_VERSION) return corruptFolders(raw)
@@ -353,8 +374,23 @@ class ChatNavigationRepository internal constructor(
         return FolderRead.Corrupt
     }
 
-    private fun encodeFolders(folders: List<FolderRecord>): String =
-        Gson().toJson(FolderCatalog(SCHEMA_VERSION, folders))
+    /** Explicit persisted JSON contract. Do not use a reflection-only wrapper:
+     * both debug and beta run R8, which may remove fields referenced only by
+     * Gson even when name obfuscation is disabled. */
+    private fun encodeFolders(folders: List<FolderRecord>): String {
+        val encodedFolders = JsonArray()
+        folders.forEach { folder ->
+            encodedFolders.add(JsonObject().apply {
+                addProperty("id", folder.id)
+                addProperty("name", folder.name)
+                addProperty("pinned", folder.pinned)
+            })
+        }
+        return JsonObject().apply {
+            addProperty("version", SCHEMA_VERSION)
+            add("folders", encodedFolders)
+        }.toString()
+    }
 
     private fun toNavigationItem(row: Map<String, String>) = ChatNavigationItem(
         id = ChatPreferences.storedChatId(row),

@@ -270,7 +270,17 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 preferences?.setApiEndpointId(apiEndpointId)
                 apiEndpoint = apiEndpointPreferences?.getApiEndpoint(requireContext(), apiEndpointId)
                 textHost?.text = if (apiEndpoint?.label != "") apiEndpoint?.label ?: getString(R.string.label_tap_to_set) else getString(R.string.label_tap_to_set)
+                // The endpoint editor's Model is the active model when that
+                // endpoint is saved/selected from this chat. Keep the chat's
+                // request state and the visible Quick Settings value together;
+                // otherwise both silently remain on the old (often gpt-4o)
+                // per-chat default after the endpoint has changed.
+                apiEndpoint?.model?.takeIf { it.isNotBlank() }?.let { endpointModel ->
+                    preferences?.setModel(endpointModel)
+                    textModel?.text = endpointModel
+                }
                 shouldForceUpdate = true
+                updateListener?.onUpdate()
                 // Provider Mode is OpenRouter-only and reflects the active
                 // model on this endpoint, so re-evaluate it when the endpoint
                 // changes.

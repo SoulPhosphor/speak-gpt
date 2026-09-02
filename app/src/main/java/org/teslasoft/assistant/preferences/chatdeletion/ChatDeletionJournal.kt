@@ -7,7 +7,9 @@ package org.teslasoft.assistant.preferences.chatdeletion
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.google.gson.Gson
+import com.google.gson.JsonArray
+import com.google.gson.JsonNull
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.util.UUID
 import org.teslasoft.assistant.preferences.SecurePrefs
@@ -47,6 +49,7 @@ class ChatDeletionJournalStore internal constructor(
     companion object {
         const val FILE_NAME = "chat_deletion_journal"
         private const val DATA_KEY = "entries"
+        private const val SHRINKER_EMPTY_BACKUP_KEY = "entries_shrinker_empty_v1"
         private const val SCHEMA_VERSION = 1
         private val LOCK = Any()
 
@@ -59,11 +62,6 @@ class ChatDeletionJournalStore internal constructor(
             )
         }
     }
-
-    private data class Payload(
-        val version: Int,
-        val entries: List<ChatDeletionJournalEntry>
-    )
 
     fun read(): ChatDeletionJournalRead = synchronized(LOCK) { readLocked() }
 
@@ -131,14 +129,18 @@ class ChatDeletionJournalStore internal constructor(
         val raw = try { preferences.getString(DATA_KEY, null) } catch (_: Exception) {
             return ChatDeletionJournalRead.Unavailable
         } ?: return ChatDeletionJournalRead.Available(emptyList())
+        if (isEmptyObject(raw)) return quarantineShrinkerEmpty(raw)
         return try {
             val root = JsonParser.parseString(raw).asJsonObject
             if (root.get("version")?.asInt != SCHEMA_VERSION) {
                 return ChatDeletionJournalRead.Unavailable
             }
-            val entries = root.getAsJsonArray("entries")?.map { element ->
-                Gson().fromJson(element, ChatDeletionJournalEntry::class.java)
-            } ?: return ChatDeletionJournalRead.Unavailable
+            val encodedEntries = root.getAsJsonArray("entries")
+                ?: return ChatDeletionJournalRead.Unavailable
+            val entries = ArrayList<ChatDeletionJournalEntry>(encodedEntries.size())
+            for (encodedEntry in encodedEntries) {
+                entries.add(decodeEntry(encodedEntry.asJsonObject))
+            }
             if (!valid(entries)) ChatDeletionJournalRead.Unavailable
             else ChatDeletionJournalRead.Available(entries)
         } catch (_: Exception) {
@@ -151,11 +153,75 @@ class ChatDeletionJournalStore internal constructor(
         return try {
             preferences.edit().putString(
                 DATA_KEY,
-                Gson().toJson(Payload(SCHEMA_VERSION, entries))
+                encode(entries)
             ).commit()
         } catch (_: Exception) {
             false
         }
+    }
+
+    /** The broken minified build could persist `{}` after R8 removed the
+     * reflection-only wrapper fields. It contains no chat/image identities, so
+     * it is never deletion authority. Preserve the exact bytes inside the same
+     * encrypted journal and clear only the unusable active slot. */
+    private fun quarantineShrinkerEmpty(raw: String): ChatDeletionJournalRead {
+        val editor = preferences.edit()
+        if (!preferences.contains(SHRINKER_EMPTY_BACKUP_KEY)) {
+            editor.putString(SHRINKER_EMPTY_BACKUP_KEY, raw)
+        }
+        editor.remove(DATA_KEY)
+        return if (editor.commit()) ChatDeletionJournalRead.Available(emptyList())
+        else ChatDeletionJournalRead.Unavailable
+    }
+
+    private fun isEmptyObject(raw: String): Boolean = try {
+        JsonParser.parseString(raw).asJsonObject.size() == 0
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun encode(entries: List<ChatDeletionJournalEntry>): String {
+        val encodedEntries = JsonArray()
+        entries.forEach { entry ->
+            encodedEntries.add(JsonObject().apply {
+                addProperty("journalId", entry.journalId)
+                add("chatIds", stringArray(entry.chatIds))
+                if (entry.folderId == null) add("folderId", JsonNull.INSTANCE)
+                else addProperty("folderId", entry.folderId)
+                addProperty("decision", entry.decision.name)
+                addProperty("stage", entry.stage.name)
+                add("candidateAssetFileNames", stringArray(entry.candidateAssetFileNames))
+                addProperty("createdAt", entry.createdAt)
+            })
+        }
+        return JsonObject().apply {
+            addProperty("version", SCHEMA_VERSION)
+            add("entries", encodedEntries)
+        }.toString()
+    }
+
+    private fun decodeEntry(encoded: JsonObject): ChatDeletionJournalEntry =
+        ChatDeletionJournalEntry(
+            journalId = encoded.get("journalId").asString,
+            chatIds = stringSet(encoded.getAsJsonArray("chatIds")),
+            folderId = encoded.get("folderId")?.takeUnless { it.isJsonNull }?.asString,
+            decision = ChatDeletionDecision.valueOf(encoded.get("decision").asString),
+            stage = ChatDeletionJournalStage.valueOf(encoded.get("stage").asString),
+            candidateAssetFileNames = stringSet(encoded.getAsJsonArray("candidateAssetFileNames")),
+            createdAt = encoded.get("createdAt").asLong
+        )
+
+    private fun stringArray(values: Set<String>): JsonArray = JsonArray().apply {
+        values.sorted().forEach { add(it) }
+    }
+
+    private fun stringSet(values: JsonArray): Set<String> {
+        val result = LinkedHashSet<String>(values.size())
+        for (encodedValue in values) {
+            val value = encodedValue.asString
+            if (!result.add(value)) throw IllegalArgumentException("Duplicate journal value")
+        }
+        return result
     }
 
     private fun valid(entries: List<ChatDeletionJournalEntry>): Boolean {

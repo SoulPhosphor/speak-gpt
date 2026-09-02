@@ -56,4 +56,47 @@ class ChatNavigationStorageHealthTest {
             (result as ChatNavigationResult.Failure).reason)
         assertFalse(store.contains(ChatNavigationRepository.FOLDERS_KEY))
     }
+
+    @Test fun minifiedEmptyFolderWrapperIsPreservedThenRepairedWhenSchemaMarkerMatches() {
+        val store = FakeSharedPreferences().apply {
+            edit()
+                .putString(ChatNavigationRepository.FOLDERS_KEY, "{}")
+                .putInt(
+                    ChatNavigationRepository.SCHEMA_VERSION_KEY,
+                    ChatNavigationRepository.SCHEMA_VERSION
+                )
+                .commit()
+        }
+        var preserved: String? = null
+        val repo = repository(
+            rows = listOf(chatRow("chat-id", "Chat", 1)),
+            chatStore = store,
+            ids = listOf(folderId).iterator(),
+            onCorrupt = { preserved = it }
+        )
+
+        assertTrue(repo.snapshot() is ChatNavigationResult.Success)
+        assertEquals("{}", preserved)
+        val repaired = store.getString(ChatNavigationRepository.FOLDERS_KEY, null).orEmpty()
+        assertTrue(repaired.contains("\"version\":1"))
+        assertTrue(repaired.contains("\"folders\":[]"))
+    }
+
+    @Test fun emptyObjectWithoutMatchingSchemaMarkerRemainsBlockedAndUntouched() {
+        val store = FakeSharedPreferences().apply {
+            edit().putString(ChatNavigationRepository.FOLDERS_KEY, "{}").commit()
+        }
+        val repo = repository(
+            rows = listOf(chatRow("chat-id", "Chat", 1)),
+            chatStore = store,
+            ids = listOf(folderId).iterator()
+        )
+
+        val result = repo.migrateSchema()
+        assertEquals(
+            ChatNavigationFailure.CORRUPT_FOLDERS,
+            (result as ChatNavigationResult.Failure).reason
+        )
+        assertEquals("{}", store.getString(ChatNavigationRepository.FOLDERS_KEY, null))
+    }
 }
