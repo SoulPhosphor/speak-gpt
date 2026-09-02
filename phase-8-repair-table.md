@@ -133,13 +133,22 @@ above: this is a latent risk that was removed, not the cause of the failures.
 | **Not yet explained** | "Token usage is missing" as distinct from "does not wrap". If it is still missing on the new beta, the next thing to check is whether the turn stored a token count at all. |
 | **Next step** | Re-test on the new beta. |
 
-### 11. Transcription
+### 11. Google dictation cuts you off mid-sentence
+
+**Not a Phase 8 regression.** The owner confirmed it behaves the same on the
+working build, and the branch's transcription code is byte-identical to `main`.
+This is a pre-existing defect in the Google dictation path.
 
 | | |
 |---|---|
-| **Finding** | The transcription pipeline on this branch is **byte-for-byte identical to `main`**. Compared function by function against the working build: the mic click handler, `handleWhisperSpeechRecognition`, `handleLocalWhisperSpeechRecognition`, `startWhisper`, `processRecording`, `insertTranscriptIntoBox`, `shouldAutoSendTranscription`, `micIdle`, `micListening`, the microphone-permission launcher and `MicrophonePermissionActivity` route, `getEffectiveAudioModel` / `getAudioModel` / `setAudioModel`, the auxiliary transcription client binding, and the `btn_micro` layout block — all identical. `stopWhisper`, `processRecording` and `restoreUIState` differ only by the added Transcribing/Stop state. |
-| **Conclusion** | "Take the code that worked before" is already the state of the branch. Whatever breaks it is in the state the pipeline reads, not the pipeline. One observation from the device separates the remaining candidates. |
-| **Next step** | Identify which of: nothing happens on tap / it records then produces nothing / it errors. |
+| **Reported symptom** | Pressing the mic opens it correctly, then the recogniser stops the user after a word, or after two sentences — inconsistently. It never waits the way Whisper does. |
+| **Why Whisper feels right** | Cloud Whisper single-turn is press-to-start / press-to-stop. The user ends the turn, so nothing can cut them off. Google dictation hands endpointing to the OS recogniser, which ends the turn on its own after roughly two seconds of silence. |
+| **Actual defect** | Voice & Speech has a **Hands Free Timers** section with **Silence Wait (Seconds)** (default 5) and **Wait for Speech (Seconds)** (default 10). Both are honoured **only while hands-free mode is on**. A single mic press applies neither.<br><br>In hands-free mode `startRecognition` sets the three `EXTRA_SPEECH_INPUT_*` silence hints, `onEndOfSpeech` deliberately does not end the turn, `onError` treats `ERROR_NO_MATCH` / `ERROR_SPEECH_TIMEOUT` as harmless and restarts the recogniser, and `onResults` buffers each fragment, restarts the mic, and submits only after `scheduleHandsFreeSubmit()`'s configured silence window — because, as the code's own comment says, the native recogniser ignores those extras on most devices.<br><br>A single mic press gets **none** of that: no extras on the intent, `onEndOfSpeech` immediately sets `isRecording = false` and idles the mic, and `onResults` submits whatever fragment the OS returned. The turn therefore ends at the OS recogniser's first pause — one word if the user paused to think, two sentences if they did not. |
+| **Machinery that already exists** | `scheduleHandsFreeSubmit()` already reads the configured window rather than hardcoding it, and already buffers and restarts. The fix is to drive a single mic turn through the same mechanism, not to invent timing. |
+| **Constraint on the fix** | A manual mic turn must keep obeying `shouldAutoSendTranscription`: the assembled text goes into the message box (auto-sent only when Auto-send is on and the box was empty). It must not start behaving like a hands-free turn. |
+| **Blocked on** | One owner decision — which settings govern a single mic press. The two existing fields are labelled *Hands Free* Timers, so reusing them changes what an approved label covers. |
+| **Automated verification** | Not written yet; blocked on the decision above. |
+| **Device verification** | Pending. |
 
 ### 12. Opening a chat at the end does not stay at the end when the keyboard appears
 
