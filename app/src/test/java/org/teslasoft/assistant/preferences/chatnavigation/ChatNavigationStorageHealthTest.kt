@@ -75,7 +75,9 @@ class ChatNavigationStorageHealthTest {
             onCorrupt = { preserved = it }
         )
 
-        assertTrue(repo.snapshot() is ChatNavigationResult.Success)
+        val snapshot = repo.snapshot()
+        assertTrue(snapshot is ChatNavigationResult.Success)
+        assertEquals("chat-id", (snapshot as ChatNavigationResult.Success).value.allChats.single().id)
         assertEquals("{}", preserved)
         val repaired = store.getString(ChatNavigationRepository.FOLDERS_KEY, null).orEmpty()
         assertTrue(repaired.contains("\"version\":1"))

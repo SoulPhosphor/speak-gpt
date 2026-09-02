@@ -17,7 +17,7 @@ No wholesale revert is recommended. `main` remains the stable comparison point, 
 
 ## Executive diagnosis
 
-The beta has a severe shared storage-contract failure plus several independent regressions or pre-existing defects.
+The beta had a severe shared storage-contract failure plus several independent regressions or pre-existing defects. Confirmed defects below now have narrow repairs on this branch; device confirmation remains required before calling the beta accepted.
 
 The repeated generic **“Sorry, action failed”** toast is most consistently explained by the new drawer/navigation repository serializing private wrapper fields through Gson reflection in an app where both debug and beta are minified. R8 can remove fields that exist only for reflection. The current ProGuard rules protect the obsolete package `com.teslasoft.assistant.**`, while the application package is `org.teslasoft.assistant.**`; the `SerializedName` rule does not protect these unannotated wrappers. A nominally successful write can therefore become `{}`. The repository subsequently rejects that object as corrupt.
 
@@ -25,7 +25,7 @@ That single unreadable navigation snapshot is consulted during launch, resume, d
 
 The same reflection pattern exists in the encrypted deletion recovery journal. That is a separate data-safety defect: a delete operation could appear journaled even though only `{}` was stored, leaving recovery unable to identify or finish the interrupted deletion.
 
-Other reports do not all have the same cause. Endpoint/model synchronization is an older two-source-of-truth problem, token metadata can be clipped by its layout constraints, and full-width drawer behavior conflicts with `DrawerLayout`'s normal reserved margin. Companion selection/prompt behavior and transcription controls need focused runtime reproduction before their intact logic is changed.
+Other reports do not all have the same cause. Endpoint/model synchronization is an older two-source-of-truth problem, token metadata was clipped by its layout constraints, and full-width drawer behavior conflicted with `DrawerLayout`'s normal reserved margin. The follow-up pass also found a first-save list rewrite immediately before the durable first commit, reflective decoding in that commit's recovery journal, stale Flower fallbacks plus an uncleared pooled shape-mask bitmap, missing Companion-ID recovery for existing chats, and no explicit stoppable transcription state.
 
 ## Findings
 
@@ -33,14 +33,16 @@ Other reports do not all have the same cause. Endpoint/model synchronization is 
 |---|---|---|---|---|
 | F1 | Launch/drawer/generic toast | Folder catalog may serialize as `{}` under R8, then every navigation snapshot is rejected | High | **Implemented on this branch** |
 | F2 | Delete recovery | Deletion journal uses the same unsafe reflection-only wrapper | High | **Implemented on this branch** |
-| F3 | Drawer geometry/state | Standard `DrawerLayout` reserves a visible margin; approved spec requires 100% available width and state-preserving chevrons | High for width; runtime check for state | Investigate then narrow repair |
+| F3 | Drawer geometry/state | Standard `DrawerLayout` reserves a visible margin; approved spec requires 100% available width and state-preserving chevrons | High | **Implemented; beta confirmation pending** |
 | F4 | Endpoint/model | Endpoint editor saves one model while the active chat retains its previous per-chat model (commonly `gpt-4o`) | High | **Implemented on this branch** |
-| F5 | Companion identity/prompt | Prompt assembly still exists in both normal request paths; persistence/selection failure is not yet localized | Medium | Reproduce first |
+| F5 | Companion identity/prompt | Prompt assembly exists in both request paths; missing/deleted IDs were not recovered for existing chats | High for selection recovery | **Implemented; request/device confirmation pending** |
 | F6 | Message token line | Metadata view can measure wider than the bubble because it lacks an end constraint, clipping instead of wrapping | High | **Implemented on this branch** |
-| F7 | Chat overflow menu | Menu hides saved-chat actions when navigation snapshot fails; actions themselves still exist | High | Re-test after F1 |
-| F8 | Profile image shape | Default is coded as Circle and principal portraits use the shape binder; gallery/history thumbnails intentionally stayed square under an older decision | Mixed | Needs owner decision after inventory |
-| F9 | Transcription | Start handlers still set Listening/stop state, but engine transition/cancellation can reset controls; exact failing engine/state is unknown | Medium | Reproduce first |
+| F7 | Chat overflow menu | Menu hides saved-chat actions when navigation snapshot fails; action implementations remain present | High | **Resolved through F1; beta confirmation pending** |
+| F8 | Profile image shape | Adapter fallbacks still started as Flower and pooled mask alpha could make Circle render square | High | **Implemented per owner decision** |
+| F9 | Transcription | Transcription work showed a progress ring but reset/disabled the mic instead of giving it the Transcribing/Stop state | High | **Implemented; engine matrix pending** |
 | F10 | Historical source loss | One intermediate commit gutted ChatActivity/strings, then a later commit restored them; final inventory does not show unexplained wholesale loss | High | No revert; regression test surfaces |
+| F11 | First chat save | A pending send rewrote the empty list immediately before first commit; its recovery journal also used reflective DTO decoding | High | **Implemented; beta confirmation pending** |
+| F12 | Initial transcript position | Plain `scrollToPosition(last)` could show only the top of a final message taller than the viewport | High | **Implemented; keyboard/device confirmation pending** |
 
 ## Detailed evidence and repair boundaries
 
@@ -99,7 +101,11 @@ This recovery choice favors not deleting data when the broken journal contains n
 
 The current drawer panel requests `match_parent`, but AndroidX `DrawerLayout` normally measures drawers with a reserved minimum margin. That can leave a strip visible despite the XML width.
 
-The storage failure must be repaired first because it contaminates every drawer interaction. Then test the rules above as a state matrix. Change geometry/state code only where a rule demonstrably fails; do not replace the chevrons, move the composer, or redesign the drawer.
+Implemented repair:
+
+- use a small `DrawerLayout` specialization that gives the drawer child the exact measured screen width before AndroidX applies its ordinary safety margin;
+- retain the existing locked-closed/temporarily-unlocked/locked-open state machine, chevrons, system-Back behavior, and the same live chat root underneath the drawer;
+- do not add edge-swipe opening, replace the chevrons, move the composer, or recreate the chat.
 
 ### F4 — Endpoint editor and Quick Settings disagree about the model
 
@@ -123,17 +129,14 @@ This does not globally rewrite every chat when an endpoint profile is edited els
 
 The normal request builders still assemble the companion/persona prompt before the ordinary system prompt. No direct removal of those prompt calls was found. New provisional chat setup intentionally clears stale identity before seeding the last successful companion or the first available one.
 
-That leaves several possible runtime faults: failure to persist the selected ID, a stale/deleted ID, timing while a provisional chat becomes saved, or UI label refresh that does not match request state.
+Implemented repair:
 
-Do not rewrite companion prompt composition based only on conversational tone. First capture, for one reproducible chat:
+- preserve a valid selected Companion;
+- if the ID is empty or points to a deleted Companion, recover the last successfully used valid Companion, then the first available Companion;
+- apply that recovery to existing chats as well as blank provisional chats;
+- leave both existing prompt-assembly paths intact and do not log prompt text or conversation content.
 
-- companion ID before opening Quick Settings;
-- displayed companion after opening;
-- companion ID at request assembly;
-- whether the companion prompt block is present in the locally assembled request;
-- the ID after activity recreation.
-
-Then repair the first transition where the stable ID is lost. Do not log prompt text or conversation content.
+The beta acceptance pass must still confirm that the recovered stable ID reaches request assembly and that the Companion prompt block is present.
 
 ### F6 — Model/token metadata does not wrap
 
@@ -149,17 +152,30 @@ Implemented repair (commit `30128274`):
 
 The action implementations and labels still exist. The overflow menu conditionally includes saved-chat actions only after it can establish that the current chat is present in the navigation snapshot. When F1 makes that snapshot fail, the code falls back to a minimal menu, which is why only Logs may remain.
 
-Re-test after F1 before modifying menu composition. If the actions remain missing with a healthy snapshot, compare saved-chat identity detection against `main`; do not duplicate delete/export implementations.
+No duplicate menu implementation was added. The saved-chat identity path and Pin/Unpin, Export Chat, Logs, and Delete action code remain present; F1 restores the healthy snapshot needed for those conditional actions to appear. Re-test their visible order and behavior in the beta.
 
 ### F8 — Default profile shape and which images it affects
 
-The code default is Circle. Uploaded user and companion portraits in the main chat renderer pass through the shape binder. However, an older documented product decision kept some gallery/history thumbnails square even when a profile image's selected shape was different. The current report says every profile representation should follow the chosen shape.
+Owner decision received: Circle is the default, and the one shape control applies to both user and Companion/AI profile portraits.
 
-This is a genuine scope conflict, not a safe assumption. Inventory every surface (chat portrait, drawer row, Quick Settings, character/persona lists, generated-image gallery, selectors, details) and show the owner which thumbnails are currently intentionally square. Apply one owner-approved rule consistently rather than partially changing only one image.
+Implemented repair:
+
+- replace stale Flower adapter/reset defaults with `ProfileImageShape.DEFAULT` (Circle);
+- keep both chat avatar refresh paths reading the same global shape and rebinding their respective user and Companion portraits;
+- clear pooled transformation bitmaps to transparent before drawing the Circle/Flower mask, preventing stale opaque corners from making Circle look square;
+- leave intentionally unmasked non-profile gallery content alone.
 
 ### F9 — Transcription control does not enter/leave a stoppable state
 
-The inspected start handlers still change the label to Listening and swap to the stop icon. During engine work, other paths disable/reset the microphone and use a separate progress cancellation control. The report could be Google dictation, cloud transcription, local Whisper, a permission transition, or a lifecycle race; each has different ownership.
+The start handlers changed to Listening while recording, but cloud/local transcription reset the microphone and then disabled it while speech-to-text was still active. The input could therefore fail to say Transcribing and the visible mic could not own Stop.
+
+Implemented repair:
+
+- add an explicit transcription-in-progress state;
+- immediately show Transcribing with an enabled red Stop mic when cloud or local transcription begins;
+- keep a tap routed through the existing all-engine cancellation funnel;
+- clear the state on success, empty result, cancellation, failure, and full AI cancellation;
+- handle a cloud recorder stop failure without stranding the controls.
 
 Required reproduction matrix:
 
@@ -170,7 +186,29 @@ Required reproduction matrix:
 | Chat | blank provisional / saved |
 | Exit | mic stop / progress cancel / automatic completion / app background |
 
-Record only UI state and engine/state identifiers. Repair the first invalid transition, and preserve the ability to cancel all in-flight engines.
+The matrix remains the beta acceptance test; the repair adds no prompt or transcript logging.
+
+### F11 — First saved chat and interrupted first-commit recovery
+
+The pending-chat send path updated chat-list timestamps before a row for that chat existed. That rewrote the current list immediately before `commitPendingConversation` added the first durable row. The commit itself already creates the correct timestamp, so the preliminary write was unnecessary and risky.
+
+Implemented repair:
+
+- skip pre-commit timestamp mutation for a pending conversation;
+- retain timestamp sorting for existing chats;
+- decode the pending first-commit journal through explicit JSON fields so R8 cannot strip a private reflective DTO's recovery data;
+- prove an existing saved row remains visible after the known `{}` folder-catalog repair.
+
+### F12 — Open at the true end of a chat
+
+The keyboard contract requires a chat already at its end to remain at its end. Initial navigation used only `scrollToPosition(last)`, which guarantees visibility but can position the top of a final row taller than the viewport.
+
+Implemented repair:
+
+- ordinary chat opens use `scrollToTranscriptEnd()`;
+- after layout positions the final row, any overflow is corrected so its bottom—not merely its top—is at the viewport end;
+- short chats keep normal top alignment and Search-target positioning remains unchanged;
+- the existing pre-resize bottom-relative anchor continues to own keyboard/composer size changes.
 
 ### F10 — Why the audit is broad despite no wholesale revert
 
@@ -191,7 +229,7 @@ This history justifies a surface-by-surface regression pass, but it does not jus
 
 ### Slice 2 — Drawer and saved-chat actions
 
-**Next after Slice 1 is installed:** F3 and F7.
+**Implemented; beta confirmation pending:** F3 and F7.
 
 - Exercise open/close/back against saved and provisional chats.
 - Verify no state mutation across drawer transitions.
@@ -211,7 +249,7 @@ This history justifies a surface-by-surface regression pass, but it does not jus
 
 ### Slice 4 — Companion identity and prompt delivery
 
-**Reproduce first:** F5.
+**Selection repair implemented; request confirmation pending:** F5.
 
 - Test existing chat, newly saved chat, and blank provisional chat.
 - Trace only stable IDs and prompt-block presence.
@@ -220,11 +258,11 @@ This history justifies a surface-by-surface regression pass, but it does not jus
 
 ### Slice 5 — Chat presentation and input controls
 
-**Implemented on this branch:** F6. **Reproduce/decide first:** F8 and F9.
+**Implemented on this branch:** F6, F8, F9, F11, and F12.
 
 - Verify token line wrapping at narrow widths, long model names, and portrait overlap.
 - Preserve reasoning-token details.
-- Inventory profile-image surfaces and resolve the square-thumbnail product conflict.
+- Verify Circle on both user and Companion portraits and verify a shape change rebinds both.
 - Run the transcription engine/state matrix and repair the first invalid transition.
 
 ### Slice 6 — Final regression pass
@@ -265,4 +303,6 @@ F1, F2, F4, and F6 are **already implemented on this branch** in commit `3012827
 
 The complete unit suite passed for that repair commit. The minified beta build and the remaining Android build gates were still running when this status paragraph was written; their final CI result must be checked before calling the APK verified.
 
-F3, F5, F8, and F9 are **not fixed yet** and remain deliberately gated by post-storage runtime evidence or an explicit product decision. The audit does not authorize speculative changes to those areas.
+The current repair batch implements F3, F5 selection recovery, F8, F9, F11, and F12. F7 is restored through F1 rather than through duplicated menu code. These changes have focused regression contracts, but they must not be described as device-verified until the new beta is exercised.
+
+Remaining acceptance work is runtime confirmation: drawer geometry/state, saved-chat menu visibility, actual Companion prompt presence in a request, all transcription engines/permission paths, Circle rendering for both portrait roles, and end-of-chat behavior during real IME animation.

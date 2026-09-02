@@ -9,6 +9,7 @@ package org.teslasoft.assistant.ui.chat
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 
@@ -43,6 +44,45 @@ class ChatTranscriptRecyclerView @JvmOverloads constructor(
         resizeAnchorPosition = position
         resizeAnchorTopFromBottom = anchor.top - height
         resizeAnchorPending = true
+    }
+
+    /**
+     * Positions an ordinary chat open at the real end of the transcript.
+     * RecyclerView's plain scrollToPosition only promises that the last row is
+     * visible; a last message taller than the viewport can therefore land at
+     * its top. The one-layout correction aligns that row's bottom instead.
+     * Short conversations retain LinearLayoutManager's normal top alignment.
+     */
+    fun scrollToTranscriptEnd() {
+        val manager = layoutManager as? LinearLayoutManager ?: return
+        val last = (adapter?.itemCount ?: 0) - 1
+        if (last < 0) return
+
+        val correction = object : View.OnLayoutChangeListener {
+            override fun onLayoutChange(
+                view: View,
+                left: Int,
+                top: Int,
+                right: Int,
+                bottom: Int,
+                oldLeft: Int,
+                oldTop: Int,
+                oldRight: Int,
+                oldBottom: Int
+            ) {
+                removeOnLayoutChangeListener(this)
+                val lastView = manager.findViewByPosition(last) ?: return
+                val overflow = lastView.bottom - (height - paddingBottom)
+                // A negative correction is clamped to zero for a genuinely
+                // short transcript, preserving its top alignment. For a long
+                // transcript with a short final row it moves that row down to
+                // the bottom; a positive correction exposes the bottom of a
+                // final row taller than the viewport.
+                if (overflow != 0) scrollBy(0, overflow)
+            }
+        }
+        addOnLayoutChangeListener(correction)
+        manager.scrollToPositionWithOffset(last, 0)
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {

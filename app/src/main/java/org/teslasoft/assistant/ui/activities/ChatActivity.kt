@@ -171,6 +171,7 @@ import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.conversation.ConversationMode
+import org.teslasoft.assistant.conversation.CompanionSelectionPolicy
 import org.teslasoft.assistant.conversation.NewConversationCoordinator
 import org.teslasoft.assistant.conversation.PendingConversationState
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
@@ -586,6 +587,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     // Init states
     private var isRecording = false
+    private var transcriptionInProgress = false
     private var keyboardMode = false
     private var isTTSInitialized = false
     private var autoLangDetect = false
@@ -871,7 +873,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * while generation cleanup or the hidden auto-title request is still busy.
      */
     private fun disableTurnControlsUnlessTheyAreStops() {
-        btnMicro?.isEnabled = readbackKeepAliveActive && !isHandsFreeEngaged()
+        btnMicro?.isEnabled = transcriptionInProgress ||
+            (readbackKeepAliveActive && !isHandsFreeEngaged())
         btnSend?.isEnabled = isHandsFreeEngaged()
     }
 
@@ -881,6 +884,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             btnMicro?.isEnabled = true
             btnSend?.isEnabled = true
             isRecording = false
+            transcriptionInProgress = false
             // If a plain read-aloud is now playing (non-hands-free), keep the mic
             // as a STOP control rather than resetting it to idle — this runs in the
             // generateResponse finally right after pronounce() started the readback.
@@ -979,6 +983,19 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             backgroundTintList = null
         }
         messageInput?.hint = getString(R.string.hint_listening)
+    }
+
+    /** Keep the mic as an enabled, visible Stop while speech becomes text. */
+    private fun micTranscribing() {
+        btnMicro?.apply {
+            isEnabled = true
+            visibility = View.VISIBLE
+            setImageResource(R.drawable.ic_stop_recording)
+            background = null
+            setColorFilter(ResourcesCompat.getColor(resources, R.color.hands_free_active_red, theme))
+            backgroundTintList = null
+        }
+        messageInput?.hint = getString(R.string.hint_transcribing)
     }
 
     /**
@@ -3082,7 +3099,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val hasTarget = intent.hasExtra(SearchTargetResolver.EXTRA_MESSAGE_ID) ||
             intent.hasExtra(SearchTargetResolver.EXTRA_LEGACY_ORDINAL)
         if (!hasTarget) {
-            chat?.scrollToPosition((adapter?.itemCount ?: 1) - 1)
+            chat?.scrollToTranscriptEnd()
             return
         }
         val ordinal = if (intent.hasExtra(SearchTargetResolver.EXTRA_LEGACY_ORDINAL)) {
@@ -3096,7 +3113,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             fingerprint = intent.getStringExtra(SearchTargetResolver.EXTRA_FINGERPRINT)
         )
         if (target == null) {
-            chat?.scrollToPosition((adapter?.itemCount ?: 1) - 1)
+            chat?.scrollToTranscriptEnd()
             return
         }
         (chat?.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
@@ -5529,12 +5546,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun stopWhisper() {
-        recorder?.apply {
-            stop()
-            release()
-        }
+        val activeRecorder = recorder
         recorder = null
+        try {
+            activeRecorder?.stop()
+        } catch (_: Exception) {
+            try { activeRecorder?.release() } catch (_: Exception) { /* ignore */ }
+            restoreUIState()
+            showAudioCaptureErrorDialog()
+            return
+        }
+        try { activeRecorder?.release() } catch (_: Exception) { /* ignore */ }
 
+        transcriptionInProgress = true
+        micTranscribing()
         disableTurnControlsUnlessTheyAreStops()
         setGenerationProgressVisible(true)
 
@@ -5555,8 +5580,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         } else {
             cancelState = false
-            micIdle()
-            isRecording = false
+            restoreUIState()
         }
     }
 
@@ -5572,11 +5596,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val transcription = openAIAI?.transcription(transcriptionRequest)!!.text
 
             if (transcription.trim() == "") {
-                isRecording = false
-                btnMicro?.isEnabled = true
-                btnSend?.isEnabled = true
-                setGenerationProgressVisible(false)
-                micIdle()
+                restoreUIState()
             } else {
                 playTranscriptionDoneSignal()
                 // Sample the box BEFORE inserting (already-typed text never auto-sends).
@@ -5593,6 +5613,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                     saveSettings()
 
+                    transcriptionInProgress = false
+                    micIdle()
                     disableTurnControlsUnlessTheyAreStops()
                     setGenerationProgressVisible(true)
 
@@ -5617,9 +5639,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         } catch (_: Exception) {
             Toast.makeText(this, "Failed to record audio", Toast.LENGTH_SHORT).show()
-            btnMicro?.isEnabled = true
-            btnSend?.isEnabled = true
-            setGenerationProgressVisible(false)
+            restoreUIState()
         }
     }
 
@@ -6108,6 +6128,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // so if it moves before transcription finishes the user stopped mid-way
         // and the result must be discarded (see the guard below).
         val turnToken = whisperTurnToken
+        transcriptionInProgress = true
+        micTranscribing()
         disableTurnControlsUnlessTheyAreStops()
         setGenerationProgressVisible(true)
 
@@ -6189,13 +6211,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // is on, push the transcript as a user turn and kick generation;
         // otherwise drop it into the message input box.
         // Transcription phase is over either way — drop the status hint.
-        messageInput?.hint = getString(R.string.hint_message)
+        transcriptionInProgress = false
         if (transcription.isNullOrBlank()) {
-            isRecording = false
-            btnMicro?.isEnabled = true
-            btnSend?.isEnabled = true
-            setGenerationProgressVisible(false)
-            micIdle()
+            restoreUIState()
             // Hands-free: a blank result (background noise tripped the VAD, or
             // whisper produced nothing) shouldn't end the conversation — just
             // re-open the mic for another turn.
@@ -6218,6 +6236,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
             saveSettings()
 
+            micIdle()
             disableTurnControlsUnlessTheyAreStops()
             setGenerationProgressVisible(true)
 
@@ -7128,32 +7147,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * empty chat, so existing conversations are never retroactively changed.
      */
     private fun seedPersonaAndActivationDefaults() {
+        if (!ensureActiveCompanion(promptWhenEmpty = true)) return
         if (preferences?.isPersonaActivationSeeded() == true) return
-
-        if (preferences?.getPersonaId().isNullOrEmpty()) {
-            val personaPrefs = PersonaPreferences.getPersonaPreferences(this)
-            val personasList = personaPrefs.getPersonasList()
-
-            if (personasList.isEmpty()) {
-                // Rule 3: no companion exists. Ask the owner to create one and
-                // open the creation screen. Do NOT mark seeding done — when
-                // they return with a companion made, this runs again and seeds
-                // it (rules 1/2).
-                promptCreateFirstCompanion()
-                return
-            }
-
-            val lastPersona = preferences?.getLastSuccessfulPersonaId().orEmpty()
-            if (lastPersona.isNotEmpty() && personaPrefs.getPersona(lastPersona).label.isNotEmpty()) {
-                // Rule 1: continue with the companion you last used.
-                preferences?.setPersonaId(lastPersona)
-            } else {
-                // Rule 2: first-ever use, or the last-used companion was since
-                // deleted — open with the companion at the top of the list. Use
-                // its stable id, never a hash of its (mutable) label.
-                preferences?.setPersonaId(personasList.first().id)
-            }
-        }
 
         preferences?.setPersonaActivationSeeded(true)
 
@@ -7177,6 +7172,31 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
         }
+    }
+
+    /**
+     * Preserve a valid Companion selection. If it is empty or points to a
+     * deleted Companion, recover the last successful selection and then the
+     * first listed Companion. Existing chats are repaired too, so Quick
+     * Settings cannot fall through to "No Companion" while one exists.
+     */
+    private fun ensureActiveCompanion(promptWhenEmpty: Boolean): Boolean {
+        val personas = PersonaPreferences.getPersonaPreferences(this).getPersonasList()
+        val current = preferences?.getPersonaId().orEmpty()
+        val resolved = CompanionSelectionPolicy.resolve(
+            currentId = current,
+            lastSuccessfulId = preferences?.getLastSuccessfulPersonaId(),
+            availableIds = personas.map { it.id }
+        )
+        if (resolved == null) {
+            if (promptWhenEmpty) promptCreateFirstCompanion()
+            return false
+        }
+        if (resolved != current) {
+            preferences?.setPersonaId(resolved)
+            refreshCompanionAvatar()
+        }
+        return true
     }
 
     /**
@@ -7234,6 +7254,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     * Setup SpeakGPT with activation prompt.
     * */
     private fun setup() {
+        if (messages.isNotEmpty()) {
+            ensureActiveCompanion(promptWhenEmpty = false)
+        }
         if (messages.isEmpty()) {
             seedPersonaAndActivationDefaults()
             seedLoreBooksForNewChat()
@@ -7442,8 +7465,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 return
             }
         }
-        // Put timestamp to chat to sort chats by last message
-        ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
+        // A pending conversation has no chat-list row yet. Do not asynchronously
+        // rewrite the still-empty list immediately before its first durable
+        // commit; the commit itself creates the row with the current timestamp.
+        // Existing chats continue to move to the top as soon as a turn starts.
+        if (!pendingConversation) {
+            ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
+        }
         try {
             if (mediaPlayer?.isPlaying == true) {
                 mediaPlayer?.stop()
@@ -9243,6 +9271,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // release that too, or the mic stays open with nothing consuming it.
         try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
         isRecording = false
+        transcriptionInProgress = false
         micIdle()
         // Any stop (in-app, notification Hang Up, mid-generation tap) also ends a
         // hands-free conversation: clear the engaged flag and reset the

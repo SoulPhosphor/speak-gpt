@@ -32,6 +32,12 @@ class NewConversationCoordinatorTest {
         assertTrue(source.contains("if (abandoned) clearStartupSession(chatId)"))
     }
 
+    @Test
+    fun firstSaveRecoveryDoesNotDependOnReflectivePrivateDtoFields() {
+        assertTrue(source.contains("JsonParser.parseString(raw).asJsonObject"))
+        assertFalse(source.contains("Gson().fromJson(raw, PendingJournalEntry::class.java)"))
+    }
+
     private fun source(relative: String): String {
         val path = "src/main/java/org/teslasoft/assistant/$relative"
         return listOf(File(path), File("app/$path"))

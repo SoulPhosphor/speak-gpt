@@ -132,7 +132,7 @@ class ChatActionSurfaceSourceContractTest {
         // typed-turn readback.
         assertTrue(activity.contains("private fun disableTurnControlsUnlessTheyAreStops()"))
         assertTrue(activity.contains(
-            "btnMicro?.isEnabled = readbackKeepAliveActive && !isHandsFreeEngaged()"
+            "btnMicro?.isEnabled = transcriptionInProgress ||"
         ))
         assertTrue(activity.contains("btnSend?.isEnabled = isHandsFreeEngaged()"))
         assertTrue(!activity.contains("btnMicro?.isEnabled = false"))
@@ -146,6 +146,29 @@ class ChatActionSurfaceSourceContractTest {
         assertTrue(activity.contains(
             "private fun micHandsFreeActive(listening: Boolean) {\n        btnSend?.apply {\n            isEnabled = true"
         ))
+    }
+
+    @Test
+    fun normalChatOpenPositionsTheTallLastMessageAtItsActualEnd() {
+        val activity = source("main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
+        val transcript = source("main/java/org/teslasoft/assistant/ui/chat/ChatTranscriptRecyclerView.kt")
+
+        assertTrue(activity.contains("chat?.scrollToTranscriptEnd()"))
+        assertTrue(transcript.contains("fun scrollToTranscriptEnd()"))
+        assertTrue(transcript.contains("lastView.bottom - (height - paddingBottom)"))
+        assertTrue(transcript.contains("if (overflow != 0) scrollBy(0, overflow)"))
+    }
+
+    @Test
+    fun transcriptionImmediatelyOwnsAnEnabledStopControl() {
+        val activity = source("main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt")
+
+        assertTrue(activity.contains("private var transcriptionInProgress = false"))
+        assertTrue(activity.contains("private fun micTranscribing()"))
+        assertTrue(activity.contains("messageInput?.hint = getString(R.string.hint_transcribing)"))
+        assertTrue(activity.contains("transcriptionInProgress = true\n        micTranscribing()"))
+        assertTrue(activity.contains("btnMicro?.isEnabled = transcriptionInProgress ||"))
+        assertTrue(activity.contains("transcriptionInProgress = false\n            micIdle()"))
     }
 
     @Test

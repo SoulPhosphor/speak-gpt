@@ -6,7 +6,7 @@
 package org.teslasoft.assistant.conversation
 
 import android.content.Context
-import com.google.gson.Gson
+import com.google.gson.JsonParser
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
@@ -117,9 +117,7 @@ class NewConversationCoordinator(private val context: Context) {
         val journal = SecurePrefs.get(app, "pending_conversation_journal")
         journal.all.forEach { (journalId, encoded) ->
             val raw = encoded as? String ?: return@forEach
-            val entry = runCatching {
-                Gson().fromJson(raw, PendingJournalEntry::class.java)
-            }.getOrNull() ?: return@forEach
+            val entry = decodePendingJournalEntry(raw) ?: return@forEach
             if (entry.id != journalId || entry.id.isBlank() || entry.name.isBlank()) return@forEach
             val history = ChatPreferences.getChatPreferences().getChatByIdResult(app, entry.id)
             if (!ChatStorageHealth.isAuthoritative(history.state) || history.messages.isEmpty()) {
@@ -160,6 +158,22 @@ class NewConversationCoordinator(private val context: Context) {
         val name: String = "",
         val mode: String = ConversationMode.CHAT.storedValue
     )
+
+    /**
+     * The journal survives process death in release builds, so decode its
+     * stable wire fields explicitly. A private Gson DTO can be reduced to `{}`
+     * by R8 when only reflective construction reaches its fields, which loses
+     * the only recovery path for a first chat save interrupted mid-commit.
+     */
+    private fun decodePendingJournalEntry(raw: String): PendingJournalEntry? = runCatching {
+        val json = JsonParser.parseString(raw).asJsonObject
+        PendingJournalEntry(
+            id = json.get("id")?.takeUnless { it.isJsonNull }?.asString.orEmpty(),
+            name = json.get("name")?.takeUnless { it.isJsonNull }?.asString.orEmpty(),
+            mode = json.get("mode")?.takeUnless { it.isJsonNull }?.asString
+                ?: ConversationMode.CHAT.storedValue
+        )
+    }.getOrNull()
 
     private fun clearStartupSession(chatId: String) {
         val session = SecurePrefs.get(app, STARTUP_SESSION_FILE)

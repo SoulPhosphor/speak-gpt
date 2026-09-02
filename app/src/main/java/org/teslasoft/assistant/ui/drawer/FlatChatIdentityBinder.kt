@@ -10,6 +10,7 @@ import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.profileimages.ProfileImageShape
 import org.teslasoft.assistant.util.ProfileImageBinder
 import org.teslasoft.assistant.util.ProfileImageResolver
 
@@ -37,7 +38,9 @@ class FlatChatIdentityBinder(
         bookmarkOverlay.visibility = View.GONE
         leading.visibility = View.GONE
         leading.setImageDrawable(null)
-        ProfileImageBinder.bind(activity, image, null, "flower") { it.setImageDrawable(null) }
+        ProfileImageBinder.bind(activity, image, null, ProfileImageShape.DEFAULT) {
+            it.setImageDrawable(null)
+        }
         title.setTextColor(MaterialColors.getColor(title, com.google.android.material.R.attr.colorOnSurface))
         title.setTypeface(null, android.graphics.Typeface.NORMAL)
     }

@@ -213,7 +213,7 @@ class ChatDrawerController private constructor(
         fun install(activity: FragmentActivity, chatRoot: View, currentChatId: () -> String): ChatDrawerController {
             val content = activity.findViewById<ViewGroup>(android.R.id.content)
             (chatRoot.parent as? ViewGroup)?.removeView(chatRoot)
-            val drawer = DrawerLayout(activity).apply {
+            val drawer = FullWidthDrawerLayout(activity).apply {
                 id = View.generateViewId()
                 layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                 setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED, GravityCompat.START)

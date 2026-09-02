@@ -108,6 +108,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.reasoning.ReasoningIndicator
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.profileimages.ProfileImageShape
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageAssetResolver
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
@@ -151,7 +152,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     // which case the row falls through to the built-in glyph.
     // [companionImageShape] is the current Default Shape to render it with.
     private var companionImageFile: File? = null
-    private var companionImageShape: String = "flower"
+    private var companionImageShape: String = ProfileImageShape.DEFAULT
     private var companionNameStyle: ChatNameStyle.Resolved? = null
 
     // The chat's current companion name, used only as the display fallback for
@@ -163,7 +164,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     // Persona's, else the Default Personal Avatar. Null only when none of those
     // is set, in which case the user bubble shows the generic person icon.
     private var userImageFile: File? = null
-    private var userImageShape: String = "flower"
+    private var userImageShape: String = ProfileImageShape.DEFAULT
 
     /** Supplies the already-resolved assistant presentation in one update.
      *  Storage and identity resolution stay in ChatActivity; rows only render. */
