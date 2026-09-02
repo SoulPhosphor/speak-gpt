@@ -79,6 +79,20 @@ above: this is a latent risk that was removed, not the cause of the failures.
 | **Automated verification** | `ChatDeletionCallSiteContractTest` updated to assert the chat-list identity and to fail if the snapshot lookup returns. |
 | **Device verification** | Pending. |
 
+### 1b. The folder file bricked the drawer, and could never recover
+
+Confirmed on the device by the owner's Error Log: *"Stored folder metadata
+failed validation."* The owner has never created a folder.
+
+| | |
+|---|---|
+| **Reported symptom** | "Sorry, action failed" everywhere; a new chat never appears in the drawer even after its first message and reply; pinning changes nothing; folders cannot be created. |
+| **Established** | The chat itself was fine throughout — the overflow menu reads the chat's row straight from the chat list and found it. Every remaining symptom went through one read of the stored folder metadata. |
+| **Root cause** | Two compounding defects.<br><br>**One.** An earlier beta wrote that entry in a shape the reader could not use — a leftover of the shrinker problem, before the keep rule was corrected. The reader classified anything it could not parse into the current contract as corruption, and corruption was a **permanent dead end**: preserved, never repaired, no recovery path in the app at all. A reinstall of the app would not clear it because the data survives. That is why later builds changed nothing.<br><br>**Two.** The chat list was read *through* that same folder read. Folder metadata the app could not use therefore withheld the user's conversations. |
+| **Exact fix** | Classify the stored payload by **whether it carries any folder identities at all**. A payload with none — empty object, missing or empty folders array, missing version — cannot lose anything, so it is backed up and replaced with a valid empty catalog, and the schema marker is no longer a precondition for that repair (requiring a match is what made the state permanent). A payload that does carry folder entries is still never overwritten. Separately, the chat list no longer depends on the folder read at all: unreadable folder organization lists every chat unfiled and flags it on the snapshot; only the chat store itself being unreadable fails that read. |
+| **Automated verification** | `ChatNavigationStorageHealthTest`: an empty payload is preserved then repaired and folder creation works afterwards; a payload holding folder entries is left untouched and still blocks folder changes; chats are listed when folder organization cannot be read. |
+| **Device verification** | Pending. Expected to heal the existing install on next launch. |
+
 ### 2b. A keyless-looking endpoint could erase the whole chat list at launch
 
 | | |
