@@ -937,6 +937,21 @@ actions. Add Folder and Rename Folder must use this one composition.
 preparing, incomplete, unavailable, and empty Search states. It resolves through
 the shared subtle-text theme role and must not carry query text or snippets.
 
+## Drawer bottom actions
+
+`Widget.App.DrawerBottomAction` is the drawer's fixed-bottom action. Three of
+them sit across one row — Settings, New Folder, New Chat — each taking an equal
+share of the drawer width.
+
+It inherits `Widget.App.FlatChatRow.Title`, so all three read at the same size
+as the single Settings action the drawer used before, and it supplies the equal
+weight, centred gravity, single line, and the shared selectable-item touch
+feedback. These actions are deliberately text-only; do not add a start drawable
+or any other icon to them.
+
+Use it only for the drawer's fixed-bottom row. A full-width bottom row is what
+makes three equal actions legible; do not reuse it for narrow containers.
+
 For each style family, document only:
 
 - the exact style name;

@@ -3534,6 +3534,7 @@
     <string name="search_rebuild">Rebuild Search Index</string>
     <string name="chat_settings_companion_images">Show Companion Images in Chat List</string>
     <string name="drawer_new_chat">New Chat</string>
+    <string name="drawer_new_folder">New Folder</string>
     <string name="drawer_folders">Folders</string>
     <string name="drawer_pinned_chats">Pinned Chats</string>
     <string name="folder_add">Add Folder</string>

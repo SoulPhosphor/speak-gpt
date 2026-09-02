@@ -44,41 +44,33 @@ Settings
 
 The visual example communicates hierarchy, not literal text glyph sizing. Use the approved Google/Material icons in the actual app.
 
-### 2.1 Fixed Top: App Name / Return Row
+### 2.1 Fixed Top: App Name / Search / Return Row
 
-The first fixed row contains:
+**Updated by owner ruling, September 2 2026.** Search moved into this row and
+the separate New Chat + Search row was removed; see 2.2.
+
+The first fixed row contains, in order:
 
 - **Soul Phosphor** left aligned;
+- an icon-only **Search** control, immediately to the left of the chevron;
 - the approved **right-facing double-chevron** aligned to the far right.
 
 This row never scrolls away.
 
 The double-chevron closes the drawer and returns to the underlying chat as defined in Section 1.
 
-### 2.2 Fixed Top: New Chat + Search Row
+**Search control:** the existing magnifying-glass asset (`ic_search`), icon
+only, no visible label. Accessibility/control name: **Search**. It opens the
+dedicated Search screen in Section 5. It shares the chevron's control size so
+the two read as one pair.
 
-Directly under the name row, place one fixed horizontal action row:
+### 2.2 The Former New Chat + Search Row Is Removed
 
-1. a wide **New Chat** button occupying the available row width;
-2. a compact icon-only **Search** button immediately to its right.
+**Owner ruling, September 2 2026.** The drawer no longer has a second fixed top
+row. New Chat moves to the fixed bottom (2.5) and Search moves beside the
+chevron (2.1), because the full-width drawer has room for three bottom actions.
 
-#### New Chat button
-
-- Visible text: **New Chat**.
-- Use the Google icon named **Contract** before the text.
-- New Chat is a real button/control, not a plain navigation label.
-- Tapping it performs the app's existing New Chat lifecycle/persistence behavior, except for the owner-approved Chat/Playground selector in Section 3.
-- Do not create duplicate blank chats from repeated drawer open/close operations.
-
-#### Search button
-
-- Use the existing Google magnifying-glass/search asset where practical (`ic_search`).
-- The drawer shows the **icon only**. Do not spend horizontal space on a visible `Search` label in this fixed row.
-- Accessibility/control name: **Search**.
-- Preserve an appropriate touch target even though the visible control is compact.
-- Tapping it opens the dedicated Search screen in Section 5.
-
-**Soul Phosphor, New Chat, and Search remain locked at the top.** Scrolling the middle region must never cover, move, or disable them.
+Do not reinstate a New Chat button at the top of the drawer.
 
 ### 2.3 Scrollable Middle: Exact Top-Level Order
 
@@ -103,14 +95,34 @@ The scrollable middle must remain virtualized/efficient with hundreds of chats. 
 - It is **not** a fixed-bottom item.
 - Tapping it opens the Image Gallery defined in `image-gallery-spec.md`.
 
-### 2.5 Fixed Bottom: Settings Only
+### 2.5 Fixed Bottom: Settings, New Folder, New Chat
 
-**Settings** is the only permanently fixed-bottom drawer destination in this design.
+**Owner ruling, September 2 2026.** The fixed bottom carries three actions
+across one row, in this exact left-to-right order:
 
-- It remains locked to the bottom of the drawer.
-- Users never need to scroll through chats/folders to reach Settings.
-- Preserve the existing Settings icon unless a separate owner-approved icon change supersedes it.
-- Fixed-bottom styling, spacing, icon tint, and background use shared/theme-ready styles rather than hard-coded colors.
+1. **Settings**
+2. **New Folder**
+3. **New Chat**
+
+Rules for this row:
+
+- All three are the **same text size as the single Settings action always
+  used** (17sp, `Widget.App.FlatChatRow.Title`). Do not shrink the text to make
+  them fit, and do not enlarge it.
+- **No icons inside these actions.** Text only, including Settings, which loses
+  the gear it previously carried.
+- Equal width, three across the full-width drawer.
+- The row stays locked to the bottom. Users never scroll through chats or
+  folders to reach any of them.
+- Styling, spacing and touch feedback come from the shared
+  `Widget.App.DrawerBottomAction` style, not from hard-coded values.
+
+**New Folder** opens the same Add Folder naming dialog and the same validation
+rules as Section 4.3. It does not replace or remove the Folders accordion's own
+long-press Add Folder action.
+
+**New Chat** performs the behavior previously specified for the top-row New
+Chat button, unchanged apart from its position.
 
 ### 2.6 Playground Is Removed From The Drawer
 

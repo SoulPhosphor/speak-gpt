@@ -7,6 +7,9 @@
     android:background="?attr/colorSurface"
     android:orientation="vertical">
 
+    <!-- Fixed top: app name, then Search, then the closing double-chevron.
+         Search sits immediately to the left of the chevron (owner ruling,
+         Sep 2 2026); it no longer occupies a row of its own. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="64dp"
@@ -24,36 +27,20 @@
             android:textStyle="bold" />
 
         <ImageButton
+            android:id="@+id/drawer_search"
+            style="@style/Widget.App.ActionBar.BackButton"
+            android:contentDescription="@string/search_title"
+            android:src="@drawable/ic_search"
+            android:tooltipText="@string/search_title"
+            app:srcCompat="@drawable/ic_search" />
+
+        <ImageButton
             android:id="@+id/drawer_close"
             style="@style/Widget.App.ActionBar.BackButton"
             android:contentDescription="@string/drawer_close"
-            android:src="@drawable/ic_drawer_close" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="64dp"
-        android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="12dp">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/drawer_new_chat"
-            style="@style/Widget.Material3.Button.TonalButton"
-            android:layout_width="0dp"
-            android:layout_height="52dp"
-            android:layout_weight="1"
-            android:text="@string/drawer_new_chat"
-            app:icon="@drawable/ic_collapse_content" />
-
-        <ImageButton
-            android:id="@+id/drawer_search"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/btn_accent_tonal"
-            android:contentDescription="@string/search_title"
-            android:src="@drawable/ic_search" />
+            android:src="@drawable/ic_drawer_close"
+            android:tooltipText="@string/drawer_close"
+            app:srcCompat="@drawable/ic_drawer_close" />
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
@@ -65,18 +52,25 @@
         android:paddingTop="4dp"
         android:paddingBottom="4dp" />
 
-    <TextView
-        android:id="@+id/drawer_settings"
-        style="@style/Widget.App.FlatChatRow.Title"
+    <!-- Fixed bottom: Settings, New Folder, New Chat, in that order. -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="64dp"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:drawablePadding="12dp"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:paddingStart="20dp"
-        android:paddingEnd="20dp"
-        android:text="@string/btn_settings"
-        app:drawableStartCompat="@drawable/ic_settings" />
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/drawer_settings"
+            style="@style/Widget.App.DrawerBottomAction"
+            android:text="@string/btn_settings" />
+
+        <TextView
+            android:id="@+id/drawer_new_folder"
+            style="@style/Widget.App.DrawerBottomAction"
+            android:text="@string/drawer_new_folder" />
+
+        <TextView
+            android:id="@+id/drawer_new_chat"
+            style="@style/Widget.App.DrawerBottomAction"
+            android:text="@string/drawer_new_chat" />
+    </LinearLayout>
 </LinearLayout>

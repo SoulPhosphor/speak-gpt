@@ -1360,6 +1360,24 @@
         <item name="android:textSize">17sp</item>
     </style>
 
+    <!-- The drawer's fixed-bottom action row. Three equal-width text actions
+         across the full-width drawer, at the same size the single Settings
+         action always used (Widget.App.FlatChatRow.Title, 17sp) so the row
+         reads as one set. Deliberately text-only: no icons inside these
+         actions (owner ruling, Sep 2 2026). -->
+    <style name="Widget.App.DrawerBottomAction" parent="Widget.App.FlatChatRow.Title">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:gravity">center</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">4dp</item>
+    </style>
+
     <style name="Widget.App.FlatChatRow.Metadata" parent="">
         <item name="android:layout_marginTop">2dp</item>
         <item name="android:textColor">?attr/appSubtleTextColor</item>

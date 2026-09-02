@@ -358,6 +358,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .putExtra("pendingConversation", pendingConversation)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
 
+        /** How long a manual dictation turn waits for the recogniser's final
+         *  fragment after the user taps stop, before delivering what it has. */
+        private const val DICTATION_FINAL_RESULT_GRACE_MS = 1500L
+
+        /** Gap before reopening the mic mid-dictation, matching the hands-free
+         *  reopen so the recogniser has released the previous session. */
+        private const val DICTATION_REOPEN_DELAY_MS = 80L
+
         // Broadcast action posted by the keep-alive notifications' "Hang Up"
         // action and handled by the live ChatActivity. Package-scoped and
         // non-exported; see hangUpReceiver.
@@ -708,6 +716,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // silence window.
     private var handsFreeBuffer: String = ""
     private var handsFreeSubmitRunnable: Runnable? = null
+
+    // Manual (single-turn) Google dictation. The OS recogniser ends its own
+    // session after a short pause, which is why one press used to come back
+    // after a single word. A manual dictation turn now buffers each fragment
+    // and reopens the mic, so the turn ends when the USER taps the mic again —
+    // the same press-to-start/press-to-stop control the Whisper button has.
+    // Hands-free is untouched: it keeps ending turns on its own configured
+    // Silence Wait timer.
+    private var dictationBuffer: String = ""
+    private var dictationStopRequested = false
 
     // Monotonic token guarding the readback→listen handoff. The mic can be
     // re-armed by either the TTS completion callback or the playback-state
@@ -1147,6 +1165,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         override fun onEndOfSpeech() {
             // In hands-free mode the loop manages the recording state itself.
             if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) return
+            // A manual dictation turn is ended by the user, not by the OS
+            // recogniser deciding you paused. Keep the mic open.
+            if (isRecording && !dictationStopRequested) return
             isRecording = false
             micIdle()
         }
@@ -1189,6 +1210,21 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 stopHandsFreeLoop("recognizer error $error (after ${handsFreeTurnRetries} rebuild retries)", notify = true)
                 return
             }
+            if (dictationStopRequested) {
+                // The stop tap flushed an empty final session; deliver what was
+                // already buffered rather than discarding the turn.
+                finishDictationTurn()
+                return
+            }
+            // A pause the recogniser reported as "no match"/"timeout" is not the
+            // end of a manual turn. Reopen and keep listening.
+            val pauseDuringDictation = isRecording &&
+                (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
+            if (pauseDuringDictation) {
+                restartDictation()
+                return
+            }
+            dictationBuffer = ""
             isRecording = false
             micIdle()
         }
@@ -1201,6 +1237,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 btnSend?.isEnabled = true
                 setGenerationProgressVisible(false)
                 isRecording = false
+                dictationBuffer = ""
+                dictationStopRequested = false
                 micIdle()
                 return
             }
@@ -1247,10 +1285,50 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 return
             }
 
+            if (recognizedText.isNotEmpty()) {
+                dictationBuffer = if (dictationBuffer.isEmpty()) recognizedText
+                                  else "$dictationBuffer $recognizedText"
+            }
+            if (dictationStopRequested) {
+                finishDictationTurn()
+                return
+            }
+            if (isRecording) {
+                // Mid-turn fragment: keep the mic open for the rest of what the
+                // user is saying instead of submitting this piece on its own.
+                restartDictation()
+                return
+            }
             isRecording = false
             micIdle()
-            if (recognizedText.isNotEmpty()) submitRecognizedText(recognizedText)
+            val dictated = dictationBuffer.trim()
+            dictationBuffer = ""
+            if (dictated.isNotEmpty()) submitRecognizedText(dictated)
         }
+    }
+
+    /** Reopen the recogniser for the rest of a manual dictation turn. */
+    private fun restartDictation() {
+        if (isFinishing || isDestroyed || cancelState || !isRecording) return
+        handsFreeHandler.postDelayed({
+            if (!isFinishing && !isDestroyed && isRecording && !cancelState &&
+                !dictationStopRequested && preferences?.getHandsFreeMode() != true
+            ) {
+                startRecognition(false)
+            }
+        }, DICTATION_REOPEN_DELAY_MS)
+    }
+
+    /** Deliver a manual dictation turn the user ended with a second mic tap. */
+    private fun finishDictationTurn() {
+        if (!dictationStopRequested) return
+        dictationStopRequested = false
+        val dictated = dictationBuffer.trim()
+        dictationBuffer = ""
+        isRecording = false
+        micIdle()
+        setGenerationProgressVisible(false)
+        if (dictated.isNotEmpty()) submitRecognizedText(dictated)
     }
 
     /** §5 spoken approval, the deny-and-continue case: the utterance waits
@@ -6293,9 +6371,18 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (preferences?.getHandsFreeMode() == true) {
                 stopHandsFreeLoop("mic button tapped while listening (google)")
             } else {
+                // The user ends this turn. Ask the recogniser for its final
+                // fragment, then deliver everything buffered so far. The
+                // delayed fallback covers a device that answers a stop with
+                // neither a result nor an error, so the words already spoken
+                // are never stranded.
+                dictationStopRequested = true
                 micIdle()
-                recognizer?.stopListening()
                 isRecording = false
+                try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
+                handsFreeHandler.postDelayed({
+                    if (dictationStopRequested) finishDictationTurn()
+                }, DICTATION_FINAL_RESULT_GRACE_MS)
             }
         } else {
             try {
@@ -6306,7 +6393,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 tts!!.stop()
             } catch (_: java.lang.Exception) {/* unused */}
             if (preferences?.getHandsFreeMode() == true) micHandsFreeActive(listening = true)
-            else micRecording()
+            else { dictationBuffer = ""; dictationStopRequested = false; micRecording() }
             if (ContextCompat.checkSelfPermission(
                     this, Manifest.permission.RECORD_AUDIO
                 ) == PackageManager.PERMISSION_GRANTED
@@ -9313,6 +9400,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
         isRecording = false
         transcriptionInProgress = false
+        dictationBuffer = ""
+        dictationStopRequested = false
         micIdle()
         // Any stop (in-app, notification Hang Up, mid-generation tap) also ends a
         // hands-free conversation: clear the engaged flag and reset the

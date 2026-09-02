@@ -52,6 +52,7 @@ class ChatDrawerController private constructor(
             activity.startActivity(Intent(activity, SearchActivity::class.java))
         }
         panel.findViewById<View>(R.id.drawer_new_chat).setOnClickListener { openNewChat() }
+        panel.findViewById<View>(R.id.drawer_new_folder).setOnClickListener { showAddFolder() }
         panel.findViewById<TextView>(R.id.drawer_settings).setOnClickListener {
             activity.startActivity(Intent(activity, SettingsActivity::class.java).setAction(Intent.ACTION_VIEW))
         }
