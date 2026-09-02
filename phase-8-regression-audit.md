@@ -301,8 +301,8 @@ This history justifies a surface-by-surface regression pass, but it does not jus
 
 F1, F2, F4, and F6 are **already implemented on this branch** in commit `30128274`: navigation storage recovery, safe deletion-journal persistence/recovery, endpoint-to-chat model synchronization, and token metadata width/wrapping. They are no longer suggestions for future work.
 
-The complete unit suite passed for that repair commit. The minified beta build and the remaining Android build gates were still running when this status paragraph was written; their final CI result must be checked before calling the APK verified.
+The final branch gate passed at head `d76ad696`: all 2,137 unit tests passed, the debug and minified side-by-side beta APKs built successfully, the beta application identity was verified, instrumentation tests compiled, and the beta prerelease artifact was published. These results verify the reviewed source and build pipeline; they do not replace the device acceptance checks below.
 
 The current repair batch implements F3, F5 selection recovery, F8, F9, F11, and F12. F7 is restored through F1 rather than through duplicated menu code. These changes have focused regression contracts, but they must not be described as device-verified until the new beta is exercised.
 
-Remaining acceptance work is runtime confirmation: drawer geometry/state, saved-chat menu visibility, actual Companion prompt presence in a request, all transcription engines/permission paths, Circle rendering for both portrait roles, and end-of-chat behavior during real IME animation.
+Remaining acceptance work is runtime/device confirmation only: drawer geometry/state, saved-chat menu visibility, actual Companion prompt presence in a request, all transcription engines/permission paths, Circle rendering for both portrait roles, and end-of-chat behavior during real IME animation.
