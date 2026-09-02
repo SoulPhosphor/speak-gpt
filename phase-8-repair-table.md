@@ -15,6 +15,17 @@ until the owner confirms it on the test device.
 - **Device-verified** — the owner exercised it on the Pixel 8 and confirmed the
   symptom is gone. Only the owner can fill this in.
 
+## Correction to an earlier claim in this file
+
+An earlier version of this document said the shrinker keep rule explained the
+beta failures. That was checked against the actual binaries and it is **wrong**.
+The working `latest` build from `main` is missing 253 of its own 735 classes
+from its DEX and works fine — R8 removing app classes is normal here. The keep
+rule was genuinely aimed at the wrong package and is still worth fixing, but it
+is not the cause of what you saw, and it is not the headline finding.
+
+The real shared cause of the "everything fails" cluster is item 1 below.
+
 ## Why the previous repair pass had no visible effect
 
 Two reasons, both of which apply to every item below.
@@ -25,13 +36,10 @@ every build type, including debug and beta. A failure that only R8 causes leaves
 the whole suite green. "2,137 tests passed" was true and told us nothing about
 the device.
 
-**The shrinker keep rule protected nothing.** `app/proguard-rules.pro` kept
-`com.teslasoft.assistant.**`. This app's classes are in
-`org.teslasoft.assistant.**` — the fork's package changed and the rule did not.
-The rule matched zero classes, so all 540 of the app's classes were exposed to
-shrinking in every build. The earlier audit noticed this and rewrote two
-serializers by hand instead of correcting the rule, leaving every other
-reflectively-used field in the app exposed.
+**The shrinker keep rule was aimed at the wrong package.** `app/proguard-rules.pro`
+kept `com.teslasoft.assistant.**`; this app's classes are `org.teslasoft.assistant.**`.
+The rule matched zero classes. Corrected, with a test — but see the correction
+above: this is a latent risk that was removed, not the cause of the failures.
 
 ---
 
@@ -43,9 +51,10 @@ reflectively-used field in the app exposed.
 |---|---|
 | **Reported symptom** | The generic failure toast appears on ordinary launch and after unrelated actions. |
 | **Working main behavior** | `main` has no drawer and no navigation snapshot, so no such toast exists. |
-| **Branch regression** | `ChatDrawerController.refresh()` raises the toast whenever the navigation snapshot fails. It runs in the controller's constructor (every chat screen creation) and again in `ChatActivity.onResume` (every return from Settings, an endpoint editor, a character screen). One unreadable navigation store therefore produced the toast on launch and after any unrelated screen. The snapshot also fails as a whole when only the *folder* catalog is unreadable. |
-| **Exact fix** | `refresh(userInitiated)` separates the automatic refreshes (construction, resume) from the ones the user asked for (opening the drawer, completing a folder/pin/move/delete action). An automatic refresh keeps whatever the drawer already shows and stays silent; a user-initiated one still reports failure. Correcting the shrinker keep rule removes the underlying cause of the snapshot failures. |
-| **Automated verification** | `ShrinkerKeepRuleTest` (new) fails if the keep rule stops matching the app's real package. |
+| **Branch regression** | `ChatNavigationRepository.migrateSchema()` treats an absent folder catalog as normal — it is the ordinary state of a device that never made a folder. But `snapshot()` and every mutation classified the folder read through a catch-all `else` that reported "storage unavailable". So a device with no stored catalog failed **the entire drawer read**, the saved-chat lookup that Pin / Export Chat / Delete hang off, and pinning itself. `ChatDrawerController.refresh()` raises the generic toast on that failure, and it runs when a chat screen is created and again on every resume — which is why it fired on launch and after returning from any other screen. One misclassification, the whole cluster. |
+| **Exact fix** | Every folder-read outcome is now classified explicitly. Absent means no folders. Only genuine corruption, an unsupported schema, or a store that cannot be opened remain failures — those still surface, because hiding them would be wrong. |
+| **Automated verification** | `ChatNavigationStorageHealthTest.anAbsentFolderCatalogListsChatsAndStillAllowsPinning` (new) — the drawer lists chats and pinning succeeds with no catalog, and nothing is treated as corruption. `ShrinkerKeepRuleTest` (new) guards the keep rule separately. |
+| **Reverted** | The earlier attempt to silence the toast on automatic refreshes. That hid the fault instead of fixing it; `ChatDrawerController` is byte-identical to before. |
 | **Device verification** | Pending. |
 
 ### 2. Chats created in the app disappear and never reach the drawer
@@ -124,12 +133,13 @@ reflectively-used field in the app exposed.
 | **Not yet explained** | "Token usage is missing" as distinct from "does not wrap". If it is still missing on the new beta, the next thing to check is whether the turn stored a token count at all. |
 | **Next step** | Re-test on the new beta. |
 
-### 11. Transcription does not reliably show a Transcribing / Stop state
+### 11. Transcription
 
 | | |
 |---|---|
-| **What is established in code** | Cloud and on-device transcription both enter an explicit in-progress state that shows "Transcribing…", keeps the mic enabled as a red Stop, and clears on success, empty result, cancellation and failure. A tap during that window routes through the shared all-engine cancellation. |
-| **Next step** | Run the engine / permission / exit matrix on the new beta. |
+| **Finding** | The transcription pipeline on this branch is **byte-for-byte identical to `main`**. Compared function by function against the working build: the mic click handler, `handleWhisperSpeechRecognition`, `handleLocalWhisperSpeechRecognition`, `startWhisper`, `processRecording`, `insertTranscriptIntoBox`, `shouldAutoSendTranscription`, `micIdle`, `micListening`, the microphone-permission launcher and `MicrophonePermissionActivity` route, `getEffectiveAudioModel` / `getAudioModel` / `setAudioModel`, the auxiliary transcription client binding, and the `btn_micro` layout block — all identical. `stopWhisper`, `processRecording` and `restoreUIState` differ only by the added Transcribing/Stop state. |
+| **Conclusion** | "Take the code that worked before" is already the state of the branch. Whatever breaks it is in the state the pipeline reads, not the pipeline. One observation from the device separates the remaining candidates. |
+| **Next step** | Identify which of: nothing happens on tap / it records then produces nothing / it errors. |
 
 ### 12. Opening a chat at the end does not stay at the end when the keyboard appears
 
