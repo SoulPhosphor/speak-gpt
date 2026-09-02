@@ -105,8 +105,8 @@ class NewConversationCoordinator(private val context: Context) {
             // under its real title after the screen and its Intent are gone.
             .putString(ConversationMode.PENDING_NAME_KEY, request.name)
             .commit()
-        indexPendingConversation(chatId, request.name)
         check(initialized) { "Unable to initialize pending conversation settings" }
+        indexPendingConversation(chatId, request.name)
         check(
             SecurePrefs.get(app, "chat_$chatId").edit()
                 .putString("chat", "[]").commit()
