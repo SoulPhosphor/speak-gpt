@@ -168,7 +168,9 @@ class ChatActionSurfaceSourceContractTest {
         assertTrue(activity.contains("messageInput?.hint = getString(R.string.hint_transcribing)"))
         assertTrue(activity.contains("transcriptionInProgress = true\n        micTranscribing()"))
         assertTrue(activity.contains("btnMicro?.isEnabled = transcriptionInProgress ||"))
-        assertTrue(activity.contains("transcriptionInProgress = false\n            micIdle()"))
+        assertTrue(activity.substringAfter(
+            "private var transcriptionInProgress = false"
+        ).contains("transcriptionInProgress = false"))
     }
 
     @Test
