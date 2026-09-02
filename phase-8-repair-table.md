@@ -70,8 +70,78 @@ reflectively-used field in the app exposed.
 | **Automated verification** | `ChatDeletionCallSiteContractTest` updated to assert the chat-list identity and to fail if the snapshot lookup returns. |
 | **Device verification** | Pending. |
 
-### 4–13
+### 2b. A keyless-looking endpoint could erase the whole chat list at launch
 
-Under investigation. Rows are added here as each is traced; none is marked
-repaired before its runtime path is established.
+| | |
+|---|---|
+| **Reported symptom** | Part of "chats disappear". Found while tracing item 2; it also exists on `main`. |
+| **Defect** | The launch path that sends a brand-new user to Welcome wrote an empty chat list unconditionally first. It runs whenever the configured endpoint reads as having no key — which is not the same thing as "this user has no chats". Any condition that makes the active endpoint resolve keyless therefore erased every conversation on the device. |
+| **Exact fix** | The list is now cleared only when it is readable **and** already empty. An unreadable list is never overwritten. |
+| **Automated verification** | Compile/CI only; the surrounding startup path has no unit harness. |
+| **Device verification** | Pending. |
+
+### 4. Endpoint model changes do not reach Quick Settings or the request
+
+| | |
+|---|---|
+| **Reported symptom** | Changing the endpoint's model does not change what Quick Settings shows or what the request uses; the older `gpt-4o` behavior takes over. |
+| **Working main behavior** | Same two-source-of-truth existed on `main`; Phase 8 made it more visible. |
+| **Branch regression / defect** | The chat screen caches the model in a field and builds every request from that cached copy. Quick Settings writes the new model straight to storage and then tells the screen to update — but the update handler only refreshed avatars, so the live conversation kept sending the model it opened with. The full-rebuild path (`onForceUpdate`) does re-read storage, but it finishes the screen and starts a fresh copy without carrying the provisional flag — so making a Quick Settings change in a brand-new chat ran the abandon path against the very conversation the replacement screen was opening. |
+| **Exact fix** | The Quick Settings update handler now re-reads the chat's model, prefix and end separator. The rebuild path carries the provisional state into the replacement screen and marks the finish as a self-replacement, so it can never abandon the conversation it is handing over. |
+| **Automated verification** | Covered by the existing Quick Settings endpoint-sync contract test; the model reload is asserted by the new source contract in `PendingConversationDurabilityTest`'s sibling checks. |
+| **Device verification** | Pending. |
+
+### 5–6. Companion shows "No Companion"; Companion prompt delivery
+
+| | |
+|---|---|
+| **Status** | Repair already on the branch (`ensureActiveCompanion`), not yet confirmed on the device. |
+| **What is established in code** | Selection recovery runs on every chat open, for existing chats as well as new ones, and both request builders still assemble the Companion prompt block. The Companion label reads "No Companion" only when the chat's stored Companion id is empty or names a deleted Companion. |
+| **What is not established** | Why the id would be empty on the owner's existing chats after that recovery runs. The remaining candidate is the shrinker (item 1's keep rule), which the new beta changes. |
+| **Next step** | Re-test on the new beta before changing the selection code again. |
+
+### 7–8. Portrait shape defaults to Circle; one setting drives both portraits
+
+| | |
+|---|---|
+| **Status** | Repair already on the branch, not yet confirmed on the device. |
+| **What is established in code** | `ProfileImageShape.DEFAULT` is Circle, `GlobalPreferences.getProfileImageShape()` defaults to `"circle"`, and no remaining fallback starts at Flower. Both the user and Companion portrait paths read the same global shape. The pooled mask bitmap is cleared to transparent before drawing, so a recycled opaque bitmap can no longer make Circle render square. |
+| **Next step** | Re-test on the new beta. |
+
+### 9. Drawer open/close must preserve live chat state
+
+| | |
+|---|---|
+| **What is established in code** | The drawer wraps the *existing* chat view rather than recreating it, so composer text, IME state, attachments and streaming survive open/close. Back closes the drawer first. Full width is applied by the drawer's own measure pass. |
+| **Change made here** | Opening the drawer no longer risks losing a provisional conversation, because tapping a chat in the drawer finishes the current screen and that finish now commits rather than discards (item 2). |
+| **Next step** | Re-test the spec's state-preservation checklist on the new beta. |
+
+### 10. Token usage missing / does not wrap under long model names
+
+| | |
+|---|---|
+| **What is established in code** | The metadata view is constrained start-to-end at `0dp`, so it now measures against the real bubble width, and it drops the token count onto its own line when both do not fit. Reasoning-token detail in Message Details is untouched. The line is hidden when Model Names / Token Usage are off or the turn stored no count. |
+| **Not yet explained** | "Token usage is missing" as distinct from "does not wrap". If it is still missing on the new beta, the next thing to check is whether the turn stored a token count at all. |
+| **Next step** | Re-test on the new beta. |
+
+### 11. Transcription does not reliably show a Transcribing / Stop state
+
+| | |
+|---|---|
+| **What is established in code** | Cloud and on-device transcription both enter an explicit in-progress state that shows "Transcribing…", keeps the mic enabled as a red Stop, and clears on success, empty result, cancellation and failure. A tap during that window routes through the shared all-engine cancellation. |
+| **Next step** | Run the engine / permission / exit matrix on the new beta. |
+
+### 12. Opening a chat at the end does not stay at the end when the keyboard appears
+
+| | |
+|---|---|
+| **What is established in code** | Opening uses an end-of-transcript scroll that corrects a final row taller than the viewport, and the keyboard resize is held by a bottom-relative anchor captured before the height changes. |
+| **Next step** | Re-test with real IME animation on the new beta. |
+
+### 13. Chat surfaces and menus that were not supposed to change
+
+| | |
+|---|---|
+| **Finding** | Nothing was silently lost. Comparing the branch against `main`: **no user-facing string was removed** (0 of `main`'s string names are missing), and only two functions are gone from the chat screen — `deleteCurrentChat`, replaced by the shared deletion coordinator, and `restoreTranscriptAnchorAfterResize`, replaced by the transcript view that owns the keyboard anchor. The only removed layout is `activity_main.xml`, the old tabbed chat-list screen the approved drawer specification replaces. |
+| **Conclusion** | The earlier accidental 12,000-line deletion was genuinely restored. If a specific surface still looks wrong on the device, it is a live wiring problem, not lost source — name the screen and it gets traced individually. |
 

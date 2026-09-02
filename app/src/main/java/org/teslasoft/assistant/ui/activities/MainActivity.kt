@@ -27,6 +27,7 @@ import org.teslasoft.assistant.conversation.NewConversationCoordinator
 import org.teslasoft.assistant.conversation.PendingConversationState
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.theme.ThemeManager
@@ -81,9 +82,19 @@ class MainActivity : FragmentActivity() {
         if (endpoints.getApiEndpoint(this, preferences.getApiEndpointId()).apiKey == "") {
             if (preferences.getApiKey(this) == "") {
                 if (preferences.getOldApiKey() == "") {
+                    // The new-user path clears the chat list. It must only ever
+                    // do that for a user who has no chats: an unconditional
+                    // write here erases every conversation on the device the
+                    // moment the configured endpoint reads as keyless for any
+                    // reason. An unreadable list is left alone too — it is not
+                    // evidence of a new user.
                     synchronized(ChatPreferences.CHAT_LIST_LOCK) {
-                        SecurePrefs.get(this, "chat_list").edit {
-                            putString("data", "[]")
+                        val stored = ChatPreferences.getChatPreferences()
+                            .getChatListResult(this, includeFirstMessage = false)
+                        if (ChatStorageHealth.isAuthoritative(stored.state) && stored.chats.isEmpty()) {
+                            SecurePrefs.get(this, "chat_list").edit {
+                                putString("data", "[]")
+                            }
                         }
                     }
                     return StartupDestination.Welcome

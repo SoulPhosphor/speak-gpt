@@ -445,6 +445,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var conversationMode: ConversationMode = ConversationMode.CHAT
     private var pendingConversation = false
 
+    /** True while this screen is being replaced by a fresh copy of itself after
+     *  a Quick Settings change. The replacement owns the same conversation, so
+     *  this finish must not treat it as an abandoned provisional chat. */
+    private var recreatingForSettings = false
+
     // Conversation summarizer (conversation-summary-plan.md decisions 11 +
     // 16): data_alert first in the icon row (with the 1–5 count badge),
     // then the subject summary icon. The controller runs the background
@@ -2658,7 +2663,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         imageImportScopes.clear()
 
-        if (isFinishing && pendingConversation && chatId.isNotBlank()) {
+        if (isFinishing && pendingConversation && chatId.isNotBlank() && !recreatingForSettings) {
             // Only a conversation that is genuinely empty is discarded here;
             // the coordinator finishes the first commit for one that holds
             // turns rather than deleting it.
@@ -6443,10 +6448,29 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 override fun onUpdate() {
                     refreshCompanionAvatar()
                     refreshUserAvatar()
+                    // Quick Settings writes the chat's model, prefix and end
+                    // separator straight to storage. This screen caches them,
+                    // and requests are built from the cached copy — so without
+                    // re-reading them here the conversation keeps sending the
+                    // model it started with (commonly the older per-chat
+                    // default) while Quick Settings shows the new one.
+                    loadModel()
                 }
 
                 override fun onForceUpdate() {
-                    startActivity(Intent(this@ChatActivity, ChatActivity::class.java).putExtra("chatId", chatId).putExtra("name", chatName).setAction(Intent.ACTION_VIEW))
+                    // Rebuilding the screen finishes this one. A provisional
+                    // conversation must survive that: carry its provisional
+                    // state into the new screen, and do not let this finish
+                    // run the abandon path against the chat the replacement
+                    // screen is about to open.
+                    recreatingForSettings = true
+                    startActivity(
+                        Intent(this@ChatActivity, ChatActivity::class.java)
+                            .putExtra("chatId", chatId)
+                            .putExtra("name", chatName)
+                            .putExtra("pendingConversation", pendingConversation)
+                            .setAction(Intent.ACTION_VIEW)
+                    )
                     finishActivity()
                 }
             })
