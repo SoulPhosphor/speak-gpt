@@ -2,6 +2,7 @@ package org.teslasoft.assistant.preferences.chatnavigation
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.ChatStorageHealth
@@ -84,6 +85,32 @@ class ChatNavigationStorageHealthTest {
         assertTrue(repaired.contains("\"folders\":[]"))
     }
 
+    @Test fun anAbsentFolderCatalogListsChatsAndStillAllowsPinning() {
+        // A device that has never made a folder has no stored catalog. Treating
+        // that as a storage failure took the whole drawer and the chat menu
+        // down, and made pinning fail, over metadata that does not exist yet.
+        val store = FolderCatalogHiddenPreferences(FakeSharedPreferences())
+        var preserved: String? = null
+        val repo = repository(
+            rows = listOf(chatRow("chat-id", "Chat", 1)),
+            chatStore = store,
+            ids = listOf(folderId).iterator(),
+            onCorrupt = { preserved = it }
+        )
+
+        val snapshot = repo.snapshot()
+        assertTrue("absent folders must not fail the snapshot", snapshot is ChatNavigationResult.Success)
+        val value = (snapshot as ChatNavigationResult.Success).value
+        assertEquals("chat-id", value.allChats.single().id)
+        assertTrue(value.folders.isEmpty())
+
+        val pinned = repo.setChatPinned("chat-id", true)
+        assertTrue("pinning must work with no folder catalog", pinned is ChatNavigationResult.Success)
+
+        // Nothing was treated as corruption, so nothing was backed up.
+        assertNull(preserved)
+    }
+
     @Test fun emptyObjectWithoutMatchingSchemaMarkerRemainsBlockedAndUntouched() {
         val store = FakeSharedPreferences().apply {
             edit().putString(ChatNavigationRepository.FOLDERS_KEY, "{}").commit()
@@ -101,4 +128,24 @@ class ChatNavigationStorageHealthTest {
         )
         assertEquals("{}", store.getString(ChatNavigationRepository.FOLDERS_KEY, null))
     }
+}
+
+/**
+ * A store whose folder catalog is never visible to a read, however it was
+ * written. Reproduces the state of a device that has no stored catalog at the
+ * moment the drawer or a chat action reads it.
+ */
+private class FolderCatalogHiddenPreferences(
+    private val delegate: android.content.SharedPreferences
+) : android.content.SharedPreferences by delegate {
+    private val hidden = ChatNavigationRepository.FOLDERS_KEY
+
+    override fun getAll(): MutableMap<String, *> =
+        delegate.all.filterKeys { it != hidden }.toMutableMap()
+
+    override fun getString(key: String?, defValue: String?): String? =
+        if (key == hidden) defValue else delegate.getString(key, defValue)
+
+    override fun contains(key: String?): Boolean =
+        key != hidden && delegate.contains(key)
 }

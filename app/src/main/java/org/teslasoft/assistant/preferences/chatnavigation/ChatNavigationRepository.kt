@@ -142,9 +142,16 @@ class ChatNavigationRepository internal constructor(
             if (!ChatStorageHealth.isAuthoritative(result.state)) return@synchronized unavailable()
             val folders = when (val read = readFolders()) {
                 is FolderRead.Ok -> read.folders
+                // No stored catalog is not a failure. It is the ordinary state
+                // of a device that has never created a folder, and it is what
+                // migrateSchema itself treats as fine. Reporting it as a
+                // storage failure took down the whole drawer and the chat
+                // menu over metadata that simply does not exist yet.
+                FolderRead.Missing -> emptyList()
+                is FolderRead.ShrinkerEmpty -> emptyList()
                 FolderRead.Corrupt -> return@synchronized failure(ChatNavigationFailure.CORRUPT_FOLDERS)
                 FolderRead.Unsupported -> return@synchronized failure(ChatNavigationFailure.UNSUPPORTED_SCHEMA)
-                else -> return@synchronized unavailable()
+                FolderRead.Unavailable -> return@synchronized unavailable()
             }
             val items = result.chats.map(::toNavigationItem)
             success(ChatNavigationProjection.build(items, folders, result.state, locale))
@@ -248,9 +255,14 @@ class ChatNavigationRepository internal constructor(
         val chats = readAuthoritativeChats() ?: return@synchronized unavailable()
         val folders = when (val read = readFolders()) {
             is FolderRead.Ok -> read.folders
+            // See snapshot(): an absent catalog means no folders exist yet, so
+            // pinning, moving and folder creation must still work. Writing the
+            // catalog is what creates the key.
+            FolderRead.Missing -> emptyList()
+            is FolderRead.ShrinkerEmpty -> emptyList()
             FolderRead.Corrupt -> return@synchronized failure(ChatNavigationFailure.CORRUPT_FOLDERS)
             FolderRead.Unsupported -> return@synchronized failure(ChatNavigationFailure.UNSUPPORTED_SCHEMA)
-            else -> return@synchronized unavailable()
+            FolderRead.Unavailable -> return@synchronized unavailable()
         }
         val existingIds = chats.mapTo(HashSet()) { ChatPreferences.storedChatId(it) }
         if (!existingIds.containsAll(chatIds)) {
@@ -305,9 +317,14 @@ class ChatNavigationRepository internal constructor(
         val chats = readAuthoritativeChats() ?: return@synchronized unavailable()
         val folders = when (val read = readFolders()) {
             is FolderRead.Ok -> read.folders
+            // See snapshot(): an absent catalog means no folders exist yet, so
+            // pinning, moving and folder creation must still work. Writing the
+            // catalog is what creates the key.
+            FolderRead.Missing -> emptyList()
+            is FolderRead.ShrinkerEmpty -> emptyList()
             FolderRead.Corrupt -> return@synchronized failure(ChatNavigationFailure.CORRUPT_FOLDERS)
             FolderRead.Unsupported -> return@synchronized failure(ChatNavigationFailure.UNSUPPORTED_SCHEMA)
-            else -> return@synchronized unavailable()
+            FolderRead.Unavailable -> return@synchronized unavailable()
         }
         when (val decision = block(chats, folders)) {
             is MutationDecision.Fail -> failure(decision.reason)
