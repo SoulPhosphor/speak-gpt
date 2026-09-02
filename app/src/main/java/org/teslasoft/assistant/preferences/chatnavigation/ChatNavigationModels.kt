@@ -35,7 +35,14 @@ data class ChatNavigationSnapshot(
     val pinnedChats: List<ChatNavigationItem>,
     val folders: List<FolderNavigationGroup>,
     val unfiledChats: List<ChatNavigationItem>,
-    val allChats: List<ChatNavigationItem>
+    val allChats: List<ChatNavigationItem>,
+    /**
+     * True when folder organization could not be read and every chat is
+     * therefore listed unfiled. Chats are never withheld because of it: a
+     * user who has no folders — or whose folder metadata is unreadable —
+     * must still see their conversations.
+     */
+    val foldersUnavailable: Boolean = false
 )
 
 enum class ChatNavigationFailure {

@@ -111,9 +111,41 @@ class ChatNavigationStorageHealthTest {
         assertNull(preserved)
     }
 
-    @Test fun emptyObjectWithoutMatchingSchemaMarkerRemainsBlockedAndUntouched() {
+    @Test fun anUnusablePayloadCarryingNoFoldersIsPreservedThenRepaired() {
+        // A payload with no folder identities in it — however it got there —
+        // has nothing to lose. It must be backed up and replaced, not left
+        // blocking the drawer and every folder action forever.
+        for (payload in listOf("{}", "{\"version\":1}", "{\"folders\":[]}")) {
+            val store = FakeSharedPreferences().apply {
+                edit().putString(ChatNavigationRepository.FOLDERS_KEY, payload).commit()
+            }
+            var preserved: String? = null
+            val repo = repository(
+                rows = listOf(chatRow("chat-id", "Chat", 1)),
+                chatStore = store,
+                ids = listOf(folderId).iterator(),
+                onCorrupt = { preserved = it }
+            )
+
+            val snapshot = repo.snapshot()
+            assertTrue("$payload must not block the drawer", snapshot is ChatNavigationResult.Success)
+            assertEquals("chat-id", (snapshot as ChatNavigationResult.Success).value.allChats.single().id)
+            assertEquals(payload, preserved)
+
+            val repaired = store.getString(ChatNavigationRepository.FOLDERS_KEY, null).orEmpty()
+            assertTrue("$payload was not repaired", repaired.contains("\"folders\":[]"))
+
+            // And folders work again afterwards.
+            assertTrue(repo.createFolder("Recovered") is ChatNavigationResult.Success)
+        }
+    }
+
+    @Test fun aPayloadThatActuallyCarriesFoldersIsNeverOverwritten() {
+        // The other side of the rule: entries that failed validation may be
+        // real folders, so they stay exactly where they are.
+        val realFolders = "{\"version\":1,\"folders\":[{\"id\":\"not-a-uuid\",\"name\":\"Taxes\"}]}"
         val store = FakeSharedPreferences().apply {
-            edit().putString(ChatNavigationRepository.FOLDERS_KEY, "{}").commit()
+            edit().putString(ChatNavigationRepository.FOLDERS_KEY, realFolders).commit()
         }
         val repo = repository(
             rows = listOf(chatRow("chat-id", "Chat", 1)),
@@ -121,12 +153,33 @@ class ChatNavigationStorageHealthTest {
             ids = listOf(folderId).iterator()
         )
 
-        val result = repo.migrateSchema()
         assertEquals(
             ChatNavigationFailure.CORRUPT_FOLDERS,
-            (result as ChatNavigationResult.Failure).reason
+            (repo.createFolder("Blocked") as ChatNavigationResult.Failure).reason
         )
-        assertEquals("{}", store.getString(ChatNavigationRepository.FOLDERS_KEY, null))
+        assertEquals(realFolders, store.getString(ChatNavigationRepository.FOLDERS_KEY, null))
+    }
+
+    @Test fun chatsAreStillListedWhenFolderOrganizationCannotBeRead() {
+        // A user must never lose sight of their conversations because folder
+        // metadata is unreadable.
+        val store = FakeSharedPreferences().apply {
+            edit().putString(ChatNavigationRepository.FOLDERS_KEY, "{broken").commit()
+        }
+        val repo = repository(
+            rows = listOf(chatRow("chat-id", "Chat", 1)),
+            chatStore = store,
+            ids = listOf(folderId).iterator()
+        )
+
+        val snapshot = repo.snapshot()
+        assertTrue(snapshot is ChatNavigationResult.Success)
+        val value = (snapshot as ChatNavigationResult.Success).value
+        assertEquals("chat-id", value.allChats.single().id)
+        assertEquals("chat-id", value.unfiledChats.single().id)
+        assertTrue(value.foldersUnavailable)
+        // The unreadable payload is left exactly as it was.
+        assertEquals("{broken", store.getString(ChatNavigationRepository.FOLDERS_KEY, null))
     }
 }
 

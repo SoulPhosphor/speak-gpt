@@ -99,20 +99,17 @@ class ChatNavigationRepository internal constructor(
             return@synchronized unavailable()
         }
         if (rawPresent) {
-            when (val catalog = readFolders()) {
+            when (readFolders()) {
                 is FolderRead.Ok -> Unit
-                is FolderRead.ShrinkerEmpty -> {
-                    // The first minified drawer build could strip both fields
-                    // from its reflection-only Gson wrapper and persist `{}`.
-                    // That payload contains no folder identities to recover.
-                    // Preserve it through the existing corruption backup, then
-                    // replace only this exact known-bad shape with the valid
-                    // empty catalog so launch/drawer reads can recover.
-                    if (marker != SCHEMA_VERSION) {
-                        preserveCorruptFolders(catalog.raw)
-                        return@synchronized failure(ChatNavigationFailure.CORRUPT_FOLDERS)
-                    }
-                    preserveCorruptFolders(catalog.raw)
+                is FolderRead.Recoverable -> {
+                    // Nothing in this payload can be lost: it carries no folder
+                    // identities. readFolders already preserved a copy, so
+                    // replace it with a valid empty catalog rather than leaving
+                    // the drawer and every folder action blocked forever. The
+                    // schema marker is deliberately not a precondition — a
+                    // payload with nothing in it is recoverable whatever the
+                    // marker says, and requiring a match is what turned this
+                    // into a permanent dead end.
                     val repaired = chatListPreferences.edit()
                         .putString(FOLDERS_KEY, encodeFolders(emptyList()))
                         .putInt(SCHEMA_VERSION_KEY, SCHEMA_VERSION)
@@ -136,25 +133,27 @@ class ChatNavigationRepository internal constructor(
 
     fun snapshot(locale: Locale = Locale.getDefault()): ChatNavigationResult<ChatNavigationSnapshot> =
         synchronized(ChatPreferences.CHAT_LIST_LOCK) {
-            val migration = migrateSchema()
-            if (migration is ChatNavigationResult.Failure) return@synchronized migration
+            // A folder-metadata problem must never withhold the chat list.
+            // Only the chat store itself being unreadable can fail this read.
+            migrateSchema()
             val result = readChatList()
             if (!ChatStorageHealth.isAuthoritative(result.state)) return@synchronized unavailable()
-            val folders = when (val read = readFolders()) {
+            val read = readFolders()
+            val folders = when (read) {
                 is FolderRead.Ok -> read.folders
-                // No stored catalog is not a failure. It is the ordinary state
-                // of a device that has never created a folder, and it is what
-                // migrateSchema itself treats as fine. Reporting it as a
-                // storage failure took down the whole drawer and the chat
-                // menu over metadata that simply does not exist yet.
-                FolderRead.Missing -> emptyList()
-                is FolderRead.ShrinkerEmpty -> emptyList()
-                FolderRead.Corrupt -> return@synchronized failure(ChatNavigationFailure.CORRUPT_FOLDERS)
-                FolderRead.Unsupported -> return@synchronized failure(ChatNavigationFailure.UNSUPPORTED_SCHEMA)
-                FolderRead.Unavailable -> return@synchronized unavailable()
+                // Absent, or unusable and carrying nothing: no folders exist.
+                FolderRead.Missing, is FolderRead.Recoverable -> emptyList()
+                // Unreadable folder organization. The chats are still listed,
+                // unfiled; folder changes stay blocked by the mutation paths.
+                FolderRead.Corrupt, FolderRead.Unsupported, FolderRead.Unavailable -> emptyList()
             }
+            val foldersUnavailable = read is FolderRead.Corrupt ||
+                read is FolderRead.Unsupported || read is FolderRead.Unavailable
             val items = result.chats.map(::toNavigationItem)
-            success(ChatNavigationProjection.build(items, folders, result.state, locale))
+            success(
+                ChatNavigationProjection.build(items, folders, result.state, locale)
+                    .copy(foldersUnavailable = foldersUnavailable)
+            )
         }
 
     fun createFolder(proposedName: String): ChatNavigationResult<FolderRecord> = mutate { chats, folders ->
@@ -258,8 +257,7 @@ class ChatNavigationRepository internal constructor(
             // See snapshot(): an absent catalog means no folders exist yet, so
             // pinning, moving and folder creation must still work. Writing the
             // catalog is what creates the key.
-            FolderRead.Missing -> emptyList()
-            is FolderRead.ShrinkerEmpty -> emptyList()
+            FolderRead.Missing, is FolderRead.Recoverable -> emptyList()
             FolderRead.Corrupt -> return@synchronized failure(ChatNavigationFailure.CORRUPT_FOLDERS)
             FolderRead.Unsupported -> return@synchronized failure(ChatNavigationFailure.UNSUPPORTED_SCHEMA)
             FolderRead.Unavailable -> return@synchronized unavailable()
@@ -320,8 +318,7 @@ class ChatNavigationRepository internal constructor(
             // See snapshot(): an absent catalog means no folders exist yet, so
             // pinning, moving and folder creation must still work. Writing the
             // catalog is what creates the key.
-            FolderRead.Missing -> emptyList()
-            is FolderRead.ShrinkerEmpty -> emptyList()
+            FolderRead.Missing, is FolderRead.Recoverable -> emptyList()
             FolderRead.Corrupt -> return@synchronized failure(ChatNavigationFailure.CORRUPT_FOLDERS)
             FolderRead.Unsupported -> return@synchronized failure(ChatNavigationFailure.UNSUPPORTED_SCHEMA)
             FolderRead.Unavailable -> return@synchronized unavailable()
@@ -346,27 +343,59 @@ class ChatNavigationRepository internal constructor(
 
     private sealed class FolderRead {
         data class Ok(val folders: List<FolderRecord>) : FolderRead()
-        data class ShrinkerEmpty(val raw: String) : FolderRead()
+
+        /**
+         * The stored payload does not match the current contract AND carries
+         * no folder identities at all — an empty object, a missing or empty
+         * folders array, a missing version. There is nothing in it to lose, so
+         * it is preserved and then replaced with a valid empty catalog instead
+         * of blocking the drawer forever.
+         */
+        data class Recoverable(val raw: String) : FolderRead()
+
         data object Missing : FolderRead()
+
+        /** The payload contains folder-shaped entries that failed validation.
+         *  Those may be real folders, so nothing is overwritten. */
         data object Corrupt : FolderRead()
+
         data object Unsupported : FolderRead()
         data object Unavailable : FolderRead()
     }
 
+    /**
+     * Classify the stored folder payload.
+     *
+     * The decision that matters is whether the payload holds any folder
+     * identities. A payload that does not — an empty object, a missing or
+     * empty folders array, a missing version — cannot lose anything by being
+     * replaced, and a user who never created a folder must never be left with
+     * a permanently blocked drawer because of it. Only a payload that actually
+     * carries folder entries is treated as corruption worth protecting.
+     */
     private fun readFolders(): FolderRead {
         if (try { !chatListPreferences.contains(FOLDERS_KEY) } catch (_: Exception) { return FolderRead.Unavailable }) {
             return FolderRead.Missing
         }
         val raw = try { chatListPreferences.getString(FOLDERS_KEY, null) } catch (_: Exception) {
             return FolderRead.Unavailable
-        } ?: return corruptFolders("null")
+        } ?: return recoverableFolders("null")
+
+        val root = try { JsonParser.parseString(raw).asJsonObject } catch (_: Exception) { null }
+            // Not an object at all. Its shape is unknown, so it is never
+            // overwritten — but it no longer blocks the chat list either.
+            ?: return corruptFolders(raw)
+
+        val array = try { root.getAsJsonArray("folders") } catch (_: Exception) { null }
+        val carriesFolders = (array?.size() ?: 0) > 0
+        val version = try { root.get("version")?.asInt } catch (_: Exception) { null }
+
+        if (version != null && version > SCHEMA_VERSION) return FolderRead.Unsupported
+        if (version != SCHEMA_VERSION || array == null) {
+            return if (carriesFolders) corruptFolders(raw) else recoverableFolders(raw)
+        }
+
         return try {
-            val root = JsonParser.parseString(raw).asJsonObject
-            if (root.size() == 0) return FolderRead.ShrinkerEmpty(raw)
-            val version = root.get("version")?.asInt ?: return corruptFolders(raw)
-            if (version > SCHEMA_VERSION) return FolderRead.Unsupported
-            if (version != SCHEMA_VERSION) return corruptFolders(raw)
-            val array = root.getAsJsonArray("folders") ?: return corruptFolders(raw)
             val folders = array.map { element ->
                 val obj = element.asJsonObject
                 FolderRecord(
@@ -382,8 +411,15 @@ class ChatNavigationRepository internal constructor(
             ) return corruptFolders(raw)
             FolderRead.Ok(folders)
         } catch (_: Exception) {
-            corruptFolders(raw)
+            if (carriesFolders) corruptFolders(raw) else recoverableFolders(raw)
         }
+    }
+
+    /** Keep a copy of an unusable payload that holds no folder identities. The
+     *  caller replaces it with a valid empty catalog. */
+    private fun recoverableFolders(raw: String): FolderRead {
+        preserveCorruptFolders(raw)
+        return FolderRead.Recoverable(raw)
     }
 
     private fun corruptFolders(raw: String): FolderRead {
