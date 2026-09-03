@@ -2245,14 +2245,17 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     }
 
     /** Work on a private copy so the chosen export is only ever read. */
-    private fun copyForLegacyConversion(uri: Uri): File? = try {
-        val target = File(cacheDir, "legacy-conversion-${System.nanoTime()}.tmp")
-        contentResolver.openInputStream(uri)?.use { input ->
-            target.outputStream().use { output -> input.copyTo(output) }
-        } ?: return null
-        target
-    } catch (_: Exception) {
-        null
+    private fun copyForLegacyConversion(uri: Uri): File? {
+        return try {
+            val source = contentResolver.openInputStream(uri) ?: return null
+            val target = File(cacheDir, "legacy-conversion-${System.nanoTime()}.tmp")
+            source.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            }
+            target
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /** Runs off the UI thread; [copy] is deleted on every path. */
