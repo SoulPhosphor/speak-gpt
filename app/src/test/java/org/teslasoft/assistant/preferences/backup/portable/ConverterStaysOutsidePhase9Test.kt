@@ -73,6 +73,32 @@ class ConverterStaysOutsidePhase9Test {
         }
     }
 
+    /** The owner's export is the one irreplaceable artifact in this operation.
+     *  The converter reads it and extracts elsewhere; the only thing it may
+     *  delete is its own staging directory. */
+    @Test
+    fun theOriginalExportIsNeverWrittenToOrDeleted() {
+        val conversion = source("preferences/backup/portable/LegacyChatConversion.kt")
+        val body = conversion.substringAfter("fun convert(")
+        assertFalse(body.contains("packageFile.delete()"))
+        assertFalse(body.contains("packageFile.writeText"))
+        assertFalse(body.contains("packageFile.writeBytes"))
+        assertFalse(body.contains("packageFile.outputStream"))
+        // Staging is the only deletion, and it always happens.
+        assertTrue(body.contains("PortableStaging.delete(staging)"))
+        assertTrue(body.contains("finally"))
+        // The decoded Recovery Code secret never outlives the call.
+        assertTrue(body.contains("PackageCrypto.wipe(secret)"))
+    }
+
+    @Test
+    fun theConversionEngineCarriesNoWordingOfItsOwn() {
+        val conversion = source("preferences/backup/portable/LegacyChatConversion.kt")
+        assertFalse(conversion.contains("R.string"))
+        assertFalse(conversion.contains("Toast"))
+        assertFalse(conversion.contains("Log."))
+    }
+
     private fun source(relative: String): String {
         val candidates = listOf(
             File("src/main/java/org/teslasoft/assistant/$relative"),
