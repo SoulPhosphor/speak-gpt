@@ -829,7 +829,11 @@ If no owner testing is requested before completion, this lane may be built immed
 
 **Owner decision, September 3, 2026:** the owner is the only legacy user expected to require this migration. Prefer a disposable one-time converter over prematurely shipping a generalized permanent restore/import feature. This lane exists only to move the owner's pre-Phase-8 corpus into the post-Phase-8 data model, can be implemented as a temporary debug utility, plugin, script, or other isolated harness, and may be removed after migration and verification. It does not replace the permanent Phase 9-11 architecture.
 
-**Start gate:** Phase 8.4 must be complete before this lane touches legacy-format data. This lane is transitional and is not an additional condition for declaring Phase 8 itself complete. The working pre-release remains installed and untouched throughout the first conversion attempts. A failed conversion in the Beta/disposable target is acceptable because the source app, source data, and original backup remain authoritative and unchanged.
+**Start gate (amended by owner decision, September 3, 2026):** this lane no longer waits for Phase 8.4. The owner has directed that the owner-only conversion must not be blocked on hardware, a local emulator, or a phone-to-computer connection. The Phase 8.4 arm64 and general SQLCipher compatibility proof remains **unresolved and recorded as unresolved**; it is simply no longer a precondition for this lane.
+
+The safety the gate existed to provide is supplied instead by the shape of the operation: the working pre-release stays installed and untouched, the original exports are preserved and never opened for writing, the converter runs only on a disposable copy, and the destination is a Beta that can be wiped. A failed conversion is a failed attempt, not a loss.
+
+This lane is transitional and is not an additional condition for declaring Phase 8 itself complete.
 
 ### 8.6.1 Audit the actual legacy backup before choosing converter architecture
 
@@ -867,8 +871,18 @@ If no owner testing is requested before completion, this lane may be built immed
 
 ### 8.6.5 Conversion rehearsal and exit
 
-1. Prove the converter first with synthetic/disposable legacy-format fixtures. Owner data is not the first test case.
-2. After the source backup has been verified and duplicated, convert a copy into the separate Beta/disposable target.
+1. **Amended by owner decision, September 3, 2026.** Do not build synthetic legacy-format fixtures for this converter. The owner's real exported corpus is the test corpus from the first attempt onward. The earlier synthetic-first rule is superseded, not merely relaxed.
+
+   The reasoning the owner gave, recorded so a later reader does not "restore" the old rule: neither the authoritative source installation nor the original exports are at risk, so a failed attempt costs a Beta reset and another copy of the export — not data. Synthetic fixtures would only delay the one test that actually matters.
+
+   The converter must in exchange:
+   - never modify the original export, and treat its input as read-only;
+   - seed only a fresh, empty Beta, and refuse a destination that already holds chats;
+   - fail visibly rather than silently omit anything;
+   - emit structural reporting sufficient to say what migrated and what did not.
+
+   Ordinary JVM unit tests of the converter's parsing, validation and planning logic are not "synthetic fixtures" in the sense being retired here, and are still expected.
+2. Copy the verified original export and convert the copy into the separate Beta/disposable target. The original is never the converter's input.
 3. Restart the target and compare at minimum: chat count and stable IDs; per-chat message counts/fingerprints; names, pins, timestamps, modes, folder catalog/assignments, and settings-key counts; plus memory/lorebook/profile/generated-image state to the extent those categories are included by the selected legacy artifact.
 4. Any unexplained mismatch is a failed conversion. Reset/discard the Beta target, correct the converter, and run again from a fresh copy of the original backup.
 5. After automated comparison passes, the owner spot-checks representative legacy chats and any high-value state that is meaningful only visually or behaviorally.
