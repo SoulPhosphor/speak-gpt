@@ -590,6 +590,18 @@
                 android:layout_marginTop="12dp"
                 android:text="@string/backup_portable_import" />
 
+            <!-- Temporary owner-only legacy conversion (plan Phase 8.6).
+                 Beta builds only; hidden everywhere else and removed once the
+                 owner's corpus has moved. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_legacy_convert"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/legacy_convert_action"
+                android:visibility="gone" />
+
             <!-- Persistent inline status for export/import results (replaces
                  the removed toasts). Stays until replaced. -->
             <TextView

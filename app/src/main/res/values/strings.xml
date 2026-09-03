@@ -2154,6 +2154,38 @@
     <string name="backup_portable_export_done">Portable data copy saved.</string>
     <string name="backup_portable_saved_to">Portable data copy saved to %1$s</string>
     <string name="backup_portable_import_title">Import Portable Data Copy</string>
+
+    <!-- Temporary owner-only legacy conversion (plan Phase 8.6). Beta builds
+         only. These strings go away with the feature; they are deliberately
+         plain and describe exactly what the converter does. -->
+    <string name="legacy_convert_action">Convert Legacy Chats</string>
+    <string name="legacy_convert_title">Convert legacy chats</string>
+    <string name="legacy_convert_body">Choose a copy of a Portable Data Copy exported by the older version. Its conversations will be rebuilt here.\n\nThis only works on an installation that has no conversations yet, and it never changes the file you choose.</string>
+    <string name="legacy_convert_choose_file">Choose File</string>
+    <string name="legacy_convert_working">Converting conversations…</string>
+    <string name="legacy_convert_code_title">Recovery Code</string>
+    <string name="legacy_convert_code_body">This copy is protected. Enter its Recovery Code to open it.</string>
+
+    <!-- Outcomes. Each names the actual cause and what can be done next. -->
+    <string name="legacy_convert_done">Converted %1$d conversations, %2$d messages and %3$d saved settings. Restart to see them.</string>
+    <string name="legacy_convert_err_code_required">This copy is protected and needs its Recovery Code.</string>
+    <string name="legacy_convert_err_code_invalid">That is not a valid Recovery Code. Check for a mistyped character and try again.</string>
+    <string name="legacy_convert_err_package">The copy could not be opened. It may be damaged, or that Recovery Code may belong to a different Recovery Key. The file was not changed.</string>
+    <string name="legacy_convert_err_no_chats">That copy contains no conversations. It may hold only memory or lorebook data.</string>
+    <string name="legacy_convert_err_unreadable">The conversations could not be read out of the copy after it was opened.</string>
+    <string name="legacy_convert_err_rejected">The conversations were readable but could not be trusted, so nothing was written. Cause: %1$s</string>
+    <string name="legacy_convert_err_not_empty">This installation already has conversations. Conversion only ever fills an empty one, so nothing was changed. Reset this installation first.</string>
+    <string name="legacy_convert_err_destination_unreadable">This installation\'s conversation list could not be read, so it was left alone. An unreadable list is not the same as an empty one.</string>
+    <string name="legacy_convert_err_write">Writing stopped partway and nothing is visible. Reset this installation and convert a fresh copy again.</string>
+
+    <!-- Rejection causes, substituted into legacy_convert_err_rejected. -->
+    <string name="legacy_convert_reason_not_chats">the file is not a conversation export</string>
+    <string name="legacy_convert_reason_format">the export was written in a format this build cannot read</string>
+    <string name="legacy_convert_reason_incomplete">the older version marked this export incomplete</string>
+    <string name="legacy_convert_reason_malformed">the export is structurally damaged</string>
+    <string name="legacy_convert_reason_identity">a conversation no longer matches the identity it was exported under</string>
+    <string name="legacy_convert_reason_duplicate">two conversations claim the same identity</string>
+    <string name="legacy_convert_reason_setting">a saved setting uses a type this build cannot restore</string>
     <!-- 6. Companion & Roleplay Backup (companion-roleplay-backup-plan.md;
          all wording owner-approved verbatim, §8/§9). One backup category,
          no per-item selection. Memories and lorebooks are deliberately NOT
