@@ -768,6 +768,58 @@ Required Beta tests:
 
 If no owner testing is requested before completion, this lane may be built immediately before the first requested owner test. Once the owner test is requested, it is a hard gate.
 
+## Phase 8.6 — Temporary owner-only legacy conversion lane
+
+**Owner decision, September 3, 2026:** the owner is the only legacy user expected to require this migration. Prefer a disposable one-time converter over prematurely shipping a generalized permanent restore/import feature. This lane exists only to move the owner's pre-Phase-8 corpus into the post-Phase-8 data model, can be implemented as a temporary debug utility, plugin, script, or other isolated harness, and may be removed after migration and verification. It does not replace the permanent Phase 9-11 architecture.
+
+**Start gate:** Phase 8.4 must be complete before this lane touches legacy-format data. This lane is transitional and is not an additional condition for declaring Phase 8 itself complete. The working pre-release remains installed and untouched throughout the first conversion attempts. A failed conversion in the Beta/disposable target is acceptable because the source app, source data, and original backup remain authoritative and unchanged.
+
+### 8.6.1 Audit the actual legacy backup before choosing converter architecture
+
+1. Inspect the exact backup/export formats the owner's current working version can produce, including the same-install Recovery Backup, Human-Readable Chat Backup, and portable logical package if present.
+2. Inventory what each artifact actually carries: chat list, histories, stored IDs and missing-explicit-ID rows, per-chat settings, folder catalog and assignments, pins/timestamps/modes, attachments/Includes, Companion/Profile references, memory/lorebook data, generated-image metadata/bytes, and any other state required to reproduce the owner's current corpus.
+3. Determine which artifacts are self-contained and which depend on installation-specific encrypted preferences, SQLCipher keys, Android Keystore scope, package identity, or app-private files. Do not assume a backup that can be created can also be opened by the side-by-side Beta.
+4. Record every gap between the legacy artifact and the current destination model before writing conversion code. The permanent Phase 9, 10, and 11 components are known to be incomplete and are not assumed to exist for this lane.
+5. Choose the smallest converter architecture only after that audit. If the current working build cannot produce sufficiently recoverable input, propose the smallest temporary exporter change needed and obtain owner approval before implementing it.
+
+### 8.6.2 Protect the working installation and source backup
+
+1. Never uninstall, clear, overwrite, or update the working pre-release as the first migration test.
+2. Create and verify the legacy backup while the working app is still functional. Keep the original artifact untouched and perform conversion only on a duplicate.
+3. Keep at least one verified copy outside app-private storage and preferably outside the phone before using owner data in the migration rehearsal.
+4. The converter must never modify the source archive in place. A failed attempt is discarded; the source artifact remains reusable for the next attempt.
+5. All first imports/conversions run against the separate Beta package or another disposable isolated target. They must not share the working package's private storage or overwrite its backup artifacts.
+
+### 8.6.3 One-time converter behavior
+
+1. The converter may intentionally support only the owner's actual legacy application version(s) and backup shape. It is not required to become a generalized historical importer or permanent product feature.
+2. Build an explicit old-to-new mapping for every preserved data category found in 8.6.1 rather than treating “restore chats” as one opaque operation.
+3. Preserve existing chat identity. Historical hash IDs remain valid; a row with no explicit `id` follows `ChatPreferences.storedChatId(chat)` compatibility behavior; titles never become a reason to re-key a chat during conversion.
+4. Produce either a new converted artifact or a fresh Beta-owned destination data set, depending on the encryption/key findings from 8.6.1. A temporary Android debug utility, desktop/scripted converter, or other narrow harness is acceptable if it keeps the source isolated and the result verifiable.
+5. Fail closed on an unknown schema/version, missing required file, malformed/duplicate identity, hash mismatch, unreadable encrypted input, or other required field the converter cannot safely map. Do not silently skip data and call the conversion successful.
+6. `chat_search.db` remains derived and is never migration truth. Rebuild Search from the converted authoritative chats after the destination opens successfully.
+7. Generated-image data is converted only to the extent the legacy source actually contains recoverable catalog metadata and bytes. If a source artifact cannot preserve some image state, disclose that gap before using it; never fabricate ownership, locks, tombstones, or missing bytes.
+8. Produce a migration report containing structural counts, IDs/fingerprints, included data categories, warnings, and pass/fail results. Do not put message text, credentials, database keys, or other private payloads in the report/logs.
+
+### 8.6.4 Relationship to the permanent Phase 9 restore boundary
+
+1. This temporary lane does **not** authorize a reachable UI/activity/debug caller of `ChatRestoreManager.restoreFromArchive`.
+2. Prefer a converter that constructs a fresh disposable Beta-owned destination or converted package without replacing a live authoritative chat set. That keeps conversion failure disposable rather than requiring the production crash-safe replacement transaction immediately.
+3. If the chosen converter would replace an already-live authoritative chat set, reuse/call `ChatRestoreManager.restoreFromArchive`, or otherwise expose the same mixed-state hazards Phase 9 exists to solve, stop and complete the applicable Phase 9 replacement boundary first. Do not create a second unsafe restore engine merely because the tool is temporary.
+4. This lane adds no permanent restore/import UI and does not settle the future Phase 10 generated-image backup policy or Phase 11 replace-versus-merge semantics.
+
+### 8.6.5 Conversion rehearsal and exit
+
+1. Prove the converter first with synthetic/disposable legacy-format fixtures. Owner data is not the first test case.
+2. After the source backup has been verified and duplicated, convert a copy into the separate Beta/disposable target.
+3. Restart the target and compare at minimum: chat count and stable IDs; per-chat message counts/fingerprints; names, pins, timestamps, modes, folder catalog/assignments, and settings-key counts; plus memory/lorebook/profile/generated-image state to the extent those categories are included by the selected legacy artifact.
+4. Any unexplained mismatch is a failed conversion. Reset/discard the Beta target, correct the converter, and run again from a fresh copy of the original backup.
+5. After automated comparison passes, the owner spot-checks representative legacy chats and any high-value state that is meaningful only visually or behaviorally.
+6. Only after the disposable migration survives restart and comparison should an in-place upgrade of the working package be considered.
+7. Keep the untouched original backup and at least one additional verified copy through the real upgrade and post-upgrade verification period.
+8. After the owner's corpus has migrated successfully, the converter may be removed from the product code. Retain only reusable non-owner-specific tests or format notes if they continue to provide value.
+9. Phase 9-11 remain the authority for any permanent general-purpose backup restore/import capability implemented later.
+
 ## Phase 9 — Safe whole-chat-set replacement and restore engine
 
 **Required before any UI, activity, debug action, or import path can call `ChatRestoreManager.restoreFromArchive`.** If this phase is deferred beyond the Main merge, keep restore engine-only and add a test proving there is no reachable caller.
