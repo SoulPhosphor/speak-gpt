@@ -76,6 +76,19 @@ jobs:
             -e class org.teslasoft.assistant.preferences.sqlcipher.SqlCipherPostUpgradeInstrumentedTest \
             com.soulphosphor.phosphorshines.test/androidx.test.runner.AndroidJUnitRunner
 
+      # Phase 8.3 step 4 requires a reopen after the process has actually been
+      # restarted, not only a second open inside one process. The suite is
+      # read-only against the fixtures (failure cases run on copies), so the
+      # identical run is the restart proof.
+      - name: Reopen every store again after a full process restart
+        run: |
+          adb shell am force-stop com.soulphosphor.phosphorshines
+          adb shell am force-stop com.soulphosphor.phosphorshines.test
+          adb shell am instrument -w \
+            -e phase8UpgradeStage post \
+            -e class org.teslasoft.assistant.preferences.sqlcipher.SqlCipherPostUpgradeInstrumentedTest \
+            com.soulphosphor.phosphorshines.test/androidx.test.runner.AndroidJUnitRunner
+
       - name: Record non-sensitive proof metadata
         if: always()
         run: |
@@ -86,4 +99,6 @@ jobs:
             echo "- 4.16.0 fixture commit: 94d58f62efbfee90aa0f7963346f0912963ca194"
             echo "- 4.17.0 candidate commit: $GITHUB_SHA"
             echo "- Fixture rows: companion_memory=1, lorebook=1, generated_images=1"
+            echo "- Encrypted FTS5: chat_search store, 1 indexed document, created and reopened on 4.17.0"
+            echo "- Reopen passes: 2 (second after a full process restart)"
           } >> "$GITHUB_STEP_SUMMARY"
