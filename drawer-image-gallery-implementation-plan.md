@@ -752,7 +752,7 @@ the work behind it.
 | The real `message_id` is used for catalog origins | **Met.** `GeneratedImageCatalogBackfill` reads `SearchableMessageProjection.MESSAGE_ID_KEY`, enforced by a unit test that runs in CI. |
 | 4.16.0-to-4.17.0 arm64 reopen tests pass for every existing encrypted database | **Not executed.** No arm64 Android runtime has been available to this work. See "Why 8.3 is still unproven" below. |
 | `./gradlew --no-daemon test assembleDebug assembleDebugAndroidTest` passes | **Met, in GitHub Actions.** `Android Checks` runs exactly those tasks, plus the Beta identity assertion. It has not been run inside a work-mode session, which has no Android SDK. |
-| GitHub `Android Checks` is green on the exact candidate commit | **Met** on the current code candidate `1032d69a`. Commits after it are documentation only. |
+| GitHub `Android Checks` is green on the exact candidate commit | **Met** on the Phase 8 repair candidate `1032d69a`. Later commits on the branch belong to the 8.6 conversion lane, which is not part of this gate. |
 | No legacy row/history was rewritten and no owner data was used as the only test copy | **Met.** `editChat` never writes an `id` into a row that lacked one, which a source contract enforces; every fixture in the suite is synthetic. |
 
 **Phase 8.4 is therefore not complete.** Two requirements — the generated-image

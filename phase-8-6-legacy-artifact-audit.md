@@ -10,16 +10,21 @@ findings only. No conversion code is written and no owner data is touched.
 
 ## The headline
 
-The export side works. The import side does not exist yet for chats.
+The export side works. The import side did not exist for chats, and has since
+been built.
 
 `DatabaseRestoreManager.prepare` refuses `BackupType.CHATS` outright — it returns
 `NO_APPROPRIATE_DATABASE` — and the automatic-entry listing filters chats out.
 `ChatRestoreManager` has no reachable caller anywhere in the app except
 `resumeIfPending` at startup, which only finishes a restore that already
-committed. So the app can write `chats.json` into a portable package and has no
-way to read one back.
+committed. So the app could write `chats.json` into a portable package and had
+no way to read one back.
 
-That is step 4 of the intended flow, and it has to be built.
+**Status: closed.** `ChatLogicalImportPlan`, `ChatLogicalImporter` and
+`LegacyChatConversion` supply the missing read side, reached from Convert
+Legacy Chats in the Beta's backup and restore screen. Neither refusal above was
+changed: the new path is separate, seeds only an installation that has never
+held a conversation, and never touches `ChatRestoreManager`.
 
 ## Two artifacts, not one
 
@@ -88,7 +93,10 @@ live authoritative chat set or call `ChatRestoreManager.restoreFromArchive`.
 A freshly installed Beta has no chats. Seeding an empty destination is not
 replacing a live chat set, so a converter that writes `chats.json` into a Beta
 that has never held a conversation stays outside the Phase 9 boundary. That is
-the cheap path, and it is the one to build.
+the cheap path, and it is the one that was built.
 
-It must refuse to run against a destination that already holds chats. That
-refusal is what keeps it outside Phase 9 rather than quietly inside it.
+It refuses to run against a destination that already holds chats, and against
+one whose chat list cannot be read authoritatively — unreadable is not evidence
+of empty. Those refusals are what keep it outside Phase 9 rather than quietly
+inside it, and they are asserted by a source contract rather than left to
+review.

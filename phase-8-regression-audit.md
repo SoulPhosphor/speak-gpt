@@ -366,8 +366,9 @@ catalog's real failure handling, or about the Pixel.
 
 ## Current repair status
 
-**Code candidate:** `1032d69a`. Commits after it on this branch change
-documentation only and do not alter the build.
+**Phase 8 repair candidate:** `1032d69a`, green on `Android Checks`. Later
+commits on this branch add the Phase 8.6 conversion lane and change none of the
+repairs audited here.
 
 F1, F2, F4, and F6 are implemented on this branch in commit `30128274`:
 navigation storage recovery, safe deletion-journal persistence and recovery,

@@ -3,7 +3,9 @@
 **Branch:** `agent/phase-8-pre-main-safety`
 **Baseline for comparison:** `main` (`0d16b3c3`)
 **Beta that failed on device:** branch head `de301bc1`
-**Current code candidate:** `1032d69a` (later commits on this branch are documentation only)
+**Phase 8 repair candidate:** `1032d69a`, green on `Android Checks`. The
+converter commits that follow it belong to the Phase 8.6 conversion lane and do
+not change any repair in this table.
 
 This table is the live record for the reported beta failures. It is updated as
 each item is investigated and repaired. Nothing here is called fixed on a device
