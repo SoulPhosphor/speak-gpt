@@ -17,11 +17,14 @@ class ConverterStaysOutsidePhase9Test {
     private val importer =
         source("preferences/backup/portable/ChatLogicalImporter.kt")
 
+    /** These files document what they stay away from by naming it, so every
+     *  "must not appear" assertion reads code with the comments removed. */
     @Test
     fun theSeederNeverReachesForTheReplacementEngine() {
-        assertFalse(importer.contains("ChatRestoreManager"))
-        assertFalse(importer.contains("restoreFromArchive"))
-        assertFalse(importer.contains("quarantine"))
+        val code = codeOnly(importer)
+        assertFalse(code.contains("ChatRestoreManager"))
+        assertFalse(code.contains("restoreFromArchive"))
+        assertFalse(code.contains("quarantine"))
     }
 
     @Test
@@ -68,9 +71,11 @@ class ConverterStaysOutsidePhase9Test {
     @Test
     fun theConversionLaneAddsNoLogging() {
         val plan = source("preferences/backup/portable/ChatLogicalImportPlan.kt")
-        for (file in listOf(importer, plan)) {
-            assertFalse(file.contains("Log."))
-            assertFalse(file.contains("Logger"))
+        val conversion = source("preferences/backup/portable/LegacyChatConversion.kt")
+        for (file in listOf(importer, plan, conversion)) {
+            val code = codeOnly(file)
+            assertFalse(code.contains("Log."))
+            assertFalse(code.contains("Logger"))
         }
     }
 
@@ -94,10 +99,9 @@ class ConverterStaysOutsidePhase9Test {
 
     @Test
     fun theConversionEngineCarriesNoWordingOfItsOwn() {
-        val conversion = source("preferences/backup/portable/LegacyChatConversion.kt")
-        assertFalse(conversion.contains("R.string"))
-        assertFalse(conversion.contains("Toast"))
-        assertFalse(conversion.contains("Log."))
+        val code = codeOnly(source("preferences/backup/portable/LegacyChatConversion.kt"))
+        assertFalse(code.contains("R.string"))
+        assertFalse(code.contains("Toast"))
     }
 
     /** The converter may seed only the disposable Beta, so its control exists
@@ -171,6 +175,12 @@ class ConverterStaysOutsidePhase9Test {
             assertTrue("$name has no message", mapping.contains(name))
         }
     }
+
+    /** Strips block and line comments so a "must not appear" check cannot be
+     *  tripped by documentation that names the thing being avoided. */
+    private fun codeOnly(source: String): String =
+        source.replace(Regex("/\\*[\\s\\S]*?\\*/"), "")
+            .replace(Regex("(?<!:)//[^\\n]*"), "")
 
     private fun layoutSource(): String {
         val candidates = listOf(
