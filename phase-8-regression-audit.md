@@ -52,7 +52,7 @@ Relevant implementation:
 
 - `ChatNavigationRepository` stored `FolderCatalog(version, folders)` using `Gson().toJson(...)`.
 - The wrapper was private and its fields were neither accessed directly nor annotated for serialization.
-- `app/build.gradle.kts` minifies both debug and beta.
+- `app/build.gradle` minifies every build type, debug and beta included.
 - `app/proguard-rules.pro` contains legacy `com.teslasoft.assistant.**` keep rules rather than rules for the real `org.teslasoft.assistant.**` namespace.
 - The reader manually requires literal `version` and `folders` keys, so `{}` is classified as corrupt.
 - `ChatDrawerController.refresh()` surfaces snapshot failure with the generic toast.
@@ -297,12 +297,120 @@ This history justifies a surface-by-surface regression pass, but it does not jus
 - Profile shapes match the final owner-approved surface rule.
 - Voice selection and playback still behave as before.
 
+## Phase 8.1 repository-wide chat identity audit
+
+The Phase 8.4 exit gate requires the repository-wide audit results to be part of
+the branch record, so they are recorded here.
+
+Eighteen production files read the chat list or a chat history. Every one that
+needs a chat's stable identity takes it from `ChatPreferences.storedChatId`,
+which returns the row's explicit `id` when it has one and the historical title
+hash when it does not.
+
+| Production file | Identity reads through the helper |
+|---|---|
+| `ui/adapters/ChatListAdapter.kt` | 13 |
+| `preferences/ChatPreferences.kt` | 8 |
+| `preferences/chatnavigation/ChatNavigationRepository.kt` | 6 |
+| `conversation/NewConversationCoordinator.kt` | 4 |
+| `ui/fragments/tabs/ChatsListFragment.kt` | 4 |
+| `preferences/generatedimages/GeneratedImageCatalogBackfill.kt` | 2 |
+| `preferences/memory/MemoryExporter.kt` | 2 |
+| `imagegen/GeneratedImageFiles.kt` | 1 |
+| `preferences/RenameJournal.kt` | 1 |
+| `preferences/backup/ChatSnapshotManifest.kt` | 1 |
+| `preferences/backup/portable/ChatLogicalSerializer.kt` | 1 |
+| `preferences/backup/readable/ReadableChatBackup.kt` | 1 |
+| `preferences/memory/TranscriptRecorder.kt` | 1 |
+| `preferences/memory/archivist/Archivist.kt` | 1 |
+| `ui/activities/ChatActivity.kt` | 1 |
+
+Three of the eighteen read the chat list without needing an identity, and were
+checked individually rather than converted: `ui/activities/MainActivity.kt` only
+asks whether the list is empty, and `imagegen/ImageGenerationJobRegistry.kt` and
+`preferences/chatsearch/ChatSearchIndexManager.kt` are handed a chat ID by their
+callers.
+
+The only literal `chat["id"]` read left in production is the helper's own
+definition. Two source contracts hold that line: one fails if a new chat-list
+reader takes `["id"]` directly, the other fails if the old hash-derived
+`addChat` creation path comes back.
+
+The three bugs the review named are fixed. `ChatPreferences.getChatName` finds a
+missing-ID row through the helper, `GeneratedImageFiles.deleteIfUnreferenced`
+scans that row's history before any file deletion, and `RenameJournal.reconcile`
+builds its live-ID set through the helper so a legacy chat is never mistaken for
+a deleted one.
+
+## What has actually been executed, and what has not
+
+This distinction decides most of the Phase 8.4 gate, so it is stated plainly.
+
+**Runs on every push.** The JVM unit suite — roughly 2,140 test methods across
+291 files — plus the debug and Beta builds, the Beta application-identity
+assertion, and compilation of the instrumentation suite. This is the whole of
+`Android Checks`, and it is exactly the Gradle gate Phase 8.4 names.
+
+**Compiles but has never run.** The instrumentation suite: roughly 87 test
+methods across 10 files, including every generated-image catalog failure
+injection and both SQLCipher upgrade fixtures. These need real SQLCipher, and
+the app ships `arm64-v8a` native code only, so they cannot run on the x86_64 CI
+runner. Nothing in this suite has produced a result.
+
+**Has never been observed at all.** Everything in the device checklist below.
+Only the owner can supply those.
+
+The practical consequence: a green `Android Checks` says the source and the
+build pipeline are sound. It says nothing about SQLCipher behavior, about the
+catalog's real failure handling, or about the Pixel.
+
 ## Current repair status
 
-F1, F2, F4, and F6 are **already implemented on this branch** in commit `30128274`: navigation storage recovery, safe deletion-journal persistence/recovery, endpoint-to-chat model synchronization, and token metadata width/wrapping. They are no longer suggestions for future work.
+**Code candidate:** `1032d69a`. Commits after it on this branch change
+documentation only and do not alter the build.
 
-The final branch gate passed at head `d76ad696`: all 2,137 unit tests passed, the debug and minified side-by-side beta APKs built successfully, the beta application identity was verified, instrumentation tests compiled, and the beta prerelease artifact was published. These results verify the reviewed source and build pipeline; they do not replace the device acceptance checks below.
+F1, F2, F4, and F6 are implemented on this branch in commit `30128274`:
+navigation storage recovery, safe deletion-journal persistence and recovery,
+endpoint-to-chat model synchronization, and token metadata width and wrapping.
+F3, F5 selection recovery, F8, F9, F11, and F12 followed. F7 is restored through
+F1 rather than through duplicated menu code.
 
-The current repair batch implements F3, F5 selection recovery, F8, F9, F11, and F12. F7 is restored through F1 rather than through duplicated menu code. These changes have focused regression contracts, but they must not be described as device-verified until the new beta is exercised.
+Three further repairs landed after this audit was first written, and are
+recorded in `phase-8-repair-table.md` rather than as new findings here: an
+absent folder catalog is no longer classified as a storage failure and an
+empty-but-present one is now repairable; a keyless-reading endpoint can no
+longer clear the chat list of a user who has chats; and a conversation whose
+first turn arrives by voice now reaches its first durable commit.
 
-Remaining acceptance work is runtime/device confirmation only: drawer geometry/state, saved-chat menu visibility, actual Companion prompt presence in a request, all transcription engines/permission paths, Circle rendering for both portrait roles, and end-of-chat behavior during real IME animation.
+None of this is device-verified. Every repair above has a focused automated
+contract, all of which run in CI except the generated-image catalog cases, and
+none of which exercise R8, a real database, or the Pixel.
+
+## Remaining runtime and device acceptance work
+
+Nothing on this list may be described as verified until the owner confirms it on
+the test device, or until the named runtime actually executes.
+
+**Needs an arm64 Android runtime, not the owner:**
+
+- the SQLCipher 4.16.0-to-4.17.0 upgrade proof for `companion_memory.db`,
+  `lorebook.db` and `generated_images.db`, plus encrypted FTS5;
+- the generated-image catalog failure injections: absent, empty, locked,
+  wrong-key and corrupt catalogs, interrupted registration, and recovery
+  idempotency.
+
+**Needs the owner on the Pixel:**
+
+- drawer geometry and state preservation across open and close;
+- saved-chat overflow menu contents and order;
+- the Companion prompt block actually present in a request;
+- the transcription engine, permission, chat and exit matrix;
+- Circle rendering for both portrait roles;
+- end-of-chat position during real IME animation;
+- the folder-metadata repair healing the existing install on next launch;
+- new chats surviving a leave-and-return, including voice-first chats;
+- the endpoint model reaching Quick Settings and the next request;
+- token usage visible and wrapping under a long model name;
+- the manual Google dictation turn ending on the second mic tap;
+- side-by-side Beta install, launch and uninstall leaving the working
+  pre-release and its data intact.

@@ -3,6 +3,7 @@
 **Branch:** `agent/phase-8-pre-main-safety`
 **Baseline for comparison:** `main` (`0d16b3c3`)
 **Beta that failed on device:** branch head `de301bc1`
+**Current code candidate:** `1032d69a` (later commits on this branch are documentation only)
 
 This table is the live record for the reported beta failures. It is updated as
 each item is investigated and repaired. Nothing here is called fixed on a device
@@ -11,9 +12,15 @@ until the owner confirms it on the test device.
 ## How to read the verification columns
 
 - **Code-verified** — the runtime path was traced in the current source and the
-  change is covered by a check that runs in CI.
+  change is covered by a check that runs in CI on every push.
+- **Compiled only** — a check exists but has never produced a result, because it
+  needs a real encrypted database and the app is arm64-only. Compiling is not
+  passing.
 - **Device-verified** — the owner exercised it on the Pixel 8 and confirmed the
   symptom is gone. Only the owner can fill this in.
+
+Nothing in this table is device-verified. Most items are code-verified; item 2b
+has compile coverage only, and item 11 has none.
 
 ## Correction to an earlier claim in this file
 
@@ -111,7 +118,7 @@ failed validation."* The owner has never created a folder.
 | **Working main behavior** | Same two-source-of-truth existed on `main`; Phase 8 made it more visible. |
 | **Branch regression / defect** | The chat screen caches the model in a field and builds every request from that cached copy. Quick Settings writes the new model straight to storage and then tells the screen to update — but the update handler only refreshed avatars, so the live conversation kept sending the model it opened with. The full-rebuild path (`onForceUpdate`) does re-read storage, but it finishes the screen and starts a fresh copy without carrying the provisional flag — so making a Quick Settings change in a brand-new chat ran the abandon path against the very conversation the replacement screen was opening. |
 | **Exact fix** | The Quick Settings update handler now re-reads the chat's model, prefix and end separator. The rebuild path carries the provisional state into the replacement screen and marks the finish as a self-replacement, so it can never abandon the conversation it is handing over. |
-| **Automated verification** | Covered by the existing Quick Settings endpoint-sync contract test; the model reload is asserted by the new source contract in `PendingConversationDurabilityTest`'s sibling checks. |
+| **Automated verification** | `QuickSettingsEndpointModelSyncTest`. Its first check covers the endpoint editor's side — the saved endpoint model becomes the chat's model and the visible label. Its second check covers the chat screen's side: the update callback re-reads the model, and the rebuild callback marks the finish as a self-replacement before it runs, so it cannot abandon the conversation it is handing over. An earlier version of this row credited `PendingConversationDurabilityTest` for the second half; that was wrong — that file asserts nothing about the model, and the check now named here was written to close the gap. |
 | **Device verification** | Pending. |
 
 ### 5–6. Companion shows "No Companion"; Companion prompt delivery
@@ -160,9 +167,10 @@ This is a pre-existing defect in the Google dictation path.
 | **Actual defect** | Voice & Speech has a **Hands Free Timers** section with **Silence Wait (Seconds)** (default 5) and **Wait for Speech (Seconds)** (default 10). Both are honoured **only while hands-free mode is on**. A single mic press applies neither.<br><br>In hands-free mode `startRecognition` sets the three `EXTRA_SPEECH_INPUT_*` silence hints, `onEndOfSpeech` deliberately does not end the turn, `onError` treats `ERROR_NO_MATCH` / `ERROR_SPEECH_TIMEOUT` as harmless and restarts the recogniser, and `onResults` buffers each fragment, restarts the mic, and submits only after `scheduleHandsFreeSubmit()`'s configured silence window — because, as the code's own comment says, the native recogniser ignores those extras on most devices.<br><br>A single mic press gets **none** of that: no extras on the intent, `onEndOfSpeech` immediately sets `isRecording = false` and idles the mic, and `onResults` submits whatever fragment the OS returned. The turn therefore ends at the OS recogniser's first pause — one word if the user paused to think, two sentences if they did not. |
 | **Machinery that already exists** | `scheduleHandsFreeSubmit()` already reads the configured window rather than hardcoding it, and already buffers and restarts. The fix is to drive a single mic turn through the same mechanism, not to invent timing. |
 | **Constraint on the fix** | A manual mic turn must keep obeying `shouldAutoSendTranscription`: the assembled text goes into the message box (auto-sent only when Auto-send is on and the box was empty). It must not start behaving like a hands-free turn. |
-| **Blocked on** | One owner decision — which settings govern a single mic press. The two existing fields are labelled *Hands Free* Timers, so reusing them changes what an approved label covers. |
-| **Automated verification** | Not written yet; blocked on the decision above. |
-| **Device verification** | Pending. |
+| **What shipped** | Commit `cb3201ea`. A manual dictation turn now buffers each fragment and reopens the mic; the turn ends when the user taps the mic a second time, the same press-to-start / press-to-stop control the Whisper button already has. A stop tap waits about 1.5 seconds for the recogniser's final fragment so nothing already spoken is stranded. A pause the recogniser reports as "no match" or "speech timeout" reopens the mic instead of ending the turn. Hands-free is untouched and still ends its turns on the configured Silence Wait timer. |
+| **Owner decision status** | The decision this row was blocked on is no longer needed. It asked which timer settings should govern a single mic press; the shipped fix uses no timer at all, so neither Hands Free Timers field changed meaning and no approved label now covers something it did not before. Nothing about the Hands Free Timers section changed. |
+| **Automated verification** | None. This behavior lives in the speech-recogniser callbacks and has no test, unlike every other repair in this table. |
+| **Device verification** | Pending. This is the item with the least automated backing, so the device check matters more here than elsewhere: press the mic, speak with pauses, and confirm the turn ends only on the second tap. |
 
 ### 12. Opening a chat at the end does not stay at the end when the keyboard appears
 

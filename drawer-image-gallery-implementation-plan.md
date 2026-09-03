@@ -739,6 +739,63 @@ Phase 8 is complete only when all of the following are true:
 - GitHub `Android Checks` is green on the exact candidate commit;
 - no legacy row/history was rewritten and no owner data was used as the only test copy.
 
+#### 8.4 status of record
+
+Audited against branch `agent/phase-8-pre-main-safety` on September 3, 2026.
+Each line reports the state of the gate requirement itself, not the state of
+the work behind it.
+
+| Gate requirement | Status |
+|---|---|
+| The three known direct-ID compatibility bugs are fixed and the repository-wide audit is recorded | **Met.** `ChatPreferences.getChatName`, `GeneratedImageFiles.deleteIfUnreferenced` and `RenameJournal.reconcile` all resolve identity through `storedChatId`. The full audit of every chat-list consumer is recorded in `phase-8-regression-audit.md` and enforced by `ChatIdentityCompatibilityTest`. |
+| The generated-image DB-loss tests prove UUID image bytes are preserved | **Written, never executed.** Every one of these cases needs a real SQLCipher catalog, so they live in `app/src/androidTest` and CI only compiles them. |
+| The real `message_id` is used for catalog origins | **Met.** `GeneratedImageCatalogBackfill` reads `SearchableMessageProjection.MESSAGE_ID_KEY`, enforced by a unit test that runs in CI. |
+| 4.16.0-to-4.17.0 arm64 reopen tests pass for every existing encrypted database | **Not executed.** No arm64 Android runtime has been available to this work. See "Why 8.3 is still unproven" below. |
+| `./gradlew --no-daemon test assembleDebug assembleDebugAndroidTest` passes | **Met, in GitHub Actions.** `Android Checks` runs exactly those tasks, plus the Beta identity assertion. It has not been run inside a work-mode session, which has no Android SDK. |
+| GitHub `Android Checks` is green on the exact candidate commit | **Met** on the current code candidate `1032d69a`. Commits after it are documentation only. |
+| No legacy row/history was rewritten and no owner data was used as the only test copy | **Met.** `editChat` never writes an `id` into a row that lacked one, which a source contract enforces; every fixture in the suite is synthetic. |
+
+**Phase 8.4 is therefore not complete.** Two requirements — the generated-image
+DB-loss proofs and the SQLCipher upgrade proof — are written and compiling but
+have never run, because both need an arm64 Android runtime.
+
+#### The complete inventory of SQLCipher stores
+
+8.3 asks for "any other pre-existing SQLCipher store". There are exactly four
+encrypted databases with app-managed keys, and no others:
+
+| Database | Key | Pre-existing at 4.16.0 |
+|---|---|---|
+| `companion_memory.db` | `DatabaseKeys.KEY_MEMORY` | yes — fixture |
+| `lorebook.db` | `DatabaseKeys.KEY_LOREBOOK` | yes — fixture |
+| `generated_images.db` | `DatabaseKeys.KEY_GENERATED_IMAGES` | yes — fixture |
+| `chat_search.db` | `DatabaseKeys.KEY_CHAT_SEARCH` | no — introduced after the pinned 4.16.0 commit, so it is only ever created by 4.17.0 and is covered by 8.3's separate encrypted-FTS5 requirement |
+
+`profile_images.db` is deliberately plain SQLite and is not in scope for 8.3.
+
+#### Why 8.3 is still unproven
+
+The harness exists and is complete: `.github/workflows/sqlcipher-arm64-upgrade.yml`
+builds a fixture producer from the pinned 4.16.0 commit `94d58f62`, creates the
+three encrypted fixtures with the app's own keys, upgrades in place without
+clearing data, then reopens, queries, integrity-checks, restarts the process and
+reopens again, exercises wrong-key and corrupt handling on copies, proves
+encrypted FTS5, and checks that no fixture sentence appears in any database,
+WAL, SHM or journal file. `SqlCipherPreUpgradeFixtureInstrumentedTest` and
+`SqlCipherPostUpgradeInstrumentedTest` carry that work and compile in CI.
+
+What is missing is only the machine. The app ships `arm64-v8a` native code
+only, so it cannot run on the ordinary x86_64 CI runner or on a work-mode
+container. The workflow targets a self-hosted arm64 Android runner with an
+attached device; no such runner is registered for this repository, and the
+workflow file has never existed on the default branch, so it cannot even be
+started from the Actions tab.
+
+Choosing where to run it is an owner decision, because each option has a
+different cost and a different trust boundary. It must never be run against a
+device holding the owner's data; the workflow already refuses to start without
+an explicit disposable-device confirmation.
+
 ### 8.5 Separate-install Beta lane before owner testing
 
 **Owner requirement, August 31, 2026:** if the owner is asked to inspect or test any of this work before the future phases are complete, provide a **Beta** that installs beside the working pre-release. Never provide an APK that updates/replaces `com.soulphosphor.phosphorshines`.
