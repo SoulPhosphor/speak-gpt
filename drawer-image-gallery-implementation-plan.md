@@ -974,6 +974,24 @@ Startup:
 - A disposable installation completes backup → mutate → restore → restart → compare, with exact chat IDs, row counts, folder catalog, settings keys, and message fingerprints matching the snapshot.
 - The owner approves the recovery wording before UI is added. Do not infer approval from approval of this technical plan.
 
+#### 9.5 status of record
+
+Audited against branch `agent/phase-8-pre-main-safety` (continued on
+`claude/phase-8-safety-continuation-a36jxx`) on September 4, 2026. Each line
+reports the state of the exit-gate requirement itself.
+
+| Exit-gate requirement | Status |
+|---|---|
+| Unit and instrumentation tests pass for the complete crash matrix | **Not started.** The Phase 9.1 replacement coordinator does not exist; `ChatRestoreManager` is still the pre-Phase-9 raw-swap engine (the plan's P1 risk), with no dependent-store rebase (9.3), no manifest-version/cross-check hardening (9.2), and journal writes that still swallow a failed commit. No crash-matrix tests exist. |
+| A source-contract test proves the engine has no reachable caller until the approved UI is implemented | **Met, engine-only.** `RestoreEngineHasNoReachableCallerTest` (unit CI) fails if any production source other than `ChatRestoreManager` reaches `restoreFromArchive`. Confirmed today: `restoreFromArchive` has no production caller. `resumeIfPending` remains the only startup finisher and is inert while no reachable restore can leave a journal. |
+| Disposable-install backup → mutate → restore → restart → compare | **Not started.** Depends on the coordinator above and on a disposable arm64 device run the owner has not authorized. Unverified. |
+| Owner approves the recovery wording before UI is added | **Not applicable yet.** No restore UI, no wording. Deferred until the engine is built and the owner is ready to review wording. |
+
+**Phase 9 is therefore not started beyond its engine-only boundary guard.** The
+restore replacement engine is deliberately kept unreachable; the guard makes
+that a build invariant so a future edit cannot silently ship a reachable,
+mixed-state restore. Nothing here is device-verified.
+
 ## Phase 10 — Generated-image backup, health, and restore policy
 
 **Owner decision required before implementation.** Phase 8 only prevents destructive catalog-loss behavior; it does not choose what backups promise to preserve.
