@@ -18,7 +18,6 @@ package org.teslasoft.assistant.preferences.backup
 
 import android.content.Context
 import androidx.core.content.edit
-import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.RenameJournal
@@ -102,13 +101,26 @@ object ChatRestoreManager {
             try { staging.deleteRecursively() } catch (_: Exception) { }
             return Result(false, "staging failed: ${e.javaClass.simpleName}")
         }
-        writeJournal(appContext, ChatRestorePlanner.PHASE_STAGED, staging.absolutePath, entries.keys)
+        // The journal carries each staged file's expected SHA-256, so a swap
+        // resumed after process death re-verifies the staged bytes by hash —
+        // not merely their presence — before it replaces anything. A journal
+        // commit that does not land stops the restore before it touches a file.
+        val expectedHashes = entries.mapValues { hex(sha256(it.value)) }
+        if (!writeJournal(appContext, ChatRestorePlanner.PHASE_STAGED, staging.absolutePath, expectedHashes)) {
+            try { staging.deleteRecursively() } catch (_: Exception) { }
+            return Result(false, "could not journal the staged restore")
+        }
 
         // ---- 3. the journaled swap, under the chat-list lock ----
         return synchronized(ChatPreferences.CHAT_LIST_LOCK) {
             try {
                 quarantineCurrentChatFiles(appContext)
-                writeJournal(appContext, ChatRestorePlanner.PHASE_SWAPPING, staging.absolutePath, entries.keys)
+                // A SWAPPING commit that does not land stops before any file is
+                // replaced: the persisted phase is still STAGED, so startup
+                // discards the staging and leaves the live files untouched.
+                if (!writeJournal(appContext, ChatRestorePlanner.PHASE_SWAPPING, staging.absolutePath, expectedHashes)) {
+                    return@synchronized Result(false, "could not journal the swap")
+                }
                 performSwap(appContext, staging, entries.keys)
                 clearJournal(appContext)
                 try { staging.deleteRecursively() } catch (_: Exception) { }
@@ -135,10 +147,11 @@ object ChatRestoreManager {
             val p = prefs(appContext)
             val phase = p.getString(KEY_PHASE, null) ?: return
             val stagingPath = p.getString(KEY_STAGING, null)
-            val names = readJournalFiles(p.getString(KEY_FILES, null))
+            val expectedHashes = readJournalHashes(p.getString(KEY_FILES, null))
+            val names = expectedHashes.keys
             val staging = stagingPath?.let { File(it) }
-            val stagingComplete = staging != null && names.isNotEmpty() &&
-                names.all { File(staging, it).exists() }
+            val stagingComplete = staging != null && expectedHashes.isNotEmpty() &&
+                stagedBytesMatch(staging, expectedHashes)
             when (ChatRestorePlanner.planRecovery(phase, stagingComplete)) {
                 ChatRestorePlanner.Recovery.NOTHING -> return
                 ChatRestorePlanner.Recovery.RESUME_SWAP -> {
@@ -261,14 +274,43 @@ object ChatRestoreManager {
         }
     }
 
-    private fun writeJournal(context: Context, phase: String, stagingPath: String, names: Collection<String>) {
-        try {
-            prefs(context).edit(commit = true) {
-                putString(KEY_PHASE, phase)
-                putString(KEY_STAGING, stagingPath)
-                putString(KEY_FILES, JSONArray(names.toList()).toString())
-            }
-        } catch (_: Exception) { }
+    /** Durably records the restore journal and returns whether the commit
+     *  actually landed. A failed commit must stop the restore before it
+     *  quarantines or swaps — never proceed on an unrecorded plan. [fileHashes]
+     *  maps each staged entry name to its expected SHA-256 so recovery can
+     *  re-verify the staged bytes, not just their presence. */
+    private fun writeJournal(
+        context: Context,
+        phase: String,
+        stagingPath: String,
+        fileHashes: Map<String, String>
+    ): Boolean {
+        return try {
+            val files = JSONObject()
+            for ((name, hash) in fileHashes) files.put(name, hash)
+            val editor = prefs(context).edit()
+            editor.putString(KEY_PHASE, phase)
+            editor.putString(KEY_STAGING, stagingPath)
+            editor.putString(KEY_FILES, files.toString())
+            editor.commit()
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Every journaled file exists in staging AND its bytes hash to the
+     *  expected value. A swap is finished from staging only when the staged
+     *  bytes are proven, so a truncated or altered staging can never be copied
+     *  over the live set — the pre-restore quarantine stays the recovery
+     *  source instead. */
+    private fun stagedBytesMatch(staging: File, expected: Map<String, String>): Boolean {
+        for ((name, hash) in expected) {
+            val staged = File(staging, name)
+            if (!staged.exists()) return false
+            val actual = try { hex(sha256(staged.readBytes())) } catch (_: Exception) { return false }
+            if (actual != hash) return false
+        }
+        return true
     }
 
     private fun clearJournal(context: Context) {
@@ -281,11 +323,21 @@ object ChatRestoreManager {
         } catch (_: Exception) { }
     }
 
-    private fun readJournalFiles(json: String?): List<String> = try {
-        if (json.isNullOrEmpty()) emptyList()
-        else JSONArray(json).let { arr -> (0 until arr.length()).map { arr.getString(it) } }
+    /** Reads the journal's expected name → SHA-256 map. An old-format journal
+     *  (a plain name array) or unreadable JSON yields an empty map, which
+     *  recovery treats as "cannot verify" — the conservative outcome that keeps
+     *  a swap from finishing against unproven staging. */
+    private fun readJournalHashes(json: String?): Map<String, String> = try {
+        if (json.isNullOrEmpty()) emptyMap()
+        else {
+            val obj = JSONObject(json)
+            val out = LinkedHashMap<String, String>()
+            val keys = obj.keys()
+            while (keys.hasNext()) { val k = keys.next(); out[k] = obj.getString(k) }
+            out
+        }
     } catch (_: Exception) {
-        emptyList()
+        emptyMap()
     }
 
     private fun sha256(bytes: ByteArray): ByteArray =
