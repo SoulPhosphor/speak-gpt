@@ -179,6 +179,23 @@ object ChatRestoreManager {
             )
             if (!meta.optBoolean("complete", false)) throw IllegalStateException("archive marked incomplete")
             val fileHashes = meta.getJSONObject("file_hashes")
+
+            // Phase 9.2 cross-check: the manifest's declared version and chat
+            // set must match the exact archive entries before any file is read
+            // or touched. Ignoring this is how a downlevel archive, a set with
+            // no chat list, or a per-chat file for an undeclared chat could pass.
+            val manifestVersion = if (meta.has("manifest_version")) meta.getInt("manifest_version") else null
+            if (!meta.has("chats")) throw IllegalStateException("manifest has no chat set")
+            val chatsArray = meta.getJSONArray("chats")
+            val chatIds = (0 until chatsArray.length()).map { chatsArray.getJSONObject(it).getString("chat_id") }
+            val hashedEntryNames = HashSet<String>().apply {
+                val keys = fileHashes.keys()
+                while (keys.hasNext()) add(keys.next())
+            }
+            ChatRestorePlanner.manifestDefect(manifestVersion, chatIds, hashedEntryNames)?.let {
+                throw IllegalStateException("manifest cross-check failed: $it")
+            }
+
             val names = fileHashes.keys()
             while (names.hasNext()) {
                 val name = names.next()

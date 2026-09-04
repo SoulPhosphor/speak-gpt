@@ -83,4 +83,88 @@ object ChatRestorePlanner {
      *  shape as [isAllowedEntryName] — other tenants of shared_prefs are
      *  never touched. */
     fun isChatStorageFileName(name: String): Boolean = isAllowedEntryName(name)
+
+    // ---- manifest cross-check (Phase 9.2) -----------------------------------
+
+    /** The single manifest version this reader understands. Must equal the
+     *  producer's [ChatSnapshotManifest.MANIFEST_VERSION]; a drift guard in
+     *  ChatRestorePlannerTest fails the build if they diverge. A future
+     *  producer that bumps the format is rejected here rather than silently
+     *  mis-read. */
+    const val SUPPORTED_MANIFEST_VERSION = 1
+
+    /** The one non-per-chat archive entry: the encrypted chat list. */
+    const val CHAT_LIST_ENTRY = "enc.chat_list.xml"
+
+    /** A stored chat id: a historical title hash or a UUID, path-safe. The same
+     *  character class the per-chat entry names allow. */
+    private val SAFE_CHAT_ID = Regex("^[A-Za-z0-9_-]+$")
+
+    /** What is wrong with a manifest's declared chat set relative to the actual
+     *  archive entries. Each is a distinct, reportable cause — nothing collapses
+     *  into a generic "invalid archive". */
+    enum class ManifestDefect {
+        /** Missing `manifest_version`, or a version this build does not read. */
+        UNSUPPORTED_VERSION,
+
+        /** No `enc.chat_list.xml` entry. Restoring a chat set with no list would
+         *  leave the destination with orphan history/settings and no chats. */
+        MISSING_CHAT_LIST,
+
+        /** The `chats` array names the same chat id twice. */
+        DUPLICATE_CHAT_ID,
+
+        /** A declared chat id is not path-safe. */
+        UNSAFE_CHAT_ID,
+
+        /** A declared chat has no `enc.chat_<id>.xml` history entry. */
+        CHAT_MISSING_HISTORY,
+
+        /** A declared chat has no `enc.settings.<id>.xml` entry. */
+        CHAT_MISSING_SETTINGS,
+
+        /** A per-chat archive entry belongs to no declared chat id. The archive
+         *  carries a chat file the manifest never listed. */
+        UNLISTED_CHAT_FILE
+    }
+
+    /**
+     * Cross-checks the manifest's declared chat set against the exact set of
+     * hashed archive entries (Phase 9.2). Returns null when the shape is
+     * coherent, or the first defect found.
+     *
+     * [manifestVersion] is the archive's declared version (null if absent).
+     * [chatIds] are the `chat_id`s from the manifest `chats` array, in order.
+     * [hashedEntryNames] are the keys of the manifest `file_hashes` block — the
+     * encrypted files the archive claims to carry.
+     *
+     * The rule: exactly the chat list plus, for every declared chat, its
+     * history and settings, and nothing else. A declared chat missing either
+     * file, or a per-chat file for an undeclared chat, is a mismatch and stops
+     * the restore before anything is touched.
+     */
+    fun manifestDefect(
+        manifestVersion: Int?,
+        chatIds: List<String>,
+        hashedEntryNames: Set<String>
+    ): ManifestDefect? {
+        if (manifestVersion != SUPPORTED_MANIFEST_VERSION) return ManifestDefect.UNSUPPORTED_VERSION
+        if (CHAT_LIST_ENTRY !in hashedEntryNames) return ManifestDefect.MISSING_CHAT_LIST
+
+        val declared = HashSet<String>()
+        declared.add(CHAT_LIST_ENTRY)
+        val seen = HashSet<String>()
+        for (id in chatIds) {
+            if (!SAFE_CHAT_ID.matches(id)) return ManifestDefect.UNSAFE_CHAT_ID
+            if (!seen.add(id)) return ManifestDefect.DUPLICATE_CHAT_ID
+            if ("enc.chat_$id.xml" !in hashedEntryNames) return ManifestDefect.CHAT_MISSING_HISTORY
+            if ("enc.settings.$id.xml" !in hashedEntryNames) return ManifestDefect.CHAT_MISSING_SETTINGS
+            declared.add("enc.chat_$id.xml")
+            declared.add("enc.settings.$id.xml")
+        }
+        for (name in hashedEntryNames) {
+            if (name !in declared) return ManifestDefect.UNLISTED_CHAT_FILE
+        }
+        return null
+    }
 }

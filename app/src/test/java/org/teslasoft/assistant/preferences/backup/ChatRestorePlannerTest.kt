@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences.backup
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -100,5 +101,135 @@ class ChatRestorePlannerTest {
     fun liveFileFilterMatchesTheSameShapes() {
         assertTrue(ChatRestorePlanner.isChatStorageFileName("enc.chat_list.xml"))
         assertFalse(ChatRestorePlanner.isChatStorageFileName("enc.other_store.xml"))
+    }
+
+    /* ---- manifest cross-check (Phase 9.2) ---- */
+
+    /** Builds the exact hashed-entry set a well-formed archive carries for the
+     *  given chat ids: the chat list plus each chat's history and settings. */
+    private fun entriesFor(vararg chatIds: String): Set<String> {
+        val set = linkedSetOf(ChatRestorePlanner.CHAT_LIST_ENTRY)
+        for (id in chatIds) {
+            set.add("enc.chat_$id.xml")
+            set.add("enc.settings.$id.xml")
+        }
+        return set
+    }
+
+    @Test
+    fun theReaderVersionMatchesTheProducer() {
+        // The reader must understand exactly the version the snapshot writes;
+        // a silent divergence is precisely what UNSUPPORTED_VERSION guards, so
+        // it must never be introduced by a producer bump left un-mirrored here.
+        assertEquals(
+            ChatSnapshotManifest.MANIFEST_VERSION,
+            ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION
+        )
+    }
+
+    @Test
+    fun aCoherentManifestHasNoDefect() {
+        assertNull(
+            ChatRestorePlanner.manifestDefect(
+                manifestVersion = ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                chatIds = listOf("1a2b3c4d", "de305d54-75b4-431b-adb2-eb6b9e546014"),
+                hashedEntryNames = entriesFor("1a2b3c4d", "de305d54-75b4-431b-adb2-eb6b9e546014")
+            )
+        )
+    }
+
+    @Test
+    fun anEmptyChatSetIsCoherentIfTheListIsPresent() {
+        // A backup of an account with no chats is a chat list and nothing else.
+        assertNull(
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                emptyList(),
+                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY)
+            )
+        )
+    }
+
+    @Test
+    fun anAbsentOrUnknownVersionIsRejected() {
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.UNSUPPORTED_VERSION,
+            ChatRestorePlanner.manifestDefect(null, listOf("a1"), entriesFor("a1"))
+        )
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.UNSUPPORTED_VERSION,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION + 1, listOf("a1"), entriesFor("a1")
+            )
+        )
+    }
+
+    @Test
+    fun anArchiveWithNoChatListIsRejected() {
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.MISSING_CHAT_LIST,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1"),
+                setOf("enc.chat_a1.xml", "enc.settings.a1.xml")
+            )
+        )
+    }
+
+    @Test
+    fun aChatMissingItsHistoryOrSettingsIsRejected() {
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.CHAT_MISSING_HISTORY,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1"),
+                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY, "enc.settings.a1.xml")
+            )
+        )
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.CHAT_MISSING_SETTINGS,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1"),
+                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY, "enc.chat_a1.xml")
+            )
+        )
+    }
+
+    @Test
+    fun aPerChatFileForAnUndeclaredChatIsRejected() {
+        // The manifest declares a1, but the archive also carries a2's files.
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.UNLISTED_CHAT_FILE,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1"),
+                entriesFor("a1") + setOf("enc.chat_a2.xml", "enc.settings.a2.xml")
+            )
+        )
+    }
+
+    @Test
+    fun aDuplicateChatIdIsRejected() {
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.DUPLICATE_CHAT_ID,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1", "a1"),
+                entriesFor("a1")
+            )
+        )
+    }
+
+    @Test
+    fun anUnsafeChatIdIsRejected() {
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.UNSAFE_CHAT_ID,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("../evil"),
+                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY)
+            )
+        )
     }
 }
