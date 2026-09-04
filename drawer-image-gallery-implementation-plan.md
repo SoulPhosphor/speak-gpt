@@ -1028,16 +1028,30 @@ Present these choices with estimated backup size from a read-only inventory. Do 
 
 **This phase is future work and requires owner approval of replacement/merge semantics. Do not implement it as part of legacy compatibility cleanup.**
 
+**Owner decision, September 4, 2026 — replace-versus-merge is a user choice.**
+The top-level question item 3 left open is now decided: on every restore the
+**user chooses** whether the backup **replaces** the current chats or is
+**merged** into them. Both modes ship; the app does not pick one silently. The
+owner's reasoning: the user keeps agency, and because the backup file still
+exists, a choice that goes wrong can be recovered by taking a fresh backup and
+restoring again. This rests on the stable, immutable UUIDs now carried by chats
+and their assets: a merge decides "is this same item already here?" by identity,
+not by title. Still to be designed under this phase (not decided here): the
+exact ID-collision rule (skip / replace / copy-to-new-ID) for the merge mode,
+and the user-facing wording — the latter requires separate owner approval before
+any UI. Restore itself is a locked "please wait" operation in both modes; the
+app blocks chat reads and writes for its duration.
+
 1. Define `chat-logical-v2`. It must include the folder catalog as well as each row's folder assignment, stable chat ID, title metadata, history, and per-chat settings. Continue excluding credentials such as `api_key`.
 2. Keep a documented v1 reader policy:
    - preserve its chat IDs;
    - treat absent folder definitions conservatively (recommended default: import affected chats as unfiled while retaining recoverable row metadata);
    - never fabricate folders solely from IDs;
    - report what could not be restored before committing.
-3. Ask the owner to choose separately:
-   - exact replacement of all current chats;
-   - merge into current chats;
-   - whether ID collisions with identical/different content are skipped, replaced, or copied to a new ID.
+3. Replacement vs. merge is decided (see the owner decision above): the user
+   chooses exact replacement or merge on each restore, and both modes ship.
+   Still open for this phase: whether ID collisions with identical/different
+   content are skipped, replaced, or copied to a new ID.
 4. A merge must validate duplicate/malformed message IDs and chat IDs without changing the identity of an existing chat. Never derive a new chat ID from a mutable title.
 5. Use the Phase 9 authoritative-set replacement coordinator for replacement. Build an equally journaled coordinator for merge; do not write directly from an Activity.
 6. Keep `chat_search.db` out of the package and rebuild it. Export generated-image data only according to the Phase 10 decision.
