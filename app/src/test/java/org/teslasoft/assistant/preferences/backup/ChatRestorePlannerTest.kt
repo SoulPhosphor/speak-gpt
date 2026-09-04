@@ -177,21 +177,60 @@ class ChatRestorePlannerTest {
     }
 
     @Test
-    fun aChatMissingItsHistoryOrSettingsIsRejected() {
-        assertEquals(
-            ChatRestorePlanner.ManifestDefect.CHAT_MISSING_HISTORY,
+    fun aChatWithHistoryButNoSettingsIsAccepted() {
+        // RecoveryBackupManager omits enc.settings.<id>.xml when the file does
+        // not exist (a chat with only default settings). That is a VALID backup
+        // and the reader must accept it, not reject the whole restore.
+        assertNull(
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1"),
+                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY, "enc.chat_a1.xml")
+            )
+        )
+    }
+
+    @Test
+    fun aChatWithSettingsButNoHistoryIsAccepted() {
+        assertNull(
             ChatRestorePlanner.manifestDefect(
                 ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
                 listOf("a1"),
                 setOf(ChatRestorePlanner.CHAT_LIST_ENTRY, "enc.settings.a1.xml")
             )
         )
-        assertEquals(
-            ChatRestorePlanner.ManifestDefect.CHAT_MISSING_SETTINGS,
+    }
+
+    @Test
+    fun aDeclaredChatWithNoPerChatFilesIsAccepted() {
+        // A brand-new or genuinely empty chat is an authoritative MISSING/EMPTY
+        // read: the producer counts it available and writes a chat-list row with
+        // no history or settings file. The reader must accept that too.
+        assertNull(
             ChatRestorePlanner.manifestDefect(
                 ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
                 listOf("a1"),
-                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY, "enc.chat_a1.xml")
+                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY)
+            )
+        )
+    }
+
+    @Test
+    fun theValidatorAcceptsWhatTheProducerActuallyBuilds() {
+        // Producer/validator agreement: mirror RecoveryBackupManager's file set
+        // for a mixed chat set — one chat with both files, one with history
+        // only, one with settings only, one with neither. This is the exact
+        // shape addEncFile's exists() guard yields, and it must validate.
+        val entries = linkedSetOf(ChatRestorePlanner.CHAT_LIST_ENTRY)
+        entries.add("enc.chat_both.xml"); entries.add("enc.settings.both.xml")
+        entries.add("enc.chat_histonly.xml")
+        entries.add("enc.settings.setonly.xml")
+        // "empty" contributes no per-chat file.
+        assertNull(
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("both", "histonly", "setonly", "empty"),
+                entries
             )
         )
     }

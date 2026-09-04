@@ -117,14 +117,10 @@ object ChatRestorePlanner {
         /** A declared chat id is not path-safe. */
         UNSAFE_CHAT_ID,
 
-        /** A declared chat has no `enc.chat_<id>.xml` history entry. */
-        CHAT_MISSING_HISTORY,
-
-        /** A declared chat has no `enc.settings.<id>.xml` entry. */
-        CHAT_MISSING_SETTINGS,
-
         /** A per-chat archive entry belongs to no declared chat id. The archive
-         *  carries a chat file the manifest never listed. */
+         *  carries a chat file the manifest never listed — the one case that is
+         *  never legitimate, because it means a file would be planted for a chat
+         *  the chat list does not contain. */
         UNLISTED_CHAT_FILE
     }
 
@@ -138,10 +134,16 @@ object ChatRestorePlanner {
      * [hashedEntryNames] are the keys of the manifest `file_hashes` block — the
      * encrypted files the archive claims to carry.
      *
-     * The rule: exactly the chat list plus, for every declared chat, its
-     * history and settings, and nothing else. A declared chat missing either
-     * file, or a per-chat file for an undeclared chat, is a mismatch and stops
-     * the restore before anything is touched.
+     * The rule mirrors what [RecoveryBackupManager] actually produces: the chat
+     * list is always present, and for every declared chat its history and
+     * settings files are ALLOWED but not required. A per-chat file is written
+     * only when it exists on disk (`addEncFile`'s `exists()` guard), and a chat
+     * with no history and no settings — a brand-new or genuinely empty chat, an
+     * authoritative MISSING/EMPTY read — is a legitimate chat-list row with no
+     * per-chat file at all. Requiring those files would reject valid backups and
+     * lose nothing by rejecting them. What is never legitimate is a per-chat
+     * file for a chat the manifest did not declare: that is [UNLISTED_CHAT_FILE]
+     * and stops the restore before anything is touched.
      */
     fun manifestDefect(
         manifestVersion: Int?,
@@ -157,8 +159,8 @@ object ChatRestorePlanner {
         for (id in chatIds) {
             if (!SAFE_CHAT_ID.matches(id)) return ManifestDefect.UNSAFE_CHAT_ID
             if (!seen.add(id)) return ManifestDefect.DUPLICATE_CHAT_ID
-            if ("enc.chat_$id.xml" !in hashedEntryNames) return ManifestDefect.CHAT_MISSING_HISTORY
-            if ("enc.settings.$id.xml" !in hashedEntryNames) return ManifestDefect.CHAT_MISSING_SETTINGS
+            // History and settings are optional per chat — see the contract note
+            // above. They are added to the allowed set, never required.
             declared.add("enc.chat_$id.xml")
             declared.add("enc.settings.$id.xml")
         }
