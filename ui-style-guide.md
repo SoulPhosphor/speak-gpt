@@ -184,16 +184,19 @@ This style requires a `ConstraintLayout` parent because its width is percentage-
 
 Two-button dialog actions should be centered as a pair by default.
 
-Button order comes from the approved feature wording/spec and must not be
-changed based on semantic role. Cancel/back-out actions use the Destructive
-style; affirmative actions use the Primary style, regardless of which appears
-first.
+Button order is fixed by role, not by feature wording (owner ruling,
+September 5 2026): the affirmative / action button is always on the RIGHT, and
+the Cancel or back-out action is always on the LEFT. This holds for every
+two-button dialog, including a system `MaterialAlertDialog` (its negative button
+is the left one, its positive button the right — so Cancel is the negative
+button and the action is the positive button). Cancel/back-out actions use the
+Destructive style; affirmative actions use the Primary style.
 
-Use `layout/dialog_two_actions.xml` for the approved primary-first,
-destructive-second order. If it cannot represent the required centered order,
-use or add an appropriate shared centered variant rather than reversing the
-approved button order. For the approved cancel-first order, use
-`layout/dialog_two_actions_cancel_first.xml`.
+Use `layout/dialog_two_actions_cancel_first.xml` for this cancel-left,
+action-right order. `layout/dialog_two_actions.xml` (action-first) predates this
+ruling: do not use it for new dialogs, and move an existing dialog onto the
+cancel-first order when that screen is next revised rather than in a blind
+app-wide reorder.
 
 ### Three dialog actions
 

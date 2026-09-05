@@ -22,22 +22,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Phase 9 engine-only boundary, enforced mechanically.
+ * Phase 9 single-approved-caller boundary, enforced mechanically.
  *
- * The safe whole-chat-set replacement engine and its coordinator
- * ([ChatSetReplacementCoordinator]) are now built, but they must stay
- * UNREACHABLE until the approved restore UI (and its owner-approved recovery
- * wording) ship. [ChatRestoreManager.restoreFromArchive] performs a wholesale,
- * journaled REPLACEMENT of encrypted chat storage, and the plan's P1 risk is
- * that a restore reached from UI, a debug action, or an import path would run
- * before the user has any way to understand or confirm it.
+ * [ChatRestoreManager.restoreFromArchive] performs a wholesale, journaled
+ * REPLACEMENT of encrypted chat storage, and the plan's P1 risk is that a
+ * restore reached from a stray UI, debug action, or import path would run
+ * before the user has any way to understand or confirm it. The owner has
+ * approved exactly one reachable restore — Restore From Backup (chats-only,
+ * replace-only), driven by [org.teslasoft.assistant.service.RestoreForegroundService]
+ * with owner-approved wording.
  *
- * This test makes the absence of a caller a build invariant: if any production
- * source file other than [ChatRestoreManager] itself names `restoreFromArchive`,
- * ordinary unit CI fails here — before a reachable restore can ship. The
- * coordinator is reached only from `restoreFromArchive`, so guarding the engine
- * entry keeps the whole path unreachable. The plan's Phase 9 exit gate requires
- * exactly this proof while no restore UI exists.
+ * This test makes that the build invariant: only the approved callers (the
+ * engine itself and the restore service) may name `restoreFromArchive`; if any
+ * OTHER production source file does, ordinary unit CI fails here — before a
+ * second, unreviewed restore path can ship. The coordinator is reached only
+ * from `restoreFromArchive`, so guarding the engine entry guards the whole path.
  *
  * `resumeIfPending` is deliberately NOT guarded: it is the startup finisher for
  * an already-journaled swap and does nothing unless a restore that was itself
@@ -48,6 +47,17 @@ class RestoreEngineHasNoReachableCallerTest {
 
     private val declaringFile = "ChatRestoreManager.kt"
     private val restoreEntryPoint = "restoreFromArchive"
+
+    /**
+     * The engine declares it; [RestoreForegroundService] is the single
+     * owner-approved reachable caller (Restore From Backup, chats-only,
+     * replace-only). Every OTHER production file must still stay away from the
+     * engine so a stray edit cannot open a second, unreviewed restore path.
+     */
+    private val approvedCallers = setOf(
+        "ChatRestoreManager.kt",
+        "RestoreForegroundService.kt"
+    )
 
     @Test
     fun theDeclarationStillExistsSoThisGuardCannotRotSilently() {
@@ -61,16 +71,16 @@ class RestoreEngineHasNoReachableCallerTest {
     }
 
     @Test
-    fun noProductionSourceReachesTheRestoreReplacementEngine() {
+    fun onlyTheApprovedCallerReachesTheRestoreReplacementEngine() {
         val offenders = mainSourceFiles()
-            .filter { it.name != declaringFile }
+            .filter { it.name !in approvedCallers }
             .filter { codeOnly(it.readText()).contains(restoreEntryPoint) }
             .map { it.path }
 
         assertEquals(
-            "No restore UI has shipped, so nothing may call the whole-chat-set restore " +
-                "replacement engine. These production files reach `$restoreEntryPoint`:\n" +
-                offenders.joinToString("\n"),
+            "Only the approved restore caller (${approvedCallers.joinToString()}) may reach " +
+                "the whole-chat-set restore replacement engine. These other production files " +
+                "reach `$restoreEntryPoint`:\n" + offenders.joinToString("\n"),
             emptyList<String>(),
             offenders
         )

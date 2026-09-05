@@ -2032,6 +2032,17 @@
     <string name="backup_err_wrong_key_or_header">This Recovery Code belongs to a different Recovery Key, or the backup header is damaged.</string>
     <string name="backup_err_damaged">The backup is damaged or has been altered.</string>
     <string name="backup_err_unsupported_protection">Unsupported or invalid backup protection settings.</string>
+    <!-- Restore From Backup (owner-approved wording, verbatim; do not reword
+         without asking). Chats-only same-install restore of the Phase 9 engine:
+         the warning names chats and data, never "all settings", so it stays
+         honest about what the restore actually replaces. -->
+    <string name="chat_restore_button">Restore From Backup</string>
+    <string name="chat_restore_confirm_message">Replacing from backup will delete any and all current chats and data. This cannot be undone.</string>
+    <string name="chat_restore_confirm_replace">Replace</string>
+    <string name="chat_restore_progress">Replacing data from backup. Please wait. Do not shut down your app while this is working.</string>
+    <string name="chat_restore_failed_title">Restoring from backup failed. Nothing was changed.</string>
+    <string name="chat_restore_read_error">The backup file could not be read.</string>
+    <string name="chat_restore_channel">Restore</string>
     <!-- Manual Recovery Backup flow (owner-approved wording, July 22 2026 —
          verbatim; do not reword without asking). Section 5/6 rulings. -->
     <string name="recovery_create">Create Recovery Backup</string>

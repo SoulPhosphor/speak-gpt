@@ -663,5 +663,14 @@
             android:name=".service.MemoryAnalysisForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Chat restore keep-alive: runs the whole-chat-set replacement in the
+             background so it survives leaving the screen, and finishes even if
+             the app is closed (the restore journal + resumeIfPending complete an
+             interrupted swap on next launch). dataSync — background data work. -->
+        <service
+            android:name=".service.RestoreForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

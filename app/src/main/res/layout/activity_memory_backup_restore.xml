@@ -404,6 +404,17 @@
                 android:layout_marginTop="12dp"
                 android:text="@string/recovery_create" />
 
+            <!-- Restore From Backup: the counterpart to Create Recovery Backup.
+                 Chats-only, same-install restore through the Phase 9 engine
+                 (owner-approved, replace-only). -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_restore_from_backup"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/chat_restore_button" />
+
             <!-- Reuse the screen's established dropdown pattern for the one
                  restore target selection. This is not a separate restore
                  section and does not multiply permanent action buttons. -->
