@@ -62,7 +62,8 @@ class ChatRestoreEngineTest {
     fun aValidArchiveReplacesTheCompleteChatSetAndVerifies() {
         // Live storage: an old chat list, one old chat, and a STALE chat file
         // the restore must remove (its chat is not in the archive).
-        val liveList = seedLive("enc.chat_list.xml", "OLD-LIST")
+        val oldListBytes = "OLD-LIST".toByteArray()
+        seedLive("enc.chat_list.xml", "OLD-LIST")
         seedLive("enc.chat_old.xml", "OLD-CHAT")
         seedLive("enc.settings.old.xml", "OLD-SETTINGS")
         val stale = seedLive("enc.chat_stale.xml", "STALE")
@@ -90,8 +91,9 @@ class ChatRestoreEngineTest {
         assertFalse(File(sharedPrefsDir(), "enc.chat_old.xml").exists())
         assertFalse(File(sharedPrefsDir(), "enc.settings.old.xml").exists())
         assertFalse("a superseded chat file must be deleted", stale.exists())
-        // The pre-restore quarantine kept a copy of the old chat list.
-        assertTrue(quarantineHasCopyOf("enc.chat_list.xml", liveList.readBytes()))
+        // The pre-restore quarantine kept a copy of the old chat list (compared
+        // against the pre-restore bytes, since the live file now holds the new).
+        assertTrue(quarantineHasCopyOf("enc.chat_list.xml", oldListBytes))
         assertJournalCleared()
     }
 
