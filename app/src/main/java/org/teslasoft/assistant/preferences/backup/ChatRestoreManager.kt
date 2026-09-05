@@ -20,7 +20,6 @@ import android.content.Context
 import androidx.core.content.edit
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.ChatPreferences
-import org.teslasoft.assistant.preferences.RenameJournal
 import org.teslasoft.assistant.preferences.SnapshotRegistry
 import java.io.File
 import java.security.MessageDigest
@@ -46,10 +45,11 @@ import java.util.zip.ZipFile
  *  in memory, so the process must not keep running on them.
  *
  * Boundaries (plan): repairs damaged chat FILES on this phone; it cannot
- * cure a lost Keystore key (Round-4 lock machinery owns that case). Honors
- * [RenameJournal.hasPending] — a half-finished rename must settle first.
- * Lock order respected: CHAT_LIST_LOCK is taken here; SecurePrefs' monitor
- * is never taken inside it by this code.
+ * cure a lost Keystore key (Round-4 lock machinery owns that case). The
+ * pending-operation gate and the dependent-store rebase are owned by
+ * [ChatSetReplacementCoordinator], which this manager calls before staging and
+ * after the verified swap. Lock order respected: CHAT_LIST_LOCK is taken here;
+ * SecurePrefs' monitor is never taken inside it by this code.
  */
 object ChatRestoreManager {
 
@@ -72,8 +72,12 @@ object ChatRestoreManager {
      */
     fun restoreFromArchive(context: Context, archive: File): Result {
         val appContext = context.applicationContext
-        if (RenameJournal.hasPending(appContext)) {
-            return Result(false, "a chat rename is still being reconciled")
+        // Phase 9.1 steps 1–2: settle every recoverable pending operation, then
+        // refuse with a typed reason if any incompatible journal is still
+        // pending. The coordinator owns this so a future replace/import reuses
+        // the same gate rather than re-checking journals ad hoc.
+        ChatSetReplacementCoordinator.settleOrRefuse(appContext)?.let {
+            return Result(false, it.detail())
         }
 
         // ---- 1. validate the whole archive before touching anything ----
@@ -127,6 +131,13 @@ object ChatRestoreManager {
                 // here, and the still-SWAPPING journal keeps recovery pointed at
                 // verified staging and the pre-restore quarantine.
                 verifyLiveSet(appContext, expectedHashes)
+                // Phase 9.1 steps 9–11: source generation, cache invalidation,
+                // and the dependent-store rebase, before the journal is cleared
+                // (step 12) so the rebase markers are durable if this is the last
+                // thing to run before the controlled restart (step 13).
+                ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
+                    appContext, ChatRestorePlanner.restoredChatIds(entries.keys)
+                )
                 clearJournal(appContext)
                 try { staging.deleteRecursively() } catch (_: Exception) { }
                 DatabaseHealthState.logHealth(appContext, "info",
@@ -168,6 +179,13 @@ object ChatRestoreManager {
                         // retries from the still-verified staging.
                         verifyLiveSet(appContext, expectedHashes)
                     }
+                    // The swap that finished here also replaced the authoritative
+                    // set, so rebase the dependent stores before clearing the
+                    // journal — the post-restart maintenance below then rebuilds
+                    // from the new source in the same start.
+                    ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
+                        appContext, ChatRestorePlanner.restoredChatIds(names)
+                    )
                     clearJournal(appContext)
                     try { staging!!.deleteRecursively() } catch (_: Exception) { }
                     DatabaseHealthState.logHealth(appContext, "warning",

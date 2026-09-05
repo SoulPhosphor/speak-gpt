@@ -329,4 +329,37 @@ class ChatRestorePlannerTest {
         )
         assertNull(ChatRestorePlanner.liveSetDefect(emptyMap(), emptyMap()))
     }
+
+    /* ---- restored chat ids from entry names (Phase 9.3) ---- */
+
+    @Test
+    fun restoredChatIdsComeFromThePerChatEntries() {
+        val ids = ChatRestorePlanner.restoredChatIds(
+            listOf(
+                "enc.chat_list.xml",
+                "enc.chat_1a2b3c4d.xml",
+                "enc.settings.1a2b3c4d.xml",
+                "enc.chat_de305d54-75b4-431b-adb2-eb6b9e546014.xml"
+            )
+        )
+        // The list entry contributes no id; a chat named by either a history or
+        // a settings file is included exactly once.
+        assertEquals(
+            setOf("1a2b3c4d", "de305d54-75b4-431b-adb2-eb6b9e546014"),
+            ids
+        )
+    }
+
+    @Test
+    fun restoredChatIdsFromOnlyAChatListIsEmpty() {
+        assertTrue(ChatRestorePlanner.restoredChatIds(listOf("enc.chat_list.xml")).isEmpty())
+    }
+
+    @Test
+    fun restoredChatIdsDeduplicatesHistoryAndSettings() {
+        val ids = ChatRestorePlanner.restoredChatIds(
+            listOf("enc.chat_a1.xml", "enc.settings.a1.xml")
+        )
+        assertEquals(setOf("a1"), ids)
+    }
 }

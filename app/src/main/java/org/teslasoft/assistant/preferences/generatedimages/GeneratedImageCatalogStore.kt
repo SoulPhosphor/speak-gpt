@@ -456,6 +456,25 @@ class GeneratedImageCatalogStore private constructor(
         )
     }
 
+    /** Requeue the given chats for a fresh backfill scan (Phase 9.3): remove
+     *  their backfill-complete markers so a restored — and possibly older —
+     *  history under the same chat id is scanned again. Active rows, tombstones,
+     *  locks, origin metadata, and gallery-only rows are untouched; only the
+     *  "already scanned" markers for these ids are cleared. */
+    fun clearBackfillChatComplete(chatIds: Set<String>) {
+        if (chatIds.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            for (chatId in chatIds) {
+                db.delete(TABLE_BACKFILL_CHATS, "chat_id = ?", arrayOf(chatId))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun getMeta(key: String): String? = readableDatabase.rawQuery(
         "SELECT value FROM $TABLE_META WHERE key = ?",
         arrayOf(key)
@@ -768,6 +787,13 @@ class GeneratedImageCatalogStore private constructor(
 
         fun markBackfillChatComplete(context: Context, chatId: String): GeneratedImageCatalogWriteResult =
             write(context, allowRecoveryBackfill = true) { it.markBackfillChatComplete(chatId); true }
+
+        /** Requeue restored chats for a backfill rescan (Phase 9.3). Preserves
+         *  every active row, tombstone, lock, and gallery-only row; only the
+         *  backfill-complete markers for [chatIds] are removed so their restored
+         *  histories are scanned again by the next maintenance pass. */
+        fun requeueBackfill(context: Context, chatIds: Set<String>): GeneratedImageCatalogWriteResult =
+            write(context, allowRecoveryBackfill = true) { it.clearBackfillChatComplete(chatIds); true }
 
         fun getMeta(context: Context, key: String): Pair<GeneratedImageCatalogStorageState, String?> {
             val (store, state) = access(context)

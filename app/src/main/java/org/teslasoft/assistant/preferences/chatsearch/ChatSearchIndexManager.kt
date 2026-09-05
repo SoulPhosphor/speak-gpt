@@ -48,6 +48,26 @@ class ChatSearchIndexManager private constructor(context: Context) {
         executor.execute { refreshTitleBlocking(chatId, expectedRevision) }
     }
 
+    /**
+     * The authoritative chat set was replaced by a restore (Phase 9.3). Search
+     * is derived and disposable, so it is rebased rather than migrated: the
+     * pre-restore dirty journal (tokens for a corpus that no longer exists) is
+     * cleared and the index database is discarded. This runs synchronously and
+     * touches no SQLCipher — the discard just closes the handle and deletes the
+     * files — so it is safe inside the restore transaction, before the required
+     * restart. The next [ensureReady] sees a missing index, treats it as a
+     * first-use rebuild, and sources every row from the new chat set; queries
+     * return nothing until that active generation exists, so no stale row —
+     * including a legacy null-revision row — can appear after a restore.
+     *
+     * Returns true when both the journal clear and the discard succeeded.
+     */
+    fun onAuthoritativeChatSetReplaced(): Boolean {
+        val journalCleared = try { journal.clearAll() } catch (_: Exception) { false }
+        val discarded = try { ChatSearchStore.discard(app) } catch (_: Exception) { false }
+        return journalCleared && discarded
+    }
+
     fun scheduleChatsDeleted(chatIds: Set<String>) {
         if (chatIds.isEmpty()) return
         executor.execute {

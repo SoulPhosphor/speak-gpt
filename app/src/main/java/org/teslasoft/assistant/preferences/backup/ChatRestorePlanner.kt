@@ -170,6 +170,28 @@ object ChatRestorePlanner {
         return null
     }
 
+    /**
+     * The stored chat ids a restored archive brings in, derived from its entry
+     * names (Phase 9.3). The dependent-store rebase needs the restored ids to
+     * requeue their generated-image backfill and to invalidate their cached
+     * preferences handles. Ids come from the per-chat entries; the chat list
+     * entry contributes none, and a declared-but-empty chat (no per-chat file)
+     * simply has no derived id — it has no per-chat state to rebase.
+     */
+    fun restoredChatIds(entryNames: Collection<String>): Set<String> {
+        val ids = LinkedHashSet<String>()
+        for (name in entryNames) {
+            when {
+                name == CHAT_LIST_ENTRY -> {}
+                name.startsWith("enc.chat_") && name.endsWith(".xml") ->
+                    ids.add(name.removePrefix("enc.chat_").removeSuffix(".xml"))
+                name.startsWith("enc.settings.") && name.endsWith(".xml") ->
+                    ids.add(name.removePrefix("enc.settings.").removeSuffix(".xml"))
+            }
+        }
+        return ids
+    }
+
     // ---- final live-set verification (Phase 9.2) ----------------------------
 
     /** What is wrong with the live chat-storage file set after a swap, relative

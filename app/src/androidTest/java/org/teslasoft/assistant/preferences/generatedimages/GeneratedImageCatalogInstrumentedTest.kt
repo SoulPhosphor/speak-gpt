@@ -227,4 +227,37 @@ class GeneratedImageCatalogInstrumentedTest {
             assertEquals("old-uuid", store.lookup("old-uuid").record!!.imageId)
         }
     }
+
+    @Test
+    fun requeueBackfillClearsOnlyTheRestoredMarkersAndPreservesRows() {
+        // Phase 9.3: a restore requeues its chats for a fresh backfill scan by
+        // clearing their backfill-complete markers, while every active row,
+        // lock, and origin label is preserved.
+        GeneratedImageCatalogStore.openForTest(context, name(), key).use { store ->
+            assertTrue(store.register(record("keep-image", chatId = "chat-keep")))
+            assertTrue(store.register(record("restore-image", chatId = "chat-restore", locked = true)))
+            store.markBackfillChatComplete("chat-keep")
+            store.markBackfillChatComplete("chat-restore")
+            assertTrue(store.isBackfillChatComplete("chat-keep"))
+            assertTrue(store.isBackfillChatComplete("chat-restore"))
+
+            store.clearBackfillChatComplete(setOf("chat-restore"))
+
+            // Only the restored chat is requeued; the untouched chat stays done.
+            assertFalse(store.isBackfillChatComplete("chat-restore"))
+            assertTrue(store.isBackfillChatComplete("chat-keep"))
+            // Rows and locks are preserved.
+            assertEquals(2, store.allActive().size)
+            assertTrue(store.lookup("restore-image").record!!.locked)
+        }
+    }
+
+    @Test
+    fun requeueBackfillWithNoIdsIsANoOp() {
+        GeneratedImageCatalogStore.openForTest(context, name(), key).use { store ->
+            store.markBackfillChatComplete("chat-a")
+            store.clearBackfillChatComplete(emptySet())
+            assertTrue(store.isBackfillChatComplete("chat-a"))
+        }
+    }
 }

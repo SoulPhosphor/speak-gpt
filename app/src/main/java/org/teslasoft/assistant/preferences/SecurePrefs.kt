@@ -122,6 +122,19 @@ object SecurePrefs {
     fun isLockedName(name: String): Boolean = name in lockedThisProcess
 
     /**
+     * Drop cached handles for [names] so the next [get] re-opens them from disk
+     * (Phase 9.1 step 10). After a chat-set replacement swaps the encrypted
+     * files under these names, a handle cached in this process still points at
+     * the pre-restore bytes; evicting it is defense in depth. It is NOT a
+     * substitute for the required controlled restart — live references already
+     * handed out keep their old view until the process restarts.
+     */
+    @Synchronized
+    fun invalidateCache(names: Collection<String>) {
+        for (name in names) cache.remove(name)
+    }
+
+    /**
      * Whether the authoritative chat list is currently LOCKED. Triggers
      * classification if the file has not been opened yet this process, so
      * activity gates can call it first thing.

@@ -150,6 +150,36 @@ class NewConversationCoordinator(private val context: Context) {
     fun hasCommitJournal(chatId: String): Boolean =
         SecurePrefs.get(app, "pending_conversation_journal").contains(chatId)
 
+    /**
+     * Any first-conversation commit still journaled (Phase 9.1 settle-or-refuse):
+     * a first user action recorded but not yet folded into the chat list. A chat
+     * set replacement must settle these first so no half-committed conversation
+     * is stranded when the current files are quarantined and replaced.
+     */
+    fun hasPendingFirstCommit(): Boolean = try {
+        SecurePrefs.get(app, "pending_conversation_journal").all.isNotEmpty()
+    } catch (_: Exception) {
+        // Unreadable is treated as "possibly pending" — the safe answer for a
+        // gate that must refuse rather than replace over unexamined work.
+        true
+    }
+
+    /**
+     * A provisional conversation still open (Phase 9.1 settle-or-refuse): the
+     * retained startup blank session, or any indexed conversation still flagged
+     * provisional. Its per-chat files live in chat storage and would be swept by
+     * the wholesale replacement, so the coordinator settles or refuses on it.
+     */
+    fun hasProvisionalSession(): Boolean {
+        val startupPointer = try {
+            SecurePrefs.get(app, STARTUP_SESSION_FILE)
+                .getString(STARTUP_SESSION_ID, "").orEmpty().isNotBlank()
+        } catch (_: Exception) {
+            true
+        }
+        return startupPointer || pendingConversationIds().isNotEmpty()
+    }
+
     /** Resume first commits that crossed the payload boundary before process death. */
     fun recoverPendingCommits() {
         val journal = SecurePrefs.get(app, "pending_conversation_journal")

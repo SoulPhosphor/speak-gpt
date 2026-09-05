@@ -126,10 +126,23 @@ class MainApplication : Application() {
                 MemoryLog.log(this, "ImageGeneration", "error", "Image-generation settings seeding at startup failed: ${e.message}")
             }
             try {
+                // Finish (or discard) a chat recovery restore interrupted by
+                // process death (Build Phase 3 item 5) — BEFORE generated-image
+                // catalog maintenance and BEFORE the outage reconcile and rename
+                // recovery (Phase 9.3 startup ordering). All of those read or
+                // rebase the chat files this may still be replacing from verified
+                // staging, so the swap and its dependent-store rebase must settle
+                // before any of them run against a possibly mixed old/new set.
+                org.teslasoft.assistant.preferences.backup.ChatRestoreManager.resumeIfPending(this)
+            } catch (e: Exception) {
+                MemoryLog.log(this, "ChatRestore", "error", "Chat-restore recovery at startup failed: ${e.message}")
+            }
+            try {
                 // Durable generated-image catalog maintenance is resumable and
                 // deliberately stays on this worker: backfill authoritative
                 // histories before reconciling only journal-proven interrupted
-                // registrations.
+                // registrations. Runs AFTER the restore resume above so a chat
+                // set replaced by a restore is rescanned from its new histories.
                 GeneratedImageCatalogMaintenance.run(this)
             } catch (e: Exception) {
                 MemoryLog.log(
@@ -138,15 +151,6 @@ class MainApplication : Application() {
                     "error",
                     "Generated-image catalog maintenance at startup failed: ${e.message}"
                 )
-            }
-            try {
-                // Finish (or discard) a chat recovery restore interrupted by
-                // process death (Build Phase 3 item 5) — BEFORE the outage
-                // reconcile and rename recovery, both of which read the chat
-                // files this may still be replacing from verified staging.
-                org.teslasoft.assistant.preferences.backup.ChatRestoreManager.resumeIfPending(this)
-            } catch (e: Exception) {
-                MemoryLog.log(this, "ChatRestore", "error", "Chat-restore recovery at startup failed: ${e.message}")
             }
             try {
                 // Settle a Companion & Roleplay restore interrupted by process
