@@ -134,6 +134,17 @@ object SecurePrefs {
         for (name in names) cache.remove(name)
     }
 
+    /** Drop the entire in-memory handle cache and per-process lock state so a
+     *  test that reuses this process singleton reads from a fresh filesystem.
+     *  Test-only: production never wants to forget every open handle at once. */
+    @androidx.annotation.VisibleForTesting
+    @Synchronized
+    fun clearCacheForTest() {
+        cache.clear()
+        lockedThisProcess.clear()
+        loggedThisProcess.clear()
+    }
+
     /**
      * Whether the authoritative chat list is currently LOCKED. Triggers
      * classification if the file has not been opened yet this process, so

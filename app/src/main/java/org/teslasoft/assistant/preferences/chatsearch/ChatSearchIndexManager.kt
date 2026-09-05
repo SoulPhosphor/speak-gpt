@@ -347,6 +347,15 @@ class ChatSearchIndexManager private constructor(context: Context) {
             instance ?: ChatSearchIndexManager(context).also { instance = it }
         }
 
+        /** Drop the process singleton so the next [get] rebinds to the current
+         *  context. Test-only: this singleton captures its application context,
+         *  and Robolectric hands each test a fresh application, so a leaked
+         *  instance would operate on a stale (empty) sandbox. */
+        @androidx.annotation.VisibleForTesting
+        fun resetForTest() {
+            synchronized(this) { instance = null }
+        }
+
         fun newRevision(): String = UUID.randomUUID().toString()
     }
 }

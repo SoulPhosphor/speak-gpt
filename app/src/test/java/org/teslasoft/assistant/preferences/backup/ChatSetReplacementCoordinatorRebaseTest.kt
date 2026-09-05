@@ -23,10 +23,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexJournal
+import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
+import org.teslasoft.assistant.preferences.chatsearch.ChatSearchStore
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
@@ -44,6 +47,17 @@ import org.robolectric.annotation.ConscryptMode
 class ChatSetReplacementCoordinatorRebaseTest {
 
     private val context: Context get() = RuntimeEnvironment.getApplication()
+
+    @Before
+    fun resetProcessStatics() {
+        // These singletons and caches live for the JVM, not the test method, and
+        // Robolectric hands each test a fresh application/filesystem. Reset them
+        // so each test starts from a genuinely clean state instead of inheriting
+        // a prior test's cached handles or a manager bound to a stale context.
+        SecurePrefs.clearCacheForTest()
+        ChatSearchIndexManager.resetForTest()
+        ChatSearchStore.discard(context)
+    }
 
     @Test
     fun aFreshInstallHasNothingToSettleAndProceeds() {
