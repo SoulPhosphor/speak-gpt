@@ -1061,6 +1061,34 @@ app blocks chat reads and writes for its duration.
 6. Keep `chat_search.db` out of the package and rebuild it. Export generated-image data only according to the Phase 10 decision.
 7. Round-trip tests must cover v1, v2, hash IDs, UUIDs, missing names, duplicate titles, folder references, settings types, message IDs, generated-image metadata, locked/corrupt source files, cancellation, and process death.
 
+### 11.1 Final destination: one selectable multi-category package
+
+**Owner decision, September 5, 2026:** portable restore is not ultimately a
+chats-only feature. The final backup format and restore experience must be able
+to carry the owner's complete recoverable app data, with independently
+selectable categories including chats, companions, roleplay, model rules,
+memories, and lorebooks. The format may be implemented category by category;
+building and proving chat replacement first is an implementation order, not a
+reduction of the final product scope.
+
+The restore screen presents the categories contained in the selected package
+as a checklist. Every available category is selected by default (the effective
+"All" choice), and the user may clear individual categories before proceeding.
+A category absent from the package must be identified as absent rather than
+silently omitted or allowed to fail later.
+
+Replace-versus-merge remains a user choice. The selected mode applies only to
+the selected categories, and the confirmation must identify those categories
+rather than imply that unselected app data will change. Each category keeps a
+separately testable validation and restore engine beneath the unified package
+flow. Chat replacement uses the Phase 9 coordinator; chat merge and the
+category-specific merge rules remain Phase 11 work.
+
+Before this unified flow is implemented, its cross-category commit/rollback
+boundary, category dependency handling, and identity-collision rules must be
+designed and approved. No narrow category implementation may describe itself
+as the completed backup/restore product.
+
 ## Phase 12 — Owner-data rehearsal and final Main gate
 
 This is the first point at which the owner's installed corpus participates, and only after a verified backup exists.
