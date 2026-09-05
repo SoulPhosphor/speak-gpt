@@ -19,6 +19,9 @@ package org.teslasoft.assistant.preferences.backup
 import android.app.Application
 import android.content.Context
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -26,6 +29,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.teslasoft.assistant.conversation.NewConversationCoordinator
+import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexJournal
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
@@ -62,6 +67,63 @@ class ChatSetReplacementCoordinatorRebaseTest {
     @Test
     fun aFreshInstallHasNothingToSettleAndProceeds() {
         assertNull(ChatSetReplacementCoordinator.settleOrRefuse(context))
+    }
+
+    @Test
+    fun pendingBlockNowCatchesAProvisionalWithoutSettling() {
+        // The in-lock re-check (Phase 9.1 TOCTOU closure) is read-only: it must
+        // report a provisional session that appeared after the initial settle,
+        // without running any reconciler.
+        assertNull(ChatSetReplacementCoordinator.pendingBlockNow(context))
+        SecurePrefs.get(context, "pending_startup_conversation").edit()
+            .putString("id", "late-provisional")
+            .putString("name", "_autoname_1")
+            .commit()
+        assertEquals(
+            ChatSetReplacementCoordinator.ReplacementBlock.PROVISIONAL_SESSION,
+            ChatSetReplacementCoordinator.pendingBlockNow(context)
+        )
+    }
+
+    @Test
+    fun createPendingConversationBlocksWhileTheChatListLockIsHeld() {
+        // Phase 9.1 Part B: provisional creation now takes CHAT_LIST_LOCK, so it
+        // cannot write a provisional's chat-storage files while a restore holds
+        // the lock and re-checks. Prove it: hold the lock, and a creation on
+        // another thread must not complete until the lock is released.
+        val coordinator = NewConversationCoordinator(context)
+        val started = CountDownLatch(1)
+        val finished = CountDownLatch(1)
+        val error = AtomicReference<Throwable?>(null)
+        val worker = Thread {
+            try {
+                started.countDown()
+                // createPendingConversation's first act is to take CHAT_LIST_LOCK,
+                // so a fixed request blocks immediately with no pre-lock work.
+                coordinator.createPendingConversation(
+                    NewConversationCoordinator.StartRequest("_toctou_test")
+                )
+            } catch (t: Throwable) {
+                error.set(t)
+            } finally {
+                finished.countDown()
+            }
+        }
+
+        synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+            worker.start()
+            assertTrue(started.await(2, TimeUnit.SECONDS))
+            // While the lock is held, the creation cannot finish.
+            assertFalse(
+                "createPendingConversation must block on CHAT_LIST_LOCK",
+                finished.await(400, TimeUnit.MILLISECONDS)
+            )
+        }
+
+        // Released — it completes cleanly.
+        assertTrue(finished.await(5, TimeUnit.SECONDS))
+        assertNull("the blocked creation must not have thrown", error.get())
+        worker.join(TimeUnit.SECONDS.toMillis(5))
     }
 
     @Test

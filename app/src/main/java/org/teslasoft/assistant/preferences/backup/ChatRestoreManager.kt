@@ -48,8 +48,12 @@ import java.util.zip.ZipFile
  * cure a lost Keystore key (Round-4 lock machinery owns that case). The
  * pending-operation gate and the dependent-store rebase are owned by
  * [ChatSetReplacementCoordinator], which this manager calls before staging and
- * after the verified swap. Lock order respected: CHAT_LIST_LOCK is taken here;
- * SecurePrefs' monitor is never taken inside it by this code.
+ * after the verified swap. Lock order respected: CHAT_LIST_LOCK is taken here,
+ * always BEFORE the SecurePrefs monitor and never the reverse — the verified
+ * order documented in ChatSnapshotManifest. The dependent-store rebase runs
+ * inside CHAT_LIST_LOCK and does reach SecurePrefs (cache eviction, the Search
+ * journal), which is exactly that outer→inner order, so it cannot invert with
+ * any existing path.
  */
 object ChatRestoreManager {
 
@@ -81,12 +85,13 @@ object ChatRestoreManager {
         }
 
         // ---- 1. validate the whole archive before touching anything ----
-        val entries: Map<String, ByteArray>
+        val verified: VerifiedArchive
         try {
-            entries = readAndVerifyArchive(archive)
+            verified = readAndVerifyArchive(archive)
         } catch (e: Exception) {
             return Result(false, "archive failed verification: ${e.javaClass.simpleName}")
         }
+        val entries = verified.entries
 
         // ---- 2. extract to staging + re-verify the staged bytes ----
         val staging = File(appContext.filesDir, "chat_restore_staging/${SnapshotRegistry.uniqueSuffix()}")
@@ -118,6 +123,19 @@ object ChatRestoreManager {
         // ---- 3. the journaled swap, under the chat-list lock ----
         return synchronized(ChatPreferences.CHAT_LIST_LOCK) {
             try {
+                // Re-check the pending-operation gate INSIDE the lock, before any
+                // file is touched. settleOrRefuse ran before staging, and chat
+                // mutations that appeared since could have journaled a rename or
+                // deletion or created a provisional conversation whose files this
+                // swap would sweep. Every chat mutation takes CHAT_LIST_LOCK
+                // (provisional creation included, since Phase 9.1), so nothing can
+                // interleave while this holds the lock; anything that completed in
+                // the window between settleOrRefuse and here is caught now and the
+                // restore refuses rather than replacing over it. No settling is
+                // done inside the lock — only the check.
+                ChatSetReplacementCoordinator.pendingBlockNow(appContext)?.let {
+                    return@synchronized Result(false, it.detail())
+                }
                 quarantineCurrentChatFiles(appContext)
                 // A SWAPPING commit that does not land stops before any file is
                 // replaced: the persisted phase is still STAGED, so startup
@@ -139,7 +157,7 @@ object ChatRestoreManager {
                 // retries the rebase idempotently at the next start rather than
                 // reporting a success that left a stale derived store behind.
                 if (!ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
-                        appContext, ChatRestorePlanner.restoredChatIds(entries.keys)
+                        appContext, verified.declaredChatIds
                     )
                 ) {
                     return@synchronized Result(
@@ -219,11 +237,22 @@ object ChatRestoreManager {
 
     // ---- internals ----------------------------------------------------------
 
+    /** A verified archive: the exact name → bytes to write, plus the manifest's
+     *  full declared chat-id set. The declared set is a superset of the ids the
+     *  entries name — a declared-but-empty chat carries no per-chat file — so it
+     *  is what the rebase must invalidate/requeue, not just the ids with files. */
+    private data class VerifiedArchive(
+        val entries: Map<String, ByteArray>,
+        val declaredChatIds: Set<String>
+    )
+
     /** Full validation: manifest present + complete, every listed file
      *  present with matching SHA-256, no unexpected entries, every name on
-     *  the strict chat-storage whitelist. Returns name → bytes. */
-    private fun readAndVerifyArchive(archive: File): Map<String, ByteArray> {
+     *  the strict chat-storage whitelist. Returns the entries and the manifest's
+     *  declared chat-id set. */
+    private fun readAndVerifyArchive(archive: File): VerifiedArchive {
         val out = LinkedHashMap<String, ByteArray>()
+        val declaredChatIds = LinkedHashSet<String>()
         ZipFile(archive).use { zip ->
             val manifestEntry = zip.getEntry("manifest.json")
                 ?: throw IllegalStateException("missing manifest")
@@ -241,6 +270,7 @@ object ChatRestoreManager {
             if (!meta.has("chats")) throw IllegalStateException("manifest has no chat set")
             val chatsArray = meta.getJSONArray("chats")
             val chatIds = (0 until chatsArray.length()).map { chatsArray.getJSONObject(it).getString("chat_id") }
+            declaredChatIds.addAll(chatIds)
             val hashedEntryNames = HashSet<String>().apply {
                 val keys = fileHashes.keys()
                 while (keys.hasNext()) add(keys.next())
@@ -271,7 +301,7 @@ object ChatRestoreManager {
             }
         }
         if (out.isEmpty()) throw IllegalStateException("archive holds no chat files")
-        return out
+        return VerifiedArchive(out, declaredChatIds)
     }
 
     /** Copy every current chat-storage file into an indexed pre-restore

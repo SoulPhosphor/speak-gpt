@@ -93,26 +93,37 @@ class NewConversationCoordinator(private val context: Context) {
         }
     }
 
-    fun createPendingConversation(request: StartRequest): PendingConversationState {
-        val chatId = allocateUniqueId()
-        initializeSettings(chatId, request)
-        val initialized = SecurePrefs.get(app, "settings.$chatId").edit()
-            .putString(ConversationMode.MODE_KEY, ConversationMode.CHAT.storedValue)
-            .putInt(ConversationMode.MODE_VERSION_KEY, ConversationMode.SCHEMA_VERSION)
-            .putBoolean(ConversationMode.PENDING_KEY, true)
-            // Stored with the chat, not only in the launching Intent, so a
-            // recovery pass can still finish this conversation's first commit
-            // under its real title after the screen and its Intent are gone.
-            .putString(ConversationMode.PENDING_NAME_KEY, request.name)
-            .commit()
-        check(initialized) { "Unable to initialize pending conversation settings" }
-        indexPendingConversation(chatId, request.name)
-        check(
-            SecurePrefs.get(app, "chat_$chatId").edit()
-                .putString("chat", "[]").commit()
-        ) { "Unable to initialize pending conversation history" }
-        return PendingConversationState(chatId, request.name, ConversationMode.CHAT)
-    }
+    fun createPendingConversation(request: StartRequest): PendingConversationState =
+        // A provisional conversation's per-chat stores (settings.<id>, chat_<id>)
+        // are chat storage: a whole-chat-set restore quarantines and replaces
+        // exactly those files. Creating them under CHAT_LIST_LOCK — the same lock
+        // every other chat mutation takes, and always OUTSIDE the SecurePrefs
+        // monitor the writes below acquire — makes this creation atomic against
+        // that restore, so a provisional can never be half-created while the
+        // restore holds the lock and re-checks, and a fully-created one is seen
+        // and refused rather than swept (Phase 9.1 TOCTOU closure). The chat-list
+        // reads inside (allocateUniqueId) do not take this lock, so there is no
+        // reentrancy or ordering hazard.
+        synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+            val chatId = allocateUniqueId()
+            initializeSettings(chatId, request)
+            val initialized = SecurePrefs.get(app, "settings.$chatId").edit()
+                .putString(ConversationMode.MODE_KEY, ConversationMode.CHAT.storedValue)
+                .putInt(ConversationMode.MODE_VERSION_KEY, ConversationMode.SCHEMA_VERSION)
+                .putBoolean(ConversationMode.PENDING_KEY, true)
+                // Stored with the chat, not only in the launching Intent, so a
+                // recovery pass can still finish this conversation's first commit
+                // under its real title after the screen and its Intent are gone.
+                .putString(ConversationMode.PENDING_NAME_KEY, request.name)
+                .commit()
+            check(initialized) { "Unable to initialize pending conversation settings" }
+            indexPendingConversation(chatId, request.name)
+            check(
+                SecurePrefs.get(app, "chat_$chatId").edit()
+                    .putString("chat", "[]").commit()
+            ) { "Unable to initialize pending conversation history" }
+            PendingConversationState(chatId, request.name, ConversationMode.CHAT)
+        }
 
     fun commitPendingConversation(
         state: PendingConversationState,

@@ -135,7 +135,24 @@ object ChatSetReplacementCoordinator {
         try { ChatDeletionCoordinator.get(appContext).recover() } catch (_: Exception) { }
         try { NewConversationCoordinator(appContext).recoverPendingCommits() } catch (_: Exception) { }
 
-        // Residual state.
+        return pendingBlockNow(appContext)
+    }
+
+    /**
+     * The residual pending-operation check WITHOUT settling — read only. This is
+     * what the replacement engine re-runs inside CHAT_LIST_LOCK, immediately
+     * before quarantine, to close the window between [settleOrRefuse] (which runs
+     * before staging) and acquiring the lock: a chat mutation that appeared in
+     * that window — a journaled rename or deletion, a pending first commit, or a
+     * newly created provisional conversation — is caught here and refuses the
+     * restore instead of being swept. Every chat mutation takes CHAT_LIST_LOCK,
+     * so while the engine holds it nothing new can appear; this only has to catch
+     * what completed before the lock was taken. Safe to call while holding the
+     * lock — it acquires no lock of its own beyond the SecurePrefs reads, which
+     * are the established inner order.
+     */
+    fun pendingBlockNow(context: Context): ReplacementBlock? {
+        val appContext = context.applicationContext
         val renamePending = try { RenameJournal.hasPending(appContext) } catch (_: Exception) { true }
         val deletion = deletionState(appContext)
         val conversations = NewConversationCoordinator(appContext)
