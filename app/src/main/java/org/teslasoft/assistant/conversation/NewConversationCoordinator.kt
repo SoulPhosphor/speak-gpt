@@ -396,7 +396,8 @@ class NewConversationCoordinator(private val context: Context) {
         created.resetNewChatInheritance()
         created.initializeNewChatQuickSettings()
         created.setResolution(defaults.getResolution())
-        created.setAudioModel(defaults.getAudioModel())
+        // The speech-to-text engine is a single global setting, so a new chat
+        // neither copies it nor writes a cached per-chat default back.
         created.setModel(request.model.ifBlank { profile.model })
         created.setMaxTokens(profile.maxTokens)
         created.setPrefix(profile.prefix)

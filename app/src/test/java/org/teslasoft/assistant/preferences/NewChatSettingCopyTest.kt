@@ -57,7 +57,9 @@ class NewChatSettingCopyTest {
         val expected = sortedSetOf(
             "ApiEndpointId",
             "AssistantName",
-            "AudioModel",
+            // AudioModel (the speech-to-text engine) became a single global
+            // setting: a new chat no longer copies it or writes a cached
+            // per-chat default back — a deliberate change, not drift.
             "AutoLangDetect",
             "AvatarId",
             "AvatarType",

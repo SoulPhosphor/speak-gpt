@@ -39,9 +39,14 @@ class Preferences internal constructor(
                 SecurePrefs.get(context, "settings.$xchatId"),
                 globalPreferences,
                 xchatId,
-                if (globalPreferences.contains("always_speak_mode")) {
+                if (globalPreferences.contains("always_speak_mode") &&
+                    globalPreferences.contains("audio")) {
                     null
                 } else {
+                    // The legacy default profile is the migration source for
+                    // settings that moved from per-chat to the global store
+                    // (Always Speak Responses, and the speech-to-text engine).
+                    // Keep it available until every such value has migrated.
                     SecurePrefs.get(context, "settings.")
                 },
                 AppTtsVoicePreferences.getPreferences(context)
@@ -724,26 +729,44 @@ class Preferences internal constructor(
     }
 
     /**
-     * Retrieves the audio model from the shared preferences.
+     * Retrieves the speech-to-text engine.
+     *
+     * This is a single app-wide choice — one microphone engine for the whole
+     * app, the way a keyboard is chosen once for the device — so it lives in
+     * the global store, not per chat.
      *
      * Recognized values:
      *  - "google"        — Android on-device dictation (default)
      *  - "whisper"       — paid OpenAI Whisper cloud API
      *  - "whisper-local" — on-device whisper.cpp (user must download a model)
      *
-     * @return The audio model value or "google" if not found.
+     * Older releases stored this inside settings.<chatId> and seeded each new
+     * chat from the default profile. Until the global value exists, fall back
+     * once to that legacy default so the upgrade preserves the user's existing
+     * choice; every new write uses the durable global store.
+     *
+     * @return The speech-to-text engine or "google" if not found.
      */
     fun getAudioModel() : String {
-        return getString("audio", "google")
+        if (!gp.contains("audio")) {
+            val legacyDefault = try {
+                defaultPreferences?.getString("audio", null)
+            } catch (_: Exception) {
+                null
+            }
+            gp.edit().putString("audio", legacyDefault ?: "google").commit()
+        }
+        return getGlobalString("audio", "google")
     }
 
     /**
-     * Sets the audio model in the shared preferences.
+     * Sets the app-wide speech-to-text engine. The choice applies in every
+     * conversation and on the assistant screen, and survives restarts.
      *
-     * @param model The audio model value to be stored.
+     * @param model The speech-to-text engine value to be stored.
      */
     fun setAudioModel(model: String) {
-        putString("audio", model)
+        putGlobalString("audio", model)
     }
 
     /**
