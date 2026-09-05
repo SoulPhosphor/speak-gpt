@@ -93,7 +93,7 @@ class NewConversationCoordinator(private val context: Context) {
         }
     }
 
-    fun createPendingConversation(request: StartRequest): PendingConversationState =
+    fun createPendingConversation(request: StartRequest): PendingConversationState {
         // A provisional conversation's per-chat stores (settings.<id>, chat_<id>)
         // are chat storage: a whole-chat-set restore quarantines and replaces
         // exactly those files. Creating them under CHAT_LIST_LOCK — the same lock
@@ -122,8 +122,9 @@ class NewConversationCoordinator(private val context: Context) {
                 SecurePrefs.get(app, "chat_$chatId").edit()
                     .putString("chat", "[]").commit()
             ) { "Unable to initialize pending conversation history" }
-            PendingConversationState(chatId, request.name, ConversationMode.CHAT)
+            return PendingConversationState(chatId, request.name, ConversationMode.CHAT)
         }
+    }
 
     fun commitPendingConversation(
         state: PendingConversationState,
