@@ -49,7 +49,6 @@ import android.provider.DocumentsContract
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.StartupHealth
-import org.teslasoft.assistant.BuildConfig
 import org.teslasoft.assistant.preferences.backup.AutoBackupController
 import org.teslasoft.assistant.preferences.backup.AutoBackupFailureReason
 import org.teslasoft.assistant.preferences.backup.AutoBackupScheduler
@@ -529,12 +528,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnPortableImport?.setOnClickListener {
             importSeedLauncher.launch(arrayOf("application/json", "text/*"))
         }
-        // Temporary owner-only legacy conversion. Present only in the
-        // side-by-side Beta, which is the only installation it may seed.
-        if (BuildConfig.BUILD_TYPE == "beta") {
-            btnLegacyConvert?.visibility = View.VISIBLE
-            btnLegacyConvert?.setOnClickListener { showLegacyConvertIntro() }
-        }
+        // Temporary legacy conversion. Shown in every build (owner decision,
+        // September 5 2026): the owner needs it reachable from the build they
+        // actually run, not only the side-by-side Beta. It still refuses any
+        // destination that already holds chats, so it can only seed a fresh
+        // install. Removable once the migration is done.
+        btnLegacyConvert?.visibility = View.VISIBLE
+        btnLegacyConvert?.setOnClickListener { showLegacyConvertIntro() }
         btnPortableExport?.setOnClickListener {
             if (!MemoryStore.isProvisioned(this)) {
                 showNoticeDialog(getString(R.string.memory_not_provisioned_toast))
