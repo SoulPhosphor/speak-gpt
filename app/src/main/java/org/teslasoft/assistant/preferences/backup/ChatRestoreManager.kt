@@ -122,6 +122,11 @@ object ChatRestoreManager {
                     return@synchronized Result(false, "could not journal the swap")
                 }
                 performSwap(appContext, staging, entries.keys)
+                // Prove the live set is exactly the manifest before the journal
+                // is cleared: a failed delete or truncated copy fails the restore
+                // here, and the still-SWAPPING journal keeps recovery pointed at
+                // verified staging and the pre-restore quarantine.
+                verifyLiveSet(appContext, expectedHashes)
                 clearJournal(appContext)
                 try { staging.deleteRecursively() } catch (_: Exception) { }
                 DatabaseHealthState.logHealth(appContext, "info",
@@ -157,6 +162,11 @@ object ChatRestoreManager {
                 ChatRestorePlanner.Recovery.RESUME_SWAP -> {
                     synchronized(ChatPreferences.CHAT_LIST_LOCK) {
                         performSwap(appContext, staging!!, names)
+                        // Same final-set proof as the live path: if the resumed
+                        // swap does not produce exactly the manifest set this
+                        // throws, the journal is NOT cleared, and the next start
+                        // retries from the still-verified staging.
+                        verifyLiveSet(appContext, expectedHashes)
                     }
                     clearJournal(appContext)
                     try { staging!!.deleteRecursively() } catch (_: Exception) { }
@@ -260,17 +270,47 @@ object ChatRestoreManager {
 
     /** The wholesale replacement: delete every current chat-storage file
      *  (already quarantined), then copy the staged set in. Idempotent — safe
-     *  to re-run from startup recovery. */
+     *  to re-run from startup recovery.
+     *
+     *  A delete or copy that does not take is a FAILURE, not something to
+     *  swallow (Phase 9.2): a superseded file left behind, or a staged file
+     *  that did not copy, is exactly the mixed old/new set this restore exists
+     *  to prevent. Throwing here stops the restore with the journal still
+     *  SWAPPING and the pre-restore quarantine intact, so recovery re-runs the
+     *  copy from verified staging rather than leaving a half-replaced set. */
     private fun performSwap(context: Context, staging: File, names: Collection<String>) {
         val dir = sharedPrefsDir(context)
         for (file in (dir.listFiles() ?: emptyArray())) {
             if (ChatRestorePlanner.isChatStorageFileName(file.name) && file.name !in names) {
-                try { file.delete() } catch (_: Exception) { }
+                if (!file.delete() && file.exists()) {
+                    throw IllegalStateException("could not delete a superseded chat file: ${file.name}")
+                }
             }
         }
         for (name in names) {
             val staged = File(staging, name)
+            // copyTo throws on an I/O failure; a target that ends up absent or
+            // the wrong length is caught by the final live-set verification.
             staged.copyTo(File(dir, name), overwrite = true)
+        }
+    }
+
+    /** Verify the live chat-storage set EXACTLY matches the manifest after a
+     *  swap (Phase 9.2 "verify the final active set"): every expected file
+     *  present with its expected hash, and no unlisted chat-storage file left
+     *  behind. Throws on any defect so the swap is not treated as complete and
+     *  the journal is not cleared — recovery keeps the pre-restore quarantine
+     *  as the source until a verified set is in place. */
+    private fun verifyLiveSet(context: Context, expected: Map<String, String>) {
+        val dir = sharedPrefsDir(context)
+        val liveHashes = LinkedHashMap<String, String>()
+        for (file in (dir.listFiles() ?: emptyArray())) {
+            if (ChatRestorePlanner.isChatStorageFileName(file.name)) {
+                liveHashes[file.name] = hex(sha256(file.readBytes()))
+            }
+        }
+        ChatRestorePlanner.liveSetDefect(expected, liveHashes)?.let {
+            throw IllegalStateException("final live set does not match the manifest: $it")
         }
     }
 

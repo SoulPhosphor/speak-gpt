@@ -271,4 +271,62 @@ class ChatRestorePlannerTest {
             )
         )
     }
+
+    /* ---- final live-set verification (Phase 9.2) ---- */
+
+    private fun hashesFor(vararg pairs: Pair<String, String>): Map<String, String> =
+        linkedMapOf(*pairs)
+
+    @Test
+    fun anExactLiveSetHasNoDefect() {
+        val expected = hashesFor(
+            ChatRestorePlanner.CHAT_LIST_ENTRY to "aa",
+            "enc.chat_a1.xml" to "bb",
+            "enc.settings.a1.xml" to "cc"
+        )
+        assertNull(ChatRestorePlanner.liveSetDefect(expected, LinkedHashMap(expected)))
+    }
+
+    @Test
+    fun aMissingLiveFileIsADefect() {
+        val expected = hashesFor(
+            ChatRestorePlanner.CHAT_LIST_ENTRY to "aa",
+            "enc.chat_a1.xml" to "bb"
+        )
+        // The chat history did not land after the copy.
+        val live = hashesFor(ChatRestorePlanner.CHAT_LIST_ENTRY to "aa")
+        assertEquals(ChatRestorePlanner.LiveSetDefect.MISSING_FILE, ChatRestorePlanner.liveSetDefect(expected, live))
+    }
+
+    @Test
+    fun aLiveHashMismatchIsADefect() {
+        val expected = hashesFor(ChatRestorePlanner.CHAT_LIST_ENTRY to "aa")
+        // A truncated or partial copy left the wrong bytes.
+        val live = hashesFor(ChatRestorePlanner.CHAT_LIST_ENTRY to "zz")
+        assertEquals(ChatRestorePlanner.LiveSetDefect.HASH_MISMATCH, ChatRestorePlanner.liveSetDefect(expected, live))
+    }
+
+    @Test
+    fun anUnlistedLiveFileIsADefect() {
+        val expected = hashesFor(ChatRestorePlanner.CHAT_LIST_ENTRY to "aa")
+        // A superseded chat file whose delete did not take is still present —
+        // the mixed old/new set the verification exists to catch.
+        val live = hashesFor(
+            ChatRestorePlanner.CHAT_LIST_ENTRY to "aa",
+            "enc.chat_stale.xml" to "dd"
+        )
+        assertEquals(ChatRestorePlanner.LiveSetDefect.UNEXPECTED_FILE, ChatRestorePlanner.liveSetDefect(expected, live))
+    }
+
+    @Test
+    fun anEmptyExpectedSetRejectsAnyLiveChatFile() {
+        // Defense in depth: even with nothing expected, a live chat-storage file
+        // is unexpected. (The engine never restores an empty manifest — the
+        // reader requires the chat list — but the pure rule stays strict.)
+        assertEquals(
+            ChatRestorePlanner.LiveSetDefect.UNEXPECTED_FILE,
+            ChatRestorePlanner.liveSetDefect(emptyMap(), hashesFor("enc.chat_list.xml" to "aa"))
+        )
+        assertNull(ChatRestorePlanner.liveSetDefect(emptyMap(), emptyMap()))
+    }
 }

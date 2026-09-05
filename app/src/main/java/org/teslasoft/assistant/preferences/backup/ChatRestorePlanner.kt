@@ -169,4 +169,51 @@ object ChatRestorePlanner {
         }
         return null
     }
+
+    // ---- final live-set verification (Phase 9.2) ----------------------------
+
+    /** What is wrong with the live chat-storage file set after a swap, relative
+     *  to the manifest the archive declared. Each is a distinct, reportable
+     *  cause; nothing collapses into a generic failure. */
+    enum class LiveSetDefect {
+        /** A file the manifest requires is absent from live storage. A copy that
+         *  silently did not land leaves this. */
+        MISSING_FILE,
+
+        /** A live file's bytes do not hash to the manifest value. A partial or
+         *  corrupt copy leaves this. */
+        HASH_MISMATCH,
+
+        /** A chat-storage file the manifest never declared is still present. A
+         *  superseded file whose delete did not take leaves this — the mixed
+         *  old/new set Phase 9 exists to prevent. */
+        UNEXPECTED_FILE
+    }
+
+    /**
+     * After the swap, the live chat-storage file set must EXACTLY match the
+     * manifest: every declared file present with the declared hash, and no
+     * chat-storage file present that the manifest did not declare (Phase 9.2
+     * step: "verify the final active set"). This is the backstop that turns a
+     * silently failed delete or a truncated copy into a failure instead of a
+     * mixed visible set.
+     *
+     * [expected] maps each manifest entry name to its expected SHA-256 (hex).
+     * [liveChatStorageHashes] maps every chat-storage file currently in
+     * shared_prefs to its actual SHA-256 (hex). Returns null when the live set
+     * matches exactly, or the first defect found.
+     */
+    fun liveSetDefect(
+        expected: Map<String, String>,
+        liveChatStorageHashes: Map<String, String>
+    ): LiveSetDefect? {
+        for ((name, hash) in expected) {
+            val actual = liveChatStorageHashes[name] ?: return LiveSetDefect.MISSING_FILE
+            if (actual != hash) return LiveSetDefect.HASH_MISMATCH
+        }
+        for (name in liveChatStorageHashes.keys) {
+            if (name !in expected) return LiveSetDefect.UNEXPECTED_FILE
+        }
+        return null
+    }
 }
