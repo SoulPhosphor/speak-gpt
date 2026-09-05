@@ -24,8 +24,12 @@ import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.teslasoft.assistant.preferences.SecurePrefs
+import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
+import org.teslasoft.assistant.preferences.chatsearch.ChatSearchStore
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
@@ -48,6 +52,17 @@ import org.robolectric.annotation.ConscryptMode
 class ChatRestoreJournalRecoveryTest {
 
     private val context: Context get() = RuntimeEnvironment.getApplication()
+
+    @Before
+    fun resetProcessStatics() {
+        // resumeIfPending now rebases dependent stores, which use process-static
+        // singletons that Robolectric does not reset between test methods. Clear
+        // them so a prior test cannot leave a Search manager bound to a stale
+        // application (and a stale index path) that would fail this test's rebase.
+        SecurePrefs.clearCacheForTest()
+        ChatSearchIndexManager.resetForTest()
+        ChatSearchStore.discard(context)
+    }
 
     private val chatListEntry = "enc.chat_list.xml"
 
