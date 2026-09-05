@@ -132,12 +132,21 @@ object ChatRestoreManager {
                 // verified staging and the pre-restore quarantine.
                 verifyLiveSet(appContext, expectedHashes)
                 // Phase 9.1 steps 9–11: source generation, cache invalidation,
-                // and the dependent-store rebase, before the journal is cleared
-                // (step 12) so the rebase markers are durable if this is the last
-                // thing to run before the controlled restart (step 13).
-                ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
-                    appContext, ChatRestorePlanner.restoredChatIds(entries.keys)
-                )
+                // and the dependent-store rebase. The journal is cleared (step 12)
+                // ONLY when the rebase is durable — otherwise the verified swap
+                // stands but a dependent store (e.g. the Search index) is stale,
+                // so the SWAPPING journal and staging are kept and the resume path
+                // retries the rebase idempotently at the next start rather than
+                // reporting a success that left a stale derived store behind.
+                if (!ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
+                        appContext, ChatRestorePlanner.restoredChatIds(entries.keys)
+                    )
+                ) {
+                    return@synchronized Result(
+                        false,
+                        "chat set replaced but a dependent store did not rebase; it will be retried at the next start"
+                    )
+                }
                 clearJournal(appContext)
                 try { staging.deleteRecursively() } catch (_: Exception) { }
                 DatabaseHealthState.logHealth(appContext, "info",
@@ -180,16 +189,19 @@ object ChatRestoreManager {
                         verifyLiveSet(appContext, expectedHashes)
                     }
                     // The swap that finished here also replaced the authoritative
-                    // set, so rebase the dependent stores before clearing the
-                    // journal — the post-restart maintenance below then rebuilds
-                    // from the new source in the same start.
-                    ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
-                        appContext, ChatRestorePlanner.restoredChatIds(names)
-                    )
-                    clearJournal(appContext)
-                    try { staging!!.deleteRecursively() } catch (_: Exception) { }
-                    DatabaseHealthState.logHealth(appContext, "warning",
-                        "An interrupted chat restore was finished from its verified staging at startup.")
+                    // set, so rebase the dependent stores. Clear the journal ONLY
+                    // when the rebase is durable; a rebase that did not complete
+                    // keeps the journal and staging so the next start retries it
+                    // idempotently, rather than leaving a stale derived store.
+                    if (ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
+                            appContext, ChatRestorePlanner.restoredChatIds(names)
+                        )
+                    ) {
+                        clearJournal(appContext)
+                        try { staging!!.deleteRecursively() } catch (_: Exception) { }
+                        DatabaseHealthState.logHealth(appContext, "warning",
+                            "An interrupted chat restore was finished from its verified staging at startup.")
+                    }
                 }
                 ChatRestorePlanner.Recovery.DISCARD_STAGING -> {
                     clearJournal(appContext)

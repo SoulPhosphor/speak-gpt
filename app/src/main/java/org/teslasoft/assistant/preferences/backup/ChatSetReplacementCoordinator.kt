@@ -25,6 +25,7 @@ import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionCoordinator
 import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionJournalRead
 import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionJournalStore
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStorageState
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
 
 /**
@@ -155,19 +156,28 @@ object ChatSetReplacementCoordinator {
      * Run the post-swap half of the transaction once the live set is verified
      * (Phase 9.1 steps 9–11): stamp a new source generation, evict the cached
      * preference handles for the replaced names, and rebase the dependent
-     * stores. Best-effort and never throws — it runs after the restore is
-     * already durable, and a controlled restart follows regardless; a rebase
-     * that could not complete here is finished by the post-restart startup
-     * maintenance. [restoredChatIds] are the stored ids the archive brought in.
+     * stores. [restoredChatIds] are the stored ids the archive brought in.
+     *
+     * Returns whether the rebase is DURABLE. The caller must NOT clear the
+     * restore journal on false: the swap is verified, but a dependent store was
+     * not rebased, so the journal is kept and the resume path retries the rebase
+     * idempotently at the next start. This is what closes the stale-derived-store
+     * hole — the Search rebuild test only checks generation/policy/locale, not
+     * the restore source generation, so a Search index that survives a failed
+     * discard would otherwise never be rebuilt and could serve pre-restore
+     * results (plan step 12: clear the journal only after dependent invalidation
+     * is durable).
+     *
+     * The source-generation stamp and the cache eviction are defense-in-depth
+     * and do not gate. Search is the strict gate (a stale index shows WRONG
+     * results). The generated-image catalog gates only when it is operable and
+     * the requeue write actually failed; a catalog that cannot open here (absent,
+     * locked, or — under a JVM test — without its native library) has no markers
+     * to clear now and is handled by the post-restart maintenance, so it must
+     * not block the restore forever.
      */
-    fun onAuthoritativeChatSetReplaced(context: Context, restoredChatIds: Set<String>) {
+    fun onAuthoritativeChatSetReplaced(context: Context, restoredChatIds: Set<String>): Boolean {
         val appContext = context.applicationContext
-
-        // Each step is best-effort and must NOT throw: the restore is already
-        // durable, a controlled restart follows, and the post-restart startup
-        // maintenance finishes any rebase that could not complete here. A
-        // dependent store can raise an Error (e.g. the SQLCipher native library
-        // is unavailable), so these swallow Throwable, not only Exception.
 
         // Step 9: a new opaque source generation marks the replacement committed.
         runCatching { bumpSourceGeneration(appContext) }
@@ -179,10 +189,19 @@ object ChatSetReplacementCoordinator {
         // Step 11: rebase dependent stores.
         // Search — derived: clear the stale journal and discard the index so the
         // next ensureReady rebuilds from the new source; no stale row survives.
-        runCatching { ChatSearchIndexManager.get(appContext).onAuthoritativeChatSetReplaced() }
+        // A store can raise an Error (e.g. the SQLCipher native library missing),
+        // so failure/throw both read as "not durable".
+        val searchOk = runCatching {
+            ChatSearchIndexManager.get(appContext).onAuthoritativeChatSetReplaced()
+        }.getOrDefault(false)
         // Generated-image catalog — NOT derived: requeue the restored chats for a
         // backfill rescan; rows, tombstones and locks are preserved.
-        runCatching { GeneratedImageCatalogStore.requeueBackfill(appContext, restoredChatIds) }
+        val catalogOk = runCatching {
+            val result = GeneratedImageCatalogStore.requeueBackfill(appContext, restoredChatIds)
+            result.success || result.state != GeneratedImageCatalogStorageState.AVAILABLE
+        }.getOrDefault(true)
+
+        return searchOk && catalogOk
     }
 
     /** The current source generation (0 when never stamped). Opaque; only its

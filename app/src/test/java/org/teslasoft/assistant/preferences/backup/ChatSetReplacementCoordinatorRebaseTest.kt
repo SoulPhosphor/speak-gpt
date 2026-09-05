@@ -102,6 +102,27 @@ class ChatSetReplacementCoordinatorRebaseTest {
     }
 
     @Test
+    fun aFailedSearchDiscardReportsTheRebaseNotDurable() {
+        // Force ChatSearchStore.discard to fail: the index path is a non-empty
+        // directory, so File.delete() returns false and the derived index is NOT
+        // discarded. The rebase must report not-durable so the caller keeps the
+        // restore journal instead of leaving a stale Search index behind.
+        val db = context.getDatabasePath("chat_search.db")
+        db.parentFile?.mkdirs()
+        db.mkdir()
+        File(db, "child").writeBytes("x".toByteArray())
+
+        val durable = ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(context, setOf("n1"))
+
+        assertFalse("a Search index that could not be discarded is not a durable rebase", durable)
+    }
+
+    @Test
+    fun aCleanRebaseReportsDurable() {
+        assertTrue(ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(context, setOf("n1")))
+    }
+
+    @Test
     fun theSourceGenerationStartsAtZeroAndIsMonotonic() {
         assertEquals(0L, ChatSetReplacementCoordinator.sourceGeneration(context))
         ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(context, emptySet())

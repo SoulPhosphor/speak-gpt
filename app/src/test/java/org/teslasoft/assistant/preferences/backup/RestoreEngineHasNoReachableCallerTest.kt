@@ -24,20 +24,20 @@ import org.junit.Test
 /**
  * Phase 9 engine-only boundary, enforced mechanically.
  *
- * The safe whole-chat-set replacement engine (Phase 9 of the drawer/gallery
- * plan) is not built yet. Until it is, [ChatRestoreManager.restoreFromArchive]
- * must stay an engine with NO reachable caller: it performs a wholesale,
+ * The safe whole-chat-set replacement engine and its coordinator
+ * ([ChatSetReplacementCoordinator]) are now built, but they must stay
+ * UNREACHABLE until the approved restore UI (and its owner-approved recovery
+ * wording) ship. [ChatRestoreManager.restoreFromArchive] performs a wholesale,
  * journaled REPLACEMENT of encrypted chat storage, and the plan's P1 risk is
  * that a restore reached from UI, a debug action, or an import path would run
- * against mixed old/new derived state (Search index, generated-image catalog,
- * stale journals) that only the Phase 9 coordinator knows how to rebase.
+ * before the user has any way to understand or confirm it.
  *
- * `restoreFromArchive` today has no production caller only by accident. This
- * test makes the absence of a caller a build invariant: if any production
+ * This test makes the absence of a caller a build invariant: if any production
  * source file other than [ChatRestoreManager] itself names `restoreFromArchive`,
- * ordinary unit CI fails here — before an unsafe reachable restore can ship.
- * The plan's Phase 9 exit gate requires exactly this proof while the engine is
- * deferred.
+ * ordinary unit CI fails here — before a reachable restore can ship. The
+ * coordinator is reached only from `restoreFromArchive`, so guarding the engine
+ * entry keeps the whole path unreachable. The plan's Phase 9 exit gate requires
+ * exactly this proof while no restore UI exists.
  *
  * `resumeIfPending` is deliberately NOT guarded: it is the startup finisher for
  * an already-journaled swap and does nothing unless a restore that was itself
@@ -68,7 +68,7 @@ class RestoreEngineHasNoReachableCallerTest {
             .map { it.path }
 
         assertEquals(
-            "Phase 9 is not complete, so nothing may call the whole-chat-set restore " +
+            "No restore UI has shipped, so nothing may call the whole-chat-set restore " +
                 "replacement engine. These production files reach `$restoreEntryPoint`:\n" +
                 offenders.joinToString("\n"),
             emptyList<String>(),

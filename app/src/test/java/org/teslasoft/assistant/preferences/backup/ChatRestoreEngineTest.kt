@@ -25,6 +25,7 @@ import java.util.zip.ZipOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -125,6 +126,34 @@ class ChatRestoreEngineTest {
         // The live file is untouched — validation failed before staging.
         assertArrayEquals("OLD-LIST".toByteArray(), liveList.readBytes())
         assertJournalCleared()
+    }
+
+    @Test
+    fun aFailedDependentRebaseKeepsTheJournalForRetryAndReportsIncomplete() {
+        seedLive("enc.chat_list.xml", "OLD-LIST")
+        val archive = buildArchive(
+            chatIds = listOf("n1"),
+            files = linkedMapOf(
+                "enc.chat_list.xml" to "NEW-LIST".toByteArray(),
+                "enc.chat_n1.xml" to "NEW".toByteArray()
+            )
+        )
+        // Force the Search rebase to fail: the index path is a non-empty
+        // directory, so discard cannot delete it.
+        val searchDb = context.getDatabasePath("chat_search.db")
+        searchDb.parentFile?.mkdirs()
+        searchDb.mkdir()
+        File(searchDb, "child").writeBytes("x".toByteArray())
+
+        val result = ChatRestoreManager.restoreFromArchive(context, archive)
+
+        // The verified swap stands — the live set is the new one...
+        assertFalse("a failed dependent rebase must not report success", result.ok)
+        assertArrayEquals("NEW-LIST".toByteArray(), File(sharedPrefsDir(), "enc.chat_list.xml").readBytes())
+        // ...but the journal stays SWAPPING so the resume path retries the rebase,
+        // rather than clearing it and leaving a stale Search index.
+        val p = context.getSharedPreferences("storage_health", Context.MODE_PRIVATE)
+        assertEquals("swapping", p.getString("chatrestore.phase", null))
     }
 
     // ---- helpers ------------------------------------------------------------
