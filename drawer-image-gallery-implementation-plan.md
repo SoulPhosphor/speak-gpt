@@ -1012,6 +1012,31 @@ Present these choices with estimated backup size from a read-only inventory. Do 
 3. **Portable data:** recommended—use a logical, versioned catalog export rather than copying the SQLCipher DB/key. Decide whether bytes accompany it.
 4. **UI grouping/name:** decide whether generated images appear as their own Backup Status type or as an explicitly renamed image-data group. Do not silently fold them into the existing user/profile-image database label.
 
+#### 10.1 owner decisions, September 7, 2026
+
+- A portable backup must work across app builds, installations, and phones.
+  An installation-bound encrypted snapshot may only be an additional recovery
+  artifact; it cannot substitute for the portable package. The existing
+  portable Recovery Code / Recovery Key / optional-password architecture is
+  the approved basis for encrypted cross-install restore.
+- Preserve **all active generated-image bytes**, including active Gallery-only
+  images whose origin chat was deleted. Metadata-only and chat-referenced-only
+  backup are rejected as the complete generated-image backup policy.
+- Generated Images and Avatar/Profile Images are separate selectable data
+  categories. Do not fold either into the other or into the existing
+  profile-image-catalog-only Backup Status row.
+- The permanent portable design must also carry the complete Avatar/Profile
+  Images gallery: its catalog and every valid gallery image, including unused
+  images. Image assignments remain properties of the identities that own
+  them, not properties of the gallery category.
+- The temporary legacy chat converter remains available for the owner’s only
+  legacy source until the permanent importer supersedes it. Do not broaden the
+  converter into that importer and do not remove it during Phase 10.
+
+Still requiring a separate owner answer before Phase 10 storage implementation:
+whether the installation-bound generated-image snapshot should ship in
+addition to the required portable package.
+
 ### 10.2 Implementation invariants after approval
 
 - Add health/check/backup/restore coverage for `generated_images.db`; do not add such coverage for derived `chat_search.db`.
@@ -1088,6 +1113,49 @@ Before this unified flow is implemented, its cross-category commit/rollback
 boundary, category dependency handling, and identity-collision rules must be
 designed and approved. No narrow category implementation may describe itself
 as the completed backup/restore product.
+
+**Owner decisions, September 7, 2026 — category boundaries and future screen
+copy direction:**
+
+- **Glamours are their own restore category.** Never place them inside
+  Roleplay. A Glamour represents the user to the AI and is not necessarily a
+  fictional or fantasy identity.
+- **Generated Images** and **Avatar/Profile Images** are two independent
+  categories. Selecting Avatar/Profile Images restores the complete avatar
+  gallery, including unused images, but does not change which image is
+  assigned to any Companion, Glamour, Roleplay Character, or default identity.
+- Restoring an image-bearing identity must preserve its assigned image without
+  requiring the complete Avatar/Profile Images gallery. Therefore a selected
+  Companion, Glamour, or Roleplay category carries only the image assets
+  referenced by its selected records as required dependencies. Selecting the
+  gallery category is what requests all gallery images; restoring three
+  Companions must not silently import fifty unrelated gallery images.
+- The same dependency rule applies to chats and generated images: Chats carry
+  the generated images required by the selected chats; selecting Generated
+  Images requests the complete generated-image gallery, including Gallery-only
+  items.
+- A gallery-only replacement must not break identities outside the selected
+  categories. Any current image still referenced by unselected data is
+  protected from deletion and the restore result must disclose that it was
+  retained.
+- Normal category checkboxes and their one-sentence explanations live directly
+  on the Restore screen above the Restore button, never in a category-picker
+  dialog. Preserve this concise content model for the future wording pass:
+  - **Chats:** chats plus the generated images used in those chats;
+  - **Generated Images:** the complete generated-image gallery, including
+    Gallery-only images;
+  - **Companions:** companions plus the pictures assigned to them;
+  - **Glamours:** Glamours plus the pictures assigned to them;
+  - **Roleplay:** roleplay data plus assigned Roleplay Character pictures;
+    Glamours are not included;
+  - **Avatar/Profile Images:** the complete avatar-image gallery, including
+    unused images; assignments are not changed by this category.
+- Activation Prompts and System Prompts must be represented in the selectable
+  restore categories. Whether they appear as one combined Prompts category or
+  as two independent categories remains an owner decision for the Phase 11.1
+  design pass. Do not silently bundle either into Companions or Roleplay.
+- The remaining category explanations, replace-versus-merge presentation, and
+  exact user-facing wording still require owner review before UI implementation.
 
 ## Phase 12 — Owner-data rehearsal and final Main gate
 

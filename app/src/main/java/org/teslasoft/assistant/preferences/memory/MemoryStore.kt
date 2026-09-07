@@ -5705,6 +5705,19 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
+    /** Commit ONLY the image for an existing user-side Roleplay Character,
+     *  by its stable id. This mirrors My Persona's immediate-save image path:
+     *  choosing a picture cannot accidentally commit other unsaved card
+     *  fields, and a blank hash clears only image_ref. */
+    fun setRoleplayCharacterImageRef(id: String, imageRef: String?) {
+        writableDatabase.update(
+            "roleplay_characters", ContentValues().apply {
+                put("image_ref", imageRef?.ifEmpty { null })
+            },
+            "roleplay_character_id = ?", arrayOf(id)
+        )
+    }
+
     fun setRoleplayCharacterStatus(id: String, status: String) {
         writableDatabase.update(
             "roleplay_characters", ContentValues().apply { put("status", status) },

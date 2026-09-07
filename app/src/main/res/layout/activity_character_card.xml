@@ -90,6 +90,19 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp">
 
+            <!-- User-side Roleplay Character picture. CharacterCardActivity
+                 hides this completely for party members. The picture itself
+                 is the picker control, matching Companion and My Persona. -->
+            <ImageView
+                android:id="@+id/img_card_avatar"
+                android:layout_width="96dp"
+                android:layout_height="96dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="24dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:scaleType="centerCrop" />
+
             <!-- Zone 1 — always visibly labeled (spec §1/§8a). Each field is a
                  label on its own line, the box immediately under it, then one
                  empty half-line before the next field (owner ruling, July 10
