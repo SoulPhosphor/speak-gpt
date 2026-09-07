@@ -64,7 +64,10 @@ object ConvertedChatRecoveryArchive {
 
             fun retain(finalName: String) {
                 val temporaryName = prefix + finalName
-                val physical = app.getSharedPreferencesPath(temporaryName)
+                val physical = File(
+                    File(app.applicationInfo.dataDir, "shared_prefs"),
+                    "$temporaryName.xml"
+                )
                 check(physical.exists() && physical.length() > 0L) {
                     "temporary encrypted preference was not written"
                 }
