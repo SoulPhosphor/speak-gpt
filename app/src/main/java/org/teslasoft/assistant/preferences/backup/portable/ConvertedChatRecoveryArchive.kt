@@ -40,6 +40,12 @@ object ConvertedChatRecoveryArchive {
         // name. Supply the final name to the crypto layer while redirecting the
         // actual backing SharedPreferences file to an isolated temporary name.
         val isolated = object : ContextWrapper(app) {
+            // EncryptedSharedPreferences immediately replaces the supplied
+            // context with context.applicationContext. Keep that lookup inside
+            // this wrapper or its getSharedPreferences override is bypassed and
+            // the converter writes the final names into live app storage.
+            override fun getApplicationContext(): Context = this
+
             override fun getSharedPreferences(name: String, mode: Int): SharedPreferences {
                 val temporaryName = prefix + name
                 if (temporaryName !in temporaryNames) temporaryNames.add(temporaryName)

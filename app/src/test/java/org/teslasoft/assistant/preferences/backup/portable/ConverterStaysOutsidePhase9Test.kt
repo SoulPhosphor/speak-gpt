@@ -90,6 +90,7 @@ class ConverterStaysOutsidePhase9Test {
     fun archiveWriterUsesIsolatedPreferencesAndTheRealRestoreValidator() {
         val archive = source("preferences/backup/portable/ConvertedChatRecoveryArchive.kt")
         assertTrue(archive.contains("prefix + name"))
+        assertTrue(archive.contains("override fun getApplicationContext(): Context = this"))
         assertTrue(archive.contains("deleteSharedPreferences(name)"))
         assertTrue(archive.contains("archivePassesValidation(output)"))
         assertFalse(archive.contains("SecurePrefs.get"))
