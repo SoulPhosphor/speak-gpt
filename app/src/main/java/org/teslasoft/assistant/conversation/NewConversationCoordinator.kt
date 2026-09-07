@@ -192,6 +192,35 @@ class NewConversationCoordinator(private val context: Context) {
         return startupPointer || pendingConversationIds().isNotEmpty()
     }
 
+    /**
+     * Settle the automatic blank conversation created when the app launches.
+     * Merely opening the app must not block a restore: if this retained startup
+     * placeholder is authoritatively empty, discard it; if it contains turns,
+     * [abandonPendingConversation] commits them instead. An unreadable session
+     * remains pending and therefore still blocks. Drawer-created provisional
+     * conversations have no startup pointer and are deliberately untouched.
+     */
+    fun settleStartupPlaceholder() {
+        val session = SecurePrefs.get(app, STARTUP_SESSION_FILE)
+        val id = try {
+            session.getString(STARTUP_SESSION_ID, "").orEmpty()
+        } catch (_: Exception) {
+            return
+        }
+        if (id.isBlank()) return
+        if (!isPending(id)) {
+            clearStartupSession(id)
+            clearPendingIndex(id)
+            return
+        }
+        val name = try {
+            session.getString(STARTUP_SESSION_NAME, "").orEmpty()
+        } catch (_: Exception) {
+            ""
+        }
+        abandonPendingConversation(id, name)
+    }
+
     /** Resume first commits that crossed the payload boundary before process death. */
     fun recoverPendingCommits() {
         val journal = SecurePrefs.get(app, "pending_conversation_journal")

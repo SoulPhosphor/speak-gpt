@@ -2041,6 +2041,7 @@
     <string name="chat_restore_confirm_replace">Replace</string>
     <string name="chat_restore_progress">Replacing data from backup. Please wait. Do not shut down your app while this is working.</string>
     <string name="chat_restore_failed_title">Restoring from backup failed. Nothing was changed.</string>
+    <string name="chat_restore_failure_reason">Reason: %1$s</string>
     <string name="chat_restore_read_error">The backup file could not be read.</string>
     <string name="chat_restore_channel">Restore</string>
     <!-- Manual Recovery Backup flow (owner-approved wording, July 22 2026 —

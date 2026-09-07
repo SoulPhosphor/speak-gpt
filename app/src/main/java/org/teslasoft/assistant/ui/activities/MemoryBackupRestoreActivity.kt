@@ -799,14 +799,27 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         restoreProgress?.visibility = View.GONE
         restoreSpinner?.visibility = View.GONE
         restoreProgressText?.text = null
-        val message = if (detail.isNullOrBlank()) getString(R.string.chat_restore_failed_title)
-                      else getString(R.string.chat_restore_failed_title) + "\n\n" + detail
+        val message = if (detail.isNullOrBlank()) {
+            getString(R.string.chat_restore_failed_title)
+        } else {
+            getString(R.string.chat_restore_failed_title) + "\n\n" +
+                getString(R.string.chat_restore_failure_reason, sentenceCase(detail))
+        }
         runCatching {
             MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
                 .setMessage(message)
                 .setPositiveButton(R.string.btn_ok, null)
                 .show()
         }
+    }
+
+    private fun sentenceCase(detail: String): String {
+        val capitalized = detail.trim().replaceFirstChar { first ->
+            if (first.isLowerCase()) first.titlecase() else first.toString()
+        }
+        return if (capitalized.endsWith('.') || capitalized.endsWith('!') ||
+            capitalized.endsWith('?')
+        ) capitalized else "$capitalized."
     }
 
     private fun prepareRestoreFile(uri: Uri) {

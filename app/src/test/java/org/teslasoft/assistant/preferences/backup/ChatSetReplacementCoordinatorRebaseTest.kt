@@ -127,14 +127,21 @@ class ChatSetReplacementCoordinatorRebaseTest {
     }
 
     @Test
-    fun anOpenProvisionalSessionRefusesTheReplacement() {
-        // Seed the retained startup blank-session pointer: an unsaved new
-        // conversation is open, so the wholesale replacement must refuse rather
-        // than sweep its chat-storage files.
-        SecurePrefs.get(context, "pending_startup_conversation").edit()
-            .putString("id", "provisional-1")
-            .putString("name", "_autoname_1")
-            .commit()
+    fun anAutomaticEmptyStartupPlaceholderIsSettledAndDoesNotBlock() {
+        val pending = NewConversationCoordinator(context)
+            .createOrRestoreStartupPendingConversation()
+
+        assertTrue(NewConversationCoordinator(context).isPending(pending.id))
+        assertNull(ChatSetReplacementCoordinator.settleOrRefuse(context))
+        assertFalse(NewConversationCoordinator(context).isPending(pending.id))
+        assertNull(ChatSetReplacementCoordinator.pendingBlockNow(context))
+    }
+
+    @Test
+    fun aUserCreatedProvisionalSessionStillRefusesTheReplacement() {
+        NewConversationCoordinator(context).createPendingConversation(
+            NewConversationCoordinator.StartRequest("User-created draft")
+        )
 
         assertEquals(
             ChatSetReplacementCoordinator.ReplacementBlock.PROVISIONAL_SESSION,

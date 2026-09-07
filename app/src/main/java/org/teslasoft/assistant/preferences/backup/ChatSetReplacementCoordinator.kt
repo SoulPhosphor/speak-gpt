@@ -133,7 +133,9 @@ object ChatSetReplacementCoordinator {
         // checks below decide, not these calls.
         try { RenameJournal.reconcile(appContext) } catch (_: Exception) { }
         try { ChatDeletionCoordinator.get(appContext).recover() } catch (_: Exception) { }
-        try { NewConversationCoordinator(appContext).recoverPendingCommits() } catch (_: Exception) { }
+        val conversations = NewConversationCoordinator(appContext)
+        try { conversations.recoverPendingCommits() } catch (_: Exception) { }
+        try { conversations.settleStartupPlaceholder() } catch (_: Exception) { }
 
         return pendingBlockNow(appContext)
     }
