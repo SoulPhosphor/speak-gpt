@@ -168,6 +168,8 @@ class ConverterStaysOutsidePhase9Test {
         val screen = source("ui/activities/LegacyChatConverterActivity.kt")
         val mapping = screen.substringAfter("private fun conversionMessage(")
             .substringBefore("private fun rejectionReason(")
+        val rejectionMapping = screen.substringAfter("private fun rejectionReason(")
+            .substringBefore("private fun setBusy(")
 
         val outcomes = source("preferences/backup/portable/LegacyChatConversion.kt")
             .substringAfter("sealed class Outcome {")
@@ -186,7 +188,7 @@ class ConverterStaysOutsidePhase9Test {
             .findAll(reasons).map { it.groupValues[1] }.toList()
         assertEquals(7, reasonNames.size)
         for (name in reasonNames) {
-            assertTrue("$name has no message", mapping.contains(name))
+            assertTrue("$name has no message", rejectionMapping.contains(name))
         }
     }
 
