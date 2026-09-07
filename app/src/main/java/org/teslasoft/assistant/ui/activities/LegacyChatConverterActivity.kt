@@ -24,10 +24,8 @@ import java.io.InputStream
 import java.security.MessageDigest
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.backup.BackupBrand
-import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
 import org.teslasoft.assistant.preferences.backup.RecoveryFileNaming
 import org.teslasoft.assistant.preferences.backup.portable.ChatLogicalImportPlan
-import org.teslasoft.assistant.preferences.backup.portable.ChatLogicalImporter
 import org.teslasoft.assistant.preferences.backup.portable.LegacyChatConversion
 import org.teslasoft.assistant.theme.ThemeManager
 
@@ -83,23 +81,21 @@ class LegacyChatConverterActivity : FragmentActivity() {
                 runOnUiThread { setIdle(getString(R.string.legacy_convert_err_unreadable)) }
                 return@Thread
             }
+            val recovery = File(cacheDir, "converted-chat-recovery-${System.nanoTime()}.zip")
             val outcome = try {
-                LegacyChatConversion.convert(applicationContext, sourceCopy)
+                LegacyChatConversion.convert(applicationContext, sourceCopy, recovery)
             } catch (_: Exception) {
                 LegacyChatConversion.Outcome.StagingUnreadable
             } finally {
                 runCatching { sourceCopy.delete() }
             }
             if (outcome !is LegacyChatConversion.Outcome.Ok) {
+                runCatching { recovery.delete() }
                 runOnUiThread { setIdle(conversionMessage(outcome)) }
                 return@Thread
             }
 
-            val recovery = File(cacheDir, "converted-chat-recovery-${System.nanoTime()}.zip")
             try {
-                if (!RecoveryBackupManager.createVerifiedChatRecoveryArchive(this, recovery)) {
-                    throw IllegalStateException("no archive")
-                }
                 val expectedSha = sha256(recovery.inputStream())
                 convertedSummary = getString(
                     R.string.legacy_convert_done,
@@ -194,16 +190,8 @@ class LegacyChatConverterActivity : FragmentActivity() {
             R.string.legacy_convert_err_rejected,
             getString(rejectionReason(outcome.reason))
         )
-        LegacyChatConversion.Outcome.DestinationClearFailed ->
-            getString(R.string.legacy_convert_err_clear)
-        is LegacyChatConversion.Outcome.DestinationRefused -> when (outcome.reason) {
-            ChatLogicalImporter.RefusalReason.DESTINATION_NOT_EMPTY ->
-                getString(R.string.legacy_convert_err_not_empty)
-            ChatLogicalImporter.RefusalReason.DESTINATION_UNREADABLE ->
-                getString(R.string.legacy_convert_err_destination_unreadable)
-        }
-        is LegacyChatConversion.Outcome.WriteFailed ->
-            getString(R.string.legacy_convert_err_write)
+        LegacyChatConversion.Outcome.ArchiveWriteFailed ->
+            getString(R.string.legacy_convert_err_archive)
     }
 
     private fun rejectionReason(reason: ChatLogicalImportPlan.Reason): Int = when (reason) {

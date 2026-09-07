@@ -9,16 +9,10 @@ package org.teslasoft.assistant.preferences.backup.portable
 
 import android.content.Context
 import java.io.File
-import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionCoordinator
-import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionDecision
-import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionPreflightResult
-import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionTarget
-import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
-import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
 
 /**
  * The owner-only conversion (Phase 8.6): take a portable Recovery Package
- * exported by the working pre-release and seed the disposable destination.
+ * exported by the working pre-release and produce a normal chat-recovery ZIP.
  *
  * Engine only — no wording, no UI, no logging. It returns a typed outcome and
  * a structural report; how any of that is presented is a separate, approved
@@ -26,11 +20,9 @@ import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
  *
  * The input is treated as strictly read-only. The package is opened for
  * reading, everything is extracted into a fresh staging directory, and the
- * staging directory is the only source-side artifact ever deleted. The caller
- * is expected to pass a disposable copy anyway, but nothing here depends on
- * that: this code cannot modify or remove the file it is given. The destination
- * chat set is deliberately disposable and is cleared only after the incoming
- * package and logical chat artifact have passed validation.
+ * staging directory is the only source-side artifact ever deleted. This code
+ * cannot modify or remove the file it is given and never reads, clears, seeds
+ * or otherwise changes the destination's live chat set.
  *
  * Only the chats artifact is handled. `memory.db`, `lorebook.db` and
  * `user_images.db` in the same package are already restorable through
@@ -44,8 +36,15 @@ object LegacyChatConversion {
     /** The chats entry [ChatLogicalSerializer] writes into a portable package. */
     const val CHATS_ENTRY = "chats.json"
 
+    data class Report(
+        val chatsWritten: Int,
+        val messagesWritten: Int,
+        val settingsWritten: Int,
+        val duplicateRowsConsolidated: Int
+    )
+
     sealed class Outcome {
-        data class Ok(val report: ChatLogicalImporter.Report) : Outcome()
+        data class Ok(val report: Report) : Outcome()
 
         /** This temporary path intentionally accepts unencrypted packages only. */
         object EncryptedPackageUnsupported : Outcome()
@@ -65,29 +64,18 @@ object LegacyChatConversion {
             val detail: String
         ) : Outcome()
 
-        /** The destination is not an empty installation. */
-        data class DestinationRefused(
-            val reason: ChatLogicalImporter.RefusalReason
-        ) : Outcome()
-
-        /** Existing disposable chats or folder metadata could not be cleared. */
-        object DestinationClearFailed : Outcome()
-
-        /** A write did not commit. The destination should be reset and the
-         *  conversion re-run from a fresh copy of the original export. */
-        data class WriteFailed(
-            val stage: ChatLogicalImporter.FailureStage,
-            val chatId: String?
-        ) : Outcome()
+        /** The converted recovery ZIP could not be built and verified. */
+        object ArchiveWriteFailed : Outcome()
 
         /** The staged artifact could not be read off disk. */
         object StagingUnreadable : Outcome()
     }
 
     /**
-     * @param packageFile a disposable copy of the exported package. Read only.
+     * @param packageFile a copy of the exported package. Read only.
+     * @param outputFile private staging path for the converted recovery ZIP.
      */
-    fun convert(context: Context, packageFile: File): Outcome {
+    fun convert(context: Context, packageFile: File, outputFile: File): Outcome {
         val header = PortablePackageFormat.readHeader(packageFile)
         if (header !is PortablePackageFormat.HeaderResult.Ok) {
             return Outcome.PackageUnusable(
@@ -129,38 +117,19 @@ object LegacyChatConversion {
                 is ChatLogicalImportPlan.Result.Ok -> parsed.plan
             }
 
-            if (!clearDisposableDestination(context.applicationContext)) {
-                return Outcome.DestinationClearFailed
+            if (!ConvertedChatRecoveryArchive.write(context, plan, outputFile)) {
+                return Outcome.ArchiveWriteFailed
             }
-
-            return when (
-                val seeded = ChatLogicalImporter.seedEmptyInstallation(context, plan)
-            ) {
-                is ChatLogicalImporter.Outcome.Ok -> Outcome.Ok(seeded.report)
-                is ChatLogicalImporter.Outcome.Refused ->
-                    Outcome.DestinationRefused(seeded.reason)
-                is ChatLogicalImporter.Outcome.Failed ->
-                    Outcome.WriteFailed(seeded.stage, seeded.chatId)
-            }
+            return Outcome.Ok(
+                Report(
+                    chatsWritten = plan.chatCount,
+                    messagesWritten = plan.messageCount,
+                    settingsWritten = plan.settingCount,
+                    duplicateRowsConsolidated = plan.duplicateRowsConsolidated
+                )
+            )
         } finally {
             PortableStaging.delete(staging)
         }
-    }
-
-    private fun clearDisposableDestination(context: Context): Boolean {
-        val navigation = ChatNavigationRepository.get(context)
-        val snapshot = navigation.snapshot()
-        if (snapshot !is ChatNavigationResult.Success || snapshot.value.foldersUnavailable) {
-            return false
-        }
-        val chatIds = snapshot.value.allChats.mapTo(LinkedHashSet()) { it.id }
-        if (chatIds.isNotEmpty()) {
-            val deletion = ChatDeletionCoordinator.get(context)
-            val preflight = deletion.preflight(ChatDeletionTarget.Chats(chatIds))
-            if (preflight !is ChatDeletionPreflightResult.Ready) return false
-            val result = deletion.execute(preflight.value, ChatDeletionDecision.DELETE_CHAT_ONLY)
-            if (!result.metadataCommitted || !result.cleanupComplete) return false
-        }
-        return navigation.clearFoldersWhenChatSetIsEmpty() is ChatNavigationResult.Success
     }
 }

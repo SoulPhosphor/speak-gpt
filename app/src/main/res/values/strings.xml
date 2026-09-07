@@ -2172,27 +2172,23 @@
     <string name="legacy_convert_screen_intro">Temporary migration tool. It converts chats from an older unencrypted Recovery Package into the current chat-recovery format.</string>
     <string name="legacy_convert_input_title">Old Recovery Package</string>
     <string name="legacy_convert_input_hint">Use the unencrypted Recovery Package created by the older pre-release. The selected source file is read only.</string>
-    <string name="legacy_convert_confirm_title">Replace chats in this installation?</string>
-    <string name="legacy_convert_confirm_body">Continuing will erase every current chat and chat folder in this installation, then rebuild them from the selected old backup. Generated-image files are kept.\n\nAfter conversion, Android will ask where to save the converted Chats-Recovery file. You can then choose that saved file in Restore From Backup to test the normal restore path.</string>
+    <string name="legacy_convert_confirm_title">Convert an old chat backup?</string>
+    <string name="legacy_convert_confirm_body">The selected backup will be read and converted into a new Chats-Recovery file. Nothing in this installation will be restored, replaced or deleted.\n\nAfter conversion, Android will ask where to save the new file. You can then choose that saved file in Restore From Backup to test the normal restore path.</string>
     <string name="legacy_convert_choose_file">Choose File</string>
     <string name="legacy_convert_working">Converting conversations…</string>
-    <string name="legacy_convert_choose_save_location">Chats were converted in this installation. Choose where to save the converted Chats-Recovery file.</string>
+    <string name="legacy_convert_choose_save_location">Conversion finished without changing this installation. Choose where to save the converted Chats-Recovery file.</string>
     <string name="legacy_convert_saving">Saving and verifying the converted Chats-Recovery file…</string>
 
     <!-- Outcomes. Each names the actual cause and what can be done next. -->
-    <string name="legacy_convert_done">Converted %1$d conversations, %2$d messages and %3$d saved settings. Restart to see them.</string>
+    <string name="legacy_convert_done">Converted %1$d conversations, %2$d messages and %3$d saved settings into the recovery file.</string>
     <string name="legacy_convert_saved_next_step">The converted file was saved and verified. Now return to Memory Backup &amp; Restore, choose Restore From Backup, and manually select the saved file to test the real restore system.</string>
-    <string name="legacy_convert_save_cancelled">Chats were converted in this installation, but no converted file was saved. Run the converter again when you are ready to choose a save location.</string>
+    <string name="legacy_convert_save_cancelled">The conversion was cancelled before a file was saved. Nothing in this installation was changed.</string>
     <string name="legacy_convert_err_encrypted">This temporary converter only accepts an unencrypted Recovery Package. Create the backup with Unencrypted selected in the older pre-release.</string>
     <string name="legacy_convert_err_package">The selected file could not be opened as an older Recovery Package. It may be damaged. The source file was not changed.</string>
     <string name="legacy_convert_err_no_chats">That copy contains no conversations. It may hold only memory or lorebook data.</string>
     <string name="legacy_convert_err_unreadable">The conversations could not be read out of the copy after it was opened.</string>
     <string name="legacy_convert_err_rejected">The conversations were readable but could not be trusted, so nothing was written. Cause: %1$s</string>
-    <string name="legacy_convert_err_not_empty">This installation already has conversations. Conversion only ever fills an empty one, so nothing was changed. Reset this installation first.</string>
-    <string name="legacy_convert_err_destination_unreadable">This installation\'s conversation list could not be read, so it was left alone. An unreadable list is not the same as an empty one.</string>
-    <string name="legacy_convert_err_write">Writing stopped partway and nothing is visible. Reset this installation and convert a fresh copy again.</string>
-    <string name="legacy_convert_err_clear">The existing chats or chat folders could not be cleared safely, so conversion stopped before importing the old chats.</string>
-    <string name="legacy_convert_err_archive">The old chats were converted in this installation, but the current-format Chats-Recovery file could not be built and verified. Run the converter again.</string>
+    <string name="legacy_convert_err_archive">The current-format Chats-Recovery file could not be built and verified. Nothing in this installation was changed.</string>
     <string name="legacy_convert_err_save">The converted Chats-Recovery file could not be saved and verified at that location. Run the converter again and choose another location.</string>
 
     <!-- Rejection causes, substituted into legacy_convert_err_rejected. -->
@@ -2201,7 +2197,7 @@
     <string name="legacy_convert_reason_incomplete">the older version marked this export incomplete</string>
     <string name="legacy_convert_reason_malformed">the export is structurally damaged</string>
     <string name="legacy_convert_reason_identity">a conversation no longer matches the identity it was exported under</string>
-    <string name="legacy_convert_reason_duplicate">two conversations claim the same identity</string>
+    <string name="legacy_convert_reason_duplicate">two entries point to the same old conversation but contain different data</string>
     <string name="legacy_convert_reason_setting">a saved setting uses a type this build cannot restore</string>
     <!-- 6. Companion & Roleplay Backup (companion-roleplay-backup-plan.md;
          all wording owner-approved verbatim, §8/§9). One backup category,

@@ -64,6 +64,15 @@ object ChatRestoreManager {
 
     data class Result(val ok: Boolean, val detail: String?)
 
+    /** The converter uses the restore engine's own reader as its final gate. */
+    internal fun archivePassesValidation(archive: File): Boolean =
+        try {
+            readAndVerifyArchive(archive)
+            true
+        } catch (_: Exception) {
+            false
+        }
+
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 

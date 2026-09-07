@@ -12,6 +12,8 @@ import org.teslasoft.assistant.util.Hash
  *  artifact, and identity is verified rather than re-derived. */
 class ChatLogicalImportPlanTest {
 
+    private val convertedUuid = "4d9ce9e0-1c7a-4e38-9e4e-6b94db6c5c11"
+
     @Test
     fun aModernChatRebuildsWithItsUuidAndItsHistoryVerbatim() {
         val messages = """[{"message":"hello","isBot":false}]"""
@@ -36,7 +38,7 @@ class ChatLogicalImportPlanTest {
     }
 
     @Test
-    fun aLegacyRowWithNoExplicitIdKeepsItsTitleHashAndNeverGainsOne() {
+    fun aLegacyRowWithNoExplicitIdReceivesARealUuid() {
         val json = artifact(
             chat(
                 id = Hash.hash("Old conversation"),
@@ -45,10 +47,11 @@ class ChatLogicalImportPlanTest {
             )
         )
 
-        val plan = (ChatLogicalImportPlan.parse(json) as ChatLogicalImportPlan.Result.Ok).plan
+        val plan = (ChatLogicalImportPlan.parse(json) { convertedUuid }
+            as ChatLogicalImportPlan.Result.Ok).plan
         val chat = plan.chats.single()
-        assertEquals(Hash.hash("Old conversation"), chat.chatId)
-        assertFalse(chat.listRow.containsKey("id"))
+        assertEquals(convertedUuid, chat.chatId)
+        assertEquals(convertedUuid, chat.listRow["id"])
     }
 
     /** The source app hashes `map["name"].toString()`, so an absent name
@@ -64,10 +67,12 @@ class ChatLogicalImportPlanTest {
             .put("settings", JSONArray())
         val json = artifact(entry)
 
-        val plan = (ChatLogicalImportPlan.parse(json) as ChatLogicalImportPlan.Result.Ok).plan
+        val plan = (ChatLogicalImportPlan.parse(json) { convertedUuid }
+            as ChatLogicalImportPlan.Result.Ok).plan
         val chat = plan.chats.single()
-        assertEquals(id, chat.chatId)
+        assertEquals(convertedUuid, chat.chatId)
         assertFalse(chat.listRow.containsKey("name"))
+        assertEquals(convertedUuid, chat.listRow["id"])
     }
 
     @Test
@@ -110,14 +115,57 @@ class ChatLogicalImportPlanTest {
     }
 
     @Test
-    fun twoEntriesClaimingOneIdentityFailTheWholeArtifact() {
+    fun duplicateLegacyRowsPointingAtTheSameContentAreConsolidated() {
         val id = Hash.hash("Same")
         val json = artifact(
             chat(id = id, name = "Same", listExtras = emptyMap()),
             chat(id = id, name = "Same", listExtras = emptyMap())
         )
+        val plan = (ChatLogicalImportPlan.parse(json) { convertedUuid }
+            as ChatLogicalImportPlan.Result.Ok).plan
+        assertEquals(1, plan.chatCount)
+        assertEquals(1, plan.duplicateRowsConsolidated)
+        assertEquals(convertedUuid, plan.chats.single().chatId)
+    }
+
+    @Test
+    fun duplicateSourceIdentityWithDifferentContentIsRejected() {
+        val id = Hash.hash("Same")
+        val json = artifact(
+            chat(id = id, name = "Same", listExtras = emptyMap(), messages = "[]"),
+            chat(
+                id = id,
+                name = "Same",
+                listExtras = emptyMap(),
+                messages = """[{"message":"different"}]"""
+            )
+        )
         val rejected = ChatLogicalImportPlan.parse(json) as ChatLogicalImportPlan.Result.Rejected
         assertEquals(ChatLogicalImportPlan.Reason.DUPLICATE_CHAT_ID, rejected.reason)
+    }
+
+    @Test
+    fun explicitLegacyHashIsRemappedButCanonicalUuidIsPreserved() {
+        val legacyHash = Hash.hash("Original title")
+        val modernUuid = "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+        val json = artifact(
+            chat(
+                id = legacyHash,
+                name = "Renamed title",
+                listExtras = mapOf("id" to legacyHash)
+            ),
+            chat(
+                id = modernUuid,
+                name = "Modern",
+                listExtras = mapOf("id" to modernUuid)
+            )
+        )
+        val plan = (ChatLogicalImportPlan.parse(json) { convertedUuid }
+            as ChatLogicalImportPlan.Result.Ok).plan
+        assertEquals(convertedUuid, plan.chats[0].chatId)
+        assertEquals(convertedUuid, plan.chats[0].listRow["id"])
+        assertEquals(modernUuid, plan.chats[1].chatId)
+        assertEquals(modernUuid, plan.chats[1].listRow["id"])
     }
 
     @Test

@@ -8,59 +8,27 @@ import org.junit.Test
 
 /**
  * Phase 8.6.4 forbids the owner-only conversion lane from becoming a second
- * restore engine. What keeps it out is structural, so it is asserted
- * structurally: the seeder refuses a destination that already holds chats,
- * writes the chat list last, and never touches the replacement machinery.
+ * restore engine. It converts into a verified recovery ZIP without reading or
+ * changing the live chat set; the normal restore screen is the only place that
+ * may apply that file.
  */
 class ConverterStaysOutsidePhase9Test {
 
-    private val importer =
-        source("preferences/backup/portable/ChatLogicalImporter.kt")
-
-    /** These files document what they stay away from by naming it, so every
-     *  "must not appear" assertion reads code with the comments removed. */
     @Test
-    fun theSeederNeverReachesForTheReplacementEngine() {
-        val code = codeOnly(importer)
-        assertFalse(code.contains("ChatRestoreManager"))
-        assertFalse(code.contains("restoreFromArchive"))
-        assertFalse(code.contains("quarantine"))
+    fun conversionNeverAppliesOrClearsLiveChats() {
+        val conversion = codeOnly(source("preferences/backup/portable/LegacyChatConversion.kt"))
+        assertFalse(conversion.contains("restoreFromArchive"))
+        assertFalse(conversion.contains("seedEmptyInstallation"))
+        assertFalse(conversion.contains("clearDisposableDestination"))
+        assertFalse(conversion.contains("ChatDeletionCoordinator"))
+        assertFalse(conversion.contains("ChatLogicalImporter"))
     }
 
-    @Test
-    fun aDestinationThatAlreadyHoldsChatsIsRefused() {
-        val body = importer.substringAfter("fun seedEmptyInstallation(")
-            .substringBefore("private fun writeSettings(")
-        assertTrue(body.contains("RefusalReason.DESTINATION_NOT_EMPTY"))
-        assertTrue(body.contains("existing.chats.isNotEmpty()"))
-        // An unreadable list is not evidence of an empty one.
-        assertTrue(body.contains("RefusalReason.DESTINATION_UNREADABLE"))
-        assertTrue(body.contains("ChatStorageHealth.isAuthoritative"))
-        assertTrue(
-            body.indexOf("RefusalReason.DESTINATION_UNREADABLE") <
-                body.indexOf("RefusalReason.DESTINATION_NOT_EMPTY")
-        )
-    }
-
-    /** The chat list is what makes chats exist, so committing it last is what
-     *  makes an interrupted run leave a still-empty, still-retryable target. */
-    @Test
-    fun theChatListIsCommittedAfterEveryHistoryAndSettingsFile() {
-        val body = importer.substringAfter("fun seedEmptyInstallation(")
-            .substringBefore("private fun writeSettings(")
-        val history = body.indexOf("\"chat_\${chat.chatId}\"")
-        val settings = body.indexOf("writeSettings(app, chat)")
-        val list = body.indexOf("\"chat_list\"", history)
-        assertTrue(settings in 0 until history)
-        assertTrue(history in 0 until list)
-    }
-
-    /** Structural counts and stable ids only — the report is allowed nowhere
-     *  near message text, titles, settings values or keys. */
     @Test
     fun theReportCarriesNoPrivatePayload() {
-        val report = importer.substringAfter("data class Report(")
-            .substringBefore("enum class RefusalReason")
+        val conversion = source("preferences/backup/portable/LegacyChatConversion.kt")
+        val report = conversion.substringAfter("data class Report(")
+            .substringBefore("sealed class Outcome")
         assertFalse(report.contains("messagesJson"))
         assertFalse(report.contains("listRow"))
         assertFalse(report.contains("name"))
@@ -72,7 +40,8 @@ class ConverterStaysOutsidePhase9Test {
     fun theConversionLaneAddsNoLogging() {
         val plan = source("preferences/backup/portable/ChatLogicalImportPlan.kt")
         val conversion = source("preferences/backup/portable/LegacyChatConversion.kt")
-        for (file in listOf(importer, plan, conversion)) {
+        val archive = source("preferences/backup/portable/ConvertedChatRecoveryArchive.kt")
+        for (file in listOf(plan, conversion, archive)) {
             val code = codeOnly(file)
             assertFalse(code.contains("Log."))
             assertFalse(code.contains("Logger"))
@@ -80,8 +49,8 @@ class ConverterStaysOutsidePhase9Test {
     }
 
     /** The owner's export is the one irreplaceable artifact in this operation.
-     *  The converter reads it and extracts elsewhere; the only thing it may
-     *  delete on the source side is its own staging directory. */
+     *  The converter reads it and extracts elsewhere; only its own staging and
+     *  failed output may be removed. */
     @Test
     fun theOriginalExportIsNeverWrittenToOrDeleted() {
         val conversion = source("preferences/backup/portable/LegacyChatConversion.kt")
@@ -106,16 +75,25 @@ class ConverterStaysOutsidePhase9Test {
     }
 
     @Test
-    fun disposableDestinationIsClearedOnlyAfterTheChatArtifactValidates() {
+    fun conversionValidatesThenWritesOnlyTheRequestedOutput() {
         val conversion = source("preferences/backup/portable/LegacyChatConversion.kt")
         val body = conversion.substringAfter("fun convert(")
-            .substringBefore("private fun clearDisposableDestination(")
         val parsed = body.indexOf("ChatLogicalImportPlan.parse(json)")
-        val cleared = body.indexOf("clearDisposableDestination")
-        val seeded = body.indexOf("seedEmptyInstallation")
+        val written = body.indexOf("ConvertedChatRecoveryArchive.write")
         assertTrue(parsed >= 0)
-        assertTrue(cleared > parsed)
-        assertTrue(seeded > cleared)
+        assertTrue(written > parsed)
+        assertFalse(body.contains("SecurePrefs"))
+        assertFalse(body.contains("ChatPreferences"))
+    }
+
+    @Test
+    fun archiveWriterUsesIsolatedPreferencesAndTheRealRestoreValidator() {
+        val archive = source("preferences/backup/portable/ConvertedChatRecoveryArchive.kt")
+        assertTrue(archive.contains("prefix + name"))
+        assertTrue(archive.contains("deleteSharedPreferences(name)"))
+        assertTrue(archive.contains("archivePassesValidation(output)"))
+        assertFalse(archive.contains("SecurePrefs.get"))
+        assertFalse(archive.contains("restoreFromArchive"))
     }
 
     /** The temporary control is reachable in every build but opens its own
@@ -153,7 +131,7 @@ class ConverterStaysOutsidePhase9Test {
     @Test
     fun conversionBuildsARecoveryFileButNeverRestoresItAutomatically() {
         val screen = source("ui/activities/LegacyChatConverterActivity.kt")
-        assertTrue(screen.contains("createVerifiedChatRecoveryArchive"))
+        assertTrue(screen.contains("LegacyChatConversion.convert(applicationContext, sourceCopy, recovery)"))
         assertTrue(screen.contains("ActivityResultContracts.CreateDocument"))
         assertTrue(screen.contains("contentResolver.openOutputStream(uri"))
         assertTrue(screen.contains("MessageDigest.isEqual"))
@@ -176,7 +154,7 @@ class ConverterStaysOutsidePhase9Test {
             .substringBefore("\n    }\n")
         val declared = Regex("(?:object|data class) (\\w+)")
             .findAll(outcomes).map { it.groupValues[1] }.toList()
-        assertEquals(9, declared.size)
+        assertEquals(7, declared.size)
         for (name in declared) {
             assertTrue("$name has no message", mapping.contains("Outcome.$name"))
         }

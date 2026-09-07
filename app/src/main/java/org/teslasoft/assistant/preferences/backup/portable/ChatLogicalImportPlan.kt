@@ -11,6 +11,7 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import org.teslasoft.assistant.util.Hash
+import java.util.UUID
 
 /**
  * Reads a `chats.json` artifact produced by [ChatLogicalSerializer] and plans
@@ -26,12 +27,12 @@ import org.teslasoft.assistant.util.Hash
  *
  * Two rules shape everything below.
  *
- * **Identity is verified, never re-derived.** Each entry carries the stable
- * `chat_id` the source app used. The plan rebuilds the chat-list row from the
- * exported fields and then checks that the row hashes back to that same id
- * through the app's own compatibility rule. A row that came from a legacy chat
- * with no explicit `id` therefore stays keyed on its title hash and never
- * acquires one. A mismatch is a rejected conversion, not a renamed chat.
+ * **Source identity is verified before conversion.** Each entry carries the
+ * `chat_id` the source app used. The plan first proves that the exported list
+ * row resolves to that id through the app's compatibility rule. A genuine,
+ * canonical UUID is then preserved; a legacy title hash (including an explicit
+ * pre-UUID hash retained by a rename) is only a source lookup key and receives
+ * a new UUID in the converted chat set.
  *
  * **Nothing is skipped quietly.** Every structural problem is a typed
  * rejection of the whole artifact. There is no partial plan.
@@ -59,7 +60,10 @@ object ChatLogicalImportPlan {
         val settings: List<SettingEntry>
     )
 
-    data class Plan(val chats: List<ChatPlan>) {
+    data class Plan(
+        val chats: List<ChatPlan>,
+        val duplicateRowsConsolidated: Int = 0
+    ) {
         val chatCount: Int get() = chats.size
         val messageCount: Int get() = chats.sumOf { it.messageCount }
         val settingCount: Int get() = chats.sumOf { it.settings.size }
@@ -81,7 +85,7 @@ object ChatLogicalImportPlan {
         /** A rebuilt row does not hash back to the id the export recorded. */
         IDENTITY_MISMATCH,
 
-        /** Two entries claim the same stable id. */
+        /** Two entries claim one source id but carry different content. */
         DUPLICATE_CHAT_ID,
 
         /** A settings entry carries a type tag this build cannot restore. */
@@ -96,7 +100,10 @@ object ChatLogicalImportPlan {
         data class Rejected(val reason: Reason, val detail: String) : Result()
     }
 
-    fun parse(json: String): Result {
+    fun parse(
+        json: String,
+        idFactory: () -> String = { UUID.randomUUID().toString() }
+    ): Result {
         val root = try {
             JSONObject(json)
         } catch (_: JSONException) {
@@ -123,8 +130,23 @@ object ChatLogicalImportPlan {
         val chats = root.optJSONArray("chats")
             ?: return Result.Rejected(Reason.MALFORMED, "no chats array")
 
+        // Reserve every genuine destination UUID before allocating legacy
+        // replacements, so even a pathological id factory cannot collide with
+        // a modern chat that appears later in the artifact.
+        val usedDestinationIds = HashSet<String>()
+        for (index in 0 until chats.length()) {
+            val entry = chats.optJSONObject(index) ?: continue
+            val declaredId = entry.optString("chat_id", "")
+            val storedId = entry.optString("list_id", "")
+            if (declaredId == storedId && isCanonicalUuid(storedId)) {
+                usedDestinationIds.add(storedId)
+            }
+        }
+
         val plans = ArrayList<ChatPlan>(chats.length())
-        val seen = HashSet<String>()
+        val bySourceId = LinkedHashMap<String, ChatPlan>()
+        val legacyIdMap = LinkedHashMap<String, String>()
+        var duplicateRowsConsolidated = 0
         for (index in 0 until chats.length()) {
             val entry = chats.optJSONObject(index)
                 ?: return Result.Rejected(Reason.MALFORMED, "entry $index is not an object")
@@ -132,12 +154,53 @@ object ChatLogicalImportPlan {
                 is Result.Rejected -> return planned
                 is Result.Ok -> planned.plan.chats.single()
             }
-            if (!seen.add(plan.chatId)) {
-                return Result.Rejected(Reason.DUPLICATE_CHAT_ID, "id ${plan.chatId} appears twice")
+            val previous = bySourceId[plan.chatId]
+            if (previous != null) {
+                if (previous.messagesJson != plan.messagesJson || previous.settings != plan.settings) {
+                    return Result.Rejected(
+                        Reason.DUPLICATE_CHAT_ID,
+                        "id ${plan.chatId} appears twice with different content"
+                    )
+                }
+                // Both list rows addressed the same one history/settings store
+                // in the legacy app. They are duplicate aliases, not two
+                // independently recoverable conversations.
+                duplicateRowsConsolidated++
+                continue
             }
-            plans.add(plan)
+            bySourceId[plan.chatId] = plan
+
+            val explicitId = plan.listRow["id"]
+            val destinationId = if (explicitId == plan.chatId && isCanonicalUuid(explicitId)) {
+                explicitId
+            } else {
+                legacyIdMap.getOrPut(plan.chatId) {
+                    allocateUuid(idFactory, usedDestinationIds)
+                }
+            }
+            usedDestinationIds.add(destinationId)
+            val destinationRow = LinkedHashMap(plan.listRow)
+            destinationRow["id"] = destinationId
+            plans.add(plan.copy(chatId = destinationId, listRow = destinationRow))
         }
-        return Result.Ok(Plan(plans))
+        return Result.Ok(Plan(plans, duplicateRowsConsolidated))
+    }
+
+    private fun allocateUuid(factory: () -> String, used: Set<String>): String {
+        repeat(100) {
+            val candidate = factory()
+            if (isCanonicalUuid(candidate) && candidate !in used) return candidate
+        }
+        throw IllegalStateException("unable to allocate a unique chat UUID")
+    }
+
+    internal fun isCanonicalUuid(value: String?): Boolean {
+        if (value == null) return false
+        return try {
+            UUID.fromString(value).toString() == value
+        } catch (_: IllegalArgumentException) {
+            false
+        }
     }
 
     private fun planChat(entry: JSONObject, index: Int): Result {
