@@ -400,6 +400,11 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.LegacyChatConverterActivity"
+            android:exported="false"
+            android:label="@string/legacy_convert_title" />
+
+        <activity
             android:name=".ui.activities.RecoveryBackupActivity"
             android:exported="false"
             android:label="@string/recovery_title" />

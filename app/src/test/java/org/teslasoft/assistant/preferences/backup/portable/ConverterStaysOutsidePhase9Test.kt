@@ -81,7 +81,7 @@ class ConverterStaysOutsidePhase9Test {
 
     /** The owner's export is the one irreplaceable artifact in this operation.
      *  The converter reads it and extracts elsewhere; the only thing it may
-     *  delete is its own staging directory. */
+     *  delete on the source side is its own staging directory. */
     @Test
     fun theOriginalExportIsNeverWrittenToOrDeleted() {
         val conversion = source("preferences/backup/portable/LegacyChatConversion.kt")
@@ -93,8 +93,9 @@ class ConverterStaysOutsidePhase9Test {
         // Staging is the only deletion, and it always happens.
         assertTrue(body.contains("PortableStaging.delete(staging)"))
         assertTrue(body.contains("finally"))
-        // The decoded Recovery Code secret never outlives the call.
-        assertTrue(body.contains("PackageCrypto.wipe(secret)"))
+        // This temporary path is deliberately unencrypted-only.
+        assertFalse(body.contains("RecoveryCode.decode"))
+        assertTrue(body.contains("EncryptedPackageUnsupported"))
     }
 
     @Test
@@ -104,21 +105,28 @@ class ConverterStaysOutsidePhase9Test {
         assertFalse(code.contains("Toast"))
     }
 
-    /** The converter may seed only the disposable Beta, so its control exists
-     *  only there. The layout ships it hidden; the Beta build type is what
-     *  reveals it. */
     @Test
-    fun theConversionControlExistsOnlyInTheBeta() {
+    fun disposableDestinationIsClearedOnlyAfterTheChatArtifactValidates() {
+        val conversion = source("preferences/backup/portable/LegacyChatConversion.kt")
+        val body = conversion.substringAfter("fun convert(")
+            .substringBefore("private fun clearDisposableDestination(")
+        val parsed = body.indexOf("ChatLogicalImportPlan.parse(json)")
+        val cleared = body.indexOf("clearDisposableDestination")
+        val seeded = body.indexOf("seedEmptyInstallation")
+        assertTrue(parsed >= 0)
+        assertTrue(cleared > parsed)
+        assertTrue(seeded > cleared)
+    }
+
+    /** The temporary control is reachable in every build but opens its own
+     *  screen rather than embedding conversion into a permanent restore path. */
+    @Test
+    fun theConversionControlOpensASeparateTemporaryScreen() {
         val screen = source("ui/activities/MemoryBackupRestoreActivity.kt")
-        val reveal = screen.substringAfter("BuildConfig.BUILD_TYPE == \"beta\"")
+        val reveal = screen.substringAfter("btnLegacyConvert?.visibility = View.VISIBLE")
             .substringBefore("btnPortableExport?.setOnClickListener")
-        assertTrue(reveal.contains("btnLegacyConvert?.visibility = View.VISIBLE"))
-        assertTrue(reveal.contains("showLegacyConvertIntro()"))
-        // The only place the control is shown is inside that guard.
-        assertEquals(
-            1,
-            Regex("btnLegacyConvert\\?\\.visibility").findAll(screen).count()
-        )
+        assertTrue(reveal.contains("LegacyChatConverterActivity::class.java"))
+        assertFalse(screen.contains("LegacyChatConversion.convert"))
 
         val layout = layoutSource()
         val button = layout.substringAfter("@+id/btn_legacy_convert")
@@ -130,30 +138,36 @@ class ConverterStaysOutsidePhase9Test {
      *  works on the copy and deletes it on every path. */
     @Test
     fun theScreenConvertsACopyAndNeverTheChosenFile() {
-        val screen = source("ui/activities/MemoryBackupRestoreActivity.kt")
-        val copy = screen.substringAfter("private fun copyForLegacyConversion(")
-            .substringBefore("private fun runLegacyConversion(")
+        val screen = source("ui/activities/LegacyChatConverterActivity.kt")
+        val copy = screen.substringAfter("private fun copySource(")
+            .substringBefore("private fun saveConvertedRecovery(")
         assertTrue(copy.contains("contentResolver.openInputStream(uri)"))
         assertTrue(copy.contains("cacheDir"))
         assertFalse(copy.contains("openOutputStream"))
 
-        val run = screen.substringAfter("private fun runLegacyConversion(")
-            .substringBefore("private fun promptLegacyRecoveryCode(")
-        assertTrue(run.contains("copy.delete()"))
+        val run = screen.substringAfter("private fun convert(uri: Uri)")
+            .substringBefore("private fun copySource(")
+        assertTrue(run.contains("sourceCopy.delete()"))
+    }
 
-        val prompt = screen.substringAfter("private fun promptLegacyRecoveryCode(")
-            .substringBefore("private fun legacyConversionMessage(")
-        // Cancelling, dismissing, or a finishing screen must not strand it.
-        assertEquals(3, Regex("copy\\.delete\\(\\)").findAll(prompt).count())
+    @Test
+    fun conversionBuildsARecoveryFileButNeverRestoresItAutomatically() {
+        val screen = source("ui/activities/LegacyChatConverterActivity.kt")
+        assertTrue(screen.contains("createVerifiedChatRecoveryArchive"))
+        assertTrue(screen.contains("ActivityResultContracts.CreateDocument"))
+        assertTrue(screen.contains("contentResolver.openOutputStream(uri"))
+        assertTrue(screen.contains("MessageDigest.isEqual"))
+        assertFalse(screen.contains("ChatRestoreManager"))
+        assertFalse(screen.contains("restoreFromArchive"))
     }
 
     /** Every outcome the engine can return gets its own message. A cause the
      *  app knows is never collapsed into a generic failure. */
     @Test
     fun everyOutcomeAndRejectionReasonHasItsOwnMessage() {
-        val screen = source("ui/activities/MemoryBackupRestoreActivity.kt")
-        val mapping = screen.substringAfter("private fun legacyConversionMessage(")
-            .substringBefore("private fun setPortableStatusText(")
+        val screen = source("ui/activities/LegacyChatConverterActivity.kt")
+        val mapping = screen.substringAfter("private fun conversionMessage(")
+            .substringBefore("private fun rejectionReason(")
 
         val outcomes = source("preferences/backup/portable/LegacyChatConversion.kt")
             .substringAfter("sealed class Outcome {")

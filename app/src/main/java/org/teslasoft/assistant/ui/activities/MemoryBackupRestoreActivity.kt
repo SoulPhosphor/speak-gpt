@@ -67,9 +67,6 @@ import org.teslasoft.assistant.preferences.backup.DatabaseRepairManager
 import org.teslasoft.assistant.preferences.backup.DatabaseRestoreManager
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
 import org.teslasoft.assistant.preferences.backup.RecoveryFileNaming
-import org.teslasoft.assistant.preferences.backup.portable.ChatLogicalImportPlan
-import org.teslasoft.assistant.preferences.backup.portable.ChatLogicalImporter
-import org.teslasoft.assistant.preferences.backup.portable.LegacyChatConversion
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporter
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupManifest
@@ -308,11 +305,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         ActivityResultContracts.OpenDocument()
     ) { uri -> if (uri != null) onCompanionImportPicked(uri) }
 
-    // Temporary owner-only legacy conversion (plan Phase 8.6). Beta only.
-    private val legacyConvertPicker = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> if (uri != null) onLegacyPackagePicked(uri) }
-
     // Human-Readable Chat Backup selections + the staged, verified ZIP waiting
     // for its Save As destination (build-before-Save-As, same architecture as
     // the recovery package). Staging is cleaned on cancel, success, failure,
@@ -528,13 +520,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnPortableImport?.setOnClickListener {
             importSeedLauncher.launch(arrayOf("application/json", "text/*"))
         }
-        // Temporary legacy conversion. Shown in every build (owner decision,
-        // September 5 2026): the owner needs it reachable from the build they
-        // actually run, not only the side-by-side Beta. It still refuses any
-        // destination that already holds chats, so it can only seed a fresh
-        // install. Removable once the migration is done.
+        // Temporary legacy conversion. Shown in every build until migration
+        // is complete, but kept on its own screen and outside the permanent
+        // Restore From Backup flow.
         btnLegacyConvert?.visibility = View.VISIBLE
-        btnLegacyConvert?.setOnClickListener { showLegacyConvertIntro() }
+        btnLegacyConvert?.setOnClickListener {
+            startActivity(Intent(this, LegacyChatConverterActivity::class.java))
+        }
         btnPortableExport?.setOnClickListener {
             if (!MemoryStore.isProvisioned(this)) {
                 showNoticeDialog(getString(R.string.memory_not_provisioned_toast))
@@ -2300,146 +2292,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
      * (no message — messages can embed paths/URIs) goes to the local Memory
      * log for diagnosis.
      */
-    /* ---------- Temporary owner-only legacy conversion (Phase 8.6) ----------
-     * Rebuilds conversations from a Portable Data Copy exported by the older
-     * version into THIS installation, which must have none of its own. The
-     * chosen file is read and never written; work happens on a private copy
-     * that is deleted whatever the outcome. Removed once the migration is
-     * done. */
-
-    private fun showLegacyConvertIntro() {
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.legacy_convert_title)
-            .setMessage(R.string.legacy_convert_body)
-            .setPositiveButton(R.string.legacy_convert_choose_file) { _, _ ->
-                legacyConvertPicker.launch(arrayOf("*/*"))
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
-    }
-
-    private fun onLegacyPackagePicked(uri: Uri) {
-        setPortableStatusText(getString(R.string.legacy_convert_working))
-        runOffThread {
-            val copy = copyForLegacyConversion(uri)
-            if (copy == null) {
-                runOnUiThread {
-                    setPortableStatusText(getString(R.string.legacy_convert_err_unreadable))
-                }
-                return@runOffThread
-            }
-            runLegacyConversion(copy, null)
-        }
-    }
-
-    /** Work on a private copy so the chosen export is only ever read. */
-    private fun copyForLegacyConversion(uri: Uri): File? {
-        return try {
-            val source = contentResolver.openInputStream(uri) ?: return null
-            val target = File(cacheDir, "legacy-conversion-${System.nanoTime()}.tmp")
-            source.use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
-            }
-            target
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    /** Runs off the UI thread; [copy] is deleted on every path. */
-    private fun runLegacyConversion(copy: File, code: String?) {
-        val outcome = try {
-            LegacyChatConversion.convert(applicationContext, copy, code)
-        } catch (_: Exception) {
-            LegacyChatConversion.Outcome.StagingUnreadable
-        }
-        if (outcome is LegacyChatConversion.Outcome.RecoveryCodeRequired && code == null) {
-            runOnUiThread { promptLegacyRecoveryCode(copy) }
-            return
-        }
-        copy.delete()
-        runOnUiThread { setPortableStatusText(legacyConversionMessage(outcome)) }
-    }
-
-    private fun promptLegacyRecoveryCode(copy: File) {
-        if (isFinishing) {
-            copy.delete()
-            return
-        }
-        val input = EditText(this).apply {
-            hint = getString(R.string.restore_recovery_code_hint)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            setSingleLine(false)
-            setPadding(48, 12, 48, 12)
-        }
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.legacy_convert_code_title)
-            .setMessage(R.string.legacy_convert_code_body)
-            .setView(input)
-            .setPositiveButton(R.string.btn_ok) { _, _ ->
-                setPortableStatusText(getString(R.string.legacy_convert_working))
-                runOffThread { runLegacyConversion(copy, input.text.toString()) }
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> copy.delete() }
-            .setOnCancelListener { copy.delete() }
-            .show()
-    }
-
-    private fun legacyConversionMessage(outcome: LegacyChatConversion.Outcome): String =
-        when (outcome) {
-            is LegacyChatConversion.Outcome.Ok -> getString(
-                R.string.legacy_convert_done,
-                outcome.report.chatsWritten,
-                outcome.report.messagesWritten,
-                outcome.report.settingsWritten
-            )
-            is LegacyChatConversion.Outcome.RecoveryCodeRequired ->
-                getString(R.string.legacy_convert_err_code_required)
-            is LegacyChatConversion.Outcome.RecoveryCodeInvalid ->
-                getString(R.string.legacy_convert_err_code_invalid)
-            is LegacyChatConversion.Outcome.PackageUnusable ->
-                getString(R.string.legacy_convert_err_package)
-            is LegacyChatConversion.Outcome.NoChatsInPackage ->
-                getString(R.string.legacy_convert_err_no_chats)
-            is LegacyChatConversion.Outcome.StagingUnreadable ->
-                getString(R.string.legacy_convert_err_unreadable)
-            is LegacyChatConversion.Outcome.ChatsRejected -> getString(
-                R.string.legacy_convert_err_rejected,
-                getString(legacyRejectionReason(outcome.reason))
-            )
-            is LegacyChatConversion.Outcome.DestinationRefused -> when (outcome.reason) {
-                ChatLogicalImporter.RefusalReason.DESTINATION_NOT_EMPTY ->
-                    getString(R.string.legacy_convert_err_not_empty)
-                ChatLogicalImporter.RefusalReason.DESTINATION_UNREADABLE ->
-                    getString(R.string.legacy_convert_err_destination_unreadable)
-            }
-            is LegacyChatConversion.Outcome.WriteFailed ->
-                getString(R.string.legacy_convert_err_write)
-        }
-
-    private fun legacyRejectionReason(reason: ChatLogicalImportPlan.Reason): Int =
-        when (reason) {
-            ChatLogicalImportPlan.Reason.NOT_A_CHATS_ARTIFACT ->
-                R.string.legacy_convert_reason_not_chats
-            ChatLogicalImportPlan.Reason.UNSUPPORTED_FORMAT ->
-                R.string.legacy_convert_reason_format
-            ChatLogicalImportPlan.Reason.INCOMPLETE_ARTIFACT ->
-                R.string.legacy_convert_reason_incomplete
-            ChatLogicalImportPlan.Reason.MALFORMED ->
-                R.string.legacy_convert_reason_malformed
-            ChatLogicalImportPlan.Reason.IDENTITY_MISMATCH ->
-                R.string.legacy_convert_reason_identity
-            ChatLogicalImportPlan.Reason.DUPLICATE_CHAT_ID ->
-                R.string.legacy_convert_reason_duplicate
-            ChatLogicalImportPlan.Reason.UNSUPPORTED_SETTING_TYPE ->
-                R.string.legacy_convert_reason_setting
-        }
-
-    private fun setPortableStatusText(message: String) {
-        textPortableStatus?.text = message
-        textPortableStatus?.visibility = View.VISIBLE
-    }
-
     private fun runOffThread(work: () -> Unit) {
         Thread {
             try {

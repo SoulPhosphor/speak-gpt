@@ -317,6 +317,19 @@ object RecoveryBackupManager {
         return staged.exists() && staged.length() > 0
     }
 
+    /**
+     * Build and fully verify a same-install chats recovery archive at an
+     * explicit staging path. This narrow entry point exists for the temporary
+     * legacy converter, which hands the verified file to Android's Save As
+     * picker instead of bypassing the normal restore workflow.
+     */
+    internal fun createVerifiedChatRecoveryArchive(context: Context, staged: File): Boolean {
+        if (staged.exists()) staged.delete()
+        if (!snapshotChats(context.applicationContext, staged)) return false
+        verifyStaged(context.applicationContext, BackupType.CHATS, staged)
+        return true
+    }
+
     private fun addEncFile(sharedPrefsDir: File, logicalName: String, out: LinkedHashMap<String, File>) {
         val f = File(sharedPrefsDir, "enc.$logicalName.xml")
         if (f.exists()) out["enc.$logicalName.xml"] = f

@@ -601,9 +601,9 @@
                 android:layout_marginTop="12dp"
                 android:text="@string/backup_portable_import" />
 
-            <!-- Temporary owner-only legacy conversion (plan Phase 8.6).
-                 Beta builds only; hidden everywhere else and removed once the
-                 owner's corpus has moved. -->
+            <!-- Temporary legacy conversion entry point. The conversion runs
+                 on its own screen and is removed from every build after the
+                 migration is complete. -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_legacy_convert"
                 style="@style/AppButton.Primary"

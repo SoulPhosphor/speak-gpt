@@ -241,6 +241,39 @@ class ChatNavigationRepository internal constructor(
         }
 
     /**
+     * Remove folder organization only after the authoritative chat set is
+     * empty. The temporary legacy converter uses this after deleting the
+     * disposable destination chats so its recovery archive cannot inherit
+     * unrelated folder records from that installation.
+     */
+    fun clearFoldersWhenChatSetIsEmpty(): ChatNavigationResult<Unit> =
+        synchronized(ChatPreferences.CHAT_LIST_LOCK) {
+            val migration = migrateSchema()
+            if (migration is ChatNavigationResult.Failure) return@synchronized migration
+            val chats = readAuthoritativeChats() ?: return@synchronized unavailable()
+            if (chats.isNotEmpty()) {
+                return@synchronized failure(ChatNavigationFailure.STALE_MEMBERSHIP)
+            }
+            val folders = when (val read = readFolders()) {
+                is FolderRead.Ok -> read.folders
+                FolderRead.Missing, is FolderRead.Recoverable -> emptyList()
+                FolderRead.Corrupt -> return@synchronized failure(ChatNavigationFailure.CORRUPT_FOLDERS)
+                FolderRead.Unsupported -> return@synchronized failure(ChatNavigationFailure.UNSUPPORTED_SCHEMA)
+                FolderRead.Unavailable -> return@synchronized unavailable()
+            }
+            val committed = chatListPreferences.edit()
+                .putString(FOLDERS_KEY, encodeFolders(emptyList()))
+                .putInt(SCHEMA_VERSION_KEY, SCHEMA_VERSION)
+                .commit()
+            if (!committed) return@synchronized failure(ChatNavigationFailure.COMMIT_FAILED)
+            val presentation = presentationPreferences.edit()
+                .putBoolean(FOLDERS_EXPANDED_KEY, false)
+            folders.forEach { presentation.remove(FOLDER_EXPANDED_PREFIX + it.id) }
+            presentation.commit()
+            success(Unit)
+        }
+
+    /**
      * Phase 3 primitive. It changes metadata only; history/image deletion is
      * deliberately outside Phase 2. When [folderId] is supplied, the caller's
      * chat IDs must exactly match the folder's authoritative current members.

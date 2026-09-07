@@ -113,4 +113,36 @@ class ChatNavigationRepositoryTest {
         repo.removeChatMetadataBatch(emptySet(), folder.id)
         assertFalse(presentation.contains("chat_navigation.folder_expanded.${folder.id}"))
     }
+
+    @Test fun converterFolderResetRefusesWhileAnyChatStillExists() {
+        val repo = repository(
+            rows = listOf(chatRow("chat-id", "Chat", 1)),
+            ids = listOf(firstId).iterator()
+        )
+        repo.createFolder("Keep")
+
+        val result = repo.clearFoldersWhenChatSetIsEmpty()
+
+        assertEquals(
+            ChatNavigationFailure.STALE_MEMBERSHIP,
+            (result as ChatNavigationResult.Failure).reason
+        )
+        assertEquals(1, (repo.snapshot() as ChatNavigationResult.Success).value.folders.size)
+    }
+
+    @Test fun converterFolderResetClearsEmptyFoldersAndPresentationState() {
+        val presentation = FakeSharedPreferences()
+        val repo = repository(
+            presentationStore = presentation,
+            ids = listOf(firstId).iterator()
+        )
+        repo.createFolder("Disposable")
+        repo.setFoldersExpanded(true)
+        repo.setFolderExpanded(firstId, true)
+
+        assertTrue(repo.clearFoldersWhenChatSetIsEmpty() is ChatNavigationResult.Success)
+        assertTrue((repo.snapshot() as ChatNavigationResult.Success).value.folders.isEmpty())
+        assertFalse(repo.areFoldersExpanded())
+        assertFalse(presentation.contains("chat_navigation.folder_expanded.$firstId"))
+    }
 }

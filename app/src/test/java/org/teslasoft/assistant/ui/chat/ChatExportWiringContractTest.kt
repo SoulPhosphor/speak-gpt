@@ -160,7 +160,7 @@ class ChatExportWiringContractTest {
         assertTrue(styleGuide.contains("Button order is fixed by role"))
         assertTrue(styleGuide.contains("action button is always on the RIGHT"))
         assertTrue(styleGuide.contains("back-out action is always on the LEFT"))
-        assertTrue(styleGuide.contains("Cancel/back-out actions use the Destructive"))
+        assertTrue(styleGuide.contains("Cancel/back-out actions use the\nDestructive"))
         assertTrue(styleGuide.contains("affirmative actions use the Primary"))
         assertTrue(styleGuide.contains("not the general default"))
         assertTrue(styleGuide.contains("`contentDescription` values, tooltip text"))
