@@ -198,7 +198,7 @@ object CompanionBackupExporter {
         return hashes
     }
 
-    private fun writeZip(
+    internal fun writeZip(
         staged: File,
         manifest: CompanionBackupManifest,
         imageFiles: Map<String, File>
