@@ -27,6 +27,9 @@ import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.dto.LoreBook
 import org.teslasoft.assistant.preferences.dto.LoreBookEntry
 import org.teslasoft.assistant.preferences.memory.MemoryId
+import org.teslasoft.assistant.preferences.backup.portable.DeletedLorebookEntry
+import org.teslasoft.assistant.preferences.backup.portable.LorebookCategoryPlanner
+import org.teslasoft.assistant.preferences.backup.portable.LorebookPortableData
 import java.util.UUID
 
 /**
@@ -65,7 +68,7 @@ class LoreBookStore private constructor(
     ) {
 
     companion object {
-        private const val DATABASE_NAME = "lorebook.db"
+        const val DATABASE_NAME = "lorebook.db"
 
         // v1: single flat memory pool.
         // v2: introduced lorebooks; memories scoped by lorebook_id.
@@ -515,6 +518,80 @@ class LoreBookStore private constructor(
     /** All memories in a single lorebook. */
     fun getEntries(lorebookId: String): ArrayList<LoreBookEntry> {
         return queryEntries("$COL_LOREBOOK_ID = ?", arrayOf(lorebookId))
+    }
+
+    /** Complete logical snapshot used by portable category restore. */
+    fun exportPortableData(): LorebookPortableData {
+        val books = getAllBooks()
+        val entries = ArrayList<LoreBookEntry>()
+        books.forEach { entries.addAll(getEntries(it.id)) }
+        val deleted = ArrayList<DeletedLorebookEntry>()
+        readableDatabase.query(
+            TABLE_DELETED_ENTRIES,
+            arrayOf(COL_ID, COL_DELETED_AT, COL_CREATED_AT),
+            null, null, null, null, "$COL_DELETED_AT ASC, $COL_ID ASC"
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                deleted.add(DeletedLorebookEntry(
+                    cursor.getString(0), cursor.getLong(1), cursor.getLong(2)
+                ))
+            }
+        }
+        return LorebookPortableData(books, entries, deleted)
+    }
+
+    /** Exact, no-ID-mint replacement below the outer restore journal. */
+    fun replacePortableData(data: LorebookPortableData): Boolean {
+        if (!LorebookCategoryPlanner.valid(data)) return false
+        val db = writableDatabase
+        db.beginTransaction()
+        return try {
+            db.delete(TABLE_TRIGGERS, null, null)
+            db.delete(TABLE_ENTRIES, null, null)
+            db.delete(TABLE_BOOKS, null, null)
+            db.delete(TABLE_DELETED_ENTRIES, null, null)
+            for (book in data.books) {
+                db.insertOrThrow(TABLE_BOOKS, null, ContentValues().apply {
+                    put(COL_BOOK_ID, book.id)
+                    put(COL_BOOK_NAME, book.name)
+                    put(COL_BOOK_DESCRIPTION, book.description)
+                    put(COL_BOOK_TAG, book.tag)
+                    put(COL_BOOK_CREATED_AT, book.createdAt)
+                    put(COL_BOOK_UPDATED_AT, book.updatedAt)
+                })
+            }
+            for (entry in data.entries) {
+                db.insertOrThrow(TABLE_ENTRIES, null, ContentValues().apply {
+                    put(COL_ID, entry.id)
+                    put(COL_LOREBOOK_ID, entry.lorebookId)
+                    put(COL_LABEL, entry.label)
+                    put(COL_CONTENT, entry.content)
+                    put(COL_SOURCE_TEXT, entry.sourceText)
+                    put(COL_ENABLED, if (entry.enabled) 1 else 0)
+                    put(COL_CREATED_AT, entry.createdAt)
+                    put(COL_UPDATED_AT, entry.updatedAt)
+                })
+                entry.triggers.forEach { trigger ->
+                    db.insertOrThrow(TABLE_TRIGGERS, null, ContentValues().apply {
+                        put(COL_TRIGGER_MEMORY_ID, entry.id)
+                        put(COL_TRIGGER_TEXT, trigger)
+                    })
+                }
+            }
+            for (item in data.deletedEntries) {
+                db.insertOrThrow(TABLE_DELETED_ENTRIES, null, ContentValues().apply {
+                    put(COL_ID, item.id)
+                    put(COL_DELETED_AT, item.deletedAt)
+                    put(COL_CREATED_AT, item.createdAt)
+                })
+            }
+            db.setTransactionSuccessful()
+            true
+        } catch (_: Exception) {
+            false
+        } finally {
+            db.endTransaction()
+        }
     }
 
     /**
