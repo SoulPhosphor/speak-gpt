@@ -16,10 +16,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.ConscryptMode
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageFileNaming
 
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, sdk = [28], application = Application::class)
+@ConscryptMode(ConscryptMode.Mode.OFF)
 class ProfileImagePortableBackupTest {
 
     @get:Rule
