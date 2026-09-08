@@ -40,6 +40,11 @@ data class GeneratedImageCatalogSnapshotResult(
     val snapshot: GeneratedImageCatalogSnapshot? = null
 )
 
+data class GeneratedImageCatalogIntegrityResult(
+    val state: GeneratedImageCatalogStorageState,
+    val detail: String? = null
+)
+
 data class GeneratedImageCatalogBooleanResult(
     val state: GeneratedImageCatalogStorageState,
     val value: Boolean = false
@@ -755,6 +760,49 @@ class GeneratedImageCatalogStore private constructor(
                 )
             } catch (_: Exception) {
                 GeneratedImageCatalogSnapshotResult(failureState(context))
+            }
+        }
+
+        /**
+         * Read-only health check for the generated-image catalog. An app that
+         * has never created this store is healthy and is not provisioned as a
+         * side effect. A present store must both open with its installation
+         * key and pass SQLCipher's full integrity check.
+         *
+         * This intentionally has its own typed result instead of pretending
+         * generated images are the Avatar/Profile Images database category.
+         * Phase 11.1 owns the future separate UI rows.
+         */
+        fun checkIntegrity(context: Context): GeneratedImageCatalogIntegrityResult {
+            val app = context.applicationContext
+            val database = app.getDatabasePath(DATABASE_NAME)
+            if (!database.exists()) {
+                val state = if (GeneratedImageCatalogHealth.missingDatabaseRequiresRecovery(app)) {
+                    GeneratedImageCatalogStorageState.NEEDS_RECOVERY
+                } else {
+                    GeneratedImageCatalogStorageState.AVAILABLE
+                }
+                return GeneratedImageCatalogIntegrityResult(state)
+            }
+
+            val (store, state) = access(app)
+            if (store == null) return GeneratedImageCatalogIntegrityResult(state)
+            return try {
+                val detail = store.integrityCheck()
+                if (detail == null) {
+                    GeneratedImageCatalogIntegrityResult(GeneratedImageCatalogStorageState.AVAILABLE)
+                } else {
+                    GeneratedImageCatalogHealth.markCorrupt(app, detail)
+                    GeneratedImageCatalogIntegrityResult(
+                        GeneratedImageCatalogStorageState.CORRUPT,
+                        detail
+                    )
+                }
+            } catch (e: Exception) {
+                GeneratedImageCatalogIntegrityResult(
+                    failureState(app),
+                    e.message ?: e.javaClass.simpleName
+                )
             }
         }
 
