@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        style="@style/Widget.App.Section.Title"
+        android:text="@string/backup_auto_section" />
+
+    <TextView
+        style="@style/Widget.App.Section.Hint"
+        android:text="@string/backup_auto_hint" />
+
+    <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+        <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+            <TextView
+                style="@style/Widget.App.Row.Title"
+                android:text="@string/backup_auto_enable" />
+
+            <TextView
+                style="@style/Widget.App.Row.Subtitle"
+                android:text="@string/backup_auto_enable_subtitle" />
+        </LinearLayout>
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switch_auto_backup"
+            style="@style/Widget.App.Row.Switch" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            style="@style/Widget.App.Dropdown.CanonicalLabel"
+            android:text="@string/backup_auto_frequency_label" />
+
+        <TextView
+            android:id="@+id/btn_auto_frequency"
+            style="@style/Widget.App.Dropdown.CanonicalValue"
+            android:layout_width="0dp"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/text_auto_location"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="16dp"
+        android:textColor="@color/text"
+        android:textIsSelectable="true"
+        android:textSize="15sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <com.google.android.material.progressindicator.CircularProgressIndicator
+            android:id="@+id/spinner_auto_status"
+            style="@style/Widget.Material3.CircularProgressIndicator"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_marginEnd="10dp"
+            android:indeterminate="true"
+            android:visibility="gone"
+            app:indicatorSize="18dp"
+            app:trackThickness="2dp" />
+
+        <TextView
+            android:id="@+id/text_auto_status"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/text"
+            android:textIsSelectable="true"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_change_auto_location"
+        style="@style/AppButton.Primary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="@string/backup_auto_change_location" />
+</LinearLayout>

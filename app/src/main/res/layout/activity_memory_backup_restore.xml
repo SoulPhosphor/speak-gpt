@@ -16,16 +16,11 @@
 * limitations under the License.
 **************************************************************************/
 -->
-<!-- Memory Backup & Restore (Database Health & Backups). Section order is
-     owner-directed and EXACT (August 5 2026, supersedes the July 24 order —
-     Companion & Roleplay Backup added directly after Portable Data Copy):
-     1. Backup Status, 2. Database Health, 3. Recovery Backup, 4. Human-
-     Readable Chat Backup, 5. Portable Data Copy, 6. Companion & Roleplay
-     Backup, 7. Automatic Backups, 8. Reset. Backup Status leads because
-     it's the one section that's always current the moment the screen opens
-     — the Database Health result lines stay blank until the user presses
-     the check button. Do not reorder. The manual and automatic backup
-     locations are separate. -->
+<!-- App-wide Backup & Restore. Phase 11 visible order: Backup Status, Database
+     Integrity, Backup (Automatic Backups, Recovery Backup, Human-Readable Chat
+     Backup, temporary legacy converter), then Restore Data (portable category
+     selection and direct database restore). Superseded one-purpose controls
+     and Reset retain their wiring but are hidden on this page. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/root"
@@ -340,7 +335,14 @@
                 android:textSize="15sp"
                 android:visibility="gone" />
 
-            <!-- ============ 3. Recovery Backup (manual) ============ -->
+            <!-- ============ 3. Backup ============ -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/backup_section_title" />
+
+            <include layout="@layout/section_automatic_backups" />
+
+            <!-- Recovery Backup (manual) -->
             <TextView
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/backup_create_section" />
@@ -413,7 +415,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="@string/chat_restore_button" />
+                android:text="@string/chat_restore_button"
+                android:visibility="gone" />
 
             <!-- Reuse the screen's established dropdown pattern for the one
                  restore target selection. This is not a separate restore
@@ -422,14 +425,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:visibility="gone">
 
                 <TextView
                     style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/restore_type_label" />
 
                 <TextView
-                    android:id="@+id/btn_restore_type"
+                    android:id="@+id/btn_restore_type_old"
                     style="@style/Widget.App.Dropdown.CanonicalValue"
                     android:layout_width="match_parent"
                     android:layout_marginTop="8dp" />
@@ -439,15 +443,16 @@
                  used by a failed database row; no separate permanent forest
                  of file/folder/latest buttons. -->
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_restore_database"
+                android:id="@+id/btn_restore_database_old"
                 style="@style/AppButton.Primary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="@string/restore_database" />
+                android:text="@string/restore_database"
+                android:visibility="gone" />
 
             <LinearLayout
-                android:id="@+id/restore_progress"
+                android:id="@+id/restore_progress_old"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
@@ -456,13 +461,13 @@
                 android:visibility="gone">
 
                 <com.google.android.material.progressindicator.CircularProgressIndicator
-                    android:id="@+id/restore_spinner"
+                    android:id="@+id/restore_spinner_old"
                     android:layout_width="18dp"
                     android:layout_height="18dp"
                     android:indeterminate="true" />
 
                 <TextView
-                    android:id="@+id/restore_progress_text"
+                    android:id="@+id/restore_progress_text_old"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
@@ -571,7 +576,8 @@
             <!-- ============ 5. Portable Data Copy ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"
-                android:text="@string/backup_portable_section" />
+                android:text="@string/backup_portable_section"
+                android:visibility="gone" />
 
             <!-- Two explanatory paragraphs, both directly under the title and
                  before either button (owner correction, July 22 2026): the
@@ -579,11 +585,13 @@
                  line, reading as if it described something else entirely. -->
             <TextView
                 style="@style/Widget.App.Section.Hint"
-                android:text="@string/backup_portable_desc" />
+                android:text="@string/backup_portable_desc"
+                android:visibility="gone" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
-                android:text="@string/backup_portable_warning" />
+                android:text="@string/backup_portable_warning"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_portable_export"
@@ -591,7 +599,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="@string/backup_portable_export" />
+                android:text="@string/backup_portable_export"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_portable_import"
@@ -599,7 +608,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="@string/backup_portable_import" />
+                android:text="@string/backup_portable_import"
+                android:visibility="gone" />
 
             <!-- Temporary legacy conversion entry point. The conversion runs
                  on its own screen and is removed from every build after the
@@ -632,11 +642,13 @@
                  button, progress and status-text styles. -->
             <TextView
                 style="@style/Widget.App.Section.Title"
-                android:text="@string/companion_backup_section" />
+                android:text="@string/companion_backup_section"
+                android:visibility="gone" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
-                android:text="@string/companion_backup_desc" />
+                android:text="@string/companion_backup_desc"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_companion_download"
@@ -644,7 +656,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="@string/companion_backup_download" />
+                android:text="@string/companion_backup_download"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_companion_upload"
@@ -652,7 +665,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="@string/companion_backup_upload" />
+                android:text="@string/companion_backup_upload"
+                android:visibility="gone" />
 
             <!-- Rotating progress + label while working ("Backing up…" /
                  "Restoring…"), same pattern as the database-restore row. -->
@@ -691,6 +705,205 @@
                 android:textSize="15sp"
                 android:visibility="gone" />
 
+            <!-- ============ Restore Data ============ -->
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/restore_data_section" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:text="@string/restore_data_hint" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_chats"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_chats" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_chats_desc" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_generated_images"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_generated_images" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_generated_images_desc" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_companions"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_companions" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_companions_desc" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_glamours"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_glamours" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_glamours_desc" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_roleplay"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_roleplay" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_roleplay_desc" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_profile_images"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_profile_images" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_profile_images_desc" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_activation_prompts"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_activation_prompts" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_activation_prompts_desc" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_system_prompts"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_system_prompts" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_system_prompts_desc" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_model_settings"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_model_settings" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_model_settings_desc" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_model_rules"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_model_rules" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_model_rules_desc" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_memories"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_memories" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_memories_desc" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/check_restore_lorebooks"
+                style="@style/Widget.App.CheckOption.CheckBox"
+                android:checked="true"
+                android:text="@string/restore_category_lorebooks" />
+
+            <TextView
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:text="@string/restore_category_lorebooks_desc" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_portable_restore"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:enabled="false"
+                android:text="@string/restore_from_backup" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/restore_type_label" />
+
+                <TextView
+                    android:id="@+id/btn_restore_type"
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="match_parent"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_restore_database"
+                style="@style/AppButton.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/restore_database" />
+
+            <LinearLayout
+                android:id="@+id/restore_progress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <com.google.android.material.progressindicator.CircularProgressIndicator
+                    android:id="@+id/restore_spinner"
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:indeterminate="true" />
+
+                <TextView
+                    android:id="@+id/restore_progress_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:textColor="@color/text"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
             <!-- ============ 7. Automatic Backups ============ -->
             <!-- The approved portable automatic WRITER (the piece that would
                  actually run a backup on a schedule) is NOT built. This
@@ -701,17 +914,21 @@
                  Order is fixed: toggle, dropdown, location, button. -->
             <TextView
                 style="@style/Widget.App.Section.Title"
-                android:text="@string/backup_auto_section" />
+                android:text="@string/backup_auto_section"
+                android:visibility="gone" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
-                android:text="@string/backup_auto_hint" />
+                android:text="@string/backup_auto_hint"
+                android:visibility="gone" />
 
             <!-- Toggle row: Widget.App.Row.Toggle/.TextColumn/.Title/.Subtitle/
                  .Switch (established house style — see ui-style-guide.md;
                  first used by "Automatically Apply Model Rules" on AI System
                  Settings). A toggle row always carries a subtitle. -->
-            <LinearLayout style="@style/Widget.App.Row.Toggle">
+            <LinearLayout
+                style="@style/Widget.App.Row.Toggle"
+                android:visibility="gone">
 
                 <LinearLayout style="@style/Widget.App.Row.TextColumn">
 
@@ -725,7 +942,7 @@
                 </LinearLayout>
 
                 <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switch_auto_backup"
+                        android:id="@+id/switch_auto_backup_old"
                     style="@style/Widget.App.Row.Switch" />
             </LinearLayout>
 
@@ -738,14 +955,15 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:visibility="gone">
 
                 <TextView
                     style="@style/Widget.App.Dropdown.CanonicalLabel"
                     android:text="@string/backup_auto_frequency_label" />
 
                 <TextView
-                    android:id="@+id/btn_auto_frequency"
+                    android:id="@+id/btn_auto_frequency_old"
                     style="@style/Widget.App.Dropdown.CanonicalValue"
                     android:layout_width="0dp"
                     android:layout_marginStart="12dp"
@@ -753,13 +971,14 @@
             </LinearLayout>
 
             <TextView
-                android:id="@+id/text_auto_location"
+                android:id="@+id/text_auto_location_old"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="16dp"
                 android:textColor="@color/text"
                 android:textIsSelectable="true"
-                android:textSize="15sp" />
+                android:textSize="15sp"
+                android:visibility="gone" />
 
             <!-- Automatic-set status: Last Automatic Backup / File Size / Next
                  Automatic Backup Due (or the paused/never state). Records
@@ -773,10 +992,11 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:visibility="gone">
 
                 <com.google.android.material.progressindicator.CircularProgressIndicator
-                    android:id="@+id/spinner_auto_status"
+                        android:id="@+id/spinner_auto_status_old"
                     android:layout_width="18dp"
                     android:layout_height="18dp"
                     android:layout_marginEnd="10dp"
@@ -787,7 +1007,7 @@
                     style="@style/Widget.Material3.CircularProgressIndicator" />
 
                 <TextView
-                    android:id="@+id/text_auto_status"
+                        android:id="@+id/text_auto_status_old"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
@@ -797,21 +1017,24 @@
             </LinearLayout>
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_change_auto_location"
+                android:id="@+id/btn_change_auto_location_old"
                 style="@style/AppButton.Primary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="@string/backup_auto_change_location" />
+                android:text="@string/backup_auto_change_location"
+                android:visibility="gone" />
 
             <!-- ============ 8. Reset (destructive; bottom, unchanged) ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"
-                android:text="@string/memory_controls_section_reset" />
+                android:text="@string/memory_controls_section_reset"
+                android:visibility="gone" />
 
             <TextView
                 style="@style/Widget.App.Section.Hint"
-                android:text="@string/memory_controls_reset_hint" />
+                android:text="@string/memory_controls_reset_hint"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_memory_reset"
@@ -819,7 +1042,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="@string/memory_controls_reset" />
+                android:text="@string/memory_controls_reset"
+                android:visibility="gone" />
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

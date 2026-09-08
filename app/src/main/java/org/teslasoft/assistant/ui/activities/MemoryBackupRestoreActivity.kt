@@ -88,25 +88,15 @@ import java.io.InputStream
 import java.security.MessageDigest
 
 /**
- * "Memory Backup & Restore" — the Database Health & Backups screen. Section
- * order is owner-directed and EXACT (August 5 2026, supersedes the July 24
- * order — Companion & Roleplay Backup added directly after Portable Data
- * Copy): 1. Backup Status, 2. Database Health, 3. Recovery Backup,
- * 4. Human-Readable Chat Backup, 5. Portable Data Copy, 6. Companion &
- * Roleplay Backup, 7. Automatic Backups, 8. Reset. Backup Status leads
- * because it's always current on open, unlike Database Health's result lines
- * which stay blank until the check button is pressed. Do not reorder. The
- * two backup LOCATIONS (manual vs automatic) are kept separate.
- *
- * Four distinct systems live here and stay separate on screen (never
- * conflated — owner directive):
- *  - Recovery Backup — the portable recovery package (RecoveryBackupActivity).
- *  - Human-Readable Chat Backup — a ZIP of chats as readable Text/JSON files.
- *  - Portable Data Copy — the readable JSON export/import of memory data
- *    (import does NOT restore chats; the description says so).
- *  - Companion & Roleplay Backup — the ZIP disaster-recovery file for
- *    companions, personas, prompts, and roleplay structure
- *    (companion-roleplay-backup-plan.md; memories and lorebooks excluded).
+ * "Backup & Restore" — the app-wide recovery screen. Phase 11 keeps Backup
+ * Status first and Database Integrity second. Backup then contains Automatic
+ * Backups, Recovery Backup, Human-Readable Chat Backup, and the temporary
+ * owner-only legacy chat converter. Restore Data contains the portable
+ * category selection followed by the distinct direct-database restore tools.
+ * The older Portable Data Copy and Companion & Roleplay controls remain
+ * internally wired but are not visible; their content moves into the normal
+ * Recovery Backup package. Reset remains internally wired for its future
+ * destination but is not displayed here.
  *
  * NO TOASTS anywhere in this workflow (owner rule): results and failures are
  * persistent inline status text or Material dialogs. Location lines show a
@@ -176,7 +166,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private val inlineBusy = HashSet<BackupType>()
     private val inlineCompleted = HashSet<BackupType>()
 
-    // 3. Recovery Backup (manual)
+    // Backup: Recovery Backup (manual)
     private var btnCreateRecovery: MaterialButton? = null
     private var textManualLocation: TextView? = null
     private var btnChangeManualLocation: MaterialButton? = null
@@ -198,19 +188,19 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var pendingUnlock: DatabaseRestoreManager.PendingCode? = null
     private var pendingPrepared: DatabaseRestoreManager.Prepared? = null
 
-    // 4. Human-Readable Chat Backup (Widget.App.Dropdown.* fields)
+    // Backup: Human-Readable Chat Backup (Widget.App.Dropdown.* fields)
     private var btnReadableScope: TextView? = null
     private var btnReadableFormat: TextView? = null
     private var btnReadableCreate: MaterialButton? = null
     private var textReadableStatus: TextView? = null
 
-    // 5. Portable Data Copy
+    // Retained hidden wiring for the superseded Portable Data Copy.
     private var btnPortableExport: MaterialButton? = null
     private var btnPortableImport: MaterialButton? = null
     private var btnLegacyConvert: MaterialButton? = null
     private var textPortableStatus: TextView? = null
 
-    // 6. Companion & Roleplay Backup (companion-roleplay-backup-plan.md §4)
+    // Retained hidden wiring for the superseded standalone Companion backup.
     private var btnCompanionDownload: MaterialButton? = null
     private var btnCompanionUpload: MaterialButton? = null
     private var companionProgress: LinearLayout? = null
@@ -218,7 +208,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var companionProgressText: TextView? = null
     private var textCompanionStatus: TextView? = null
 
-    // 7. Automatic Backups. The toggle and frequency dropdown are restored/
+    // Backup: Automatic Backups. The toggle and frequency dropdown are
     // visible (owner ruling, July 22 2026) and persist the user's choice
     // and drive the portable automatic Recovery-package writer.
     private var switchAutoBackup: MaterialSwitch? = null
@@ -246,7 +236,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     // they cancel the picker, the toggle reverts to off.
     private var pendingEnableAfterPick = false
 
-    // 8. Reset
+    // Retained hidden Reset wiring for its future destination.
     private var btnReset: MaterialButton? = null
 
     private val importSeedLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -491,7 +481,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         /* ---- 2. Database Health ---- */
         btnCheckIntegrity?.setOnClickListener { onCheckIntegrity() }
 
-        /* ---- 3. Recovery Backup (manual) ---- */
+        /* ---- Backup: Recovery Backup (manual) ---- */
         // The installation-bound v1 controls (btn_change_manual_location,
         // btn_create_backup) are hidden AND unwired: the old writer must not be
         // reachable from this screen (owner correction, July 22 2026). The v1
@@ -512,10 +502,10 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             showRestoreChoice(generalRestoreType, null)
         }
 
-        /* ---- 4. Human-Readable Chat Backup ---- */
+        /* ---- Backup: Human-Readable Chat Backup ---- */
         initReadableSection()
 
-        /* ---- 5. Portable Data Copy ---- */
+        /* ---- Hidden legacy Portable Data Copy wiring ---- */
         btnPortableImport?.setOnClickListener {
             importSeedLauncher.launch(arrayOf("application/json", "text/*"))
         }
@@ -535,13 +525,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             exportLauncher.launch("memory-export-$stamp.json")
         }
 
-        /* ---- 6. Companion & Roleplay Backup ---- */
+        /* ---- Hidden standalone Companion & Roleplay wiring ---- */
         btnCompanionDownload?.setOnClickListener { onCompanionDownload() }
         btnCompanionUpload?.setOnClickListener {
             companionImportLauncher.launch(arrayOf("*/*"))
         }
 
-        /* ---- 7. Automatic Backups: enabled flag + frequency + destination
+        /* ---- Backup: Automatic Backups. Enabled flag + frequency + destination
              drive the WorkManager job and the app-open catch-up check. A
              valid, writable destination is REQUIRED before enabling — flipping
              the toggle on with no folder opens the picker and completes the

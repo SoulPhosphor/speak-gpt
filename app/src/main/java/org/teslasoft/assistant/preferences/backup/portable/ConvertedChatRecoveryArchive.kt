@@ -20,6 +20,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
 import org.teslasoft.assistant.preferences.backup.ChatSnapshotManifest
+import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
 
 /**
  * Builds the normal same-install chat-recovery ZIP directly from a logical
@@ -30,7 +31,21 @@ import org.teslasoft.assistant.preferences.backup.ChatSnapshotManifest
  */
 object ConvertedChatRecoveryArchive {
 
-    fun write(context: Context, plan: ChatLogicalImportPlan.Plan, output: File): Boolean {
+    fun write(context: Context, plan: ChatLogicalImportPlan.Plan, output: File): Boolean =
+        write(context, plan.chats, folders = null, output = output)
+
+    /** Permanent v1/v2 restore staging. A non-null folder list records the
+     * authoritative v2 folder catalog; v1 passes an empty list and therefore
+     * rebuilds every chat unfiled. */
+    fun write(context: Context, plan: PortableChatRestorePlan.Plan, output: File): Boolean =
+        write(context, plan.chats, plan.folders, output)
+
+    private fun write(
+        context: Context,
+        chats: List<ChatLogicalImportPlan.ChatPlan>,
+        folders: List<PortableChatRestorePlan.FolderPlan>?,
+        output: File
+    ): Boolean {
         val app = context.applicationContext
         val prefix = "legacy_conversion_${UUID.randomUUID()}_"
         val temporaryNames = ArrayList<String>()
@@ -81,19 +96,33 @@ object ConvertedChatRecoveryArchive {
             }
 
             val listName = "enc.chat_list"
-            val listJson = Gson().toJson(plan.chats.map { it.listRow })
+            val listJson = Gson().toJson(chats.map { it.listRow })
             val listPreferences = encrypted(listName)
-            check(
-                listPreferences.edit()
-                    .putString("data", listJson)
-                    .commit()
-            ) { "chat list write failed" }
+            val listEditor = listPreferences.edit().putString("data", listJson)
+            if (folders != null) {
+                listEditor
+                    .putString(
+                        ChatNavigationRepository.FOLDERS_KEY,
+                        ChatFolderPortableCodec.encodeStored(folders)
+                    )
+                    .putInt(
+                        ChatNavigationRepository.SCHEMA_VERSION_KEY,
+                        ChatNavigationRepository.SCHEMA_VERSION
+                    )
+            }
+            check(listEditor.commit()) { "chat list write failed" }
             check(listPreferences.getString("data", null) == listJson) {
                 "chat list verification failed"
             }
+            if (folders != null) {
+                check(
+                    listPreferences.getString(ChatNavigationRepository.FOLDERS_KEY, null) ==
+                        ChatFolderPortableCodec.encodeStored(folders)
+                ) { "chat folder verification failed" }
+            }
             retain(listName)
 
-            for (chat in plan.chats) {
+            for (chat in chats) {
                 val historyName = "enc.chat_${chat.chatId}"
                 val historyPreferences = encrypted(historyName)
                 check(
@@ -117,7 +146,7 @@ object ConvertedChatRecoveryArchive {
                 retain(settingsName)
             }
 
-            writeZip(output, plan, files)
+            writeZip(output, chats, files)
             if (!ChatRestoreManager.archivePassesValidation(output)) {
                 output.delete()
                 return false
@@ -164,7 +193,7 @@ object ConvertedChatRecoveryArchive {
 
     private fun writeZip(
         output: File,
-        plan: ChatLogicalImportPlan.Plan,
+        chatsToWrite: List<ChatLogicalImportPlan.ChatPlan>,
         files: Map<String, File>
     ) {
         val hashes = JSONObject()
@@ -178,7 +207,7 @@ object ConvertedChatRecoveryArchive {
             }
 
             val chats = JSONArray()
-            for (chat in plan.chats) {
+            for (chat in chatsToWrite) {
                 chats.put(
                     JSONObject()
                         .put("chat_id", chat.chatId)

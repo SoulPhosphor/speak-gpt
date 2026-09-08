@@ -61,6 +61,7 @@ class SettingsActivity : FragmentActivity() {
     private var rowImages: LinearLayout? = null
     private var rowAppearance: LinearLayout? = null
     private var rowChatSettings: LinearLayout? = null
+    private var rowBackupRestore: LinearLayout? = null
     private var rowAboutApp: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
     private var rowAlertDebugMenu: LinearLayout? = null
@@ -112,6 +113,7 @@ class SettingsActivity : FragmentActivity() {
         transition.excludeTarget(R.id.tile_about_app, true)
         transition.excludeTarget(R.id.tile_documentation, true)
         transition.excludeTarget(R.id.tile_alert_debug_menu, true)
+        transition.excludeTarget(R.id.tile_backup_restore, true)
         transition.excludeTarget(R.id.tile_log_cabin, true)
 
         val transition2 = TransitionInflater.from(this).inflateTransition(android.R.transition.move).apply {
@@ -140,6 +142,7 @@ class SettingsActivity : FragmentActivity() {
         transition2.excludeTarget(R.id.tile_about_app, true)
         transition2.excludeTarget(R.id.tile_documentation, true)
         transition2.excludeTarget(R.id.tile_alert_debug_menu, true)
+        transition2.excludeTarget(R.id.tile_backup_restore, true)
         transition2.excludeTarget(R.id.tile_log_cabin, true)
 
         // Set the transition as the shared element enter transition
@@ -253,6 +256,7 @@ class SettingsActivity : FragmentActivity() {
         rowImages = findViewById(R.id.tile_images)
         rowAppearance = findViewById(R.id.tile_appearance)
         rowChatSettings = findViewById(R.id.tile_chat_settings)
+        rowBackupRestore = findViewById(R.id.tile_backup_restore)
         rowAboutApp = findViewById(R.id.tile_about_app)
         rowAlertDebugMenu = findViewById(R.id.tile_alert_debug_menu)
         rowLogCabin = findViewById(R.id.tile_log_cabin)
@@ -294,6 +298,10 @@ class SettingsActivity : FragmentActivity() {
 
         rowChatSettings?.setOnClickListener {
             startActivity(Intent(this, ChatSettingsActivity::class.java))
+        }
+
+        rowBackupRestore?.setOnClickListener {
+            startActivity(Intent(this, MemoryBackupRestoreActivity::class.java).putExtra("chatId", chatId))
         }
 
         rowAboutApp?.setOnClickListener {

@@ -226,7 +226,7 @@ object PortableRecoveryWriter {
             }
 
             // ---- chats (logical serialization; LOCKED fails visibly) ----
-            when (val chats = ChatLogicalSerializer.serialize(context)) {
+            when (val chats = ChatLogicalSerializer.serializeV2(context)) {
                 is ChatLogicalSerializer.Result.Unavailable ->
                     return Result.Failed(Reason.CHATS_UNAVAILABLE, chatFailure = chats.category)
                 is ChatLogicalSerializer.Result.Ok -> {
@@ -235,7 +235,7 @@ object PortableRecoveryWriter {
                     artifacts.add(
                         PortablePackage.Artifact(
                             entryName = "chats.json", type = "chats-json", file = staged,
-                            databaseKeyHex = null, keySemantics = null, schemaVersion = null
+                            databaseKeyHex = null, keySemantics = null, schemaVersion = 2
                         )
                     )
                     includedTypes.add(BackupType.CHATS)

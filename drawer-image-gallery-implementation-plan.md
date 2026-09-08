@@ -1111,7 +1111,11 @@ The Phase 10 owner gate is resolved: implement portable-only backup and restore.
 
 ## Phase 11 — Portable chat restore/import format
 
-**This phase is future work and requires owner approval of replacement/merge semantics. Do not implement it as part of legacy compatibility cleanup.**
+**Active implementation phase as of September 8, 2026.** The owner approved
+the replacement/merge behavior, category boundaries, transaction boundary,
+folder handling, missing-category behavior, and wording direction below. Keep
+this work on `claude/phase-9-replacement-coordinator-ebnptm`. Do not merge it to
+Main and do not turn it into legacy compatibility cleanup.
 
 **Owner decision, September 4, 2026 — replace-versus-merge is a user choice.**
 The top-level question item 3 left open is now decided: on every restore the
@@ -1121,26 +1125,52 @@ owner's reasoning: the user keeps agency, and because the backup file still
 exists, a choice that goes wrong can be recovered by taking a fresh backup and
 restoring again. This rests on the stable, immutable UUIDs now carried by chats
 and their assets: a merge decides "is this same item already here?" by identity,
-not by title. Still to be designed under this phase (not decided here): the
-exact ID-collision rule (skip / replace / copy-to-new-ID) for the merge mode,
-and the user-facing wording — the latter requires separate owner approval before
-any UI. Restore itself is a locked "please wait" operation in both modes; the
-app blocks chat reads and writes for its duration.
+not by title. Restore itself is a locked "please wait" operation in both modes;
+the app blocks reads and writes to every selected category for its duration.
 
-1. Define `chat-logical-v2`. It must include the folder catalog as well as each row's folder assignment, stable chat ID, title metadata, history, and per-chat settings. Continue excluding credentials such as `api_key`.
+1. Define `chat-logical-v2`. It must include every folder referenced by a
+   backed-up chat as well as each row's folder assignment, stable chat ID,
+   title metadata, history, and per-chat settings. Continue excluding
+   credentials such as `api_key`. Do not include empty folders: a folder is
+   backup data only when at least one backed-up chat belongs to it.
 2. Keep a documented v1 reader policy:
    - preserve its chat IDs;
-   - treat absent folder definitions conservatively (recommended default: import affected chats as unfiled while retaining recoverable row metadata);
+   - restore its chats as unfiled while retaining every recoverable chat field;
    - never fabricate folders solely from IDs;
    - report what could not be restored before committing.
-3. Replacement vs. merge is decided (see the owner decision above): the user
-   chooses exact replacement or merge on each restore, and both modes ship.
-   Still open for this phase: whether ID collisions with identical/different
-   content are skipped, replaced, or copied to a new ID.
-4. A merge must validate duplicate/malformed message IDs and chat IDs without changing the identity of an existing chat. Never derive a new chat ID from a mutable title.
-5. Use the Phase 9 authoritative-set replacement coordinator for replacement. Build an equally journaled coordinator for merge; do not write directly from an Activity.
-6. Keep `chat_search.db` out of the package and rebuild it. Export generated-image data only according to the Phase 10 decision.
-7. Round-trip tests must cover v1, v2, hash IDs, UUIDs, missing names, duplicate titles, folder references, settings types, message IDs, generated-image metadata, locked/corrupt source files, cancellation, and process death.
+3. Replacement vs. merge is decided (see the owner decision above). The user
+   chooses a mode independently for each selected category where merging is
+   meaningful. A single global mode must not force unrelated categories into
+   the same behavior.
+4. Merge collisions use these owner-approved rules:
+   - same stable ID and identical content: skip the duplicate;
+   - same stable ID and different content: keep the current item and report
+     the conflict; never assign a new ID silently;
+   - when two versions of one chat are otherwise identical and one history is
+     an exact prefix of the other, keep the version with the additional
+     messages;
+   - apply the same keep-current-and-report identity rule to Companions,
+     Glamours, Roleplay Characters, and every other stable-ID category;
+   - a user who wants the backup's conflicting version can choose Replace.
+5. A merge must validate duplicate/malformed message IDs and chat IDs without changing the identity of an existing chat. Never derive a new chat ID from a mutable title.
+6. Folder IDs are immutable across rename and restore. During Merge:
+   - matching folder ID means the same folder; keep that identity and merge its
+     chat membership under the normal item-collision rules;
+   - a backup folder whose name matches a current folder case-insensitively but
+     whose UUID differs requires an explicit three-action dialog: **Cancel**
+     on the far left, **Merge** next, and **Create New Folder** on the right;
+   - Merge maps the backup folder's chats into the current same-name folder
+     without removing current chats;
+   - Create New Folder keeps the backup folder's UUID and asks for a different
+     valid name only if the duplicate-name rule requires it;
+   - Cancel cancels the complete restore before any selected category changes;
+   - do not offer a fourth "put in main chat" option. Older backups without
+     folder definitions restore their chats as unfiled.
+7. Use the Phase 9 authoritative-set replacement coordinator for replacement.
+   Build an equally journaled coordinator for merge; do not write directly
+   from an Activity.
+8. Keep `chat_search.db` out of the package and rebuild it. Export generated-image data only according to the Phase 10 decision.
+9. Round-trip tests must cover v1, v2, hash IDs, UUIDs, missing names, duplicate titles, folder references, settings types, message IDs, generated-image metadata, locked/corrupt source files, cancellation, and process death.
 
 ### 11.1 Final destination: one selectable multi-category package
 
@@ -1153,10 +1183,14 @@ building and proving chat replacement first is an implementation order, not a
 reduction of the final product scope.
 
 The restore screen presents the categories contained in the selected package
-as a checklist. Every available category is selected by default (the effective
+as ordinary on-screen checkboxes above **Restore From Backup**, not in a
+category-picker dialog. Every category is selected by default (the effective
 "All" choice), and the user may clear individual categories before proceeding.
-A category absent from the package must be identified as absent rather than
-silently omitted or allowed to fail later.
+A category absent from the selected package must be named exactly. The dialog
+offers **Cancel** on the far left and **Restore Available Categories** on the
+right. Nothing is silently unchecked. Continuing explicitly removes only the
+missing categories from this run and restores the available selected
+categories.
 
 Replace-versus-merge remains a user choice. The selected mode applies only to
 the selected categories, and the confirmation must identify those categories
@@ -1165,10 +1199,11 @@ separately testable validation and restore engine beneath the unified package
 flow. Chat replacement uses the Phase 9 coordinator; chat merge and the
 category-specific merge rules remain Phase 11 work.
 
-Before this unified flow is implemented, its cross-category commit/rollback
-boundary, category dependency handling, and identity-collision rules must be
-designed and approved. No narrow category implementation may describe itself
-as the completed backup/restore product.
+All selected categories form one transaction. Validate and stage every
+selected category and all required dependencies before changing live data. If
+any selected category cannot restore safely, change nothing. After mutation
+begins, any failure rolls every selected category back. No narrow category
+implementation may describe itself as the completed backup/restore product.
 
 **Owner decisions, September 7, 2026 — category boundaries and future screen
 copy direction:**
@@ -1206,12 +1241,73 @@ copy direction:**
     Glamours are not included;
   - **Avatar/Profile Images:** the complete avatar-image gallery, including
     unused images; assignments are not changed by this category.
-- Activation Prompts and System Prompts must be represented in the selectable
-  restore categories. Whether they appear as one combined Prompts category or
-  as two independent categories remains an owner decision for the Phase 11.1
-  design pass. Do not silently bundle either into Companions or Roleplay.
-- The remaining category explanations, replace-versus-merge presentation, and
-  exact user-facing wording still require owner review before UI implementation.
+- **Activation Prompts** and **System Prompts** are separate selectable
+  categories. Do not silently bundle either into Companions or Roleplay.
+- Add **Model & Endpoint Settings** as a separate category. It carries portable
+  endpoint and model definitions, favorite models and their settings, preferred
+  providers and provider order/allow/ignore/routing choices, and other
+  non-secret model configuration required to recreate the saved setup. It must
+  never contain API keys, tokens, passwords, credentials, or device-bound key
+  material. **Model Rules** remain their own category.
+- **Memories** and **Lorebooks** remain independent categories.
+- Category explanations, replace-versus-merge presentation, confirmations,
+  conflict reports, and errors are maintained in
+  `phase-11-backup-restore-copy.md`. The owner authorized concise, direct,
+  sentence-structured technical-writer copy and Title Caps for labels/actions.
+
+### 11.2 Recovery Backup and Restore Data screen
+
+Move the destination out of the Memory area. The main Settings screen has one
+navigation row titled **Backup & Restore**, replacing the existing **Memory
+Backup & Restore** row in the Memory section. Reuse the approved shared
+navigation-row style. Place it immediately above **Alerts, Errors & Logs**.
+
+The destination keeps **Backup Status** first and **Database Integrity**
+second. The rest of the visible screen is reorganized exactly as follows:
+
+1. **Backup** section title.
+2. The complete existing **Automatic Backups** controls and behavior.
+3. The existing Recovery Backup explanation, protected/unencrypted summaries,
+   recovery-type dropdown, and **Create Recovery Backup** button. Normal manual
+   and automatic Recovery Backups contain every available supported category
+   whenever the complete package can be validated; they are not category-
+   limited backup files.
+4. **Human-Readable Chat Backup**, retaining its current controls as the first
+   readable export. Expand the readable export into user-selectable supported
+   content in a dedicated follow-through within this phase. It remains a
+   non-restorable, app-independent copy and must never be presented as a
+   Recovery Backup.
+5. The temporary **Convert Legacy Chat Backup** button at the end of Backup,
+   after Human-Readable Chat Backup. It remains visible for the owner until the
+   old pre-change installation has been safely migrated and the app is
+   finished. Do not remove or hide it during Phase 11. Its existing dialog copy
+   may remain temporarily inaccurate rather than spending this phase rewording
+   a one-user bridge.
+6. **Restore Data** section title.
+7. The on-screen category checkboxes, explanations, and per-category mode
+   controls where meaningful.
+8. One **Restore From Backup** button for unified portable category restore.
+9. The existing **Type of Database to Restore** dropdown followed by the
+   existing **Restore Database** button at the bottom of Restore Data. This
+   direct database-recovery flow remains distinct from portable category
+   restore.
+
+Remove the visible **Portable Data Copy**, standalone **Companion & Roleplay
+Backup**, and old chats-only restore button from this page because their
+portable data belongs in normal Recovery Backups and their restore behavior
+belongs in the unified category flow. Preserve the temporary legacy converter
+visibly under Backup until the owner's migration is complete. Preserve the
+database-type restore selector and button at the bottom of Restore Data.
+
+Do not display Reset on this page. Keep its backend wiring intact for its
+approved future destination; this layout change is not permission to delete or
+disable reset behavior elsewhere.
+
+There is no separate encrypted/unencrypted dropdown for restore. The selected
+package declares its protection. An unencrypted package proceeds through
+damage validation; a protected package asks for an available portable unlock
+method (Recovery Code, Recovery Key file, or configured password) and never
+depends on the source device.
 
 ## Phase 12 — Owner-data rehearsal and final Main gate
 

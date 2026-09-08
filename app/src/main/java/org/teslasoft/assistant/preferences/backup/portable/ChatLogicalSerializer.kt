@@ -24,8 +24,8 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.SecurePrefs
+import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
 import org.teslasoft.assistant.preferences.memory.MemoryLog
-import org.teslasoft.assistant.util.Hash
 
 /**
  * Logical chat serialization for portable recovery packages (owner ruling 8,
@@ -74,7 +74,11 @@ import org.teslasoft.assistant.util.Hash
  */
 object ChatLogicalSerializer {
 
-    const val FORMAT = "chat-logical-v1"
+    const val FORMAT_V1 = "chat-logical-v1"
+    const val FORMAT_V2 = "chat-logical-v2"
+
+    /** Kept for the temporary owner-only v1 converter. */
+    const val FORMAT = FORMAT_V1
 
     /** Settings keys that must never travel (external credentials). */
     private val EXCLUDED_SETTINGS_KEYS = setOf("api_key")
@@ -101,7 +105,16 @@ object ChatLogicalSerializer {
      */
     fun storedNameForId(storedName: String?): String = storedName ?: "null"
 
-    fun serialize(context: Context): Result {
+    fun serialize(context: Context): Result = serialize(context, FORMAT_V1)
+
+    /**
+     * Permanent portable form. Unlike the temporary v1 converter artifact,
+     * v2 carries immutable folder definitions for every folder referenced by
+     * a chat. Empty folders are deliberately not backup data.
+     */
+    fun serializeV2(context: Context): Result = serialize(context, FORMAT_V2)
+
+    private fun serialize(context: Context, format: String): Result {
         val gson = Gson()
         val chatPreferences = ChatPreferences.getChatPreferences()
 
@@ -114,6 +127,7 @@ object ChatLogicalSerializer {
             }
 
             val chats = JSONArray()
+            val referencedFolderIds = LinkedHashSet<String>()
             for (chat in listResult.chats) {
                 val storedName = chat["name"]
                 val name = storedNameForId(storedName)
@@ -138,16 +152,55 @@ object ChatLogicalSerializer {
                 for ((key, value) in chat) {
                     if (key != "name" && key != "first_message") obj.put("list_$key", value)
                 }
+                if (format == FORMAT_V2) {
+                    // v2 always makes the already-authoritative stable ID
+                    // explicit. A legacy title hash remains the same ID; it is
+                    // not replaced with a generated UUID.
+                    obj.put("list_id", chatId)
+                    chat[ChatNavigationRepository.FOLDER_ID_KEY]
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(referencedFolderIds::add)
+                }
                 obj.put("messages", JSONArray(gson.toJson(history.messages)))
                 obj.put("settings", settings)
                 chats.put(obj)
             }
 
             val root = JSONObject()
-            root.put("format", FORMAT)
+            root.put("format", format)
             root.put("complete", true)
+            if (format == FORMAT_V2) {
+                val folders = readReferencedFolders(context, referencedFolderIds)
+                    ?: return Result.Unavailable(FailureCategory.LIST)
+                root.put("folders", folders)
+            }
             root.put("chats", chats)
             return Result.Ok(root.toString(), chats.length())
+        }
+    }
+
+    /** Read-only folder projection while CHAT_LIST_LOCK is already held. */
+    private fun readReferencedFolders(
+        context: Context,
+        referencedIds: Set<String>
+    ): JSONArray? {
+        if (referencedIds.isEmpty()) return JSONArray()
+        val preferences = try {
+            SecurePrefs.get(context, "chat_list")
+        } catch (_: Exception) {
+            return null
+        }
+        if (SecurePrefs.isLockedName("chat_list")) return null
+        val raw = try {
+            preferences.getString(ChatNavigationRepository.FOLDERS_KEY, null)
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        val decoded = ChatFolderPortableCodec.decodeStored(raw) ?: return null
+        val byId = decoded.associateBy { it.id }
+        if (!byId.keys.containsAll(referencedIds)) return null
+        return JSONArray().apply {
+            referencedIds.forEach { id -> put(ChatFolderPortableCodec.toArtifactJson(byId.getValue(id))) }
         }
     }
 
