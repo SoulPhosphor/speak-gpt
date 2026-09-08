@@ -164,7 +164,13 @@ class ApiEndpointPreferences private constructor(
 
     fun deleteApiEndpoint(context: Context, id: String) = deleteApiEndpoint(id)
 
-    internal fun deleteApiEndpoint(id: String) {
+    internal fun deleteApiEndpoint(id: String) = deleteApiEndpoint(id, deleteCredential = true)
+
+    /** Portable restore removes only the non-secret definition. */
+    internal fun deleteApiEndpointDefinition(id: String) =
+        deleteApiEndpoint(id, deleteCredential = false)
+
+    private fun deleteApiEndpoint(id: String, deleteCredential: Boolean) {
         preferences.edit { remove(id + "_label") }
         preferences.edit { remove(id + "_host") }
         preferences.edit { remove(id + "_chat_endpoint") }
@@ -190,7 +196,7 @@ class ApiEndpointPreferences private constructor(
         preferences.edit { remove(id + "_provider_discovery_path") }
         preferences.edit { remove(id + "_identity") }
         preferences.edit { remove(id + "_tts_rejected_voices") }
-        secrets.set(id + "_api_key", "null")
+        if (deleteCredential) secrets.set(id + "_api_key", "null")
 
         for (listener in listeners) {
             listener.onApiEndpointChange()
@@ -207,7 +213,14 @@ class ApiEndpointPreferences private constructor(
      * stay attached because nothing moves to a new, name-derived id. Returns the
      * id the profile was saved under.
      */
-    internal fun setApiEndpoint(endpoint: ApiEndpointObject): String {
+    internal fun setApiEndpoint(endpoint: ApiEndpointObject): String =
+        setApiEndpoint(endpoint, writeCredential = true)
+
+    /** Portable restore writes only non-secret definition fields. */
+    internal fun setApiEndpointDefinition(endpoint: ApiEndpointObject): String =
+        setApiEndpoint(endpoint, writeCredential = false)
+
+    private fun setApiEndpoint(endpoint: ApiEndpointObject, writeCredential: Boolean): String {
         val id = StableId.resolve(endpoint.id, "ep-")
         endpoint.id = id
         putString(id + "_label", endpoint.label)
@@ -278,7 +291,7 @@ class ApiEndpointPreferences private constructor(
         } else {
             putString(id + "_provider_discovery_path", endpoint.providerDiscoveryPath)
         }
-        secrets.set(id + "_api_key", endpoint.apiKey)
+        if (writeCredential) secrets.set(id + "_api_key", endpoint.apiKey)
         // Routing identity is established once and never demoted: an endpoint
         // already marked OPENROUTER stays OPENROUTER regardless of later
         // base-URL edits; otherwise a recognized OpenRouter URL promotes it.
@@ -348,6 +361,10 @@ class ApiEndpointPreferences private constructor(
      */
     fun getImageCapabilityByModel(id: String): String =
         getString(id + "_image_capability_by_model", "")
+
+    internal fun setRejectedTtsVoices(id: String, voiceIds: Set<String>) {
+        putString(id + "_tts_rejected_voices", JSONArray(voiceIds.sorted()).toString())
+    }
 
     /**
      * Persist an updated image-capability-by-model JSON for [id]. Empty

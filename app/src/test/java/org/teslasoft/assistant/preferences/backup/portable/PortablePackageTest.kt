@@ -286,6 +286,38 @@ class PortablePackageTest {
     }
 
     @Test
+    fun modelEndpointSettingsIsAValidatedPortableArtifact() {
+        val settings = artifactFile(
+            "model_endpoint_settings",
+            ModelEndpointPortableCodec.encode(
+                ModelEndpointPortableCodec.Data(emptyList(), emptyList())
+            ).toByteArray(Charsets.UTF_8)
+        )
+        val inner = tmp.newFile("model_endpoint_inner.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "model_endpoint_settings.json",
+                    PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS,
+                    settings,
+                    null,
+                    null,
+                    ModelEndpointPortableCodec.SCHEMA_VERSION
+                )
+            ),
+            "2026-09-08T00:00:00Z",
+            inner
+        )
+
+        val extracted = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(extracted is PortablePackage.ValidateResult.Ok)
+        assertEquals(
+            PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS,
+            (extracted as PortablePackage.ValidateResult.Ok).artifacts.single().type
+        )
+    }
+
+    @Test
     fun passwordRouteRecoversTheSecretItself() {
         val rs = PackageCrypto.newRecoverySecret()
         val salt = PackageCrypto.newKdfSalt()

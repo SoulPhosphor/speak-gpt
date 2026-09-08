@@ -1251,6 +1251,11 @@ copy direction:**
   non-secret model configuration required to recreate the saved setup. It must
   never contain API keys, tokens, passwords, credentials, or device-bound key
   material. **Model Rules** remain their own category.
+- Credentials remain device-local during Model & Endpoint Settings restore.
+  Restore must not read, write, export, or delete the encrypted credential
+  store. A restored endpoint with the same stable ID continues to use any
+  credential already configured on that device; a new endpoint has no
+  credential until the user supplies one.
 - **Memories** and **Lorebooks** remain independent categories.
 - Category explanations, replace-versus-merge presentation, confirmations,
   conflict reports, and errors are maintained in

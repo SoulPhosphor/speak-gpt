@@ -49,6 +49,8 @@ import java.time.Instant
  *  - Companions and roleplay: the existing validated logical archive, which
  *    also contains Activation Prompts, System Prompts, Glamours, Roleplay
  *    Characters, related roleplay records, and referenced profile images.
+ *  - Model & Endpoint Settings: credential-free endpoint definitions,
+ *    favorite-model parameters, provider preferences and routing choices.
  *
  * NOTE for the unencrypted tier: the SAME inner layout is used, so the
  * database keys are exposed in cleartext inside the file. That is within the
@@ -248,6 +250,26 @@ object PortableRecoveryWriter {
                         )
                     )
                 }
+            }
+
+            // ---- Model & Endpoint Settings (never credentials) ----
+            run {
+                val staged = File(staging, "model_endpoint_settings.json")
+                if (ModelEndpointPortableBackup.write(context, staged) is
+                    ModelEndpointPortableBackup.Result.Failed
+                ) {
+                    return Result.Failed(Reason.SNAPSHOT_FAILED)
+                }
+                artifacts.add(
+                    PortablePackage.Artifact(
+                        entryName = "model_endpoint_settings.json",
+                        type = PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS,
+                        file = staged,
+                        databaseKeyHex = null,
+                        keySemantics = null,
+                        schemaVersion = ModelEndpointPortableCodec.SCHEMA_VERSION
+                    )
+                )
             }
 
             // ---- chats (logical serialization; LOCKED fails visibly) ----

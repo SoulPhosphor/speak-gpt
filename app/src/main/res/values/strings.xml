@@ -1236,9 +1236,9 @@
     <string name="restore_data_hint">Select the data to restore from a Recovery Backup.</string>
     <string name="restore_from_backup">Restore From Backup</string>
     <string name="restore_category_chats">Chats</string>
-    <string name="restore_category_chats_desc">Chats and the generated images used in them.</string>
+    <string name="restore_category_chats_desc">Chats, folders, and the generated images used in those chats.</string>
     <string name="restore_category_generated_images">Generated Images</string>
-    <string name="restore_category_generated_images_desc">The complete generated-image gallery, including Gallery-only images.</string>
+    <string name="restore_category_generated_images_desc">The complete generated-image gallery, including images whose original chats were deleted.</string>
     <string name="restore_category_companions">Companions</string>
     <string name="restore_category_companions_desc">Companions and the pictures assigned to them.</string>
     <string name="restore_category_glamours">Glamours</string>
@@ -1248,17 +1248,17 @@
     <string name="restore_category_profile_images">Avatar/Profile Images</string>
     <string name="restore_category_profile_images_desc">The complete avatar-image gallery, including unused images. Assignments are not changed.</string>
     <string name="restore_category_activation_prompts">Activation Prompts</string>
-    <string name="restore_category_activation_prompts_desc">Saved prompts used to activate a Companion.</string>
+    <string name="restore_category_activation_prompts_desc">Saved Activation Prompts and their stable identities.</string>
     <string name="restore_category_system_prompts">System Prompts</string>
-    <string name="restore_category_system_prompts_desc">Saved instructions used as system prompts.</string>
+    <string name="restore_category_system_prompts_desc">Saved System Prompts and the current selection.</string>
     <string name="restore_category_model_settings">Model &amp; Endpoint Settings</string>
-    <string name="restore_category_model_settings_desc">Saved models, endpoints, favorites, preferred providers, and routing choices. Credentials are never included.</string>
+    <string name="restore_category_model_settings_desc">Endpoint and model definitions, favorites, model settings, and preferred provider routing. Credentials are not included.</string>
     <string name="restore_category_model_rules">Model Rules</string>
-    <string name="restore_category_model_rules_desc">Saved rules for choosing models and providers.</string>
+    <string name="restore_category_model_rules_desc">Model Rules, their tags, and their stable endpoint and model links.</string>
     <string name="restore_category_memories">Memories</string>
-    <string name="restore_category_memories_desc">Companion memories and their organization.</string>
+    <string name="restore_category_memories_desc">Saved memories and their supported relationships.</string>
     <string name="restore_category_lorebooks">Lorebooks</string>
-    <string name="restore_category_lorebooks_desc">Lorebooks and their entries.</string>
+    <string name="restore_category_lorebooks_desc">Lorebooks, entries, triggers, and their supported relationships.</string>
 
     <!-- Memory Assistant (Phase 6). Every user-visible sentence here is the
          owner's approved wording (memory_assistant_design.md §1–§2 + the

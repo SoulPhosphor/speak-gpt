@@ -130,6 +130,26 @@ class ApiEndpointStableIdTest {
         assertEquals("key nulled on delete", "null", secrets.get(id + "_api_key"))
     }
 
+    @Test fun portableDefinitionReplaceNeverReadsWritesOrDeletesCredentials() {
+        val id = store.setApiEndpoint(sample("Original"))
+        secrets.setKeys.clear()
+
+        store.setApiEndpointDefinition(
+            store.getApiEndpoint(id).apply {
+                label = "Restored"
+                apiKey = "must-not-be-written"
+            }
+        )
+        assertEquals("Restored", store.getApiEndpoint(id).label)
+        assertEquals("sk-secret-123", secrets.get(id + "_api_key"))
+        assertTrue(secrets.setKeys.isEmpty())
+
+        store.deleteApiEndpointDefinition(id)
+        assertTrue(store.getApiEndpointsList().isEmpty())
+        assertEquals("sk-secret-123", secrets.get(id + "_api_key"))
+        assertTrue(secrets.setKeys.isEmpty())
+    }
+
     @Test fun theBuiltInDefaultProfileUsesTheReservedConstantId() {
         val ep = ApiEndpointObject("Default", "https://api.openai.com/v1/", "", id = ApiEndpointObject.DEFAULT_ENDPOINT_ID)
         val id = store.setApiEndpoint(ep)

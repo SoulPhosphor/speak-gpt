@@ -70,6 +70,7 @@ object PortablePackage {
     const val TYPE_SQLITE_DB = "sqlite-db"
     const val TYPE_CHATS_JSON = "chats-json"
     const val TYPE_COMPANION_ROLEPLAY_ARCHIVE = "companion-roleplay-archive"
+    const val TYPE_MODEL_ENDPOINT_SETTINGS = "model-endpoint-settings"
     const val TYPE_GENERATED_IMAGES_CATALOG = "generated-images-catalog"
     const val TYPE_GENERATED_IMAGE_ASSET = "generated-image-asset"
     const val TYPE_PROFILE_IMAGE_ASSET = "profile-image-asset"
@@ -420,6 +421,14 @@ object PortablePackage {
                     ) {
                         return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
                     }
+                    if (meta.optString("type", "") == TYPE_MODEL_ENDPOINT_SETTINGS) {
+                        if (staged.length() > ModelEndpointPortableCodec.MAX_ARTIFACT_BYTES ||
+                            ModelEndpointPortableCodec.parse(staged.readText(Charsets.UTF_8))
+                                !is ModelEndpointPortableCodec.Result.Ok
+                        ) {
+                            return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                        }
+                    }
                     out.add(
                         ValidatedArtifact(
                             entryName = name,
@@ -473,6 +482,7 @@ object PortablePackage {
         TYPE_SQLITE_DB -> name == "user_images.db"
         TYPE_CHATS_JSON -> name == "chats.json"
         TYPE_COMPANION_ROLEPLAY_ARCHIVE -> name == "companion_roleplay.zip"
+        TYPE_MODEL_ENDPOINT_SETTINGS -> name == "model_endpoint_settings.json"
         TYPE_GENERATED_IMAGES_CATALOG -> name == "generated_images/catalog.json"
         TYPE_GENERATED_IMAGE_ASSET -> {
             val fileName = name.removePrefix("generated_images/assets/")

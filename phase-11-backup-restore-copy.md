@@ -52,6 +52,8 @@ button remain at the bottom of Restore Data, beneath **Restore From Backup**.
 
 Per-category mode label: **Restore Mode**
 
+When Model & Endpoint Settings is selected: **Credentials are not restored or removed. Existing credentials stay on this device. Newly restored endpoints need credentials before use.**
+
 Mode choices:
 
 - **Merge**

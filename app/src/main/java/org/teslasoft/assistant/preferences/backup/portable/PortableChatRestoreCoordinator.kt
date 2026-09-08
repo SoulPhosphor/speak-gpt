@@ -11,11 +11,9 @@ import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
  * Phase 9 replacement coordinator; no Activity writes chat storage directly.
  */
 object PortableChatRestoreCoordinator {
-    enum class Mode { REPLACE, MERGE }
-
     data class Prepared(
         val plan: PortableChatRestorePlan.Plan,
-        val mode: Mode,
+        val mode: PortableRestoreMode,
         val mergeReport: ChatMergePlanner.Report? = null
     )
 
@@ -35,7 +33,7 @@ object PortableChatRestoreCoordinator {
     fun prepare(
         context: Context,
         backupJson: String,
-        mode: Mode,
+        mode: PortableRestoreMode,
         folderResolutions: Map<String, ChatMergePlanner.FolderResolution> = emptyMap()
     ): PrepareResult {
         val backup = when (val parsed = PortableChatRestorePlan.parse(backupJson)) {
@@ -44,7 +42,7 @@ object PortableChatRestoreCoordinator {
                 return PrepareResult.Rejected("${parsed.reason}: ${parsed.detail}")
             }
         }
-        if (mode == Mode.REPLACE) return PrepareResult.Ready(Prepared(backup, mode))
+        if (mode == PortableRestoreMode.REPLACE) return PrepareResult.Ready(Prepared(backup, mode))
 
         val currentJson = when (val serialized = ChatLogicalSerializer.serializeV2(context)) {
             is ChatLogicalSerializer.Result.Ok -> serialized.json
