@@ -143,23 +143,25 @@ class CompanionCategoryRestoreParticipant internal constructor(
         return archive to manifest
     }
 
-    private fun readPresence(): List<Pair<String, ImagePresence>>? = try {
-        val stateFile = File(stagingRoot, STATE_FILE)
-        if (!stateFile.isFile || stateFile.length() > MAX_STATE_BYTES) return null
-        val root = JSONObject(stateFile.readText(Charsets.UTF_8))
-        if (root.optInt("version", -1) != 1) return null
-        val array = root.getJSONArray("added")
-        val result = ArrayList<Pair<String, ImagePresence>>(array.length())
-        val seen = HashSet<String>()
-        repeat(array.length()) { index ->
-            val item = array.getJSONObject(index)
-            val hash = item.getString("hash")
-            if (!HASH.matches(hash) || !seen.add(hash)) return null
-            result.add(hash to ImagePresence(item.getBoolean("file"), item.getBoolean("catalog")))
+    private fun readPresence(): List<Pair<String, ImagePresence>>? {
+        return try {
+            val stateFile = File(stagingRoot, STATE_FILE)
+            if (!stateFile.isFile || stateFile.length() > MAX_STATE_BYTES) return null
+            val root = JSONObject(stateFile.readText(Charsets.UTF_8))
+            if (root.optInt("version", -1) != 1) return null
+            val array = root.getJSONArray("added")
+            val result = ArrayList<Pair<String, ImagePresence>>(array.length())
+            val seen = HashSet<String>()
+            repeat(array.length()) { index ->
+                val item = array.getJSONObject(index)
+                val hash = item.getString("hash")
+                if (!HASH.matches(hash) || !seen.add(hash)) return null
+                result.add(hash to ImagePresence(item.getBoolean("file"), item.getBoolean("catalog")))
+            }
+            result
+        } catch (_: Exception) {
+            null
         }
-        result
-    } catch (_: Exception) {
-        null
     }
 
     private class AndroidBackend(context: Context) : Backend {

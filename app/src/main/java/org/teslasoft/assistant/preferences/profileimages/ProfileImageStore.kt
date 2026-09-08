@@ -135,6 +135,10 @@ class ProfileImageStore private constructor(context: Context) {
 
     fun contains(hash: String): Boolean = db.contains(hash)
 
+    /** Portable restore only: replace catalog metadata after every desired
+     * asset has been validated and copied into permanent storage. */
+    internal fun replaceCatalog(records: List<ProfileImageRecord>) = db.replaceAll(records)
+
     /** The permanent file for [hash], or null if it is not on disk (a missing-file record). */
     fun imageFile(hash: String): File? {
         val dir = permanentDir() ?: return null

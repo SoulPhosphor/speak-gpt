@@ -51,7 +51,7 @@ class ProfileImageDb private constructor(context: Context) :
     ) {
 
     companion object {
-        private const val DATABASE_NAME = "profile_images.db"
+        const val DATABASE_NAME = "profile_images.db"
         private const val DATABASE_VERSION = 1
 
         private const val TABLE_IMAGES = "profile_images"
@@ -152,6 +152,26 @@ class ProfileImageDb private constructor(context: Context) :
     /** Removes the catalog row for [hash]. Used after its permanent file is deleted. */
     fun delete(hash: String) {
         writableDatabase.delete(TABLE_IMAGES, "$COL_HASH = ?", arrayOf(hash))
+    }
+
+    /** Exact logical catalog replacement for the outer portable-restore
+     * transaction. Pixel files are staged and validated by its participant. */
+    internal fun replaceAll(records: List<ProfileImageRecord>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete(TABLE_IMAGES, null, null)
+            for (record in records) {
+                val values = ContentValues().apply {
+                    put(COL_HASH, record.hash)
+                    put(COL_CREATED_AT, record.createdAt)
+                }
+                db.insertOrThrow(TABLE_IMAGES, null, values)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     /**

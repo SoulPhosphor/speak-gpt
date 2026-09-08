@@ -20,34 +20,36 @@ object CompanionArchiveAssembler {
         destination: File,
         manifest: CompanionBackupManifest,
         sources: List<Source>
-    ): Boolean = try {
-        val imageSources = LinkedHashMap<String, Pair<File, CompanionBackupImage>>()
-        for (source in sources) {
-            source.manifest.images.forEach { image ->
-                imageSources.putIfAbsent(image.hash, source.archive to image)
-            }
-        }
-        if (manifest.images.any { it.hash !in imageSources }) return false
-
-        ZipOutputStream(destination.outputStream().buffered()).use { zip ->
-            zip.putNextEntry(ZipEntry(CompanionBackupFormat.MANIFEST_ENTRY))
-            zip.write(CompanionBackupCodec.toJson(manifest).toByteArray(Charsets.UTF_8))
-            zip.closeEntry()
-            for (image in manifest.images) {
-                val (archive, sourceImage) = imageSources.getValue(image.hash)
-                val bytes = ZipFile(archive).use { sourceZip ->
-                    val entry = sourceZip.getEntry(sourceImage.file) ?: return false
-                    sourceZip.getInputStream(entry).use { it.readBytes() }
+    ): Boolean {
+        return try {
+            val imageSources = LinkedHashMap<String, Pair<File, CompanionBackupImage>>()
+            for (source in sources) {
+                source.manifest.images.forEach { image ->
+                    imageSources.putIfAbsent(image.hash, source.archive to image)
                 }
-                if (Hash.hash(bytes) != image.hash) return false
-                zip.putNextEntry(ZipEntry(image.file))
-                zip.write(bytes)
-                zip.closeEntry()
             }
+            if (manifest.images.any { it.hash !in imageSources }) return false
+
+            ZipOutputStream(destination.outputStream().buffered()).use { zip ->
+                zip.putNextEntry(ZipEntry(CompanionBackupFormat.MANIFEST_ENTRY))
+                zip.write(CompanionBackupCodec.toJson(manifest).toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+                for (image in manifest.images) {
+                    val (archive, sourceImage) = imageSources.getValue(image.hash)
+                    val bytes = ZipFile(archive).use { sourceZip ->
+                        val entry = sourceZip.getEntry(sourceImage.file) ?: return false
+                        sourceZip.getInputStream(entry).use { it.readBytes() }
+                    }
+                    if (Hash.hash(bytes) != image.hash) return false
+                    zip.putNextEntry(ZipEntry(image.file))
+                    zip.write(bytes)
+                    zip.closeEntry()
+                }
+            }
+            CompanionBackupValidator.validate(destination) is CompanionBackupValidator.Verdict.Valid
+        } catch (_: Exception) {
+            destination.delete()
+            false
         }
-        CompanionBackupValidator.validate(destination) is CompanionBackupValidator.Verdict.Valid
-    } catch (_: Exception) {
-        destination.delete()
-        false
     }
 }
