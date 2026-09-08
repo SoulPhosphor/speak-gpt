@@ -34,7 +34,7 @@ class BackupRestoreScreenContractTest {
         val readable = layout.indexOf("@string/backup_readable_section")
         val converter = layout.indexOf("@+id/btn_legacy_convert")
         val restoreTitle = layout.indexOf("@string/restore_data_section")
-        val categories = layout.indexOf("@+id/check_restore_chats")
+        val categories = layout.indexOf("@+id/restore_category_chats")
         val portableRestore = layout.indexOf("@+id/btn_portable_restore")
         val databaseType = layout.indexOf("@+id/btn_restore_type\"")
         val databaseRestore = layout.indexOf("@+id/btn_restore_database\"")
@@ -49,6 +49,16 @@ class BackupRestoreScreenContractTest {
         assertTrue(portableRestore > categories)
         assertTrue(databaseType > portableRestore)
         assertTrue(databaseRestore > databaseType)
+    }
+
+    @Test
+    fun restoreCategoriesUseCompactCheckboxAndModeRows() {
+        val layout = source("activity_memory_backup_restore.xml")
+        val row = source("view_restore_category.xml")
+        assertTrue(row.contains("@+id/category_check"))
+        assertTrue(row.contains("@+id/category_mode"))
+        assertTrue(row.contains("Widget.App.Dropdown.CanonicalValue"))
+        assertTrue(layout.split("org.teslasoft.assistant.ui.views.RestoreCategoryView").size - 1 == 12)
     }
 
     @Test

@@ -70,7 +70,8 @@ object ModelEndpointPortableCodec {
     }
 
     fun encode(data: Data): String {
-        require(validate(data) == null) { validate(data) }
+        val failure = validate(data)
+        require(failure == null) { failure ?: "invalid data" }
         val endpoints = JSONArray()
         data.endpoints.forEach { endpoint ->
             endpoints.put(
@@ -117,70 +118,72 @@ object ModelEndpointPortableCodec {
             .toString(2)
     }
 
-    fun parse(json: String): Result = try {
-        if (json.toByteArray(Charsets.UTF_8).size > MAX_ARTIFACT_BYTES) {
-            return Result.Rejected("artifact is too large")
-        }
-        val root = JSONObject(json)
-        if (!hasExactKeys(root, ROOT_KEYS)) return Result.Rejected("unknown or missing top-level field")
-        if (root.getString("format") != FORMAT) return Result.Rejected("unsupported format")
-        if (!root.getBoolean("complete")) return Result.Rejected("artifact is incomplete")
-
-        val endpointsJson = root.getJSONArray("endpoints")
-        val endpoints = ArrayList<Endpoint>(endpointsJson.length())
-        repeat(endpointsJson.length()) { index ->
-            val item = endpointsJson.getJSONObject(index)
-            if (!hasExactKeys(item, ENDPOINT_KEYS)) {
-                return Result.Rejected("endpoint $index has unknown or missing fields")
+    fun parse(json: String): Result {
+        return try {
+            if (json.toByteArray(Charsets.UTF_8).size > MAX_ARTIFACT_BYTES) {
+                return Result.Rejected("artifact is too large")
             }
-            endpoints.add(
-                Endpoint(
-                    id = item.getString("id"),
-                    label = item.getString("label"),
-                    host = item.getString("host"),
-                    chatEndpoint = item.getString("chat_endpoint"),
-                    speechEndpoint = item.getString("speech_endpoint"),
-                    authType = item.getString("auth_type"),
-                    model = item.getString("model"),
-                    temperature = item.getDouble("temperature"),
-                    topP = item.getDouble("top_p"),
-                    frequencyPenalty = item.getDouble("frequency_penalty"),
-                    presencePenalty = item.getDouble("presence_penalty"),
-                    maxTokens = item.getInt("max_tokens"),
-                    endSeparator = item.getString("end_separator"),
-                    prefix = item.getString("prefix"),
-                    provider = item.getString("provider"),
-                    connectTimeoutSeconds = item.getInt("connect_timeout_seconds"),
-                    responseTimeoutSeconds = item.getInt("response_timeout_seconds"),
-                    contextWindowTokens = if (item.isNull("context_window_tokens")) null
-                    else item.getInt("context_window_tokens"),
-                    contextWindowModelId = item.getString("context_window_model_id"),
-                    imageCapabilityByModel = item.getString("image_capability_by_model"),
-                    toolCapabilityByModel = item.getString("tool_capability_by_model"),
-                    reasoningCapabilityByModel = item.getString("reasoning_capability_by_model"),
-                    reasoningRejectedLevelsByModel = item.getString("reasoning_rejected_levels_by_model"),
-                    providerDiscoveryPath = item.getString("provider_discovery_path"),
-                    identity = item.getString("identity"),
-                    rejectedTtsVoices = strings(item.getJSONArray("rejected_tts_voices"))
+            val root = JSONObject(json)
+            if (!hasExactKeys(root, ROOT_KEYS)) return Result.Rejected("unknown or missing top-level field")
+            if (root.getString("format") != FORMAT) return Result.Rejected("unsupported format")
+            if (!root.getBoolean("complete")) return Result.Rejected("artifact is incomplete")
+
+            val endpointsJson = root.getJSONArray("endpoints")
+            val endpoints = ArrayList<Endpoint>(endpointsJson.length())
+            repeat(endpointsJson.length()) { index ->
+                val item = endpointsJson.getJSONObject(index)
+                if (!hasExactKeys(item, ENDPOINT_KEYS)) {
+                    return Result.Rejected("endpoint $index has unknown or missing fields")
+                }
+                endpoints.add(
+                    Endpoint(
+                        id = item.getString("id"),
+                        label = item.getString("label"),
+                        host = item.getString("host"),
+                        chatEndpoint = item.getString("chat_endpoint"),
+                        speechEndpoint = item.getString("speech_endpoint"),
+                        authType = item.getString("auth_type"),
+                        model = item.getString("model"),
+                        temperature = item.getDouble("temperature"),
+                        topP = item.getDouble("top_p"),
+                        frequencyPenalty = item.getDouble("frequency_penalty"),
+                        presencePenalty = item.getDouble("presence_penalty"),
+                        maxTokens = item.getInt("max_tokens"),
+                        endSeparator = item.getString("end_separator"),
+                        prefix = item.getString("prefix"),
+                        provider = item.getString("provider"),
+                        connectTimeoutSeconds = item.getInt("connect_timeout_seconds"),
+                        responseTimeoutSeconds = item.getInt("response_timeout_seconds"),
+                        contextWindowTokens = if (item.isNull("context_window_tokens")) null
+                        else item.getInt("context_window_tokens"),
+                        contextWindowModelId = item.getString("context_window_model_id"),
+                        imageCapabilityByModel = item.getString("image_capability_by_model"),
+                        toolCapabilityByModel = item.getString("tool_capability_by_model"),
+                        reasoningCapabilityByModel = item.getString("reasoning_capability_by_model"),
+                        reasoningRejectedLevelsByModel = item.getString("reasoning_rejected_levels_by_model"),
+                        providerDiscoveryPath = item.getString("provider_discovery_path"),
+                        identity = item.getString("identity"),
+                        rejectedTtsVoices = strings(item.getJSONArray("rejected_tts_voices"))
+                    )
                 )
-            )
-        }
-
-        val favoritesJson = root.getJSONArray("favorites")
-        val favorites = ArrayList<Map<String, String>>(favoritesJson.length())
-        repeat(favoritesJson.length()) { index ->
-            val item = favoritesJson.getJSONObject(index)
-            if (item.keys().asSequence().any { it !in FAVORITE_KEYS }) {
-                return Result.Rejected("favorite $index has an unknown field")
             }
-            val favorite = LinkedHashMap<String, String>()
-            item.keys().forEach { key -> favorite[key] = item.getString(key) }
-            favorites.add(favorite)
+
+            val favoritesJson = root.getJSONArray("favorites")
+            val favorites = ArrayList<Map<String, String>>(favoritesJson.length())
+            repeat(favoritesJson.length()) { index ->
+                val item = favoritesJson.getJSONObject(index)
+                if (item.keys().asSequence().any { it !in FAVORITE_KEYS }) {
+                    return Result.Rejected("favorite $index has an unknown field")
+                }
+                val favorite = LinkedHashMap<String, String>()
+                item.keys().forEach { key -> favorite[key] = item.getString(key) }
+                favorites.add(favorite)
+            }
+            val data = Data(endpoints, favorites)
+            validate(data)?.let { Result.Rejected(it) } ?: Result.Ok(data)
+        } catch (_: Exception) {
+            Result.Rejected("artifact is malformed")
         }
-        val data = Data(endpoints, favorites)
-        validate(data)?.let { Result.Rejected(it) } ?: Result.Ok(data)
-    } catch (_: Exception) {
-        Result.Rejected("artifact is malformed")
     }
 
     private fun validate(data: Data): String? {

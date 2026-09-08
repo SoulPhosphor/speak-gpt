@@ -714,137 +714,65 @@
                 style="@style/Widget.App.Section.Hint"
                 android:text="@string/restore_data_hint" />
 
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_chats"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_chats" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_chats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_chats_desc" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_generated_images"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_generated_images"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_generated_images" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_companions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_generated_images_desc" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_glamours"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_companions"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_companions" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_roleplay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_companions_desc" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_profile_images"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_glamours"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_glamours" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_activation_prompts"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_glamours_desc" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_system_prompts"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_roleplay"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_roleplay" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_model_settings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_roleplay_desc" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_model_rules"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_profile_images"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_profile_images" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_memories"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_profile_images_desc" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_activation_prompts"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_activation_prompts" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_activation_prompts_desc" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_system_prompts"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_system_prompts" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_system_prompts_desc" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_model_settings"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_model_settings" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_model_settings_desc" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_model_rules"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_model_rules" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_model_rules_desc" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_memories"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_memories" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_memories_desc" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/check_restore_lorebooks"
-                style="@style/Widget.App.CheckOption.CheckBox"
-                android:checked="true"
-                android:text="@string/restore_category_lorebooks" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="48dp"
-                android:text="@string/restore_category_lorebooks_desc" />
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_lorebooks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_portable_restore"

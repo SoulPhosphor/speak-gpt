@@ -1233,8 +1233,12 @@
     <string name="title_memory_backup_restore">Backup &amp; Restore</string>
     <string name="backup_section_title">Backup</string>
     <string name="restore_data_section">Restore Data</string>
-    <string name="restore_data_hint">Select the data to restore from a Recovery Backup.</string>
+    <string name="restore_data_hint">Select the data to restore and choose Merge or Replace for each category.</string>
     <string name="restore_from_backup">Restore From Backup</string>
+    <string name="restore_mode_label">Restore Mode</string>
+    <string name="restore_mode_merge">Merge</string>
+    <string name="restore_mode_replace">Replace</string>
+    <string name="restore_mode_accessibility">Restore Mode: %1$s</string>
     <string name="restore_category_chats">Chats</string>
     <string name="restore_category_chats_desc">Chats, folders, and the generated images used in those chats.</string>
     <string name="restore_category_generated_images">Generated Images</string>

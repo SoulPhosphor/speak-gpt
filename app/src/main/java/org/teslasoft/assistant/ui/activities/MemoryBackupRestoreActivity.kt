@@ -77,12 +77,14 @@ import org.teslasoft.assistant.service.RestoreForegroundService
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatBackup
+import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreCategory
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemorySeedCodec
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.widgets.AppDropdown
+import org.teslasoft.assistant.ui.views.RestoreCategoryView
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
@@ -178,6 +180,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var btnRestoreType: TextView? = null
     private var btnRestoreDatabase: MaterialButton? = null
     private var btnRestoreFromBackup: MaterialButton? = null
+    private var btnPortableRestore: MaterialButton? = null
+    private val restoreCategoryViews = LinkedHashMap<PortableRestoreCategory, RestoreCategoryView>()
     private var restoreProgress: LinearLayout? = null
     private var restoreSpinner: CircularProgressIndicator? = null
     private var restoreProgressText: TextView? = null
@@ -393,6 +397,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
         btnCreateRecovery = findViewById(R.id.btn_create_recovery)
         btnRestoreFromBackup = findViewById(R.id.btn_restore_from_backup)
+        btnPortableRestore = findViewById(R.id.btn_portable_restore)
         textManualLocation = findViewById(R.id.text_manual_location)
         btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
         btnCreateBackup = findViewById(R.id.btn_create_backup)
@@ -430,6 +435,67 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnChangeAutoLocation = findViewById(R.id.btn_change_auto_location)
 
         btnReset = findViewById(R.id.btn_memory_reset)
+
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.CHATS, R.id.restore_category_chats,
+            R.string.restore_category_chats, R.string.restore_category_chats_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.GENERATED_IMAGES, R.id.restore_category_generated_images,
+            R.string.restore_category_generated_images, R.string.restore_category_generated_images_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.COMPANIONS, R.id.restore_category_companions,
+            R.string.restore_category_companions, R.string.restore_category_companions_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.GLAMOURS, R.id.restore_category_glamours,
+            R.string.restore_category_glamours, R.string.restore_category_glamours_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.ROLEPLAY, R.id.restore_category_roleplay,
+            R.string.restore_category_roleplay, R.string.restore_category_roleplay_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.PROFILE_IMAGES, R.id.restore_category_profile_images,
+            R.string.restore_category_profile_images, R.string.restore_category_profile_images_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.ACTIVATION_PROMPTS, R.id.restore_category_activation_prompts,
+            R.string.restore_category_activation_prompts, R.string.restore_category_activation_prompts_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.SYSTEM_PROMPTS, R.id.restore_category_system_prompts,
+            R.string.restore_category_system_prompts, R.string.restore_category_system_prompts_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS, R.id.restore_category_model_settings,
+            R.string.restore_category_model_settings, R.string.restore_category_model_settings_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.MODEL_RULES, R.id.restore_category_model_rules,
+            R.string.restore_category_model_rules, R.string.restore_category_model_rules_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.MEMORIES, R.id.restore_category_memories,
+            R.string.restore_category_memories, R.string.restore_category_memories_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.LOREBOOKS, R.id.restore_category_lorebooks,
+            R.string.restore_category_lorebooks, R.string.restore_category_lorebooks_desc
+        )
+    }
+
+    private fun bindPortableRestoreCategory(
+        category: PortableRestoreCategory,
+        viewId: Int,
+        title: Int,
+        description: Int
+    ) {
+        findViewById<RestoreCategoryView>(viewId).also {
+            it.bind(category, title, description)
+            restoreCategoryViews[category] = it
+        }
     }
 
     @Suppress("DEPRECATION")
