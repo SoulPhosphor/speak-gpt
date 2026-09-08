@@ -42,6 +42,7 @@ import org.teslasoft.assistant.preferences.backup.AutoBackupScheduling
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.StartupDatabaseCheck
+import org.teslasoft.assistant.preferences.backup.portable.GeneratedImagePortableRestoreManager
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -143,7 +144,14 @@ class MainApplication : Application() {
                 // histories before reconciling only journal-proven interrupted
                 // registrations. Runs AFTER the restore resume above so a chat
                 // set replaced by a restore is rescanned from its new histories.
-                GeneratedImageCatalogMaintenance.run(this)
+                // A Phase 10 generated-image replacement may have been
+                // interrupted after file or catalog mutation. Roll it back
+                // before backfill/reconciliation observes a mixed set. If the
+                // rollback cannot finish, leave the journal intact and do not
+                // mutate the catalog further; the next startup retries.
+                if (GeneratedImagePortableRestoreManager.recoverPending(this)) {
+                    GeneratedImageCatalogMaintenance.run(this)
+                }
             } catch (e: Exception) {
                 MemoryLog.log(
                     this,

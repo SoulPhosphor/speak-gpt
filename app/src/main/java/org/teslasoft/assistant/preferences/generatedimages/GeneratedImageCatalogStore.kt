@@ -294,6 +294,52 @@ class GeneratedImageCatalogStore private constructor(
         }
     }
 
+    /** Replace every logical catalog table in one SQLCipher transaction. File
+     * bytes are coordinated by GeneratedImageRestoreTransaction; this method
+     * either commits the complete catalog snapshot or leaves the old one. */
+    fun replaceSnapshot(snapshot: GeneratedImageCatalogSnapshot): Boolean {
+        val db = writableDatabase
+        db.beginTransaction()
+        return try {
+            db.delete(TABLE_IMAGES, null, null)
+            db.delete(TABLE_TOMBSTONES, null, null)
+            db.delete(TABLE_META, null, null)
+            db.delete(TABLE_BACKFILL_CHATS, null, null)
+            snapshot.active.forEach { db.insertOrThrow(TABLE_IMAGES, null, values(it)) }
+            snapshot.tombstones.forEach { tombstone ->
+                db.insertOrThrow(
+                    TABLE_TOMBSTONES,
+                    null,
+                    ContentValues().apply {
+                        put(COL_IMAGE_ID, tombstone.imageId)
+                        if (tombstone.assetFileName == null) putNull(COL_ASSET_FILE_NAME)
+                        else put(COL_ASSET_FILE_NAME, tombstone.assetFileName)
+                        put("deleted_at", tombstone.deletedAt)
+                        put("reason", tombstone.reason)
+                    }
+                )
+            }
+            snapshot.meta.forEach { (key, value) ->
+                db.insertOrThrow(
+                    TABLE_META,
+                    null,
+                    ContentValues().apply { put("key", key); put("value", value) }
+                )
+            }
+            snapshot.backfillChats.forEach { (chatId, scannedAt) ->
+                db.insertOrThrow(
+                    TABLE_BACKFILL_CHATS,
+                    null,
+                    ContentValues().apply { put("chat_id", chatId); put("scanned_at", scannedAt) }
+                )
+            }
+            db.setTransactionSuccessful()
+            true
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun hasActiveFileHash(fileHash: String): Boolean = readableDatabase.rawQuery(
         "SELECT 1 FROM $TABLE_IMAGES WHERE $COL_FILE_HASH = ? LIMIT 1",
         arrayOf(fileHash)
@@ -711,6 +757,11 @@ class GeneratedImageCatalogStore private constructor(
                 GeneratedImageCatalogSnapshotResult(failureState(context))
             }
         }
+
+        fun replaceSnapshot(
+            context: Context,
+            snapshot: GeneratedImageCatalogSnapshot
+        ): GeneratedImageCatalogWriteResult = write(context) { it.replaceSnapshot(snapshot) }
 
         fun listOwnedByChats(context: Context, chatIds: Set<String>): GeneratedImageCatalogListResult {
             val (store, state) = access(context)
