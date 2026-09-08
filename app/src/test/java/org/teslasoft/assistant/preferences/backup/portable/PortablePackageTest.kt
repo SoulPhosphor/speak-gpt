@@ -162,6 +162,57 @@ class PortablePackageTest {
     }
 
     @Test
+    fun profileImageAssetIsAPortableArtifactWithStrictHashFilename() {
+        val inner = tmp.newFile("profile_image_inner.zip").apply { delete() }
+        val jpeg = artifactFile(
+            "profile_jpeg",
+            byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 1, 2, 0xff.toByte(), 0xd9.toByte())
+        )
+        val hash = "a".repeat(64)
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "profile_images/assets/profile_$hash.jpg",
+                    PortablePackage.TYPE_PROFILE_IMAGE_ASSET,
+                    jpeg,
+                    null,
+                    null,
+                    null
+                )
+            ),
+            "2026-09-08T00:00:00Z",
+            inner
+        )
+
+        val extracted = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(extracted is PortablePackage.ValidateResult.Ok)
+        assertEquals(
+            PortablePackage.TYPE_PROFILE_IMAGE_ASSET,
+            (extracted as PortablePackage.ValidateResult.Ok).artifacts.single().type
+        )
+
+        val unsafe = tmp.newFile("unsafe_profile.zip").apply { delete() }
+        assertTrue(
+            runCatching {
+                PortablePackage.buildInnerZip(
+                    listOf(
+                        PortablePackage.Artifact(
+                            "profile_images/assets/not-a-hash.jpg",
+                            PortablePackage.TYPE_PROFILE_IMAGE_ASSET,
+                            jpeg,
+                            null,
+                            null,
+                            null
+                        )
+                    ),
+                    "2026-09-08T00:00:00Z",
+                    unsafe
+                )
+            }.exceptionOrNull() is IllegalArgumentException
+        )
+    }
+
+    @Test
     fun passwordRouteRecoversTheSecretItself() {
         val rs = PackageCrypto.newRecoverySecret()
         val salt = PackageCrypto.newKdfSalt()

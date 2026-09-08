@@ -70,6 +70,7 @@ object PortablePackage {
     const val TYPE_CHATS_JSON = "chats-json"
     const val TYPE_GENERATED_IMAGES_CATALOG = "generated-images-catalog"
     const val TYPE_GENERATED_IMAGE_ASSET = "generated-image-asset"
+    const val TYPE_PROFILE_IMAGE_ASSET = "profile-image-asset"
 
     data class Artifact(
         val entryName: String,
@@ -468,6 +469,11 @@ object PortablePackage {
             val fileName = name.removePrefix("generated_images/assets/")
             name.startsWith("generated_images/assets/") &&
                 fileName.isNotBlank() && !fileName.contains('/') && !fileName.contains('\\')
+        }
+        TYPE_PROFILE_IMAGE_ASSET -> {
+            val fileName = name.removePrefix("profile_images/assets/")
+            name.startsWith("profile_images/assets/") &&
+                Regex("^profile_[0-9a-f]{64}\\.jpg$").matches(fileName)
         }
         else -> false
     }

@@ -38,8 +38,9 @@ import java.time.Instant
  *    inside the package — the two most sensitive stores never exist as
  *    plaintext on disk during an encrypted backup. Keys are ordinary
  *    exportable bytes; only their STORAGE is Keystore-bound.
- *  - User image catalog: row-level rebuilt plain SQLite copy (catalog only;
- *    the JPEGs are not backed up — standing owner ruling).
+ *  - Avatar/Profile Images: row-level rebuilt plain SQLite catalog plus every
+ *    valid content-addressed gallery JPEG, including unused images. Identity
+ *    assignments live with their owning records and are not changed here.
  *  - Chats: logical serialization ([ChatLogicalSerializer]) — the raw
  *    enc.*.xml files can never be portable. LOCKED storage fails the run
  *    visibly.
@@ -70,7 +71,9 @@ object PortableRecoveryWriter {
             val artifactCount: Int,
             val includedTypes: Set<BackupType>,
             val generatedImageCount: Int = 0,
-            val generatedImageBytes: Long = 0L
+            val generatedImageBytes: Long = 0L,
+            val profileImageCount: Int = 0,
+            val profileImageBytes: Long = 0L
         ) : Result()
 
         /** [chatFailure] refines CHATS_UNAVAILABLE with WHICH part of chat
@@ -136,6 +139,8 @@ object PortableRecoveryWriter {
             val includedTypes = LinkedHashSet<BackupType>()
             var generatedImageCount = 0
             var generatedImageBytes = 0L
+            var profileImageCount = 0
+            var profileImageBytes = 0L
 
             // ---- memory DB (ciphertext + key) ----
             if (MemoryStore.isProvisioned(context)) {
@@ -183,17 +188,26 @@ object PortableRecoveryWriter {
                 includedTypes.add(BackupType.LOREBOOK)
             }
 
-            // ---- user image catalog (plain SQLite; catalog only) ----
+            // ---- Avatar/Profile Images (plain SQLite catalog + complete
+            //      gallery bytes, including images not assigned anywhere) ----
             run {
                 val staged = File(staging, "user_images.snapshot")
                 if (RecoveryBackupManager.snapshotUserImageCatalog(context, staged)) {
                     RecoveryBackupManager.integrityCheckPlain(staged)
+                    val profileImages = ProfileImagePortableBackup.buildArtifacts(context, staged)
+                    if (profileImages is ProfileImagePortableBackup.Result.Failed) {
+                        return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    }
+                    profileImages as ProfileImagePortableBackup.Result.Ok
                     artifacts.add(
                         PortablePackage.Artifact(
                             entryName = "user_images.db", type = "sqlite-db", file = staged,
                             databaseKeyHex = null, keySemantics = null, schemaVersion = null
                         )
                     )
+                    artifacts.addAll(profileImages.artifacts)
+                    profileImageCount = profileImages.inventory.imageCount
+                    profileImageBytes = profileImages.inventory.imageBytes
                     includedTypes.add(BackupType.USER_IMAGE)
                 }
             }
@@ -258,7 +272,9 @@ object PortableRecoveryWriter {
                         artifactCount = artifacts.size,
                         includedTypes = includedTypes,
                         generatedImageCount = generatedImageCount,
-                        generatedImageBytes = generatedImageBytes
+                        generatedImageBytes = generatedImageBytes,
+                        profileImageCount = profileImageCount,
+                        profileImageBytes = profileImageBytes
                     )
                 }
             }

@@ -1,6 +1,5 @@
 package org.teslasoft.assistant.preferences.generatedimages
 
-import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -8,13 +7,14 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class GeneratedImageCatalogHealthCheckTest {
 
-    private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+    private val context: android.content.Context get() = RuntimeEnvironment.getApplication()
     private lateinit var database: File
 
     @Before
