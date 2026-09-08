@@ -1015,10 +1015,13 @@ Present these choices with estimated backup size from a read-only inventory. Do 
 #### 10.1 owner decisions, September 7, 2026
 
 - A portable backup must work across app builds, installations, and phones.
-  An installation-bound encrypted snapshot may only be an additional recovery
-  artifact; it cannot substitute for the portable package. The existing
-  portable Recovery Code / Recovery Key / optional-password architecture is
-  the approved basis for encrypted cross-install restore.
+  This requirement applies to every restorable backup. Do not create or expose
+  an installation-bound backup, even as an additional recovery artifact: a
+  backup that becomes unusable when the original phone is destroyed would put
+  the user's data at risk. The existing portable Recovery Code / Recovery Key /
+  optional-password architecture is the approved basis for encrypted
+  cross-install restore; encryption must never depend on a key available only
+  from the source installation.
 - Preserve **all active generated-image bytes**, including active Gallery-only
   images whose origin chat was deleted. Metadata-only and chat-referenced-only
   backup are rejected as the complete generated-image backup policy.
@@ -1033,9 +1036,18 @@ Present these choices with estimated backup size from a read-only inventory. Do 
   legacy source until the permanent importer supersedes it. Do not broaden the
   converter into that importer and do not remove it during Phase 10.
 
-Still requiring a separate owner answer before Phase 10 storage implementation:
-whether the installation-bound generated-image snapshot should ship in
-addition to the required portable package.
+- Restorable backups may be encrypted or unencrypted at the user's choice.
+  Password encryption is allowed for users who need privacy from people with
+  access to their files, but the app must not require a password for users who
+  do not trust themselves to retain one. Any encrypted restore dependency must
+  be portable and clearly handed to the user.
+- A human-readable data copy is a separate, deliberately non-restorable export.
+  It remains valuable when a user wants to leave the app while retaining access
+  to their own information. A later export-design pass should allow the user to
+  select which supported categories appear in that readable copy; do not
+  confuse it with or substitute it for the portable restorable backup.
+
+The Phase 10 owner gate is resolved: implement portable-only backup and restore.
 
 ### 10.2 Implementation invariants after approval
 
@@ -1163,9 +1175,9 @@ This is the first point at which the owner's installed corpus participates, and 
 
 1. Any early owner inspection uses the separate-install Phase 8.5 Beta. Never install the reviewed branch over the working pre-release. Remember that the Beta cannot read or validate the working app's private corpus.
 2. Before any eventual in-place candidate upgrade over the owner's only data:
-   - create and verify a same-install Recovery Backup;
+   - create and verify a portable Recovery Backup that can be restored after
+     reinstalling the app or on another device;
    - create and verify a Human-Readable Chat Backup in JSON mode;
-   - if available after Phase 10/11, create and verify the portable artifact;
    - copy at least one verified artifact off the phone/app-private storage.
 3. Never begin by restoring over the only copy. First restore a duplicate fixture/disposable installation and compare:
    - chat count and stable IDs;
