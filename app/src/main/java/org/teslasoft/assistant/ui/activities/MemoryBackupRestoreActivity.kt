@@ -220,8 +220,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     // 7. Automatic Backups. The toggle and frequency dropdown are restored/
     // visible (owner ruling, July 22 2026) and persist the user's choice
-    // ahead of the portable automatic WRITER existing (that piece is still
-    // unbuilt - these controls don't make anything run on a schedule yet).
+    // and drive the portable automatic Recovery-package writer.
     private var switchAutoBackup: MaterialSwitch? = null
     private var btnAutoFrequency: TextView? = null
     private var autoFrequency = BackupFrequency.DAILY
