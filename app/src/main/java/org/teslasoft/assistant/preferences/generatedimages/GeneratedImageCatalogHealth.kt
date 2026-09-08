@@ -77,7 +77,13 @@ object GeneratedImageCatalogHealth {
     }
 
     @androidx.annotation.VisibleForTesting
-    fun clear(context: Context) {
+    fun clear(context: Context) = clearFlags(context)
+
+    /** Restore rollback only: return a store created by the failed restore to
+     * its exact never-provisioned health state after its files and key are gone. */
+    internal fun clearAfterRestoreRollback(context: Context) = clearFlags(context)
+
+    private fun clearFlags(context: Context) {
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
             .edit(commit = true) {
                 remove(KEY_CORRUPT)
