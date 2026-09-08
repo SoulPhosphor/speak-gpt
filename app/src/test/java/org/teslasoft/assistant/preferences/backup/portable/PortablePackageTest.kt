@@ -16,6 +16,9 @@
 
 package org.teslasoft.assistant.preferences.backup.portable
 
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupCodec
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupManifest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -25,6 +28,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.RandomAccessFile
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
  * End-to-end format tests: build -> envelope -> inspect -> decode -> validate,
@@ -209,6 +214,74 @@ class PortablePackageTest {
                     unsafe
                 )
             }.exceptionOrNull() is IllegalArgumentException
+        )
+    }
+
+    @Test
+    fun companionAndRoleplayArchiveIsAValidatedPortableArtifact() {
+        val companionArchive = artifactFile("companion_archive", ByteArray(0))
+        ZipOutputStream(companionArchive.outputStream()).use { zip ->
+            zip.putNextEntry(ZipEntry(CompanionBackupFormat.MANIFEST_ENTRY))
+            zip.write(
+                CompanionBackupCodec.toJson(
+                    CompanionBackupManifest(
+                        formatVersion = CompanionBackupFormat.FORMAT_VERSION,
+                        appVersion = "1.0",
+                        exportedAt = "2026-09-08T00:00:00Z",
+                        companionProfiles = emptyList(),
+                        activationPrompts = emptyList(),
+                        systemPrompts = emptyList(),
+                        selectedSystemPromptId = "",
+                        roleplayTables = CompanionBackupFormat.ROLEPLAY_TABLES
+                            .associateWith { emptyList() },
+                        images = emptyList()
+                    )
+                ).toByteArray(Charsets.UTF_8)
+            )
+            zip.closeEntry()
+        }
+        val inner = tmp.newFile("companion_inner.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "companion_roleplay.zip",
+                    PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE,
+                    companionArchive,
+                    null,
+                    null,
+                    CompanionBackupFormat.FORMAT_VERSION
+                )
+            ),
+            "2026-09-08T00:00:00Z",
+            inner
+        )
+
+        val extracted = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(extracted is PortablePackage.ValidateResult.Ok)
+        assertEquals(
+            PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE,
+            (extracted as PortablePackage.ValidateResult.Ok).artifacts.single().type
+        )
+
+        companionArchive.writeBytes("not a zip".toByteArray())
+        val invalidInner = tmp.newFile("invalid_companion_inner.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "companion_roleplay.zip",
+                    PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE,
+                    companionArchive,
+                    null,
+                    null,
+                    CompanionBackupFormat.FORMAT_VERSION
+                )
+            ),
+            "2026-09-08T00:00:00Z",
+            invalidInner
+        )
+        assertTrue(
+            PortablePackage.validateAndExtract(invalidInner, tmp.newFolder())
+                is PortablePackage.ValidateResult.Failed
         )
     }
 

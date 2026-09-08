@@ -28,9 +28,10 @@ import org.junit.Test
  * REPLACEMENT of encrypted chat storage, and the plan's P1 risk is that a
  * restore reached from a stray UI, debug action, or import path would run
  * before the user has any way to understand or confirm it. The owner has
- * approved exactly one reachable restore — Restore From Backup (chats-only,
+ * approved the Phase 9 reachable restore — Restore From Backup (chats-only,
  * replace-only), driven by [org.teslasoft.assistant.service.RestoreForegroundService]
- * with owner-approved wording.
+ * — and Phase 11's engine-only portable chat coordinator. A separate Phase 11
+ * boundary test proves that coordinator is not reached by an Activity.
  *
  * This test makes that the build invariant: only the approved callers (the
  * engine itself and the restore service) may name `restoreFromArchive`; if any
@@ -51,12 +52,14 @@ class RestoreEngineHasNoReachableCallerTest {
     /**
      * The engine declares it; [RestoreForegroundService] is the single
      * owner-approved reachable caller (Restore From Backup, chats-only,
-     * replace-only). Every OTHER production file must still stay away from the
-     * engine so a stray edit cannot open a second, unreviewed restore path.
+     * replace-only). Phase 11 adds the portable chat category coordinator, but
+     * not a direct UI caller. Every OTHER production file must still stay away
+     * from the engine so a stray edit cannot open an unreviewed restore path.
      */
     private val approvedCallers = setOf(
         "ChatRestoreManager.kt",
-        "RestoreForegroundService.kt"
+        "RestoreForegroundService.kt",
+        "PortableChatRestoreCoordinator.kt"
     )
 
     @Test

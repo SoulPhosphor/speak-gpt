@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences.backup.portable
 
 import org.json.JSONArray
 import org.json.JSONObject
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupValidator
 import java.io.File
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
@@ -68,17 +69,18 @@ object PortablePackage {
     const val TYPE_SQLCIPHER_DB = "sqlcipher-db"
     const val TYPE_SQLITE_DB = "sqlite-db"
     const val TYPE_CHATS_JSON = "chats-json"
+    const val TYPE_COMPANION_ROLEPLAY_ARCHIVE = "companion-roleplay-archive"
     const val TYPE_GENERATED_IMAGES_CATALOG = "generated-images-catalog"
     const val TYPE_GENERATED_IMAGE_ASSET = "generated-image-asset"
     const val TYPE_PROFILE_IMAGE_ASSET = "profile-image-asset"
 
     data class Artifact(
         val entryName: String,
-        val type: String,           // "sqlcipher-db" | "sqlite-db" | "chats-json"
+        val type: String,
         val file: File,
         val databaseKeyHex: String?, // sqlcipher-db only
         val keySemantics: String?,   // sqlcipher-db only
-        val schemaVersion: Int?      // databases only, when known
+        val schemaVersion: Int?      // database or logical artifact format, when known
     )
 
     // ----- creation ----------------------------------------------------------
@@ -412,6 +414,12 @@ object PortablePackage {
                     if (hash != meta.optString("sha256", "")) {
                         return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
                     }
+                    if (
+                        meta.optString("type", "") == TYPE_COMPANION_ROLEPLAY_ARCHIVE &&
+                        CompanionBackupValidator.validate(staged) !is CompanionBackupValidator.Verdict.Valid
+                    ) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    }
                     out.add(
                         ValidatedArtifact(
                             entryName = name,
@@ -464,6 +472,7 @@ object PortablePackage {
         TYPE_SQLCIPHER_DB -> name == "memory.db" || name == "lorebook.db"
         TYPE_SQLITE_DB -> name == "user_images.db"
         TYPE_CHATS_JSON -> name == "chats.json"
+        TYPE_COMPANION_ROLEPLAY_ARCHIVE -> name == "companion_roleplay.zip"
         TYPE_GENERATED_IMAGES_CATALOG -> name == "generated_images/catalog.json"
         TYPE_GENERATED_IMAGE_ASSET -> {
             val fileName = name.removePrefix("generated_images/assets/")

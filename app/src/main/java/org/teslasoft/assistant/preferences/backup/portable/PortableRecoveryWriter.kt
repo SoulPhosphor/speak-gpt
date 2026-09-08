@@ -20,6 +20,8 @@ import android.content.Context
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporter
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
 import org.teslasoft.assistant.preferences.lorebook.LoreBookEncryption
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 import org.teslasoft.assistant.preferences.memory.MemoryLog
@@ -44,6 +46,9 @@ import java.time.Instant
  *  - Chats: logical serialization ([ChatLogicalSerializer]) — the raw
  *    enc.*.xml files can never be portable. LOCKED storage fails the run
  *    visibly.
+ *  - Companions and roleplay: the existing validated logical archive, which
+ *    also contains Activation Prompts, System Prompts, Glamours, Roleplay
+ *    Characters, related roleplay records, and referenced profile images.
  *
  * NOTE for the unencrypted tier: the SAME inner layout is used, so the
  * database keys are exposed in cleartext inside the file. That is within the
@@ -225,6 +230,26 @@ object PortableRecoveryWriter {
                 }
             }
 
+            // ---- companions, prompts and roleplay (logical archive) ----
+            run {
+                val staged = File(staging, "companion_roleplay.zip")
+                when (CompanionBackupExporter.buildBackupZip(context, staged)) {
+                    CompanionBackupExporter.BuildResult.MemoryUnavailable,
+                    CompanionBackupExporter.BuildResult.LorebookUnavailable ->
+                        return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    is CompanionBackupExporter.BuildResult.Ok -> artifacts.add(
+                        PortablePackage.Artifact(
+                            entryName = "companion_roleplay.zip",
+                            type = PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE,
+                            file = staged,
+                            databaseKeyHex = null,
+                            keySemantics = null,
+                            schemaVersion = CompanionBackupFormat.FORMAT_VERSION
+                        )
+                    )
+                }
+            }
+
             // ---- chats (logical serialization; LOCKED fails visibly) ----
             when (val chats = ChatLogicalSerializer.serializeV2(context)) {
                 is ChatLogicalSerializer.Result.Unavailable ->
@@ -239,12 +264,6 @@ object PortableRecoveryWriter {
                         )
                     )
                     includedTypes.add(BackupType.CHATS)
-                    if (artifacts.size == 1 && chats.chatCount == 0) {
-                        // No databases exist and no chats exist: nothing real
-                        // to package — neutral, not a failure (owner ruling).
-                        return Result.Failed(Reason.NOTHING_TO_BACK_UP)
-                    }
-
                     // ---- assemble + envelope + reopen-and-verify ----
                     val innerZip = File(staging, "inner.zip")
                     PortablePackage.buildInnerZip(artifacts, createdAt, innerZip)
