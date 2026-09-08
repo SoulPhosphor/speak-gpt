@@ -39,7 +39,7 @@ class RestoreCategoryView @JvmOverloads constructor(
     private lateinit var category: PortableRestoreCategory
     private var mode = PortableRestoreMode.MERGE
 
-    val isSelected: Boolean get() = check.isChecked
+    val isCategorySelected: Boolean get() = check.isChecked
     val selectedMode: PortableRestoreMode get() = mode
 
     init {
