@@ -45,7 +45,8 @@ object ChatMergePlanner {
         val backupFoldersById = backup.folders.associateBy { it.id }
 
         val collisions = neededBackupFolders.mapNotNull { id ->
-            val source = backupFoldersById[id] ?: return Rejected("chat folder $id has no definition")
+            val source = backupFoldersById[id]
+                ?: return Result.Rejected("chat folder $id has no definition")
             if (id in currentFoldersById) return@mapNotNull null
             currentFoldersByName[normalizeName(source.name)]?.let { FolderCollision(source, it) }
         }.filter { it.backupFolder.id !in folderResolutions }
@@ -103,7 +104,7 @@ object ChatMergePlanner {
                 chatsAdded++
                 continue
             }
-            if (existing == source) {
+            if (sameContent(existing, source)) {
                 identicalSkipped++
                 continue
             }
@@ -145,6 +146,13 @@ object ChatMergePlanner {
             else -> null
         }
     }
+
+    private fun sameContent(
+        current: ChatLogicalImportPlan.ChatPlan,
+        backup: ChatLogicalImportPlan.ChatPlan
+    ): Boolean = contentRow(current.listRow) == contentRow(backup.listRow) &&
+        current.settings == backup.settings &&
+        current.messagesJson == backup.messagesJson
 
     private fun isPrefix(shorter: JSONArray, longer: JSONArray): Boolean {
         if (shorter.length() >= longer.length()) return false

@@ -1190,7 +1190,9 @@ A category absent from the selected package must be named exactly. The dialog
 offers **Cancel** on the far left and **Restore Available Categories** on the
 right. Nothing is silently unchecked. Continuing explicitly removes only the
 missing categories from this run and restores the available selected
-categories.
+categories. This exists primarily for valid older Recovery Backups created
+before newer categories were available; normal current Recovery Backups still
+aim to contain every supported category.
 
 Replace-versus-merge remains a user choice. The selected mode applies only to
 the selected categories, and the confirmation must identify those categories

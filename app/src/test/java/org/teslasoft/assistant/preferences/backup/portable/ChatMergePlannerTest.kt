@@ -13,14 +13,15 @@ class ChatMergePlannerTest {
 
     @Test
     fun identicalStableIdentityIsSkipped() {
-        val current = plan(chat(chatId, "[]"))
-        val backup = plan(chat(chatId, "[]"))
+        val current = plan(chat(chatId, "[]", mapOf("timestamp" to "1", "pinned" to "true")))
+        val backup = plan(chat(chatId, "[]", mapOf("timestamp" to "2", "pinned" to "false")))
 
         val ready = ChatMergePlanner.plan(current, backup) as ChatMergePlanner.Result.Ready
 
         assertEquals(1, ready.report.identicalSkipped)
         assertEquals(0, ready.report.conflicts.size)
         assertEquals(1, ready.plan.chats.size)
+        assertEquals("true", ready.plan.chats.single().listRow["pinned"])
     }
 
     @Test

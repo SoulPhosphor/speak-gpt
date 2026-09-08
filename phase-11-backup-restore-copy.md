@@ -59,6 +59,11 @@ Mode choices:
 
 ## Missing Categories
 
+This dialog is useful when the user chooses an older Recovery Backup created
+before one or more current categories existed, or another valid backup format
+that never carried those categories. It lets the user deliberately recover the
+usable categories without pretending the missing data was restored.
+
 - Title: **Some Selected Data Is Not in This Backup**
 - Message: **This backup does not contain: %1$s. You can cancel and change your selections, or restore the selected categories that are available.**
 - Left action: **Cancel**
