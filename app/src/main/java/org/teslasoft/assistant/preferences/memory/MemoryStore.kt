@@ -7769,6 +7769,18 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         return out
     }
 
+    /** Exact logical rows for the independently selectable Memories and Model
+     * Rules portable categories. Derived/temporary tables are intentionally
+     * outside these user-data snapshots. */
+    fun exportPortableRows(group: MemoryPortableGroup): MemoryPortableRows =
+        MemoryPortableRowFormat.read(readableDatabase, group)
+
+    /** Category-scoped exact replacement below the outer restore journal.
+     * This never clears Companion/Roleplay rows while restoring Memories, and
+     * never clears Memories while restoring Model Rules. */
+    fun replacePortableRows(group: MemoryPortableGroup, rows: MemoryPortableRows): Boolean =
+        MemoryPortableRowFormat.replace(writableDatabase, group, rows)
+
     /**
      * The §6.3 step-2 replace: delete the existing §2.4 record sets, insert
      * [tables]' rows, apply the §6.4 resolution rules, write the restore
