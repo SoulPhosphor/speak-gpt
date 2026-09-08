@@ -1316,6 +1316,53 @@ damage validation; a protected package asks for an available portable unlock
 method (Recovery Code, Recovery Key file, or configured password) and never
 depends on the source device.
 
+### 11.3 implementation status of record, September 8, 2026
+
+- `chat-logical-v2`, its strict v1/v2 reader, immutable folder definitions,
+  exact-prefix longer-chat rule, stable-ID conflict reporting, and the three
+  folder-collision outcomes are implemented below a journaled chat restore
+  coordinator. The current-item-wins merge path never mints replacement IDs.
+- A generic selected-category transaction validates and stages every selected
+  participant before live writes, records each participant before its apply
+  begins, rolls applied categories back in reverse order after failure, and
+  has process-death recovery tests. This is the required outer transaction;
+  category-private journals remain responsible for atomicity inside one
+  participant.
+- Normal protected and unencrypted Recovery Backups now embed the existing
+  Companion & Roleplay archive, the full Generated Images logical catalog and
+  bytes, the Avatar/Profile Images catalog and bytes, chats, memory and
+  lorebook snapshots, and credential-free Model & Endpoint Settings whenever
+  those sources validate. Package inventory distinguishes categories that are
+  present from categories missing in valid older packages.
+- Model & Endpoint Settings has a strict credential-free codec, backup writer,
+  stable-ID merge planner, restore participant, and tests proving that its
+  backup/restore seam does not touch endpoint credentials. Existing device
+  credentials remain associated with the same endpoint ID; new endpoints
+  receive no credential.
+- Generated Images now has stable-ID merge planning and a selected-category
+  participant that stages both desired and exact rollback catalogs/assets.
+  Replace planning retains and reports current images required by unselected
+  data. A physical filename collision with different content fails before
+  mutation. The dependency collector that supplies those protected image IDs
+  is still required before this participant gains a production UI caller.
+- The main Settings row and Backup & Restore screen use the approved visible
+  order. The Restore Data section has twelve on-screen category rows, selected
+  by default, with concise explanations and independent Merge/Replace controls.
+  The legacy converter remains visible under Backup, direct database restore
+  remains at the bottom, and Reset plus retired standalone flows retain hidden
+  wiring. The unified Restore From Backup action deliberately remains disabled
+  until every selectable category and dependency can join the outer
+  transaction safely.
+- Still required before Phase 11 is complete: split the bundled Companion,
+  Glamour, Roleplay, Activation Prompt, and System Prompt data into genuinely
+  selective participants; add Memories, Lorebooks, Model Rules, and complete
+  Avatar/Profile Images participants; collect cross-category image and record
+  dependencies; wire package selection/unlock, missing-category consent,
+  folder decisions, confirmation, progress, conflict reporting, and startup
+  recovery into the unified screen; expand the Human-Readable export; then
+  pass the full unit/build/Beta/instrumentation-compilation workflow. Do not
+  enable the button or describe the product as complete before those items.
+
 ## Phase 12 — Owner-data rehearsal and final Main gate
 
 This is the first point at which the owner's installed corpus participates, and only after a verified backup exists.
