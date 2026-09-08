@@ -121,6 +121,70 @@ object UnifiedPortableRestore {
     ): SelectedCategoryRestoreTransaction.Result =
         SelectedCategoryRestoreTransaction.execute(journalRoot, ready.participants)
 
+    /** Persistent rollback staging used only after the package has been fully
+     * decoded and validated. Unlike decode staging, this must survive process
+     * death until the outer transaction is complete or rolled back. */
+    fun newTransactionStaging(context: Context): File? {
+        val journal = journalRoot(context)
+        if (journal.exists()) return null
+        val root = transactionStagingRoot(context)
+        if (root.exists() && !root.deleteRecursively()) return null
+        return root.takeIf { it.mkdirs() || it.isDirectory }
+    }
+
+    fun journalRoot(context: Context): File =
+        File(context.filesDir, JOURNAL_DIRECTORY)
+
+    /** Resolve a selected-category transaction interrupted after mutation
+     * began. Constructors are supplied only so each participant can read its
+     * already-staged exact rollback snapshot; validate/stage are never called
+     * by [SelectedCategoryRestoreTransaction.recover]. */
+    fun recoverPending(context: Context): Boolean {
+        val journal = journalRoot(context)
+        val root = transactionStagingRoot(context)
+        if (!journal.exists()) {
+            if (root.exists()) root.deleteRecursively()
+            return true
+        }
+        val unused = File(root, "unused")
+        val participants = listOf<SelectedCategoryRestoreTransaction.Participant>(
+            ChatRestoreParticipant(context, unused, PortableRestoreMode.MERGE, emptyMap(), File(root, "chats")),
+            GeneratedImageRestoreParticipant(
+                context, emptyList(), PortableRestoreMode.MERGE, emptySet(), File(root, "generated_images")
+            ),
+            GeneratedImageRestoreParticipant(
+                context, emptyList(), emptySet(), File(root, "chat_images"), "chat_image_dependencies"
+            ),
+            CompanionCategoryRestoreParticipant(
+                context, unused,
+                listOf(CompanionCategoryPlanner.Selection(
+                    PortableRestoreCategory.COMPANIONS, PortableRestoreMode.MERGE
+                )),
+                File(root, "identity_bundle")
+            ),
+            ProfileImageRestoreParticipant(
+                context, emptyList(), PortableRestoreMode.MERGE, emptySet(), File(root, "profile_images")
+            ),
+            ModelEndpointRestoreParticipant(
+                context, unused, PortableRestoreMode.MERGE, File(root, "model_endpoints")
+            ),
+            MemoryRowsRestoreParticipant(
+                context, emptyList(), PortableRestoreCategory.MODEL_RULES,
+                PortableRestoreMode.MERGE, File(root, PortableRestoreCategory.MODEL_RULES.key)
+            ),
+            MemoryRowsRestoreParticipant(
+                context, emptyList(), PortableRestoreCategory.MEMORIES,
+                PortableRestoreMode.MERGE, File(root, PortableRestoreCategory.MEMORIES.key)
+            ),
+            LorebookRestoreParticipant(
+                context, emptyList(), PortableRestoreMode.MERGE, File(root, "lorebooks")
+            )
+        ).associateBy { it.categoryKey }
+        val recovered = SelectedCategoryRestoreTransaction.recover(journal, participants)
+        if (recovered) root.deleteRecursively()
+        return recovered
+    }
+
     private fun artifact(
         artifacts: List<PortablePackage.ValidatedArtifact>, type: String
     ): PortablePackage.ValidatedArtifact? = artifacts.singleOrNull { it.type == type }
@@ -151,4 +215,10 @@ object UnifiedPortableRestore {
         PortableRestoreCategory.ACTIVATION_PROMPTS,
         PortableRestoreCategory.SYSTEM_PROMPTS
     )
+
+    private const val JOURNAL_DIRECTORY = "selected_category_restore_journal"
+    private const val STAGING_DIRECTORY = "selected_category_restore_staging"
+
+    private fun transactionStagingRoot(context: Context): File =
+        File(context.filesDir, STAGING_DIRECTORY)
 }

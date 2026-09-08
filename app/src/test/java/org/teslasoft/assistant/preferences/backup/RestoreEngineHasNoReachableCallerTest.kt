@@ -30,8 +30,7 @@ import org.junit.Test
  * before the user has any way to understand or confirm it. The owner has
  * approved the Phase 9 reachable restore — Restore From Backup (chats-only,
  * replace-only), driven by [org.teslasoft.assistant.service.RestoreForegroundService]
- * — and Phase 11's engine-only portable chat coordinator. A separate Phase 11
- * boundary test proves that coordinator is not reached by an Activity.
+ * — and Phase 11's selected-category portable restore participant.
  *
  * This test makes that the build invariant: only the approved callers (the
  * engine itself and the restore service) may name `restoreFromArchive`; if any
@@ -51,15 +50,16 @@ class RestoreEngineHasNoReachableCallerTest {
 
     /**
      * The engine declares it; [RestoreForegroundService] is the single
-     * owner-approved reachable caller (Restore From Backup, chats-only,
-     * replace-only). Phase 11 adds the portable chat category coordinator, but
-     * not a direct UI caller. Every OTHER production file must still stay away
+     * owner-approved callers. Phase 11 adds the transaction participant that
+     * stages exact current/desired archives and reaches the same engine only
+     * after the unified confirmation. Every OTHER production file stays away
      * from the engine so a stray edit cannot open an unreviewed restore path.
      */
     private val approvedCallers = setOf(
         "ChatRestoreManager.kt",
         "RestoreForegroundService.kt",
-        "PortableChatRestoreCoordinator.kt"
+        "PortableChatRestoreCoordinator.kt",
+        "ChatRestoreParticipant.kt"
     )
 
     @Test
