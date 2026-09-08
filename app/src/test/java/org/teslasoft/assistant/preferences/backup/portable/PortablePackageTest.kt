@@ -115,6 +115,53 @@ class PortablePackageTest {
     }
 
     @Test
+    fun generatedImageCatalogAndAssetArePortableArtifacts() {
+        val inner = tmp.newFile("generated_inner.zip").apply { delete() }
+        val catalog = artifactFile(
+            "generated_catalog",
+            """{"format":"generated-images-logical-v1","active":[],"tombstones":[],"meta":[],"backfill_chats":[]}""".toByteArray()
+        )
+        val png = artifactFile(
+            "generated_png",
+            byteArrayOf(
+                0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+                0x00, 0x00, 0x00, 0x00
+            )
+        )
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "generated_images/catalog.json",
+                    PortablePackage.TYPE_GENERATED_IMAGES_CATALOG,
+                    catalog,
+                    null,
+                    null,
+                    1
+                ),
+                PortablePackage.Artifact(
+                    "generated_images/assets/79b4e47b-b6d4-4e7d-8d8d-413215eab779.png",
+                    PortablePackage.TYPE_GENERATED_IMAGE_ASSET,
+                    png,
+                    null,
+                    null,
+                    null
+                )
+            ),
+            "2026-09-08T00:00:00Z",
+            inner
+        )
+
+        val extracted = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(extracted is PortablePackage.ValidateResult.Ok)
+        val artifacts = (extracted as PortablePackage.ValidateResult.Ok).artifacts
+        assertEquals(2, artifacts.size)
+        assertEquals(
+            1,
+            artifacts.first { it.type == PortablePackage.TYPE_GENERATED_IMAGES_CATALOG }.schemaVersion
+        )
+    }
+
+    @Test
     fun passwordRouteRecoversTheSecretItself() {
         val rs = PackageCrypto.newRecoverySecret()
         val salt = PackageCrypto.newKdfSalt()

@@ -35,6 +35,11 @@ data class GeneratedImageCatalogListResult(
     val records: List<GeneratedImageCatalogRecord> = emptyList()
 )
 
+data class GeneratedImageCatalogSnapshotResult(
+    val state: GeneratedImageCatalogStorageState,
+    val snapshot: GeneratedImageCatalogSnapshot? = null
+)
+
 data class GeneratedImageCatalogBooleanResult(
     val state: GeneratedImageCatalogStorageState,
     val value: Boolean = false
@@ -233,6 +238,59 @@ class GeneratedImageCatalogStore private constructor(
     ).use { cursor ->
         buildList {
             while (cursor.moveToNext()) add(record(cursor))
+        }
+    }
+
+    /** One read transaction gives portable export a self-consistent logical
+     * view without copying this installation's SQLCipher file or key. */
+    fun exportSnapshot(): GeneratedImageCatalogSnapshot {
+        val db = readableDatabase
+        db.beginTransaction()
+        return try {
+            val active = db.rawQuery(
+                "SELECT * FROM $TABLE_IMAGES ORDER BY $COL_CREATED_AT ASC, $COL_IMAGE_ID ASC",
+                emptyArray()
+            ).use { cursor ->
+                buildList { while (cursor.moveToNext()) add(record(cursor)) }
+            }
+            val tombstones = db.rawQuery(
+                "SELECT $COL_IMAGE_ID, $COL_ASSET_FILE_NAME, deleted_at, reason " +
+                    "FROM $TABLE_TOMBSTONES ORDER BY deleted_at ASC, $COL_IMAGE_ID ASC",
+                emptyArray()
+            ).use { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            GeneratedImageCatalogTombstone(
+                                imageId = cursor.getString(0),
+                                assetFileName = if (cursor.isNull(1)) null else cursor.getString(1),
+                                deletedAt = cursor.getLong(2),
+                                reason = cursor.getString(3)
+                            )
+                        )
+                    }
+                }
+            }
+            val meta = db.rawQuery(
+                "SELECT key, value FROM $TABLE_META ORDER BY key ASC",
+                emptyArray()
+            ).use { cursor ->
+                linkedMapOf<String, String>().apply {
+                    while (cursor.moveToNext()) put(cursor.getString(0), cursor.getString(1))
+                }
+            }
+            val backfillChats = db.rawQuery(
+                "SELECT chat_id, scanned_at FROM $TABLE_BACKFILL_CHATS ORDER BY chat_id ASC",
+                emptyArray()
+            ).use { cursor ->
+                linkedMapOf<String, Long>().apply {
+                    while (cursor.moveToNext()) put(cursor.getString(0), cursor.getLong(1))
+                }
+            }
+            db.setTransactionSuccessful()
+            GeneratedImageCatalogSnapshot(active, tombstones, meta, backfillChats)
+        } finally {
+            db.endTransaction()
         }
     }
 
@@ -638,6 +696,19 @@ class GeneratedImageCatalogStore private constructor(
                 GeneratedImageCatalogListResult(GeneratedImageCatalogStorageState.AVAILABLE, store.allActive())
             } catch (_: Exception) {
                 GeneratedImageCatalogListResult(failureState(context))
+            }
+        }
+
+        fun exportSnapshot(context: Context): GeneratedImageCatalogSnapshotResult {
+            val (store, state) = access(context)
+            if (store == null) return GeneratedImageCatalogSnapshotResult(state)
+            return try {
+                GeneratedImageCatalogSnapshotResult(
+                    GeneratedImageCatalogStorageState.AVAILABLE,
+                    store.exportSnapshot()
+                )
+            } catch (_: Exception) {
+                GeneratedImageCatalogSnapshotResult(failureState(context))
             }
         }
 

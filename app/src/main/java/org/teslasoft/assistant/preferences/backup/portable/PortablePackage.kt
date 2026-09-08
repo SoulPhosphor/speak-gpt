@@ -65,6 +65,12 @@ object PortablePackage {
     const val SQLCIPHER_VERSION = "4.16.0"
     const val CIPHER_COMPAT = 4
 
+    const val TYPE_SQLCIPHER_DB = "sqlcipher-db"
+    const val TYPE_SQLITE_DB = "sqlite-db"
+    const val TYPE_CHATS_JSON = "chats-json"
+    const val TYPE_GENERATED_IMAGES_CATALOG = "generated-images-catalog"
+    const val TYPE_GENERATED_IMAGE_ASSET = "generated-image-asset"
+
     data class Artifact(
         val entryName: String,
         val type: String,           // "sqlcipher-db" | "sqlite-db" | "chats-json"
@@ -87,6 +93,7 @@ object PortablePackage {
         ZipOutputStream(innerZip.outputStream().buffered()).use { zip ->
             for (a in artifacts) {
                 requireSafeEntryName(a.entryName)
+                require(isSupportedArtifact(a.entryName, a.type)) { "unsupported artifact" }
                 zip.putNextEntry(ZipEntry(a.entryName))
                 val digest = MessageDigest.getInstance("SHA-256")
                 a.file.inputStream().use { input ->
@@ -301,7 +308,8 @@ object PortablePackage {
         val type: String,
         val stagedFile: File,
         val databaseKeyHex: String?,
-        val keySemantics: String?
+        val keySemantics: String?,
+        val schemaVersion: Int?
     )
 
     sealed class ValidateResult {
@@ -356,7 +364,11 @@ object PortablePackage {
                 for (i in 0 until list.length()) {
                     val a = list.getJSONObject(i)
                     val name = a.optString("name", "")
+                    val type = a.optString("type", "")
                     if (!isSafeEntryName(name) || name == MANIFEST_ENTRY) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    }
+                    if (!isSupportedArtifact(name, type)) {
                         return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
                     }
                     // Duplicate artifact names inside the manifest are rejected.
@@ -405,7 +417,10 @@ object PortablePackage {
                             type = meta.optString("type", ""),
                             stagedFile = staged,
                             databaseKeyHex = meta.optString("db_key_hex", "").ifEmpty { null },
-                            keySemantics = meta.optString("key_semantics", "").ifEmpty { null }
+                            keySemantics = meta.optString("key_semantics", "").ifEmpty { null },
+                            schemaVersion = if (meta.has("schema_version")) {
+                                meta.optInt("schema_version", -1).takeIf { it >= 0 }
+                            } else null
                         )
                     )
                 }
@@ -442,5 +457,18 @@ object PortablePackage {
 
     private fun requireSafeEntryName(name: String) {
         require(isSafeEntryName(name)) { "unsafe entry name" }
+    }
+
+    private fun isSupportedArtifact(name: String, type: String): Boolean = when (type) {
+        TYPE_SQLCIPHER_DB -> name == "memory.db" || name == "lorebook.db"
+        TYPE_SQLITE_DB -> name == "user_images.db"
+        TYPE_CHATS_JSON -> name == "chats.json"
+        TYPE_GENERATED_IMAGES_CATALOG -> name == "generated_images/catalog.json"
+        TYPE_GENERATED_IMAGE_ASSET -> {
+            val fileName = name.removePrefix("generated_images/assets/")
+            name.startsWith("generated_images/assets/") &&
+                fileName.isNotBlank() && !fileName.contains('/') && !fileName.contains('\\')
+        }
+        else -> false
     }
 }

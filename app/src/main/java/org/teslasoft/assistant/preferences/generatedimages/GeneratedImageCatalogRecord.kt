@@ -45,6 +45,22 @@ data class GeneratedImageCatalogRecord(
     }
 }
 
+/** Logical catalog state used by portable backup/restore. It deliberately
+ * excludes the SQLCipher file and its installation key. */
+data class GeneratedImageCatalogSnapshot(
+    val active: List<GeneratedImageCatalogRecord>,
+    val tombstones: List<GeneratedImageCatalogTombstone>,
+    val meta: Map<String, String>,
+    val backfillChats: Map<String, Long>
+)
+
+data class GeneratedImageCatalogTombstone(
+    val imageId: String,
+    val assetFileName: String?,
+    val deletedAt: Long,
+    val reason: String
+)
+
 /** Conservative identity for records that predate stable image IDs. A stored
  * creation time distinguishes separate generations with identical bytes. If
  * even that provenance is absent, the physical legacy file is the strongest

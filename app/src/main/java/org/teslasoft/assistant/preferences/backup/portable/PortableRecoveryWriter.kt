@@ -68,7 +68,9 @@ object PortableRecoveryWriter {
         data class Ok(
             val chatCount: Int,
             val artifactCount: Int,
-            val includedTypes: Set<BackupType>
+            val includedTypes: Set<BackupType>,
+            val generatedImageCount: Int = 0,
+            val generatedImageBytes: Long = 0L
         ) : Result()
 
         /** [chatFailure] refines CHATS_UNAVAILABLE with WHICH part of chat
@@ -132,6 +134,8 @@ object PortableRecoveryWriter {
             val createdAt = Instant.now().toString()
             val artifacts = ArrayList<PortablePackage.Artifact>()
             val includedTypes = LinkedHashSet<BackupType>()
+            var generatedImageCount = 0
+            var generatedImageBytes = 0L
 
             // ---- memory DB (ciphertext + key) ----
             if (MemoryStore.isProvisioned(context)) {
@@ -194,6 +198,19 @@ object PortableRecoveryWriter {
                 }
             }
 
+            // ---- generated images (portable logical catalog + every active
+            //      gallery byte, including Gallery-only images) ----
+            when (val generated = GeneratedImagePortableBackup.buildArtifacts(context, staging)) {
+                is GeneratedImagePortableBackup.Result.NothingToBackUp -> Unit
+                is GeneratedImagePortableBackup.Result.Failed ->
+                    return Result.Failed(Reason.SNAPSHOT_FAILED)
+                is GeneratedImagePortableBackup.Result.Ok -> {
+                    artifacts.addAll(generated.artifacts)
+                    generatedImageCount = generated.inventory.imageCount
+                    generatedImageBytes = generated.inventory.imageBytes
+                }
+            }
+
             // ---- chats (logical serialization; LOCKED fails visibly) ----
             when (val chats = ChatLogicalSerializer.serialize(context)) {
                 is ChatLogicalSerializer.Result.Unavailable ->
@@ -239,7 +256,9 @@ object PortableRecoveryWriter {
                     return Result.Ok(
                         chatCount = chats.chatCount,
                         artifactCount = artifacts.size,
-                        includedTypes = includedTypes
+                        includedTypes = includedTypes,
+                        generatedImageCount = generatedImageCount,
+                        generatedImageBytes = generatedImageBytes
                     )
                 }
             }
