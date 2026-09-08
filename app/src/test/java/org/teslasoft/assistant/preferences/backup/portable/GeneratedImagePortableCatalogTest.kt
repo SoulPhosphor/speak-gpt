@@ -107,7 +107,9 @@ class GeneratedImagePortableCatalogTest {
                             record.createdAt,
                             "missing"
                         )
-                    )
+                    ),
+                    meta = emptyMap(),
+                    backfillChats = emptyMap()
                 )
             )
         )
