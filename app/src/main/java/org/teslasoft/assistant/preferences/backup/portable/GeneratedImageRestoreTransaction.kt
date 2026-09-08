@@ -197,30 +197,32 @@ object GeneratedImageRestoreTransaction {
         return AtomicFileWriter.writeAndVerify(File(root, STATE_FILE), json)
     }
 
-    private fun readState(root: File): State? = try {
-        val stateFile = File(root, STATE_FILE)
-        if (!stateFile.isFile || stateFile.length() > GeneratedImagePortableCatalog.MAX_JSON_CHARS * 2L) return null
-        val rootJson = JSONObject(stateFile.readText(Charsets.UTF_8))
-        if (rootJson.optInt("version", -1) != 1) return null
-        val original = GeneratedImagePortableCatalog.parse(rootJson.getJSONObject("original").toString())
-        val desired = GeneratedImagePortableCatalog.parse(rootJson.getJSONObject("desired").toString())
-        if (original !is GeneratedImagePortableCatalog.ParseResult.Ok ||
-            desired !is GeneratedImagePortableCatalog.ParseResult.Ok
-        ) return null
-        val filesJson = rootJson.getJSONArray("original_files")
-        val files = LinkedHashSet<String>()
-        repeat(filesJson.length()) {
-            val name = filesJson.getString(it)
-            if (!GeneratedImagePortableCatalog.safeAssetName(name) || !files.add(name)) return null
+    private fun readState(root: File): State? {
+        return try {
+            val stateFile = File(root, STATE_FILE)
+            if (!stateFile.isFile || stateFile.length() > GeneratedImagePortableCatalog.MAX_JSON_CHARS * 2L) return null
+            val rootJson = JSONObject(stateFile.readText(Charsets.UTF_8))
+            if (rootJson.optInt("version", -1) != 1) return null
+            val original = GeneratedImagePortableCatalog.parse(rootJson.getJSONObject("original").toString())
+            val desired = GeneratedImagePortableCatalog.parse(rootJson.getJSONObject("desired").toString())
+            if (original !is GeneratedImagePortableCatalog.ParseResult.Ok ||
+                desired !is GeneratedImagePortableCatalog.ParseResult.Ok
+            ) return null
+            val filesJson = rootJson.getJSONArray("original_files")
+            val files = LinkedHashSet<String>()
+            repeat(filesJson.length()) {
+                val name = filesJson.getString(it)
+                if (!GeneratedImagePortableCatalog.safeAssetName(name) || !files.add(name)) return null
+            }
+            State(
+                Phase.valueOf(rootJson.getString("phase")),
+                original.snapshot,
+                desired.snapshot,
+                files
+            )
+        } catch (_: Exception) {
+            null
         }
-        State(
-            Phase.valueOf(rootJson.getString("phase")),
-            original.snapshot,
-            desired.snapshot,
-            files
-        )
-    } catch (_: Exception) {
-        null
     }
 
     private fun copyVerified(source: File, target: File, replace: Boolean): Boolean {
