@@ -988,13 +988,23 @@ reports the state of the exit-gate requirement itself.
 | Disposable-install backup → mutate → restore → restart → compare | **Not started.** The coordinator it depends on now exists, but this requires a disposable arm64 device run the owner has not authorized. Unverified. |
 | Owner approves the recovery wording before UI is added | **Not applicable yet.** No restore UI, no wording. The fail-closed `UNRECOVERABLE` recovery-state wording is deliberately deferred until the owner is ready to review it. |
 
-**Phase 9's engine and coordinator are now built and unit/Robolectric-verified,
-but remain deliberately unreachable.** The boundary guard makes that a build
-invariant so a future edit cannot silently ship a reachable, mixed-state
-restore. Nothing here is device-verified: the disposable-install rehearsal, the
-process-death crash matrix, and every Pixel/arm64/real-owner-data check remain
-unrun, and the fail-closed recovery wording still needs owner approval before
-any UI.
+**At the time of the 9.5 audit, Phase 9's engine and coordinator were built and
+unit/Robolectric-verified but deliberately unreachable.** The lines above are
+retained as that audit record. The later owner-verified Beta baseline is the
+controlling current status below.
+
+#### 9.6 owner-verified Beta baseline, September 7, 2026
+
+The preceding 9.5 paragraph records the earlier engine-only gate, not the
+current product baseline. The owner subsequently tested the isolated Beta on a
+Pixel 8 and verified the current chats-only, replace-only Restore From Backup
+workflow end to end: the temporary converter accepted the owner's unencrypted
+legacy backup, produced a current Chats-Recovery ZIP without changing live
+data, and that ZIP restored through the real restore path. Chat UUIDs remained
+unchanged. An automatic blank startup placeholder did not block restore, while
+a genuine user-created pending conversation remained protected. Restore errors
+use the approved `Reason: Proper sentence.` form. Do not ask the owner to repeat
+this completed test, and do not reopen Phase 9 architecture discovery.
 
 ## Phase 10 — Generated-image backup, health, and restore policy
 
@@ -1064,6 +1074,40 @@ The Phase 10 owner gate is resolved: implement portable-only backup and restore.
 - missing DB, wrong key, corrupt DB, missing byte, extra byte, partial package, interrupted snapshot, and interrupted restore;
 - exact disclosure/behavior for the owner-selected byte policy;
 - prove `chat_search.db`, its key, WAL, SHM, and journals are excluded from every backup and rebuilt after restore.
+
+### 10.4 implementation status of record, September 8, 2026
+
+- Portable recovery packages now carry a versioned logical generated-image
+  catalog plus every unique active image byte, including locked images,
+  copied/shared references, deleted-origin records, tombstones, and Gallery-only
+  images. Hashes, UUIDs, safe in-app filenames, sizes, MIME signatures, schema
+  version, duplicate identities, and exact missing/extra asset sets are checked
+  before restore may mutate storage.
+- Generated-image replacement is one private, journaled catalog-and-file
+  transaction. Failure rolls both parts back; startup rolls back any durable
+  non-complete journal, and an unreadable journal is preserved rather than
+  guessed away. The engine has no production restore caller and is guarded by
+  a source-contract test until the Phase 11.1 category transaction and screen
+  are approved.
+- Generated-image health checking distinguishes never-created, available,
+  locked/unavailable, needs-recovery, and corrupt states. A never-created check
+  does not provision an empty database; a missing previously provisioned store
+  and a corrupt store remain fail-closed.
+- Manual and automatic Recovery Backups use the same portable protected or
+  unencrypted package. Protected packages depend only on the portable Recovery
+  Code/Key and optional password route, never on a source-device-only restore
+  key. The retired installation-bound writer has no production caller. The
+  temporary legacy converter remains present and narrow.
+- Portable packages also carry the complete Avatar/Profile Images catalog and
+  every valid content-addressed gallery JPEG, including unused images. Missing,
+  altered, non-JPEG, duplicate, or malformed catalog assets fail the backup
+  instead of publishing a catalog without its pixels. Applying that category,
+  assignment dependencies, and protected-retention rules remain deliberately
+  at the Phase 11.1 cross-category design gate; this Phase 10 work does not add
+  an early category UI or change any identity assignment.
+- The package artifact allowlist rejects `chat_search.db`, its key, WAL, SHM,
+  and journal names. Existing chat replacement tests prove Search is discarded
+  and rebuilt from restored authoritative chat data.
 
 ## Phase 11 — Portable chat restore/import format
 

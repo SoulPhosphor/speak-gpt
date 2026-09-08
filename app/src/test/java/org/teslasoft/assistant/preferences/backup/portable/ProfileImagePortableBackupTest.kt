@@ -1,5 +1,6 @@
 package org.teslasoft.assistant.preferences.backup.portable
 
+import android.app.Application
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import java.io.File
@@ -18,7 +19,7 @@ import org.robolectric.annotation.Config
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageFileNaming
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [35])
+@Config(manifest = Config.NONE, sdk = [28], application = Application::class)
 class ProfileImagePortableBackupTest {
 
     @get:Rule
