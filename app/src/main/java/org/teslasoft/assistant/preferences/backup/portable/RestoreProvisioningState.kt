@@ -24,13 +24,16 @@ internal object RestoreProvisioningState {
         false
     }
 
-    fun read(root: File): Boolean? = try {
-        val file = File(root, FILE)
-        if (!file.isFile || file.length() > 1024L) return null
-        val json = JSONObject(file.readText(Charsets.UTF_8))
-        if (json.optInt("version", -1) != 1 || !json.has("provisioned")) null
-        else json.getBoolean("provisioned")
-    } catch (_: Exception) {
-        null
+    fun read(root: File): Boolean? {
+        return try {
+            val file = File(root, FILE)
+            if (!file.isFile || file.length() > 1024L) null else {
+                val json = JSONObject(file.readText(Charsets.UTF_8))
+                if (json.optInt("version", -1) != 1 || !json.has("provisioned")) null
+                else json.getBoolean("provisioned")
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 }

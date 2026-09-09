@@ -18,6 +18,7 @@ package org.teslasoft.assistant.ui.activities
 
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.DialogInterface
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.ColorStateList
@@ -90,6 +91,8 @@ import org.teslasoft.assistant.preferences.backup.portable.RecoveryCode
 import org.teslasoft.assistant.preferences.backup.portable.RecoveryKeyFile
 import org.teslasoft.assistant.preferences.backup.portable.SelectedCategoryRestoreTransaction
 import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestore
+import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
+import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemorySeedCodec
@@ -100,6 +103,7 @@ import org.teslasoft.assistant.ui.views.RestoreCategoryView
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
+import java.util.Locale
 
 /**
  * "Backup & Restore" — the app-wide recovery screen. Phase 11 keeps Backup
@@ -1141,23 +1145,46 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             setSingleLine(true)
             setPadding(48, 12, 48, 12)
         }
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.portable_folder_name_title)
             .setView(input)
-            .setPositiveButton(R.string.portable_folder_create) { _, _ ->
-                val name = input.text?.toString().orEmpty().trim()
-                if (name.isBlank()) {
-                    showNoticeDialog(getString(R.string.portable_folder_blank))
-                    showNewFolderName(pending, collision)
-                } else {
-                    pending.folderResolutions[collision.backupFolder.id] =
-                        ChatMergePlanner.FolderResolution.CreateNew(name)
-                    preflightPortableRestore(pending)
-                }
-            }
+            .setPositiveButton(R.string.portable_folder_create, null)
             .setNegativeButton(R.string.btn_cancel) { _, _ -> showFolderCollision(pending, collision) }
             .setOnCancelListener { showFolderCollision(pending, collision) }
-            .show()
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+                val name = input.text?.toString().orEmpty().trim()
+                when {
+                    name.isBlank() -> input.error = getString(R.string.portable_folder_blank)
+                    portableFolderNameAlreadyUsed(pending, name) ->
+                        input.error = getString(R.string.portable_folder_duplicate)
+                    else -> {
+                        dialog.dismiss()
+                        pending.folderResolutions[collision.backupFolder.id] =
+                            ChatMergePlanner.FolderResolution.CreateNew(name)
+                        preflightPortableRestore(pending)
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun portableFolderNameAlreadyUsed(
+        pending: PendingPortableRestore,
+        proposedName: String
+    ): Boolean {
+        val normalized = proposedName.trim().lowercase(Locale.ROOT)
+        if (pending.folderResolutions.values.any {
+                it is ChatMergePlanner.FolderResolution.CreateNew &&
+                    it.name.trim().lowercase(Locale.ROOT) == normalized
+            }
+        ) return true
+        val snapshot = ChatNavigationRepository.get(applicationContext).snapshot()
+        return snapshot is ChatNavigationResult.Success && snapshot.value.folders.any {
+            it.folder.name.trim().lowercase(Locale.ROOT) == normalized
+        }
     }
 
     private fun showPortableConfirmation(pending: PendingPortableRestore) {
