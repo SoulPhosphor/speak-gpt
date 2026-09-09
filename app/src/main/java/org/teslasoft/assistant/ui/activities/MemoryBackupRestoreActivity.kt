@@ -16,11 +16,9 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.net.Uri
@@ -36,7 +34,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
@@ -74,7 +71,6 @@ import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupManif
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupValidator
 import org.teslasoft.assistant.preferences.backup.companion.CompanionRoleplayRestoreManager
 import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
-import org.teslasoft.assistant.service.RestoreForegroundService
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.ui.PortableRestoreRecoveryFlow
 import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
@@ -84,6 +80,7 @@ import org.teslasoft.assistant.preferences.backup.portable.ChatMergePlanner
 import org.teslasoft.assistant.preferences.backup.portable.PackageCrypto
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackage
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
+import org.teslasoft.assistant.preferences.backup.portable.PortableChatRestorePlan
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreCategory
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreInventory
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreSelectionPlan
@@ -196,7 +193,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var recoveryTypeProtected = true
     private var btnRestoreType: TextView? = null
     private var btnRestoreDatabase: MaterialButton? = null
-    private var btnRestoreFromBackup: MaterialButton? = null
     private var btnPortableRestore: MaterialButton? = null
     private val restoreCategoryViews = LinkedHashMap<PortableRestoreCategory, RestoreCategoryView>()
     private var modelCredentialsNote: TextView? = null
@@ -288,12 +284,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         if (uri != null) prepareRestoreFolder(uri) else endRestoreSelection()
     }
 
-    // Restore From Backup (chats-only, replace-only). Picking a backup file
-    // shows the destructive confirmation before anything runs.
-    private val chatRestoreFilePicker = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> if (uri != null) confirmChatRestore(uri) }
-
     private val portableRestoreFilePicker = registerForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -304,15 +294,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) unlockPortableWithKeyFile(uri) else showPortableUnlockChoices()
-    }
-
-    // The restore runs in RestoreForegroundService; a failure comes back as a
-    // package-scoped broadcast so this screen can show the reason. Registered
-    // only while resumed, so the dialog never lands on a stopped activity.
-    private val chatRestoreFailureReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            onChatRestoreFailed(intent?.getStringExtra(RestoreForegroundService.EXTRA_FAILURE_DETAIL))
-        }
     }
 
     private val readableSaveLauncher = registerForActivityResult(
@@ -375,12 +356,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         if (PortableRestoreRecoveryFlow.showIfPending(this)) return
-        ContextCompat.registerReceiver(
-            this,
-            chatRestoreFailureReceiver,
-            IntentFilter(RestoreForegroundService.ACTION_RESTORE_FAILED),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
         refreshLocations()
         refreshBackupStatus()
         refreshAutoStatus()
@@ -399,11 +374,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         }
         DatabaseRecoveryFlows.showPendingNoticeIfAny(this) { refreshBackupStatus() }
         sweepRepeatedBackupFailures()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        runCatching { unregisterReceiver(chatRestoreFailureReceiver) }
     }
 
     private fun bindViews() {
@@ -444,7 +414,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         healthProgressTextUserImage = findViewById(R.id.health_progress_text_userimage)
 
         btnCreateRecovery = findViewById(R.id.btn_create_recovery)
-        btnRestoreFromBackup = findViewById(R.id.btn_restore_from_backup)
         btnPortableRestore = findViewById(R.id.btn_portable_restore)
         textManualLocation = findViewById(R.id.text_manual_location)
         btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
@@ -642,9 +611,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     .putExtra(RecoveryBackupActivity.EXTRA_RECOVERY_PROTECTED, recoveryTypeProtected)
             )
         }
-        btnRestoreFromBackup?.setOnClickListener {
-            chatRestoreFilePicker.launch(arrayOf("application/zip", "application/octet-stream"))
-        }
         btnPortableRestore?.setOnClickListener { beginPortableRestore() }
         updateRestoreTypeLabel()
         btnRestoreType?.setOnClickListener { pickRestoreType() }
@@ -805,7 +771,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private fun setRestoreFlowActive(active: Boolean) {
         restoreFlowActive = active
         btnPortableRestore?.isEnabled = !active
-        btnRestoreFromBackup?.isEnabled = !active
         btnRestoreDatabase?.isEnabled = !active
         btnRestoreType?.isEnabled = !active
         DatabaseHealthState.databaseTypes.forEach { applyInlineState(it) }
@@ -1534,69 +1499,6 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         setDatabaseMutationRunning(false)
         setRestoreFlowActive(false)
         setRestoreStatus(null, null, busy = false)
-    }
-
-    private fun confirmChatRestore(uri: Uri) {
-        // Cancel on the left, the action on the right (style guide: the action
-        // button is always to the right).
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setMessage(R.string.chat_restore_confirm_message)
-            .setNegativeButton(R.string.btn_cancel, null)
-            .setPositiveButton(R.string.chat_restore_confirm_replace) { _, _ -> startChatRestore(uri) }
-            .show()
-    }
-
-    private fun startChatRestore(uri: Uri) {
-        btnRestoreFromBackup?.isEnabled = false
-        restoreProgress?.visibility = View.VISIBLE
-        restoreSpinner?.visibility = View.VISIBLE
-        restoreProgressText?.text = getString(R.string.chat_restore_progress)
-        runOffThread {
-            // The service runs the engine but cannot read the picker's content
-            // URI, so stage a private cache copy first and hand it the path.
-            val stagedFile = File(cacheDir, "chat_restore_stage_${System.nanoTime()}.zip")
-            val copied = try {
-                contentResolver.openInputStream(uri)?.use { input ->
-                    stagedFile.outputStream().use { input.copyTo(it) }
-                } ?: throw IllegalStateException("could not open the selected file")
-                true
-            } catch (_: Exception) {
-                runCatching { stagedFile.delete() }
-                false
-            }
-            runOnUiThread {
-                if (copied) RestoreForegroundService.start(this, stagedFile.absolutePath)
-                else onChatRestoreFailed(getString(R.string.chat_restore_read_error))
-            }
-        }
-    }
-
-    private fun onChatRestoreFailed(detail: String?) {
-        btnRestoreFromBackup?.isEnabled = true
-        restoreProgress?.visibility = View.GONE
-        restoreSpinner?.visibility = View.GONE
-        restoreProgressText?.text = null
-        val message = if (detail.isNullOrBlank()) {
-            getString(R.string.chat_restore_failed_title)
-        } else {
-            getString(R.string.chat_restore_failed_title) + "\n\n" +
-                getString(R.string.chat_restore_failure_reason, sentenceCase(detail))
-        }
-        runCatching {
-            MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setMessage(message)
-                .setPositiveButton(R.string.btn_ok, null)
-                .show()
-        }
-    }
-
-    private fun sentenceCase(detail: String): String {
-        val capitalized = detail.trim().replaceFirstChar { first ->
-            if (first.isLowerCase()) first.titlecase() else first.toString()
-        }
-        return if (capitalized.endsWith('.') || capitalized.endsWith('!') ||
-            capitalized.endsWith('?')
-        ) capitalized else "$capitalized."
     }
 
     private fun prepareRestoreFile(uri: Uri) {
