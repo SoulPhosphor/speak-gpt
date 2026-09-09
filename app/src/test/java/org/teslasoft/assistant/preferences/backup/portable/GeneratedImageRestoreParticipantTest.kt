@@ -80,7 +80,7 @@ class GeneratedImageRestoreParticipantTest {
             precomputed = GeneratedImageRestoreParticipant.PreparedPlan(
                 current = snapshot(oldRecord),
                 incoming = prepared,
-                desired = planned.desired,
+                desired = planned.snapshot,
                 report = planned.report
             )
         )
@@ -90,7 +90,7 @@ class GeneratedImageRestoreParticipantTest {
         assertTrue(participant.stage())
         assertEquals(0, backend.snapshotCalls)
         assertTrue(participant.apply())
-        assertEquals(planned.desired, backend.value)
+        assertEquals(planned.snapshot, backend.value)
     }
 
     @Test
