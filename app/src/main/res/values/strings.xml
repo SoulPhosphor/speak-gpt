@@ -2205,8 +2205,8 @@
     <string name="backup_location_unavailable">Folder unavailable. Choose a new location.</string>
     <!-- 4. Human-Readable Chat Backup (new section — owner directive, July 22
          2026: separate from Recovery Backup and from Portable Data Copy). -->
-    <string name="backup_readable_section">Human-Readable Chat Backup</string>
-    <string name="backup_readable_desc">Saves your chats as ordinary files you can open anywhere, packed into one ZIP.</string>
+    <string name="backup_readable_section">Human-Readable Data Backup</string>
+    <string name="backup_readable_desc">Saves selected data as ordinary JSON, text, and image files you can use without the app, packed into one ZIP. Backup Style and Format apply to chats.</string>
     <string name="backup_readable_scope_label">Backup Style</string>
     <string name="backup_readable_scope_all">All Chats</string>
     <string name="backup_readable_scope_incremental">New and Changed Chats Only</string>
@@ -2214,17 +2214,28 @@
     <string name="backup_readable_format_text">Text</string>
     <string name="backup_readable_format_json">JSON</string>
     <string name="backup_readable_format_both">Text + JSON</string>
-    <string name="backup_readable_create">Create Readable Chat Backup</string>
+    <string name="backup_readable_content_label">Content</string>
+    <string name="backup_readable_content_title">Choose Readable Content</string>
+    <string name="backup_readable_content_all">All Content</string>
+    <string name="backup_readable_content_none">No Content Selected</string>
+    <string name="backup_readable_category_identities">Companions, Glamours, Roleplay &amp; Prompts</string>
+    <string name="backup_readable_select_content">Select at least one type of content to back up.</string>
+    <string name="backup_readable_done">Done</string>
+    <plurals name="backup_readable_content_count">
+        <item quantity="one">%d Category Selected</item>
+        <item quantity="other">%d Categories Selected</item>
+    </plurals>
+    <string name="backup_readable_create">Create Human-Readable Backup</string>
     <string name="backup_readable_preparing">Preparing backup. You will choose where to save it when it is ready.</string>
     <string name="backup_readable_saving">Saving backup…</string>
     <string name="backup_readable_none">No new or updated chats.</string>
     <string name="backup_readable_cancelled">Backup cancelled. Nothing was saved.</string>
-    <string name="backup_readable_saved_to">Readable chat backup saved to %1$s</string>
-    <string name="backup_readable_saved_generic">Readable chat backup saved.</string>
+    <string name="backup_readable_saved_to">Human-readable backup saved to %1$s</string>
+    <string name="backup_readable_saved_generic">Human-readable backup saved.</string>
     <!-- Title Case label (owner correction, July 23 2026 — was sentence case,
          inconsistent with every other "Label: value" status line on this
          screen, e.g. backup_current_location). -->
-    <string name="backup_readable_last_success">Last Readable Chat Backup: %1$s</string>
+    <string name="backup_readable_last_success">Last Human-Readable Backup: %1$s</string>
     <!-- Shown directly under backup_readable_last_success, same Title Case
          "Label: value" formatting. The value is the FINAL verified
          destination ZIP's exact size (never the staged/temporary file),
@@ -2232,7 +2243,7 @@
          confirms the backup is intact — see MemoryBackupRestoreActivity
          .onReadableSaveAsResult. %1$s is a formatted size (ByteSizeFormatter,
          e.g. "4.8 MB") or backup_size_unavailable. -->
-    <string name="backup_readable_file_size">Chat Backup File Size: %1$s</string>
+    <string name="backup_readable_file_size">Backup File Size: %1$s</string>
     <string name="backup_readable_fail_chats">Your chats could not be read. No backup was created.</string>
     <string name="backup_readable_fail_generic">The backup could not be created.</string>
     <string name="backup_readable_fail_verify">The backup could not be verified. No backup was saved.</string>

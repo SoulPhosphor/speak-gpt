@@ -42,6 +42,10 @@ class CompanionCategoryRestoreParticipantTest {
 
             assertTrue(participant.validate())
             assertTrue(participant.stage())
+            assertEquals(
+                setOf("current-glamour"),
+                participant.memoryReferenceIds()?.userPersonas
+            )
             assertTrue(participant.apply())
             assertEquals("backup", backend.live.activationPrompts.single().id)
             assertEquals("current-glamour", backend.live.roleplayTables.getValue("user_personas").single()["persona_id"])

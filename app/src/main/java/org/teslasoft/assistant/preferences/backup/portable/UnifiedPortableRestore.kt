@@ -79,12 +79,14 @@ object UnifiedPortableRestore {
 
         val identitySelections = request.selections.filter { it.category in IDENTITY_CATEGORIES }
             .map { CompanionCategoryPlanner.Selection(it.category, it.mode) }
+        var identityParticipant: CompanionCategoryRestoreParticipant? = null
         if (identitySelections.isNotEmpty()) {
             val archive = artifact(artifacts, PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE)
                 ?: return BuildResult.Failed("Identity data is missing from the staged backup.")
-            participants.add(CompanionCategoryRestoreParticipant(
+            identityParticipant = CompanionCategoryRestoreParticipant(
                 app, archive.stagedFile, identitySelections, File(stagingRoot, "identity_bundle")
-            ))
+            )
+            participants.add(identityParticipant)
         }
 
         if (PortableRestoreCategory.PROFILE_IMAGES in modes) {
@@ -104,9 +106,17 @@ object UnifiedPortableRestore {
             ))
         }
         for (category in listOf(PortableRestoreCategory.MODEL_RULES, PortableRestoreCategory.MEMORIES)) {
-            if (category in modes) participants.add(MemoryRowsRestoreParticipant(
-                app, artifacts, category, modes.getValue(category), File(stagingRoot, category.key)
-            ))
+            if (category in modes) participants.add(
+                if (category == PortableRestoreCategory.MEMORIES && identityParticipant != null) {
+                    MemoryRowsRestoreParticipant(
+                        app, artifacts, category, modes.getValue(category), File(stagingRoot, category.key)
+                    ) { identityParticipant?.memoryReferenceIds() ?: MemoryReferenceIds() }
+                } else {
+                    MemoryRowsRestoreParticipant(
+                        app, artifacts, category, modes.getValue(category), File(stagingRoot, category.key)
+                    )
+                }
+            )
         }
         if (PortableRestoreCategory.LOREBOOKS in modes) participants.add(LorebookRestoreParticipant(
             app, artifacts, modes.getValue(PortableRestoreCategory.LOREBOOKS),

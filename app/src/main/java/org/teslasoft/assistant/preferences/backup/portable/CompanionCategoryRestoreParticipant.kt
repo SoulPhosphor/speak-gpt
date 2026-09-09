@@ -59,6 +59,9 @@ class CompanionCategoryRestoreParticipant internal constructor(
         private set
 
     private var incomingManifest: CompanionBackupManifest? = null
+    private var desiredMemoryReferences: MemoryReferenceIds? = null
+
+    fun memoryReferenceIds(): MemoryReferenceIds? = desiredMemoryReferences
 
     override fun validate(): Boolean {
         incomingManifest = (CompanionBackupValidator.validate(incomingArchive) as?
@@ -82,6 +85,7 @@ class CompanionCategoryRestoreParticipant internal constructor(
             val planned = CompanionCategoryPlanner.plan(current, incoming, selections) as?
                 CompanionCategoryPlanner.Result.Ready ?: return false
             report = planned.report
+            desiredMemoryReferences = references(planned.manifest)
 
             val desiredArchive = File(stagingRoot, DESIRED_ARCHIVE)
             if (!CompanionArchiveAssembler.write(
@@ -199,6 +203,19 @@ class CompanionCategoryRestoreParticipant internal constructor(
     }
 
     private companion object {
+        fun references(manifest: CompanionBackupManifest): MemoryReferenceIds {
+            fun ids(table: String, column: String): Set<String> = manifest.roleplayTables[table]
+                .orEmpty().mapNotNullTo(LinkedHashSet()) { (it[column] as? String)?.takeIf(String::isNotBlank) }
+            return MemoryReferenceIds(
+                companions = ids("companions", "companion_id"),
+                worlds = ids("worlds", "world_id"),
+                campaigns = ids("campaigns", "campaign_id"),
+                roleplayCharacters = ids("roleplay_characters", "roleplay_character_id"),
+                userPersonas = ids("user_personas", "persona_id"),
+                roleplayTags = ids("rp_tags", "tag_id")
+            )
+        }
+
         val CompanionBackupImageHash: (org.teslasoft.assistant.preferences.backup.companion.CompanionBackupImage) -> String = { it.hash }
         const val CURRENT_ARCHIVE = "current.zip"
         const val DESIRED_ARCHIVE = "desired.zip"

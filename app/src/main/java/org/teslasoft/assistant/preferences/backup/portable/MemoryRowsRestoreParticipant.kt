@@ -20,7 +20,8 @@ class MemoryRowsRestoreParticipant internal constructor(
     private val group: MemoryPortableGroup,
     private val mode: PortableRestoreMode,
     private val stagingRoot: File,
-    private val backend: Backend
+    private val backend: Backend,
+    private val referenceProvider: (() -> MemoryReferenceIds)? = null
 ) : SelectedCategoryRestoreTransaction.Participant {
 
     interface Backend {
@@ -42,7 +43,23 @@ class MemoryRowsRestoreParticipant internal constructor(
         groupFor(category),
         mode,
         stagingRoot,
-        AndroidBackend(context.applicationContext, artifacts)
+        AndroidBackend(context.applicationContext, artifacts),
+        null
+    )
+
+    constructor(
+        context: Context,
+        artifacts: List<PortablePackage.ValidatedArtifact>,
+        category: PortableRestoreCategory,
+        mode: PortableRestoreMode,
+        stagingRoot: File,
+        referenceProvider: () -> MemoryReferenceIds
+    ) : this(
+        groupFor(category),
+        mode,
+        stagingRoot,
+        AndroidBackend(context.applicationContext, artifacts),
+        referenceProvider
     )
 
     override val categoryKey: String = when (group) {
@@ -63,7 +80,7 @@ class MemoryRowsRestoreParticipant internal constructor(
         val incoming = backup ?: return false
         val current = backend.snapshot(group) ?: return false
         val planned = MemoryCategoryPlanner.plan(
-            group, current, incoming, mode, backend.references()
+            group, current, incoming, mode, referenceProvider?.invoke() ?: backend.references()
         ) as? MemoryCategoryPlanner.Result.Ready ?: return false
         report = planned.report
         return try {

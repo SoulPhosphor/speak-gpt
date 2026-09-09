@@ -554,6 +554,26 @@
                     android:text="@string/backup_readable_format_text" />
             </LinearLayout>
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/Widget.App.Dropdown.CanonicalLabel"
+                    android:text="@string/backup_readable_content_label" />
+
+                <TextView
+                    android:id="@+id/btn_readable_content"
+                    style="@style/Widget.App.Dropdown.CanonicalValue"
+                    android:layout_width="0dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:text="@string/backup_readable_content_all" />
+            </LinearLayout>
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_readable_create"
                 style="@style/AppButton.Primary"

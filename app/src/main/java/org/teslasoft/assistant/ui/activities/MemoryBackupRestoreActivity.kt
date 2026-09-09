@@ -77,6 +77,7 @@ import org.teslasoft.assistant.service.RestoreForegroundService
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
 import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatBackup
+import org.teslasoft.assistant.preferences.backup.readable.ReadableDataBackup
 import org.teslasoft.assistant.preferences.backup.portable.ChatMergePlanner
 import org.teslasoft.assistant.preferences.backup.portable.PackageCrypto
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackage
@@ -206,6 +207,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     // Backup: Human-Readable Chat Backup (Widget.App.Dropdown.* fields)
     private var btnReadableScope: TextView? = null
     private var btnReadableFormat: TextView? = null
+    private var btnReadableContent: TextView? = null
     private var btnReadableCreate: MaterialButton? = null
     private var textReadableStatus: TextView? = null
 
@@ -328,6 +330,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     // destination has been verified.
     private var readableScopeAll = true
     private var readableFormat = ReadableChatBackup.Format.TEXT
+    private var readableCategories = ReadableDataBackup.Category.entries.toSet()
     private var stagedReadable: File? = null
     private var stagedReadableSha: ByteArray? = null
     private var stagedReadableFingerprints: Map<String, String>? = null
@@ -448,6 +451,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
         btnReadableScope = findViewById(R.id.btn_readable_scope)
         btnReadableFormat = findViewById(R.id.btn_readable_format)
+        btnReadableContent = findViewById(R.id.btn_readable_content)
         btnReadableCreate = findViewById(R.id.btn_readable_create)
         textReadableStatus = findViewById(R.id.text_readable_status)
 
@@ -1732,9 +1736,11 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         // screen was reopened.
         readableScopeAll = ReadableBackupState.getScopeAll(this)
         readableFormat = ReadableBackupState.getFormat(this)
+        readableCategories = ReadableBackupState.getCategories(this)
         updateReadableSelectorLabels()
         btnReadableScope?.setOnClickListener { pickReadableScope() }
         btnReadableFormat?.setOnClickListener { pickReadableFormat() }
+        btnReadableContent?.setOnClickListener { pickReadableContent() }
         btnReadableCreate?.setOnClickListener { onCreateReadableBackup() }
         showReadableLastSuccess()
     }
@@ -1751,6 +1757,15 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 ReadableChatBackup.Format.BOTH -> R.string.backup_readable_format_both
             }
         )
+        btnReadableContent?.text = when (readableCategories.size) {
+            ReadableDataBackup.Category.entries.size -> getString(R.string.backup_readable_content_all)
+            0 -> getString(R.string.backup_readable_content_none)
+            else -> resources.getQuantityString(
+                R.plurals.backup_readable_content_count,
+                readableCategories.size,
+                readableCategories.size
+            )
+        }
     }
 
     private fun pickReadableScope() {
@@ -1784,6 +1799,36 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         }
     }
 
+    private fun pickReadableContent() {
+        val categories = ReadableDataBackup.Category.entries
+        val labels = categories.map(::readableCategoryName).toTypedArray()
+        val checked = BooleanArray(categories.size) { categories[it] in readableCategories }
+        val selected = readableCategories.toMutableSet()
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.backup_readable_content_title)
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                if (isChecked) selected.add(categories[which]) else selected.remove(categories[which])
+            }
+            .setPositiveButton(R.string.backup_readable_done) { _, _ ->
+                readableCategories = selected.toSet()
+                ReadableBackupState.setCategories(this, readableCategories)
+                updateReadableSelectorLabels()
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    private fun readableCategoryName(category: ReadableDataBackup.Category): String = getString(when (category) {
+        ReadableDataBackup.Category.CHATS -> R.string.restore_category_chats
+        ReadableDataBackup.Category.GENERATED_IMAGES -> R.string.restore_category_generated_images
+        ReadableDataBackup.Category.IDENTITIES -> R.string.backup_readable_category_identities
+        ReadableDataBackup.Category.PROFILE_IMAGES -> R.string.restore_category_profile_images
+        ReadableDataBackup.Category.MODEL_SETTINGS -> R.string.restore_category_model_settings
+        ReadableDataBackup.Category.MEMORIES -> R.string.restore_category_memories
+        ReadableDataBackup.Category.MODEL_RULES -> R.string.restore_category_model_rules
+        ReadableDataBackup.Category.LOREBOOKS -> R.string.restore_category_lorebooks
+    })
+
     private fun setReadableStatus(text: String) {
         textReadableStatus?.text = text
         textReadableStatus?.visibility = View.VISIBLE
@@ -1804,33 +1849,38 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     /** Build + verify the ZIP in private staging FIRST; Save As launches only
      *  when the staged file is real and verified. */
     private fun onCreateReadableBackup() {
+        if (readableCategories.isEmpty()) {
+            showNoticeDialog(getString(R.string.backup_readable_select_content))
+            return
+        }
         btnReadableCreate?.isEnabled = false
         setReadableStatus(getString(R.string.backup_readable_preparing))
         cleanupStagedReadable()
         val allChats = readableScopeAll
         val format = readableFormat
+        val categories = readableCategories
         runOffThread {
             val staged = File(cacheDir, "readable_stage_${System.nanoTime()}.zip")
-            when (val result = ReadableChatBackup.build(this, staged, allChats, format)) {
-                is ReadableChatBackup.BuildResult.NothingNew -> runOnUiThread {
+            when (val result = ReadableDataBackup.build(this, staged, allChats, format, categories)) {
+                is ReadableDataBackup.Result.NothingNew -> runOnUiThread {
                     btnReadableCreate?.isEnabled = true
                     setReadableStatus(getString(R.string.backup_readable_none))
                 }
-                is ReadableChatBackup.BuildResult.NothingToBackUp -> runOnUiThread {
+                is ReadableDataBackup.Result.NothingToBackUp -> runOnUiThread {
                     btnReadableCreate?.isEnabled = true
                     setReadableStatus(getString(R.string.recovery_fail_nothing))
                 }
-                is ReadableChatBackup.BuildResult.ChatsUnreadable -> runOnUiThread {
+                is ReadableDataBackup.Result.ChatsUnreadable -> runOnUiThread {
                     btnReadableCreate?.isEnabled = true
                     setReadableStatus(getString(R.string.backup_readable_fail_chats))
                     showNoticeDialog(getString(R.string.backup_readable_fail_chats))
                 }
-                is ReadableChatBackup.BuildResult.Failed -> runOnUiThread {
+                is ReadableDataBackup.Result.Failed -> runOnUiThread {
                     btnReadableCreate?.isEnabled = true
                     setReadableStatus(getString(R.string.backup_readable_fail_generic))
                     showNoticeDialog(getString(R.string.backup_readable_fail_generic))
                 }
-                is ReadableChatBackup.BuildResult.Ok -> {
+                is ReadableDataBackup.Result.Ok -> {
                     val sha = sha256(staged)
                     runOnUiThread {
                         stagedReadable = staged
