@@ -31,6 +31,8 @@ class MemoryRowsRestoreParticipant internal constructor(
         fun replace(group: MemoryPortableGroup, rows: MemoryPortableRows): Boolean
         fun restoreOriginal(group: MemoryPortableGroup, rows: MemoryPortableRows): Boolean =
             replace(group, rows)
+        fun wasProvisionedBeforeStage(): Boolean = true
+        fun removeProvisionedStore(): Boolean = true
     }
 
     constructor(
@@ -87,6 +89,7 @@ class MemoryRowsRestoreParticipant internal constructor(
             if (stagingRoot.exists()) {
                 if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) return false
             } else if (!stagingRoot.mkdirs()) return false
+            if (!RestoreProvisioningState.write(stagingRoot, backend.wasProvisionedBeforeStage())) return false
             write(CURRENT_JSON, current) && write(DESIRED_JSON, planned.rows) &&
                 read(CURRENT_JSON) != null && read(DESIRED_JSON) != null
         } catch (_: Exception) {
@@ -96,8 +99,12 @@ class MemoryRowsRestoreParticipant internal constructor(
 
     override fun apply(): Boolean = read(DESIRED_JSON)?.let { backend.replace(group, it) } == true
 
-    override fun rollback(): Boolean =
-        read(CURRENT_JSON)?.let { backend.restoreOriginal(group, it) } == true
+    override fun rollback(): Boolean {
+        val current = read(CURRENT_JSON) ?: return false
+        val wasProvisioned = RestoreProvisioningState.read(stagingRoot) ?: return false
+        if (!backend.restoreOriginal(group, current)) return false
+        return wasProvisioned || backend.removeProvisionedStore()
+    }
 
     override fun cleanup() {
         stagingRoot.deleteRecursively()
@@ -157,6 +164,8 @@ class MemoryRowsRestoreParticipant internal constructor(
             catch (_: Exception) { null }
         }
 
+        override fun wasProvisionedBeforeStage(): Boolean = initiallyProvisioned
+
         override fun references(): MemoryReferenceIds {
             if (!MemoryStore.isProvisioned(app)) return MemoryReferenceIds()
             return try {
@@ -184,8 +193,10 @@ class MemoryRowsRestoreParticipant internal constructor(
             group: MemoryPortableGroup,
             rows: MemoryPortableRows
         ): Boolean {
-            if (!replace(group, rows)) return false
-            if (initiallyProvisioned) return true
+            return replace(group, rows)
+        }
+
+        override fun removeProvisionedStore(): Boolean {
             MemoryStore.invalidateInstance()
             val database = app.getDatabasePath(MemoryStore.DATABASE_NAME)
             val files = listOf(

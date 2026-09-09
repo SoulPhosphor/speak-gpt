@@ -33,6 +33,8 @@ class ProfileImageRestoreParticipant internal constructor(
         fun replace(records: List<ProfileImageRecord>, assets: Map<String, File>): Boolean
         fun restoreOriginal(records: List<ProfileImageRecord>, assets: Map<String, File>): Boolean =
             replace(records, assets)
+        fun wasProvisionedBeforeStage(): Boolean = true
+        fun removeProvisionedStore(): Boolean = true
     }
 
     constructor(
@@ -76,6 +78,7 @@ class ProfileImageRestoreParticipant internal constructor(
             if (stagingRoot.exists()) {
                 if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) return false
             } else if (!stagingRoot.mkdirs()) return false
+            if (!RestoreProvisioningState.write(stagingRoot, backend.wasProvisionedBeforeStage())) return false
             if (!stageSet(current.records, current.assets, CURRENT_DIR, CURRENT_JSON)) return false
             val desiredAssets = LinkedHashMap<String, File>()
             val currentAssets = current.assets
@@ -98,7 +101,9 @@ class ProfileImageRestoreParticipant internal constructor(
 
     override fun rollback(): Boolean {
         val set = loadSet(CURRENT_JSON, CURRENT_DIR) ?: return false
-        return backend.restoreOriginal(set.records, set.assets)
+        val wasProvisioned = RestoreProvisioningState.read(stagingRoot) ?: return false
+        if (!backend.restoreOriginal(set.records, set.assets)) return false
+        return wasProvisioned || backend.removeProvisionedStore()
     }
 
     override fun cleanup() {
@@ -177,6 +182,8 @@ class ProfileImageRestoreParticipant internal constructor(
             }
         }
 
+        override fun wasProvisionedBeforeStage(): Boolean = initiallyProvisioned
+
         override fun replace(
             records: List<ProfileImageRecord>,
             assets: Map<String, File>
@@ -206,8 +213,10 @@ class ProfileImageRestoreParticipant internal constructor(
             records: List<ProfileImageRecord>,
             assets: Map<String, File>
         ): Boolean {
-            if (!replace(records, assets)) return false
-            if (initiallyProvisioned) return true
+            return replace(records, assets)
+        }
+
+        override fun removeProvisionedStore(): Boolean {
             ProfileImageStore.invalidateInstance()
             ProfileImageDb.invalidateInstance()
             val database = app.getDatabasePath(ProfileImageDb.DATABASE_NAME)

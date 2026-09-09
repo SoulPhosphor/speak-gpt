@@ -71,6 +71,31 @@ class GeneratedImageRestoreParticipantTest {
         assertEquals(snapshot(oldRecord), backend.value)
     }
 
+    @Test
+    fun rollbackRemovesStoreThatDidNotExistBeforeStaging() {
+        val newBytes = png(3)
+        val newRecord = record(ID_TWO, "two.png", newBytes)
+        val backend = FakeBackend(
+            value = snapshot(),
+            liveDir = tmp.newFolder("unprovisioned_live"),
+            wasProvisioned = false
+        )
+        val participant = GeneratedImageRestoreParticipant(
+            artifacts(snapshot(newRecord), newRecord, newBytes),
+            PortableRestoreMode.REPLACE,
+            emptySet(),
+            File(tmp.root, "staging_unprovisioned"),
+            backend
+        )
+
+        assertTrue(participant.validate())
+        assertTrue(participant.stage())
+        assertTrue(participant.apply())
+        assertTrue(participant.rollback())
+        assertEquals(snapshot(), backend.value)
+        assertEquals(1, backend.removeProvisionedStoreCalls)
+    }
+
     private fun artifacts(
         backup: GeneratedImageCatalogSnapshot = snapshot(),
         newRecord: GeneratedImageCatalogRecord,
@@ -124,11 +149,13 @@ class GeneratedImageRestoreParticipantTest {
 
     private class FakeBackend(
         var value: GeneratedImageCatalogSnapshot,
-        private val liveDir: File
+        private val liveDir: File,
+        private val wasProvisioned: Boolean = true
     ) : GeneratedImageRestoreParticipant.Backend {
         var snapshotCalls = 0
         var replaceCalls = 0
         var restoreOriginalCalls = 0
+        var removeProvisionedStoreCalls = 0
 
         override fun snapshot(): GeneratedImageCatalogSnapshot {
             snapshotCalls++
@@ -156,6 +183,13 @@ class GeneratedImageRestoreParticipantTest {
         }
 
         override fun recoverPending(): Boolean = true
+
+        override fun wasProvisionedBeforeStage(): Boolean = wasProvisioned
+
+        override fun removeProvisionedStore(): Boolean {
+            removeProvisionedStoreCalls++
+            return true
+        }
     }
 
     private companion object {

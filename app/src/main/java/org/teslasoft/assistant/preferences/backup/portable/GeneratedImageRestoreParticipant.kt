@@ -45,6 +45,8 @@ class GeneratedImageRestoreParticipant internal constructor(
             assets: Map<String, File>
         ): Boolean = replace(snapshot, assets)
         fun recoverPending(): Boolean
+        fun wasProvisionedBeforeStage(): Boolean = true
+        fun removeProvisionedStore(): Boolean = true
     }
 
     constructor(
@@ -120,6 +122,7 @@ class GeneratedImageRestoreParticipant internal constructor(
             } else if (!stagingRoot.mkdirs()) {
                 return false
             }
+            if (!RestoreProvisioningState.write(stagingRoot, backend.wasProvisionedBeforeStage())) return false
             if (!stageSet(current, emptyMap(), CURRENT_DIR, CURRENT_CATALOG)) return false
             if (!stageSet(planned.snapshot, backup.assets, DESIRED_DIR, DESIRED_CATALOG)) return false
             loadSet(CURRENT_CATALOG, CURRENT_DIR) != null &&
@@ -131,7 +134,11 @@ class GeneratedImageRestoreParticipant internal constructor(
 
     override fun apply(): Boolean = applySet(DESIRED_CATALOG, DESIRED_DIR)
 
-    override fun rollback(): Boolean = applySet(CURRENT_CATALOG, CURRENT_DIR, restoreOriginal = true)
+    override fun rollback(): Boolean {
+        val wasProvisioned = RestoreProvisioningState.read(stagingRoot) ?: return false
+        if (!applySet(CURRENT_CATALOG, CURRENT_DIR, restoreOriginal = true)) return false
+        return wasProvisioned || backend.removeProvisionedStore()
+    }
 
     override fun cleanup() {
         stagingRoot.deleteRecursively()
@@ -257,12 +264,16 @@ class GeneratedImageRestoreParticipant internal constructor(
             return GeneratedImageRestoreTransaction.recover(journal, directory, catalogBackend())
         }
 
+        override fun wasProvisionedBeforeStage(): Boolean = initiallyProvisioned
+
         override fun restoreOriginal(
             snapshot: GeneratedImageCatalogSnapshot,
             assets: Map<String, File>
         ): Boolean {
-            if (!replace(snapshot, assets)) return false
-            if (initiallyProvisioned) return true
+            return replace(snapshot, assets)
+        }
+
+        override fun removeProvisionedStore(): Boolean {
             GeneratedImageCatalogStore.invalidateInstance()
             val database = app.getDatabasePath(GeneratedImageCatalogStore.DATABASE_NAME)
             val files = listOf(

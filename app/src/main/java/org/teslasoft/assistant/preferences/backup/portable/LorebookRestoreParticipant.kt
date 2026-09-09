@@ -22,6 +22,8 @@ class LorebookRestoreParticipant internal constructor(
         fun snapshot(): LorebookPortableData?
         fun replace(data: LorebookPortableData): Boolean
         fun restoreOriginal(data: LorebookPortableData): Boolean = replace(data)
+        fun wasProvisionedBeforeStage(): Boolean = true
+        fun removeProvisionedStore(): Boolean = true
     }
 
     constructor(
@@ -57,6 +59,7 @@ class LorebookRestoreParticipant internal constructor(
             if (stagingRoot.exists()) {
                 if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) return false
             } else if (!stagingRoot.mkdirs()) return false
+            if (!RestoreProvisioningState.write(stagingRoot, backend.wasProvisionedBeforeStage())) return false
             write(CURRENT_JSON, current) && write(DESIRED_JSON, planned.data) &&
                 read(CURRENT_JSON) != null && read(DESIRED_JSON) != null
         } catch (_: Exception) {
@@ -66,7 +69,12 @@ class LorebookRestoreParticipant internal constructor(
 
     override fun apply(): Boolean = read(DESIRED_JSON)?.let(backend::replace) == true
 
-    override fun rollback(): Boolean = read(CURRENT_JSON)?.let(backend::restoreOriginal) == true
+    override fun rollback(): Boolean {
+        val current = read(CURRENT_JSON) ?: return false
+        val wasProvisioned = RestoreProvisioningState.read(stagingRoot) ?: return false
+        if (!backend.restoreOriginal(current)) return false
+        return wasProvisioned || backend.removeProvisionedStore()
+    }
 
     override fun cleanup() {
         stagingRoot.deleteRecursively()
@@ -124,6 +132,8 @@ class LorebookRestoreParticipant internal constructor(
             catch (_: Exception) { null }
         }
 
+        override fun wasProvisionedBeforeStage(): Boolean = initiallyProvisioned
+
         override fun replace(data: LorebookPortableData): Boolean = try {
             LoreBookStore.getInstance(app).replacePortableData(data)
         } catch (_: Exception) {
@@ -131,8 +141,10 @@ class LorebookRestoreParticipant internal constructor(
         }
 
         override fun restoreOriginal(data: LorebookPortableData): Boolean {
-            if (!replace(data)) return false
-            if (initiallyProvisioned) return true
+            return replace(data)
+        }
+
+        override fun removeProvisionedStore(): Boolean {
             LoreBookStore.invalidateInstance()
             val database = app.getDatabasePath(LoreBookStore.DATABASE_NAME)
             val files = listOf(
