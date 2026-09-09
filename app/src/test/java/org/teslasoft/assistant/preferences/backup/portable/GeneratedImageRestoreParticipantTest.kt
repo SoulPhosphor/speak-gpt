@@ -62,14 +62,14 @@ class GeneratedImageRestoreParticipantTest {
             snapshot = snapshot(newRecord),
             assets = artifacts(snapshot(newRecord), newRecord, newBytes)
                 .filter { it.type == PortablePackage.TYPE_GENERATED_IMAGE_ASSET }
-                .associate { it.path.substringAfterLast('/') to it.file }
+                .associate { it.entryName.substringAfterLast('/') to it.stagedFile }
         )
         val planned = GeneratedImageCategoryPlanner.plan(
             current = snapshot(oldRecord),
             backup = prepared.snapshot,
             mode = PortableRestoreMode.MERGE,
             protectedCurrentImageIds = emptySet()
-        )
+        ) as GeneratedImageCategoryPlanner.Result.Ready
         val backend = FakeBackend(snapshot(oldRecord), liveDir)
         val participant = GeneratedImageRestoreParticipant(
             emptyList(),

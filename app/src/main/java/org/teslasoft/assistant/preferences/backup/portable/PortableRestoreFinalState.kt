@@ -145,6 +145,11 @@ class PortableRestoreFinalState private constructor(
         val protectedProfileImageHashes: Set<String> = emptySet()
     )
 
+    internal data class ChatImageReferences(
+        val allIds: Set<String>,
+        val requiredAssetIds: Set<String>
+    )
+
     companion object {
         internal fun create(inputs: Inputs): PortableRestoreDependencyRead<PortableRestoreFinalState> {
             val chatReferences = when (val scanned = scanChatImageReferences(inputs.finalChats)) {
@@ -213,11 +218,6 @@ class PortableRestoreFinalState private constructor(
                 )
             )
         }
-
-        internal data class ChatImageReferences(
-            val allIds: Set<String>,
-            val requiredAssetIds: Set<String>
-        )
 
         internal fun scanChatImageReferences(
             chats: PortableChatRestorePlan.Plan?
