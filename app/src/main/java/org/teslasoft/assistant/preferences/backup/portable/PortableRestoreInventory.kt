@@ -39,7 +39,9 @@ enum class PortableRestoreCategory(val key: String) {
  */
 object PortableRestoreInventory {
     data class Inventory(
-        val available: Set<PortableRestoreCategory>
+        val available: Set<PortableRestoreCategory>,
+        /** Categories deliberately represented as empty by a current package. */
+        val explicitlyEmpty: Set<PortableRestoreCategory> = emptySet()
     ) {
         fun missingFrom(selected: Set<PortableRestoreCategory>): Set<PortableRestoreCategory> =
             selected - available
@@ -48,7 +50,10 @@ object PortableRestoreInventory {
             selected intersect available
     }
 
-    fun from(artifacts: List<PortablePackage.ValidatedArtifact>): Inventory {
+    fun from(
+        artifacts: List<PortablePackage.ValidatedArtifact>,
+        declaredCategories: Set<PortableRestoreCategory>? = null
+    ): Inventory {
         val categories = LinkedHashSet<PortableRestoreCategory>()
         artifacts.forEach { artifact ->
             when (artifact.type) {
@@ -80,6 +85,10 @@ object PortableRestoreInventory {
                 }
             }
         }
-        return Inventory(categories)
+        if (declaredCategories == null) return Inventory(categories)
+        return Inventory(
+            available = declaredCategories,
+            explicitlyEmpty = declaredCategories - categories
+        )
     }
 }

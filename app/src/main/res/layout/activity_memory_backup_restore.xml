@@ -406,75 +406,6 @@
                 android:layout_marginTop="12dp"
                 android:text="@string/recovery_create" />
 
-            <!-- Restore From Backup: the counterpart to Create Recovery Backup.
-                 Chats-only, same-install restore through the Phase 9 engine
-                 (owner-approved, replace-only). -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_restore_from_backup"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/chat_restore_button"
-                android:visibility="gone" />
-
-            <!-- Reuse the screen's established dropdown pattern for the one
-                 restore target selection. This is not a separate restore
-                 section and does not multiply permanent action buttons. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <TextView
-                    style="@style/Widget.App.Dropdown.CanonicalLabel"
-                    android:text="@string/restore_type_label" />
-
-                <TextView
-                    android:id="@+id/btn_restore_type_old"
-                    style="@style/Widget.App.Dropdown.CanonicalValue"
-                    android:layout_width="match_parent"
-                    android:layout_marginTop="8dp" />
-            </LinearLayout>
-
-            <!-- One familiar restore entry. It opens the same restore chooser
-                 used by a failed database row; no separate permanent forest
-                 of file/folder/latest buttons. -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_restore_database_old"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/restore_database"
-                android:visibility="gone" />
-
-            <LinearLayout
-                android:id="@+id/restore_progress_old"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:visibility="gone">
-
-                <com.google.android.material.progressindicator.CircularProgressIndicator
-                    android:id="@+id/restore_spinner_old"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:indeterminate="true" />
-
-                <TextView
-                    android:id="@+id/restore_progress_text_old"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:textColor="@color/text"
-                    android:textSize="14sp" />
-            </LinearLayout>
-
             <TextView
                 android:id="@+id/text_manual_location"
                 android:layout_width="match_parent"
@@ -779,6 +710,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 
+            <TextView
+                android:id="@+id/restore_model_credentials_note"
+                style="@style/Widget.App.Section.Hint"
+                android:layout_marginStart="48dp"
+                android:paddingTop="4dp"
+                android:text="@string/restore_model_credentials_note" />
+
             <org.teslasoft.assistant.ui.views.RestoreCategoryView
                 android:id="@+id/restore_category_model_rules"
                 android:layout_width="match_parent"
@@ -851,127 +789,6 @@
                     android:textColor="@color/text"
                     android:textSize="14sp" />
             </LinearLayout>
-
-            <!-- ============ 7. Automatic Backups ============ -->
-            <!-- The approved portable automatic WRITER (the piece that would
-                 actually run a backup on a schedule) is NOT built. This
-                 section says so honestly. The toggle and frequency dropdown
-                 below are restored/visible (owner ruling, July 22 2026) and
-                 persist the user's choice for when that writer exists; the
-                 location chooser stays for the same reason it always did.
-                 Order is fixed: toggle, dropdown, location, button. -->
-            <TextView
-                style="@style/Widget.App.Section.Title"
-                android:text="@string/backup_auto_section"
-                android:visibility="gone" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:text="@string/backup_auto_hint"
-                android:visibility="gone" />
-
-            <!-- Toggle row: Widget.App.Row.Toggle/.TextColumn/.Title/.Subtitle/
-                 .Switch (established house style — see ui-style-guide.md;
-                 first used by "Automatically Apply Model Rules" on AI System
-                 Settings). A toggle row always carries a subtitle. -->
-            <LinearLayout
-                style="@style/Widget.App.Row.Toggle"
-                android:visibility="gone">
-
-                <LinearLayout style="@style/Widget.App.Row.TextColumn">
-
-                    <TextView
-                        style="@style/Widget.App.Row.Title"
-                        android:text="@string/backup_auto_enable" />
-
-                    <TextView
-                        style="@style/Widget.App.Row.Subtitle"
-                        android:text="@string/backup_auto_enable_subtitle" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/switch_auto_backup_old"
-                    style="@style/Widget.App.Row.Switch" />
-            </LinearLayout>
-
-            <!-- Frequency dropdown: Widget.App.Dropdown.* (owner ruling, July
-                 22 2026), same pattern as the other dropdowns on this screen;
-                 selection persists (RecoveryBackupState.getAutoFrequency/
-                 setAutoFrequency). -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:visibility="gone">
-
-                <TextView
-                    style="@style/Widget.App.Dropdown.CanonicalLabel"
-                    android:text="@string/backup_auto_frequency_label" />
-
-                <TextView
-                    android:id="@+id/btn_auto_frequency_old"
-                    style="@style/Widget.App.Dropdown.CanonicalValue"
-                    android:layout_width="0dp"
-                    android:layout_marginStart="12dp"
-                    android:layout_weight="1" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/text_auto_location_old"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="16dp"
-                android:textColor="@color/text"
-                android:textIsSelectable="true"
-                android:textSize="15sp"
-                android:visibility="gone" />
-
-            <!-- Automatic-set status: Last Automatic Backup / File Size / Next
-                 Automatic Backup Due (or the paused/never state). Records
-                 surfaced honestly; the per-type rows in Backup Status show
-                 each artifact's own result. While a pass is actively running
-                 (spinner_auto_status visible) this text instead reads
-                 backup_auto_status_creating - the spinner and text sit in one
-                 row so both toggle together. -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:visibility="gone">
-
-                <com.google.android.material.progressindicator.CircularProgressIndicator
-                        android:id="@+id/spinner_auto_status_old"
-                    android:layout_width="18dp"
-                    android:layout_height="18dp"
-                    android:layout_marginEnd="10dp"
-                    android:indeterminate="true"
-                    android:visibility="gone"
-                    app:indicatorSize="18dp"
-                    app:trackThickness="2dp"
-                    style="@style/Widget.Material3.CircularProgressIndicator" />
-
-                <TextView
-                        android:id="@+id/text_auto_status_old"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textColor="@color/text"
-                    android:textIsSelectable="true"
-                    android:textSize="13sp" />
-            </LinearLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_change_auto_location_old"
-                style="@style/AppButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:text="@string/backup_auto_change_location"
-                android:visibility="gone" />
 
             <!-- ============ 8. Reset (destructive; bottom, unchanged) ============ -->
             <TextView

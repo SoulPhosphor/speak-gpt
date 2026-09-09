@@ -1375,6 +1375,65 @@ depends on the source device.
   the full unit/build/Beta/instrumentation-compilation workflow. Keep it on the
   working branch for Phase 12 owner-data rehearsal; do not merge it to Main.
 
+### 11.4 post-review correction plan, September 9, 2026
+
+The owner authorized professional product and implementation judgment for the
+Phase 11 review findings, excluding review item 12. Apply these corrections on
+`claude/phase-9-replacement-coordinator-ebnptm` without merging to Main:
+
+1. Restore results must distinguish three truthful outcomes: the previous data
+   was fully preserved, the selected data was restored but cleanup remains
+   pending, or rollback failed and the live state may be mixed. Only the first
+   outcome may say that nothing changed. A failed rollback keeps its recovery
+   journal and staging for the next recovery attempt.
+2. User-facing failures name the category that failed when known and use
+   translatable sentences, never lowercased enum constants. Chats expose the
+   validator's specific safe cause without displaying message contents,
+   credentials, internal paths, or raw identifiers.
+3. The folder-collision action order is exactly **Cancel | Merge | Create New
+   Folder**. The implementation must verify rendered button placement, not only
+   declaration order.
+4. Category presence means that the backup format deliberately represents the
+   category, including the valid state of having zero items. It does not mean
+   that at least one record happens to exist. Current backups carry an explicit
+   category inventory so “intentionally empty” is distinguishable from “this
+   older backup never included that category.” Replace can therefore restore an
+   empty category; Merge treats it as a no-op. Older packages without the
+   explicit inventory retain their compatible artifact-based interpretation.
+5. Current Recovery Backups explicitly represent every supported category even
+   when Generated Images, Memories, Model Rules, or Lorebooks have no records.
+   The missing-category dialog is reserved for genuinely absent categories,
+   primarily older supported package layouts.
+6. Remove the two unapproved selected-category recovery log lines. A pending
+   recovery remains fail-closed for startup work that could observe or save a
+   mixed state, but it must be visible to the user and retryable; it must not be
+   an indefinite silent condition detectable only through a log.
+7. Every category row uses the approved **Restore Mode** label-plus-value
+   presentation. The credential note appears whenever Model & Endpoint Settings
+   is selected.
+8. Merge is meaningful for all twelve current categories because each carries
+   a collection or stable-identity record set. System Prompts merges the saved
+   prompt collection; it keeps the current selection when one exists and uses
+   the backup selection only when the device has none. No current category is
+   forced to Replace-only. The row component must nevertheless represent mode
+   capability explicitly so a future non-mergeable category cannot accidentally
+   inherit a Merge choice.
+9. A successful restore and its Restore Report are separate dialogs. The report
+   uses neutral introductory wording that covers identity conflicts, longer chat
+   histories, protected images, and other disclosed restore decisions without
+   falsely describing all retained items as conflicts.
+10. Update `ui-style-adoption.md` with the current Backup & Restore screen and
+    `RestoreCategoryView`. Disabled appearance must come from shared/theme-aware
+    state styling, not a hardcoded Kotlin alpha.
+11. Remove the inert duplicated Automatic Backups, old restore-type, and old
+    restore-button XML. Preserve only the live controls and the intentionally
+    retained hidden backend wiring already required by Phase 11.
+
+Acceptance requires focused regression tests for each behavior above, the full
+repository build gate, a pushed commit, and green GitHub Actions on that exact
+commit. Runtime appearance remains subject to the owner's later Beta/device
+review and must not be claimed from source tests alone.
+
 ## Phase 12 — Owner-data rehearsal and final Main gate
 
 This is the first point at which the owner's installed corpus participates, and only after a verified backup exists.

@@ -9,6 +9,7 @@ import android.content.Context
 import org.teslasoft.assistant.imagegen.ImageFormat
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogHealth
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecord
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogSnapshot
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStorageState
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
 import java.io.File
@@ -47,23 +48,22 @@ object GeneratedImagePortableBackup {
     fun buildArtifacts(context: Context, stagingDir: File): Result {
         val app = context.applicationContext
         val database = app.getDatabasePath(GeneratedImageCatalogStore.DATABASE_NAME)
-        if (!database.exists() && !GeneratedImageCatalogHealth.missingDatabaseRequiresRecovery(app)) {
-            return Result.NothingToBackUp
+        val snapshot = if (!database.exists() &&
+            !GeneratedImageCatalogHealth.missingDatabaseRequiresRecovery(app)
+        ) {
+            GeneratedImageCatalogSnapshot(emptyList(), emptyList(), emptyMap(), emptyMap())
+        } else {
+            val exported = GeneratedImageCatalogStore.exportSnapshot(app)
+            if (exported.state != GeneratedImageCatalogStorageState.AVAILABLE) {
+                return Result.Failed(Failure.CATALOG_UNAVAILABLE)
+            }
+            exported.snapshot ?: return Result.Failed(Failure.CATALOG_UNAVAILABLE)
         }
-        val exported = GeneratedImageCatalogStore.exportSnapshot(app)
-        if (exported.state != GeneratedImageCatalogStorageState.AVAILABLE) {
-            return Result.Failed(Failure.CATALOG_UNAVAILABLE)
-        }
-        val snapshot = exported.snapshot ?: return Result.Failed(Failure.CATALOG_UNAVAILABLE)
         if (GeneratedImagePortableCatalog.validate(snapshot) != null) {
             return Result.Failed(Failure.INVALID_CATALOG)
         }
 
-        if (snapshot.active.isEmpty() && snapshot.tombstones.isEmpty() &&
-            snapshot.meta.isEmpty() && snapshot.backfillChats.isEmpty()
-        ) return Result.NothingToBackUp
-
-        val imagesDir = app.getExternalFilesDir("images")
+        val imagesDir = if (snapshot.active.isEmpty()) null else app.getExternalFilesDir("images")
             ?: return Result.Failed(Failure.MISSING_ASSET)
         val artifacts = ArrayList<PortablePackage.Artifact>()
         val uniqueRecords = LinkedHashMap<String, GeneratedImageCatalogRecord>()
@@ -80,7 +80,7 @@ object GeneratedImagePortableBackup {
             if (!GeneratedImagePortableCatalog.safeAssetName(fileName)) {
                 return Result.Failed(Failure.INVALID_CATALOG)
             }
-            val file = File(imagesDir, fileName)
+            val file = File(imagesDir ?: return Result.Failed(Failure.MISSING_ASSET), fileName)
             if (!file.isFile) return Result.Failed(Failure.MISSING_ASSET)
             if (file.length() <= 0L || file.length() > PortablePackage.MAX_ENTRY_BYTES) {
                 return Result.Failed(Failure.INVALID_ASSET)

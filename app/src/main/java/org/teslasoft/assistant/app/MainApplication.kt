@@ -123,13 +123,9 @@ class MainApplication : Application() {
                 // Settle its exact rollback snapshots before any startup task
                 // observes or mutates a possibly mixed category set.
                 if (!UnifiedPortableRestore.recoverPending(this)) {
-                    MemoryLog.log(this, "PortableRestore", "error",
-                        "Selected-category restore recovery remains pending.")
                     return@Thread
                 }
-            } catch (e: Exception) {
-                MemoryLog.log(this, "PortableRestore", "error",
-                    "Selected-category restore recovery at startup failed (${e.javaClass.simpleName}).")
+            } catch (_: Exception) {
                 return@Thread
             }
             try {

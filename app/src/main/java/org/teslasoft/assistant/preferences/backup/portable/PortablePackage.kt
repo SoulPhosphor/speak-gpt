@@ -86,13 +86,27 @@ object PortablePackage {
 
     // ----- creation ----------------------------------------------------------
 
-    /** Build the inner ZIP (artifacts + manifest) into [innerZip]. */
-    fun buildInnerZip(artifacts: List<Artifact>, createdAtIso: String, innerZip: File) {
+    /** Build the inner ZIP (artifacts + manifest) into [innerZip].
+     * [restoreCategories] is null only for compatibility fixtures and older
+     * callers. A current Recovery Backup supplies the complete logical
+     * category inventory, including categories that intentionally contain no
+     * records and therefore need no artifact. */
+    fun buildInnerZip(
+        artifacts: List<Artifact>,
+        createdAtIso: String,
+        innerZip: File,
+        restoreCategories: Set<PortableRestoreCategory>? = null
+    ) {
         require(artifacts.isNotEmpty()) { "no artifacts" }
         val manifest = JSONObject()
         manifest.put("created_at", createdAtIso)
         manifest.put("sqlcipher_version", SQLCIPHER_VERSION)
         manifest.put("cipher_compat", CIPHER_COMPAT)
+        if (restoreCategories != null) {
+            manifest.put("restore_categories", JSONArray().apply {
+                restoreCategories.sortedBy { it.ordinal }.forEach { put(it.key) }
+            })
+        }
         val list = JSONArray()
         ZipOutputStream(innerZip.outputStream().buffered()).use { zip ->
             for (a in artifacts) {
@@ -317,7 +331,12 @@ object PortablePackage {
     )
 
     sealed class ValidateResult {
-        data class Ok(val artifacts: List<ValidatedArtifact>) : ValidateResult()
+        data class Ok(
+            val artifacts: List<ValidatedArtifact>,
+            /** Null identifies a compatible older package whose inventory
+             * must be inferred from its artifact layout. */
+            val declaredCategories: Set<PortableRestoreCategory>? = null
+        ) : ValidateResult()
         data class Failed(val error: PortablePackageFormat.RestoreError) : ValidateResult()
     }
 
@@ -363,6 +382,10 @@ object PortablePackage {
                 val manifest = JSONObject(String(manifestBytes, Charsets.UTF_8))
                 val list = manifest.optJSONArray("artifacts")
                     ?: return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                val declaredCategories = parseRestoreCategories(manifest)
+                    ?: if (manifest.has("restore_categories")) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    } else null
 
                 val expected = HashMap<String, JSONObject>()
                 for (i in 0 until list.length()) {
@@ -442,7 +465,7 @@ object PortablePackage {
                         )
                     )
                 }
-                return ValidateResult.Ok(out)
+                return ValidateResult.Ok(out, declaredCategories)
             }
         } catch (_: Exception) {
             return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
@@ -464,6 +487,20 @@ object PortablePackage {
             }
         }
         return out.toByteArray()
+    }
+
+    private fun parseRestoreCategories(
+        manifest: JSONObject
+    ): Set<PortableRestoreCategory>? {
+        val array = manifest.optJSONArray("restore_categories") ?: return null
+        val byKey = PortableRestoreCategory.entries.associateBy(PortableRestoreCategory::key)
+        val categories = LinkedHashSet<PortableRestoreCategory>()
+        repeat(array.length()) { index ->
+            val key = array.optString(index, "")
+            val category = byKey[key] ?: return null
+            if (!categories.add(category)) return null
+        }
+        return categories
     }
 
     // ----- entry-name safety -------------------------------------------------

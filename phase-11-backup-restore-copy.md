@@ -104,15 +104,26 @@ If Create New Folder needs a different name:
 - Progress: **Restoring selected data. Please wait. Do not close the app.**
 - Success title: **Restore Complete**
 - Success message: **The selected data was restored.**
-- Success with report: **The selected data was restored. Some current items were kept because their identities conflicted with different backup content.**
 - Failure title: **Restore Failed**
 - Failure message: **Nothing was changed.**
-- Failure reason: **Reason: %1$s**
+- Failure reason with category: **%1$s could not be restored. Reason: %2$s**
+- Failure reason without category: **Reason: %1$s**
+- Completed-cleanup-pending title: **Restore Complete**
+- Completed-cleanup-pending message: **The selected data was restored, but cleanup could not finish. Choose Okay to finish recovery before starting another restore.**
+- Rollback-failed title: **Restore Recovery Needed**
+- Rollback-failed message: **The app could not restore all previous data after the restore failed. Some selected data may have changed. Choose Okay to retry recovery before using Backup & Restore again.**
+- Pending-recovery message: **A previous restore still has recovery or cleanup work to finish. Complete it before continuing so the app can verify a consistent data state.**
+- Pending-recovery action: **Try Recovery Again**
+- Retry progress: **Recovering the previous data. Please wait. Do not close the app.**
+
+Only a failure that fully preserved or restored the previous state may say
+**Nothing was changed.** A completed restore with pending cleanup and a failed
+rollback use their dedicated truthful messages above.
 
 ## Conflict Report
 
 - Title: **Restore Report**
-- Intro: **These current items were kept because the backup used the same identity for different content:**
+- Intro: **The restore completed with these details:**
 - Longer-chat note: **A longer version of %1$d chat was kept.**
 - Longer-chats note: **Longer versions of %1$d chats were kept.**
 - Protected-image note: **%1$d current image was kept because unselected data still uses it.**
@@ -122,6 +133,9 @@ If Create New Folder needs a different name:
 Reports identify items by category and user-visible name when available. They
 must never expose message text, prompt bodies, credentials, database keys, or
 internal file paths.
+
+The Restore Complete dialog appears first. If the restore has report details,
+its **Okay** action opens the separate Restore Report dialog.
 
 ## Protected Backup Unlock
 

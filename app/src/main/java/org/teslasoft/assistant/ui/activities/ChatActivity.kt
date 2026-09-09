@@ -243,6 +243,7 @@ import org.teslasoft.assistant.service.GenerationForegroundService
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
+import org.teslasoft.assistant.ui.PortableRestoreRecoveryFlow
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
 import org.teslasoft.assistant.usage.ConversationUsageSummary
 import org.teslasoft.assistant.usage.ProviderUsageAttempt
@@ -1448,6 +1449,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     override fun onResume() {
         super.onResume()
 
+        if (PortableRestoreRecoveryFlow.showIfPending(this)) return
+
         preloadAmoled()
         reloadAmoled()
 
@@ -2553,7 +2556,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         chatStartupComplete = true
-        DatabaseRecoveryFlows.showPendingNoticeIfAny(this)
+        if (!PortableRestoreRecoveryFlow.showIfPending(this)) {
+            DatabaseRecoveryFlows.showPendingNoticeIfAny(this)
+        }
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {

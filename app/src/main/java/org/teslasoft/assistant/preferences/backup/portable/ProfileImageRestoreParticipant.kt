@@ -20,7 +20,8 @@ class ProfileImageRestoreParticipant internal constructor(
     private val mode: PortableRestoreMode,
     private val protectedCurrentHashes: Set<String>,
     private val stagingRoot: File,
-    private val backend: Backend
+    private val backend: Backend,
+    private val incomingIsEmpty: Boolean = false
 ) : SelectedCategoryRestoreTransaction.Participant {
 
     data class Snapshot(
@@ -42,13 +43,15 @@ class ProfileImageRestoreParticipant internal constructor(
         artifacts: List<PortablePackage.ValidatedArtifact>,
         mode: PortableRestoreMode,
         protectedCurrentHashes: Set<String>,
-        stagingRoot: File
+        stagingRoot: File,
+        incomingIsEmpty: Boolean = false
     ) : this(
         artifacts,
         mode,
         protectedCurrentHashes,
         stagingRoot,
-        AndroidBackend(context.applicationContext)
+        AndroidBackend(context.applicationContext),
+        incomingIsEmpty
     )
 
     override val categoryKey: String = PortableRestoreCategory.PROFILE_IMAGES.key
@@ -59,8 +62,15 @@ class ProfileImageRestoreParticipant internal constructor(
     private var incoming: ProfileImagePortableRestoreManager.Prepared? = null
 
     override fun validate(): Boolean {
-        incoming = (ProfileImagePortableRestoreManager.prepare(artifacts) as?
-            ProfileImagePortableRestoreManager.Result.Ready)?.prepared
+        incoming = if (incomingIsEmpty && artifacts.none {
+                it.type == PortablePackage.TYPE_SQLITE_DB && it.entryName == "user_images.db"
+            }
+        ) {
+            ProfileImagePortableRestoreManager.Prepared(emptyList(), emptyMap())
+        } else {
+            (ProfileImagePortableRestoreManager.prepare(artifacts) as?
+                ProfileImagePortableRestoreManager.Result.Ready)?.prepared
+        }
         return incoming != null
     }
 

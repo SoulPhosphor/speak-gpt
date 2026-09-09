@@ -22,7 +22,10 @@ object PortableChatRestoreCoordinator {
         data class NeedsFolderDecisions(
             val collisions: List<ChatMergePlanner.FolderCollision>
         ) : PrepareResult()
-        data class Rejected(val detail: String) : PrepareResult()
+        data class Rejected(
+            val detail: String,
+            val chatReason: PortableChatRestorePlan.Reason? = null
+        ) : PrepareResult()
     }
 
     sealed class RestoreResult {
@@ -39,7 +42,7 @@ object PortableChatRestoreCoordinator {
         val backup = when (val parsed = PortableChatRestorePlan.parse(backupJson)) {
             is PortableChatRestorePlan.Result.Ok -> parsed.plan
             is PortableChatRestorePlan.Result.Rejected -> {
-                return PrepareResult.Rejected("${parsed.reason}: ${parsed.detail}")
+                return PrepareResult.Rejected(parsed.detail, parsed.reason)
             }
         }
         if (mode == PortableRestoreMode.REPLACE) return PrepareResult.Ready(Prepared(backup, mode))

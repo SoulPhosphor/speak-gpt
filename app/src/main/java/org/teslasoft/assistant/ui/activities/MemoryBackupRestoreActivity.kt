@@ -76,6 +76,7 @@ import org.teslasoft.assistant.preferences.backup.companion.CompanionRoleplayRes
 import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
 import org.teslasoft.assistant.service.RestoreForegroundService
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
+import org.teslasoft.assistant.ui.PortableRestoreRecoveryFlow
 import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatBackup
 import org.teslasoft.assistant.preferences.backup.readable.ReadableDataBackup
@@ -198,6 +199,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var btnRestoreFromBackup: MaterialButton? = null
     private var btnPortableRestore: MaterialButton? = null
     private val restoreCategoryViews = LinkedHashMap<PortableRestoreCategory, RestoreCategoryView>()
+    private var modelCredentialsNote: TextView? = null
     private var restoreProgress: LinearLayout? = null
     private var restoreSpinner: CircularProgressIndicator? = null
     private var restoreProgressText: TextView? = null
@@ -349,6 +351,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         val requested: List<PortableRestoreSelectionPlan.Selection>,
         val inspection: PortablePackage.Inspection,
         var artifacts: List<PortablePackage.ValidatedArtifact> = emptyList(),
+        var declaredCategories: Set<PortableRestoreCategory>? = null,
+        var explicitlyEmptyCategories: Set<PortableRestoreCategory> = emptySet(),
         var selected: List<PortableRestoreSelectionPlan.Selection> = emptyList(),
         val folderResolutions: MutableMap<String, ChatMergePlanner.FolderResolution> = LinkedHashMap(),
         var transactionRoot: File? = null,
@@ -370,6 +374,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (PortableRestoreRecoveryFlow.showIfPending(this)) return
         ContextCompat.registerReceiver(
             this,
             chatRestoreFailureReceiver,
@@ -479,6 +484,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnChangeAutoLocation = findViewById(R.id.btn_change_auto_location)
 
         btnReset = findViewById(R.id.btn_memory_reset)
+        modelCredentialsNote = findViewById(R.id.restore_model_credentials_note)
 
         bindPortableRestoreCategory(
             PortableRestoreCategory.CHATS, R.id.restore_category_chats,
@@ -537,9 +543,42 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         description: Int
     ) {
         findViewById<RestoreCategoryView>(viewId).also {
-            it.bind(category, title, description)
+            it.bind(
+                category,
+                title,
+                description,
+                supportsMerge = portableCategorySupportsMerge(category),
+                onSelectionChanged = if (category == PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS) {
+                    ::showModelCredentialsNote
+                } else null
+            )
             restoreCategoryViews[category] = it
+            if (category == PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS) {
+                showModelCredentialsNote(it.isCategorySelected)
+            }
         }
+    }
+
+    private fun showModelCredentialsNote(selected: Boolean) {
+        modelCredentialsNote?.visibility = if (selected) View.VISIBLE else View.GONE
+    }
+
+    /** Every current category owns a stable-identity collection, so Merge is
+     * meaningful for all twelve. Keep this exhaustive gate: a future category
+     * cannot acquire Merge merely by being added to the enum. */
+    private fun portableCategorySupportsMerge(category: PortableRestoreCategory): Boolean = when (category) {
+        PortableRestoreCategory.CHATS,
+        PortableRestoreCategory.GENERATED_IMAGES,
+        PortableRestoreCategory.COMPANIONS,
+        PortableRestoreCategory.GLAMOURS,
+        PortableRestoreCategory.ROLEPLAY,
+        PortableRestoreCategory.PROFILE_IMAGES,
+        PortableRestoreCategory.ACTIVATION_PROMPTS,
+        PortableRestoreCategory.SYSTEM_PROMPTS,
+        PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS,
+        PortableRestoreCategory.MODEL_RULES,
+        PortableRestoreCategory.MEMORIES,
+        PortableRestoreCategory.LOREBOOKS -> true
     }
 
     @Suppress("DEPRECATION")
@@ -1046,6 +1085,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             runOnUiThread {
                 if (validated is PortablePackage.ValidateResult.Ok) {
                     pending.artifacts = validated.artifacts
+                    pending.declaredCategories = validated.declaredCategories
                     handlePortableInventory(pending)
                 } else {
                     val error = (validated as PortablePackage.ValidateResult.Failed).error
@@ -1057,8 +1097,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     private fun handlePortableInventory(pending: PendingPortableRestore) {
         setRestoreStatus(null, null, busy = false)
+        val inventory = PortableRestoreInventory.from(
+            pending.artifacts,
+            pending.declaredCategories
+        )
+        pending.explicitlyEmptyCategories = inventory.explicitlyEmpty
         when (val result = PortableRestoreSelectionPlan.inspect(
-            pending.requested, PortableRestoreInventory.from(pending.artifacts)
+            pending.requested, inventory
         )) {
             is PortableRestoreSelectionPlan.Result.Ready -> {
                 pending.selected = result.selections
@@ -1093,11 +1138,15 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         val built = UnifiedPortableRestore.build(
             applicationContext,
             pending.artifacts,
-            UnifiedPortableRestore.Request(pending.selected, pending.folderResolutions),
+            UnifiedPortableRestore.Request(
+                pending.selected,
+                pending.folderResolutions,
+                pending.explicitlyEmptyCategories
+            ),
             transactionRoot
         )
         if (built !is UnifiedPortableRestore.BuildResult.Ready) {
-            showPortableFailure((built as UnifiedPortableRestore.BuildResult.Failed).detail)
+            showPortableBuildFailure(built as UnifiedPortableRestore.BuildResult.Failed)
             return
         }
         val chat = built.chatParticipant
@@ -1106,7 +1155,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             if (collision != null) {
                 showFolderCollision(pending, collision)
             } else {
-                showPortableFailure(getString(R.string.portable_restore_validation_failed))
+                showPortableFailure(portableChatValidationMessage(chat.validationFailure))
             }
             return
         }
@@ -1124,12 +1173,12 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             .setPositiveButton(R.string.portable_folder_create_new) { _, _ ->
                 showNewFolderName(pending, collision)
             }
-            .setNeutralButton(R.string.portable_folder_merge) { _, _ ->
+            .setNegativeButton(R.string.portable_folder_merge) { _, _ ->
                 pending.folderResolutions[collision.backupFolder.id] =
                     ChatMergePlanner.FolderResolution.MergeInto(collision.currentFolder.id)
                 preflightPortableRestore(pending)
             }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> finishPortableRestoreFlow() }
+            .setNeutralButton(R.string.btn_cancel) { _, _ -> finishPortableRestoreFlow() }
             .setOnCancelListener { finishPortableRestoreFlow() }
             .show()
     }
@@ -1230,10 +1279,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     showPortableSuccess(ready)
                 } else {
                     val failed = result as SelectedCategoryRestoreTransaction.Result.Failed
-                    showPortableFailure(
-                        getString(R.string.portable_restore_failure_reason, failed.reason.name.lowercase().replace('_', ' ')),
-                        cleanup = false
-                    )
+                    showPortableTransactionFailure(failed, ready)
                 }
             }
         }
@@ -1243,10 +1289,17 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         val report = portableReport(ready)
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.portable_success_title)
-            .setMessage(
-                if (report.isEmpty()) getString(R.string.portable_success_message)
-                else getString(R.string.portable_success_with_report) + "\n\n" + report.joinToString("\n")
-            )
+            .setMessage(R.string.portable_success_message)
+            .setPositiveButton(R.string.btn_ok) { _, _ ->
+                if (report.isNotEmpty()) showPortableReport(report)
+            }
+            .show()
+    }
+
+    private fun showPortableReport(lines: List<String>) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.portable_report_title)
+            .setMessage(getString(R.string.portable_report_intro) + "\n\n" + lines.joinToString("\n"))
             .setPositiveButton(R.string.btn_ok, null)
             .show()
     }
@@ -1291,6 +1344,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     ))
                 }
             }
+            is org.teslasoft.assistant.preferences.backup.portable.ModelEndpointRestoreParticipant -> {
+                val count = participant.mergeReport?.conflicts?.size ?: 0
+                if (count > 0) lines.add(getString(
+                    R.string.portable_report_conflict_count,
+                    portableCategoryName(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS), count
+                ))
+            }
             is org.teslasoft.assistant.preferences.backup.portable.MemoryRowsRestoreParticipant -> {
                 val count = participant.report?.conflicts?.size ?: 0
                 if (count > 0) lines.add(getString(
@@ -1324,6 +1384,117 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         PortableRestoreCategory.MODEL_RULES -> R.string.restore_category_model_rules
         PortableRestoreCategory.MEMORIES -> R.string.restore_category_memories
         PortableRestoreCategory.LOREBOOKS -> R.string.restore_category_lorebooks
+    })
+
+    private fun showPortableBuildFailure(failed: UnifiedPortableRestore.BuildResult.Failed) {
+        val reason = getString(when (failed.reason) {
+            UnifiedPortableRestore.BuildFailure.EMPTY_SELECTION ->
+                R.string.portable_restore_reason_empty_selection
+            UnifiedPortableRestore.BuildFailure.MISSING_CATEGORY_ARTIFACT ->
+                R.string.portable_restore_reason_missing_artifact
+            UnifiedPortableRestore.BuildFailure.DEPENDENCY_VALIDATION_FAILED ->
+                R.string.portable_restore_reason_dependency_validation
+        })
+        val detail = failed.category?.let {
+            getString(R.string.portable_restore_category_failure, portableCategoryName(it), reason)
+        } ?: getString(R.string.portable_restore_failure_reason, reason.removeSuffix("."))
+        showPortableFailure(detail)
+    }
+
+    private fun showPortableTransactionFailure(
+        failed: SelectedCategoryRestoreTransaction.Result.Failed,
+        ready: UnifiedPortableRestore.BuildResult.Ready
+    ) {
+        when (failed.dataState) {
+            SelectedCategoryRestoreTransaction.DataState.RESTORED_CLEANUP_PENDING ->
+                showPortableOutcome(
+                    R.string.portable_success_title,
+                    getString(R.string.portable_restore_cleanup_pending),
+                    retryPendingPortableRecovery = true
+                )
+            SelectedCategoryRestoreTransaction.DataState.RECOVERY_REQUIRED ->
+                showPortableOutcome(
+                    R.string.portable_restore_recovery_title,
+                    getString(R.string.portable_restore_recovery_message),
+                    retryPendingPortableRecovery = true
+                )
+            SelectedCategoryRestoreTransaction.DataState.UNCHANGED -> {
+                val category = PortableRestoreCategory.entries.firstOrNull {
+                    it.key == failed.categoryKey
+                }
+                val reason = if (
+                    failed.reason == SelectedCategoryRestoreTransaction.Failure.VALIDATION_FAILED &&
+                    category == PortableRestoreCategory.CHATS
+                ) {
+                    portableChatValidationMessage(ready.chatParticipant?.validationFailure)
+                } else {
+                    portableTransactionReason(failed.reason)
+                }
+                val detail = if (category == null) {
+                    getString(R.string.portable_restore_failure_reason, reason.removeSuffix("."))
+                } else {
+                    getString(R.string.portable_restore_category_failure, portableCategoryName(category), reason)
+                }
+                showPortableFailure(detail, cleanup = false)
+            }
+        }
+    }
+
+    private fun showPortableOutcome(
+        title: Int,
+        message: String,
+        retryPendingPortableRecovery: Boolean = false
+    ) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton(R.string.btn_ok) { _, _ ->
+                if (retryPendingPortableRecovery) {
+                    PortableRestoreRecoveryFlow.showIfPending(this)
+                }
+            }
+            .show()
+    }
+
+    private fun portableTransactionReason(
+        reason: SelectedCategoryRestoreTransaction.Failure
+    ): String = getString(when (reason) {
+        SelectedCategoryRestoreTransaction.Failure.EMPTY_SELECTION ->
+            R.string.portable_restore_reason_empty_selection
+        SelectedCategoryRestoreTransaction.Failure.DUPLICATE_CATEGORY ->
+            R.string.portable_restore_reason_duplicate_category
+        SelectedCategoryRestoreTransaction.Failure.PENDING_RECOVERY ->
+            R.string.portable_restore_reason_pending_recovery
+        SelectedCategoryRestoreTransaction.Failure.VALIDATION_FAILED ->
+            R.string.portable_restore_reason_validation_failed
+        SelectedCategoryRestoreTransaction.Failure.STAGING_FAILED ->
+            R.string.portable_restore_reason_staging_failed
+        SelectedCategoryRestoreTransaction.Failure.JOURNAL_FAILED ->
+            R.string.portable_restore_reason_journal_failed
+        SelectedCategoryRestoreTransaction.Failure.APPLY_FAILED ->
+            R.string.portable_restore_reason_apply_failed
+        SelectedCategoryRestoreTransaction.Failure.ROLLBACK_FAILED ->
+            R.string.portable_restore_reason_rollback_failed
+    })
+
+    private fun portableChatValidationMessage(
+        reason: PortableChatRestorePlan.Reason?
+    ): String = getString(when (reason) {
+        PortableChatRestorePlan.Reason.NOT_A_CHATS_ARTIFACT -> R.string.portable_chat_invalid_file_type
+        PortableChatRestorePlan.Reason.UNSUPPORTED_FORMAT -> R.string.portable_chat_unsupported_format
+        PortableChatRestorePlan.Reason.INCOMPLETE_ARTIFACT -> R.string.portable_chat_incomplete
+        PortableChatRestorePlan.Reason.MALFORMED -> R.string.portable_chat_malformed
+        PortableChatRestorePlan.Reason.UNSAFE_CHAT_ID -> R.string.portable_chat_unsafe_id
+        PortableChatRestorePlan.Reason.IDENTITY_MISMATCH -> R.string.portable_chat_identity_mismatch
+        PortableChatRestorePlan.Reason.DUPLICATE_CHAT_ID -> R.string.portable_chat_duplicate_id
+        PortableChatRestorePlan.Reason.MALFORMED_MESSAGE_ID -> R.string.portable_chat_malformed_message_id
+        PortableChatRestorePlan.Reason.DUPLICATE_MESSAGE_ID -> R.string.portable_chat_duplicate_message_id
+        PortableChatRestorePlan.Reason.MALFORMED_FOLDERS -> R.string.portable_chat_malformed_folders
+        PortableChatRestorePlan.Reason.MISSING_FOLDER -> R.string.portable_chat_missing_folder
+        PortableChatRestorePlan.Reason.UNREFERENCED_FOLDER -> R.string.portable_chat_unreferenced_folder
+        PortableChatRestorePlan.Reason.UNSUPPORTED_SETTING_TYPE -> R.string.portable_chat_unsupported_setting
+        PortableChatRestorePlan.Reason.FORBIDDEN_CREDENTIAL -> R.string.portable_chat_forbidden_credential
+        null -> R.string.portable_restore_validation_failed
     })
 
     private fun portableErrorMessage(error: PortablePackageFormat.RestoreError): String = getString(when (error) {

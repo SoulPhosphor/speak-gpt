@@ -18,7 +18,8 @@ import org.teslasoft.assistant.preferences.profileimages.ProfileImageUsage
 object UnifiedPortableRestore {
     data class Request(
         val selections: List<PortableRestoreSelectionPlan.Selection>,
-        val folderResolutions: Map<String, ChatMergePlanner.FolderResolution> = emptyMap()
+        val folderResolutions: Map<String, ChatMergePlanner.FolderResolution> = emptyMap(),
+        val explicitlyEmptyCategories: Set<PortableRestoreCategory> = emptySet()
     )
 
     sealed class BuildResult {
@@ -26,7 +27,16 @@ object UnifiedPortableRestore {
             val participants: List<SelectedCategoryRestoreTransaction.Participant>,
             val chatParticipant: ChatRestoreParticipant?
         ) : BuildResult()
-        data class Failed(val detail: String) : BuildResult()
+        data class Failed(
+            val reason: BuildFailure,
+            val category: PortableRestoreCategory? = null
+        ) : BuildResult()
+    }
+
+    enum class BuildFailure {
+        EMPTY_SELECTION,
+        MISSING_CATEGORY_ARTIFACT,
+        DEPENDENCY_VALIDATION_FAILED
     }
 
     fun build(
@@ -35,7 +45,7 @@ object UnifiedPortableRestore {
         request: Request,
         stagingRoot: File
     ): BuildResult {
-        if (request.selections.isEmpty()) return BuildResult.Failed("No categories were selected.")
+        if (request.selections.isEmpty()) return BuildResult.Failed(BuildFailure.EMPTY_SELECTION)
         val app = context.applicationContext
         val modes = request.selections.associate { it.category to it.mode }
         val participants = ArrayList<SelectedCategoryRestoreTransaction.Participant>()
@@ -43,7 +53,9 @@ object UnifiedPortableRestore {
         val chatArtifact = artifact(artifacts, PortablePackage.TYPE_CHATS_JSON)
         var chatParticipant: ChatRestoreParticipant? = null
         if (PortableRestoreCategory.CHATS in modes) {
-            chatArtifact ?: return BuildResult.Failed("Chats are missing from the staged backup.")
+            chatArtifact ?: return BuildResult.Failed(
+                BuildFailure.MISSING_CATEGORY_ARTIFACT, PortableRestoreCategory.CHATS
+            )
             chatParticipant = ChatRestoreParticipant(
                 app, chatArtifact.stagedFile, modes.getValue(PortableRestoreCategory.CHATS),
                 request.folderResolutions, File(stagingRoot, "chats")
@@ -63,7 +75,9 @@ object UnifiedPortableRestore {
         } else if (PortableRestoreCategory.CHATS in modes) {
             val parsed = PortableChatRestorePlan.parse(chatArtifact!!.stagedFile.readText(Charsets.UTF_8)) as?
                 PortableChatRestorePlan.Result.Ok
-                ?: return BuildResult.Failed("Chats failed dependency validation.")
+                ?: return BuildResult.Failed(
+                    BuildFailure.DEPENDENCY_VALIDATION_FAILED, PortableRestoreCategory.CHATS
+                )
             val chatIds = parsed.plan.chats.mapTo(HashSet()) { it.chatId }
             val generated = (GeneratedImagePortableRestoreManager.prepare(artifacts) as?
                 GeneratedImagePortableRestoreManager.PrepareResult.Ready)?.prepared
@@ -82,7 +96,10 @@ object UnifiedPortableRestore {
         var identityParticipant: CompanionCategoryRestoreParticipant? = null
         if (identitySelections.isNotEmpty()) {
             val archive = artifact(artifacts, PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE)
-                ?: return BuildResult.Failed("Identity data is missing from the staged backup.")
+                ?: return BuildResult.Failed(
+                    BuildFailure.MISSING_CATEGORY_ARTIFACT,
+                    identitySelections.first().category
+                )
             identityParticipant = CompanionCategoryRestoreParticipant(
                 app, archive.stagedFile, identitySelections, File(stagingRoot, "identity_bundle")
             )
@@ -92,13 +109,17 @@ object UnifiedPortableRestore {
         if (PortableRestoreCategory.PROFILE_IMAGES in modes) {
             participants.add(ProfileImageRestoreParticipant(
                 app, artifacts, modes.getValue(PortableRestoreCategory.PROFILE_IMAGES),
-                protectedProfileImages(app, modes.keys), File(stagingRoot, "profile_images")
+                protectedProfileImages(app, modes.keys), File(stagingRoot, "profile_images"),
+                PortableRestoreCategory.PROFILE_IMAGES in request.explicitlyEmptyCategories
             ))
         }
 
         if (PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS in modes) {
             val artifact = artifact(artifacts, PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS)
-                ?: return BuildResult.Failed("Model and endpoint settings are missing.")
+                ?: return BuildResult.Failed(
+                    BuildFailure.MISSING_CATEGORY_ARTIFACT,
+                    PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS
+                )
             participants.add(ModelEndpointRestoreParticipant(
                 app, artifact.stagedFile,
                 modes.getValue(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS),
@@ -109,18 +130,21 @@ object UnifiedPortableRestore {
             if (category in modes) participants.add(
                 if (category == PortableRestoreCategory.MEMORIES && identityParticipant != null) {
                     MemoryRowsRestoreParticipant(
-                        app, artifacts, category, modes.getValue(category), File(stagingRoot, category.key)
+                        app, artifacts, category, modes.getValue(category), File(stagingRoot, category.key),
+                        category in request.explicitlyEmptyCategories
                     ) { identityParticipant?.memoryReferenceIds() ?: MemoryReferenceIds() }
                 } else {
                     MemoryRowsRestoreParticipant(
-                        app, artifacts, category, modes.getValue(category), File(stagingRoot, category.key)
+                        app, artifacts, category, modes.getValue(category), File(stagingRoot, category.key),
+                        category in request.explicitlyEmptyCategories
                     )
                 }
             )
         }
         if (PortableRestoreCategory.LOREBOOKS in modes) participants.add(LorebookRestoreParticipant(
             app, artifacts, modes.getValue(PortableRestoreCategory.LOREBOOKS),
-            File(stagingRoot, "lorebooks")
+            File(stagingRoot, "lorebooks"),
+            PortableRestoreCategory.LOREBOOKS in request.explicitlyEmptyCategories
         ))
         return BuildResult.Ready(participants, chatParticipant)
     }
@@ -149,6 +173,7 @@ object UnifiedPortableRestore {
      * began. Constructors are supplied only so each participant can read its
      * already-staged exact rollback snapshot; validate/stage are never called
      * by [SelectedCategoryRestoreTransaction.recover]. */
+    @Synchronized
     fun recoverPending(context: Context): Boolean {
         val journal = journalRoot(context)
         val root = transactionStagingRoot(context)

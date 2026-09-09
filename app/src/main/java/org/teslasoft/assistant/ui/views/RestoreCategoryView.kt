@@ -38,6 +38,8 @@ class RestoreCategoryView @JvmOverloads constructor(
     private val modeView: TextView
     private lateinit var category: PortableRestoreCategory
     private var mode = PortableRestoreMode.MERGE
+    private var mergeSupported = true
+    private var selectionChanged: ((Boolean) -> Unit)? = null
 
     val isCategorySelected: Boolean get() = check.isChecked
     val selectedMode: PortableRestoreMode get() = mode
@@ -49,8 +51,8 @@ class RestoreCategoryView @JvmOverloads constructor(
         description = findViewById(R.id.category_description)
         modeView = findViewById(R.id.category_mode)
         check.setOnCheckedChangeListener { _, selected ->
-            modeView.isEnabled = selected
-            modeView.alpha = if (selected) 1f else DISABLED_ALPHA
+            modeView.isEnabled = selected && mergeSupported
+            selectionChanged?.invoke(selected)
         }
         modeView.setOnClickListener { showModeMenu() }
     }
@@ -58,11 +60,17 @@ class RestoreCategoryView @JvmOverloads constructor(
     fun bind(
         restoreCategory: PortableRestoreCategory,
         @StringRes title: Int,
-        @StringRes explanation: Int
+        @StringRes explanation: Int,
+        supportsMerge: Boolean,
+        onSelectionChanged: ((Boolean) -> Unit)? = null
     ) {
         category = restoreCategory
+        mergeSupported = supportsMerge
+        selectionChanged = onSelectionChanged
+        if (!mergeSupported) mode = PortableRestoreMode.REPLACE
         check.setText(title)
         description.setText(explanation)
+        modeView.isEnabled = check.isChecked && mergeSupported
         updateModeLabel()
         AppDropdown.sizeToOptions(modeView, modeLabels()) {
             (width - check.paddingStart).coerceAtLeast(modeView.minimumWidth)
@@ -85,7 +93,7 @@ class RestoreCategoryView @JvmOverloads constructor(
     private fun modeLabels(): List<String> = listOf(
         context.getString(R.string.restore_mode_merge),
         context.getString(R.string.restore_mode_replace)
-    )
+    ).let { if (mergeSupported) it else listOf(it.last()) }
 
     private fun updateModeLabel() {
         val label = context.getString(
@@ -96,7 +104,4 @@ class RestoreCategoryView @JvmOverloads constructor(
         modeView.contentDescription = context.getString(R.string.restore_mode_accessibility, label)
     }
 
-    private companion object {
-        const val DISABLED_ALPHA = 0.38f
-    }
 }

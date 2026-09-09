@@ -61,7 +61,20 @@ object SelectedCategoryRestoreTransaction {
 
     sealed class Result {
         data object Success : Result()
-        data class Failed(val reason: Failure, val categoryKey: String? = null) : Result()
+        data class Failed(
+            val reason: Failure,
+            val categoryKey: String? = null,
+            val dataState: DataState = DataState.UNCHANGED
+        ) : Result()
+    }
+
+    enum class DataState {
+        /** Validation/staging failed, or every started write rolled back. */
+        UNCHANGED,
+        /** Every selected category applied; only durable-journal cleanup failed. */
+        RESTORED_CLEANUP_PENDING,
+        /** At least one attempted write could not be rolled back. */
+        RECOVERY_REQUIRED
     }
 
     enum class InterruptionPoint { AFTER_FIRST_APPLY }
@@ -122,7 +135,10 @@ object SelectedCategoryRestoreTransaction {
             return rollbackAfterFailure(journalRoot, started, Failure.JOURNAL_FAILED, null)
         }
         cleanup(participants)
-        if (!deleteJournal(journalRoot)) return Result.Failed(Failure.JOURNAL_FAILED)
+        if (!deleteJournal(journalRoot)) return Result.Failed(
+            Failure.JOURNAL_FAILED,
+            dataState = DataState.RESTORED_CLEANUP_PENDING
+        )
         return Result.Success
     }
 
@@ -157,9 +173,15 @@ object SelectedCategoryRestoreTransaction {
         for (participant in started.asReversed()) {
             if (!safeCall(participant::rollback)) rolledBack = false
         }
-        if (!rolledBack) return Result.Failed(Failure.ROLLBACK_FAILED, categoryKey)
-        cleanup(started)
+        if (!rolledBack) return Result.Failed(
+            Failure.ROLLBACK_FAILED,
+            categoryKey,
+            DataState.RECOVERY_REQUIRED
+        )
+        // Keep exact rollback snapshots until the durable journal is gone. If
+        // deletion fails, a later recovery pass can safely repeat rollback.
         if (!deleteJournal(journalRoot)) return Result.Failed(Failure.JOURNAL_FAILED, categoryKey)
+        cleanup(started)
         return Result.Failed(originalFailure, categoryKey)
     }
 

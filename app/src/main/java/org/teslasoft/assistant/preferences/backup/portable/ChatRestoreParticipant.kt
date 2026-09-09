@@ -24,10 +24,13 @@ class ChatRestoreParticipant(
         private set
     var folderCollisions: List<ChatMergePlanner.FolderCollision> = emptyList()
         private set
+    var validationFailure: PortableChatRestorePlan.Reason? = null
+        private set
 
     override val categoryKey: String = PortableRestoreCategory.CHATS.key
 
     override fun validate(): Boolean {
+        validationFailure = null
         if (!incoming.isFile || incoming.length() > PortablePackage.MAX_ENTRY_BYTES) return false
         val json = try { incoming.readText(Charsets.UTF_8) } catch (_: Exception) { return false }
         return when (val result = PortableChatRestoreCoordinator.prepare(
@@ -42,7 +45,10 @@ class ChatRestoreParticipant(
                 folderCollisions = result.collisions
                 false
             }
-            is PortableChatRestoreCoordinator.PrepareResult.Rejected -> false
+            is PortableChatRestoreCoordinator.PrepareResult.Rejected -> {
+                validationFailure = result.chatReason
+                false
+            }
         }
     }
 

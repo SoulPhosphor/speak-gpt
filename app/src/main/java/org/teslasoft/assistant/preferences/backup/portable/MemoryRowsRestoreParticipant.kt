@@ -40,12 +40,13 @@ class MemoryRowsRestoreParticipant internal constructor(
         artifacts: List<PortablePackage.ValidatedArtifact>,
         category: PortableRestoreCategory,
         mode: PortableRestoreMode,
-        stagingRoot: File
+        stagingRoot: File,
+        incomingIsEmpty: Boolean = false
     ) : this(
         groupFor(category),
         mode,
         stagingRoot,
-        AndroidBackend(context.applicationContext, artifacts),
+        AndroidBackend(context.applicationContext, artifacts, incomingIsEmpty),
         null
     )
 
@@ -55,12 +56,13 @@ class MemoryRowsRestoreParticipant internal constructor(
         category: PortableRestoreCategory,
         mode: PortableRestoreMode,
         stagingRoot: File,
+        incomingIsEmpty: Boolean = false,
         referenceProvider: () -> MemoryReferenceIds
     ) : this(
         groupFor(category),
         mode,
         stagingRoot,
-        AndroidBackend(context.applicationContext, artifacts),
+        AndroidBackend(context.applicationContext, artifacts, incomingIsEmpty),
         referenceProvider
     )
 
@@ -128,7 +130,8 @@ class MemoryRowsRestoreParticipant internal constructor(
 
     private class AndroidBackend(
         context: Context,
-        private val artifacts: List<PortablePackage.ValidatedArtifact>
+        private val artifacts: List<PortablePackage.ValidatedArtifact>,
+        private val incomingIsEmpty: Boolean
     ) : Backend {
         private val app = context.applicationContext
         private val initiallyProvisioned = MemoryStore.isProvisioned(app)
@@ -137,6 +140,7 @@ class MemoryRowsRestoreParticipant internal constructor(
             val matches = artifacts.filter {
                 it.type == PortablePackage.TYPE_SQLCIPHER_DB && it.entryName == "memory.db"
             }
+            if (matches.isEmpty() && incomingIsEmpty) return emptyRows(group)
             if (matches.size != 1) return null
             val artifact = matches.single()
             if (artifact.keySemantics != PortablePackage.KEY_SEMANTICS_PASSPHRASE) return null

@@ -288,7 +288,12 @@ object PortableRecoveryWriter {
                     includedTypes.add(BackupType.CHATS)
                     // ---- assemble + envelope + reopen-and-verify ----
                     val innerZip = File(staging, "inner.zip")
-                    PortablePackage.buildInnerZip(artifacts, createdAt, innerZip)
+                    PortablePackage.buildInnerZip(
+                        artifacts,
+                        createdAt,
+                        innerZip,
+                        restoreCategories = PortableRestoreCategory.entries.toSet()
+                    )
                     // Producer metadata: identity lives in the header, never in
                     // the filename (owner filename architecture). The display
                     // name is captured AT CREATION TIME; a later app rename

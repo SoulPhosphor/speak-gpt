@@ -118,6 +118,10 @@ class SelectedCategoryRestoreTransactionTest {
             SelectedCategoryRestoreTransaction.Failure.ROLLBACK_FAILED,
             (result as SelectedCategoryRestoreTransaction.Result.Failed).reason
         )
+        assertEquals(
+            SelectedCategoryRestoreTransaction.DataState.RECOVERY_REQUIRED,
+            result.dataState
+        )
         assertTrue(root.resolve("state.json").isFile)
     }
 

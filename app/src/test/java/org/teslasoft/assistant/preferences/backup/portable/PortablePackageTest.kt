@@ -102,6 +102,29 @@ class PortablePackageTest {
     }
 
     @Test
+    fun currentPackageRoundTripsDeclaredRestoreCategoriesIncludingEmptyOnes() {
+        val inner = tmp.newFile("inventory_inner.zip").apply { delete() }
+        val declared = setOf(
+            PortableRestoreCategory.CHATS,
+            PortableRestoreCategory.GENERATED_IMAGES,
+            PortableRestoreCategory.LOREBOOKS
+        )
+        PortablePackage.buildInnerZip(
+            buildArtifacts(),
+            "2026-09-09T00:00:00Z",
+            inner,
+            declared
+        )
+
+        val extracted = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(extracted is PortablePackage.ValidateResult.Ok)
+        assertEquals(
+            declared,
+            (extracted as PortablePackage.ValidateResult.Ok).declaredCategories
+        )
+    }
+
+    @Test
     fun unencryptedRoundTripIsNeverAuthenticated() {
         val pkg = makePackage(recoverySecret = null)
         val inspect = PortablePackage.inspect(pkg)

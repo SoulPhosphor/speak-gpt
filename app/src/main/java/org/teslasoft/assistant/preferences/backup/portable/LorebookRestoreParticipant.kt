@@ -30,11 +30,12 @@ class LorebookRestoreParticipant internal constructor(
         context: Context,
         artifacts: List<PortablePackage.ValidatedArtifact>,
         mode: PortableRestoreMode,
-        stagingRoot: File
+        stagingRoot: File,
+        incomingIsEmpty: Boolean = false
     ) : this(
         mode,
         stagingRoot,
-        AndroidBackend(context.applicationContext, artifacts)
+        AndroidBackend(context.applicationContext, artifacts, incomingIsEmpty)
     )
 
     override val categoryKey: String = PortableRestoreCategory.LOREBOOKS.key
@@ -96,7 +97,8 @@ class LorebookRestoreParticipant internal constructor(
 
     private class AndroidBackend(
         context: Context,
-        private val artifacts: List<PortablePackage.ValidatedArtifact>
+        private val artifacts: List<PortablePackage.ValidatedArtifact>,
+        private val incomingIsEmpty: Boolean
     ) : Backend {
         private val app = context.applicationContext
         private val initiallyProvisioned = LoreBookStore.isProvisioned(app)
@@ -104,6 +106,9 @@ class LorebookRestoreParticipant internal constructor(
         override fun incoming(): LorebookPortableData? {
             val matches = artifacts.filter {
                 it.type == PortablePackage.TYPE_SQLCIPHER_DB && it.entryName == "lorebook.db"
+            }
+            if (matches.isEmpty() && incomingIsEmpty) {
+                return LorebookPortableData(emptyList(), emptyList(), emptyList())
             }
             if (matches.size != 1) return null
             val artifact = matches.single()

@@ -59,6 +59,29 @@ class PortableRestoreInventoryTest {
         assertEquals(setOf(PortableRestoreCategory.CHATS), inventory.availableFrom(selected))
     }
 
+    @Test
+    fun declaredInventoryDistinguishesIntentionallyEmptyFromMissing() {
+        val declared = linkedSetOf(
+            PortableRestoreCategory.CHATS,
+            PortableRestoreCategory.GENERATED_IMAGES,
+            PortableRestoreCategory.MEMORIES
+        )
+        val inventory = PortableRestoreInventory.from(
+            listOf(artifact("chats.json", PortablePackage.TYPE_CHATS_JSON)),
+            declared
+        )
+
+        assertEquals(declared, inventory.available)
+        assertEquals(
+            setOf(PortableRestoreCategory.GENERATED_IMAGES, PortableRestoreCategory.MEMORIES),
+            inventory.explicitlyEmpty
+        )
+        assertEquals(
+            setOf(PortableRestoreCategory.LOREBOOKS),
+            inventory.missingFrom(setOf(PortableRestoreCategory.MEMORIES, PortableRestoreCategory.LOREBOOKS))
+        )
+    }
+
     private fun artifact(name: String, type: String) = PortablePackage.ValidatedArtifact(
         entryName = name,
         type = type,

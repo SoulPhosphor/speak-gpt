@@ -57,8 +57,11 @@ class BackupRestoreScreenContractTest {
         val row = source("view_restore_category.xml")
         assertTrue(row.contains("@+id/category_check"))
         assertTrue(row.contains("@+id/category_mode"))
+        assertTrue(row.contains("@string/restore_mode_label"))
         assertTrue(row.contains("Widget.App.Dropdown.CanonicalValue"))
+        assertTrue(row.contains("Widget.App.Dropdown.CanonicalLabel"))
         assertTrue(layout.split("org.teslasoft.assistant.ui.views.RestoreCategoryView").size - 1 == 12)
+        assertTrue(layout.contains("@+id/restore_model_credentials_note"))
     }
 
     @Test
@@ -70,7 +73,6 @@ class BackupRestoreScreenContractTest {
             "btn_portable_import",
             "btn_companion_download",
             "btn_companion_upload",
-            "btn_restore_from_backup",
             "btn_memory_reset"
         )) {
             val view = layout.substringAfter("@+id/$id").substringBefore("/>")
@@ -80,6 +82,44 @@ class BackupRestoreScreenContractTest {
         assertTrue(activity.contains("btnLegacyConvert?.visibility = View.VISIBLE"))
         assertTrue(activity.contains("btnReset = findViewById(R.id.btn_memory_reset)"))
         assertTrue(activity.contains("btnReset?.setOnClickListener"))
+        assertTrue(!layout.contains("_old"))
+        assertTrue(!layout.contains("@+id/btn_restore_from_backup"))
+    }
+
+    @Test
+    fun folderCollisionUsesRenderedCancelMergeCreateOrder() {
+        val activity = javaSource("MemoryBackupRestoreActivity.kt")
+        val collision = activity.substringAfter("private fun showFolderCollision(")
+            .substringBefore("private fun showNewFolderName(")
+        assertTrue(collision.contains("setNeutralButton(R.string.btn_cancel)"))
+        assertTrue(collision.contains("setNegativeButton(R.string.portable_folder_merge)"))
+        assertTrue(collision.contains("setPositiveButton(R.string.portable_folder_create_new)"))
+    }
+
+    @Test
+    fun restoreFailuresDoNotRenderEnumNamesAsCopy() {
+        val activity = javaSource("MemoryBackupRestoreActivity.kt")
+        assertTrue(!activity.contains("failed.reason.name.lowercase()"))
+        assertTrue(activity.contains("portableChatValidationMessage"))
+        assertTrue(activity.contains("portable_restore_category_failure"))
+        assertTrue(activity.contains("showPortableReport(report)"))
+    }
+
+    @Test
+    fun pendingOuterRestoreIsVisibleAndDoesNotAddDiagnosticLogging() {
+        val application = find(
+            "src/main/java/org/teslasoft/assistant/app/MainApplication.kt",
+            "app/src/main/java/org/teslasoft/assistant/app/MainApplication.kt"
+        ).readText()
+        val recoveryFlow = find(
+            "src/main/java/org/teslasoft/assistant/ui/PortableRestoreRecoveryFlow.kt",
+            "app/src/main/java/org/teslasoft/assistant/ui/PortableRestoreRecoveryFlow.kt"
+        ).readText()
+        assertTrue(application.contains("UnifiedPortableRestore.recoverPending(this)"))
+        assertTrue(!application.contains("MemoryLog.log(this, \"PortableRestore\""))
+        assertTrue(recoveryFlow.contains("portable_restore_pending_message"))
+        assertTrue(recoveryFlow.contains("portable_restore_retry_recovery"))
+        assertTrue(recoveryFlow.contains("setCancelable(false)"))
     }
 
     private fun source(name: String): String = find(
