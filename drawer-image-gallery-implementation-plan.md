@@ -1316,7 +1316,7 @@ damage validation; a protected package asks for an available portable unlock
 method (Recovery Code, Recovery Key file, or configured password) and never
 depends on the source device.
 
-### 11.3 implementation status of record, September 8, 2026
+### 11.3 implementation status of record, September 9, 2026
 
 - `chat-logical-v2`, its strict v1/v2 reader, immutable folder definitions,
   exact-prefix longer-chat rule, stable-ID conflict reporting, and the three
@@ -1343,25 +1343,37 @@ depends on the source device.
   participant that stages both desired and exact rollback catalogs/assets.
   Replace planning retains and reports current images required by unselected
   data. A physical filename collision with different content fails before
-  mutation. The dependency collector that supplies those protected image IDs
-  is still required before this participant gains a production UI caller.
+  mutation. Production dependency collectors protect generated images used by
+  selected chats and current images still referenced by unselected data.
+- All twelve selectable categories now have production restore participants:
+  Chats, Generated Images, Companions, Glamours, Roleplay, Avatar/Profile
+  Images, Activation Prompts, System Prompts, Model & Endpoint Settings, Model
+  Rules, Memories, and Lorebooks. The bundled identity archive is filtered
+  into genuinely selective category plans, and referenced image, memory,
+  lorebook, endpoint, model, and folder dependencies are validated before any
+  live category changes.
 - The main Settings row and Backup & Restore screen use the approved visible
   order. The Restore Data section has twelve on-screen category rows, selected
   by default, with concise explanations and independent Merge/Replace controls.
   The legacy converter remains visible under Backup, direct database restore
   remains at the bottom, and Reset plus retired standalone flows retain hidden
-  wiring. The unified Restore From Backup action deliberately remains disabled
-  until every selectable category and dependency can join the outer
-  transaction safely.
-- Still required before Phase 11 is complete: split the bundled Companion,
-  Glamour, Roleplay, Activation Prompt, and System Prompt data into genuinely
-  selective participants; add Memories, Lorebooks, Model Rules, and complete
-  Avatar/Profile Images participants; collect cross-category image and record
-  dependencies; wire package selection/unlock, missing-category consent,
-  folder decisions, confirmation, progress, conflict reporting, and startup
-  recovery into the unified screen; expand the Human-Readable export; then
-  pass the full unit/build/Beta/instrumentation-compilation workflow. Do not
-  enable the button or describe the product as complete before those items.
+  wiring. The unified Restore From Backup action is enabled and drives package
+  inspection, protection-aware unlock, explicit missing-category consent,
+  folder decisions, destructive confirmation, locked progress, and a final
+  conflict/result report.
+- The Human-Readable export now has an on-screen content selector and can write
+  app-independent logical chat data, generated images, identities and their
+  assigned pictures, the complete profile-image gallery, credential-free model
+  settings, memories, Model Rules, and lorebooks. It remains separate from a
+  Recovery Backup and is deliberately non-restorable.
+- Startup recovery enters through the same outer selected-category transaction
+  journal before normal app initialization. Each database-backed participant
+  records whether its store existed before staging, so rollback after process
+  death restores both the prior contents and the prior absent/present state.
+  Focused tests cover the marker and an actual participant rollback.
+- Phase 11 is implementation-complete when the exact final branch commit passes
+  the full unit/build/Beta/instrumentation-compilation workflow. Keep it on the
+  working branch for Phase 12 owner-data rehearsal; do not merge it to Main.
 
 ## Phase 12 — Owner-data rehearsal and final Main gate
 
