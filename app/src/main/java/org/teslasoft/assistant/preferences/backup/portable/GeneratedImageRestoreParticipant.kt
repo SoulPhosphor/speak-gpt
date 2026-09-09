@@ -33,8 +33,16 @@ class GeneratedImageRestoreParticipant internal constructor(
     private val stagingRoot: File,
     private val backend: Backend,
     private val includedBackupImageIds: Set<String>? = null,
-    private val participantKey: String = PortableRestoreCategory.GENERATED_IMAGES.key
+    private val participantKey: String = PortableRestoreCategory.GENERATED_IMAGES.key,
+    private val precomputed: PreparedPlan? = null
 ) : SelectedCategoryRestoreTransaction.Participant {
+
+    data class PreparedPlan(
+        val current: GeneratedImageCatalogSnapshot,
+        val incoming: GeneratedImagePortableRestoreManager.Prepared,
+        val desired: GeneratedImageCatalogSnapshot,
+        val report: GeneratedImageCategoryPlanner.Report
+    )
 
     interface Backend {
         fun snapshot(): GeneratedImageCatalogSnapshot?
@@ -62,7 +70,8 @@ class GeneratedImageRestoreParticipant internal constructor(
         stagingRoot,
         AndroidBackend(context.applicationContext),
         null,
-        PortableRestoreCategory.GENERATED_IMAGES.key
+        PortableRestoreCategory.GENERATED_IMAGES.key,
+        null
     )
 
     constructor(
@@ -78,8 +87,28 @@ class GeneratedImageRestoreParticipant internal constructor(
         stagingRoot,
         AndroidBackend(context.applicationContext),
         includedBackupImageIds,
-        dependencyParticipantKey
+        dependencyParticipantKey,
+        null
     )
+
+    internal constructor(
+        context: Context,
+        plan: PreparedPlan,
+        stagingRoot: File,
+        participantKey: String = PortableRestoreCategory.GENERATED_IMAGES.key
+    ) : this(
+        emptyList(),
+        PortableRestoreMode.MERGE,
+        emptySet(),
+        stagingRoot,
+        AndroidBackend(context.applicationContext),
+        null,
+        participantKey,
+        plan
+    ) {
+        incoming = plan.incoming
+        report = plan.report
+    }
 
     override val categoryKey: String = participantKey
 
@@ -89,6 +118,11 @@ class GeneratedImageRestoreParticipant internal constructor(
     private var incoming: GeneratedImagePortableRestoreManager.Prepared? = null
 
     override fun validate(): Boolean {
+        precomputed?.let {
+            incoming = it.incoming
+            report = it.report
+            return true
+        }
         val prepared = (GeneratedImagePortableRestoreManager.prepare(artifacts) as?
             GeneratedImagePortableRestoreManager.PrepareResult.Ready)?.prepared
         incoming = if (prepared == null || includedBackupImageIds == null) prepared else {
@@ -106,14 +140,16 @@ class GeneratedImageRestoreParticipant internal constructor(
 
     override fun stage(): Boolean {
         val backup = incoming ?: return false
-        val current = backend.snapshot() ?: return false
+        val current = precomputed?.current ?: backend.snapshot() ?: return false
         if (GeneratedImagePortableCatalog.validate(current) != null) return false
-        val planned = GeneratedImageCategoryPlanner.plan(
+        val planned = precomputed?.let {
+            GeneratedImageCategoryPlanner.Result.Ready(it.desired, it.report)
+        } ?: (GeneratedImageCategoryPlanner.plan(
             current,
             backup.snapshot,
             mode,
             protectedCurrentImageIds
-        ) as? GeneratedImageCategoryPlanner.Result.Ready ?: return false
+        ) as? GeneratedImageCategoryPlanner.Result.Ready ?: return false)
         report = planned.report
 
         return try {

@@ -10,12 +10,14 @@ import java.io.File
 import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
 
 /** Chats adapter for the selected-category outer transaction. */
-class ChatRestoreParticipant(
+class ChatRestoreParticipant internal constructor(
     context: Context,
-    private val incoming: File,
+    private val incoming: File?,
     private val mode: PortableRestoreMode,
     private val folderResolutions: Map<String, ChatMergePlanner.FolderResolution>,
-    private val stagingRoot: File
+    private val stagingRoot: File,
+    private val precomputed: PortableChatRestoreCoordinator.Prepared? = null,
+    private val precomputedCurrent: PortableChatRestorePlan.Plan? = null
 ) : SelectedCategoryRestoreTransaction.Participant {
     private val app = context.applicationContext
     private var prepared: PortableChatRestoreCoordinator.Prepared? = null
@@ -29,10 +31,42 @@ class ChatRestoreParticipant(
 
     override val categoryKey: String = PortableRestoreCategory.CHATS.key
 
+    constructor(
+        context: Context,
+        incoming: File,
+        mode: PortableRestoreMode,
+        folderResolutions: Map<String, ChatMergePlanner.FolderResolution>,
+        stagingRoot: File
+    ) : this(context, incoming, mode, folderResolutions, stagingRoot, null, null)
+
+    internal constructor(
+        context: Context,
+        prepared: PortableChatRestoreCoordinator.Prepared,
+        current: PortableChatRestorePlan.Plan,
+        stagingRoot: File
+    ) : this(
+        context,
+        null,
+        prepared.mode,
+        emptyMap(),
+        stagingRoot,
+        prepared,
+        current
+    ) {
+        this.prepared = prepared
+        mergeReport = prepared.mergeReport
+    }
+
     override fun validate(): Boolean {
         validationFailure = null
-        if (!incoming.isFile || incoming.length() > PortablePackage.MAX_ENTRY_BYTES) return false
-        val json = try { incoming.readText(Charsets.UTF_8) } catch (_: Exception) { return false }
+        precomputed?.let {
+            prepared = it
+            mergeReport = it.mergeReport
+            return true
+        }
+        val source = incoming ?: return false
+        if (!source.isFile || source.length() > PortablePackage.MAX_ENTRY_BYTES) return false
+        val json = try { source.readText(Charsets.UTF_8) } catch (_: Exception) { return false }
         return when (val result = PortableChatRestoreCoordinator.prepare(
             app, json, mode, folderResolutions
         )) {
@@ -58,10 +92,12 @@ class ChatRestoreParticipant(
             if (stagingRoot.exists()) {
                 if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) return false
             } else if (!stagingRoot.mkdirs()) return false
-            val currentJson = (ChatLogicalSerializer.serializeV2(app) as?
-                ChatLogicalSerializer.Result.Ok)?.json ?: return false
-            val current = (PortableChatRestorePlan.parse(currentJson) as?
-                PortableChatRestorePlan.Result.Ok)?.plan ?: return false
+            val current = precomputedCurrent ?: run {
+                val currentJson = (ChatLogicalSerializer.serializeV2(app) as?
+                    ChatLogicalSerializer.Result.Ok)?.json ?: return false
+                (PortableChatRestorePlan.parse(currentJson) as?
+                    PortableChatRestorePlan.Result.Ok)?.plan ?: return false
+            }
             val currentArchive = File(stagingRoot, CURRENT_ARCHIVE)
             val desiredArchive = File(stagingRoot, DESIRED_ARCHIVE)
             ConvertedChatRecoveryArchive.write(app, current, currentArchive) &&

@@ -21,12 +21,20 @@ class ProfileImageRestoreParticipant internal constructor(
     private val protectedCurrentHashes: Set<String>,
     private val stagingRoot: File,
     private val backend: Backend,
-    private val incomingIsEmpty: Boolean = false
+    private val incomingIsEmpty: Boolean = false,
+    private val precomputed: PreparedPlan? = null
 ) : SelectedCategoryRestoreTransaction.Participant {
 
     data class Snapshot(
         val records: List<ProfileImageRecord>,
         val assets: Map<String, File>
+    )
+
+    data class PreparedPlan(
+        val current: Snapshot,
+        val incoming: ProfileImagePortableRestoreManager.Prepared,
+        val desiredRecords: List<ProfileImageRecord>,
+        val report: ProfileImageCategoryPlanner.Report
     )
 
     interface Backend {
@@ -51,8 +59,26 @@ class ProfileImageRestoreParticipant internal constructor(
         protectedCurrentHashes,
         stagingRoot,
         AndroidBackend(context.applicationContext),
-        incomingIsEmpty
+        incomingIsEmpty,
+        null
     )
+
+    internal constructor(
+        context: Context,
+        plan: PreparedPlan,
+        stagingRoot: File
+    ) : this(
+        emptyList(),
+        PortableRestoreMode.MERGE,
+        emptySet(),
+        stagingRoot,
+        AndroidBackend(context.applicationContext),
+        false,
+        plan
+    ) {
+        incoming = plan.incoming
+        report = plan.report
+    }
 
     override val categoryKey: String = PortableRestoreCategory.PROFILE_IMAGES.key
 
@@ -62,6 +88,11 @@ class ProfileImageRestoreParticipant internal constructor(
     private var incoming: ProfileImagePortableRestoreManager.Prepared? = null
 
     override fun validate(): Boolean {
+        precomputed?.let {
+            incoming = it.incoming
+            report = it.report
+            return true
+        }
         incoming = if (incomingIsEmpty && artifacts.none {
                 it.type == PortablePackage.TYPE_SQLITE_DB && it.entryName == "user_images.db"
             }
@@ -76,13 +107,15 @@ class ProfileImageRestoreParticipant internal constructor(
 
     override fun stage(): Boolean {
         val backup = incoming ?: return false
-        val current = backend.snapshot() ?: return false
-        val planned = ProfileImageCategoryPlanner.plan(
+        val current = precomputed?.current ?: backend.snapshot() ?: return false
+        val planned = precomputed?.let {
+            ProfileImageCategoryPlanner.Result.Ready(it.desiredRecords, it.report)
+        } ?: (ProfileImageCategoryPlanner.plan(
             current.records,
             backup.records,
             mode,
             protectedCurrentHashes
-        ) as? ProfileImageCategoryPlanner.Result.Ready ?: return false
+        ) as? ProfileImageCategoryPlanner.Result.Ready ?: return false)
         report = planned.report
         return try {
             if (stagingRoot.exists()) {

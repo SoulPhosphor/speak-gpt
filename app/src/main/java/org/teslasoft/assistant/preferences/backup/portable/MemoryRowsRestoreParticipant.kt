@@ -21,8 +21,17 @@ class MemoryRowsRestoreParticipant internal constructor(
     private val mode: PortableRestoreMode,
     private val stagingRoot: File,
     private val backend: Backend,
-    private val referenceProvider: (() -> MemoryReferenceIds)? = null
+    private val referenceProvider: (() -> MemoryReferenceIds)? = null,
+    private val precomputed: PreparedPlan? = null
 ) : SelectedCategoryRestoreTransaction.Participant {
+
+    data class PreparedPlan(
+        val current: MemoryPortableRows,
+        val incoming: MemoryPortableRows,
+        val desired: MemoryPortableRows,
+        val report: MemoryCategoryPlanner.Report,
+        val references: MemoryReferenceIds
+    )
 
     interface Backend {
         fun incoming(group: MemoryPortableGroup): MemoryPortableRows?
@@ -47,6 +56,7 @@ class MemoryRowsRestoreParticipant internal constructor(
         mode,
         stagingRoot,
         AndroidBackend(context.applicationContext, artifacts, incomingIsEmpty),
+        null,
         null
     )
 
@@ -63,8 +73,26 @@ class MemoryRowsRestoreParticipant internal constructor(
         mode,
         stagingRoot,
         AndroidBackend(context.applicationContext, artifacts, incomingIsEmpty),
-        referenceProvider
+        referenceProvider,
+        null
     )
+
+    internal constructor(
+        context: Context,
+        category: PortableRestoreCategory,
+        plan: PreparedPlan,
+        stagingRoot: File
+    ) : this(
+        groupFor(category),
+        PortableRestoreMode.MERGE,
+        stagingRoot,
+        AndroidBackend(context.applicationContext, emptyList(), false),
+        null,
+        plan
+    ) {
+        backup = plan.incoming
+        report = plan.report
+    }
 
     override val categoryKey: String = when (group) {
         MemoryPortableGroup.MEMORIES -> PortableRestoreCategory.MEMORIES.key
@@ -76,16 +104,23 @@ class MemoryRowsRestoreParticipant internal constructor(
     private var backup: MemoryPortableRows? = null
 
     override fun validate(): Boolean {
+        precomputed?.let {
+            backup = it.incoming
+            report = it.report
+            return true
+        }
         backup = backend.incoming(group)
         return backup != null
     }
 
     override fun stage(): Boolean {
         val incoming = backup ?: return false
-        val current = backend.snapshot(group) ?: return false
-        val planned = MemoryCategoryPlanner.plan(
+        val current = precomputed?.current ?: backend.snapshot(group) ?: return false
+        val planned = precomputed?.let {
+            MemoryCategoryPlanner.Result.Ready(it.desired, it.report)
+        } ?: (MemoryCategoryPlanner.plan(
             group, current, incoming, mode, referenceProvider?.invoke() ?: backend.references()
-        ) as? MemoryCategoryPlanner.Result.Ready ?: return false
+        ) as? MemoryCategoryPlanner.Result.Ready ?: return false)
         report = planned.report
         return try {
             if (stagingRoot.exists()) {

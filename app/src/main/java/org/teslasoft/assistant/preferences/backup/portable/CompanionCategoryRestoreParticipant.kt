@@ -15,6 +15,7 @@ import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupManif
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupValidator
 import org.teslasoft.assistant.preferences.backup.companion.CompanionCategoryPlanner
 import org.teslasoft.assistant.preferences.backup.companion.CompanionRestoreJournal
+import org.teslasoft.assistant.preferences.backup.companion.CompanionRestorePlanner
 import org.teslasoft.assistant.preferences.backup.companion.CompanionRoleplayRestoreManager
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 
@@ -28,16 +29,32 @@ class CompanionCategoryRestoreParticipant internal constructor(
     private val incomingArchive: File,
     private val selections: List<CompanionCategoryPlanner.Selection>,
     private val stagingRoot: File,
-    private val backend: Backend
+    private val backend: Backend,
+    private val precomputed: PreparedPlan? = null
 ) : SelectedCategoryRestoreTransaction.Participant {
 
     data class ImagePresence(val file: Boolean, val catalog: Boolean)
+
+    data class PreparedPlan(
+        val currentArchive: File,
+        val current: CompanionBackupManifest,
+        val incoming: CompanionBackupManifest,
+        val desired: CompanionBackupManifest,
+        val report: CompanionCategoryPlanner.Report,
+        val restorePlan: CompanionRestorePlanner.Plan,
+        val rollbackPlan: CompanionRestorePlanner.Plan
+    )
 
     interface Backend {
         fun snapshot(destination: File): CompanionBackupManifest?
         fun imagePresence(hash: String): ImagePresence
         fun recoverPending(): Boolean
         fun apply(manifest: CompanionBackupManifest, archive: File): Boolean
+        fun apply(
+            manifest: CompanionBackupManifest,
+            archive: File,
+            restorePlan: CompanionRestorePlanner.Plan
+        ): Boolean = apply(manifest, archive)
         fun removeRestoredImage(hash: String, removeFile: Boolean, removeCatalog: Boolean): Boolean
     }
 
@@ -50,8 +67,26 @@ class CompanionCategoryRestoreParticipant internal constructor(
         incomingArchive,
         selections,
         stagingRoot,
-        AndroidBackend(context.applicationContext)
+        AndroidBackend(context.applicationContext),
+        null
     )
+
+    internal constructor(
+        context: Context,
+        plan: PreparedPlan,
+        selections: List<CompanionCategoryPlanner.Selection>,
+        stagingRoot: File
+    ) : this(
+        plan.currentArchive,
+        selections,
+        stagingRoot,
+        AndroidBackend(context.applicationContext),
+        plan
+    ) {
+        incomingManifest = plan.incoming
+        desiredMemoryReferences = references(plan.desired)
+        report = plan.report
+    }
 
     override val categoryKey: String = "identity_bundle"
 
@@ -64,6 +99,12 @@ class CompanionCategoryRestoreParticipant internal constructor(
     fun memoryReferenceIds(): MemoryReferenceIds? = desiredMemoryReferences
 
     override fun validate(): Boolean {
+        precomputed?.let {
+            incomingManifest = it.incoming
+            desiredMemoryReferences = references(it.desired)
+            report = it.report
+            return selections.isNotEmpty()
+        }
         incomingManifest = (CompanionBackupValidator.validate(incomingArchive) as?
             CompanionBackupValidator.Verdict.Valid)?.manifest
         return incomingManifest != null && selections.isNotEmpty()
@@ -77,13 +118,20 @@ class CompanionCategoryRestoreParticipant internal constructor(
             } else if (!stagingRoot.mkdirs()) return false
 
             val currentArchive = File(stagingRoot, CURRENT_ARCHIVE)
-            val current = backend.snapshot(currentArchive) ?: return false
+            val current = if (precomputed != null) {
+                precomputed.currentArchive.copyTo(currentArchive, overwrite = false)
+                precomputed.current
+            } else {
+                backend.snapshot(currentArchive) ?: return false
+            }
             val currentValidated = CompanionBackupValidator.validate(currentArchive) as?
                 CompanionBackupValidator.Verdict.Valid ?: return false
             if (currentValidated.manifest != current) return false
 
-            val planned = CompanionCategoryPlanner.plan(current, incoming, selections) as?
-                CompanionCategoryPlanner.Result.Ready ?: return false
+            val planned = precomputed?.let {
+                CompanionCategoryPlanner.Result.Ready(it.desired, it.report)
+            } ?: (CompanionCategoryPlanner.plan(current, incoming, selections) as?
+                CompanionCategoryPlanner.Result.Ready ?: return false)
             report = planned.report
             desiredMemoryReferences = references(planned.manifest)
 
@@ -107,7 +155,11 @@ class CompanionCategoryRestoreParticipant internal constructor(
                     .put("catalog", presence.catalog)
             }
             File(stagingRoot, STATE_FILE).writeText(
-                JSONObject().put("version", 1).put("added", JSONArray(additions)).toString(),
+                JSONObject()
+                    .put("version", 1)
+                    .put("added", JSONArray(additions))
+                    .put("rollback_lorebook_ids", JSONArray(lorebookIds(current).toList()))
+                    .toString(),
                 Charsets.UTF_8
             )
             load(DESIRED_ARCHIVE) != null && readPresence() != null
@@ -119,13 +171,20 @@ class CompanionCategoryRestoreParticipant internal constructor(
     override fun apply(): Boolean {
         if (!backend.recoverPending()) return false
         val (archive, manifest) = load(DESIRED_ARCHIVE) ?: return false
-        return backend.apply(manifest, archive)
+        val planned = precomputed?.restorePlan
+        return if (planned == null) backend.apply(manifest, archive)
+        else backend.apply(manifest, archive, planned)
     }
 
     override fun rollback(): Boolean {
         if (!backend.recoverPending()) return false
         val (archive, manifest) = load(CURRENT_ARCHIVE) ?: return false
-        if (!backend.apply(manifest, archive)) return false
+        val rollbackPlan = precomputed?.rollbackPlan ?: readRollbackLorebookIds()?.let {
+            CompanionRestorePlanner.plan(manifest, it)
+        }
+        val restored = if (rollbackPlan == null) backend.apply(manifest, archive)
+        else backend.apply(manifest, archive, rollbackPlan)
+        if (!restored) return false
         val presence = readPresence() ?: return false
         return presence.all { (hash, before) ->
             backend.removeRestoredImage(
@@ -168,6 +227,22 @@ class CompanionCategoryRestoreParticipant internal constructor(
         }
     }
 
+    private fun readRollbackLorebookIds(): Set<String>? = try {
+        val stateFile = File(stagingRoot, STATE_FILE)
+        if (!stateFile.isFile || stateFile.length() > MAX_STATE_BYTES) return null
+        val root = JSONObject(stateFile.readText(Charsets.UTF_8))
+        if (root.optInt("version", -1) != 1) return null
+        val array = root.getJSONArray("rollback_lorebook_ids")
+        val result = LinkedHashSet<String>()
+        repeat(array.length()) {
+            val id = array.getString(it)
+            if (id.isBlank() || !result.add(id)) return null
+        }
+        result
+    } catch (_: Exception) {
+        null
+    }
+
     private class AndroidBackend(context: Context) : Backend {
         private val app = context.applicationContext
         private val imageStore: ProfileImageStore get() = ProfileImageStore.getInstance(app)
@@ -189,6 +264,14 @@ class CompanionCategoryRestoreParticipant internal constructor(
         override fun apply(manifest: CompanionBackupManifest, archive: File): Boolean =
             CompanionRoleplayRestoreManager.restore(app, manifest, archive) is
                 CompanionRoleplayRestoreManager.RestoreResult.Success
+
+        override fun apply(
+            manifest: CompanionBackupManifest,
+            archive: File,
+            restorePlan: CompanionRestorePlanner.Plan
+        ): Boolean = CompanionRoleplayRestoreManager.restore(
+            app, manifest, archive, restorePlan
+        ) is CompanionRoleplayRestoreManager.RestoreResult.Success
 
         override fun removeRestoredImage(
             hash: String,
@@ -215,6 +298,11 @@ class CompanionCategoryRestoreParticipant internal constructor(
                 roleplayTags = ids("rp_tags", "tag_id")
             )
         }
+
+        fun lorebookIds(manifest: CompanionBackupManifest): Set<String> =
+            manifest.companionProfiles.flatMap { profile ->
+                listOf(profile.coreLoreBookId) + profile.additionalLoreBookIds
+            }.filter(String::isNotBlank).toSet()
 
         val CompanionBackupImageHash: (org.teslasoft.assistant.preferences.backup.companion.CompanionBackupImage) -> String = { it.hash }
         const val CURRENT_ARCHIVE = "current.zip"

@@ -1110,19 +1110,18 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             ),
             transactionRoot
         )
-        if (built !is UnifiedPortableRestore.BuildResult.Ready) {
-            showPortableBuildFailure(built as UnifiedPortableRestore.BuildResult.Failed)
-            return
-        }
-        val chat = built.chatParticipant
-        if (chat != null && !chat.validate()) {
-            val collision = chat.folderCollisions.firstOrNull()
-            if (collision != null) {
-                showFolderCollision(pending, collision)
-            } else {
-                showPortableFailure(portableChatValidationMessage(chat.validationFailure))
+        when (built) {
+            is UnifiedPortableRestore.BuildResult.NeedsFolderDecisions -> {
+                val collision = built.collisions.firstOrNull()
+                if (collision != null) showFolderCollision(pending, collision)
+                else showPortableFailure(getString(R.string.portable_restore_validation_failed))
+                return
             }
-            return
+            is UnifiedPortableRestore.BuildResult.Failed -> {
+                showPortableBuildFailure(built)
+                return
+            }
+            is UnifiedPortableRestore.BuildResult.Ready -> Unit
         }
         pending.ready = built
         showPortableConfirmation(pending)

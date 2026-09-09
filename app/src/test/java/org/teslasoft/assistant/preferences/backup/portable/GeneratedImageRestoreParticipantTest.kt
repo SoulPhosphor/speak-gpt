@@ -51,6 +51,49 @@ class GeneratedImageRestoreParticipantTest {
     }
 
     @Test
+    fun precomputedPlanDrivesValidationReportAndStageWithoutAnotherSnapshot() {
+        val oldBytes = png(4)
+        val newBytes = png(5)
+        val oldRecord = record(ID_ONE, "one.png", oldBytes)
+        val newRecord = record(ID_TWO, "two.png", newBytes)
+        val liveDir = tmp.newFolder("precomputed_live")
+        File(liveDir, oldRecord.assetFileName).writeBytes(oldBytes)
+        val prepared = GeneratedImagePortableRestoreManager.Prepared(
+            snapshot = snapshot(newRecord),
+            assets = artifacts(snapshot(newRecord), newRecord, newBytes)
+                .filter { it.type == PortablePackage.TYPE_GENERATED_IMAGE_ASSET }
+                .associate { it.path.substringAfterLast('/') to it.file }
+        )
+        val planned = GeneratedImageCategoryPlanner.plan(
+            current = snapshot(oldRecord),
+            backup = prepared.snapshot,
+            mode = PortableRestoreMode.MERGE,
+            protectedCurrentImageIds = emptySet()
+        )
+        val backend = FakeBackend(snapshot(oldRecord), liveDir)
+        val participant = GeneratedImageRestoreParticipant(
+            emptyList(),
+            PortableRestoreMode.MERGE,
+            emptySet(),
+            File(tmp.root, "precomputed_staging"),
+            backend,
+            precomputed = GeneratedImageRestoreParticipant.PreparedPlan(
+                current = snapshot(oldRecord),
+                incoming = prepared,
+                desired = planned.desired,
+                report = planned.report
+            )
+        )
+
+        assertTrue(participant.validate())
+        assertEquals(planned.report, participant.report)
+        assertTrue(participant.stage())
+        assertEquals(0, backend.snapshotCalls)
+        assertTrue(participant.apply())
+        assertEquals(planned.desired, backend.value)
+    }
+
+    @Test
     fun missingCurrentBytesFailStagingBeforeAnyReplace() {
         val oldBytes = png(1)
         val newBytes = png(2)

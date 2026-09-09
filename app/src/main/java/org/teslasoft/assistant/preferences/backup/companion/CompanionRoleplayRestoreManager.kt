@@ -159,13 +159,43 @@ object CompanionRoleplayRestoreManager {
         return proceed(appContext, manifest, archiveFile, existingLorebookIds)
     }
 
+    /**
+     * Unified portable restore entry point. Lorebook resolution was completed
+     * by the immutable final-state planner, so apply consumes that exact plan
+     * and never queries a newer live lorebook generation.
+     */
+    internal fun restore(
+        context: Context,
+        manifest: CompanionBackupManifest,
+        archiveFile: File,
+        planned: CompanionRestorePlanner.Plan
+    ): RestoreResult {
+        val appContext = context.applicationContext
+        val dbInvolved = MemoryStore.isProvisioned(appContext) || manifest.hasRoleplayRecords()
+        if (dbInvolved && DatabaseHealthState.isDegraded(appContext, BackupType.MEMORY)) {
+            return RestoreResult.Failed(FailReason.MEMORY_UNAVAILABLE)
+        }
+        return proceed(appContext, manifest, archiveFile, planned)
+    }
+
     private fun proceed(
         appContext: Context,
         manifest: CompanionBackupManifest,
         archiveFile: File,
         existingLorebookIds: Set<String>
+    ): RestoreResult = proceed(
+        appContext,
+        manifest,
+        archiveFile,
+        CompanionRestorePlanner.plan(manifest, existingLorebookIds)
+    )
+
+    private fun proceed(
+        appContext: Context,
+        manifest: CompanionBackupManifest,
+        archiveFile: File,
+        plan: CompanionRestorePlanner.Plan
     ): RestoreResult {
-        val plan = CompanionRestorePlanner.plan(manifest, existingLorebookIds)
         val settingsOld = CompanionSettingsApplier.snapshot(appContext)
 
         // ---- 1. Images first (additive) ----

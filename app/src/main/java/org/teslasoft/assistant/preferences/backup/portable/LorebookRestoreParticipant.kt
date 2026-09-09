@@ -14,8 +14,16 @@ import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 class LorebookRestoreParticipant internal constructor(
     private val mode: PortableRestoreMode,
     private val stagingRoot: File,
-    private val backend: Backend
+    private val backend: Backend,
+    private val precomputed: PreparedPlan? = null
 ) : SelectedCategoryRestoreTransaction.Participant {
+
+    data class PreparedPlan(
+        val current: LorebookPortableData,
+        val incoming: LorebookPortableData,
+        val desired: LorebookPortableData,
+        val report: LorebookCategoryPlanner.Report
+    )
 
     interface Backend {
         fun incoming(): LorebookPortableData?
@@ -35,8 +43,23 @@ class LorebookRestoreParticipant internal constructor(
     ) : this(
         mode,
         stagingRoot,
-        AndroidBackend(context.applicationContext, artifacts, incomingIsEmpty)
+        AndroidBackend(context.applicationContext, artifacts, incomingIsEmpty),
+        null
     )
+
+    internal constructor(
+        context: Context,
+        plan: PreparedPlan,
+        stagingRoot: File
+    ) : this(
+        PortableRestoreMode.MERGE,
+        stagingRoot,
+        AndroidBackend(context.applicationContext, emptyList(), false),
+        plan
+    ) {
+        backup = plan.incoming
+        report = plan.report
+    }
 
     override val categoryKey: String = PortableRestoreCategory.LOREBOOKS.key
 
@@ -46,15 +69,22 @@ class LorebookRestoreParticipant internal constructor(
     private var backup: LorebookPortableData? = null
 
     override fun validate(): Boolean {
+        precomputed?.let {
+            backup = it.incoming
+            report = it.report
+            return true
+        }
         backup = backend.incoming()
         return backup != null
     }
 
     override fun stage(): Boolean {
         val incoming = backup ?: return false
-        val current = backend.snapshot() ?: return false
-        val planned = LorebookCategoryPlanner.plan(current, incoming, mode) as?
-            LorebookCategoryPlanner.Result.Ready ?: return false
+        val current = precomputed?.current ?: backend.snapshot() ?: return false
+        val planned = precomputed?.let {
+            LorebookCategoryPlanner.Result.Ready(it.desired, it.report)
+        } ?: (LorebookCategoryPlanner.plan(current, incoming, mode) as?
+            LorebookCategoryPlanner.Result.Ready ?: return false)
         report = planned.report
         return try {
             if (stagingRoot.exists()) {

@@ -41,6 +41,18 @@ object ProfileImageUsage {
      *  ever one of it, so it has no separate name to show. */
     data class Reference(val kind: Kind, val name: String?)
 
+    data class RestoreReference(
+        val kind: Kind,
+        val identityId: String,
+        val name: String?,
+        val imageHash: String
+    )
+
+    sealed interface RestoreRead {
+        data class Available(val references: List<RestoreReference>) : RestoreRead
+        data class Unavailable(val reason: String) : RestoreRead
+    }
+
     enum class Kind { DEFAULT_USER_IMAGE, COMPANION, MY_PERSONA, ROLEPLAY_CHARACTER }
 
     /**
@@ -86,6 +98,46 @@ object ProfileImageUsage {
         }
 
         return map
+    }
+
+    /**
+     * Strict restore-planning projection. Unlike the gallery presentation
+     * helper above, this includes every roleplay character regardless of who
+     * plays it and returns an unavailable result instead of a partial set.
+     */
+    fun readForRestore(context: Context): RestoreRead {
+        val result = ArrayList<RestoreReference>()
+        fun add(kind: Kind, id: String, name: String?, hash: String?) {
+            if (!hash.isNullOrBlank()) result.add(RestoreReference(kind, id, name, hash))
+        }
+        return try {
+            add(
+                Kind.DEFAULT_USER_IMAGE,
+                "default_user",
+                null,
+                GlobalPreferences.getPreferences(context).getDefaultUserImageRef()
+            )
+            PersonaPreferences.getPersonaPreferences(context).getPersonasList().forEach {
+                add(Kind.COMPANION, it.id, it.label, it.avatarRef)
+            }
+            if (MemoryStore.isProvisioned(context)) {
+                if (org.teslasoft.assistant.preferences.backup.DatabaseHealthState.isDegraded(
+                        context,
+                        org.teslasoft.assistant.preferences.backup.BackupType.MEMORY
+                    )
+                ) return RestoreRead.Unavailable("the Memory store is unavailable")
+                val store = MemoryStore.getInstance(context)
+                store.getAllUserPersonas().forEach {
+                    add(Kind.MY_PERSONA, it.personaId, it.name, it.imageRef)
+                }
+                store.getAllRoleplayCharacters().forEach {
+                    add(Kind.ROLEPLAY_CHARACTER, it.roleplayCharacterId, it.name, it.imageRef)
+                }
+            }
+            RestoreRead.Available(result)
+        } catch (_: Exception) {
+            RestoreRead.Unavailable("identity profile-image references could not be read")
+        }
     }
 
     /** Whether [hash] has at least one live reference right now. */

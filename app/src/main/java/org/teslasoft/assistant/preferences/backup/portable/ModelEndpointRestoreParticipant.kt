@@ -20,12 +20,36 @@ import android.content.Context
 import java.io.File
 
 /** Transaction participant for credential-free Model & Endpoint Settings. */
-class ModelEndpointRestoreParticipant(
+class ModelEndpointRestoreParticipant internal constructor(
     context: Context,
-    private val incoming: File,
+    private val incoming: File?,
     private val mode: PortableRestoreMode,
-    private val stagingRoot: File
+    private val stagingRoot: File,
+    private val precomputed: PreparedPlan? = null
 ) : SelectedCategoryRestoreTransaction.Participant {
+
+    data class PreparedPlan(
+        val current: ModelEndpointPortableCodec.Data,
+        val incoming: ModelEndpointPortableCodec.Data,
+        val desired: ModelEndpointPortableCodec.Data,
+        val report: ModelEndpointMergePlanner.Report?
+    )
+
+    constructor(
+        context: Context,
+        incoming: File,
+        mode: PortableRestoreMode,
+        stagingRoot: File
+    ) : this(context, incoming, mode, stagingRoot, null)
+
+    internal constructor(
+        context: Context,
+        plan: PreparedPlan,
+        stagingRoot: File
+    ) : this(context, null, PortableRestoreMode.MERGE, stagingRoot, plan) {
+        validatedIncoming = plan.incoming
+        mergeReport = plan.report
+    }
     private val appContext = context.applicationContext
     private var validatedIncoming: ModelEndpointPortableCodec.Data? = null
 
@@ -35,10 +59,16 @@ class ModelEndpointRestoreParticipant(
     override val categoryKey: String = PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS.key
 
     override fun validate(): Boolean {
-        if (!incoming.isFile || incoming.length() > ModelEndpointPortableCodec.MAX_ARTIFACT_BYTES) {
+        precomputed?.let {
+            validatedIncoming = it.incoming
+            mergeReport = it.report
+            return true
+        }
+        val source = incoming ?: return false
+        if (!source.isFile || source.length() > ModelEndpointPortableCodec.MAX_ARTIFACT_BYTES) {
             return false
         }
-        val parsed = ModelEndpointPortableCodec.parse(incoming.readText(Charsets.UTF_8))
+        val parsed = ModelEndpointPortableCodec.parse(source.readText(Charsets.UTF_8))
         validatedIncoming = (parsed as? ModelEndpointPortableCodec.Result.Ok)?.data
         return validatedIncoming != null
     }
@@ -47,12 +77,17 @@ class ModelEndpointRestoreParticipant(
         val backup = validatedIncoming ?: return false
         if (!stagingRoot.exists() && !stagingRoot.mkdirs()) return false
         val currentFile = File(stagingRoot, CURRENT_FILE)
-        if (ModelEndpointPortableBackup.write(appContext, currentFile) is
-            ModelEndpointPortableBackup.Result.Failed
-        ) return false
-        val current = (ModelEndpointPortableCodec.parse(currentFile.readText(Charsets.UTF_8)) as?
-            ModelEndpointPortableCodec.Result.Ok)?.data ?: return false
-        val desired = if (mode == PortableRestoreMode.REPLACE) {
+        val current = precomputed?.current ?: run {
+            if (ModelEndpointPortableBackup.write(appContext, currentFile) is
+                ModelEndpointPortableBackup.Result.Failed
+            ) return false
+            (ModelEndpointPortableCodec.parse(currentFile.readText(Charsets.UTF_8)) as?
+                ModelEndpointPortableCodec.Result.Ok)?.data ?: return false
+        }
+        if (precomputed != null) {
+            currentFile.writeText(ModelEndpointPortableCodec.encode(current), Charsets.UTF_8)
+        }
+        val desired = precomputed?.desired ?: if (mode == PortableRestoreMode.REPLACE) {
             backup
         } else {
             ModelEndpointMergePlanner.merge(current, backup).also { mergeReport = it.report }.data
