@@ -73,7 +73,7 @@ class PortableRestoreFinalState private constructor(
         val campaigns = immutableSet(campaigns)
         val roleplayTags = immutableSet(roleplayTags)
 
-        private fun immutableCopy() = of(
+        internal fun immutableCopy() = of(
             companions, glamours, roleplayCharacters, worlds, campaigns, roleplayTags
         )
 

@@ -227,20 +227,22 @@ class CompanionCategoryRestoreParticipant internal constructor(
         }
     }
 
-    private fun readRollbackLorebookIds(): Set<String>? = try {
-        val stateFile = File(stagingRoot, STATE_FILE)
-        if (!stateFile.isFile || stateFile.length() > MAX_STATE_BYTES) return null
-        val root = JSONObject(stateFile.readText(Charsets.UTF_8))
-        if (root.optInt("version", -1) != 1) return null
-        val array = root.getJSONArray("rollback_lorebook_ids")
-        val result = LinkedHashSet<String>()
-        repeat(array.length()) {
-            val id = array.getString(it)
-            if (id.isBlank() || !result.add(id)) return null
+    private fun readRollbackLorebookIds(): Set<String>? {
+        return try {
+            val stateFile = File(stagingRoot, STATE_FILE)
+            if (!stateFile.isFile || stateFile.length() > MAX_STATE_BYTES) return null
+            val root = JSONObject(stateFile.readText(Charsets.UTF_8))
+            if (root.optInt("version", -1) != 1) return null
+            val array = root.getJSONArray("rollback_lorebook_ids")
+            val result = LinkedHashSet<String>()
+            repeat(array.length()) {
+                val id = array.getString(it)
+                if (id.isBlank() || !result.add(id)) return null
+            }
+            result
+        } catch (_: Exception) {
+            null
         }
-        result
-    } catch (_: Exception) {
-        null
     }
 
     private class AndroidBackend(context: Context) : Backend {

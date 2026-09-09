@@ -226,7 +226,8 @@ object UnifiedPortableRestore {
         artifacts: List<PortablePackage.ValidatedArtifact>,
         request: Request,
         modes: Map<PortableRestoreCategory, PortableRestoreMode>
-    ): ParsedBackup? = try {
+    ): ParsedBackup? {
+        return try {
         val chats = if (PortableRestoreCategory.CHATS in modes) {
             val source = artifact(artifacts, PortablePackage.TYPE_CHATS_JSON)?.stagedFile
                 ?: return null
@@ -298,19 +299,20 @@ object UnifiedPortableRestore {
                 ModelEndpointPortableCodec.Result.Ok)?.data ?: return null
         } else null
 
-        ParsedBackup(
-            chats,
-            generated,
-            identities,
-            identityArtifact?.stagedFile,
-            profileImages,
-            memories,
-            rules,
-            lorebooks,
-            endpoints
-        )
-    } catch (_: Exception) {
-        null
+            ParsedBackup(
+                chats,
+                generated,
+                identities,
+                identityArtifact?.stagedFile,
+                profileImages,
+                memories,
+                rules,
+                lorebooks,
+                endpoints
+            )
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun captureLiveState(
