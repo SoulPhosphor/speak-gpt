@@ -77,7 +77,11 @@ object SelectedCategoryRestoreTransaction {
         RECOVERY_REQUIRED
     }
 
-    enum class InterruptionPoint { AFTER_FIRST_APPLY }
+    enum class InterruptionPoint {
+        AFTER_PREPARED,
+        AFTER_FIRST_PARTICIPANT_STARTED,
+        AFTER_FIRST_APPLY
+    }
     private class SimulatedInterruption : Error("simulated process interruption")
 
     fun execute(
@@ -113,6 +117,9 @@ object SelectedCategoryRestoreTransaction {
             cleanup(participants)
             return Result.Failed(Failure.JOURNAL_FAILED)
         }
+        if (interruptionPoint == InterruptionPoint.AFTER_PREPARED) {
+            throw SimulatedInterruption()
+        }
 
         val started = ArrayList<Participant>()
         for ((index, participant) in participants.withIndex()) {
@@ -122,6 +129,11 @@ object SelectedCategoryRestoreTransaction {
             // included in recovery even when apply never reports success.
             if (!writeState(journalRoot, Phase.APPLYING, started.map { it.categoryKey })) {
                 return rollbackAfterFailure(journalRoot, started, Failure.JOURNAL_FAILED, participant.categoryKey)
+            }
+            if (index == 0 &&
+                interruptionPoint == InterruptionPoint.AFTER_FIRST_PARTICIPANT_STARTED
+            ) {
+                throw SimulatedInterruption()
             }
             if (!safeCall(participant::apply)) {
                 return rollbackAfterFailure(journalRoot, started, Failure.APPLY_FAILED, participant.categoryKey)

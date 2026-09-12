@@ -264,14 +264,19 @@ class CompanionCategoryRestoreParticipant internal constructor(
         }
 
         override fun apply(manifest: CompanionBackupManifest, archive: File): Boolean =
-            CompanionRoleplayRestoreManager.restore(app, manifest, archive) is
+            CompanionRoleplayRestoreManager.restoreSettingsAndImages(
+                app,
+                manifest,
+                archive,
+                CompanionRestorePlanner.plan(manifest, lorebookIds(manifest))
+            ) is
                 CompanionRoleplayRestoreManager.RestoreResult.Success
 
         override fun apply(
             manifest: CompanionBackupManifest,
             archive: File,
             restorePlan: CompanionRestorePlanner.Plan
-        ): Boolean = CompanionRoleplayRestoreManager.restore(
+        ): Boolean = CompanionRoleplayRestoreManager.restoreSettingsAndImages(
             app, manifest, archive, restorePlan
         ) is CompanionRoleplayRestoreManager.RestoreResult.Success
 

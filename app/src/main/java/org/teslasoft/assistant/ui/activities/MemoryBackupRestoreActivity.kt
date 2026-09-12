@@ -1315,13 +1315,16 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     portableCategoryName(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS), count
                 ))
             }
-            is org.teslasoft.assistant.preferences.backup.portable.MemoryRowsRestoreParticipant -> {
-                val count = participant.report?.conflicts?.size ?: 0
-                if (count > 0) lines.add(getString(
+            is org.teslasoft.assistant.preferences.backup.portable.CompanionMemoryRestoreParticipant -> {
+                val memoryConflicts = participant.memoryReport?.conflicts?.size ?: 0
+                if (memoryConflicts > 0) lines.add(getString(
                     R.string.portable_report_conflict_count,
-                    if (participant.categoryKey == PortableRestoreCategory.MEMORIES.key)
-                        portableCategoryName(PortableRestoreCategory.MEMORIES)
-                    else portableCategoryName(PortableRestoreCategory.MODEL_RULES), count
+                    portableCategoryName(PortableRestoreCategory.MEMORIES), memoryConflicts
+                ))
+                val ruleConflicts = participant.modelRulesReport?.conflicts?.size ?: 0
+                if (ruleConflicts > 0) lines.add(getString(
+                    R.string.portable_report_conflict_count,
+                    portableCategoryName(PortableRestoreCategory.MODEL_RULES), ruleConflicts
                 ))
             }
             is org.teslasoft.assistant.preferences.backup.portable.LorebookRestoreParticipant -> {

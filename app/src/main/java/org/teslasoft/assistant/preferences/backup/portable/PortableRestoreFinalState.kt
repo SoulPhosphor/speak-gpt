@@ -113,6 +113,7 @@ class PortableRestoreFinalState private constructor(
         GENERATED_IMAGES,
         IDENTITIES,
         PROFILE_IMAGES,
+        COMPANION_MEMORY_STORE,
         MEMORY_ROWS,
         MODEL_RULE_ROWS,
         LOREBOOKS,

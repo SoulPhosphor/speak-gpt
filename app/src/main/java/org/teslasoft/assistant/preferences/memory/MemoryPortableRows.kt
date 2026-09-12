@@ -94,6 +94,11 @@ object MemoryPortableRowFormat {
                     for (spec in specs.asReversed()) {
                         if (spec.where == null) db.delete(spec.table, null, null)
                     }
+                    db.delete(
+                        "deleted_ids",
+                        "record_type IN ('memory','entity','project')",
+                        null
+                    )
                 }
                 MemoryPortableGroup.MODEL_RULES -> specs.asReversed().forEach {
                     db.delete(it.table, null, null)

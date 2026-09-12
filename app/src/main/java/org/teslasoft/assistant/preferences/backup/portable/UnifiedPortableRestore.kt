@@ -23,6 +23,8 @@ import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryPortableGroup
 import org.teslasoft.assistant.preferences.memory.MemoryPortableRowFormat
 import org.teslasoft.assistant.preferences.memory.MemoryPortableRows
+import org.teslasoft.assistant.preferences.memory.MemorySharedRestoreRowFormat
+import org.teslasoft.assistant.preferences.memory.MemorySharedRestoreRows
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageDb
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
@@ -140,23 +142,16 @@ object UnifiedPortableRestore {
                 app, it, identitySelections, File(stagingRoot, "identity_bundle")
             ))
         }
+        planned.sharedMemory?.let {
+            participants.add(CompanionMemoryRestoreParticipant(
+                app, it, File(stagingRoot, CompanionMemoryRestoreParticipant.CATEGORY_KEY)
+            ))
+        }
         planned.profileImages?.let {
             participants.add(ProfileImageRestoreParticipant(app, it, File(stagingRoot, "profile_images")))
         }
         planned.modelEndpoints?.let {
             participants.add(ModelEndpointRestoreParticipant(app, it, File(stagingRoot, "model_endpoints")))
-        }
-        planned.modelRules?.let {
-            participants.add(MemoryRowsRestoreParticipant(
-                app, PortableRestoreCategory.MODEL_RULES, it,
-                File(stagingRoot, PortableRestoreCategory.MODEL_RULES.key)
-            ))
-        }
-        planned.memories?.let {
-            participants.add(MemoryRowsRestoreParticipant(
-                app, PortableRestoreCategory.MEMORIES, it,
-                File(stagingRoot, PortableRestoreCategory.MEMORIES.key)
-            ))
         }
         planned.lorebooks?.let {
             participants.add(LorebookRestoreParticipant(app, it, File(stagingRoot, "lorebooks")))
@@ -184,6 +179,7 @@ object UnifiedPortableRestore {
         val identityImageUsage: List<ProfileImageUsage.RestoreReference> = emptyList(),
         val identityReferences: MemoryReferenceIds = MemoryReferenceIds(),
         val profileImages: ProfileImageRestoreParticipant.Snapshot? = null,
+        val sharedMemory: MemorySharedRestoreRows? = null,
         val memories: MemoryPortableRows? = null,
         val modelRules: MemoryPortableRows? = null,
         val lorebooks: LorebookPortableData? = null,
@@ -206,10 +202,9 @@ object UnifiedPortableRestore {
         val chat: PlannedChat? = null,
         val generated: PlannedGenerated? = null,
         val identities: CompanionCategoryRestoreParticipant.PreparedPlan? = null,
+        val sharedMemory: CompanionMemoryRestoreParticipant.PreparedPlan? = null,
         val profileImages: ProfileImageRestoreParticipant.PreparedPlan? = null,
         val modelEndpoints: ModelEndpointRestoreParticipant.PreparedPlan? = null,
-        val modelRules: MemoryRowsRestoreParticipant.PreparedPlan? = null,
-        val memories: MemoryRowsRestoreParticipant.PreparedPlan? = null,
         val lorebooks: LorebookRestoreParticipant.PreparedPlan? = null
     )
 
@@ -362,9 +357,32 @@ object UnifiedPortableRestore {
             identityArchive = archive
         }
 
+        val sharedStoreSelected = identitiesSelected ||
+            PortableRestoreCategory.MEMORIES in modes ||
+            PortableRestoreCategory.MODEL_RULES in modes
+        val sharedMemory = if (sharedStoreSelected) {
+            readCurrentSharedMemory(context)
+                ?: return PortableRestoreDependencyRead.Unavailable("current shared memory data is unavailable")
+        } else null
+        if (sharedMemory != null) {
+            generations[PortableRestoreFinalState.Source.COMPANION_MEMORY_STORE] =
+                Hash.hash(MemorySharedRestoreRowFormat.toJson(sharedMemory))
+        }
+        if (identities != null && sharedMemory != null &&
+            !sameRoleplayRows(
+                identities.roleplayTables,
+                CompanionMemoryRestorePlanner.roleplayTables(sharedMemory)
+            )
+        ) {
+            return PortableRestoreDependencyRead.Unavailable(
+                "identity data changed while the shared database snapshot was captured"
+            )
+        }
+
         val needIdentityReferences = PortableRestoreCategory.MEMORIES in modes && !identitiesSelected
         val identityReferences = if (needIdentityReferences) {
-            readCurrentMemoryReferences(context)
+            sharedMemory?.let(CompanionMemoryRestorePlanner::roleplayTables)
+                ?.let(::memoryReferences)
                 ?: return PortableRestoreDependencyRead.Unavailable("identity relationships are unavailable")
         } else MemoryReferenceIds()
         if (identitiesSelected || needIdentityUsage || needIdentityReferences) {
@@ -383,15 +401,15 @@ object UnifiedPortableRestore {
             current
         } else null
 
-        val memories = if (PortableRestoreCategory.MEMORIES in modes) {
-            val current = readCurrentMemory(context, MemoryPortableGroup.MEMORIES)
+        val memories = if (PortableRestoreCategory.MEMORIES in modes || identitiesSelected) {
+            val current = sharedMemory?.let(CompanionMemoryRestorePlanner::memoryRows)
                 ?: return PortableRestoreDependencyRead.Unavailable("current memories are unavailable")
             generations[PortableRestoreFinalState.Source.MEMORY_ROWS] =
                 Hash.hash(MemoryPortableRowFormat.toJson(MemoryPortableGroup.MEMORIES, current))
             current
         } else null
         val rules = if (PortableRestoreCategory.MODEL_RULES in modes) {
-            val current = readCurrentMemory(context, MemoryPortableGroup.MODEL_RULES)
+            val current = sharedMemory?.let(CompanionMemoryRestorePlanner::modelRuleRows)
                 ?: return PortableRestoreDependencyRead.Unavailable("current model rules are unavailable")
             generations[PortableRestoreFinalState.Source.MODEL_RULE_ROWS] =
                 Hash.hash(MemoryPortableRowFormat.toJson(MemoryPortableGroup.MODEL_RULES, current))
@@ -430,6 +448,7 @@ object UnifiedPortableRestore {
                     usage,
                     identityReferences,
                     profile,
+                    sharedMemory,
                     memories,
                     rules,
                     lorebooks,
@@ -581,8 +600,8 @@ object UnifiedPortableRestore {
 
         val finalIdentityReferences = finalIdentities?.let(::memoryReferences)
             ?: live.identityReferences
-        var memoryParticipant: MemoryRowsRestoreParticipant.PreparedPlan? = null
-        val finalMemories = if (PortableRestoreCategory.MEMORIES in modes) {
+        var memoryReport: MemoryCategoryPlanner.Report? = null
+        val plannedMemories = if (PortableRestoreCategory.MEMORIES in modes) {
             val current = live.memories
                 ?: return PlanningResult.Unavailable("current memories are unavailable")
             val incoming = backup.memories
@@ -595,13 +614,12 @@ object UnifiedPortableRestore {
                 finalIdentityReferences
             ) as? MemoryCategoryPlanner.Result.Ready
                 ?: return PlanningResult.Unavailable("memories could not be planned")
-            memoryParticipant = MemoryRowsRestoreParticipant.PreparedPlan(
-                current, incoming, planned.rows, planned.report, finalIdentityReferences
-            )
+            memoryReport = planned.report
             planned.rows
-        } else null
+        } else live.memories
 
-        var rulesParticipant: MemoryRowsRestoreParticipant.PreparedPlan? = null
+        var modelRulesReport: MemoryCategoryPlanner.Report? = null
+        var plannedModelRules: MemoryPortableRows? = null
         if (PortableRestoreCategory.MODEL_RULES in modes) {
             val current = live.modelRules
                 ?: return PlanningResult.Unavailable("current model rules are unavailable")
@@ -614,10 +632,39 @@ object UnifiedPortableRestore {
                 modes.getValue(PortableRestoreCategory.MODEL_RULES)
             ) as? MemoryCategoryPlanner.Result.Ready
                 ?: return PlanningResult.Unavailable("model rules could not be planned")
-            rulesParticipant = MemoryRowsRestoreParticipant.PreparedPlan(
-                current, incoming, planned.rows, planned.report, MemoryReferenceIds()
-            )
+            modelRulesReport = planned.report
+            plannedModelRules = planned.rows
         }
+
+        val sharedStoreSelected = identitySelections.isNotEmpty() ||
+            PortableRestoreCategory.MEMORIES in modes ||
+            PortableRestoreCategory.MODEL_RULES in modes
+        val sharedParticipant = if (sharedStoreSelected) {
+            val current = live.sharedMemory
+                ?: return PlanningResult.Unavailable("current shared memory data is unavailable")
+            val shared = CompanionMemoryRestorePlanner.plan(
+                CompanionMemoryRestorePlanner.Input(
+                    current = current,
+                    identitiesSelected = identitySelections.isNotEmpty(),
+                    memoriesSelected = PortableRestoreCategory.MEMORIES in modes,
+                    modelRulesSelected = PortableRestoreCategory.MODEL_RULES in modes,
+                    finalRoleplayTables = finalIdentities?.roleplayTables,
+                    finalMemories = if (PortableRestoreCategory.MEMORIES in modes) plannedMemories else null,
+                    finalModelRules = plannedModelRules,
+                    finalIdentityReferences = finalIdentityReferences
+                )
+            ) ?: return PlanningResult.Unavailable("shared memory data could not be planned")
+            CompanionMemoryRestoreParticipant.PreparedPlan(
+                shared.current,
+                shared.desired,
+                shared.affectedTables,
+                memoryReport,
+                modelRulesReport
+            )
+        } else null
+        val finalMemories = sharedParticipant?.desired
+            ?.let(CompanionMemoryRestorePlanner::memoryRows)
+            ?: plannedMemories
 
         val finalUsage = ArrayList<PortableRestoreFinalState.IdentityProfileImageReference>()
         if (PortableRestoreCategory.PROFILE_IMAGES in modes) {
@@ -712,10 +759,9 @@ object UnifiedPortableRestore {
                 plannedChat,
                 plannedGenerated,
                 identityParticipant,
+                sharedParticipant,
                 profileParticipant,
                 endpointParticipant,
-                rulesParticipant,
-                memoryParticipant,
                 lorebookParticipant
             )
         )
@@ -769,19 +815,15 @@ object UnifiedPortableRestore {
                 )),
                 File(root, "identity_bundle")
             ),
+            CompanionMemoryRestoreParticipant(
+                context,
+                File(root, CompanionMemoryRestoreParticipant.CATEGORY_KEY)
+            ),
             ProfileImageRestoreParticipant(
                 context, emptyList(), PortableRestoreMode.MERGE, emptySet(), File(root, "profile_images")
             ),
             ModelEndpointRestoreParticipant(
                 context, unused, PortableRestoreMode.MERGE, File(root, "model_endpoints")
-            ),
-            MemoryRowsRestoreParticipant(
-                context, emptyList(), PortableRestoreCategory.MODEL_RULES,
-                PortableRestoreMode.MERGE, File(root, PortableRestoreCategory.MODEL_RULES.key)
-            ),
-            MemoryRowsRestoreParticipant(
-                context, emptyList(), PortableRestoreCategory.MEMORIES,
-                PortableRestoreMode.MERGE, File(root, PortableRestoreCategory.MEMORIES.key)
             ),
             LorebookRestoreParticipant(
                 context, emptyList(), PortableRestoreMode.MERGE, File(root, "lorebooks")
@@ -834,20 +876,10 @@ object UnifiedPortableRestore {
         }
     }
 
-    private fun readCurrentMemory(
-        context: Context,
-        group: MemoryPortableGroup
-    ): MemoryPortableRows? {
-        if (!MemoryStore.isProvisioned(context)) return emptyMemoryRows(group)
+    private fun readCurrentSharedMemory(context: Context): MemorySharedRestoreRows? {
+        if (!MemoryStore.isProvisioned(context)) return MemorySharedRestoreRowFormat.empty()
         if (DatabaseHealthState.isDegraded(context, BackupType.MEMORY)) return null
-        return try { MemoryStore.getInstance(context).exportPortableRows(group) }
-        catch (_: Exception) { null }
-    }
-
-    private fun readCurrentMemoryReferences(context: Context): MemoryReferenceIds? {
-        if (!MemoryStore.isProvisioned(context)) return MemoryReferenceIds()
-        if (DatabaseHealthState.isDegraded(context, BackupType.MEMORY)) return null
-        return try { memoryReferences(MemoryStore.getInstance(context).exportRoleplayTables()) }
+        return try { MemoryStore.getInstance(context).exportSharedRestoreRows() }
         catch (_: Exception) { null }
     }
 
@@ -953,6 +985,13 @@ object UnifiedPortableRestore {
             userPersonas = ids("user_personas", "persona_id"),
             roleplayTags = ids("rp_tags", "tag_id")
         )
+    }
+
+    private fun sameRoleplayRows(
+        first: Map<String, List<Map<String, Any?>>>,
+        second: Map<String, List<Map<String, Any?>>>
+    ): Boolean = first.keys == second.keys && first.keys.all { table ->
+        first.getValue(table).toSet() == second.getValue(table).toSet()
     }
 
     private fun chatToken(plan: PortableChatRestorePlan.Plan): String = Hash.hash(

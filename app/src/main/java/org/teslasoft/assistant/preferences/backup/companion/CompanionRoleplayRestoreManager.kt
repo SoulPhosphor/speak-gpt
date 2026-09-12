@@ -178,6 +178,25 @@ object CompanionRoleplayRestoreManager {
         return proceed(appContext, manifest, archiveFile, planned)
     }
 
+    /**
+     * Unified selected-category restore owns companion_memory.db through its
+     * shared database participant. This half applies only the archive's image
+     * assets and planned settings; the outer journal supplies the cross-
+     * participant rollback boundary.
+     */
+    internal fun restoreSettingsAndImages(
+        context: Context,
+        manifest: CompanionBackupManifest,
+        archiveFile: File,
+        planned: CompanionRestorePlanner.Plan
+    ): RestoreResult = proceed(
+        context.applicationContext,
+        manifest,
+        archiveFile,
+        planned,
+        includeDatabase = false
+    )
+
     private fun proceed(
         appContext: Context,
         manifest: CompanionBackupManifest,
@@ -194,7 +213,8 @@ object CompanionRoleplayRestoreManager {
         appContext: Context,
         manifest: CompanionBackupManifest,
         archiveFile: File,
-        plan: CompanionRestorePlanner.Plan
+        plan: CompanionRestorePlanner.Plan,
+        includeDatabase: Boolean = true
     ): RestoreResult {
         val settingsOld = CompanionSettingsApplier.snapshot(appContext)
 
@@ -216,7 +236,8 @@ object CompanionRoleplayRestoreManager {
             return RestoreResult.Failed(FailReason.IMAGES_WRITE_FAILED)
         }
 
-        val dbInvolved = MemoryStore.isProvisioned(appContext) || manifest.hasRoleplayRecords()
+        val dbInvolved = includeDatabase &&
+            (MemoryStore.isProvisioned(appContext) || manifest.hasRoleplayRecords())
         val provisionedByRestore = dbInvolved && !MemoryStore.isProvisioned(appContext)
         val token = "crb-" + UUID.randomUUID()
 
@@ -274,7 +295,7 @@ object CompanionRoleplayRestoreManager {
 
         // ---- 5. Done: settle the journal, refresh cached stores ----
         CompanionRestoreJournal.clear(appContext)
-        MemoryStore.invalidateInstance()
+        if (dbInvolved) MemoryStore.invalidateInstance()
         return RestoreResult.Success(plan.removedLinks)
     }
 

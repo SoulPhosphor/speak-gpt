@@ -42,6 +42,9 @@ object MemoryCategoryPlanner {
         for (spec in MemoryPortableRowFormat.specs(group)) {
             val currentRows = current.tables.getValue(spec.table)
             val backupRows = backup.tables.getValue(spec.table)
+            val normalized: (Map<String, Any?>) -> Map<String, Any?> = { row ->
+                if (spec.table == "change_log") row - "id" else row
+            }
             if (mode == PortableRestoreMode.REPLACE) {
                 tables[spec.table] = backupRows.map { LinkedHashMap(it) }
                 continue
@@ -52,7 +55,9 @@ object MemoryCategoryPlanner {
                 val id = MemoryPortableRowFormat.identity(spec, row)!!
                 val existing = currentById[id]
                 if (existing == null) result.add(LinkedHashMap(row))
-                else if (existing != row) conflicts.add(Conflict(spec.table, id))
+                else if (normalized(existing) != normalized(row)) {
+                    conflicts.add(Conflict(spec.table, id))
+                }
             }
             tables[spec.table] = result
         }

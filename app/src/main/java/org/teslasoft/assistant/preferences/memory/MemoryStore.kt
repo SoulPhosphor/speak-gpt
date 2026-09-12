@@ -7775,11 +7775,34 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
     fun exportPortableRows(group: MemoryPortableGroup): MemoryPortableRows =
         MemoryPortableRowFormat.read(readableDatabase, group)
 
+    /** One consistent snapshot for the shared portable-restore participant. */
+    fun exportSharedRestoreRows(): MemorySharedRestoreRows {
+        val db = readableDatabase
+        db.beginTransaction()
+        return try {
+            val rows = MemorySharedRestoreRowFormat.read(db)
+            db.setTransactionSuccessful()
+            rows
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /** Category-scoped exact replacement below the outer restore journal.
      * This never clears Companion/Roleplay rows while restoring Memories, and
      * never clears Memories while restoring Model Rules. */
     fun replacePortableRows(group: MemoryPortableGroup, rows: MemoryPortableRows): Boolean =
         MemoryPortableRowFormat.replace(writableDatabase, group, rows)
+
+    /**
+     * The only physical write used by unified portable restore. Apply and
+     * rollback both pass their exact staged row set through this same
+     * SQLCipher transaction and foreign-key validation boundary.
+     */
+    fun replaceSharedRestoreRows(
+        rows: MemorySharedRestoreRows,
+        affectedTables: Set<String>
+    ): Boolean = MemorySharedRestoreRowFormat.replace(writableDatabase, rows, affectedTables)
 
     /**
      * The §6.3 step-2 replace: delete the existing §2.4 record sets, insert
