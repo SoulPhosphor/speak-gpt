@@ -102,7 +102,9 @@ class BackupRestoreScreenContractTest {
         assertTrue(!activity.contains("failed.reason.name.lowercase()"))
         assertTrue(activity.contains("portableChatValidationMessage"))
         assertTrue(activity.contains("portable_restore_category_failure"))
-        assertTrue(activity.contains("showPortableReport(report)"))
+        // The success flow still renders the structured report; Phase 12.3 adds
+        // an optional removed-links argument, so match the call by prefix.
+        assertTrue(activity.contains("showPortableReport(report"))
     }
 
     @Test
