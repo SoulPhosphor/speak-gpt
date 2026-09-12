@@ -1251,20 +1251,36 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     private fun showPortableSuccess(ready: UnifiedPortableRestore.BuildResult.Ready) {
         val report = portableReport(ready)
+        // Phase 12.3 (BR-04): surface every companion -> lorebook connection the
+        // restore removed, using the approved removed-links report verbatim. It
+        // is shown only when links were actually removed.
+        val removedLinks = ready.participants
+            .filterIsInstance<
+                org.teslasoft.assistant.preferences.backup.portable.CompanionCategoryRestoreParticipant
+            >()
+            .flatMap { it.removedLorebookLinks }
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.portable_success_title)
             .setMessage(R.string.portable_success_message)
             .setPositiveButton(R.string.btn_ok) { _, _ ->
-                if (report.isNotEmpty()) showPortableReport(report)
+                when {
+                    report.isNotEmpty() -> showPortableReport(report, removedLinks)
+                    removedLinks.isNotEmpty() -> showCompanionRestoreReport(removedLinks)
+                }
             }
             .show()
     }
 
-    private fun showPortableReport(lines: List<String>) {
+    private fun showPortableReport(
+        lines: List<String>,
+        removedLinks: List<RemovedLorebookLink> = emptyList()
+    ) {
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.portable_report_title)
             .setMessage(getString(R.string.portable_report_intro) + "\n\n" + lines.joinToString("\n"))
-            .setPositiveButton(R.string.btn_ok, null)
+            .setPositiveButton(R.string.btn_ok) { _, _ ->
+                if (removedLinks.isNotEmpty()) showCompanionRestoreReport(removedLinks)
+            }
             .show()
     }
 
