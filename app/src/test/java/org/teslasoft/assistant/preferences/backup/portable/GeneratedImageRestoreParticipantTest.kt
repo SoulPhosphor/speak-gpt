@@ -139,6 +139,47 @@ class GeneratedImageRestoreParticipantTest {
         assertEquals(1, backend.removeProvisionedStoreCalls)
     }
 
+    @Test
+    fun applyFailsWhenPostApplyClosureIsNotSatisfied() {
+        val oldBytes = png(1)
+        val newBytes = png(2)
+        val oldRecord = record(ID_ONE, "one.png", oldBytes)
+        val newRecord = record(ID_TWO, "two.png", newBytes)
+        val liveDir = tmp.newFolder("closure_live")
+        File(liveDir, oldRecord.assetFileName).writeBytes(oldBytes)
+        val backend = FakeBackend(snapshot(oldRecord), liveDir).apply { closureResult = false }
+        val participant = GeneratedImageRestoreParticipant(
+            artifacts(snapshot(newRecord), newRecord, newBytes),
+            PortableRestoreMode.MERGE,
+            emptySet(),
+            tmp.newFolder("closure_staging"),
+            backend
+        )
+
+        assertTrue(participant.validate())
+        assertTrue(participant.stage())
+        assertFalse(participant.apply())
+    }
+
+    @Test
+    fun closurePredicateRequiresEqualActiveIdsAndValidAssets() {
+        val a = record(ID_ONE, "one.png", png(1))
+        val b = record(ID_TWO, "two.png", png(2))
+        assertTrue(
+            GeneratedImageRestoreParticipant.closureHolds(snapshot(a, b), snapshot(a, b)) { true }
+        )
+        // A live catalog missing a desired row is not closed.
+        assertFalse(
+            GeneratedImageRestoreParticipant.closureHolds(snapshot(a), snapshot(a, b)) { true }
+        )
+        // A present row whose asset does not validate is not closed.
+        assertFalse(
+            GeneratedImageRestoreParticipant.closureHolds(snapshot(a, b), snapshot(a, b)) {
+                it.imageId != ID_TWO
+            }
+        )
+    }
+
     private fun artifacts(
         backup: GeneratedImageCatalogSnapshot = snapshot(),
         newRecord: GeneratedImageCatalogRecord,
@@ -199,11 +240,14 @@ class GeneratedImageRestoreParticipantTest {
         var replaceCalls = 0
         var restoreOriginalCalls = 0
         var removeProvisionedStoreCalls = 0
+        var closureResult = true
 
         override fun snapshot(): GeneratedImageCatalogSnapshot {
             snapshotCalls++
             return value
         }
+
+        override fun verifyClosure(desired: GeneratedImageCatalogSnapshot): Boolean = closureResult
 
         override fun assetFile(fileName: String): File? =
             File(liveDir, fileName).takeIf(File::isFile)

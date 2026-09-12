@@ -79,7 +79,9 @@ object ReadableDataBackup {
 
             if (Category.IDENTITIES in categories) {
                 val archive = File(staging, "identities.zip")
-                when (CompanionBackupExporter.buildBackupZip(context, archive)) {
+                when (CompanionBackupExporter.buildBackupZip(
+                    context, archive, validateAssignedImages = true
+                )) {
                     is CompanionBackupExporter.BuildResult.Ok -> collectZip(archive, "identities/", sources)
                     else -> return Result.Failed
                 }

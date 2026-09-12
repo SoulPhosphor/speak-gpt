@@ -1751,6 +1751,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 getString(R.string.backup_err_wrong_key_or_header)
             DatabaseRestoreManager.Failure.SOURCE_UNAVAILABLE ->
                 getString(R.string.restore_source_unavailable)
+            DatabaseRestoreManager.Failure.PROFILE_IMAGE_ASSETS_MISSING ->
+                getString(R.string.restore_profile_image_assets_missing)
             DatabaseRestoreManager.Failure.RESTORE_FAILED ->
                 getString(R.string.restore_database_failed)
         }
@@ -2766,13 +2768,17 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             // Collect/assemble first, in its own failure scope, so a read-side
             // problem is never reported as a destination-write problem.
             try {
-                val build = CompanionBackupExporter.buildBackupZip(this, staged)
+                val build = CompanionBackupExporter.buildBackupZip(
+                    this, staged, validateAssignedImages = true
+                )
                 val refusalMessage = when (build) {
                     is CompanionBackupExporter.BuildResult.Ok -> null
                     CompanionBackupExporter.BuildResult.MemoryUnavailable ->
                         R.string.companion_backup_err_needs_memory_repair
                     CompanionBackupExporter.BuildResult.LorebookUnavailable ->
                         R.string.companion_backup_err_needs_lorebook_repair
+                    CompanionBackupExporter.BuildResult.ProfileImageUnavailable ->
+                        R.string.companion_backup_err_image_unavailable
                 }
                 if (refusalMessage != null) {
                     runCatching { if (staged.exists()) staged.delete() }

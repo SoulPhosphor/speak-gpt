@@ -44,6 +44,14 @@ class ProfileImageRestoreParticipant internal constructor(
             replace(records, assets)
         fun wasProvisionedBeforeStage(): Boolean = true
         fun removeProvisionedStore(): Boolean = true
+
+        /** Post-apply reference-closure check (Phase 12.4 item 7): the live
+         *  catalog must equal the desired set and every catalog row must
+         *  resolve to a valid image file. A false return fails apply, so the
+         *  outer transaction rolls back. Test fakes that do not model live
+         *  files keep the permissive default; the Android store implements the
+         *  real check. */
+        fun verifyClosure(desired: List<ProfileImageRecord>): Boolean = true
     }
 
     constructor(
@@ -139,7 +147,8 @@ class ProfileImageRestoreParticipant internal constructor(
 
     override fun apply(): Boolean {
         val set = loadSet(DESIRED_JSON, DESIRED_DIR) ?: return false
-        return backend.replace(set.records, set.assets)
+        if (!backend.replace(set.records, set.assets)) return false
+        return backend.verifyClosure(set.records)
     }
 
     override fun rollback(): Boolean {
@@ -227,6 +236,13 @@ class ProfileImageRestoreParticipant internal constructor(
 
         override fun wasProvisionedBeforeStage(): Boolean = initiallyProvisioned
 
+        override fun verifyClosure(desired: List<ProfileImageRecord>): Boolean {
+            val live = snapshot() ?: return false
+            return closureHolds(live, desired) { hash, file ->
+                ProfileImagePortableBackup.isValidAsset(file, hash)
+            }
+        }
+
         override fun replace(
             records: List<ProfileImageRecord>,
             assets: Map<String, File>
@@ -273,12 +289,30 @@ class ProfileImageRestoreParticipant internal constructor(
         }
     }
 
-    private companion object {
+    internal companion object {
         const val CURRENT_DIR = "current_assets"
         const val DESIRED_DIR = "desired_assets"
         const val CURRENT_JSON = "current.json"
         const val DESIRED_JSON = "desired.json"
         const val MAX_JSON_BYTES = 8L * 1024L * 1024L
         val HASH = Regex("^[0-9a-f]{64}$")
+
+        /** Reference closure for the applied gallery: the live catalog must
+         *  equal the desired hash set and every row must resolve to a valid
+         *  image file ([assetValid]). A replaced catalog holds no orphaned row,
+         *  so this also proves no deleted file remains referenced. */
+        internal fun closureHolds(
+            live: Snapshot,
+            desired: List<ProfileImageRecord>,
+            assetValid: (hash: String, file: File) -> Boolean
+        ): Boolean {
+            val liveHashes = live.records.mapTo(HashSet()) { it.hash }
+            val desiredHashes = desired.mapTo(HashSet()) { it.hash }
+            if (liveHashes != desiredHashes) return false
+            return live.records.all { record ->
+                val file = live.assets[record.hash] ?: return@all false
+                assetValid(record.hash, file)
+            }
+        }
     }
 }

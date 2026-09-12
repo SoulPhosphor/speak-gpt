@@ -42,6 +42,14 @@ object ProfileImagePortableRestoreManager {
         return Result.Ready(Prepared(records, assets))
     }
 
+    /**
+     * The catalog's referenced hashes, or null when the file is not a readable
+     * profile-image catalog. Used by direct database restore to test whether a
+     * legacy catalog-only file's pictures already exist locally (BR-08).
+     */
+    fun readCatalogHashes(file: File): List<String>? =
+        readCatalog(file)?.map(ProfileImageRecord::hash)
+
     private fun readCatalog(file: File): List<ProfileImageRecord>? {
         return try {
             if (!file.isFile) return null

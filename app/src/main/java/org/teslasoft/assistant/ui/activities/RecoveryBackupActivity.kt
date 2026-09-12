@@ -627,6 +627,8 @@ class RecoveryBackupActivity : FragmentActivity() {
                 showFailureText(getString(R.string.recovery_fail_nothing))
             PortableRecoveryWriter.Reason.STORE_DEGRADED ->
                 showFailureText(getString(R.string.recovery_fail_degraded))
+            PortableRecoveryWriter.Reason.PROFILE_IMAGE_UNAVAILABLE ->
+                showFailureText(getString(R.string.companion_backup_err_image_unavailable))
         }
     }
 

@@ -55,6 +55,13 @@ class GeneratedImageRestoreParticipant internal constructor(
         fun recoverPending(): Boolean
         fun wasProvisionedBeforeStage(): Boolean = true
         fun removeProvisionedStore(): Boolean = true
+
+        /** Post-apply reference-closure check (Phase 12.4 item 7): the live
+         *  catalog must equal the desired set and every active row must resolve
+         *  to a valid asset file. A false return fails apply, so the outer
+         *  transaction rolls back. Test fakes that do not model live files keep
+         *  the permissive default; the Android store implements the real check. */
+        fun verifyClosure(desired: GeneratedImageCatalogSnapshot): Boolean = true
     }
 
     constructor(
@@ -168,7 +175,11 @@ class GeneratedImageRestoreParticipant internal constructor(
         }
     }
 
-    override fun apply(): Boolean = applySet(DESIRED_CATALOG, DESIRED_DIR)
+    override fun apply(): Boolean {
+        if (!applySet(DESIRED_CATALOG, DESIRED_DIR)) return false
+        val desired = loadSet(DESIRED_CATALOG, DESIRED_DIR)?.first ?: return false
+        return backend.verifyClosure(desired)
+    }
 
     override fun rollback(): Boolean {
         val wasProvisioned = RestoreProvisioningState.read(stagingRoot) ?: return false
@@ -302,6 +313,14 @@ class GeneratedImageRestoreParticipant internal constructor(
 
         override fun wasProvisionedBeforeStage(): Boolean = initiallyProvisioned
 
+        override fun verifyClosure(desired: GeneratedImageCatalogSnapshot): Boolean {
+            val live = snapshot() ?: return false
+            return closureHolds(live, desired) { record ->
+                val file = assetFile(record.assetFileName)
+                file != null && GeneratedImagePortableBackup.isValidAsset(file, record)
+            }
+        }
+
         override fun restoreOriginal(
             snapshot: GeneratedImageCatalogSnapshot,
             assets: Map<String, File>
@@ -341,11 +360,27 @@ class GeneratedImageRestoreParticipant internal constructor(
         )
     }
 
-    private companion object {
+    internal companion object {
         const val CURRENT_DIR = "current_assets"
         const val DESIRED_DIR = "desired_assets"
         const val CURRENT_CATALOG = "current.json"
         const val DESIRED_CATALOG = "desired.json"
         const val JOURNAL_DIR = "generated_image_restore_journal"
+
+        /** Reference closure for the applied catalog: the live active set must
+         *  equal the desired active set and every active row must resolve to a
+         *  valid asset ([assetValid]). A replaced catalog holds no orphaned
+         *  active row, so satisfying this also proves no file scheduled for
+         *  deletion is still referenced. */
+        internal fun closureHolds(
+            live: GeneratedImageCatalogSnapshot,
+            desired: GeneratedImageCatalogSnapshot,
+            assetValid: (GeneratedImageCatalogRecord) -> Boolean
+        ): Boolean {
+            val liveIds = live.active.mapTo(HashSet()) { it.imageId }
+            val desiredIds = desired.active.mapTo(HashSet()) { it.imageId }
+            if (liveIds != desiredIds) return false
+            return live.active.all(assetValid)
+        }
     }
 }

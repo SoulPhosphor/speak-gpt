@@ -2350,6 +2350,7 @@
     <string name="companion_backup_err_restore_write_failed">The restore failed because this device storage could not be written to. Please free up space and try again.</string>
     <string name="companion_backup_err_data_unreadable">The operation failed because the application data could not be read. Please retry or check the database health.</string>
     <string name="companion_backup_err_save_location_failed">The backup could not be saved to the chosen location. Please select a different folder and try again.</string>
+    <string name="companion_backup_err_image_unavailable">This backup wasn\'t created because a required profile picture is missing or damaged. Your existing backup is unchanged. Reassign or remove the affected picture, then try again.</string>
     <!-- §9 replace confirmation. -->
     <string name="companion_backup_confirm_title">Replace companion and roleplay data?</string>
     <string name="companion_backup_confirm_body">This backup will replace your existing companions, personas, system prompts, activation prompts, and roleplay cards with the contents of the backup file. Memories, lorebooks, conversations, API settings, and other app settings will not be changed.</string>
@@ -2488,6 +2489,7 @@
     <string name="restore_repair_failed">Repair Failed.</string>
     <string name="restore_no_current_backup">No usable backup was found in the current automatic backup location.</string>
     <string name="restore_no_appropriate_database">Database import failed. No appropriate database found.</string>
+    <string name="restore_profile_image_assets_missing">This profile-image backup can\'t be restored because the picture files it needs are not included and are not already on this device. Your current pictures were left unchanged. Restore from a full Recovery Backup instead.</string>
     <string name="restore_no_valid_file">No valid databases found in file.</string>
     <string name="restore_no_valid_folder">No valid databases found in folder.</string>
     <string name="restore_automatic_key_or_damage">This automatic backup cannot be opened with this app installation’s database key, or the file is damaged. Choose a Recovery Backup if this file came from another installation.</string>

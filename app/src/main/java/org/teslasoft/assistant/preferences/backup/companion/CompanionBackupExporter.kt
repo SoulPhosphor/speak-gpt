@@ -23,6 +23,7 @@ import org.teslasoft.assistant.preferences.SystemPromptsPreferences
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.dto.PersonaObject
+import org.teslasoft.assistant.preferences.backup.portable.ProfileImagePortableBackup
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
@@ -60,14 +61,35 @@ object CompanionBackupExporter {
          *  silently dropping links whose books actually exist — is not
          *  allowed. The export refuses instead. */
         object LorebookUnavailable : BuildResult()
+
+        /** A profile picture assigned to an included record is missing on this
+         *  device, or its file no longer matches its stored identity hash.
+         *  Only backup CREATION asks for this check ([validateAssignedImages]):
+         *  publishing an archive that silently omits an assigned picture would
+         *  produce a falsely-complete recovery backup (BR-07). Restore-time
+         *  current-state snapshots do not ask for it, so an already-dangling
+         *  reference on the device never blocks a restore or its rollback. */
+        object ProfileImageUnavailable : BuildResult()
     }
 
     /**
      * Collects all §2 data and writes the complete ZIP to [staged]
      * (overwritten if present). Throws on I/O failure — the caller surfaces
      * the approved save-failure dialog.
+     *
+     * [validateAssignedImages] is set by backup-creation callers only. When
+     * set, every referenced profile picture must resolve to a readable file
+     * whose content hash matches its identity; otherwise the export refuses
+     * with [BuildResult.ProfileImageUnavailable] and writes nothing. Callers
+     * that snapshot the current state for restore rollback leave it false and
+     * keep the tolerant behavior (a missing file is carried as a reference
+     * only), so a pre-existing dangling reference cannot block a restore.
      */
-    fun buildBackupZip(context: Context, staged: File): BuildResult {
+    fun buildBackupZip(
+        context: Context,
+        staged: File,
+        validateAssignedImages: Boolean = false
+    ): BuildResult {
         val appContext = context.applicationContext
 
         val personas = PersonaPreferences.getPersonaPreferences(appContext)
@@ -124,7 +146,16 @@ object CompanionBackupExporter {
         val referencedHashes = collectImageHashes(profiles, roleplayTables)
         val imageFiles = LinkedHashMap<String, File>()
         for (hash in referencedHashes) {
-            val file = imageStore.imageFile(hash) ?: continue // missing: carried as reference only
+            val file = imageStore.imageFile(hash)
+            if (file == null) {
+                // Backup creation must not publish an archive that silently
+                // omits an assigned picture; a restore snapshot tolerates it.
+                if (validateAssignedImages) return BuildResult.ProfileImageUnavailable
+                continue // missing: carried as reference only
+            }
+            if (validateAssignedImages && !ProfileImagePortableBackup.isValidAsset(file, hash)) {
+                return BuildResult.ProfileImageUnavailable
+            }
             imageFiles[hash] = file
         }
 

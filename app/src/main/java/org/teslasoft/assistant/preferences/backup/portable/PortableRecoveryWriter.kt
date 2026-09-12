@@ -112,7 +112,14 @@ object PortableRecoveryWriter {
          *  degraded flag). A recovery package must never capture a corrupt
          *  database as if it were a good copy — repair first (A1's
          *  "unavailable to use or save"). Visible, typed, never silent. */
-        STORE_DEGRADED
+        STORE_DEGRADED,
+
+        /** A profile picture assigned to an included identity is missing or no
+         *  longer matches its stored hash. Publishing an archive that omits an
+         *  assigned picture would be a falsely-complete recovery backup
+         *  (BR-07), so the write refuses and the previous automatic backup is
+         *  kept. Visible, typed, never silent. */
+        PROFILE_IMAGE_UNAVAILABLE
     }
 
     /**
@@ -235,10 +242,14 @@ object PortableRecoveryWriter {
             // ---- companions, prompts and roleplay (logical archive) ----
             run {
                 val staged = File(staging, "companion_roleplay.zip")
-                when (CompanionBackupExporter.buildBackupZip(context, staged)) {
+                when (CompanionBackupExporter.buildBackupZip(
+                    context, staged, validateAssignedImages = true
+                )) {
                     CompanionBackupExporter.BuildResult.MemoryUnavailable,
                     CompanionBackupExporter.BuildResult.LorebookUnavailable ->
                         return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    CompanionBackupExporter.BuildResult.ProfileImageUnavailable ->
+                        return Result.Failed(Reason.PROFILE_IMAGE_UNAVAILABLE)
                     is CompanionBackupExporter.BuildResult.Ok -> artifacts.add(
                         PortablePackage.Artifact(
                             entryName = "companion_roleplay.zip",
