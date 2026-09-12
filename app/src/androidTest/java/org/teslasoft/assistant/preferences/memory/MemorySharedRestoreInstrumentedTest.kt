@@ -105,7 +105,7 @@ class MemorySharedRestoreInstrumentedTest {
         )
         val original = store.exportSharedRestoreRows()
         val finalRoleplay = emptyRoleplay().toMutableMap().apply {
-            this["companions"] = listOf(companionRow("new"))
+            this["companions"] = companionRow("new")
         }
         val plan = CompanionMemoryRestorePlanner.plan(
             CompanionMemoryRestorePlanner.Input(
