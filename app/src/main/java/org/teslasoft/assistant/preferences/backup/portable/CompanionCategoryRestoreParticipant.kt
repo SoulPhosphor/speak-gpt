@@ -17,6 +17,7 @@ import org.teslasoft.assistant.preferences.backup.companion.CompanionCategoryPla
 import org.teslasoft.assistant.preferences.backup.companion.CompanionRestoreJournal
 import org.teslasoft.assistant.preferences.backup.companion.CompanionRestorePlanner
 import org.teslasoft.assistant.preferences.backup.companion.CompanionRoleplayRestoreManager
+import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 
 /**
@@ -86,11 +87,23 @@ class CompanionCategoryRestoreParticipant internal constructor(
         incomingManifest = plan.incoming
         desiredMemoryReferences = references(plan.desired)
         report = plan.report
+        removedLorebookLinks = plan.restorePlan.removedLinks
     }
 
     override val categoryKey: String = "identity_bundle"
 
     var report: CompanionCategoryPlanner.Report? = null
+        private set
+
+    /**
+     * Phase 12.3 (BR-04): the identity -> lorebook connections this restore
+     * removes because their lorebooks are absent from the planned final
+     * lorebook set. Retained as a structured outcome so the unified restore
+     * report can show every intentional removal instead of discarding it
+     * behind a Boolean apply result. Empty on the recovery-only reconstruction
+     * path, which has no precomputed plan and never reports to the user.
+     */
+    var removedLorebookLinks: List<RemovedLorebookLink> = emptyList()
         private set
 
     private var incomingManifest: CompanionBackupManifest? = null
@@ -103,6 +116,7 @@ class CompanionCategoryRestoreParticipant internal constructor(
             incomingManifest = it.incoming
             desiredMemoryReferences = references(it.desired)
             report = it.report
+            removedLorebookLinks = it.restorePlan.removedLinks
             return selections.isNotEmpty()
         }
         incomingManifest = (CompanionBackupValidator.validate(incomingArchive) as?
