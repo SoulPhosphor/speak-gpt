@@ -146,20 +146,22 @@ class CompanionMemoryRestoreParticipant internal constructor(
             .toString()
     )
 
-    private fun readAffected(): Set<String>? = try {
-        val file = File(stagingRoot, AFFECTED_JSON)
-        if (!file.isFile || file.length() > MAX_AFFECTED_BYTES) return null
-        val root = JSONObject(file.readText(Charsets.UTF_8))
-        if (root.optInt("version", -1) != 1) return null
-        val array = root.getJSONArray("tables")
-        val result = LinkedHashSet<String>()
-        repeat(array.length()) {
-            val table = array.getString(it)
-            if (table !in MemorySharedRestoreRowFormat.tableNames || !result.add(table)) return null
+    private fun readAffected(): Set<String>? {
+        return try {
+            val file = File(stagingRoot, AFFECTED_JSON)
+            if (!file.isFile || file.length() > MAX_AFFECTED_BYTES) return null
+            val root = JSONObject(file.readText(Charsets.UTF_8))
+            if (root.optInt("version", -1) != 1) return null
+            val array = root.getJSONArray("tables")
+            val result = LinkedHashSet<String>()
+            repeat(array.length()) {
+                val table = array.getString(it)
+                if (table !in MemorySharedRestoreRowFormat.tableNames || !result.add(table)) return null
+            }
+            result.takeIf(Set<String>::isNotEmpty)
+        } catch (_: Exception) {
+            null
         }
-        result.takeIf(Set<String>::isNotEmpty)
-    } catch (_: Exception) {
-        null
     }
 
     private fun requiresStore(rows: MemorySharedRestoreRows, affected: Set<String>): Boolean =

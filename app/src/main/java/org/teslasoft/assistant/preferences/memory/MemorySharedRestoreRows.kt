@@ -170,45 +170,47 @@ object MemorySharedRestoreRowFormat {
             .toString()
     }
 
-    fun parse(text: String): MemorySharedRestoreRows? = try {
-        val root = JSONObject(text)
-        if (root.optInt("version", -1) != 1) return null
-        val tablesJson = root.getJSONObject("tables")
-        if (tablesJson.keys().asSequence().toSet() != tableNames) return null
-        val tables = LinkedHashMap<String, List<Map<String, Any?>>>()
-        for (spec in specs) {
-            val array = tablesJson.getJSONArray(spec.table)
-            val rows = ArrayList<Map<String, Any?>>(array.length())
-            repeat(array.length()) { index ->
-                val item = array.getJSONObject(index)
-                val row = LinkedHashMap<String, Any?>()
-                item.keys().forEach { key ->
-                    row[key] = when (val value = item.get(key)) {
-                        JSONObject.NULL -> null
-                        is Int -> value.toLong()
-                        is String, is Long, is Double, is Boolean -> value
-                        is JSONObject -> {
-                            if (value.optString("value_type") != "blob" ||
-                                !value.has("base64") || value.length() != 2
-                            ) return null
-                            val encoded = value.getString("base64")
-                            try {
-                                Base64.getDecoder().decode(encoded)
-                            } catch (_: IllegalArgumentException) {
-                                return null
+    fun parse(text: String): MemorySharedRestoreRows? {
+        return try {
+            val root = JSONObject(text)
+            if (root.optInt("version", -1) != 1) return null
+            val tablesJson = root.getJSONObject("tables")
+            if (tablesJson.keys().asSequence().toSet() != tableNames) return null
+            val tables = LinkedHashMap<String, List<Map<String, Any?>>>()
+            for (spec in specs) {
+                val array = tablesJson.getJSONArray(spec.table)
+                val rows = ArrayList<Map<String, Any?>>(array.length())
+                repeat(array.length()) { index ->
+                    val item = array.getJSONObject(index)
+                    val row = LinkedHashMap<String, Any?>()
+                    item.keys().forEach { key ->
+                        row[key] = when (val value = item.get(key)) {
+                            JSONObject.NULL -> null
+                            is Int -> value.toLong()
+                            is String, is Long, is Double, is Boolean -> value
+                            is JSONObject -> {
+                                if (value.optString("value_type") != "blob" ||
+                                    !value.has("base64") || value.length() != 2
+                                ) return null
+                                val encoded = value.getString("base64")
+                                try {
+                                    Base64.getDecoder().decode(encoded)
+                                } catch (_: IllegalArgumentException) {
+                                    return null
+                                }
+                                MemorySharedRestoreBlob(encoded)
                             }
-                            MemorySharedRestoreBlob(encoded)
+                            else -> return null
                         }
-                        else -> return null
                     }
+                    rows.add(row)
                 }
-                rows.add(row)
+                tables[spec.table] = rows
             }
-            tables[spec.table] = rows
+            MemorySharedRestoreRows(tables).takeIf(::valid)
+        } catch (_: Exception) {
+            null
         }
-        MemorySharedRestoreRows(tables).takeIf(::valid)
-    } catch (_: Exception) {
-        null
     }
 
     /**
