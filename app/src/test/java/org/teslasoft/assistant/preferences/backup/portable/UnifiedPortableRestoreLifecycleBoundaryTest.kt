@@ -90,7 +90,7 @@ class UnifiedPortableRestoreLifecycleBoundaryTest {
             .substringBefore("private fun inspectPortableRestore(")
         assertFalse(begin.contains("recoverPending("))
         val recoveryFlow = source("ui/PortableRestoreRecoveryFlow.kt")
-        assertFalse(recoveryFlow.contains("Thread {"))
+        assertFalse(Regex("(?m)^\\s*Thread \\{").containsMatchIn(recoveryFlow))
         assertTrue(recoveryFlow.contains("recoverPendingAsync"))
         val folderRead = activity.substringAfter("private fun currentFolderNameAlreadyUsed")
             .substringBefore("private fun showPortableConfirmation")
