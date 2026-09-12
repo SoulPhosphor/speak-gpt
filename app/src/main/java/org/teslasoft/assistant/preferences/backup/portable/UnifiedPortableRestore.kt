@@ -769,9 +769,35 @@ object UnifiedPortableRestore {
 
     fun execute(
         journalRoot: File,
-        ready: BuildResult.Ready
+        ready: BuildResult.Ready,
+        beforeCleanup: () -> Boolean = { true }
     ): SelectedCategoryRestoreTransaction.Result =
-        SelectedCategoryRestoreTransaction.execute(journalRoot, ready.participants)
+        SelectedCategoryRestoreTransaction.execute(
+            journalRoot, ready.participants, beforeCleanup = beforeCleanup
+        )
+
+    /** A cheap final fence immediately before staging/apply. A mismatch never
+     * mutates data; the durable coordinator discards this Ready object and
+     * returns through semantic preflight with the same decoded artifacts. */
+    fun sourceGenerationsMatch(
+        context: Context,
+        ready: BuildResult.Ready,
+        stagingRoot: File
+    ): Boolean {
+        val modes = ready.finalState.categoryModes
+        val verificationRoot = File(stagingRoot, "pre_apply_generation_check")
+        if (verificationRoot.exists() && !verificationRoot.deleteRecursively()) return false
+        return when (val captured = captureLiveState(
+            context.applicationContext,
+            modes,
+            modes.keys.any(IDENTITY_CATEGORIES::contains),
+            verificationRoot
+        )) {
+            is PortableRestoreDependencyRead.Available ->
+                captured.snapshot.generations == ready.finalState.sourceGenerations
+            is PortableRestoreDependencyRead.Unavailable -> false
+        }
+    }
 
     /** Persistent rollback staging used only after the package has been fully
      * decoded and validated. Unlike decode staging, this must survive process

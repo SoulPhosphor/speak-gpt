@@ -16,7 +16,9 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.backup.ChatRestoreManager
+import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestoreCoordinator
 import java.io.File
+import java.util.concurrent.Executors
 
 /**
  * Foreground lifetime for a Restore From Backup run.
@@ -41,6 +43,8 @@ class RestoreForegroundService : Service() {
         private const val CHANNEL_ID = "restore_operations"
         private const val NOTIFICATION_ID = 9941
         private const val EXTRA_ARCHIVE_PATH = "archivePath"
+        private const val ACTION_CHAT_RESTORE = "org.teslasoft.assistant.action.CHAT_RESTORE"
+        private const val ACTION_UNIFIED_RESTORE = "org.teslasoft.assistant.action.UNIFIED_RESTORE"
 
         /** Package-scoped result broadcast the backup/restore screen listens for. */
         const val ACTION_RESTORE_FAILED = "org.teslasoft.assistant.action.RESTORE_FAILED"
@@ -51,12 +55,30 @@ class RestoreForegroundService : Service() {
          *  the picker's content URI itself). */
         fun start(context: Context, archivePath: String) {
             val intent = Intent(context, RestoreForegroundService::class.java)
+                .setAction(ACTION_CHAT_RESTORE)
                 .putExtra(EXTRA_ARCHIVE_PATH, archivePath)
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
                 else context.startService(intent)
             } catch (_: Exception) { /* caller shows the failure path if this throws */ }
         }
+
+        /** Advance the process-owned unified restore state machine. */
+        fun startUnified(context: Context): Boolean {
+            val intent = Intent(context, RestoreForegroundService::class.java)
+                .setAction(ACTION_UNIFIED_RESTORE)
+            return try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+                else context.startService(intent)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
+    private val worker = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "restore-coordinator")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -68,7 +90,20 @@ class RestoreForegroundService : Service() {
                 startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
             } else startForeground(NOTIFICATION_ID, notification())
         } catch (_: Exception) {
+            if (intent?.action == ACTION_UNIFIED_RESTORE) {
+                UnifiedPortableRestoreCoordinator.cancel()
+            }
             stopSelf()
+            return START_NOT_STICKY
+        }
+
+        if (intent?.action == ACTION_UNIFIED_RESTORE) {
+            worker.execute {
+                when (UnifiedPortableRestoreCoordinator.advance(applicationContext)) {
+                    UnifiedPortableRestoreCoordinator.AdvanceResult.RESTART_REQUIRED -> restartApp()
+                    else -> finishWithoutBroadcast(startId)
+                }
+            }
             return START_NOT_STICKY
         }
 
@@ -78,7 +113,7 @@ class RestoreForegroundService : Service() {
             return START_NOT_STICKY
         }
 
-        Thread {
+        worker.execute {
             val archive = File(path)
             val result = try {
                 ChatRestoreManager.restoreFromArchive(applicationContext, archive)
@@ -93,7 +128,7 @@ class RestoreForegroundService : Service() {
             } else {
                 finishWithFailure(result.detail, deleteArchive = archive)
             }
-        }.start()
+        }
 
         // Not sticky: an interrupted run is finished by resumeIfPending at the
         // next launch, not by the system restarting this service with no intent.
@@ -109,6 +144,11 @@ class RestoreForegroundService : Service() {
         )
         stopForegroundCompat()
         stopSelf()
+    }
+
+    private fun finishWithoutBroadcast(startId: Int) {
+        stopForegroundCompat()
+        stopSelfResult(startId)
     }
 
     private fun restartApp() {
@@ -154,4 +194,9 @@ class RestoreForegroundService : Service() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .build()
+
+    override fun onDestroy() {
+        worker.shutdown()
+        super.onDestroy()
+    }
 }

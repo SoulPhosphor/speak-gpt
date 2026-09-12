@@ -29,6 +29,7 @@ import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexJournal
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
 import org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.util.Hash
 import java.lang.Exception
 import java.lang.reflect.Type
@@ -465,6 +466,9 @@ class ChatPreferences private constructor() {
         messages: List<HashMap<String, Any>>,
         synchronous: Boolean = false
     ): ChatStorageHealth.WriteOutcome {
+        if (PortableRestoreProcessGate.blocksCurrentProcess(context)) {
+            return ChatStorageHealth.WriteOutcome.FAILED
+        }
         val name = "chat_$chatId"
         SecurePrefs.get(context, name)
         if (SecurePrefs.isLockedName(name)) {

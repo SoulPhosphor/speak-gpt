@@ -30,6 +30,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.SecurePrefs
+import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.onboarding.WelcomeActivity
 
@@ -46,6 +47,7 @@ class MainActivity : FragmentActivity() {
     private sealed interface StartupDestination {
         data object LockedStorage : StartupDestination
         data object Welcome : StartupDestination
+        data object RestoreRecovery : StartupDestination
         data class BlankChat(val pending: PendingConversationState) : StartupDestination
     }
 
@@ -73,6 +75,9 @@ class MainActivity : FragmentActivity() {
 
     /** Keep the established lock-before-key-migration ordering off the UI thread. */
     private fun resolveStartupDestination(): StartupDestination {
+        if (!PortableRestoreProcessGate.awaitStartupRecovery()) {
+            return StartupDestination.RestoreRecovery
+        }
         if (SecurePrefs.isChatStorageLocked(this)) {
             return StartupDestination.LockedStorage
         }
@@ -119,6 +124,11 @@ class MainActivity : FragmentActivity() {
             )
             StartupDestination.Welcome -> startActivity(
                 Intent(this, WelcomeActivity::class.java)
+                    .setAction(Intent.ACTION_VIEW)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            )
+            StartupDestination.RestoreRecovery -> startActivity(
+                Intent(this, MemoryBackupRestoreActivity::class.java)
                     .setAction(Intent.ACTION_VIEW)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             )

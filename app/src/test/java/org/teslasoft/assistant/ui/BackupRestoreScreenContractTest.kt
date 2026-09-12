@@ -99,12 +99,16 @@ class BackupRestoreScreenContractTest {
     @Test
     fun restoreFailuresDoNotRenderEnumNamesAsCopy() {
         val activity = javaSource("MemoryBackupRestoreActivity.kt")
+        val outcomeFlow = find(
+            "src/main/java/org/teslasoft/assistant/ui/PortableRestoreOutcomeFlow.kt",
+            "app/src/main/java/org/teslasoft/assistant/ui/PortableRestoreOutcomeFlow.kt"
+        ).readText()
         assertTrue(!activity.contains("failed.reason.name.lowercase()"))
-        assertTrue(activity.contains("portableChatValidationMessage"))
-        assertTrue(activity.contains("portable_restore_category_failure"))
-        // The success flow still renders the structured report; Phase 12.3 adds
-        // an optional removed-links argument, so match the call by prefix.
-        assertTrue(activity.contains("showPortableReport(report"))
+        assertTrue(outcomeFlow.contains("chatValidationMessage"))
+        assertTrue(outcomeFlow.contains("portable_restore_category_failure"))
+        // Phase 12.5 persists the structured report before restart and the
+        // recreated screen delegates its one-time rendering to the shared flow.
+        assertTrue(activity.contains("PortableRestoreOutcomeFlow.showIfPending"))
     }
 
     @Test
@@ -117,7 +121,7 @@ class BackupRestoreScreenContractTest {
             "src/main/java/org/teslasoft/assistant/ui/PortableRestoreRecoveryFlow.kt",
             "app/src/main/java/org/teslasoft/assistant/ui/PortableRestoreRecoveryFlow.kt"
         ).readText()
-        assertTrue(application.contains("UnifiedPortableRestore.recoverPending(this)"))
+        assertTrue(application.contains("UnifiedPortableRestoreCoordinator.recoverPending(this)"))
         assertTrue(!application.contains("MemoryLog.log(this, \"PortableRestore\""))
         assertTrue(recoveryFlow.contains("portable_restore_pending_message"))
         assertTrue(recoveryFlow.contains("portable_restore_retry_recovery"))

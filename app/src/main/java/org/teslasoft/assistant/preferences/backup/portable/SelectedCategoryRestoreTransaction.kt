@@ -87,7 +87,8 @@ object SelectedCategoryRestoreTransaction {
     fun execute(
         journalRoot: File,
         participants: List<Participant>,
-        interruptionPoint: InterruptionPoint? = null
+        interruptionPoint: InterruptionPoint? = null,
+        beforeCleanup: () -> Boolean = { true }
     ): Result {
         if (participants.isEmpty()) return Result.Failed(Failure.EMPTY_SELECTION)
         val keys = participants.map { it.categoryKey }
@@ -146,6 +147,13 @@ object SelectedCategoryRestoreTransaction {
         if (!writeState(journalRoot, Phase.COMPLETE, started.map { it.categoryKey })) {
             return rollbackAfterFailure(journalRoot, started, Failure.JOURNAL_FAILED, null)
         }
+        // COMPLETE remains durable until the service has written the terminal
+        // result that the clean process will consume. If publication fails,
+        // startup recovery may safely finish cleanup without replaying apply.
+        if (!safeCall(beforeCleanup)) return Result.Failed(
+            Failure.JOURNAL_FAILED,
+            dataState = DataState.RESTORED_CLEANUP_PENDING
+        )
         cleanup(participants)
         if (!deleteJournal(journalRoot)) return Result.Failed(
             Failure.JOURNAL_FAILED,

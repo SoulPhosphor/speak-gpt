@@ -43,7 +43,8 @@ import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.StartupDatabaseCheck
 import org.teslasoft.assistant.preferences.backup.portable.GeneratedImagePortableRestoreManager
-import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestore
+import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
+import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestoreCoordinator
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -117,15 +118,25 @@ class MainApplication : Application() {
         // integrity_check surfaced loudly per the spec, then the rotating
         // automatic backup if one is due. Off the main thread; app start must
         // not wait on SQLCipher.
+        PortableRestoreProcessGate.beginStartupRecoveryIfNeeded(this)
         Thread {
             try {
                 // The outer selected-category restore may span several stores.
                 // Settle its exact rollback snapshots before any startup task
                 // observes or mutates a possibly mixed category set.
-                if (!UnifiedPortableRestore.recoverPending(this)) {
+                if (!UnifiedPortableRestoreCoordinator.recoverPending(this)) {
+                    PortableRestoreProcessGate.finishStartupRecovery(false)
                     return@Thread
                 }
+                if (!PortableRestoreProcessGate.clearRecoveredPreviousProcess(this) &&
+                    PortableRestoreProcessGate.blocksCurrentProcess(this)
+                ) {
+                    PortableRestoreProcessGate.finishStartupRecovery(false)
+                    return@Thread
+                }
+                PortableRestoreProcessGate.finishStartupRecovery(true)
             } catch (_: Exception) {
+                PortableRestoreProcessGate.finishStartupRecovery(false)
                 return@Thread
             }
             try {

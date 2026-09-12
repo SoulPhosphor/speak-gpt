@@ -154,6 +154,48 @@ class SelectedCategoryRestoreTransactionTest {
         assertFalse(root.exists())
     }
 
+    @Test
+    fun terminalOutcomeIsWrittenBeforeCleanupAndJournalRelease() {
+        val events = ArrayList<String>()
+        val root = tempRoot()
+        val result = SelectedCategoryRestoreTransaction.execute(
+            root,
+            listOf(participant("chats", events)),
+            beforeCleanup = {
+                assertTrue(root.resolve("state.json").isFile)
+                events.add("terminal")
+                true
+            }
+        )
+
+        assertEquals(SelectedCategoryRestoreTransaction.Result.Success, result)
+        assertTrue(events.indexOf("apply:chats") < events.indexOf("terminal"))
+        assertTrue(events.indexOf("terminal") < events.indexOf("cleanup:chats"))
+        assertFalse(root.exists())
+    }
+
+    @Test
+    fun terminalOutcomeFailureRetainsCompleteJournalForStartupCleanup() {
+        val events = ArrayList<String>()
+        val root = tempRoot()
+        val chats = participant("chats", events)
+        val result = SelectedCategoryRestoreTransaction.execute(
+            root,
+            listOf(chats),
+            beforeCleanup = { false }
+        ) as SelectedCategoryRestoreTransaction.Result.Failed
+
+        assertEquals(SelectedCategoryRestoreTransaction.Failure.JOURNAL_FAILED, result.reason)
+        assertEquals(
+            SelectedCategoryRestoreTransaction.DataState.RESTORED_CLEANUP_PENDING,
+            result.dataState
+        )
+        assertFalse(events.contains("cleanup:chats"))
+        assertTrue(SelectedCategoryRestoreTransaction.recover(root, mapOf("chats" to chats)))
+        assertTrue(events.contains("cleanup:chats"))
+        assertFalse(events.contains("rollback:chats"))
+    }
+
     private fun participant(
         key: String,
         events: MutableList<String>,

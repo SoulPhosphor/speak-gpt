@@ -243,7 +243,9 @@ import org.teslasoft.assistant.service.GenerationForegroundService
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
+import org.teslasoft.assistant.ui.PortableRestoreOutcomeFlow
 import org.teslasoft.assistant.ui.PortableRestoreRecoveryFlow
+import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
 import org.teslasoft.assistant.usage.ConversationUsageSummary
 import org.teslasoft.assistant.usage.ProviderUsageAttempt
@@ -655,6 +657,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private data class ChatStartupResult(
         val storageLocked: Boolean,
+        val restoreRecoveryRequired: Boolean = false,
         val preparedChat: PreparedChatStartup? = null
     )
 
@@ -1450,6 +1453,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         super.onResume()
 
         if (PortableRestoreRecoveryFlow.showIfPending(this)) return
+        if (PortableRestoreProcessGate.blocksCurrentProcess(this)) return
+        if (chatStartupComplete && PortableRestoreOutcomeFlow.showIfPending(this)) return
 
         preloadAmoled()
         reloadAmoled()
@@ -2370,6 +2375,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 val startupResult = startupAttempt.getOrElse { throw it }
 
+                if (startupResult.restoreRecoveryRequired) {
+                    startActivity(
+                        Intent(this, MemoryBackupRestoreActivity::class.java)
+                            .setAction(Intent.ACTION_VIEW)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    )
+                    finish()
+                    return@runOnUiThread
+                }
+
                 if (startupResult.storageLocked) {
                     startActivity(Intent(this, ChatStorageLockedActivity::class.java).setAction(Intent.ACTION_VIEW))
                     finish()
@@ -2386,6 +2401,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * Keystore outage can never masquerade as an empty API key or empty chat.
      */
     private fun prepareChatStartup(): ChatStartupResult {
+        if (!PortableRestoreProcessGate.awaitStartupRecovery()) {
+            return ChatStartupResult(storageLocked = false, restoreRecoveryRequired = true)
+        }
         if (SecurePrefs.isChatStorageLocked(this)) {
             return ChatStartupResult(storageLocked = true)
         }
@@ -2557,7 +2575,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         chatStartupComplete = true
         if (!PortableRestoreRecoveryFlow.showIfPending(this)) {
-            DatabaseRecoveryFlows.showPendingNoticeIfAny(this)
+            if (!PortableRestoreOutcomeFlow.showIfPending(this)) {
+                DatabaseRecoveryFlows.showPendingNoticeIfAny(this)
+            }
         }
     }
 
@@ -2638,6 +2658,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     public override fun onDestroy() {
+        PortableRestoreOutcomeFlow.onActivityDestroyed(this)
         // Tombstone for the event log: when the OS (or a navigation flow)
         // destroys this screen while a voice conversation is live, everything
         // below silently kills the readback and the loop. Without this line
