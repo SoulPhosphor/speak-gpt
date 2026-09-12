@@ -212,7 +212,7 @@ object UnifiedPortableRestoreCoordinator {
     /** Called on the foreground service's single worker, never the main thread. */
     fun advance(context: Context): AdvanceResult {
         if (!advancing.compareAndSet(false, true)) return AdvanceResult.NO_WORK
-        return try {
+        try {
             while (true) {
                 val next = synchronized(lock) { session?.next } ?: return AdvanceResult.NO_WORK
                 when (next) {
@@ -239,6 +239,8 @@ object UnifiedPortableRestoreCoordinator {
         } finally {
             advancing.set(false)
         }
+        @Suppress("UNREACHABLE_CODE")
+        return AdvanceResult.NO_WORK
     }
 
     private enum class Step { CONTINUE, WAIT, TERMINAL, RESTART }

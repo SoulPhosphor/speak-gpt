@@ -327,7 +327,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var pendingPortableRestore: PendingPortableRestore? = null
     private var renderedPortableCoordinatorVersion = -1L
     private val portableCoordinatorObserver = UnifiedPortableRestoreCoordinator.Observer { state ->
-        runOnUiThread { renderPortableCoordinatorState(state) }
+        runOnUiThread { renderCoordinatorState(state) }
     }
 
     private data class PendingPortableRestore(
@@ -354,7 +354,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         super.onResume()
         if (UnifiedPortableRestoreCoordinator.isActive()) {
             setRestoreFlowActive(true)
-            renderPortableCoordinatorState(UnifiedPortableRestoreCoordinator.snapshot())
+            renderCoordinatorState(UnifiedPortableRestoreCoordinator.snapshot())
             return
         }
         if (PortableRestoreOutcomeFlow.showIfPending(this)) return
@@ -382,7 +382,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         val state = UnifiedPortableRestoreCoordinator.addObserver(portableCoordinatorObserver)
-        if (UnifiedPortableRestoreCoordinator.isActive()) renderPortableCoordinatorState(state)
+        if (UnifiedPortableRestoreCoordinator.isActive()) renderCoordinatorState(state)
     }
 
     override fun onStop() {

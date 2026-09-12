@@ -108,37 +108,45 @@ object PortableRestoreOutcomeStore {
         return root
     }
 
-    internal fun decode(source: File): PortableRestoreOutcome? = try {
-        if (!source.isFile || source.length() > MAX_BYTES) return null
-        decode(JSONObject(source.readText(Charsets.UTF_8)))
-    } catch (_: Exception) {
-        null
+    internal fun decode(source: File): PortableRestoreOutcome? {
+        return try {
+            if (!source.isFile || source.length() > MAX_BYTES) return null
+            decode(JSONObject(source.readText(Charsets.UTF_8)))
+        } catch (_: Exception) {
+            null
+        }
     }
 
-    internal fun decode(root: JSONObject): PortableRestoreOutcome? = try {
-        if (root.optInt("version", -1) != VERSION) return null
-        when (root.getString("kind")) {
-            "success" -> PortableRestoreOutcome.Success(decodeReport(root.getJSONObject("report")) ?: return null)
-            "package_failure" -> PortableRestoreOutcome.PackageFailure(
-                PortablePackageFormat.RestoreError.valueOf(root.getString("error"))
-            )
-            "build_failure" -> PortableRestoreOutcome.BuildFailure(
-                UnifiedPortableRestore.BuildFailure.valueOf(root.getString("reason")),
-                root.optString("category").takeIf(String::isNotBlank)
-                    ?.let(PortableRestoreCategory::valueOf)
-            )
-            "nothing_available" -> PortableRestoreOutcome.NothingAvailable
-            "transaction_failure" -> PortableRestoreOutcome.TransactionFailure(
-                SelectedCategoryRestoreTransaction.Failure.valueOf(root.getString("reason")),
-                root.optString("category_key").takeIf(String::isNotBlank),
-                SelectedCategoryRestoreTransaction.DataState.valueOf(root.getString("data_state")),
-                root.optString("chat_validation").takeIf(String::isNotBlank)
-                    ?.let(PortableChatRestorePlan.Reason::valueOf)
-            )
-            else -> null
+    internal fun decode(root: JSONObject): PortableRestoreOutcome? {
+        return try {
+            if (root.optInt("version", -1) != VERSION) return null
+            when (root.getString("kind")) {
+                "success" -> PortableRestoreOutcome.Success(
+                    decodeReport(root.getJSONObject("report")) ?: return null
+                )
+                "package_failure" -> PortableRestoreOutcome.PackageFailure(
+                    PortablePackageFormat.RestoreError.valueOf(root.getString("error"))
+                )
+                "build_failure" -> PortableRestoreOutcome.BuildFailure(
+                    UnifiedPortableRestore.BuildFailure.valueOf(root.getString("reason")),
+                    root.optString("category").takeIf(String::isNotBlank)
+                        ?.let(PortableRestoreCategory::valueOf)
+                )
+                "nothing_available" -> PortableRestoreOutcome.NothingAvailable
+                "transaction_failure" -> PortableRestoreOutcome.TransactionFailure(
+                    SelectedCategoryRestoreTransaction.Failure.valueOf(root.getString("reason")),
+                    root.optString("category_key").takeIf(String::isNotBlank),
+                    SelectedCategoryRestoreTransaction.DataState.valueOf(
+                        root.getString("data_state")
+                    ),
+                    root.optString("chat_validation").takeIf(String::isNotBlank)
+                        ?.let(PortableChatRestorePlan.Reason::valueOf)
+                )
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
         }
-    } catch (_: Exception) {
-        null
     }
 
     private fun encodeReport(report: PortableRestoreOutcome.Report) = JSONObject()
@@ -171,49 +179,51 @@ object PortableRestoreOutcomeStore {
             }
         })
 
-    private fun decodeReport(root: JSONObject): PortableRestoreOutcome.Report? = try {
-        val linesJson = root.getJSONArray("lines")
-        val lines = ArrayList<PortableRestoreOutcome.Report.Line>(linesJson.length())
-        repeat(linesJson.length()) { index ->
-            val item = linesJson.getJSONObject(index)
-            val count = item.optInt("count", -1)
-            lines.add(when (item.getString("kind")) {
-                "conflict_count" -> PortableRestoreOutcome.Report.Line.ConflictCount(
-                    PortableRestoreCategory.valueOf(item.getString("category")),
-                    count.takeIf { it > 0 } ?: return null
-                )
-                "named_conflicts" -> {
-                    val namesJson = item.getJSONArray("names")
-                    val names = ArrayList<String>(namesJson.length())
-                    repeat(namesJson.length()) { names.add(namesJson.getString(it)) }
-                    val fallback = item.optInt("fallback_count", -1)
-                    if (fallback <= 0) return null
-                    PortableRestoreOutcome.Report.Line.NamedConflicts(
+    private fun decodeReport(root: JSONObject): PortableRestoreOutcome.Report? {
+        return try {
+            val linesJson = root.getJSONArray("lines")
+            val lines = ArrayList<PortableRestoreOutcome.Report.Line>(linesJson.length())
+            repeat(linesJson.length()) { index ->
+                val item = linesJson.getJSONObject(index)
+                val count = item.optInt("count", -1)
+                lines.add(when (item.getString("kind")) {
+                    "conflict_count" -> PortableRestoreOutcome.Report.Line.ConflictCount(
                         PortableRestoreCategory.valueOf(item.getString("category")),
-                        names,
-                        fallback
+                        count.takeIf { it > 0 } ?: return null
                     )
-                }
-                "longer_chats" -> PortableRestoreOutcome.Report.Line.LongerChats(
-                    count.takeIf { it > 0 } ?: return null
-                )
-                "protected_images" -> PortableRestoreOutcome.Report.Line.ProtectedImages(
-                    count.takeIf { it > 0 } ?: return null
-                )
-                else -> return null
-            })
+                    "named_conflicts" -> {
+                        val namesJson = item.getJSONArray("names")
+                        val names = ArrayList<String>(namesJson.length())
+                        repeat(namesJson.length()) { names.add(namesJson.getString(it)) }
+                        val fallback = item.optInt("fallback_count", -1)
+                        if (fallback <= 0) return null
+                        PortableRestoreOutcome.Report.Line.NamedConflicts(
+                            PortableRestoreCategory.valueOf(item.getString("category")),
+                            names,
+                            fallback
+                        )
+                    }
+                    "longer_chats" -> PortableRestoreOutcome.Report.Line.LongerChats(
+                        count.takeIf { it > 0 } ?: return null
+                    )
+                    "protected_images" -> PortableRestoreOutcome.Report.Line.ProtectedImages(
+                        count.takeIf { it > 0 } ?: return null
+                    )
+                    else -> return null
+                })
+            }
+            val linksJson = root.getJSONArray("removed_lorebook_links")
+            val links = ArrayList<RemovedLorebookLink>(linksJson.length())
+            repeat(linksJson.length()) { index ->
+                val item = linksJson.getJSONObject(index)
+                links.add(RemovedLorebookLink(
+                    item.getString("companion_label"), item.getString("lorebook_name")
+                ))
+            }
+            PortableRestoreOutcome.Report(lines, links)
+        } catch (_: Exception) {
+            null
         }
-        val linksJson = root.getJSONArray("removed_lorebook_links")
-        val links = ArrayList<RemovedLorebookLink>(linksJson.length())
-        repeat(linksJson.length()) { index ->
-            val item = linksJson.getJSONObject(index)
-            links.add(RemovedLorebookLink(
-                item.getString("companion_label"), item.getString("lorebook_name")
-            ))
-        }
-        PortableRestoreOutcome.Report(lines, links)
-    } catch (_: Exception) {
-        null
     }
 
     private fun file(context: Context) = File(context.filesDir, FILE_NAME)

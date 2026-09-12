@@ -69,14 +69,16 @@ object PortableRestoreProcessGate {
         return marker.delete() || !marker.exists()
     }
 
-    private fun read(context: Context): Pair<Int, Phase>? = try {
-        val marker = file(context)
-        if (!marker.isFile || marker.length() > MAX_BYTES) return null
-        val root = JSONObject(marker.readText(Charsets.UTF_8))
-        if (root.optInt("version", -1) != VERSION) return null
-        root.getInt("owner_pid") to Phase.valueOf(root.getString("phase"))
-    } catch (_: Exception) {
-        null
+    private fun read(context: Context): Pair<Int, Phase>? {
+        return try {
+            val marker = file(context)
+            if (!marker.isFile || marker.length() > MAX_BYTES) return null
+            val root = JSONObject(marker.readText(Charsets.UTF_8))
+            if (root.optInt("version", -1) != VERSION) return null
+            root.getInt("owner_pid") to Phase.valueOf(root.getString("phase"))
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun file(context: Context) = File(context.filesDir, FILE_NAME)
