@@ -1201,8 +1201,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private fun renderCoordinatorState(
         state: UnifiedPortableRestoreCoordinator.State
     ) {
-        if (isFinishing || state.version == renderedCoordinatorVersion) return
-        renderedCoordinatorVersion = state.version
+        if (isFinishing || state.version == renderedPortableCoordinatorVersion) return
+        renderedPortableCoordinatorVersion = state.version
         when (state) {
             is UnifiedPortableRestoreCoordinator.State.Idle -> finishPortableRestoreFlow()
             is UnifiedPortableRestoreCoordinator.State.Progress -> {
