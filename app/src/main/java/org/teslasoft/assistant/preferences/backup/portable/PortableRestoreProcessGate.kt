@@ -9,6 +9,8 @@ import android.os.Process
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import org.json.JSONObject
+import org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreCoordinator
+import org.teslasoft.assistant.preferences.backup.DirectProfileImageRestoreRecovery
 import org.teslasoft.assistant.util.AtomicFileWriter
 
 /**
@@ -32,14 +34,20 @@ object PortableRestoreProcessGate {
     )
 
     fun blocksCurrentProcess(context: Context): Boolean {
-        if (UnifiedPortableRestore.journalRoot(context).exists()) return true
+        if (UnifiedPortableRestore.journalRoot(context).exists() ||
+            DirectDatabaseRestoreCoordinator.hasPending(context) ||
+            DirectProfileImageRestoreRecovery.hasPending(context)
+        ) return true
         val marker = file(context)
         val state = read(context) ?: return marker.exists()
         return state.first == Process.myPid()
     }
 
     fun beginStartupRecoveryIfNeeded(context: Context) {
-        if (file(context).exists() || UnifiedPortableRestore.journalRoot(context).exists()) {
+        if (file(context).exists() || UnifiedPortableRestore.journalRoot(context).exists() ||
+            DirectDatabaseRestoreCoordinator.hasPending(context) ||
+            DirectProfileImageRestoreRecovery.hasPending(context)
+        ) {
             startupRecoverySucceeded = false
             startupRecovery = CountDownLatch(1)
         }

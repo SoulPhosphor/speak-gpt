@@ -24,6 +24,7 @@ import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.CorruptionErrorHandlers
 import org.teslasoft.assistant.preferences.backup.DatabaseDegradedException
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
+import org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreCoordinator
 import org.teslasoft.assistant.preferences.dto.LoreBook
 import org.teslasoft.assistant.preferences.dto.LoreBookEntry
 import org.teslasoft.assistant.preferences.memory.MemoryId
@@ -121,13 +122,21 @@ class LoreBookStore private constructor(
         private var instance: LoreBookStore? = null
 
         fun getInstance(context: Context): LoreBookStore {
+            if (DirectDatabaseRestoreCoordinator.blocksStore(
+                    context.applicationContext, BackupType.LOREBOOK
+                )
+            ) {
+                throw IllegalStateException("Lorebook store recovery is still pending")
+            }
             // Degraded gate (Database Health Build Phase 3, §15.2a): a store
             // with CONFIRMED damage is genuinely off — reads and writes —
             // until a repair/restore succeeds. Checked before the cached
             // instance too. ChatActivity's lorebook call sites already
             // try/catch-guard this path, so a degraded store means "no lore
             // this turn", never a crash.
-            if (DatabaseHealthState.isDegraded(context.applicationContext, BackupType.LOREBOOK)) {
+            if (DatabaseHealthState.isDegraded(context.applicationContext, BackupType.LOREBOOK) &&
+                !DirectDatabaseRestoreCoordinator.allowsRecoveryOpen(BackupType.LOREBOOK)
+            ) {
                 throw DatabaseDegradedException(BackupType.LOREBOOK)
             }
             return instance ?: synchronized(this) {

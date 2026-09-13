@@ -22,6 +22,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.CorruptionErrorHandlers
+import org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreCoordinator
+import org.teslasoft.assistant.preferences.backup.DirectProfileImageRestoreRecovery
 
 /**
  * Catalog of permanent Profile Images: which content hashes have a saved
@@ -62,6 +64,12 @@ class ProfileImageDb private constructor(context: Context) :
         private var instance: ProfileImageDb? = null
 
         fun getInstance(context: Context): ProfileImageDb {
+            if (DirectDatabaseRestoreCoordinator.blocksStore(
+                    context.applicationContext, BackupType.USER_IMAGE
+                ) || DirectProfileImageRestoreRecovery.blocksStore(context.applicationContext)
+            ) {
+                throw IllegalStateException("Profile image database recovery is still pending")
+            }
             return instance ?: synchronized(this) {
                 instance ?: ProfileImageDb(context.applicationContext).also { instance = it }
             }

@@ -20,6 +20,7 @@ import android.content.Context
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
+import org.teslasoft.assistant.preferences.backup.RecoveryOperationGate
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporter
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
 import org.teslasoft.assistant.preferences.lorebook.LoreBookEncryption
@@ -134,6 +135,16 @@ object PortableRecoveryWriter {
      *        password is set (byte-copied; the KDF never runs here).
      */
     fun createPackage(
+        context: Context,
+        out: File,
+        recoverySecret: ByteArray?,
+        passwordBlob: PortablePackageFormat.PasswordBlob?,
+        appVersion: String
+    ): Result = RecoveryOperationGate.runExclusive {
+        createPackageLocked(context, out, recoverySecret, passwordBlob, appVersion)
+    }
+
+    private fun createPackageLocked(
         context: Context,
         out: File,
         recoverySecret: ByteArray?,

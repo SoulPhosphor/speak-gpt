@@ -53,6 +53,14 @@ object DatabaseKeys {
      * never shares a passphrase with authoritative chat or memory storage. */
     const val KEY_CHAT_SEARCH = "chat_search_db_key_hex"
 
+    sealed class StoredKeyState {
+        data object Absent : StoredKeyState()
+        data object Unavailable : StoredKeyState()
+        class Present(value: ByteArray) : StoredKeyState() {
+            val value: ByteArray = value.copyOf()
+        }
+    }
+
     fun getOrCreate(context: Context, keyName: String, databaseExists: Boolean): ByteArray? {
         val existing = EncryptedPreferences.getEncryptedPreference(context, PREF_FILE, keyName)
         if (existing.isNotEmpty()) return decodeHex(existing)
@@ -75,11 +83,22 @@ object DatabaseKeys {
      * if the key is absent/unavailable, trying a newly generated key would
      * falsely make a good backup look corrupt. */
     fun readExisting(context: Context, keyName: String): ByteArray? {
-        val value = EncryptedPreferences.getEncryptedPreferenceOrNull(
+        return (readState(context, keyName) as? StoredKeyState.Present)?.value
+    }
+
+    /** Exact state used by crash-safe database replacement. Unlike the legacy
+     * nullable reader, absence and a Keystore/preferences outage are distinct. */
+    fun readState(context: Context, keyName: String): StoredKeyState {
+        val encoded = EncryptedPreferences.getEncryptedPreferenceOrNull(
             context, PREF_FILE, keyName
-        ) ?: return null
-        if (value.isEmpty()) return null
-        return try { decodeHex(value) } catch (_: Exception) { null }
+        ) ?: return StoredKeyState.Unavailable
+        if (encoded.isEmpty()) return StoredKeyState.Absent
+        return try {
+            if (encoded.length % 2 != 0) StoredKeyState.Unavailable
+            else StoredKeyState.Present(decodeHex(encoded))
+        } catch (_: Exception) {
+            StoredKeyState.Unavailable
+        }
     }
 
     /** Durably install a key carried by a verified portable Recovery Backup.
@@ -101,6 +120,70 @@ object DatabaseKeys {
         EncryptedPreferences.setEncryptedPreferenceCommit(context, PREF_FILE, keyName, "") &&
             EncryptedPreferences.getEncryptedPreferenceOrNull(context, PREF_FILE, keyName) == ""
 
+    /** Exact state used by direct-restore journaling. Unlike [readExisting],
+     * this distinguishes a genuinely absent key from unavailable encrypted
+     * preference storage. The returned key is caller-owned and must be wiped. */
+    fun readStoredState(context: Context, keyName: String): StoredKeyState {
+        val encoded = EncryptedPreferences.getEncryptedPreferenceOrNull(
+            context, PREF_FILE, keyName
+        ) ?: return StoredKeyState.Unavailable
+        if (encoded.isEmpty()) return StoredKeyState.Absent
+        return try {
+            StoredKeyState.Present(decodeHex(encoded))
+        } catch (_: Exception) {
+            StoredKeyState.Unavailable
+        }
+    }
+
+    /** Store transaction-only key bytes in the same Keystore-protected
+     * preference file as database keys. The ordinary-text journal contains
+     * only state and SHA-256 fingerprints. */
+    fun persistRestoreSecret(context: Context, slot: String, key: ByteArray): Boolean {
+        if (key.isEmpty()) return false
+        val name = recoverySlot(slot)
+        val encoded = encodeHex(key)
+        return EncryptedPreferences.setEncryptedPreferenceCommit(context, PREF_FILE, name, encoded) &&
+            EncryptedPreferences.getEncryptedPreferenceOrNull(context, PREF_FILE, name) == encoded
+    }
+
+    fun readRestoreSecret(context: Context, slot: String): ByteArray? {
+        val encoded = EncryptedPreferences.getEncryptedPreferenceOrNull(
+            context, PREF_FILE, recoverySlot(slot)
+        ) ?: return null
+        if (encoded.isEmpty()) return null
+        return try { decodeHex(encoded) } catch (_: Exception) { null }
+    }
+
+    fun clearRestoreSecret(context: Context, slot: String): Boolean =
+        EncryptedPreferences.removeEncryptedPreferenceCommit(
+            context, PREF_FILE, recoverySlot(slot)
+        )
+
+    /** Recovery key bytes live only in encrypted preferences. The ordinary
+     * JSON journal stores the matching SHA-256 fingerprint, never these bytes. */
+    fun storeRecoveryKey(context: Context, slot: String, key: ByteArray): Boolean {
+        if (key.isEmpty()) return false
+        val encoded = encodeHex(key)
+        return EncryptedPreferences.setEncryptedPreferenceCommit(
+            context, PREF_FILE, recoverySlot(slot), encoded
+        ) && EncryptedPreferences.getEncryptedPreferenceOrNull(
+            context, PREF_FILE, recoverySlot(slot)
+        ) == encoded
+    }
+
+    fun readRecoveryKey(context: Context, slot: String): ByteArray? {
+        val encoded = EncryptedPreferences.getEncryptedPreferenceOrNull(
+            context, PREF_FILE, recoverySlot(slot)
+        ) ?: return null
+        if (encoded.isEmpty() || encoded.length % 2 != 0) return null
+        return try { decodeHex(encoded) } catch (_: Exception) { null }
+    }
+
+    fun clearRecoveryKey(context: Context, slot: String): Boolean =
+        EncryptedPreferences.removeEncryptedPreferenceCommit(
+            context, PREF_FILE, recoverySlot(slot)
+        )
+
     /** Hex form for embedding as a raw-key literal (KEY "x'…'") in ATTACH. */
     fun toHex(key: ByteArray): String = encodeHex(key)
 
@@ -109,4 +192,9 @@ object DatabaseKeys {
 
     private fun decodeHex(hex: String): ByteArray =
         ByteArray(hex.length / 2) { ((hex[it * 2].digitToInt(16) shl 4) + hex[it * 2 + 1].digitToInt(16)).toByte() }
+
+    private fun recoverySlot(slot: String): String {
+        require(slot.matches(Regex("[a-z0-9_-]{1,96}")))
+        return "direct_restore_$slot"
+    }
 }

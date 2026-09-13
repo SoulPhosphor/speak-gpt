@@ -11,6 +11,7 @@ import java.util.WeakHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
+import org.teslasoft.assistant.preferences.backup.RecoveryOperationGate
 
 /**
  * Process-lifetime owner of unified portable restore work. The foreground
@@ -190,7 +191,9 @@ object UnifiedPortableRestoreCoordinator {
     /** Startup/manual recovery enters through the same operation owner. */
     @Synchronized
     fun recoverPending(context: Context): Boolean =
-        UnifiedPortableRestore.recoverPending(context.applicationContext)
+        RecoveryOperationGate.runExclusive {
+            UnifiedPortableRestore.recoverPending(context.applicationContext)
+        }
 
     /** Recovery execution remains process-owned even if its requesting Activity is destroyed. */
     fun recoverPendingAsync(context: Context, complete: (Boolean) -> Unit) {
@@ -386,7 +389,11 @@ object UnifiedPortableRestoreCoordinator {
         )
     }
 
-    private fun apply(context: Context): Step {
+    private fun apply(context: Context): Step = RecoveryOperationGate.runExclusive {
+        applyLocked(context)
+    }
+
+    private fun applyLocked(context: Context): Step {
         val current = synchronized(lock) { session } ?: return Step.TERMINAL
         val ready = current.ready ?: return terminal(
             context,

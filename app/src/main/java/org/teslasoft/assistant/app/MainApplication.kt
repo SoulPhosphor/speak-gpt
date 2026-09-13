@@ -41,6 +41,8 @@ import org.teslasoft.assistant.preferences.backup.AutoBackupController
 import org.teslasoft.assistant.preferences.backup.AutoBackupScheduling
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
+import org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreCoordinator
+import org.teslasoft.assistant.preferences.backup.DirectProfileImageRestoreRecovery
 import org.teslasoft.assistant.preferences.backup.StartupDatabaseCheck
 import org.teslasoft.assistant.preferences.backup.portable.GeneratedImagePortableRestoreManager
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
@@ -121,6 +123,17 @@ class MainApplication : Application() {
         PortableRestoreProcessGate.beginStartupRecoveryIfNeeded(this)
         Thread {
             try {
+                // A direct database replacement owns a per-store key/file
+                // journal. Settle it before the outer portable transaction or
+                // any ordinary startup reader can open an affected store.
+                if (!DirectDatabaseRestoreCoordinator.recoverAll(this)) {
+                    PortableRestoreProcessGate.finishStartupRecovery(false)
+                    return@Thread
+                }
+                if (!DirectProfileImageRestoreRecovery.recoverPending(this)) {
+                    PortableRestoreProcessGate.finishStartupRecovery(false)
+                    return@Thread
+                }
                 // The outer selected-category restore may span several stores.
                 // Settle its exact rollback snapshots before any startup task
                 // observes or mutates a possibly mixed category set.

@@ -23,13 +23,10 @@ import android.provider.OpenableColumns
 import org.teslasoft.assistant.preferences.backup.portable.PackageCrypto
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackage
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
-import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreMode
 import org.teslasoft.assistant.preferences.backup.portable.PortableStaging
 import org.teslasoft.assistant.preferences.backup.portable.ProfileImagePortableBackup
 import org.teslasoft.assistant.preferences.backup.portable.ProfileImagePortableRestoreManager
-import org.teslasoft.assistant.preferences.backup.portable.ProfileImageRestoreParticipant
 import org.teslasoft.assistant.preferences.backup.portable.RecoveryCode
-import org.teslasoft.assistant.preferences.backup.portable.SelectedCategoryRestoreTransaction
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 import org.teslasoft.assistant.preferences.memory.MemorySeedCodec
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageFileNaming
@@ -90,8 +87,6 @@ object DatabaseRestoreManager {
          *  every other source, which uses the plain snapshot swap. */
         internal val profileImageArtifacts: List<PortablePackage.ValidatedArtifact>? = null
     ) {
-        internal fun participantStaging(name: String): File = File(stagingRoot, name)
-
         fun discard() {
             sourceKey?.fill(0)
             PortableStaging.delete(stagingRoot)
@@ -579,7 +574,7 @@ object DatabaseRestoreManager {
             Kind.DATABASE_SNAPSHOT -> {
                 val profileArtifacts = prepared.profileImageArtifacts
                 if (prepared.type == BackupType.USER_IMAGE && profileArtifacts != null) {
-                    restoreProfileImagesThroughParticipant(context, prepared, profileArtifacts)
+                    restoreProfileImagesThroughParticipant(context, profileArtifacts)
                 } else {
                     DatabaseRepairManager.restoreSnapshot(
                         context, prepared.type, prepared.stagedFile,
@@ -607,31 +602,9 @@ object DatabaseRestoreManager {
      *  commit and roll back as one (BR-08, item 5). */
     private fun restoreProfileImagesThroughParticipant(
         context: Context,
-        prepared: Prepared,
         artifacts: List<PortablePackage.ValidatedArtifact>
     ): DatabaseRepairManager.Outcome {
-        val staging = prepared.participantStaging("profile_image_participant")
-        val journal = prepared.participantStaging("profile_image_participant_journal")
-        runCatching { if (staging.exists()) staging.deleteRecursively() }
-        runCatching { if (journal.exists()) journal.deleteRecursively() }
-        if (!staging.mkdirs()) {
-            return DatabaseRepairManager.Outcome(false, null, "profile image staging unavailable")
-        }
-        val participant = ProfileImageRestoreParticipant(
-            context.applicationContext,
-            artifacts,
-            PortableRestoreMode.REPLACE,
-            emptySet(),
-            staging
-        )
-        return when (
-            val result = SelectedCategoryRestoreTransaction.execute(journal, listOf(participant))
-        ) {
-            SelectedCategoryRestoreTransaction.Result.Success ->
-                DatabaseRepairManager.Outcome(true, null, null)
-            is SelectedCategoryRestoreTransaction.Result.Failed ->
-                DatabaseRepairManager.Outcome(false, null, "profile image restore failed: ${result.reason}")
-        }
+        return DirectProfileImageRestoreRecovery.execute(context, artifacts)
     }
 
     private fun listAutomaticEntries(

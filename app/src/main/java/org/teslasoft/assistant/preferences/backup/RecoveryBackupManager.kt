@@ -102,7 +102,16 @@ object RecoveryBackupManager {
      *        deletion stays disabled until a rotation policy is explicitly
      *        approved).
      */
-    fun createBackup(context: Context, treeUri: Uri, rotateOldCopies: Boolean = true): List<TypeResult> {
+    fun createBackup(context: Context, treeUri: Uri, rotateOldCopies: Boolean = true): List<TypeResult> =
+        RecoveryOperationGate.runExclusive {
+            createBackupLocked(context, treeUri, rotateOldCopies)
+        }
+
+    private fun createBackupLocked(
+        context: Context,
+        treeUri: Uri,
+        rotateOldCopies: Boolean
+    ): List<TypeResult> {
         val runAt = System.currentTimeMillis()
         return BackupType.displayOrder.map { runOne(context, it, treeUri, runAt, rotateOldCopies) }
     }

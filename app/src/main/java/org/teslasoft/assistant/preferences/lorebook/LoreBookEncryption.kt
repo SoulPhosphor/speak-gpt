@@ -20,6 +20,7 @@ import android.content.Context
 import net.zetetic.database.sqlcipher.SQLiteDatabase
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
+import org.teslasoft.assistant.preferences.backup.RecoveryOperationGate
 import java.io.File
 import java.io.FileInputStream
 
@@ -56,7 +57,10 @@ object LoreBookEncryption {
         }
     }
 
-    fun obtainPassword(context: Context, databaseName: String): ByteArray {
+    fun obtainPassword(context: Context, databaseName: String): ByteArray =
+        RecoveryOperationGate.runExclusive { obtainPasswordLocked(context, databaseName) }
+
+    private fun obtainPasswordLocked(context: Context, databaseName: String): ByteArray {
         loadLibrary()
         val dbFile = context.getDatabasePath(databaseName)
 

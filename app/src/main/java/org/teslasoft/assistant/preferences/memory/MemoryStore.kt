@@ -25,6 +25,7 @@ import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.CorruptionErrorHandlers
 import org.teslasoft.assistant.preferences.backup.DatabaseDegradedException
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
+import org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreCoordinator
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -141,6 +142,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         private var libraryLoaded = false
 
         fun getInstance(context: Context): MemoryStore {
+            if (DirectDatabaseRestoreCoordinator.blocksStore(
+                    context.applicationContext, BackupType.MEMORY
+                )
+            ) {
+                throw IllegalStateException("Memory store recovery is still pending")
+            }
             // Degraded gate (Database Health Build Phase 3, §15.2a): once
             // damage is CONFIRMED the store is genuinely OFF — reads and
             // writes both — until a repair/restore succeeds, because reading
@@ -149,7 +156,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             // stops being handed out the moment the flag is set. Same failure
             // envelope as the locked-key IllegalStateException below, so
             // every existing best-effort call site degrades identically.
-            if (DatabaseHealthState.isDegraded(context.applicationContext, BackupType.MEMORY)) {
+            if (DatabaseHealthState.isDegraded(context.applicationContext, BackupType.MEMORY) &&
+                !DirectDatabaseRestoreCoordinator.allowsRecoveryOpen(BackupType.MEMORY)
+            ) {
                 throw DatabaseDegradedException(BackupType.MEMORY)
             }
             return instance ?: synchronized(this) {
