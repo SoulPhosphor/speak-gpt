@@ -56,9 +56,7 @@ object DatabaseKeys {
     sealed class StoredKeyState {
         data object Absent : StoredKeyState()
         data object Unavailable : StoredKeyState()
-        class Present(value: ByteArray) : StoredKeyState() {
-            val value: ByteArray = value.copyOf()
-        }
+        class Present(val value: ByteArray) : StoredKeyState()
     }
 
     fun getOrCreate(context: Context, keyName: String, databaseExists: Boolean): ByteArray? {
@@ -119,45 +117,6 @@ object DatabaseKeys {
     fun clearExisting(context: Context, keyName: String): Boolean =
         EncryptedPreferences.setEncryptedPreferenceCommit(context, PREF_FILE, keyName, "") &&
             EncryptedPreferences.getEncryptedPreferenceOrNull(context, PREF_FILE, keyName) == ""
-
-    /** Exact state used by direct-restore journaling. Unlike [readExisting],
-     * this distinguishes a genuinely absent key from unavailable encrypted
-     * preference storage. The returned key is caller-owned and must be wiped. */
-    fun readStoredState(context: Context, keyName: String): StoredKeyState {
-        val encoded = EncryptedPreferences.getEncryptedPreferenceOrNull(
-            context, PREF_FILE, keyName
-        ) ?: return StoredKeyState.Unavailable
-        if (encoded.isEmpty()) return StoredKeyState.Absent
-        return try {
-            StoredKeyState.Present(decodeHex(encoded))
-        } catch (_: Exception) {
-            StoredKeyState.Unavailable
-        }
-    }
-
-    /** Store transaction-only key bytes in the same Keystore-protected
-     * preference file as database keys. The ordinary-text journal contains
-     * only state and SHA-256 fingerprints. */
-    fun persistRestoreSecret(context: Context, slot: String, key: ByteArray): Boolean {
-        if (key.isEmpty()) return false
-        val name = recoverySlot(slot)
-        val encoded = encodeHex(key)
-        return EncryptedPreferences.setEncryptedPreferenceCommit(context, PREF_FILE, name, encoded) &&
-            EncryptedPreferences.getEncryptedPreferenceOrNull(context, PREF_FILE, name) == encoded
-    }
-
-    fun readRestoreSecret(context: Context, slot: String): ByteArray? {
-        val encoded = EncryptedPreferences.getEncryptedPreferenceOrNull(
-            context, PREF_FILE, recoverySlot(slot)
-        ) ?: return null
-        if (encoded.isEmpty()) return null
-        return try { decodeHex(encoded) } catch (_: Exception) { null }
-    }
-
-    fun clearRestoreSecret(context: Context, slot: String): Boolean =
-        EncryptedPreferences.removeEncryptedPreferenceCommit(
-            context, PREF_FILE, recoverySlot(slot)
-        )
 
     /** Recovery key bytes live only in encrypted preferences. The ordinary
      * JSON journal stores the matching SHA-256 fingerprint, never these bytes. */

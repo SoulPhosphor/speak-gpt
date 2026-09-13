@@ -113,8 +113,9 @@ object DatabaseRevertManager {
         } catch (e: Exception) {
             return@runExclusive DatabaseRepairManager.Outcome(false, null, "backup unreadable: ${e.javaClass.simpleName}")
         }
-        val storedKey = DatabaseKeys.readStoredState(appContext, DatabaseKeys.KEY_MEMORY)
+        val storedKey = DatabaseKeys.readState(appContext, DatabaseKeys.KEY_MEMORY)
         if (storedKey is DatabaseKeys.StoredKeyState.Unavailable) {
+            logRestoreFailure(appContext, "IllegalStateException", recoveryRequired = false)
             return@runExclusive DatabaseRepairManager.Outcome(false, null, "database key state unavailable")
         }
         val key = when (storedKey) {
@@ -148,20 +149,16 @@ object DatabaseRevertManager {
                 DatabaseHealthState.logHealth(appContext, "info",
                     "Memory database restored from backup ${verified.candidate.file.name}. " +
                         "Previous database preserved" + (outcome.quarantinePath?.let { " at $it" } ?: "") + ".")
-            } else {
-                DatabaseHealthState.logHealth(appContext, "error",
-                    "Restore of the memory database failed (${outcome.detail}). " +
-                        (if (!DirectDatabaseRestoreCoordinator.hasPending(appContext)) {
-                            "The previous database was put back; all backups are untouched."
-                        } else {
-                            "The previous database is preserved but could not be put back automatically."
-                        }))
+            } else if (outcome.restoreFailureLogDetail != null) {
+                logRestoreFailure(
+                    appContext,
+                    outcome.restoreFailureLogDetail,
+                    DirectDatabaseRestoreCoordinator.hasPending(appContext)
+                )
             }
             outcome
         } catch (e: Exception) {
-            DatabaseHealthState.logHealth(appContext, "error",
-                "Restore of the memory database failed (${e.javaClass.simpleName}). " +
-                    "The previous database was put back; all backups are untouched.")
+            logRestoreFailure(appContext, e.javaClass.simpleName, recoveryRequired = false)
             DatabaseRepairManager.Outcome(false, null, e.javaClass.simpleName)
         } finally {
             key.fill(0)
@@ -170,5 +167,15 @@ object DatabaseRevertManager {
                 runCatching { File(staged.path + suffix).delete() }
             }
         }
+    }
+
+    private fun logRestoreFailure(context: Context, detail: String, recoveryRequired: Boolean) {
+        DatabaseHealthState.logHealth(context, "error",
+            "Restore of the memory database failed ($detail). " +
+                (if (!recoveryRequired) {
+                    "The previous database was put back; all backups are untouched."
+                } else {
+                    "The previous database is preserved but could not be put back automatically."
+                }))
     }
 }

@@ -56,7 +56,10 @@ object DatabaseRepairManager {
         /** Absolute path of the preserved (quarantined) damaged database, for
          *  the A6 dialog's "saved here" line. Null when quarantine failed. */
         val quarantinePath: String?,
-        val detail: String?
+        val detail: String?,
+        /** Non-null only when the legacy restore path would have emitted its
+         *  post-swap failure log. Pre-mutation refusals remain unlogged. */
+        val restoreFailureLogDetail: String? = null
     )
 
     private val SIDECAR_SUFFIXES = listOf("-wal", "-shm", "-journal")
@@ -217,11 +220,11 @@ object DatabaseRepairManager {
                     (outcome.quarantinePath?.let { "Previous database preserved at $it." }
                         ?: "No previous database file existed.")
             )
-        } else {
+        } else if (outcome.restoreFailureLogDetail != null) {
             DatabaseHealthState.logHealth(
                 appContext, "error",
                 "Restore of the ${DatabaseHealthState.displayNoun(type)} database failed " +
-                    "(${outcome.detail ?: "unknown"}). " +
+                    "(${outcome.restoreFailureLogDetail}). " +
                     if (DirectDatabaseRestoreCoordinator.hasPending(appContext)) {
                         "The previous database remains preserved but could not be put back automatically."
                     } else {

@@ -200,15 +200,6 @@ internal object DirectDatabaseRestoreCoordinator {
 
             verifyInstalledLowLevel(context, record, intendedKey)
             faultInjector.after(Boundary.AFTER_LOW_LEVEL_VERIFY)
-            record = record.copy(
-                installedFiles = DirectDatabaseRestoreJournal.evidence(active)
-                    ?: return failAndRecover(context, record, "installed database evidence unavailable"),
-                phase = Phase.VERIFIED
-            )
-            if (!DirectDatabaseRestoreJournal.write(context, record)) {
-                return failAndRecover(context, record, "restore journal could not record verification")
-            }
-
             verifyThroughNormalStore(context, type)
             faultInjector.after(Boundary.AFTER_NORMAL_VERIFY)
             DatabaseRepairManager.invalidateStore(context, type)
@@ -391,11 +382,17 @@ internal object DirectDatabaseRestoreCoordinator {
         record: DirectDatabaseRestoreJournal.Record,
         detail: String
     ): DatabaseRepairManager.Outcome {
+        val installedWasPublished =
+            record.phase >= Phase.FILE_INSTALLED ||
+                DirectDatabaseRestoreJournal.matches(
+                    File(record.activePath), record.installedFiles
+                )
         val rolledBack = rollback(context, record)
         return DatabaseRepairManager.Outcome(
             false,
             File(record.quarantinePath).takeIf { record.originalExisted }?.path,
-            if (rolledBack) detail else "$detail; startup recovery required"
+            if (rolledBack) detail else "$detail; startup recovery required",
+            detail.takeIf { installedWasPublished }
         )
     }
 
@@ -580,8 +577,8 @@ internal object DirectDatabaseRestoreCoordinator {
 
     private fun keyState(context: Context, type: BackupType): DatabaseKeys.StoredKeyState =
         when (type) {
-            BackupType.MEMORY -> DatabaseKeys.readStoredState(context, DatabaseKeys.KEY_MEMORY)
-            BackupType.LOREBOOK -> DatabaseKeys.readStoredState(context, DatabaseKeys.KEY_LOREBOOK)
+            BackupType.MEMORY -> DatabaseKeys.readState(context, DatabaseKeys.KEY_MEMORY)
+            BackupType.LOREBOOK -> DatabaseKeys.readState(context, DatabaseKeys.KEY_LOREBOOK)
             BackupType.USER_IMAGE -> DatabaseKeys.StoredKeyState.Absent
             BackupType.CHATS -> DatabaseKeys.StoredKeyState.Unavailable
         }
@@ -607,16 +604,16 @@ internal object DirectDatabaseRestoreCoordinator {
     ): Boolean {
         if (type == BackupType.USER_IMAGE) return true
         clearRecoveryKeys(context, type)
-        if (original != null && !DatabaseKeys.persistRestoreSecret(context, slot(type, false), original)) {
+        if (original != null && !DatabaseKeys.storeRecoveryKey(context, slot(type, false), original)) {
             return false
         }
-        return DatabaseKeys.persistRestoreSecret(context, slot(type, true), intended)
+        return DatabaseKeys.storeRecoveryKey(context, slot(type, true), intended)
     }
 
     private fun clearRecoveryKeys(context: Context, type: BackupType) {
         if (type == BackupType.USER_IMAGE) return
-        DatabaseKeys.clearRestoreSecret(context, slot(type, false))
-        DatabaseKeys.clearRestoreSecret(context, slot(type, true))
+        DatabaseKeys.clearRecoveryKey(context, slot(type, false))
+        DatabaseKeys.clearRecoveryKey(context, slot(type, true))
     }
 
     private fun installKey(
@@ -639,7 +636,7 @@ internal object DirectDatabaseRestoreCoordinator {
             KeyKind.NOT_APPLICABLE -> true
             KeyKind.ABSENT -> DatabaseKeys.clearExisting(context, keyName(record.type))
             KeyKind.PRESENT -> {
-                val original = DatabaseKeys.readRestoreSecret(context, slot(record.type, false))
+                val original = DatabaseKeys.readRecoveryKey(context, slot(record.type, false))
                     ?: return false
                 try {
                     DirectDatabaseRestoreJournal.keyMatches(original, record.originalKey) &&
@@ -659,7 +656,7 @@ internal object DirectDatabaseRestoreCoordinator {
         val evidence = if (intended) record.intendedKey else record.originalKey
         if (evidence.kind == KeyKind.NOT_APPLICABLE) return ByteArray(0)
         if (evidence.kind == KeyKind.ABSENT) return ByteArray(0)
-        val secret = DatabaseKeys.readRestoreSecret(context, slot(record.type, intended)) ?: return null
+        val secret = DatabaseKeys.readRecoveryKey(context, slot(record.type, intended)) ?: return null
         return secret.takeIf { DirectDatabaseRestoreJournal.keyMatches(it, evidence) }
             ?: run { secret.fill(0); null }
     }

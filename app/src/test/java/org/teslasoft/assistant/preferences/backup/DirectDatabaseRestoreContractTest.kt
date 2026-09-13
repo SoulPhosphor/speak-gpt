@@ -51,10 +51,11 @@ class DirectDatabaseRestoreContractTest {
         val key = body.indexOf("installKey(context")
         val publish = body.indexOf("DurableRecoveryFileOps.atomicReplace(staged, active)")
         val normal = body.indexOf("verifyThroughNormalStore(context, type)")
+        val verified = body.indexOf("phase = Phase.VERIFIED")
         val committed = body.indexOf("phase = Phase.COMMITTED")
         val retired = body.indexOf("retireCommitted(context, record)")
         assertTrue(prepared >= 0 && key > prepared && publish > key)
-        assertTrue(normal > publish && committed > normal && retired > committed)
+        assertTrue(normal > publish && verified > normal && committed > verified && retired > committed)
     }
 
     @Test
