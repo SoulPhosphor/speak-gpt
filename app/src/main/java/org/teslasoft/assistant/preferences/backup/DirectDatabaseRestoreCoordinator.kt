@@ -139,6 +139,7 @@ internal object DirectDatabaseRestoreCoordinator {
         val intendedKeyEvidence = keyEvidence(type, intendedKey)
 
         try {
+            val sourceIdentity = sha256(source)
             verifySnapshot(type, source, sourceKey, sourcePlaintext)
             DatabaseRepairManager.invalidateStore(context, type)
 
@@ -149,7 +150,13 @@ internal object DirectDatabaseRestoreCoordinator {
             }
             val installedFiles = DirectDatabaseRestoreJournal.evidence(staged)
                 ?: return DatabaseRepairManager.Outcome(false, quarantine.takeIf { active.exists() }?.path, "database staging verification failed")
-            val sourceIdentity = sha256(source)
+            if (sha256(source) != sourceIdentity) {
+                return DatabaseRepairManager.Outcome(
+                    false,
+                    quarantine.takeIf { active.exists() }?.path,
+                    "restore source changed during staging"
+                )
+            }
 
             if (!persistRecoveryKeys(context, type, originalKey, intendedKey)) {
                 return DatabaseRepairManager.Outcome(false, quarantine.takeIf { active.exists() }?.path, "could not preserve database key state")

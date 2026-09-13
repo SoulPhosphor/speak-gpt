@@ -29,6 +29,17 @@ class DirectDatabaseRestoreContractTest {
     }
 
     @Test
+    fun sourceIdentityIsStableAcrossStaging() {
+        val coordinator = source("preferences/backup/DirectDatabaseRestoreCoordinator.kt")
+        val body = coordinator.substringAfter("private fun installLocked(")
+            .substringBefore("private fun recoverOne(")
+        val captured = body.indexOf("val sourceIdentity = sha256(source)")
+        val staged = body.indexOf("stageIncoming(type, source, staged")
+        val compared = body.indexOf("sha256(source) != sourceIdentity")
+        assertTrue(captured >= 0 && staged > captured && compared > staged)
+    }
+
+    @Test
     fun publicationIsAtomicAndHasNoDeleteThenCopyFallback() {
         val coordinator = source("preferences/backup/DirectDatabaseRestoreCoordinator.kt")
         val operations = source("preferences/backup/DurableRecoveryFileOps.kt")
@@ -105,9 +116,15 @@ class DirectDatabaseRestoreContractTest {
             .contains("RecoveryOperationGate.runExclusive"))
         assertTrue(source("preferences/backup/DatabaseRepairManager.kt")
             .contains("RecoveryOperationGate.runExclusive"))
+        assertTrue(source("preferences/backup/RecoveryBackupManager.kt")
+            .contains("RecoveryOperationGate.runExclusive"))
+        assertTrue(source("preferences/backup/DirectProfileImageRestoreRecovery.kt")
+            .contains("RecoveryOperationGate.runExclusive"))
         assertTrue(source("preferences/backup/portable/PortableRecoveryWriter.kt")
             .contains("RecoveryOperationGate.runExclusive"))
         assertTrue(source("preferences/backup/portable/UnifiedPortableRestoreCoordinator.kt")
+            .contains("RecoveryOperationGate.runExclusive"))
+        assertTrue(source("preferences/lorebook/LoreBookEncryption.kt")
             .contains("RecoveryOperationGate.runExclusive"))
     }
 
