@@ -6,6 +6,7 @@ import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.*
+import org.teslasoft.assistant.preferences.ModelEndpointStateGenerationStore
 import org.teslasoft.assistant.preferences.tts.SavedTtsSourcesPreferences
 import java.io.File
 
@@ -33,7 +34,10 @@ class TtsPlayback(
     private var invalidatedCallback: () -> Unit = {}
     private val profileListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         val endpointId = activeEndpointId
-        if (endpointId != null && key != null && key in speechProfileKeys.map { endpointId + it }) invalidate()
+        if (endpointId != null && key != null &&
+            (key == ModelEndpointStateGenerationStore.ACTIVE_GENERATION_KEY ||
+                key in speechProfileKeys.map { endpointId + it })
+        ) invalidate()
     }
     private val removeSourceObserver = SavedTtsSourcesPreferences.observeChanges { changed ->
         if (activeSourceId in changed) invalidate()

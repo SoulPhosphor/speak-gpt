@@ -224,6 +224,7 @@ object ModelEndpointPortableCodec {
             ) return "invalid rejected voice list"
         }
         val identities = HashSet<Pair<String, String>>()
+        val endpointIds = data.endpoints.mapTo(HashSet()) { it.id }
         data.favorites.forEach { favorite ->
             if (favorite.keys.any { it !in FAVORITE_KEYS } ||
                 favorite.values.any { !safeText(it) }
@@ -233,6 +234,7 @@ object ModelEndpointPortableCodec {
             if (endpointId.isBlank() || modelId.isBlank() || !identities.add(endpointId to modelId)) {
                 return "invalid or duplicate favorite identity"
             }
+            if (endpointId !in endpointIds) return "favorite refers to an omitted endpoint"
             for (key in listOf("providerOrder", "ignoredProviders")) {
                 favorite[key]?.let { value ->
                     if (runCatching { strings(JSONArray(value)) }.isFailure) {

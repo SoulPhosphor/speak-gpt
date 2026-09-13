@@ -40,13 +40,24 @@ class PortableRecoveryCompletenessContractTest {
     }
 
     @Test
-    fun modelSettingsRestoreUsesOnlyTheNonSecretEndpointSeam() {
+    fun modelSettingsRestorePublishesOneCredentialFreeGeneration() {
         val restore = source("ModelEndpointPortableRestore.kt")
-        assertTrue(restore.contains("setApiEndpointDefinition"))
-        assertTrue(restore.contains("deleteApiEndpointDefinition"))
+        assertTrue(restore.contains("ModelEndpointStateGenerationStore"))
+        assertTrue(restore.contains(".install(data)"))
         assertFalse(restore.contains("setApiEndpoint("))
         assertFalse(restore.contains("deleteApiEndpoint("))
         assertFalse(restore.contains("EncryptedPreferences"))
+    }
+
+    @Test
+    fun modelSettingsParticipantStagesAndSwitchesGenerationIdsForApplyAndRollback() {
+        val participant = source("ModelEndpointRestoreParticipant.kt")
+        assertTrue(participant.contains("state.stage(current)"))
+        assertTrue(participant.contains("state.stage(desired)"))
+        assertTrue(participant.contains("ORIGINAL_GENERATION_FILE"))
+        assertTrue(participant.contains("DESIRED_GENERATION_FILE"))
+        assertTrue(participant.contains("state.activate"))
+        assertFalse(participant.contains("ModelEndpointPortableRestore.apply"))
     }
 
     private fun source(name: String): String = mainRoot().resolve(name).readText()

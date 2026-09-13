@@ -18,6 +18,8 @@ package org.teslasoft.assistant.preferences.backup.portable
 
 import android.content.Context
 import java.io.File
+import org.teslasoft.assistant.preferences.ModelEndpointStateGenerationStore
+import org.teslasoft.assistant.util.AtomicFileWriter
 
 /** Transaction participant for credential-free Model & Endpoint Settings. */
 class ModelEndpointRestoreParticipant internal constructor(
@@ -51,6 +53,7 @@ class ModelEndpointRestoreParticipant internal constructor(
         mergeReport = plan.report
     }
     private val appContext = context.applicationContext
+    private val state = ModelEndpointStateGenerationStore.get(appContext)
     private var validatedIncoming: ModelEndpointPortableCodec.Data? = null
 
     var mergeReport: ModelEndpointMergePlanner.Report? = null
@@ -84,37 +87,57 @@ class ModelEndpointRestoreParticipant internal constructor(
             (ModelEndpointPortableCodec.parse(currentFile.readText(Charsets.UTF_8)) as?
                 ModelEndpointPortableCodec.Result.Ok)?.data ?: return false
         }
-        if (precomputed != null) {
-            currentFile.writeText(ModelEndpointPortableCodec.encode(current), Charsets.UTF_8)
-        }
+        if (precomputed != null && !AtomicFileWriter.writeAndVerify(
+                currentFile,
+                ModelEndpointPortableCodec.encode(current)
+            )
+        ) return false
         val desired = precomputed?.desired ?: if (mode == PortableRestoreMode.REPLACE) {
             backup
         } else {
             ModelEndpointMergePlanner.merge(current, backup).also { mergeReport = it.report }.data
         }
         val desiredFile = File(stagingRoot, DESIRED_FILE)
-        desiredFile.writeText(ModelEndpointPortableCodec.encode(desired), Charsets.UTF_8)
-        return ModelEndpointPortableCodec.parse(desiredFile.readText(Charsets.UTF_8)) is
+        if (!AtomicFileWriter.writeAndVerify(
+                desiredFile,
+                ModelEndpointPortableCodec.encode(desired)
+            )
+        ) return false
+        if (ModelEndpointPortableCodec.parse(desiredFile.readText(Charsets.UTF_8)) !is
             ModelEndpointPortableCodec.Result.Ok
+        ) return false
+
+        val originalGeneration = state.stage(current) ?: return false
+        // Refuse a stale precomputed rollback snapshot. The outer generation
+        // fence normally catches this; this local check closes the remaining
+        // gap before the transaction journal declares the participant staged.
+        if (state.activeGenerationId() != originalGeneration) return false
+        val desiredGeneration = state.stage(desired) ?: return false
+        return AtomicFileWriter.writeAndVerify(
+            File(stagingRoot, ORIGINAL_GENERATION_FILE), originalGeneration
+        ) && AtomicFileWriter.writeAndVerify(
+            File(stagingRoot, DESIRED_GENERATION_FILE), desiredGeneration
+        )
     }
 
-    override fun apply(): Boolean = applyFile(File(stagingRoot, DESIRED_FILE))
+    override fun apply(): Boolean = activate(File(stagingRoot, DESIRED_GENERATION_FILE))
 
-    override fun rollback(): Boolean = applyFile(File(stagingRoot, CURRENT_FILE))
+    override fun rollback(): Boolean = activate(File(stagingRoot, ORIGINAL_GENERATION_FILE))
 
     override fun cleanup() {
         stagingRoot.deleteRecursively()
     }
 
-    private fun applyFile(file: File): Boolean {
-        if (!file.isFile || file.length() > ModelEndpointPortableCodec.MAX_ARTIFACT_BYTES) return false
-        val parsed = ModelEndpointPortableCodec.parse(file.readText(Charsets.UTF_8)) as?
-            ModelEndpointPortableCodec.Result.Ok ?: return false
-        return ModelEndpointPortableRestore.apply(appContext, parsed.data)
+    private fun activate(file: File): Boolean {
+        if (!file.isFile || file.length() > MAX_GENERATION_ID_BYTES) return false
+        return state.activate(file.readText(Charsets.UTF_8))
     }
 
     companion object {
         private const val CURRENT_FILE = "current.json"
         private const val DESIRED_FILE = "desired.json"
+        private const val ORIGINAL_GENERATION_FILE = "original-generation"
+        private const val DESIRED_GENERATION_FILE = "desired-generation"
+        private const val MAX_GENERATION_ID_BYTES = 128L
     }
 }

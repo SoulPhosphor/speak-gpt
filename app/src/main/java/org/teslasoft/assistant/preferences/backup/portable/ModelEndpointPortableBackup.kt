@@ -18,8 +18,7 @@ package org.teslasoft.assistant.preferences.backup.portable
 
 import android.content.Context
 import java.io.File
-import org.teslasoft.assistant.preferences.ApiEndpointPreferences
-import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
+import org.teslasoft.assistant.preferences.ModelEndpointStateGenerationStore
 
 /** Creates the credential-free Model & Endpoint Settings artifact. */
 object ModelEndpointPortableBackup {
@@ -30,49 +29,10 @@ object ModelEndpointPortableBackup {
 
     fun write(context: Context, out: File): Result = try {
         val appContext = context.applicationContext
-        val endpointPreferences = ApiEndpointPreferences.getApiEndpointPreferences(appContext)
-        val endpoints = endpointPreferences.getApiEndpointsList(appContext)
-            .sortedBy { it.id }
-            .map { endpoint ->
-                ModelEndpointPortableCodec.Endpoint(
-                    id = endpoint.id,
-                    label = endpoint.label,
-                    host = endpoint.host,
-                    chatEndpoint = endpoint.chatEndpoint,
-                    speechEndpoint = endpoint.speechEndpoint,
-                    authType = endpoint.authType,
-                    model = endpoint.model,
-                    temperature = endpoint.temperature.toDouble(),
-                    topP = endpoint.topP.toDouble(),
-                    frequencyPenalty = endpoint.frequencyPenalty.toDouble(),
-                    presencePenalty = endpoint.presencePenalty.toDouble(),
-                    maxTokens = endpoint.maxTokens,
-                    endSeparator = endpoint.endSeparator,
-                    prefix = endpoint.prefix,
-                    provider = endpoint.provider,
-                    connectTimeoutSeconds = endpoint.connectTimeoutSeconds,
-                    responseTimeoutSeconds = endpoint.responseTimeoutSeconds,
-                    contextWindowTokens = endpoint.contextWindowTokens,
-                    contextWindowModelId = endpoint.contextWindowModelId,
-                    imageCapabilityByModel = endpoint.imageCapabilityByModel,
-                    toolCapabilityByModel = endpoint.toolCapabilityByModel,
-                    reasoningCapabilityByModel = endpoint.reasoningCapabilityByModel,
-                    reasoningRejectedLevelsByModel = endpoint.reasoningRejectedLevelsByModel,
-                    providerDiscoveryPath = endpoint.providerDiscoveryPath,
-                    identity = endpoint.identity,
-                    rejectedTtsVoices = endpointPreferences.getRejectedTtsVoices(endpoint.id)
-                        .sorted()
-                )
-            }
-        val favorites = FavoriteModelsPreferences.getPreferences(appContext)
-            .getFavoriteModels()
-            .map { LinkedHashMap(it) }
-            .sortedWith(compareBy({ it["endpointId"].orEmpty() }, { it["modelId"].orEmpty() }))
-        val json = ModelEndpointPortableCodec.encode(
-            ModelEndpointPortableCodec.Data(endpoints, favorites)
-        )
+        val data = ModelEndpointStateGenerationStore.get(appContext).read() ?: return Result.Failed
+        val json = ModelEndpointPortableCodec.encode(data)
         out.writeText(json, Charsets.UTF_8)
-        Result.Ok(endpoints.size, favorites.size)
+        Result.Ok(data.endpoints.size, data.favorites.size)
     } catch (_: Exception) {
         Result.Failed
     }

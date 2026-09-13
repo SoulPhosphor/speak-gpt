@@ -18,46 +18,48 @@ package org.teslasoft.assistant.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.google.gson.Gson
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.models.ModelIdentity
-import androidx.core.content.edit
+import com.google.gson.Gson
 
-class FavoriteModelsPreferences private constructor(private val sharedPreferences: SharedPreferences) {
+class FavoriteModelsPreferences private constructor(
+    private val state: ModelEndpointStateGenerationStore
+) {
     companion object {
-        private const val KEY_FAVORITE_MODELS = "favorite_models"
-
-        private lateinit var sharedPreferences: SharedPreferences
-
         private var instance: FavoriteModelsPreferences? = null
 
         fun getPreferences(context: Context): FavoriteModelsPreferences {
-            sharedPreferences = context.getSharedPreferences("favorite_models", Context.MODE_PRIVATE)
-
             if (instance == null) {
-                instance = FavoriteModelsPreferences(sharedPreferences)
+                instance = FavoriteModelsPreferences(ModelEndpointStateGenerationStore.get(context))
             }
-
             return instance!!
         }
+
+        internal fun createForTest(
+            statePreferences: SharedPreferences,
+            legacyFavoritePreferences: SharedPreferences = statePreferences
+        ): FavoriteModelsPreferences = FavoriteModelsPreferences(
+            ModelEndpointStateGenerationStore.createForTest(
+                statePreferences,
+                legacyFavoritePreferences
+            )
+        )
     }
 
     fun setFavoriteModels(models: ArrayList<Map<String, String>>) {
-        sharedPreferences.edit { putString(KEY_FAVORITE_MODELS, Gson().toJson(models)) }
+        state.update { current ->
+            val endpointIds = current.endpoints.mapTo(HashSet()) { it.id }
+            current.copy(
+                favorites = models
+                    .filter { it["endpointId"].orEmpty() in endpointIds }
+                    .distinctBy { it["endpointId"].orEmpty() + "\u0000" + it["modelId"].orEmpty() }
+                    .map { LinkedHashMap(it) }
+            )
+        }
     }
 
     fun getFavoriteModels(): ArrayList<Map<String, String>> {
-        val models = sharedPreferences.getString(KEY_FAVORITE_MODELS, "[]")
-
-        var list = try {
-            Gson().fromJson(models, ArrayList<Map<String, String>>()::class.java)
-        } catch (_: Exception) {
-            arrayListOf()
-        }
-
-        if (list == null) list = arrayListOf()
-
-        return list
+        return ArrayList(state.read()?.favorites.orEmpty().map { LinkedHashMap(it) })
     }
 
     /**

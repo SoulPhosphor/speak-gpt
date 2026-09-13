@@ -57,6 +57,18 @@ class ModelEndpointPortableCodecTest {
         )
     }
 
+    @Test
+    fun favoriteForAnOmittedEndpointIsRejected() {
+        val favorite = fixture().favorites.single().toMutableMap().apply {
+            this["endpointId"] = "ep-missing"
+        }
+        assertTrue(
+            runCatching {
+                ModelEndpointPortableCodec.encode(fixture().copy(favorites = listOf(favorite)))
+            }.isFailure
+        )
+    }
+
     private fun fixture() = ModelEndpointPortableCodec.Data(
         endpoints = listOf(
             ModelEndpointPortableCodec.Endpoint(
