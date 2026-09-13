@@ -70,8 +70,6 @@ internal object DirectDatabaseRestoreJournal {
     fun hasAny(context: Context): Boolean = DATABASE_TYPES.any { root(context, it).exists() }
 
     fun write(context: Context, record: Record): Boolean {
-        val root = root(context, record.type)
-        if (!root.exists() && !root.mkdirs()) return false
         val bytes = encode(record).toString().toByteArray(Charsets.UTF_8)
         if (bytes.size > MAX_BYTES) return false
         if (!DurableRecoveryFileOps.writeAtomic(stateFile(context, record.type), bytes)) return false
@@ -94,7 +92,7 @@ internal object DirectDatabaseRestoreJournal {
         if (!root.exists()) return true
         val state = File(root, STATE_FILE)
         if (!DurableRecoveryFileOps.deleteAndSync(state)) return false
-        return root.delete() || !root.exists()
+        return DurableRecoveryFileOps.deleteEmptyDirectoryAndSync(root)
     }
 
     fun evidence(base: File): List<FileEvidence>? {

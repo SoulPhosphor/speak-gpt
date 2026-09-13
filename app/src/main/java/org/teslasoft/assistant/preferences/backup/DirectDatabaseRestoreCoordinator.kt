@@ -94,12 +94,14 @@ internal object DirectDatabaseRestoreCoordinator {
         for (type in DirectDatabaseRestoreJournal.databaseTypes()) {
             if (!DirectDatabaseRestoreJournal.root(app, type).exists()) {
                 clearRecoveryKeys(app, type)
+                cleanupUnpublishedStages(app, type)
                 continue
             }
             activeTypes.add(type)
             recoveryThread.set(true)
             try {
                 if (!recoverOne(app, type)) return@runExclusive false
+                cleanupUnpublishedStages(app, type)
             } finally {
                 recoveryThread.remove()
                 activeTypes.remove(type)

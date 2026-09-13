@@ -15,7 +15,7 @@ import java.nio.file.StandardCopyOption
 internal object DurableRecoveryFileOps {
     fun writeAtomic(target: File, bytes: ByteArray): Boolean {
         val parent = target.parentFile ?: return false
-        if (!parent.exists() && !parent.mkdirs()) return false
+        if (!ensureDirectoryDurable(parent)) return false
         val temporary = File(parent, target.name + ".writing")
         return try {
             writeAndSync(temporary, bytes)
@@ -29,7 +29,7 @@ internal object DurableRecoveryFileOps {
 
     fun copyAndSync(source: File, target: File): Boolean {
         val parent = target.parentFile ?: return false
-        if (!source.isFile || (!parent.exists() && !parent.mkdirs())) return false
+        if (!source.isFile || !ensureDirectoryDurable(parent)) return false
         return try {
             source.inputStream().buffered().use { input ->
                 FileOutputStream(target).buffered().use { output ->
@@ -68,6 +68,16 @@ internal object DurableRecoveryFileOps {
         }
     }
 
+    fun deleteEmptyDirectoryAndSync(directory: File): Boolean {
+        if (!directory.exists()) return true
+        val parent = directory.parentFile ?: return false
+        return try {
+            directory.isDirectory && directory.delete() && syncDirectory(parent)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun syncFile(file: File): Boolean = try {
         FileOutputStream(file, true).use {
             it.flush()
@@ -83,6 +93,17 @@ internal object DurableRecoveryFileOps {
             output.write(bytes)
             output.flush()
             output.fd.sync()
+        }
+    }
+
+    private fun ensureDirectoryDurable(directory: File): Boolean {
+        if (directory.exists()) return directory.isDirectory
+        val parent = directory.parentFile ?: return false
+        if (!ensureDirectoryDurable(parent)) return false
+        return try {
+            (directory.mkdir() || directory.isDirectory) && syncDirectory(parent)
+        } catch (_: Exception) {
+            false
         }
     }
 

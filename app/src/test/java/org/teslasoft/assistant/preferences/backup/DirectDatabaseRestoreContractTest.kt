@@ -34,6 +34,8 @@ class DirectDatabaseRestoreContractTest {
         val operations = source("preferences/backup/DurableRecoveryFileOps.kt")
         assertTrue(operations.contains("StandardCopyOption.ATOMIC_MOVE"))
         assertTrue(operations.contains("StandardCopyOption.REPLACE_EXISTING"))
+        assertTrue(operations.contains("ensureDirectoryDurable(parent)"))
+        assertTrue(operations.contains("syncDirectory(parent)"))
         val publish = coordinator.substringAfter("private fun installLocked(")
             .substringAfter("AFTER_SIDECAR_REMOVAL")
             .substringBefore("AFTER_FILE_RENAME")
@@ -76,6 +78,15 @@ class DirectDatabaseRestoreContractTest {
         val absent = body.indexOf("!active.exists()")
         val original = body.indexOf("record.originalExisted &&")
         assertTrue(absent >= 0 && original > absent)
+    }
+
+    @Test
+    fun startupRemovesOnlyUnjournaledDirectRestoreStages() {
+        val coordinator = source("preferences/backup/DirectDatabaseRestoreCoordinator.kt")
+        val recovery = coordinator.substringAfter("fun recoverAll(context: Context)")
+            .substringBefore("private fun installLocked(")
+        assertTrue(recovery.contains("cleanupUnpublishedStages(app, type)"))
+        assertTrue(coordinator.contains("if (!recoverOne(app, type)) return@runExclusive false"))
     }
 
     @Test

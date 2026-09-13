@@ -123,7 +123,8 @@ object DatabaseRevertManager {
             DatabaseKeys.StoredKeyState.Absent -> ByteArray(32).also(SecureRandom()::nextBytes)
             DatabaseKeys.StoredKeyState.Unavailable -> error("handled above")
         }
-        val stagedName = ".${MemoryStore.DATABASE_NAME}.direct-seed-${System.nanoTime()}.db"
+        val stagedName =
+            ".${MemoryStore.DATABASE_NAME}.direct-restore-seed-${System.nanoTime()}.stage"
         val staged = appContext.getDatabasePath(stagedName)
         return@runExclusive try {
             val store = MemoryStore.openForTest(appContext, stagedName, key)
