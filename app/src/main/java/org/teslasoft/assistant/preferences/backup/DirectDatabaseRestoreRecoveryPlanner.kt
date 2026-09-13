@@ -35,8 +35,10 @@ internal object DirectDatabaseRestoreRecoveryPlanner {
         if (evidence.originalExisted && evidence.quarantineOriginalCopyValid) {
             return Decision.ROLLBACK
         }
-        if (!evidence.originalExisted && evidence.active == FileState.ABSENT &&
-            (evidence.key == KeyState.ORIGINAL || evidence.key == KeyState.NOT_APPLICABLE)
+        if (!evidence.originalExisted && evidence.active != FileState.INSTALLED &&
+            (evidence.key == KeyState.ORIGINAL ||
+                evidence.key == KeyState.INTENDED ||
+                evidence.key == KeyState.NOT_APPLICABLE)
         ) {
             return Decision.ROLLBACK
         }

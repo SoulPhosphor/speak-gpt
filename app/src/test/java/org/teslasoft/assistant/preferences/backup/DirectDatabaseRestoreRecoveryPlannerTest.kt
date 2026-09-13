@@ -73,18 +73,30 @@ class DirectDatabaseRestoreRecoveryPlannerTest {
 
     @Test
     fun absentOriginalCanReturnToExactAbsentState() {
-        val evidence = DirectDatabaseRestoreRecoveryPlanner.Evidence(
-            phase = DirectDatabaseRestoreJournal.Phase.PREPARED,
-            originalExisted = false,
-            active = DirectDatabaseRestoreRecoveryPlanner.FileState.ABSENT,
-            stagedInstalledCopyValid = false,
-            quarantineOriginalCopyValid = true,
-            key = DirectDatabaseRestoreRecoveryPlanner.KeyState.ORIGINAL
-        )
-        assertEquals(
-            DirectDatabaseRestoreRecoveryPlanner.Decision.ROLLBACK,
-            DirectDatabaseRestoreRecoveryPlanner.decide(evidence)
-        )
+        for (active in listOf(
+            DirectDatabaseRestoreRecoveryPlanner.FileState.ABSENT,
+            DirectDatabaseRestoreRecoveryPlanner.FileState.UNKNOWN
+        )) {
+            for (key in listOf(
+                DirectDatabaseRestoreRecoveryPlanner.KeyState.ORIGINAL,
+                DirectDatabaseRestoreRecoveryPlanner.KeyState.INTENDED,
+                DirectDatabaseRestoreRecoveryPlanner.KeyState.NOT_APPLICABLE
+            )) {
+                val evidence = DirectDatabaseRestoreRecoveryPlanner.Evidence(
+                    phase = DirectDatabaseRestoreJournal.Phase.PREPARED,
+                    originalExisted = false,
+                    active = active,
+                    stagedInstalledCopyValid = false,
+                    quarantineOriginalCopyValid = true,
+                    key = key
+                )
+                assertEquals(
+                    "active=$active key=$key",
+                    DirectDatabaseRestoreRecoveryPlanner.Decision.ROLLBACK,
+                    DirectDatabaseRestoreRecoveryPlanner.decide(evidence)
+                )
+            }
+        }
     }
 
     @Test

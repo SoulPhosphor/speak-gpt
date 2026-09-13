@@ -69,6 +69,16 @@ class DirectDatabaseRestoreContractTest {
     }
 
     @Test
+    fun anAbsentOriginalIsClassifiedBeforeOriginalFileMatching() {
+        val coordinator = source("preferences/backup/DirectDatabaseRestoreCoordinator.kt")
+        val body = coordinator.substringAfter("private fun recoverOne(")
+            .substringBefore("private fun finishInstall(")
+        val absent = body.indexOf("!active.exists()")
+        val original = body.indexOf("record.originalExisted &&")
+        assertTrue(absent >= 0 && original > absent)
+    }
+
+    @Test
     fun startupRecoveryRunsBeforeUnifiedRecoveryAndStoreHousekeeping() {
         val application = source("app/MainApplication.kt")
         val direct = application.indexOf("DirectDatabaseRestoreCoordinator.recoverAll(this)")

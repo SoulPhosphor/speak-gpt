@@ -262,10 +262,11 @@ internal object DirectDatabaseRestoreCoordinator {
         val activeState = when {
             DirectDatabaseRestoreJournal.matches(active, record.installedFiles) ->
                 DirectDatabaseRestoreRecoveryPlanner.FileState.INSTALLED
-            DirectDatabaseRestoreJournal.matches(active, record.originalFiles) ->
-                DirectDatabaseRestoreRecoveryPlanner.FileState.ORIGINAL
             !active.exists() && sidecars.none { File(active.path + it).exists() } ->
                 DirectDatabaseRestoreRecoveryPlanner.FileState.ABSENT
+            record.originalExisted &&
+                DirectDatabaseRestoreJournal.matches(active, record.originalFiles) ->
+                DirectDatabaseRestoreRecoveryPlanner.FileState.ORIGINAL
             else -> DirectDatabaseRestoreRecoveryPlanner.FileState.UNKNOWN
         }
         val decision = DirectDatabaseRestoreRecoveryPlanner.decide(
