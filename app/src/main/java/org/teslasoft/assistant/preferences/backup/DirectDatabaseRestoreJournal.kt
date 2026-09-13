@@ -57,6 +57,7 @@ internal object DirectDatabaseRestoreJournal {
             require(originalFiles.map { it.suffix }.size == originalFiles.map { it.suffix }.toSet().size)
             require(installedFiles.map { it.suffix }.size == installedFiles.map { it.suffix }.toSet().size)
             require(originalExisted == originalFiles.any { it.suffix.isEmpty() })
+            require(originalExisted || originalFiles.isEmpty())
             require(installedFiles.any { it.suffix.isEmpty() })
         }
     }

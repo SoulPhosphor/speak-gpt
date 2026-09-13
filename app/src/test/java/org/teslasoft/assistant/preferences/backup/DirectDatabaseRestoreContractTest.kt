@@ -40,6 +40,16 @@ class DirectDatabaseRestoreContractTest {
     }
 
     @Test
+    fun sidecarOnlyOriginalIsRejectedBeforeTheJournalBoundary() {
+        val coordinator = source("preferences/backup/DirectDatabaseRestoreCoordinator.kt")
+        val quarantine = coordinator.substringAfter("private fun stageQuarantine(")
+            .substringBefore("private fun stageIncoming(")
+        assertTrue(quarantine.contains("sidecars.any { File(active.path + it).exists() }"))
+        assertTrue(source("preferences/backup/DirectDatabaseRestoreJournal.kt")
+            .contains("require(originalExisted || originalFiles.isEmpty())"))
+    }
+
+    @Test
     fun publicationIsAtomicAndHasNoDeleteThenCopyFallback() {
         val coordinator = source("preferences/backup/DirectDatabaseRestoreCoordinator.kt")
         val operations = source("preferences/backup/DurableRecoveryFileOps.kt")
@@ -53,6 +63,8 @@ class DirectDatabaseRestoreContractTest {
         assertTrue(publish.contains("DurableRecoveryFileOps.atomicReplace(staged, active)"))
         assertFalse(publish.contains("copyTo(active"))
         assertFalse(publish.contains("deleteActiveFiles"))
+        assertFalse(source("preferences/backup/DatabaseRepairManager.kt")
+            .contains("restoreQuarantinedFiles"))
     }
 
     @Test

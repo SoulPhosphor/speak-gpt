@@ -436,7 +436,9 @@ internal object DirectDatabaseRestoreCoordinator {
         active: File,
         quarantine: File
     ): List<FileEvidence>? {
-        if (!active.exists()) return emptyList()
+        if (!active.exists()) {
+            return if (sidecars.any { File(active.path + it).exists() }) null else emptyList()
+        }
         cleanupFileSet(quarantine)
         val sources = listOf("") + sidecars
         for (suffix in sources) {

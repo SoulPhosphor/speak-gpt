@@ -159,33 +159,6 @@ object DatabaseRepairManager {
         }
     }
 
-    /** Put a pre-restore snapshot back after a failed swap. The preserved copy
-     *  remains in storage_recovery; rollback copies it rather than consuming
-     *  the user's safety copy. */
-    internal fun restoreQuarantinedFiles(
-        context: Context,
-        type: BackupType,
-        quarantinePath: String
-    ): Boolean = try {
-        val active = context.getDatabasePath(dbFileName(type))
-        val preserved = File(quarantinePath)
-        if (!preserved.exists()) {
-            false
-        } else {
-            deleteActiveFiles(context, type)
-            preserved.copyTo(active, overwrite = true)
-            for (suffix in SIDECAR_SUFFIXES) {
-                val preservedSidecar = File(quarantinePath + suffix)
-                if (preservedSidecar.exists()) {
-                    preservedSidecar.copyTo(File(active.path + suffix), overwrite = true)
-                }
-            }
-            true
-        }
-    } catch (_: Exception) {
-        false
-    }
-
     /**
      * Install an already-staged and verified database snapshot. This is shared
      * by same-install automatic artifacts and portable Recovery Packages.
