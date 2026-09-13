@@ -33,7 +33,7 @@ import org.teslasoft.assistant.preferences.ModelEndpointStateGenerationStore
 class ModelEndpointRestoreParticipantTest {
     @Test
     fun applyAndRollbackSwitchTheStagedGenerationsIdempotently() {
-        val context = RuntimeEnvironment.getApplication<Application>()
+        val context = RuntimeEnvironment.getApplication()
         context.getSharedPreferences("api_endpoint", Context.MODE_PRIVATE).edit().clear().commit()
         context.getSharedPreferences("favorite_models", Context.MODE_PRIVATE).edit().clear().commit()
         val state = ModelEndpointStateGenerationStore.get(context)
