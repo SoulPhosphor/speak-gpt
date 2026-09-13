@@ -322,11 +322,6 @@ internal object DirectDatabaseRestoreCoordinator {
             record = record.copy(phase = Phase.FILE_INSTALLED)
             if (!DirectDatabaseRestoreJournal.write(context, record)) return false
             verifyInstalledLowLevel(context, record, intended)
-            record = record.copy(
-                installedFiles = DirectDatabaseRestoreJournal.evidence(active) ?: return false,
-                phase = Phase.VERIFIED
-            )
-            if (!DirectDatabaseRestoreJournal.write(context, record)) return false
             verifyThroughNormalStore(context, record.type)
             DatabaseRepairManager.invalidateStore(context, record.type)
             record = record.copy(

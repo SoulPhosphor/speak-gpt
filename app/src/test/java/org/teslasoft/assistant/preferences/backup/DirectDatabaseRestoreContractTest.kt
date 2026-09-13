@@ -59,6 +59,16 @@ class DirectDatabaseRestoreContractTest {
     }
 
     @Test
+    fun startupFinishAlsoMarksVerifiedOnlyAfterTheNormalStoreCheck() {
+        val coordinator = source("preferences/backup/DirectDatabaseRestoreCoordinator.kt")
+        val body = coordinator.substringAfter("private fun finishInstall(")
+            .substringBefore("private fun rollback(")
+        val normal = body.indexOf("verifyThroughNormalStore(context, record.type)")
+        val verified = body.indexOf("phase = Phase.VERIFIED")
+        assertTrue(normal >= 0 && verified > normal)
+    }
+
+    @Test
     fun startupRecoveryRunsBeforeUnifiedRecoveryAndStoreHousekeeping() {
         val application = source("app/MainApplication.kt")
         val direct = application.indexOf("DirectDatabaseRestoreCoordinator.recoverAll(this)")
