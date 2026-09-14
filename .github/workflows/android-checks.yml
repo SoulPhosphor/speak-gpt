@@ -126,9 +126,14 @@ jobs:
             -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
             -camera-back none -camera-front none -wipe-data \
             > "$RUNNER_TEMP/recovery-emulator.log" 2>&1 &
-          adb wait-for-device
+          emulator_pid=$!
           for attempt in $(seq 1 90); do
-            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+            if ! kill -0 "$emulator_pid" 2>/dev/null; then
+              tail -n 200 "$RUNNER_TEMP/recovery-emulator.log"
+              exit 1
+            fi
+            if adb devices | grep -q '^emulator-' && \
+              [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
               adb shell settings put global window_animation_scale 0
               adb shell settings put global transition_animation_scale 0
               adb shell settings put global animator_duration_scale 0
@@ -136,6 +141,7 @@ jobs:
             fi
             sleep 5
           done
+          tail -n 200 "$RUNNER_TEMP/recovery-emulator.log"
           exit 1
 
       - name: Build x86_64 recovery test APKs
