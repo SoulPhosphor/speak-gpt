@@ -48,6 +48,7 @@ import org.teslasoft.assistant.preferences.backup.BackupFailureClassifier
 import org.teslasoft.assistant.preferences.backup.BackupLocationDisplay
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupState
+import org.teslasoft.assistant.preferences.backup.RecoveryDocumentPublication
 import org.teslasoft.assistant.preferences.backup.RecoveryFileNaming
 import org.teslasoft.assistant.preferences.backup.portable.ChatLogicalSerializer
 import org.teslasoft.assistant.preferences.backup.portable.PackageCrypto
@@ -158,6 +159,10 @@ class RecoveryBackupActivity : FragmentActivity() {
      *  recorded from this ONLY after the destination is also verified (owner
      *  rule: never claim a failed or unfinished attempt succeeded). */
     private var stagedIncludedTypes: Set<BackupType> = emptySet()
+
+    /** Final name used only after the selected incomplete SAF document has
+     * passed byte verification. */
+    private var pendingFinalFileName: String? = null
 
     private val saveKeyFileLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
@@ -464,7 +469,10 @@ class RecoveryBackupActivity : FragmentActivity() {
                             val name = RecoveryFileNaming.manualRecoveryPackage(
                                 BackupBrand.resolve(this), protected, System.currentTimeMillis()
                             )
-                            createPackageLauncher.launch(name)
+                            pendingFinalFileName = name
+                            createPackageLauncher.launch(
+                                RecoveryDocumentPublication.incompleteName(name)
+                            )
                         }
                     }
                 }
@@ -490,9 +498,10 @@ class RecoveryBackupActivity : FragmentActivity() {
     }
 
     /** Copy the verified staged package to the chosen destination, then reopen
-     *  the destination and verify its SHA-256 matches the staged file. On any
-     *  mismatch/failure the destination is discarded and a visible failure is
-     *  shown. Staging is cleaned on every path. */
+     *  the destination and verify its SHA-256 matches the staged file. A
+     *  provider that cannot rename retains only the unmistakably incomplete
+     *  document; other failures discard their destination. Staging is cleaned
+     *  on every path. */
     private fun copyStagedToDestination(uri: Uri) {
         val staged = stagedPackage
         val expectedSha = stagedSha
@@ -507,6 +516,12 @@ class RecoveryBackupActivity : FragmentActivity() {
         btnResultDone?.visibility = View.GONE
 
         val includedTypes = stagedIncludedTypes
+        val finalName = pendingFinalFileName
+        if (finalName == null) {
+            cleanupStaged()
+            showFailureText(getString(R.string.recovery_fail_generic))
+            return
+        }
         runOffThread {
             try {
                 contentResolver.openOutputStream(uri, "wt")?.use { out ->
@@ -523,6 +538,23 @@ class RecoveryBackupActivity : FragmentActivity() {
                     return@runOffThread
                 }
 
+                val finalUri = RecoveryDocumentPublication.finalize(
+                    contentResolver, uri, finalName
+                )
+                if (finalUri == null) {
+                    recordFailureStatusAll(BackupFailureCategory.DESTINATION_WRITE)
+                    runOnUiThread { showFailureText(getString(R.string.recovery_fail_generic)) }
+                    return@runOffThread
+                }
+                val finalizedSha = contentResolver.openInputStream(finalUri)?.use { sha256(it) }
+                    ?: throw IllegalStateException("could not reopen finalized destination")
+                if (!MessageDigest.isEqual(expectedSha, finalizedSha)) {
+                    discardDestination(finalUri)
+                    recordFailureStatusAll(BackupFailureCategory.VERIFY)
+                    runOnUiThread { showFailureText(getString(R.string.recovery_fail_verify)) }
+                    return@runOffThread
+                }
+
                 // BOTH verifications passed (staged package + destination):
                 // only now may Backup Status claim success (owner rule). Types
                 // with no artifact in this package record the neutral
@@ -533,7 +565,7 @@ class RecoveryBackupActivity : FragmentActivity() {
                     else RecoveryBackupState.recordNothingToBackUp(this, type, now)
                 }
 
-                val where = BackupLocationDisplay.describeSaveAs(this, uri)
+                val where = BackupLocationDisplay.describeSaveAs(this, finalUri)
                 runOnUiThread { showSaved(where) }
             } catch (e: Exception) {
                 discardDestination(uri)
@@ -596,6 +628,7 @@ class RecoveryBackupActivity : FragmentActivity() {
         stagedPackage = null
         stagedSha = null
         stagedIncludedTypes = emptySet()
+        pendingFinalFileName = null
     }
 
     private fun showWriterFailure(
@@ -619,7 +652,8 @@ class RecoveryBackupActivity : FragmentActivity() {
                     textResultDetail?.visibility = View.VISIBLE
                 }
             }
-            PortableRecoveryWriter.Reason.SNAPSHOT_FAILED ->
+            PortableRecoveryWriter.Reason.SNAPSHOT_FAILED,
+            PortableRecoveryWriter.Reason.SOURCE_CHANGED_DURING_CAPTURE ->
                 showFailureText(getString(R.string.recovery_fail_snapshot))
             PortableRecoveryWriter.Reason.PACKAGE_VERIFY_FAILED ->
                 showFailureText(getString(R.string.recovery_fail_verify))

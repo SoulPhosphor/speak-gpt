@@ -28,7 +28,7 @@ import org.json.JSONObject
 object ModelEndpointPortableCodec {
     const val FORMAT = "model-endpoint-settings-v1"
     const val SCHEMA_VERSION = 1
-    const val MAX_ARTIFACT_BYTES = 8L * 1024L * 1024L
+    const val MAX_ARTIFACT_BYTES = PortableRecoveryLimits.MODEL_ENDPOINT_SETTINGS_BYTES
 
     data class Endpoint(
         val id: String,

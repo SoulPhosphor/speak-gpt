@@ -120,7 +120,11 @@ object PortableRecoveryWriter {
          *  assigned picture would be a falsely-complete recovery backup
          *  (BR-07), so the write refuses and the previous automatic backup is
          *  kept. Visible, typed, never silent. */
-        PROFILE_IMAGE_UNAVAILABLE
+        PROFILE_IMAGE_UNAVAILABLE,
+
+        /** Live authoritative state changed during both bounded capture
+         * attempts. No package is published from mixed generations. */
+        SOURCE_CHANGED_DURING_CAPTURE
     }
 
     /**
@@ -141,7 +145,19 @@ object PortableRecoveryWriter {
         passwordBlob: PortablePackageFormat.PasswordBlob?,
         appVersion: String
     ): Result = RecoveryOperationGate.runExclusive {
-        createPackageLocked(context, out, recoverySecret, passwordBlob, appVersion)
+        for (attempt in 1..PortableBackupCaptureStability.MAX_ATTEMPTS) {
+            val before = PortableBackupMutationTokens.read(context)
+                ?: return@runExclusive Result.Failed(Reason.SNAPSHOT_FAILED)
+            runCatching { if (out.exists()) out.delete() }
+            val result = createPackageLocked(
+                context, out, recoverySecret, passwordBlob, appVersion, before, attempt
+            )
+            if (result !is Result.Failed ||
+                result.reason != Reason.SOURCE_CHANGED_DURING_CAPTURE ||
+                attempt == PortableBackupCaptureStability.MAX_ATTEMPTS
+            ) return@runExclusive result
+        }
+        Result.Failed(Reason.SOURCE_CHANGED_DURING_CAPTURE)
     }
 
     private fun createPackageLocked(
@@ -149,7 +165,9 @@ object PortableRecoveryWriter {
         out: File,
         recoverySecret: ByteArray?,
         passwordBlob: PortablePackageFormat.PasswordBlob?,
-        appVersion: String
+        appVersion: String,
+        beforeTokens: Map<String, String>,
+        captureAttempt: Int
     ): Result {
         val staging = PortableStaging.newRunDir(context)
         try {
@@ -308,13 +326,52 @@ object PortableRecoveryWriter {
                         )
                     )
                     includedTypes.add(BackupType.CHATS)
+                    when (PortableBackupCaptureStability.decide(
+                        beforeTokens,
+                        PortableBackupMutationTokens.read(context),
+                        captureAttempt
+                    )) {
+                        PortableBackupCaptureStability.Decision.STABLE -> Unit
+                        PortableBackupCaptureStability.Decision.RETRY,
+                        PortableBackupCaptureStability.Decision.REFUSE ->
+                            return Result.Failed(Reason.SOURCE_CHANGED_DURING_CAPTURE)
+                        PortableBackupCaptureStability.Decision.UNAVAILABLE ->
+                            return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    }
+                    val validatedArtifacts = artifacts.map { artifact ->
+                        PortablePackage.ValidatedArtifact(
+                            artifact.entryName,
+                            artifact.type,
+                            artifact.file,
+                            artifact.databaseKeyHex,
+                            artifact.keySemantics,
+                            artifact.schemaVersion
+                        )
+                    }
+                    val represented = PortableRestoreInventory.from(validatedArtifacts).available
+                    val semantic = PortableRecoverySemanticValidator.validate(
+                        context,
+                        validatedArtifacts,
+                        declaredCategories = PortableRestoreCategory.entries.toSet(),
+                        explicitlyEmptyCategories = PortableRestoreCategory.entries.toSet() - represented
+                    )
+                    if (semantic !is PortableRecoverySemanticValidator.Result.Valid) {
+                        return Result.Failed(
+                            if (semantic is PortableRecoverySemanticValidator.Result.TooLarge) {
+                                Reason.SNAPSHOT_FAILED
+                            } else Reason.PACKAGE_VERIFY_FAILED
+                        )
+                    }
+                    val declarations = PortableRecoverySemanticValidator.declarations(
+                        validatedArtifacts, semantic.recordCounts
+                    )
                     // ---- assemble + envelope + reopen-and-verify ----
                     val innerZip = File(staging, "inner.zip")
                     PortablePackage.buildInnerZip(
                         artifacts,
                         createdAt,
                         innerZip,
-                        restoreCategories = PortableRestoreCategory.entries.toSet()
+                        categoryDeclarations = declarations
                     )
                     // Producer metadata: identity lives in the header, never in
                     // the filename (owner filename architecture). The display
@@ -368,7 +425,15 @@ object PortableRecoveryWriter {
                 PortablePackage.decodeWithSecret(packageFile, ByteArray(0), verifyStaging)
             }
             val inner = (decoded as? PortablePackage.DecodeResult.Ok)?.innerZip ?: return false
-            return PortablePackage.validateAndExtract(inner, verifyStaging) is PortablePackage.ValidateResult.Ok
+            val validated = PortablePackage.validateAndExtract(inner, verifyStaging)
+                as? PortablePackage.ValidateResult.Ok ?: return false
+            return PortableRecoverySemanticValidator.validate(
+                context,
+                validated.artifacts,
+                validated.declaredCategories,
+                validated.explicitlyEmptyCategories,
+                validated.categoryRecordCounts
+            ) is PortableRecoverySemanticValidator.Result.Valid
         } catch (_: Exception) {
             return false
         } finally {

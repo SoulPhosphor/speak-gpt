@@ -82,7 +82,9 @@ object GeneratedImagePortableBackup {
             }
             val file = File(imagesDir ?: return Result.Failed(Failure.MISSING_ASSET), fileName)
             if (!file.isFile) return Result.Failed(Failure.MISSING_ASSET)
-            if (file.length() <= 0L || file.length() > PortablePackage.MAX_ENTRY_BYTES) {
+            if (file.length() <= 0L ||
+                file.length() > PortableRecoveryLimits.IMAGE_ASSET_BYTES
+            ) {
                 return Result.Failed(Failure.INVALID_ASSET)
             }
             if (!isValidAsset(file, record)) {
@@ -134,7 +136,9 @@ object GeneratedImagePortableBackup {
     }
 
     internal fun isValidAsset(file: File, record: GeneratedImageCatalogRecord): Boolean {
-        if (!file.isFile || file.length() <= 0L || file.length() > PortablePackage.MAX_ENTRY_BYTES) {
+        if (!file.isFile || file.length() <= 0L ||
+            file.length() > PortableRecoveryLimits.IMAGE_ASSET_BYTES
+        ) {
             return false
         }
         val format = sniff(file) ?: return false

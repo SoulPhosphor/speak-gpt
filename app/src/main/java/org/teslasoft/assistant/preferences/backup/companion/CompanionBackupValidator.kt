@@ -16,8 +16,10 @@
 
 package org.teslasoft.assistant.preferences.backup.companion
 
-import org.teslasoft.assistant.util.Hash
+import org.teslasoft.assistant.preferences.backup.portable.PortableRecoveryLimits
 import java.io.File
+import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 /**
@@ -51,6 +53,9 @@ object CompanionBackupValidator {
     }
 
     fun validate(file: File): Verdict {
+        if (!file.isFile || file.length() > PortableRecoveryLimits.COMPANION_ROLEPLAY_ARCHIVE_BYTES) {
+            return Verdict.Damaged
+        }
         val zip = try {
             ZipFile(file)
         } catch (_: Exception) {
@@ -61,7 +66,19 @@ object CompanionBackupValidator {
                 ?: return Verdict.WrongFile
             val manifestText = try {
                 zip.getInputStream(manifestEntry).use { input ->
-                    input.readBytes().toString(Charsets.UTF_8)
+                    val out = ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    var count = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        count += read
+                        if (count > PortableRecoveryLimits.COMPANION_ROLEPLAY_ARCHIVE_BYTES) {
+                            return Verdict.Damaged
+                        }
+                        out.write(buffer, 0, read)
+                    }
+                    out.toString(Charsets.UTF_8.name())
                 }
             } catch (_: Exception) {
                 return Verdict.Damaged
@@ -76,12 +93,27 @@ object CompanionBackupValidator {
 
             for (image in manifest.images) {
                 val entry = zip.getEntry(image.file) ?: return Verdict.Damaged
-                val bytes = try {
-                    zip.getInputStream(entry).use { it.readBytes() }
+                if (entry.size > PortableRecoveryLimits.IMAGE_ASSET_BYTES) return Verdict.Damaged
+                val actualHash = try {
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    var count = 0L
+                    zip.getInputStream(entry).use { input ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            count += read
+                            if (count > PortableRecoveryLimits.IMAGE_ASSET_BYTES) {
+                                return Verdict.Damaged
+                            }
+                            digest.update(buffer, 0, read)
+                        }
+                    }
+                    digest.digest().joinToString("") { "%02x".format(it) }
                 } catch (_: Exception) {
                     return Verdict.Damaged
                 }
-                if (Hash.hash(bytes) != image.hash) return Verdict.Damaged
+                if (actualHash != image.hash) return Verdict.Damaged
             }
 
             return Verdict.Valid(manifest)
@@ -93,6 +125,23 @@ object CompanionBackupValidator {
         ZipFile(file).use { zip ->
             val entry = zip.getEntry(image.file)
                 ?: throw IllegalStateException("validated image entry disappeared: ${image.file}")
-            zip.getInputStream(entry).use { it.readBytes() }
+            if (entry.size > PortableRecoveryLimits.IMAGE_ASSET_BYTES) {
+                throw IllegalStateException("validated image exceeds the decoded-size policy")
+            }
+            zip.getInputStream(entry).use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(64 * 1024)
+                var count = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    count += read
+                    if (count > PortableRecoveryLimits.IMAGE_ASSET_BYTES) {
+                        throw IllegalStateException("validated image exceeds the decoded-size policy")
+                    }
+                    output.write(buffer, 0, read)
+                }
+                output.toByteArray()
+            }
         }
 }

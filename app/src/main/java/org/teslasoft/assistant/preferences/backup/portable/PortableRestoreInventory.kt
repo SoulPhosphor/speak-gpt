@@ -52,7 +52,8 @@ object PortableRestoreInventory {
 
     fun from(
         artifacts: List<PortablePackage.ValidatedArtifact>,
-        declaredCategories: Set<PortableRestoreCategory>? = null
+        declaredCategories: Set<PortableRestoreCategory>? = null,
+        explicitlyEmptyCategories: Set<PortableRestoreCategory> = emptySet()
     ): Inventory {
         val categories = LinkedHashSet<PortableRestoreCategory>()
         artifacts.forEach { artifact ->
@@ -88,7 +89,7 @@ object PortableRestoreInventory {
         if (declaredCategories == null) return Inventory(categories)
         return Inventory(
             available = declaredCategories,
-            explicitlyEmpty = declaredCategories - categories
+            explicitlyEmpty = explicitlyEmptyCategories
         )
     }
 }

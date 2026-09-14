@@ -65,7 +65,7 @@ class ChatRestoreParticipant internal constructor(
             return true
         }
         val source = incoming ?: return false
-        if (!source.isFile || source.length() > PortablePackage.MAX_ENTRY_BYTES) return false
+        if (!source.isFile || source.length() > PortableRecoveryLimits.CHATS_JSON_BYTES) return false
         val json = try { source.readText(Charsets.UTF_8) } catch (_: Exception) { return false }
         return when (val result = PortableChatRestoreCoordinator.prepare(
             app, json, mode, folderResolutions

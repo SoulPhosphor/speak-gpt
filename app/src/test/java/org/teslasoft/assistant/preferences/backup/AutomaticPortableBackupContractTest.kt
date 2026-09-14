@@ -19,6 +19,8 @@ class AutomaticPortableBackupContractTest {
         val writer = source("preferences/backup/AutomaticPortableBackupWriter.kt")
         assertTrue(writer.contains("PortableRecoveryWriter.createPackage"))
         assertTrue(writer.contains("RecoveryFileNaming.automaticRecoveryPackage"))
+        assertTrue(writer.contains("RecoveryDocumentPublication.incompleteName"))
+        assertTrue(writer.contains("RecoveryDocumentPublication.finalize"))
         assertFalse(writer.contains("rotate("))
         assertFalse(writer.contains("listFiles"))
     }

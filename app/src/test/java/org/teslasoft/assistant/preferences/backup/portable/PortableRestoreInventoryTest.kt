@@ -68,7 +68,8 @@ class PortableRestoreInventoryTest {
         )
         val inventory = PortableRestoreInventory.from(
             listOf(artifact("chats.json", PortablePackage.TYPE_CHATS_JSON)),
-            declared
+            declared,
+            setOf(PortableRestoreCategory.GENERATED_IMAGES, PortableRestoreCategory.MEMORIES)
         )
 
         assertEquals(declared, inventory.available)

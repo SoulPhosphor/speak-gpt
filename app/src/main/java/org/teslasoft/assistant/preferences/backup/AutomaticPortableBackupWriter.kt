@@ -90,6 +90,7 @@ object AutomaticPortableBackupWriter {
 
             val expectedHash = sha256(staged.inputStream())
             val name = nextName(app, treeUri, protected, System.currentTimeMillis())
+            val incompleteName = RecoveryDocumentPublication.incompleteName(name)
             stage = BackupStage.WRITE_DESTINATION
             val parentId = DocumentsContract.getTreeDocumentId(treeUri)
             val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, parentId)
@@ -97,7 +98,7 @@ object AutomaticPortableBackupWriter {
                 app.contentResolver,
                 parentUri,
                 "application/zip",
-                name
+                incompleteName
             ) ?: throw IllegalStateException("destination unavailable")
             app.contentResolver.openOutputStream(destination, "wt")?.use { output ->
                 staged.inputStream().use { input -> input.copyTo(output, 64 * 1024) }
@@ -109,7 +110,17 @@ object AutomaticPortableBackupWriter {
             if (!MessageDigest.isEqual(expectedHash, verified.first)) {
                 throw IllegalStateException("destination verification failed")
             }
-            return Result.Success(verified.second, built.includedTypes)
+            val finalDestination = RecoveryDocumentPublication.finalize(
+                app.contentResolver, destination, name
+            ) ?: return Result.Failed(BackupFailureCategory.DESTINATION_WRITE)
+            destination = finalDestination
+            val finalVerified = app.contentResolver.openInputStream(finalDestination)
+                ?.use { sha256WithSize(it) }
+                ?: throw IllegalStateException("final destination unavailable")
+            if (!MessageDigest.isEqual(expectedHash, finalVerified.first)) {
+                throw IllegalStateException("final destination verification failed")
+            }
+            return Result.Success(finalVerified.second, built.includedTypes)
         } catch (error: Exception) {
             discardDestination(app, destination)
             return Result.Failed(
@@ -132,7 +143,9 @@ object AutomaticPortableBackupWriter {
                 now,
                 seq = sequence
             )
-            if (candidate !in names) return candidate
+            if (candidate !in names && RecoveryDocumentPublication.incompleteName(candidate) !in names) {
+                return candidate
+            }
             sequence++
         }
     }

@@ -91,7 +91,7 @@ object ProfileImagePortableBackup {
 
     internal fun isValidAsset(file: File, expectedHash: String): Boolean {
         if (!HASH.matches(expectedHash) || !file.isFile || file.length() <= 3L ||
-            file.length() > PortablePackage.MAX_ENTRY_BYTES
+            file.length() > PortableRecoveryLimits.IMAGE_ASSET_BYTES
         ) return false
         val prefix = ByteArray(3)
         if (file.inputStream().use { it.read(prefix) } != prefix.size ||

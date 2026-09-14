@@ -19,6 +19,7 @@ package org.teslasoft.assistant.preferences.backup.portable
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupCodec
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupManifest
+import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,6 +30,7 @@ import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 /**
@@ -102,12 +104,12 @@ class PortablePackageTest {
     }
 
     @Test
-    fun currentPackageRoundTripsDeclaredRestoreCategoriesIncludingEmptyOnes() {
+    fun validV2PackageRoundTripsOnlyArtifactBackedCategories() {
         val inner = tmp.newFile("inventory_inner.zip").apply { delete() }
         val declared = setOf(
             PortableRestoreCategory.CHATS,
-            PortableRestoreCategory.GENERATED_IMAGES,
-            PortableRestoreCategory.LOREBOOKS
+            PortableRestoreCategory.MEMORIES,
+            PortableRestoreCategory.MODEL_RULES
         )
         PortablePackage.buildInnerZip(
             buildArtifacts(),
@@ -121,6 +123,171 @@ class PortablePackageTest {
         assertEquals(
             declared,
             (extracted as PortablePackage.ValidateResult.Ok).declaredCategories
+        )
+    }
+
+    @Test
+    fun ambiguousV2MissingArtifactsAreNotInventedAsEmptyCategories() {
+        val inner = tmp.newFile("ambiguous_v2_inner.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            buildArtifacts(),
+            "2026-09-09T00:00:00Z",
+            inner,
+            setOf(
+                PortableRestoreCategory.CHATS,
+                PortableRestoreCategory.GENERATED_IMAGES,
+                PortableRestoreCategory.MEMORIES,
+                PortableRestoreCategory.MODEL_RULES
+            )
+        )
+
+        assertTrue(
+            PortablePackage.validateAndExtract(inner, tmp.newFolder())
+                is PortablePackage.ValidateResult.Failed
+        )
+    }
+
+    @Test
+    fun currentManifestRoundTripsExactArtifactAndEmptyRepresentations() {
+        val artifacts = buildArtifacts()
+        val declarations = PortableRestoreCategory.entries.map { category ->
+            val names = when (category) {
+                PortableRestoreCategory.CHATS -> setOf("chats.json")
+                PortableRestoreCategory.MEMORIES,
+                PortableRestoreCategory.MODEL_RULES -> setOf("memory.db")
+                else -> emptySet()
+            }
+            PortablePackage.CategoryDeclaration(
+                category,
+                if (names.isEmpty()) PortablePackage.CategoryRepresentation.EMPTY
+                else PortablePackage.CategoryRepresentation.ARTIFACTS,
+                names,
+                0L
+            )
+        }
+        val inner = tmp.newFile("current_inventory_inner.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            artifacts,
+            "2026-09-14T00:00:00Z",
+            inner,
+            categoryDeclarations = declarations
+        )
+
+        val result = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(result is PortablePackage.ValidateResult.Ok)
+        result as PortablePackage.ValidateResult.Ok
+        assertEquals(PortablePackage.MANIFEST_VERSION, result.manifestVersion)
+        assertEquals(PortableRestoreCategory.entries.toSet(), result.declaredCategories)
+        assertEquals(
+            PortableRestoreCategory.entries.toSet() - setOf(
+                PortableRestoreCategory.CHATS,
+                PortableRestoreCategory.MEMORIES,
+                PortableRestoreCategory.MODEL_RULES
+            ),
+            result.explicitlyEmptyCategories
+        )
+    }
+
+    @Test
+    fun currentManifestRejectsMissingDuplicateAndContradictoryCategoryDeclarations() {
+        fun currentInner(name: String): File {
+            val artifacts = buildArtifacts()
+            val declarations = PortableRestoreCategory.entries.map { category ->
+                val names = when (category) {
+                    PortableRestoreCategory.CHATS -> setOf("chats.json")
+                    PortableRestoreCategory.MEMORIES,
+                    PortableRestoreCategory.MODEL_RULES -> setOf("memory.db")
+                    else -> emptySet()
+                }
+                PortablePackage.CategoryDeclaration(
+                    category,
+                    if (names.isEmpty()) PortablePackage.CategoryRepresentation.EMPTY
+                    else PortablePackage.CategoryRepresentation.ARTIFACTS,
+                    names,
+                    0L
+                )
+            }
+            return tmp.newFile(name).apply {
+                delete()
+                PortablePackage.buildInnerZip(
+                    artifacts,
+                    "2026-09-14T00:00:00Z",
+                    this,
+                    categoryDeclarations = declarations
+                )
+            }
+        }
+
+        val missing = rewriteManifest(currentInner("source_missing.zip"), "missing_category.zip") { manifest ->
+            manifest.getJSONArray("categories").remove(0)
+        }
+        val duplicate = rewriteManifest(currentInner("source_duplicate.zip"), "duplicate_category.zip") { manifest ->
+            val categories = manifest.getJSONArray("categories")
+            categories.put(JSONObject(categories.getJSONObject(0).toString()))
+        }
+        val contradictory = rewriteManifest(currentInner("source_contradictory.zip"), "contradictory.zip") { manifest ->
+            val categories = manifest.getJSONArray("categories")
+            val chat = (0 until categories.length())
+                .map { categories.getJSONObject(it) }
+                .first { it.getString("category") == PortableRestoreCategory.CHATS.key }
+            chat.put("representation", PortablePackage.CategoryRepresentation.EMPTY.value)
+                .put("artifacts", org.json.JSONArray())
+                .put("record_count", 0)
+        }
+
+        listOf(missing, duplicate, contradictory).forEach { invalid ->
+            assertTrue(
+                PortablePackage.validateAndExtract(invalid, tmp.newFolder())
+                    is PortablePackage.ValidateResult.Failed
+            )
+        }
+    }
+
+    @Test
+    fun currentManifestRejectsOverLimitDeclarationBeforeArtifactParsing() {
+        val chats = artifactFile(
+            "limit_chats",
+            """{"format":"chat-logical-v2","complete":true,"chats":[],"folders":[]}"""
+                .toByteArray(Charsets.UTF_8)
+        )
+        val declarations = PortableRestoreCategory.entries.map { category ->
+            val names = if (category == PortableRestoreCategory.CHATS) setOf("chats.json") else emptySet()
+            PortablePackage.CategoryDeclaration(
+                category,
+                if (names.isEmpty()) PortablePackage.CategoryRepresentation.EMPTY
+                else PortablePackage.CategoryRepresentation.ARTIFACTS,
+                names,
+                0L
+            )
+        }
+        val valid = tmp.newFile("limit_source.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "chats.json",
+                    PortablePackage.TYPE_CHATS_JSON,
+                    chats,
+                    null,
+                    null,
+                    2
+                )
+            ),
+            "2026-09-14T00:00:00Z",
+            valid,
+            categoryDeclarations = declarations
+        )
+        val invalid = rewriteManifest(valid, "limit_invalid.zip") { manifest ->
+            manifest.getJSONArray("artifacts").getJSONObject(0).put(
+                "decoded_bytes",
+                PortableRecoveryLimits.CHATS_JSON_BYTES + 1L
+            )
+        }
+
+        val result = PortablePackage.validateAndExtract(invalid, tmp.newFolder())
+        assertTrue(result is PortablePackage.ValidateResult.Failed)
+        assertEquals(
+            PortablePackageFormat.RestoreError.TOO_LARGE,
+            (result as PortablePackage.ValidateResult.Failed).error
         )
     }
 
@@ -547,5 +714,32 @@ class PortablePackageTest {
         assertFalse(PortablePackage.isSafeEntryName("a\\b"))
         assertFalse(PortablePackage.isSafeEntryName(""))
         assertTrue(PortablePackage.isSafeEntryName("memory.db"))
+    }
+
+    private fun rewriteManifest(
+        source: File,
+        destinationName: String,
+        mutate: (JSONObject) -> Unit
+    ): File {
+        val destination = tmp.newFile(destinationName).apply { delete() }
+        ZipFile(source).use { input ->
+            ZipOutputStream(destination.outputStream()).use { output ->
+                val entries = input.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    output.putNextEntry(ZipEntry(entry.name))
+                    val bytes = input.getInputStream(entry).use { it.readBytes() }
+                    if (entry.name == PortablePackage.MANIFEST_ENTRY) {
+                        val manifest = JSONObject(String(bytes, Charsets.UTF_8))
+                        mutate(manifest)
+                        output.write(manifest.toString().toByteArray(Charsets.UTF_8))
+                    } else {
+                        output.write(bytes)
+                    }
+                    output.closeEntry()
+                }
+            }
+        }
+        return destination
     }
 }

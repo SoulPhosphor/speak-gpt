@@ -918,7 +918,7 @@ object UnifiedPortableRestore {
         catch (_: Exception) { null }
     }
 
-    private fun readIncomingMemory(
+    internal fun readIncomingMemory(
         artifacts: List<PortablePackage.ValidatedArtifact>,
         group: MemoryPortableGroup,
         incomingIsEmpty: Boolean
@@ -933,6 +933,7 @@ object UnifiedPortableRestore {
         val key = decodeHex(databaseArtifact.databaseKeyHex ?: return null) ?: return null
         var database: SQLiteDatabase? = null
         return try {
+            LoreBookEncryption.loadLibrary()
             val opened = SQLiteDatabase.openDatabase(
                 databaseArtifact.stagedFile.absolutePath,
                 key,
@@ -952,7 +953,7 @@ object UnifiedPortableRestore {
         }
     }
 
-    private fun readIncomingLorebooks(
+    internal fun readIncomingLorebooks(
         context: Context,
         artifacts: List<PortablePackage.ValidatedArtifact>,
         incomingIsEmpty: Boolean
@@ -965,8 +966,15 @@ object UnifiedPortableRestore {
         }
         if (matches.size != 1) return null
         val databaseArtifact = matches.single()
-        if (databaseArtifact.keySemantics != PortablePackage.KEY_SEMANTICS_PASSPHRASE) return null
-        val key = decodeHex(databaseArtifact.databaseKeyHex ?: return null) ?: return null
+        val key = when (databaseArtifact.keySemantics) {
+            PortablePackage.KEY_SEMANTICS_PASSPHRASE ->
+                decodeHex(databaseArtifact.databaseKeyHex ?: return null) ?: return null
+            PortablePackage.KEY_SEMANTICS_PLAINTEXT -> {
+                if (databaseArtifact.databaseKeyHex != null) return null
+                ByteArray(0)
+            }
+            else -> return null
+        }
         val store = try {
             LoreBookStore.openForTest(context, databaseArtifact.stagedFile.absolutePath, key)
         } catch (_: Exception) {

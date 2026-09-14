@@ -23,6 +23,7 @@ import android.provider.OpenableColumns
 import org.teslasoft.assistant.preferences.backup.portable.PackageCrypto
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackage
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
+import org.teslasoft.assistant.preferences.backup.portable.PortableRecoverySemanticValidator
 import org.teslasoft.assistant.preferences.backup.portable.PortableStaging
 import org.teslasoft.assistant.preferences.backup.portable.ProfileImagePortableBackup
 import org.teslasoft.assistant.preferences.backup.portable.ProfileImagePortableRestoreManager
@@ -322,6 +323,24 @@ object DatabaseRestoreManager {
             PortableStaging.delete(root)
             return PrepareResult.Failed(
                 mapPortableFailure((validated as PortablePackage.ValidateResult.Failed).error)
+            )
+        }
+
+        val semantic = PortableRecoverySemanticValidator.validate(
+            context.applicationContext,
+            validated.artifacts,
+            validated.declaredCategories,
+            validated.explicitlyEmptyCategories,
+            validated.categoryRecordCounts
+        )
+        if (semantic !is PortableRecoverySemanticValidator.Result.Valid) {
+            PortableStaging.delete(root)
+            return PrepareResult.Failed(
+                mapPortableFailure(
+                    if (semantic is PortableRecoverySemanticValidator.Result.TooLarge) {
+                        PortablePackageFormat.RestoreError.TOO_LARGE
+                    } else PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED
+                )
             )
         }
 

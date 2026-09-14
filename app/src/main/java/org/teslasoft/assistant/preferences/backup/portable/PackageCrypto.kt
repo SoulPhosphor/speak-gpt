@@ -63,7 +63,7 @@ import javax.crypto.spec.SecretKeySpec
 object PackageCrypto {
 
     /** Conservative whole-package cap, enforced on create and restore. */
-    const val MAX_PACKAGE_BYTES: Long = 1L shl 30 // 1 GiB
+    const val MAX_PACKAGE_BYTES: Long = PortableRecoveryLimits.COMPLETE_PACKAGE_BYTES
 
     const val KDF_ALG = "PBKDF2WithHmacSHA256"
     const val KDF_MIN_ITERATIONS = 600_000

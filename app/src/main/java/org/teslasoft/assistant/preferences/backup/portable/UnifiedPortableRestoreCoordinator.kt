@@ -300,9 +300,25 @@ object UnifiedPortableRestoreCoordinator {
                 current
             )
         }
-        val inventory = PortableRestoreInventory.from(
-            validated.artifacts, validated.declaredCategories
+        val semantic = PortableRecoverySemanticValidator.validate(
+            context.applicationContext,
+            validated.artifacts,
+            validated.declaredCategories,
+            validated.explicitlyEmptyCategories,
+            validated.categoryRecordCounts
         )
+        if (semantic !is PortableRecoverySemanticValidator.Result.Valid) {
+            return terminal(
+                context,
+                PortableRestoreOutcome.PackageFailure(
+                    if (semantic is PortableRecoverySemanticValidator.Result.TooLarge) {
+                        PortablePackageFormat.RestoreError.TOO_LARGE
+                    } else PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED
+                ),
+                current
+            )
+        }
+        val inventory = semantic.inventory
         when (val selected = PortableRestoreSelectionPlan.inspect(current.requested, inventory)) {
             is PortableRestoreSelectionPlan.Result.Ready -> synchronized(lock) {
                 current.artifacts = validated.artifacts.toList()
