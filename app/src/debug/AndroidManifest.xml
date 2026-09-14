@@ -3,8 +3,9 @@
     <application>
         <provider
             android:name="org.teslasoft.assistant.preferences.backup.RecoveryTestDocumentsProvider"
-            android:authorities="com.soulphosphor.phosphorshines.test.recovery.documents"
-            android:exported="true"
+            android:authorities="${applicationId}.recovery.documents"
+            android:enabled="${recoveryTestDocumentsProviderEnabled}"
+            android:exported="false"
             android:grantUriPermissions="true" />
     </application>
 </manifest>

@@ -51,6 +51,7 @@ android {
 
         buildConfigField "String", "GIT_SHA", "\"${gitSha}\""
         buildConfigField "String", "BUILD_DATE", "\"${buildDate}\""
+        manifestPlaceholders.recoveryTestDocumentsProviderEnabled = instrumentationAbi != null
 
         // Instrumentation tests (app/src/androidTest) exercise the real
         // SQLCipher-backed MemoryStore — onCreate/onUpgrade/import/deletion.

@@ -69,7 +69,7 @@ class RecoveryTestDocumentsProvider : DocumentsProvider() {
     }
 
     companion object {
-        const val AUTHORITY = "com.soulphosphor.phosphorshines.test.recovery.documents"
+        const val AUTHORITY = "com.soulphosphor.phosphorshines.recovery.documents"
         const val ROOT_ID = "recovery-root"
         const val DIRECTORY = "recovery-provider"
         private val SAFE_NAME = Regex("[A-Za-z0-9._-]{1,160}")
@@ -88,3 +88,4 @@ class RecoveryTestDocumentsProvider : DocumentsProvider() {
         )
     }
 }
+
