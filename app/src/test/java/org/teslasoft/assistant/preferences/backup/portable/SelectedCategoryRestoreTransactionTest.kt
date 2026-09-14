@@ -17,6 +17,8 @@
 package org.teslasoft.assistant.preferences.backup.portable
 
 import java.nio.file.Files
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -155,6 +157,107 @@ class SelectedCategoryRestoreTransactionTest {
     }
 
     @Test
+    fun everyParticipantStartAndCompleteBoundaryRecoversExactLogicalContent() {
+        val categoryKeys = listOf(
+            "chats",
+            "generated_images",
+            "identity_bundle",
+            "companion_memory_store",
+            "profile_images",
+            "lorebooks",
+            "model_endpoint_settings"
+        )
+        val faultCases = buildList {
+            add(SelectedCategoryRestoreTransaction.Boundary.AFTER_PREPARED to null)
+            categoryKeys.forEach { key ->
+                add(SelectedCategoryRestoreTransaction.Boundary.AFTER_PARTICIPANT_STARTED to key)
+                add(SelectedCategoryRestoreTransaction.Boundary.AFTER_PARTICIPANT_COMPLETED to key)
+            }
+        }
+
+        faultCases.forEach { (boundary, faultCategory) ->
+            val root = tempRoot()
+            val logicalContent = categoryKeys.associateWithTo(LinkedHashMap()) { "original-$it" }
+            val participants = categoryKeys.map { key ->
+                statefulParticipant(key, logicalContent, "desired-$key")
+            }
+            var interrupted = false
+            try {
+                SelectedCategoryRestoreTransaction.execute(
+                    root,
+                    participants,
+                    faultInjector = SelectedCategoryRestoreTransaction.FaultInjector {
+                            actualBoundary, actualCategory ->
+                        if (actualBoundary == boundary && actualCategory == faultCategory) {
+                            throw SimulatedProcessDeath()
+                        }
+                    }
+                )
+            } catch (_: SimulatedProcessDeath) {
+                interrupted = true
+            }
+
+            assertTrue("$boundary/$faultCategory did not interrupt", interrupted)
+            assertTrue(
+                "$boundary/$faultCategory did not recover",
+                SelectedCategoryRestoreTransaction.recover(
+                    root, participants.associateBy { it.categoryKey }
+                )
+            )
+            assertEquals(
+                "$boundary/$faultCategory exposed partial logical content",
+                categoryKeys.associateWith { "original-$it" },
+                logicalContent
+            )
+            assertFalse("$boundary/$faultCategory left a journal", root.exists())
+        }
+    }
+
+    @Test
+    fun interruptionAfterTransactionCompleteKeepsDesiredContentAndOnlyCleansUp() {
+        val root = tempRoot()
+        val logicalContent = linkedMapOf("chats" to "original-chats")
+        val chats = statefulParticipant("chats", logicalContent, "desired-chats")
+        var interrupted = false
+        try {
+            SelectedCategoryRestoreTransaction.execute(
+                root,
+                listOf(chats),
+                faultInjector = SelectedCategoryRestoreTransaction.FaultInjector { boundary, _ ->
+                    if (boundary ==
+                        SelectedCategoryRestoreTransaction.Boundary.AFTER_TRANSACTION_COMPLETED
+                    ) throw SimulatedProcessDeath()
+                }
+            )
+        } catch (_: SimulatedProcessDeath) {
+            interrupted = true
+        }
+
+        assertTrue(interrupted)
+        assertTrue(SelectedCategoryRestoreTransaction.recover(root, mapOf("chats" to chats)))
+        assertEquals(mapOf("chats" to "desired-chats"), logicalContent)
+        assertFalse(root.exists())
+    }
+
+    @Test
+    fun versionOneJournalRemainsRecoverableAfterTheMarkerUpgrade() {
+        val root = tempRoot().apply { mkdirs() }
+        root.resolve("state.json").writeText(
+            JSONObject()
+                .put("version", 1)
+                .put("phase", "APPLYING")
+                .put("started", JSONArray().put("chats"))
+                .toString()
+        )
+        val logicalContent = linkedMapOf("chats" to "partially-applied")
+        val chats = statefulParticipant("chats", logicalContent, "desired-chats", "original-chats")
+
+        assertTrue(SelectedCategoryRestoreTransaction.recover(root, mapOf("chats" to chats)))
+        assertEquals(mapOf("chats" to "original-chats"), logicalContent)
+        assertFalse(root.exists())
+    }
+
+    @Test
     fun terminalOutcomeIsWrittenBeforeCleanupAndJournalRelease() {
         val events = ArrayList<String>()
         val root = tempRoot()
@@ -211,6 +314,30 @@ class SelectedCategoryRestoreTransactionTest {
         override fun rollback(): Boolean { events.add("rollback:$key"); return rollsBack }
         override fun cleanup() { events.add("cleanup:$key") }
     }
+
+    private fun statefulParticipant(
+        key: String,
+        logicalContent: MutableMap<String, String>,
+        desired: String,
+        stagedOriginal: String = logicalContent.getValue(key)
+    ): SelectedCategoryRestoreTransaction.Participant {
+        return object : SelectedCategoryRestoreTransaction.Participant {
+            override val categoryKey = key
+            override fun validate() = true
+            override fun stage() = true
+            override fun apply(): Boolean {
+                logicalContent[key] = desired
+                return true
+            }
+            override fun rollback(): Boolean {
+                logicalContent[key] = stagedOriginal
+                return true
+            }
+            override fun cleanup() = Unit
+        }
+    }
+
+    private class SimulatedProcessDeath : Error()
 
     private fun tempRoot() = Files.createTempDirectory("restore-transaction-test")
         .resolve("journal")

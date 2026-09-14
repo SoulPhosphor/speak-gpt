@@ -21,6 +21,10 @@ try {
     gitSha = "unknown"
 }
 def buildDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format(new Date())
+def instrumentationAbi = providers.gradleProperty("recoveryInstrumentationAbi").orNull
+if (instrumentationAbi != null && instrumentationAbi !in ["arm64-v8a", "x86_64"]) {
+    throw new GradleException("Unsupported recovery instrumentation ABI: ${instrumentationAbi}")
+}
 
 android {
     namespace 'org.teslasoft.assistant'
@@ -58,7 +62,10 @@ android {
         ndk {
             // Only ship arm64 binaries. The target user runs a Pixel 8 and
             // we don't need to bloat the APK with x86_64 / armeabi-v7a.
-            abiFilters "arm64-v8a"
+            // Production remains arm64-only. Phase 12.9 may request an x86_64
+            // instrumentation APK so the recovery suite can execute on a
+            // GitHub-hosted emulator instead of merely compiling in CI.
+            abiFilters instrumentationAbi ?: "arm64-v8a"
         }
 
         externalNativeBuild {

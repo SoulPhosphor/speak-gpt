@@ -72,3 +72,114 @@ jobs:
           name: app-beta-apk
           path: app/build/outputs/apk/beta/app-beta.apk
           if-no-files-found: error
+
+      - name: Archive JVM test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jvm-test-results
+          path: app/build/test-results/test*/**/*.xml
+          if-no-files-found: error
+
+  recovery-instrumentation:
+    name: Recovery instrumentation and fault matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install emulator and build dependencies
+        run: |
+          set -euo pipefail
+          sdkmanager --install \
+            "platform-tools" \
+            "emulator" \
+            "system-images;android-35;google_apis;x86_64" \
+            "ndk;26.3.11579264" \
+            "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
+          chmod +x ./gradlew
+
+      - name: Start disposable x86_64 emulator
+        run: |
+          set -euo pipefail
+          echo no | avdmanager create avd \
+            --force \
+            --name recovery-matrix \
+            --package "system-images;android-35;google_apis;x86_64" \
+            --device pixel_6
+          sudo chmod 666 /dev/kvm
+          nohup emulator @recovery-matrix \
+            -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
+            -camera-back none -camera-front none -wipe-data \
+            > "$RUNNER_TEMP/recovery-emulator.log" 2>&1 &
+          adb wait-for-device
+          for attempt in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+              adb shell settings put global window_animation_scale 0
+              adb shell settings put global transition_animation_scale 0
+              adb shell settings put global animator_duration_scale 0
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Build x86_64 recovery test APKs
+        run: >-
+          ./gradlew --no-daemon
+          -PrecoveryInstrumentationAbi=x86_64
+          assembleDebug assembleDebugAndroidTest
+
+      - name: Install recovery test APKs
+        run: |
+          set -euo pipefail
+          adb install -t app/build/outputs/apk/debug/app-debug.apk
+          adb install -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+
+      - name: Run recovery instrumentation and fault suite
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/recovery-results"
+          adb shell am instrument -w -r \
+            -e class \
+            org.teslasoft.assistant.preferences.backup.PortableRecoveryMatrixInstrumentedTest,org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreInstrumentedTest,org.teslasoft.assistant.preferences.memory.MemorySharedRestoreInstrumentedTest,org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporterImageValidationInstrumentedTest,org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecoveryInstrumentedTest \
+            com.soulphosphor.phosphorshines.test/androidx.test.runner.AndroidJUnitRunner \
+            | tee "$RUNNER_TEMP/recovery-results/instrumentation.txt"
+          grep -Fq "OK (" "$RUNNER_TEMP/recovery-results/instrumentation.txt"
+
+      - name: Record recovery proof metadata
+        if: always()
+        run: |
+          {
+            echo "## Phase 12.9 automated recovery matrix"
+            echo "- Candidate commit: $GITHUB_SHA"
+            echo "- Emulator ABI: $(adb shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')"
+            echo "- Android: $(adb shell getprop ro.build.version.release 2>/dev/null | tr -d '\r')"
+            echo "- JVM results: archived by the test job"
+            echo "- Instrumentation output: archived by this job"
+            echo "- Recovery assertions: logical content, reference closure, integrity, journal cleanup"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Archive instrumentation and fault evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-instrumentation-results
+          path: |
+            ${{ runner.temp }}/recovery-results
+            ${{ runner.temp }}/recovery-emulator.log
+          if-no-files-found: error

@@ -10,6 +10,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.File
 import java.security.MessageDigest
+import java.util.zip.ZipFile
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -72,6 +73,29 @@ class CompanionBackupExporterImageValidationInstrumentedTest {
             CompanionBackupExporter.buildBackupZip(context, staged, validateAssignedImages = true)
                 is CompanionBackupExporter.BuildResult.ProfileImageUnavailable
         )
+        staged.delete()
+    }
+
+    @Test
+    fun validAssignedImageBytesArePresentInTheFinishedIdentityArchive() {
+        val bytes = jpeg(7)
+        val hash = MessageDigest.getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString("") { "%02x".format(it) }
+        seedCompanionWithAvatar(hash)
+        File(imagesDir, ProfileImageFileNaming.permanentFileName(hash)).writeBytes(bytes)
+        val staged = File(context.cacheDir, "exporter-valid-${System.nanoTime()}.zip")
+
+        val result = CompanionBackupExporter.buildBackupZip(
+            context, staged, validateAssignedImages = true
+        )
+
+        assertTrue(result is CompanionBackupExporter.BuildResult.Ok)
+        ZipFile(staged).use { archive ->
+            val entry = archive.getEntry(CompanionBackupFormat.imageEntryName(hash))
+            assertTrue(entry != null)
+            assertTrue(archive.getInputStream(entry!!).use { it.readBytes().contentEquals(bytes) })
+        }
         staged.delete()
     }
 
