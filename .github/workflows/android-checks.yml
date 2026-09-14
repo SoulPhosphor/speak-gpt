@@ -163,12 +163,32 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/recovery-results"
-          adb shell am instrument -w -r \
-            -e class \
-            org.teslasoft.assistant.preferences.backup.PortableRecoveryMatrixInstrumentedTest,org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreInstrumentedTest,org.teslasoft.assistant.preferences.memory.MemorySharedRestoreInstrumentedTest,org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporterImageValidationInstrumentedTest,org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecoveryInstrumentedTest \
-            com.soulphosphor.phosphorshines.test/androidx.test.runner.AndroidJUnitRunner \
-            | tee "$RUNNER_TEMP/recovery-results/instrumentation.txt"
-          grep -Fq "OK (" "$RUNNER_TEMP/recovery-results/instrumentation.txt"
+          classes=(
+            org.teslasoft.assistant.preferences.backup.PortableRecoveryMatrixInstrumentedTest
+            org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreInstrumentedTest
+            org.teslasoft.assistant.preferences.memory.MemorySharedRestoreInstrumentedTest
+            org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporterImageValidationInstrumentedTest
+            org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRecoveryInstrumentedTest
+          )
+          failed=0
+          for class_name in "${classes[@]}"; do
+            result_name="${class_name##*.}"
+            adb logcat -c
+            set +e
+            adb shell am instrument -w -r \
+              -e class "$class_name" \
+              com.soulphosphor.phosphorshines.test/androidx.test.runner.AndroidJUnitRunner \
+              | tee "$RUNNER_TEMP/recovery-results/$result_name.txt"
+            instrument_status=${PIPESTATUS[0]}
+            set -e
+            adb logcat -d -v threadtime \
+              > "$RUNNER_TEMP/recovery-results/$result_name-logcat.txt"
+            if [ "$instrument_status" -ne 0 ] || \
+              ! grep -Fq "OK (" "$RUNNER_TEMP/recovery-results/$result_name.txt"; then
+              failed=1
+            fi
+          done
+          exit "$failed"
 
       - name: Record recovery proof metadata
         if: always()
