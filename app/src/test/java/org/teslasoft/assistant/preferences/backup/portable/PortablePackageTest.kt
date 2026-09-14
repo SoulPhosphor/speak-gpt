@@ -45,7 +45,7 @@ class PortablePackageTest {
     val tmp = TemporaryFolder()
 
     private fun artifactFile(name: String, content: ByteArray): File =
-        tmp.newFile(name).apply { writeBytes(content) }
+        tmp.newFile("${name}_${System.nanoTime()}").apply { writeBytes(content) }
 
     private fun buildArtifacts(): List<PortablePackage.Artifact> = listOf(
         PortablePackage.Artifact(

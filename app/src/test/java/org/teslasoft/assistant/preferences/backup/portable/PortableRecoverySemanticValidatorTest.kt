@@ -1,5 +1,6 @@
 package org.teslasoft.assistant.preferences.backup.portable
 
+import android.app.Application
 import android.content.Context
 import java.io.File
 import java.util.UUID
@@ -14,6 +15,8 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.ConscryptMode
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupCodec
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
@@ -23,6 +26,8 @@ import org.teslasoft.assistant.preferences.backup.companion.CompanionProfileEntr
 import org.teslasoft.assistant.util.Hash
 
 @RunWith(RobolectricTestRunner::class)
+@Config(manifest = Config.NONE, sdk = [28], application = Application::class)
+@ConscryptMode(ConscryptMode.Mode.OFF)
 class PortableRecoverySemanticValidatorTest {
     @get:Rule
     val tmp = TemporaryFolder()
