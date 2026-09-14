@@ -5,7 +5,6 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -17,36 +16,38 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.teslasoft.assistant.preferences.ModelEndpointStateGenerationStore
+import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.backup.portable.ModelEndpointPortableCodec
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackage
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
 import org.teslasoft.assistant.preferences.backup.portable.PortableRecoverySemanticValidator
 import org.teslasoft.assistant.preferences.backup.portable.PortableRecoveryWriter
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreCategory
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
+import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.profileimages.ProfileImageDb
 
 @RunWith(AndroidJUnit4::class)
 class PortableRecoveryMatrixInstrumentedTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
-    private val testContext: Context get() = InstrumentationRegistry.getInstrumentation().context
     private val created = ArrayList<File>()
 
     @Before
     fun prepare() {
         context.getSharedPreferences("api_endpoint", Context.MODE_PRIVATE).edit().clear().commit()
         context.getSharedPreferences("favorite_models", Context.MODE_PRIVATE).edit().clear().commit()
-        providerRoot().deleteRecursively()
     }
 
     @After
     fun cleanup() {
         created.forEach { it.deleteRecursively() }
-        providerRoot().deleteRecursively()
         context.getSharedPreferences("api_endpoint", Context.MODE_PRIVATE).edit().clear().commit()
         context.getSharedPreferences("favorite_models", Context.MODE_PRIVATE).edit().clear().commit()
     }
 
     @Test
     fun currentWriterProducesAReadableAllTwelveCategoryFixtureOnRealFiles() {
+        primePortableSources()
         val output = tempFile("all-twelve.sgbak")
         val written = PortableRecoveryWriter.createPackage(
             context,
@@ -55,7 +56,7 @@ class PortableRecoveryMatrixInstrumentedTest {
             passwordBlob = null,
             appVersion = "phase-12.9-test"
         )
-        assertTrue(written is PortableRecoveryWriter.Result.Ok)
+        assertTrue("writer result: $written", written is PortableRecoveryWriter.Result.Ok)
         assertTrue(output.isFile && output.length() > 0L)
 
         val inspected = PortablePackage.inspect(output)
@@ -112,14 +113,11 @@ class PortableRecoveryMatrixInstrumentedTest {
         val bytes = ByteArray(4096) { (it % 251).toByte() }
         val finalName = "Recovery-Matrix.sgbak"
         val incompleteName = RecoveryDocumentPublication.incompleteName(finalName)
-        File(providerRoot(), incompleteName).apply {
-            parentFile?.mkdirs()
-            writeBytes(bytes)
-        }
         val incompleteUri = DocumentsContract.buildDocumentUri(
             RecoveryTestDocumentsProvider.AUTHORITY,
             incompleteName
         )
+        context.contentResolver.openOutputStream(incompleteUri, "w")!!.use { it.write(bytes) }
 
         val published = RecoveryDocumentPublication.finalize(
             context.contentResolver,
@@ -129,10 +127,24 @@ class PortableRecoveryMatrixInstrumentedTest {
 
         assertNotNull(published)
         assertEquals(finalName, DocumentsContract.getDocumentId(published!!))
-        assertFalse(File(providerRoot(), incompleteName).exists())
-        assertTrue(File(providerRoot(), finalName).isFile)
+        assertFalse(runCatching {
+            context.contentResolver.openInputStream(incompleteUri)!!.use { it.read() }
+        }.isSuccess)
         val actual = context.contentResolver.openInputStream(published)!!.use { it.readBytes() }
         assertArrayEquals(bytes, actual)
+    }
+
+    private fun primePortableSources() {
+        assertTrue(SecurePrefs.get(context, "chat_list").edit()
+            .putString("data", "[]").commit())
+        MemoryStore.getInstance(context).readableDatabase.rawQuery("SELECT 1", null).use {
+            assertTrue(it.moveToFirst())
+        }
+        ProfileImageDb.getInstance(context).readableDatabase.rawQuery("SELECT 1", null).use {
+            assertTrue(it.moveToFirst())
+        }
+        GeneratedImageCatalogStore.ensureAvailableForRegistration(context)
+        ModelEndpointStateGenerationStore.get(context).read()
     }
 
     private fun endpointData(label: String, model: String): ModelEndpointPortableCodec.Data {
@@ -169,11 +181,6 @@ class PortableRecoveryMatrixInstrumentedTest {
             listOf(linkedMapOf("endpointId" to endpoint.id, "modelId" to model))
         )
     }
-
-    private fun providerRoot(): File = File(
-        testContext.filesDir,
-        RecoveryTestDocumentsProvider.DIRECTORY
-    )
 
     private fun tempFile(name: String): File =
         File(context.cacheDir, "phase-12-9-${System.nanoTime()}-$name").also(created::add)
