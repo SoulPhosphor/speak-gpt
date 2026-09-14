@@ -19,6 +19,7 @@ import org.teslasoft.assistant.preferences.backup.companion.CompanionRestorePlan
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStorageState
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogSnapshot
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
+import org.teslasoft.assistant.preferences.lorebook.LoreBookEncryption
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryPortableGroup
 import org.teslasoft.assistant.preferences.memory.MemoryPortableRowFormat
