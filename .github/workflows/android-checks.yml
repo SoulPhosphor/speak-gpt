@@ -116,11 +116,14 @@ jobs:
       - name: Start disposable x86_64 emulator
         run: |
           set -euo pipefail
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/android-avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           echo no | avdmanager create avd \
             --force \
             --name recovery-matrix \
             --package "system-images;android-35;google_apis;x86_64" \
-            --device pixel_6
+            --device pixel_6 \
+            --path "$ANDROID_AVD_HOME/recovery-matrix.avd"
           sudo chmod 666 /dev/kvm
           nohup "$ANDROID_HOME/emulator/emulator" @recovery-matrix \
             -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect \
