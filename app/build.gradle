@@ -118,8 +118,12 @@ android {
 
         debug {
             debuggable false
-            minifyEnabled true
-            shrinkResources true
+            // The disposable x86_64 test APK shares its classloader with the
+            // separately built instrumentation APK. R8 cannot see those test-
+            // only calls and would remove runner APIs such as Trace.beginSection.
+            // Normal arm64 debug artifacts remain minified exactly as before.
+            minifyEnabled instrumentationAbi == null
+            shrinkResources instrumentationAbi == null
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             multiDexEnabled true
             signingConfig signingConfigs.debug
