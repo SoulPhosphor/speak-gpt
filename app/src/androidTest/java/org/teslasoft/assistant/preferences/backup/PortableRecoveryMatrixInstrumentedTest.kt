@@ -60,8 +60,12 @@ class PortableRecoveryMatrixInstrumentedTest {
 
         val inspected = PortablePackage.inspect(output)
         assertTrue(inspected is PortablePackage.InspectResult.Ok)
-        inspected as PortablePackage.InspectResult.Ok
-        assertEquals(PortablePackageFormat.FORMAT_VERSION, inspected.inspection.formatVersion)
+        val header = PortablePackageFormat.readHeader(output)
+        assertTrue(header is PortablePackageFormat.HeaderResult.Ok)
+        assertEquals(
+            PortablePackageFormat.FORMAT_VERSION,
+            (header as PortablePackageFormat.HeaderResult.Ok).header.formatVersion
+        )
 
         val decodeRoot = tempDirectory("all-twelve-decode")
         val decoded = PortablePackage.decodeWithSecret(output, ByteArray(0), decodeRoot)
