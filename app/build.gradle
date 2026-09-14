@@ -232,6 +232,10 @@ dependencies {
     // only run when the user opens the app). One unique periodic job; the
     // worker's own due gate makes a deferred/early fire harmless.
     implementation 'androidx.work:work-runtime-ktx:2.10.0'
+    // AndroidJUnitRunner calls Trace.beginSection during startup. Keep the
+    // application-side class new enough for the runner's shared classloader;
+    // an older transitive tracing artifact crashes before any device test runs.
+    implementation 'androidx.tracing:tracing:1.2.0'
 
     // JVM unit tests (app/src/test); run in CI via "gradlew test".
     testImplementation 'junit:junit:4.13.2'
