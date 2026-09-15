@@ -1,0 +1,15 @@
+Speak-GPT Licensing Notice
+
+This repository is derived from SpeakGPT by Dmytro Ostapenko (AndraxDev), originally distributed under the Apache License, Version 2.0.
+
+Original upstream work:
+Copyright (c) 2023-2026 Dmytro Ostapenko. All rights reserved.
+Licensed under the Apache License, Version 2.0. See LICENSE.md.
+
+SoulPhosphor modifications and new work:
+Copyright (c) 2026 SoulPhosphor.
+Except where otherwise noted, original modifications and new code authored by SoulPhosphor are licensed under the PolyForm Noncommercial License 1.0.0. See LICENSE-POLYFORM-NONCOMMERCIAL.md.
+
+The PolyForm Noncommercial terms apply only to material for which SoulPhosphor owns the applicable copyright. They do not revoke, narrow, or replace rights granted under the Apache License, Version 2.0 for upstream material, nor do they change the licenses of third-party components.
+
+If code under another license is incorporated in the future, that code remains subject to its own license and this notice should be updated as needed.
