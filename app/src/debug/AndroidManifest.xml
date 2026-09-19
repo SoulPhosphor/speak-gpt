@@ -6,6 +6,7 @@
             android:authorities="${applicationId}.recovery.documents"
             android:enabled="${recoveryTestDocumentsProviderEnabled}"
             android:exported="true"
-            android:grantUriPermissions="true" />
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS" />
     </application>
 </manifest>
