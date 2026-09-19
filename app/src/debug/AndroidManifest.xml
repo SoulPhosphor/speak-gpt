@@ -5,7 +5,7 @@
             android:name="org.teslasoft.assistant.preferences.backup.RecoveryTestDocumentsProvider"
             android:authorities="${applicationId}.recovery.documents"
             android:enabled="${recoveryTestDocumentsProviderEnabled}"
-            android:exported="false"
+            android:exported="true"
             android:grantUriPermissions="true" />
     </application>
 </manifest>
