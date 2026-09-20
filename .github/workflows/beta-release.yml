@@ -3,7 +3,7 @@ name: Side-by-side Beta APK
 on:
   push:
     branches:
-      - agent/phase-8-pre-main-safety
+      - beta/new-client
 
 concurrency:
   group: side-by-side-beta
@@ -27,7 +27,7 @@ jobs:
           cache: gradle
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install build dependencies
         run: |
