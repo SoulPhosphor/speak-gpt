@@ -34,6 +34,14 @@ import org.teslasoft.assistant.preferences.RenameJournal.Pending
  */
 class RenameJournalReconcileTest {
 
+    @Test
+    fun missingIdLegacyRowContributesItsCompatibilityIdToRecovery() {
+        val legacy = mapOf("name" to "Legacy")
+        val liveIds = setOf(ChatPreferences.storedChatId(legacy))
+        val pending = Pending("old", ChatPreferences.storedChatId(legacy))
+        assertEquals(listOf(Action.Repoint(pending.old, pending.new)), RenameJournal.planReconcile(listOf(pending), liveIds, true))
+    }
+
     private val old = "oldid"
     private val new = "newid"
     private fun one() = listOf(Pending(old, new))

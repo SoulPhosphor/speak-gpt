@@ -17,6 +17,7 @@
 package org.teslasoft.assistant.util
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,6 +25,43 @@ import java.io.File
 import java.nio.file.Files
 
 class AtomicFileWriterTest {
+
+    @Test
+    fun binaryWritePublishesVerifiedFileAndRetryIsIdempotent() {
+        val dir = kotlin.io.path.createTempDirectory("atomic-bytes").toFile()
+        try {
+            val target = File(dir, "image-id.png")
+            val bytes = byteArrayOf(1, 2, 3, 4)
+            assertEquals(
+                AtomicFileWriter.ByteWriteResult.WRITTEN,
+                AtomicFileWriter.writeBytesAndVerify(target, bytes)
+            )
+            assertEquals(
+                AtomicFileWriter.ByteWriteResult.EXISTING_MATCH,
+                AtomicFileWriter.writeBytesAndVerify(target, bytes.copyOf())
+            )
+            assertArrayEquals(bytes, target.readBytes())
+            assertFalse(File(dir, "image-id.png.catalogtmp").exists())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun binaryWriteNeverReplacesDifferentExistingAsset() {
+        val dir = kotlin.io.path.createTempDirectory("atomic-existing").toFile()
+        try {
+            val target = File(dir, "image-id.png")
+            target.writeBytes(byteArrayOf(9, 9, 9))
+            assertEquals(
+                AtomicFileWriter.ByteWriteResult.FAILED,
+                AtomicFileWriter.writeBytesAndVerify(target, byteArrayOf(1, 2, 3))
+            )
+            assertArrayEquals(byteArrayOf(9, 9, 9), target.readBytes())
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
 
     private fun tempDir(): File = Files.createTempDirectory("atomic-writer-test").toFile()
 

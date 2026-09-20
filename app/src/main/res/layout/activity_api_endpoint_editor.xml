@@ -233,18 +233,15 @@
             <!-- Streaming is a general default for new chats, not an endpoint
                  profile field. Keep the explanation before the plain checkbox
                  option row and use the shared CheckOption family. -->
-            <TextView
-                android:id="@+id/label_streaming"
-                style="@style/Widget.App.Section.Title"
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                android:id="@+id/header_streaming"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/streaming_title" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/streaming_description" />
+                android:layout_marginEnd="16dp"
+                android:paddingTop="24dp"
+                app:parameterTitle="@string/streaming_title"
+                app:parameterInfo="@string/streaming_description" />
 
             <LinearLayout
                 android:id="@+id/row_streaming"
@@ -266,18 +263,14 @@
             <!-- Temperature: shared Widget.App.Section.Title/.Hint (see
                  values/themes.xml + ui-style-guide.md), title then explanation
                  before the control, per the section-ordering rule. -->
-            <TextView
-                android:id="@+id/label_temperature"
-                style="@style/Widget.App.Section.Title"
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/sampling_label_temperature" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/sampling_hint_temperature" />
+                android:layout_marginEnd="16dp"
+                android:paddingTop="24dp"
+                app:parameterTitle="@string/sampling_label_temperature"
+                app:parameterInfo="@string/sampling_hint_temperature" />
 
             <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
                 android:id="@+id/slider_temperature"
@@ -285,18 +278,14 @@
                 android:contentDescription="@string/set_temperature" />
 
             <!-- Top P -->
-            <TextView
-                android:id="@+id/label_top_p"
-                style="@style/Widget.App.Section.Title"
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/sampling_label_top_p" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/sampling_hint_top_p" />
+                android:layout_marginEnd="16dp"
+                android:paddingTop="24dp"
+                app:parameterTitle="@string/sampling_label_top_p"
+                app:parameterInfo="@string/sampling_hint_top_p" />
 
             <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
                 android:id="@+id/slider_top_p"
@@ -304,18 +293,14 @@
                 android:contentDescription="@string/set_top_p" />
 
             <!-- Frequency Penalty -->
-            <TextView
-                android:id="@+id/label_frequency_penalty"
-                style="@style/Widget.App.Section.Title"
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/sampling_label_frequency_penalty" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/sampling_hint_frequency_penalty" />
+                android:layout_marginEnd="16dp"
+                android:paddingTop="24dp"
+                app:parameterTitle="@string/sampling_label_frequency_penalty"
+                app:parameterInfo="@string/sampling_hint_frequency_penalty" />
 
             <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
                 android:id="@+id/slider_frequency_penalty"
@@ -323,18 +308,14 @@
                 android:contentDescription="@string/set_frequency_penalty" />
 
             <!-- Presence Penalty -->
-            <TextView
-                android:id="@+id/label_presence_penalty"
-                style="@style/Widget.App.Section.Title"
+            <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/sampling_label_presence_penalty" />
-
-            <TextView
-                style="@style/Widget.App.Section.Hint"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/sampling_hint_presence_penalty" />
+                android:layout_marginEnd="16dp"
+                android:paddingTop="24dp"
+                app:parameterTitle="@string/sampling_label_presence_penalty"
+                app:parameterInfo="@string/sampling_hint_presence_penalty" />
 
             <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
                 android:id="@+id/slider_presence_penalty"

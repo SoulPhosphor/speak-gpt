@@ -134,6 +134,7 @@ class FavoriteModelListAdapter(
         viewHolder.modelAction.tooltipText = context.getString(R.string.label_remove_from_favorites)
         viewHolder.modelAction.contentDescription = context.getString(R.string.label_remove_from_favorites)
 
+        bindParametersButton(viewHolder, modelId, endpointId, rowTextColor)
         bindRoutingGear(viewHolder, modelId, endpointId, rowTextColor)
         bindReasoningLightbulb(viewHolder, modelId, endpointId, rowTextColor)
 
@@ -146,6 +147,28 @@ class FavoriteModelListAdapter(
         }
 
         return view
+    }
+
+    /**
+     * The Model Parameters (Tune) button. Shown for every favorite in the lists
+     * that opt into the row controls ([showRoutingGear]), since saved sampling
+     * parameters apply to any model regardless of provider. Tapping it opens the
+     * favorite's Model Parameters screen. Hidden wherever the favorite row is
+     * shown without those controls, so those displays stay unchanged.
+     */
+    private fun bindParametersButton(viewHolder: ViewHolder, modelId: String, endpointId: String, tintColor: Int) {
+        if (!showRoutingGear) {
+            viewHolder.parametersButton.visibility = View.GONE
+            viewHolder.parametersButton.setOnClickListener(null)
+            return
+        }
+        viewHolder.parametersButton.imageTintList = ColorStateList.valueOf(tintColor)
+        viewHolder.parametersButton.tooltipText = context.getString(R.string.model_parameters_button_desc, modelId)
+        viewHolder.parametersButton.contentDescription = context.getString(R.string.model_parameters_button_desc, modelId)
+        viewHolder.parametersButton.visibility = View.VISIBLE
+        viewHolder.parametersButton.setOnClickListener {
+            listener?.onParametersClick(modelId, endpointId)
+        }
     }
 
     /**
@@ -259,6 +282,7 @@ class FavoriteModelListAdapter(
         val voiceBg: ConstraintLayout = view.findViewById(R.id.voice_bg)
         val modelAction: ImageButton = view.findViewById(R.id.btn_action)
         val routingSettings: ImageButton = view.findViewById(R.id.btn_routing_settings)
+        val parametersButton: ImageButton = view.findViewById(R.id.btn_parameters)
         val reasoningSettings: ImageButton = view.findViewById(R.id.btn_reasoning_settings)
         val unavailableWarning: ImageView = view.findViewById(R.id.model_unavailable_warning)
     }
@@ -269,6 +293,9 @@ class FavoriteModelListAdapter(
 
         /** The provider-routing gear was tapped (OpenRouter favorites only). */
         fun onSettingsClick(model: String, endpointId: String)
+
+        /** The Model Parameters (Tune) button was tapped. */
+        fun onParametersClick(model: String, endpointId: String)
     }
 
     fun setOnItemClickListener(listener: OnItemClickListener) {

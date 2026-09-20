@@ -16,6 +16,10 @@
 
 package org.teslasoft.assistant.preferences.backup.portable
 
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupCodec
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupManifest
+import org.json.JSONObject
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -25,6 +29,9 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.RandomAccessFile
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 /**
  * End-to-end format tests: build -> envelope -> inspect -> decode -> validate,
@@ -38,7 +45,7 @@ class PortablePackageTest {
     val tmp = TemporaryFolder()
 
     private fun artifactFile(name: String, content: ByteArray): File =
-        tmp.newFile(name).apply { writeBytes(content) }
+        tmp.newFile("${name}_${System.nanoTime()}").apply { writeBytes(content) }
 
     private fun buildArtifacts(): List<PortablePackage.Artifact> = listOf(
         PortablePackage.Artifact(
@@ -97,6 +104,194 @@ class PortablePackageTest {
     }
 
     @Test
+    fun validV2PackageRoundTripsOnlyArtifactBackedCategories() {
+        val inner = tmp.newFile("inventory_inner.zip").apply { delete() }
+        val declared = setOf(
+            PortableRestoreCategory.CHATS,
+            PortableRestoreCategory.MEMORIES,
+            PortableRestoreCategory.MODEL_RULES
+        )
+        PortablePackage.buildInnerZip(
+            buildArtifacts(),
+            "2026-09-09T00:00:00Z",
+            inner,
+            declared
+        )
+
+        val extracted = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(extracted is PortablePackage.ValidateResult.Ok)
+        assertEquals(
+            declared,
+            (extracted as PortablePackage.ValidateResult.Ok).declaredCategories
+        )
+    }
+
+    @Test
+    fun ambiguousV2MissingArtifactsAreNotInventedAsEmptyCategories() {
+        val inner = tmp.newFile("ambiguous_v2_inner.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            buildArtifacts(),
+            "2026-09-09T00:00:00Z",
+            inner,
+            setOf(
+                PortableRestoreCategory.CHATS,
+                PortableRestoreCategory.GENERATED_IMAGES,
+                PortableRestoreCategory.MEMORIES,
+                PortableRestoreCategory.MODEL_RULES
+            )
+        )
+
+        assertTrue(
+            PortablePackage.validateAndExtract(inner, tmp.newFolder())
+                is PortablePackage.ValidateResult.Failed
+        )
+    }
+
+    @Test
+    fun currentManifestRoundTripsExactArtifactAndEmptyRepresentations() {
+        val artifacts = buildArtifacts()
+        val declarations = PortableRestoreCategory.entries.map { category ->
+            val names = when (category) {
+                PortableRestoreCategory.CHATS -> setOf("chats.json")
+                PortableRestoreCategory.MEMORIES,
+                PortableRestoreCategory.MODEL_RULES -> setOf("memory.db")
+                else -> emptySet()
+            }
+            PortablePackage.CategoryDeclaration(
+                category,
+                if (names.isEmpty()) PortablePackage.CategoryRepresentation.EMPTY
+                else PortablePackage.CategoryRepresentation.ARTIFACTS,
+                names,
+                0L
+            )
+        }
+        val inner = tmp.newFile("current_inventory_inner.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            artifacts,
+            "2026-09-14T00:00:00Z",
+            inner,
+            categoryDeclarations = declarations
+        )
+
+        val result = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(result is PortablePackage.ValidateResult.Ok)
+        result as PortablePackage.ValidateResult.Ok
+        assertEquals(PortablePackage.MANIFEST_VERSION, result.manifestVersion)
+        assertEquals(PortableRestoreCategory.entries.toSet(), result.declaredCategories)
+        assertEquals(
+            PortableRestoreCategory.entries.toSet() - setOf(
+                PortableRestoreCategory.CHATS,
+                PortableRestoreCategory.MEMORIES,
+                PortableRestoreCategory.MODEL_RULES
+            ),
+            result.explicitlyEmptyCategories
+        )
+    }
+
+    @Test
+    fun currentManifestRejectsMissingDuplicateAndContradictoryCategoryDeclarations() {
+        fun currentInner(name: String): File {
+            val artifacts = buildArtifacts()
+            val declarations = PortableRestoreCategory.entries.map { category ->
+                val names = when (category) {
+                    PortableRestoreCategory.CHATS -> setOf("chats.json")
+                    PortableRestoreCategory.MEMORIES,
+                    PortableRestoreCategory.MODEL_RULES -> setOf("memory.db")
+                    else -> emptySet()
+                }
+                PortablePackage.CategoryDeclaration(
+                    category,
+                    if (names.isEmpty()) PortablePackage.CategoryRepresentation.EMPTY
+                    else PortablePackage.CategoryRepresentation.ARTIFACTS,
+                    names,
+                    0L
+                )
+            }
+            return tmp.newFile(name).apply {
+                delete()
+                PortablePackage.buildInnerZip(
+                    artifacts,
+                    "2026-09-14T00:00:00Z",
+                    this,
+                    categoryDeclarations = declarations
+                )
+            }
+        }
+
+        val missing = rewriteManifest(currentInner("source_missing.zip"), "missing_category.zip") { manifest ->
+            manifest.getJSONArray("categories").remove(0)
+        }
+        val duplicate = rewriteManifest(currentInner("source_duplicate.zip"), "duplicate_category.zip") { manifest ->
+            val categories = manifest.getJSONArray("categories")
+            categories.put(JSONObject(categories.getJSONObject(0).toString()))
+        }
+        val contradictory = rewriteManifest(currentInner("source_contradictory.zip"), "contradictory.zip") { manifest ->
+            val categories = manifest.getJSONArray("categories")
+            val chat = (0 until categories.length())
+                .map { categories.getJSONObject(it) }
+                .first { it.getString("category") == PortableRestoreCategory.CHATS.key }
+            chat.put("representation", PortablePackage.CategoryRepresentation.EMPTY.value)
+                .put("artifacts", org.json.JSONArray())
+                .put("record_count", 0)
+        }
+
+        listOf(missing, duplicate, contradictory).forEach { invalid ->
+            assertTrue(
+                PortablePackage.validateAndExtract(invalid, tmp.newFolder())
+                    is PortablePackage.ValidateResult.Failed
+            )
+        }
+    }
+
+    @Test
+    fun currentManifestRejectsOverLimitDeclarationBeforeArtifactParsing() {
+        val chats = artifactFile(
+            "limit_chats",
+            """{"format":"chat-logical-v2","complete":true,"chats":[],"folders":[]}"""
+                .toByteArray(Charsets.UTF_8)
+        )
+        val declarations = PortableRestoreCategory.entries.map { category ->
+            val names = if (category == PortableRestoreCategory.CHATS) setOf("chats.json") else emptySet()
+            PortablePackage.CategoryDeclaration(
+                category,
+                if (names.isEmpty()) PortablePackage.CategoryRepresentation.EMPTY
+                else PortablePackage.CategoryRepresentation.ARTIFACTS,
+                names,
+                0L
+            )
+        }
+        val valid = tmp.newFile("limit_source.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "chats.json",
+                    PortablePackage.TYPE_CHATS_JSON,
+                    chats,
+                    null,
+                    null,
+                    2
+                )
+            ),
+            "2026-09-14T00:00:00Z",
+            valid,
+            categoryDeclarations = declarations
+        )
+        val invalid = rewriteManifest(valid, "limit_invalid.zip") { manifest ->
+            manifest.getJSONArray("artifacts").getJSONObject(0).put(
+                "decoded_bytes",
+                PortableRecoveryLimits.CHATS_JSON_BYTES + 1L
+            )
+        }
+
+        val result = PortablePackage.validateAndExtract(invalid, tmp.newFolder())
+        assertTrue(result is PortablePackage.ValidateResult.Failed)
+        assertEquals(
+            PortablePackageFormat.RestoreError.TOO_LARGE,
+            (result as PortablePackage.ValidateResult.Failed).error
+        )
+    }
+
+    @Test
     fun unencryptedRoundTripIsNeverAuthenticated() {
         val pkg = makePackage(recoverySecret = null)
         val inspect = PortablePackage.inspect(pkg)
@@ -112,6 +307,204 @@ class PortablePackageTest {
         // "Checked for damage", never "verified": authenticated must be false.
         assertFalse((decoded as PortablePackage.DecodeResult.Ok).authenticated)
         assertTrue(PortablePackage.validateAndExtract(decoded.innerZip, staging) is PortablePackage.ValidateResult.Ok)
+    }
+
+    @Test
+    fun generatedImageCatalogAndAssetArePortableArtifacts() {
+        val inner = tmp.newFile("generated_inner.zip").apply { delete() }
+        val catalog = artifactFile(
+            "generated_catalog",
+            """{"format":"generated-images-logical-v1","active":[],"tombstones":[],"meta":[],"backfill_chats":[]}""".toByteArray()
+        )
+        val png = artifactFile(
+            "generated_png",
+            byteArrayOf(
+                0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+                0x00, 0x00, 0x00, 0x00
+            )
+        )
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "generated_images/catalog.json",
+                    PortablePackage.TYPE_GENERATED_IMAGES_CATALOG,
+                    catalog,
+                    null,
+                    null,
+                    1
+                ),
+                PortablePackage.Artifact(
+                    "generated_images/assets/79b4e47b-b6d4-4e7d-8d8d-413215eab779.png",
+                    PortablePackage.TYPE_GENERATED_IMAGE_ASSET,
+                    png,
+                    null,
+                    null,
+                    null
+                )
+            ),
+            "2026-09-08T00:00:00Z",
+            inner
+        )
+
+        val extracted = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(extracted is PortablePackage.ValidateResult.Ok)
+        val artifacts = (extracted as PortablePackage.ValidateResult.Ok).artifacts
+        assertEquals(2, artifacts.size)
+        assertEquals(
+            1,
+            artifacts.first { it.type == PortablePackage.TYPE_GENERATED_IMAGES_CATALOG }.schemaVersion
+        )
+    }
+
+    @Test
+    fun profileImageAssetIsAPortableArtifactWithStrictHashFilename() {
+        val inner = tmp.newFile("profile_image_inner.zip").apply { delete() }
+        val jpeg = artifactFile(
+            "profile_jpeg",
+            byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 1, 2, 0xff.toByte(), 0xd9.toByte())
+        )
+        val hash = "a".repeat(64)
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "profile_images/assets/profile_$hash.jpg",
+                    PortablePackage.TYPE_PROFILE_IMAGE_ASSET,
+                    jpeg,
+                    null,
+                    null,
+                    null
+                )
+            ),
+            "2026-09-08T00:00:00Z",
+            inner
+        )
+
+        val extracted = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(extracted is PortablePackage.ValidateResult.Ok)
+        assertEquals(
+            PortablePackage.TYPE_PROFILE_IMAGE_ASSET,
+            (extracted as PortablePackage.ValidateResult.Ok).artifacts.single().type
+        )
+
+        val unsafe = tmp.newFile("unsafe_profile.zip").apply { delete() }
+        assertTrue(
+            runCatching {
+                PortablePackage.buildInnerZip(
+                    listOf(
+                        PortablePackage.Artifact(
+                            "profile_images/assets/not-a-hash.jpg",
+                            PortablePackage.TYPE_PROFILE_IMAGE_ASSET,
+                            jpeg,
+                            null,
+                            null,
+                            null
+                        )
+                    ),
+                    "2026-09-08T00:00:00Z",
+                    unsafe
+                )
+            }.exceptionOrNull() is IllegalArgumentException
+        )
+    }
+
+    @Test
+    fun companionAndRoleplayArchiveIsAValidatedPortableArtifact() {
+        val companionArchive = artifactFile("companion_archive", ByteArray(0))
+        ZipOutputStream(companionArchive.outputStream()).use { zip ->
+            zip.putNextEntry(ZipEntry(CompanionBackupFormat.MANIFEST_ENTRY))
+            zip.write(
+                CompanionBackupCodec.toJson(
+                    CompanionBackupManifest(
+                        formatVersion = CompanionBackupFormat.FORMAT_VERSION,
+                        appVersion = "1.0",
+                        exportedAt = "2026-09-08T00:00:00Z",
+                        companionProfiles = emptyList(),
+                        activationPrompts = emptyList(),
+                        systemPrompts = emptyList(),
+                        selectedSystemPromptId = "",
+                        roleplayTables = CompanionBackupFormat.ROLEPLAY_TABLES
+                            .associateWith { emptyList() },
+                        images = emptyList()
+                    )
+                ).toByteArray(Charsets.UTF_8)
+            )
+            zip.closeEntry()
+        }
+        val inner = tmp.newFile("companion_inner.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "companion_roleplay.zip",
+                    PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE,
+                    companionArchive,
+                    null,
+                    null,
+                    CompanionBackupFormat.FORMAT_VERSION
+                )
+            ),
+            "2026-09-08T00:00:00Z",
+            inner
+        )
+
+        val extracted = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(extracted is PortablePackage.ValidateResult.Ok)
+        assertEquals(
+            PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE,
+            (extracted as PortablePackage.ValidateResult.Ok).artifacts.single().type
+        )
+
+        companionArchive.writeBytes("not a zip".toByteArray())
+        val invalidInner = tmp.newFile("invalid_companion_inner.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "companion_roleplay.zip",
+                    PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE,
+                    companionArchive,
+                    null,
+                    null,
+                    CompanionBackupFormat.FORMAT_VERSION
+                )
+            ),
+            "2026-09-08T00:00:00Z",
+            invalidInner
+        )
+        assertTrue(
+            PortablePackage.validateAndExtract(invalidInner, tmp.newFolder())
+                is PortablePackage.ValidateResult.Failed
+        )
+    }
+
+    @Test
+    fun modelEndpointSettingsIsAValidatedPortableArtifact() {
+        val settings = artifactFile(
+            "model_endpoint_settings",
+            ModelEndpointPortableCodec.encode(
+                ModelEndpointPortableCodec.Data(emptyList(), emptyList())
+            ).toByteArray(Charsets.UTF_8)
+        )
+        val inner = tmp.newFile("model_endpoint_inner.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            listOf(
+                PortablePackage.Artifact(
+                    "model_endpoint_settings.json",
+                    PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS,
+                    settings,
+                    null,
+                    null,
+                    ModelEndpointPortableCodec.SCHEMA_VERSION
+                )
+            ),
+            "2026-09-08T00:00:00Z",
+            inner
+        )
+
+        val extracted = PortablePackage.validateAndExtract(inner, tmp.newFolder())
+        assertTrue(extracted is PortablePackage.ValidateResult.Ok)
+        assertEquals(
+            PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS,
+            (extracted as PortablePackage.ValidateResult.Ok).artifacts.single().type
+        )
     }
 
     @Test
@@ -321,5 +714,32 @@ class PortablePackageTest {
         assertFalse(PortablePackage.isSafeEntryName("a\\b"))
         assertFalse(PortablePackage.isSafeEntryName(""))
         assertTrue(PortablePackage.isSafeEntryName("memory.db"))
+    }
+
+    private fun rewriteManifest(
+        source: File,
+        destinationName: String,
+        mutate: (JSONObject) -> Unit
+    ): File {
+        val destination = tmp.newFile(destinationName).apply { delete() }
+        ZipFile(source).use { input ->
+            ZipOutputStream(destination.outputStream()).use { output ->
+                val entries = input.entries()
+                while (entries.hasMoreElements()) {
+                    val entry = entries.nextElement()
+                    output.putNextEntry(ZipEntry(entry.name))
+                    val bytes = input.getInputStream(entry).use { it.readBytes() }
+                    if (entry.name == PortablePackage.MANIFEST_ENTRY) {
+                        val manifest = JSONObject(String(bytes, Charsets.UTF_8))
+                        mutate(manifest)
+                        output.write(manifest.toString().toByteArray(Charsets.UTF_8))
+                    } else {
+                        output.write(bytes)
+                    }
+                    output.closeEntry()
+                }
+            }
+        }
+        return destination
     }
 }

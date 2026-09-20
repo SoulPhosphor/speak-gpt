@@ -83,4 +83,159 @@ object ChatRestorePlanner {
      *  shape as [isAllowedEntryName] — other tenants of shared_prefs are
      *  never touched. */
     fun isChatStorageFileName(name: String): Boolean = isAllowedEntryName(name)
+
+    // ---- manifest cross-check (Phase 9.2) -----------------------------------
+
+    /** The single manifest version this reader understands. Must equal the
+     *  producer's [ChatSnapshotManifest.MANIFEST_VERSION]; a drift guard in
+     *  ChatRestorePlannerTest fails the build if they diverge. A future
+     *  producer that bumps the format is rejected here rather than silently
+     *  mis-read. */
+    const val SUPPORTED_MANIFEST_VERSION = 1
+
+    /** The one non-per-chat archive entry: the encrypted chat list. */
+    const val CHAT_LIST_ENTRY = "enc.chat_list.xml"
+
+    /** A stored chat id: a historical title hash or a UUID, path-safe. The same
+     *  character class the per-chat entry names allow. */
+    private val SAFE_CHAT_ID = Regex("^[A-Za-z0-9_-]+$")
+
+    /** What is wrong with a manifest's declared chat set relative to the actual
+     *  archive entries. Each is a distinct, reportable cause — nothing collapses
+     *  into a generic "invalid archive". */
+    enum class ManifestDefect {
+        /** Missing `manifest_version`, or a version this build does not read. */
+        UNSUPPORTED_VERSION,
+
+        /** No `enc.chat_list.xml` entry. Restoring a chat set with no list would
+         *  leave the destination with orphan history/settings and no chats. */
+        MISSING_CHAT_LIST,
+
+        /** The `chats` array names the same chat id twice. */
+        DUPLICATE_CHAT_ID,
+
+        /** A declared chat id is not path-safe. */
+        UNSAFE_CHAT_ID,
+
+        /** A per-chat archive entry belongs to no declared chat id. The archive
+         *  carries a chat file the manifest never listed — the one case that is
+         *  never legitimate, because it means a file would be planted for a chat
+         *  the chat list does not contain. */
+        UNLISTED_CHAT_FILE
+    }
+
+    /**
+     * Cross-checks the manifest's declared chat set against the exact set of
+     * hashed archive entries (Phase 9.2). Returns null when the shape is
+     * coherent, or the first defect found.
+     *
+     * [manifestVersion] is the archive's declared version (null if absent).
+     * [chatIds] are the `chat_id`s from the manifest `chats` array, in order.
+     * [hashedEntryNames] are the keys of the manifest `file_hashes` block — the
+     * encrypted files the archive claims to carry.
+     *
+     * The rule mirrors what [RecoveryBackupManager] actually produces: the chat
+     * list is always present, and for every declared chat its history and
+     * settings files are ALLOWED but not required. A per-chat file is written
+     * only when it exists on disk (`addEncFile`'s `exists()` guard), and a chat
+     * with no history and no settings — a brand-new or genuinely empty chat, an
+     * authoritative MISSING/EMPTY read — is a legitimate chat-list row with no
+     * per-chat file at all. Requiring those files would reject valid backups and
+     * lose nothing by rejecting them. What is never legitimate is a per-chat
+     * file for a chat the manifest did not declare: that is [UNLISTED_CHAT_FILE]
+     * and stops the restore before anything is touched.
+     */
+    fun manifestDefect(
+        manifestVersion: Int?,
+        chatIds: List<String>,
+        hashedEntryNames: Set<String>
+    ): ManifestDefect? {
+        if (manifestVersion != SUPPORTED_MANIFEST_VERSION) return ManifestDefect.UNSUPPORTED_VERSION
+        if (CHAT_LIST_ENTRY !in hashedEntryNames) return ManifestDefect.MISSING_CHAT_LIST
+
+        val declared = HashSet<String>()
+        declared.add(CHAT_LIST_ENTRY)
+        val seen = HashSet<String>()
+        for (id in chatIds) {
+            if (!SAFE_CHAT_ID.matches(id)) return ManifestDefect.UNSAFE_CHAT_ID
+            if (!seen.add(id)) return ManifestDefect.DUPLICATE_CHAT_ID
+            // History and settings are optional per chat — see the contract note
+            // above. They are added to the allowed set, never required.
+            declared.add("enc.chat_$id.xml")
+            declared.add("enc.settings.$id.xml")
+        }
+        for (name in hashedEntryNames) {
+            if (name !in declared) return ManifestDefect.UNLISTED_CHAT_FILE
+        }
+        return null
+    }
+
+    /**
+     * The stored chat ids a restored archive brings in, derived from its entry
+     * names (Phase 9.3). The dependent-store rebase needs the restored ids to
+     * requeue their generated-image backfill and to invalidate their cached
+     * preferences handles. Ids come from the per-chat entries; the chat list
+     * entry contributes none, and a declared-but-empty chat (no per-chat file)
+     * simply has no derived id — it has no per-chat state to rebase.
+     */
+    fun restoredChatIds(entryNames: Collection<String>): Set<String> {
+        val ids = LinkedHashSet<String>()
+        for (name in entryNames) {
+            when {
+                name == CHAT_LIST_ENTRY -> {}
+                name.startsWith("enc.chat_") && name.endsWith(".xml") ->
+                    ids.add(name.removePrefix("enc.chat_").removeSuffix(".xml"))
+                name.startsWith("enc.settings.") && name.endsWith(".xml") ->
+                    ids.add(name.removePrefix("enc.settings.").removeSuffix(".xml"))
+            }
+        }
+        return ids
+    }
+
+    // ---- final live-set verification (Phase 9.2) ----------------------------
+
+    /** What is wrong with the live chat-storage file set after a swap, relative
+     *  to the manifest the archive declared. Each is a distinct, reportable
+     *  cause; nothing collapses into a generic failure. */
+    enum class LiveSetDefect {
+        /** A file the manifest requires is absent from live storage. A copy that
+         *  silently did not land leaves this. */
+        MISSING_FILE,
+
+        /** A live file's bytes do not hash to the manifest value. A partial or
+         *  corrupt copy leaves this. */
+        HASH_MISMATCH,
+
+        /** A chat-storage file the manifest never declared is still present. A
+         *  superseded file whose delete did not take leaves this — the mixed
+         *  old/new set Phase 9 exists to prevent. */
+        UNEXPECTED_FILE
+    }
+
+    /**
+     * After the swap, the live chat-storage file set must EXACTLY match the
+     * manifest: every declared file present with the declared hash, and no
+     * chat-storage file present that the manifest did not declare (Phase 9.2
+     * step: "verify the final active set"). This is the backstop that turns a
+     * silently failed delete or a truncated copy into a failure instead of a
+     * mixed visible set.
+     *
+     * [expected] maps each manifest entry name to its expected SHA-256 (hex).
+     * [liveChatStorageHashes] maps every chat-storage file currently in
+     * shared_prefs to its actual SHA-256 (hex). Returns null when the live set
+     * matches exactly, or the first defect found.
+     */
+    fun liveSetDefect(
+        expected: Map<String, String>,
+        liveChatStorageHashes: Map<String, String>
+    ): LiveSetDefect? {
+        for ((name, hash) in expected) {
+            val actual = liveChatStorageHashes[name] ?: return LiveSetDefect.MISSING_FILE
+            if (actual != hash) return LiveSetDefect.HASH_MISMATCH
+        }
+        for (name in liveChatStorageHashes.keys) {
+            if (name !in expected) return LiveSetDefect.UNEXPECTED_FILE
+        }
+        return null
+    }
 }

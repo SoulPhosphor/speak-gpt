@@ -62,6 +62,10 @@ class ProfileShapeTransformation(@Suppress("unused") context: Context, shape: St
         val height = toTransform.height
         val output = pool.get(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(output)
+        // BitmapPool may return a previously opaque bitmap. The mask relies on
+        // transparent pixels outside Circle/Flower, so stale alpha there would
+        // make either selected shape render as a square.
+        canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
 
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val rect = Rect(0, 0, width, height)

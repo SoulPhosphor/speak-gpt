@@ -38,16 +38,13 @@ import org.teslasoft.assistant.ui.activities.memory.MemoryBrowserActivity
 /**
  * "Memory Manager" (owner ruling, July 8 2026): the entry point for the memory
  * system, reached from the Settings-home "Memory Manager" tile. A plain
- * chevron-row hub (house style: rows, not cards) with six doors —
+ * chevron-row hub (house style: rows, not cards) with five doors —
  *
  *   1. Memory Browser   → the single global memories browser.
  *   2. Memory Assistant → a placeholder ("Coming soon") to be designed later.
  *   3. Lorebooks        → the lorebook manager, moved here out of Characters.
  *   4. Memory Controls  → the normal user-facing controls page.
- *   5. Memory Backup & Restore → the Backups + Reset sections, moved here out
- *      of the Memory Controls screen (owner request, July 18 2026). Sits
- *      directly above Advanced Memory Settings (owner request, July 18 2026).
- *   6. Advanced Memory Settings → diagnostics/repair; moved here out of the
+ *   5. Advanced Memory Settings → diagnostics/repair; moved here out of the
  *      Memory Controls screen (owner ruling, July 9 2026).
  *
  * The browser used to sit inside the old "Memory (experimental)" screen; it is
@@ -68,7 +65,6 @@ class MemoryManagerActivity : FragmentActivity() {
     private var rowMemorySettings: LinearLayout? = null
     private var rowAssistantAdvancedSettings: LinearLayout? = null
     private var rowAdvancedMemory: LinearLayout? = null
-    private var rowMemoryBackupRestore: LinearLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,7 +88,6 @@ class MemoryManagerActivity : FragmentActivity() {
         rowMemorySettings = findViewById(R.id.row_memory_settings)
         rowAssistantAdvancedSettings = findViewById(R.id.row_assistant_advanced_settings)
         rowAdvancedMemory = findViewById(R.id.row_advanced_memory)
-        rowMemoryBackupRestore = findViewById(R.id.row_memory_backup_restore)
     }
 
     @Suppress("DEPRECATION")
@@ -145,9 +140,6 @@ class MemoryManagerActivity : FragmentActivity() {
             startActivity(Intent(this, AdvancedMemorySettingsActivity::class.java).putExtra("chatId", chatId))
         }
 
-        rowMemoryBackupRestore?.setOnClickListener {
-            startActivity(Intent(this, MemoryBackupRestoreActivity::class.java).putExtra("chatId", chatId))
-        }
     }
 
     override fun onAttachedToWindow() {

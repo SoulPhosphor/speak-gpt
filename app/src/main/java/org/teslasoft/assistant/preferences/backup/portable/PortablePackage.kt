@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences.backup.portable
 
 import org.json.JSONArray
 import org.json.JSONObject
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupValidator
 import java.io.File
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
@@ -54,6 +55,7 @@ import java.util.zip.ZipOutputStream
 object PortablePackage {
 
     const val MANIFEST_ENTRY = "manifest.json"
+    const val MANIFEST_VERSION = 3
     const val MAX_ENTRIES = 10_000
     const val MAX_ENTRY_BYTES: Long = 1L shl 30      // 1 GiB per entry
     const val MAX_TOTAL_BYTES: Long = 2L shl 30      // 2 GiB uncompressed total
@@ -62,31 +64,96 @@ object PortablePackage {
     const val KEY_SEMANTICS_PASSPHRASE = "passphrase-bytes"
     const val KEY_SEMANTICS_PLAINTEXT = "plaintext-empty"
 
-    const val SQLCIPHER_VERSION = "4.16.0"
+    const val SQLCIPHER_VERSION = "4.17.0"
     const val CIPHER_COMPAT = 4
+
+    const val TYPE_SQLCIPHER_DB = "sqlcipher-db"
+    const val TYPE_SQLITE_DB = "sqlite-db"
+    const val TYPE_CHATS_JSON = "chats-json"
+    const val TYPE_COMPANION_ROLEPLAY_ARCHIVE = "companion-roleplay-archive"
+    const val TYPE_MODEL_ENDPOINT_SETTINGS = "model-endpoint-settings"
+    const val TYPE_GENERATED_IMAGES_CATALOG = "generated-images-catalog"
+    const val TYPE_GENERATED_IMAGE_ASSET = "generated-image-asset"
+    const val TYPE_PROFILE_IMAGE_ASSET = "profile-image-asset"
 
     data class Artifact(
         val entryName: String,
-        val type: String,           // "sqlcipher-db" | "sqlite-db" | "chats-json"
+        val type: String,
         val file: File,
         val databaseKeyHex: String?, // sqlcipher-db only
         val keySemantics: String?,   // sqlcipher-db only
-        val schemaVersion: Int?      // databases only, when known
+        val schemaVersion: Int?      // database or logical artifact format, when known
+    )
+
+    enum class CategoryRepresentation(val value: String) {
+        ARTIFACTS("artifacts"),
+        EMPTY("empty")
+    }
+
+    data class CategoryDeclaration(
+        val category: PortableRestoreCategory,
+        val representation: CategoryRepresentation,
+        val artifactNames: Set<String>,
+        val recordCount: Long
     )
 
     // ----- creation ----------------------------------------------------------
 
-    /** Build the inner ZIP (artifacts + manifest) into [innerZip]. */
-    fun buildInnerZip(artifacts: List<Artifact>, createdAtIso: String, innerZip: File) {
+    /** Build the inner ZIP (artifacts + manifest) into [innerZip].
+     * [restoreCategories] is null only for compatibility fixtures and older
+     * callers. A current Recovery Backup supplies the complete logical
+     * category inventory, including categories that intentionally contain no
+     * records and therefore need no artifact. */
+    fun buildInnerZip(
+        artifacts: List<Artifact>,
+        createdAtIso: String,
+        innerZip: File,
+        restoreCategories: Set<PortableRestoreCategory>? = null,
+        categoryDeclarations: List<CategoryDeclaration>? = null
+    ) {
         require(artifacts.isNotEmpty()) { "no artifacts" }
+        require(restoreCategories == null || categoryDeclarations == null) {
+            "use either v2 categories or current category declarations"
+        }
         val manifest = JSONObject()
         manifest.put("created_at", createdAtIso)
         manifest.put("sqlcipher_version", SQLCIPHER_VERSION)
         manifest.put("cipher_compat", CIPHER_COMPAT)
+        if (categoryDeclarations != null) {
+            require(categoryDeclarations.map { it.category }.toSet() == PortableRestoreCategory.entries.toSet()) {
+                "current manifest must declare every category exactly once"
+            }
+            require(categoryDeclarations.size == PortableRestoreCategory.entries.size) {
+                "duplicate category declaration"
+            }
+            manifest.put("manifest_version", MANIFEST_VERSION)
+            manifest.put("limits_policy_version", PortableRecoveryLimits.POLICY_VERSION)
+            manifest.put("categories", JSONArray().apply {
+                categoryDeclarations.sortedBy { it.category.ordinal }.forEach { declaration ->
+                    require(declaration.recordCount >= 0L) { "negative category record count" }
+                    require(
+                        declaration.representation != CategoryRepresentation.EMPTY ||
+                            (declaration.artifactNames.isEmpty() && declaration.recordCount == 0L)
+                    ) { "empty category has artifacts or records" }
+                    put(JSONObject()
+                        .put("category", declaration.category.key)
+                        .put("representation", declaration.representation.value)
+                        .put("artifacts", JSONArray().apply {
+                            declaration.artifactNames.sorted().forEach(::put)
+                        })
+                        .put("record_count", declaration.recordCount))
+                }
+            })
+        } else if (restoreCategories != null) {
+            manifest.put("restore_categories", JSONArray().apply {
+                restoreCategories.sortedBy { it.ordinal }.forEach { put(it.key) }
+            })
+        }
         val list = JSONArray()
         ZipOutputStream(innerZip.outputStream().buffered()).use { zip ->
             for (a in artifacts) {
                 requireSafeEntryName(a.entryName)
+                require(isSupportedArtifact(a.entryName, a.type)) { "unsupported artifact" }
                 zip.putNextEntry(ZipEntry(a.entryName))
                 val digest = MessageDigest.getInstance("SHA-256")
                 a.file.inputStream().use { input ->
@@ -103,6 +170,7 @@ object PortablePackage {
                 entry.put("name", a.entryName)
                 entry.put("type", a.type)
                 entry.put("sha256", digest.digest().joinToString("") { "%02x".format(it) })
+                if (categoryDeclarations != null) entry.put("decoded_bytes", a.file.length())
                 if (a.databaseKeyHex != null) entry.put("db_key_hex", a.databaseKeyHex)
                 if (a.keySemantics != null) entry.put("key_semantics", a.keySemantics)
                 if (a.schemaVersion != null) entry.put("schema_version", a.schemaVersion)
@@ -301,11 +369,20 @@ object PortablePackage {
         val type: String,
         val stagedFile: File,
         val databaseKeyHex: String?,
-        val keySemantics: String?
+        val keySemantics: String?,
+        val schemaVersion: Int?
     )
 
     sealed class ValidateResult {
-        data class Ok(val artifacts: List<ValidatedArtifact>) : ValidateResult()
+        data class Ok(
+            val artifacts: List<ValidatedArtifact>,
+            /** Null identifies a compatible older package whose inventory
+             * must be inferred from its artifact layout. */
+            val declaredCategories: Set<PortableRestoreCategory>? = null,
+            val explicitlyEmptyCategories: Set<PortableRestoreCategory> = emptySet(),
+            val categoryRecordCounts: Map<PortableRestoreCategory, Long> = emptyMap(),
+            val manifestVersion: Int = 2
+        ) : ValidateResult()
         data class Failed(val error: PortablePackageFormat.RestoreError) : ValidateResult()
     }
 
@@ -351,18 +428,37 @@ object PortablePackage {
                 val manifest = JSONObject(String(manifestBytes, Charsets.UTF_8))
                 val list = manifest.optJSONArray("artifacts")
                     ?: return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
-
                 val expected = HashMap<String, JSONObject>()
                 for (i in 0 until list.length()) {
                     val a = list.getJSONObject(i)
                     val name = a.optString("name", "")
+                    val type = a.optString("type", "")
                     if (!isSafeEntryName(name) || name == MANIFEST_ENTRY) {
                         return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    }
+                    if (!isSupportedArtifact(name, type)) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    }
+                    if (a.has("decoded_bytes") && a.opt("decoded_bytes") !is Number) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    }
+                    val declaredBytes = if (a.has("decoded_bytes")) a.optLong("decoded_bytes", -1L) else null
+                    if (declaredBytes != null &&
+                        !PortableRecoveryLimits.accepts(name, type, declaredBytes)
+                    ) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.TOO_LARGE)
                     }
                     // Duplicate artifact names inside the manifest are rejected.
                     if (expected.put(name, a) != null) {
                         return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
                     }
+                }
+
+                val inventory = when (val parsed = parseManifestInventory(manifest, expected)) {
+                    is ManifestInventoryResult.Ok -> parsed.inventory
+                    ManifestInventoryResult.Invalid -> return ValidateResult.Failed(
+                        PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED
+                    )
                 }
 
                 // Exact set match: no unexpected entries, nothing missing.
@@ -376,6 +472,12 @@ object PortablePackage {
                 for ((name, meta) in expected) {
                     val entry = byName[name]
                         ?: return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    val type = meta.optString("type", "")
+                    val categoryLimit = PortableRecoveryLimits.maxDecodedBytes(name, type)
+                        ?: return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    if (entry.size >= 0L && entry.size > categoryLimit) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.TOO_LARGE)
+                    }
                     val staged = File(stagingDir, "artifact_" + name.replace('/', '_'))
                     val digest = MessageDigest.getInstance("SHA-256")
                     var entryBytes = 0L
@@ -387,7 +489,9 @@ object PortablePackage {
                                 if (n < 0) break
                                 entryBytes += n
                                 total += n
-                                if (entryBytes > MAX_ENTRY_BYTES || total > MAX_TOTAL_BYTES) {
+                                if (entryBytes > categoryLimit || entryBytes > MAX_ENTRY_BYTES ||
+                                    total > MAX_TOTAL_BYTES
+                                ) {
                                     return ValidateResult.Failed(PortablePackageFormat.RestoreError.TOO_LARGE)
                                 }
                                 o.write(buf, 0, n)
@@ -399,17 +503,43 @@ object PortablePackage {
                     if (hash != meta.optString("sha256", "")) {
                         return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
                     }
+                    if (meta.has("decoded_bytes") && meta.optLong("decoded_bytes", -1L) != entryBytes) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    }
+                    if (
+                        meta.optString("type", "") == TYPE_COMPANION_ROLEPLAY_ARCHIVE &&
+                        CompanionBackupValidator.validate(staged) !is CompanionBackupValidator.Verdict.Valid
+                    ) {
+                        return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                    }
+                    if (meta.optString("type", "") == TYPE_MODEL_ENDPOINT_SETTINGS) {
+                        if (staged.length() > ModelEndpointPortableCodec.MAX_ARTIFACT_BYTES ||
+                            ModelEndpointPortableCodec.parse(staged.readText(Charsets.UTF_8))
+                                !is ModelEndpointPortableCodec.Result.Ok
+                        ) {
+                            return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                        }
+                    }
                     out.add(
                         ValidatedArtifact(
                             entryName = name,
                             type = meta.optString("type", ""),
                             stagedFile = staged,
                             databaseKeyHex = meta.optString("db_key_hex", "").ifEmpty { null },
-                            keySemantics = meta.optString("key_semantics", "").ifEmpty { null }
+                            keySemantics = meta.optString("key_semantics", "").ifEmpty { null },
+                            schemaVersion = if (meta.has("schema_version")) {
+                                meta.optInt("schema_version", -1).takeIf { it >= 0 }
+                            } else null
                         )
                     )
                 }
-                return ValidateResult.Ok(out)
+                return ValidateResult.Ok(
+                    out,
+                    inventory.declaredCategories,
+                    inventory.explicitlyEmptyCategories,
+                    inventory.recordCounts,
+                    inventory.manifestVersion
+                )
             }
         } catch (_: Exception) {
             return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
@@ -433,6 +563,147 @@ object PortablePackage {
         return out.toByteArray()
     }
 
+    private data class ManifestInventory(
+        val declaredCategories: Set<PortableRestoreCategory>?,
+        val explicitlyEmptyCategories: Set<PortableRestoreCategory>,
+        val recordCounts: Map<PortableRestoreCategory, Long>,
+        val manifestVersion: Int
+    )
+
+    private sealed interface ManifestInventoryResult {
+        data class Ok(val inventory: ManifestInventory) : ManifestInventoryResult
+        data object Invalid : ManifestInventoryResult
+    }
+
+    /** Current manifests are exact. V2 is accepted conservatively: a declared
+     * category must have its recognized carrier artifact, so a missing v2
+     * artifact is never invented as an empty category. */
+    private fun parseManifestInventory(
+        manifest: JSONObject,
+        artifacts: Map<String, JSONObject>
+    ): ManifestInventoryResult {
+        val version = if (manifest.has("manifest_version")) {
+            manifest.optInt("manifest_version", -1)
+        } else 2
+        if (version == MANIFEST_VERSION) return parseCurrentInventory(manifest, artifacts)
+        if (version != 2 || manifest.has("categories")) return ManifestInventoryResult.Invalid
+
+        val declared = if (manifest.has("restore_categories")) {
+            parseV2RestoreCategories(manifest) ?: return ManifestInventoryResult.Invalid
+        } else null
+        if (declared != null) {
+            val represented = PortableRestoreCategory.entries.filterTo(LinkedHashSet()) {
+                artifactNamesFor(it, artifacts).isNotEmpty()
+            }
+            if (declared != represented) return ManifestInventoryResult.Invalid
+        }
+        return ManifestInventoryResult.Ok(
+            ManifestInventory(declared, emptySet(), emptyMap(), 2)
+        )
+    }
+
+    private fun parseCurrentInventory(
+        manifest: JSONObject,
+        artifacts: Map<String, JSONObject>
+    ): ManifestInventoryResult {
+        if (manifest.optInt("limits_policy_version", -1) != PortableRecoveryLimits.POLICY_VERSION ||
+            manifest.has("restore_categories")
+        ) return ManifestInventoryResult.Invalid
+        val array = manifest.optJSONArray("categories") ?: return ManifestInventoryResult.Invalid
+        val byKey = PortableRestoreCategory.entries.associateBy(PortableRestoreCategory::key)
+        val declared = LinkedHashSet<PortableRestoreCategory>()
+        val empty = LinkedHashSet<PortableRestoreCategory>()
+        val counts = LinkedHashMap<PortableRestoreCategory, Long>()
+        val claimedArtifacts = LinkedHashSet<String>()
+        repeat(array.length()) { index ->
+            val item = array.optJSONObject(index) ?: return ManifestInventoryResult.Invalid
+            if (item.keys().asSequence().toSet() != CURRENT_CATEGORY_KEYS) {
+                return ManifestInventoryResult.Invalid
+            }
+            val category = byKey[item.optString("category", "")]
+                ?: return ManifestInventoryResult.Invalid
+            if (!declared.add(category)) return ManifestInventoryResult.Invalid
+            val representation = when (item.optString("representation", "")) {
+                CategoryRepresentation.ARTIFACTS.value -> CategoryRepresentation.ARTIFACTS
+                CategoryRepresentation.EMPTY.value -> CategoryRepresentation.EMPTY
+                else -> return ManifestInventoryResult.Invalid
+            }
+            val namesJson = item.optJSONArray("artifacts") ?: return ManifestInventoryResult.Invalid
+            val names = LinkedHashSet<String>()
+            repeat(namesJson.length()) { nameIndex ->
+                val name = namesJson.optString(nameIndex, "")
+                if (name.isBlank() || !names.add(name)) return ManifestInventoryResult.Invalid
+            }
+            if (item.opt("record_count") !is Number) return ManifestInventoryResult.Invalid
+            val count = item.optLong("record_count", -1L)
+            if (count < 0L) return ManifestInventoryResult.Invalid
+            val actualNames = artifactNamesFor(category, artifacts)
+            when (representation) {
+                CategoryRepresentation.ARTIFACTS -> {
+                    if (names.isEmpty() || names != actualNames) return ManifestInventoryResult.Invalid
+                    claimedArtifacts.addAll(names)
+                }
+                CategoryRepresentation.EMPTY -> {
+                    if (names.isNotEmpty() || count != 0L || actualNames.isNotEmpty()) {
+                        return ManifestInventoryResult.Invalid
+                    }
+                    empty.add(category)
+                }
+            }
+            counts[category] = count
+        }
+        if (declared != PortableRestoreCategory.entries.toSet() || claimedArtifacts != artifacts.keys) {
+            return ManifestInventoryResult.Invalid
+        }
+        return ManifestInventoryResult.Ok(
+            ManifestInventory(declared, empty, counts, MANIFEST_VERSION)
+        )
+    }
+
+    private fun parseV2RestoreCategories(manifest: JSONObject): Set<PortableRestoreCategory>? {
+        val array = manifest.optJSONArray("restore_categories") ?: return null
+        val byKey = PortableRestoreCategory.entries.associateBy(PortableRestoreCategory::key)
+        val categories = LinkedHashSet<PortableRestoreCategory>()
+        repeat(array.length()) { index ->
+            val category = byKey[array.optString(index, "")] ?: return null
+            if (!categories.add(category)) return null
+        }
+        return categories
+    }
+
+    private fun artifactNamesFor(
+        category: PortableRestoreCategory,
+        artifacts: Map<String, JSONObject>
+    ): Set<String> = artifacts.filterValues { item ->
+        val name = item.optString("name", "")
+        when (category) {
+            PortableRestoreCategory.CHATS -> item.optString("type") == TYPE_CHATS_JSON
+            PortableRestoreCategory.GENERATED_IMAGES -> item.optString("type") in setOf(
+                TYPE_GENERATED_IMAGES_CATALOG, TYPE_GENERATED_IMAGE_ASSET
+            )
+            PortableRestoreCategory.COMPANIONS,
+            PortableRestoreCategory.GLAMOURS,
+            PortableRestoreCategory.ROLEPLAY,
+            PortableRestoreCategory.ACTIVATION_PROMPTS,
+            PortableRestoreCategory.SYSTEM_PROMPTS ->
+                item.optString("type") == TYPE_COMPANION_ROLEPLAY_ARCHIVE
+            PortableRestoreCategory.PROFILE_IMAGES -> item.optString("type") in setOf(
+                TYPE_SQLITE_DB, TYPE_PROFILE_IMAGE_ASSET
+            ) && (item.optString("type") != TYPE_SQLITE_DB || name == "user_images.db")
+            PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS ->
+                item.optString("type") == TYPE_MODEL_ENDPOINT_SETTINGS
+            PortableRestoreCategory.MODEL_RULES,
+            PortableRestoreCategory.MEMORIES -> name == "memory.db" &&
+                item.optString("type") == TYPE_SQLCIPHER_DB
+            PortableRestoreCategory.LOREBOOKS -> name == "lorebook.db" &&
+                item.optString("type") == TYPE_SQLCIPHER_DB
+        }
+    }.keys
+
+    private val CURRENT_CATEGORY_KEYS = setOf(
+        "category", "representation", "artifacts", "record_count"
+    )
+
     // ----- entry-name safety -------------------------------------------------
 
     fun isSafeEntryName(name: String): Boolean =
@@ -442,5 +713,25 @@ object PortablePackage {
 
     private fun requireSafeEntryName(name: String) {
         require(isSafeEntryName(name)) { "unsafe entry name" }
+    }
+
+    private fun isSupportedArtifact(name: String, type: String): Boolean = when (type) {
+        TYPE_SQLCIPHER_DB -> name == "memory.db" || name == "lorebook.db"
+        TYPE_SQLITE_DB -> name == "user_images.db"
+        TYPE_CHATS_JSON -> name == "chats.json"
+        TYPE_COMPANION_ROLEPLAY_ARCHIVE -> name == "companion_roleplay.zip"
+        TYPE_MODEL_ENDPOINT_SETTINGS -> name == "model_endpoint_settings.json"
+        TYPE_GENERATED_IMAGES_CATALOG -> name == "generated_images/catalog.json"
+        TYPE_GENERATED_IMAGE_ASSET -> {
+            val fileName = name.removePrefix("generated_images/assets/")
+            name.startsWith("generated_images/assets/") &&
+                fileName.isNotBlank() && !fileName.contains('/') && !fileName.contains('\\')
+        }
+        TYPE_PROFILE_IMAGE_ASSET -> {
+            val fileName = name.removePrefix("profile_images/assets/")
+            name.startsWith("profile_images/assets/") &&
+                Regex("^profile_[0-9a-f]{64}\\.jpg$").matches(fileName)
+        }
+        else -> false
     }
 }

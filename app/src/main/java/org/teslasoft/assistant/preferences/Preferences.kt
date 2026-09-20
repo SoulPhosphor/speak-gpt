@@ -39,9 +39,14 @@ class Preferences internal constructor(
                 SecurePrefs.get(context, "settings.$xchatId"),
                 globalPreferences,
                 xchatId,
-                if (globalPreferences.contains("always_speak_mode")) {
+                if (globalPreferences.contains("always_speak_mode") &&
+                    globalPreferences.contains("audio")) {
                     null
                 } else {
+                    // The legacy default profile is the migration source for
+                    // settings that moved from per-chat to the global store
+                    // (Always Speak Responses, and the speech-to-text engine).
+                    // Keep it available until every such value has migrated.
                     SecurePrefs.get(context, "settings.")
                 },
                 AppTtsVoicePreferences.getPreferences(context)
@@ -521,6 +526,13 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_show_profile_images", state, true)
     }
 
+    fun getShowCompanionImagesInChatList(): Boolean =
+        getGlobalBoolean("chat_list_companion_images", false)
+
+    fun setShowCompanionImagesInChatList(state: Boolean) {
+        putGlobalBoolean("chat_list_companion_images", state, false)
+    }
+
     fun getShowChatNames(): Boolean = getGlobalBoolean("chat_show_names", true)
 
     fun setShowChatNames(state: Boolean) {
@@ -717,26 +729,44 @@ class Preferences internal constructor(
     }
 
     /**
-     * Retrieves the audio model from the shared preferences.
+     * Retrieves the speech-to-text engine.
+     *
+     * This is a single app-wide choice — one microphone engine for the whole
+     * app, the way a keyboard is chosen once for the device — so it lives in
+     * the global store, not per chat.
      *
      * Recognized values:
      *  - "google"        — Android on-device dictation (default)
      *  - "whisper"       — paid OpenAI Whisper cloud API
      *  - "whisper-local" — on-device whisper.cpp (user must download a model)
      *
-     * @return The audio model value or "google" if not found.
+     * Older releases stored this inside settings.<chatId> and seeded each new
+     * chat from the default profile. Until the global value exists, fall back
+     * once to that legacy default so the upgrade preserves the user's existing
+     * choice; every new write uses the durable global store.
+     *
+     * @return The speech-to-text engine or "google" if not found.
      */
     fun getAudioModel() : String {
-        return getString("audio", "google")
+        if (!gp.contains("audio")) {
+            val legacyDefault = try {
+                defaultPreferences?.getString("audio", null)
+            } catch (_: Exception) {
+                null
+            }
+            gp.edit().putString("audio", legacyDefault ?: "google").commit()
+        }
+        return getGlobalString("audio", "google")
     }
 
     /**
-     * Sets the audio model in the shared preferences.
+     * Sets the app-wide speech-to-text engine. The choice applies in every
+     * conversation and on the assistant screen, and survives restarts.
      *
-     * @param model The audio model value to be stored.
+     * @param model The speech-to-text engine value to be stored.
      */
     fun setAudioModel(model: String) {
-        putString("audio", model)
+        putGlobalString("audio", model)
     }
 
     /**
@@ -2459,6 +2489,16 @@ class Preferences internal constructor(
         putGlobalBoolean("image_gen_imagine_command", value, true)
     }
 
+    /** Image Gallery spec section 9. Off is the fail-safe default. Turning it
+     * on only offers Delete All in a later confirmation; it never deletes by
+     * itself. */
+    fun getDeleteImagesWithChat(): Boolean =
+        getGlobalBoolean("image_gen_delete_images_with_chat", false)
+
+    fun setDeleteImagesWithChat(value: Boolean) {
+        putGlobalBoolean("image_gen_delete_images_with_chat", value)
+    }
+
     /** §14 seeding marker: stamped only after every global value above has
      *  been written by ImageGenerationMigration. */
     fun getImageGenerationSeeded(): Boolean =
@@ -2839,6 +2879,20 @@ class Preferences internal constructor(
 
     fun setSummarizerErrors(json: String) {
         putString("summarizer_errors", json)
+    }
+
+    /**
+     * Whether the chat has a summarizer/compaction failure the user has NOT yet
+     * opened. Drives the top-bar error badge's look: a new failure sets it so
+     * the badge shows as an alert (red number on white, theme-independent),
+     * opening the errors list clears it so the badge relaxes to its neutral
+     * reminder look while the log still has entries (owner ruling, Aug 31 2026).
+     */
+    fun getSummarizerErrorsUnseen(): Boolean =
+        getString("summarizer_errors_unseen", "false") == "true"
+
+    fun setSummarizerErrorsUnseen(value: Boolean) {
+        putString("summarizer_errors_unseen", if (value) "true" else "false")
     }
 
     /**

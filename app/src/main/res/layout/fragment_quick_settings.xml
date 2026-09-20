@@ -638,25 +638,17 @@
                     app:layout_constraintStart_toStartOf="parent"
                     app:layout_constraintTop_toBottomOf="@+id/linearLayout26">
 
-                    <TextView
-                        android:id="@+id/label_streaming"
-                        style="@style/Widget.App.Section.Title"
+                    <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                        android:id="@+id/header_streaming"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:text="@string/streaming_title"
+                        android:layout_marginEnd="8dp"
+                        app:parameterTitle="@string/streaming_title"
+                        app:parameterInfo="@string/streaming_description"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
-
-                    <TextView
-                        android:id="@+id/hint_streaming"
-                        style="@style/Widget.App.Section.Hint"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:text="@string/streaming_description"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/label_streaming" />
 
                     <LinearLayout
                         android:id="@+id/row_streaming"
@@ -666,7 +658,7 @@
                         android:layout_marginEnd="16dp"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/hint_streaming">
+                        app:layout_constraintTop_toBottomOf="@+id/header_streaming">
 
                         <com.google.android.material.checkbox.MaterialCheckBox
                             android:id="@+id/check_streaming"
@@ -722,29 +714,24 @@
                         android:contentDescription="@string/set_temperature"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/hint_temperature" />
+                        app:layout_constraintTop_toBottomOf="@+id/header_temperature" />
 
-                    <!-- Title + hint: shared Widget.App.Section.Title/.Hint and the
-                         same sampling_label_*/sampling_hint_* strings as the API
-                         Endpoint editor, so a future theming pass changes both at
-                         once (owner ruling, July 26 2026). -->
-                    <TextView
-                        android:id="@+id/textView66"
-                        style="@style/Widget.App.Section.Title"
+                    <!-- Title + circled-i info button. The explanation that used
+                         to sit as always-on subtext now opens from the info
+                         button (shared ParameterSectionHeader), so Quick Settings
+                         and the Model Parameters screen read the same. -->
+                    <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                        android:id="@+id/header_temperature"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:text="@string/sampling_label_temperature"
+                        android:layout_marginEnd="8dp"
+                        android:paddingTop="12dp"
+                        app:parameterTitle="@string/sampling_label_temperature"
+                        app:parameterInfo="@string/sampling_hint_temperature"
+                        app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
-
-                    <TextView
-                        android:id="@+id/hint_temperature"
-                        style="@style/Widget.App.Section.Hint"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:text="@string/sampling_hint_temperature"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/textView66" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -769,25 +756,20 @@
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintHorizontal_bias="0.0"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/hint_top_p" />
+                        app:layout_constraintTop_toBottomOf="@+id/header_top_p" />
 
-                    <TextView
-                        android:id="@+id/textView69"
-                        style="@style/Widget.App.Section.Title"
+                    <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                        android:id="@+id/header_top_p"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:text="@string/sampling_label_top_p"
+                        android:layout_marginEnd="8dp"
+                        android:paddingTop="12dp"
+                        app:parameterTitle="@string/sampling_label_top_p"
+                        app:parameterInfo="@string/sampling_hint_top_p"
+                        app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
-
-                    <TextView
-                        android:id="@+id/hint_top_p"
-                        style="@style/Widget.App.Section.Hint"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:text="@string/sampling_hint_top_p"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/textView69" />
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
                 <androidx.constraintlayout.widget.ConstraintLayout
@@ -812,25 +794,20 @@
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintHorizontal_bias="0.0"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/hint_frequency_penalty" />
+                        app:layout_constraintTop_toBottomOf="@+id/header_frequency_penalty" />
 
-                    <TextView
-                        android:id="@+id/textView692"
-                        style="@style/Widget.App.Section.Title"
+                    <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                        android:id="@+id/header_frequency_penalty"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:text="@string/sampling_label_frequency_penalty"
+                        android:layout_marginEnd="8dp"
+                        android:paddingTop="12dp"
+                        app:parameterTitle="@string/sampling_label_frequency_penalty"
+                        app:parameterInfo="@string/sampling_hint_frequency_penalty"
+                        app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
-
-                    <TextView
-                        android:id="@+id/hint_frequency_penalty"
-                        style="@style/Widget.App.Section.Hint"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:text="@string/sampling_hint_frequency_penalty"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/textView692" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
@@ -856,25 +833,20 @@
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintHorizontal_bias="0.0"
                         app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/hint_presence_penalty" />
+                        app:layout_constraintTop_toBottomOf="@+id/header_presence_penalty" />
 
-                    <TextView
-                        android:id="@+id/textView693"
-                        style="@style/Widget.App.Section.Title"
+                    <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+                        android:id="@+id/header_presence_penalty"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
                         android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:text="@string/sampling_label_presence_penalty"
+                        android:layout_marginEnd="8dp"
+                        android:paddingTop="12dp"
+                        app:parameterTitle="@string/sampling_label_presence_penalty"
+                        app:parameterInfo="@string/sampling_hint_presence_penalty"
+                        app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toTopOf="parent" />
-
-                    <TextView
-                        android:id="@+id/hint_presence_penalty"
-                        style="@style/Widget.App.Section.Hint"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="16dp"
-                        android:text="@string/sampling_hint_presence_penalty"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/textView693" />
 
                 </androidx.constraintlayout.widget.ConstraintLayout>
 

@@ -18,46 +18,48 @@ package org.teslasoft.assistant.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.google.gson.Gson
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.models.ModelIdentity
-import androidx.core.content.edit
+import com.google.gson.Gson
 
-class FavoriteModelsPreferences private constructor(private val sharedPreferences: SharedPreferences) {
+class FavoriteModelsPreferences private constructor(
+    private val state: ModelEndpointStateGenerationStore
+) {
     companion object {
-        private const val KEY_FAVORITE_MODELS = "favorite_models"
-
-        private lateinit var sharedPreferences: SharedPreferences
-
         private var instance: FavoriteModelsPreferences? = null
 
         fun getPreferences(context: Context): FavoriteModelsPreferences {
-            sharedPreferences = context.getSharedPreferences("favorite_models", Context.MODE_PRIVATE)
-
             if (instance == null) {
-                instance = FavoriteModelsPreferences(sharedPreferences)
+                instance = FavoriteModelsPreferences(ModelEndpointStateGenerationStore.get(context))
             }
-
             return instance!!
         }
+
+        internal fun createForTest(
+            statePreferences: SharedPreferences,
+            legacyFavoritePreferences: SharedPreferences = statePreferences
+        ): FavoriteModelsPreferences = FavoriteModelsPreferences(
+            ModelEndpointStateGenerationStore.createForTest(
+                statePreferences,
+                legacyFavoritePreferences
+            )
+        )
     }
 
     fun setFavoriteModels(models: ArrayList<Map<String, String>>) {
-        sharedPreferences.edit { putString(KEY_FAVORITE_MODELS, Gson().toJson(models)) }
+        state.update { current ->
+            val endpointIds = current.endpoints.mapTo(HashSet()) { it.id }
+            current.copy(
+                favorites = models
+                    .filter { it["endpointId"].orEmpty() in endpointIds }
+                    .distinctBy { it["endpointId"].orEmpty() + "\u0000" + it["modelId"].orEmpty() }
+                    .map { LinkedHashMap(it) }
+            )
+        }
     }
 
     fun getFavoriteModels(): ArrayList<Map<String, String>> {
-        val models = sharedPreferences.getString(KEY_FAVORITE_MODELS, "[]")
-
-        var list = try {
-            Gson().fromJson(models, ArrayList<Map<String, String>>()::class.java)
-        } catch (_: Exception) {
-            arrayListOf()
-        }
-
-        if (list == null) list = arrayListOf()
-
-        return list
+        return ArrayList(state.read()?.favorites.orEmpty().map { LinkedHashMap(it) })
     }
 
     /**
@@ -82,6 +84,7 @@ class FavoriteModelsPreferences private constructor(private val sharedPreference
         // new model is appended. The provider memory lives on the favorite so
         // removing the favorite removes it too (see removeFavoriteModel).
         val existingIndex = models.indexOfFirst { m -> m["modelId"] == model.modelId && m["endpointId"] == model.endpointId }
+        val existing = if (existingIndex >= 0) models[existingIndex] else null
         val entry = hashMapOf(
             "modelId" to model.modelId,
             "endpointId" to model.endpointId,
@@ -96,6 +99,18 @@ class FavoriteModelsPreferences private constructor(private val sharedPreference
             "reasoningEffort" to model.reasoningEffort,
             "showReasoning" to model.showReasoning.toString()
         )
+        // Sampling parameters ride on the favorite (Model Parameters screen).
+        // A write that does not carry them (e.g. saving routing from the gear,
+        // or reasoning from its screen) preserves whatever was saved before, so
+        // those unrelated saves never erase a model's parameters. Only the
+        // Model Parameters screen supplies non-null values, which overwrite.
+        // A brand-new favorite has neither, so the keys stay absent and read
+        // back all-null (see getFavorite).
+        (model.streaming?.toString() ?: existing?.get("streaming"))?.let { entry["streaming"] = it }
+        (model.temperature?.toString() ?: existing?.get("temperature"))?.let { entry["temperature"] = it }
+        (model.topP?.toString() ?: existing?.get("topP"))?.let { entry["topP"] = it }
+        (model.frequencyPenalty?.toString() ?: existing?.get("frequencyPenalty"))?.let { entry["frequencyPenalty"] = it }
+        (model.presencePenalty?.toString() ?: existing?.get("presencePenalty"))?.let { entry["presencePenalty"] = it }
         if (existingIndex >= 0) {
             models[existingIndex] = entry
         } else {
@@ -144,7 +159,16 @@ class FavoriteModelsPreferences private constructor(private val sharedPreference
             // Reasoning On (§7.9). A blank stored effort also falls to Auto.
             reasoningEffort = entry["reasoningEffort"]?.takeIf { it.isNotBlank() }
                 ?: FavoriteModelObject.REASONING_AUTO,
-            showReasoning = entry["showReasoning"] != "false"
+            showReasoning = entry["showReasoning"] != "false",
+            // Sampling parameters are null when the key is absent (favorite
+            // saved before this feature, or the user never saved parameters
+            // for it) — that null is what tells a model selection to leave the
+            // chat's own values alone.
+            streaming = entry["streaming"]?.toBooleanStrictOrNull(),
+            temperature = entry["temperature"]?.toFloatOrNull(),
+            topP = entry["topP"]?.toFloatOrNull(),
+            frequencyPenalty = entry["frequencyPenalty"]?.toFloatOrNull(),
+            presencePenalty = entry["presencePenalty"]?.toFloatOrNull()
         )
     }
 

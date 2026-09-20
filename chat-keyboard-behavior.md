@@ -159,8 +159,8 @@ carefully or composing a message.
 
 | Behavior | Where |
 | --- | --- |
-| Notes the position before a resize | `ChatActivity.captureTranscriptAnchor()` |
-| Puts it back after the resize | `ChatActivity.restoreTranscriptAnchorAfterResize()` |
+| Notes the position before a resize | `ChatActivity.captureTranscriptAnchor()` / `ChatTranscriptRecyclerView.captureResizeAnchor()` |
+| Puts it back during the new-size layout | `ChatTranscriptRecyclerView.onSizeChanged()` |
 | Keyboard reports before it takes or gives back space | `ChatImeInsetLayout.onBottomInsetChanging` (in `ChatComposerLayout.kt`) |
 | Whether the keyboard is currently up | `ChatImeInsetLayout.isKeyboardOpen` |
 | The lock, and the Send exception | `ChatActivity.scroll()` and `imeClosingForSend` |
@@ -193,6 +193,12 @@ of sight. Restore an absolute position; it is correct either way.
 **Restoring on a timer or from an inset animation callback.** The restore has to
 run on the chat area's own resize, or it lands before the resize it is meant to
 compensate for and does nothing.
+
+**Posting the restore until after the resize callback.** Composer promotion and
+the next keyboard-inset frame can both arrive before that runnable. They can
+overwrite the saved anchor or apply restores out of order. The transcript must
+arm the absolute anchor during its new-size layout, before laying out the new
+viewport height.
 
 **Letting an arriving message override the hold.** It looks like a courtesy to
 the new message, but it breaks the keyboard-open behavior. An incoming or

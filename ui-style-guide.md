@@ -184,16 +184,35 @@ This style requires a `ConstraintLayout` parent because its width is percentage-
 
 Two-button dialog actions should be centered as a pair by default.
 
-Button order comes from the approved feature wording/spec and must not be
-changed based on semantic role. Cancel/back-out actions use the Destructive
-style; affirmative actions use the Primary style, regardless of which appears
-first.
+Button order is fixed by role, not by feature wording (owner ruling,
+September 5 2026): the affirmative / action button is always on the RIGHT, and
+the Cancel or back-out action is always on the LEFT. This holds for every
+two-button dialog, including a system `MaterialAlertDialog` (its negative button
+is the left one, its positive button the right — so Cancel is the negative
+button and the action is the positive button). Cancel/back-out actions use the
+Destructive style; affirmative actions use the Primary style.
 
-Use `layout/dialog_two_actions.xml` for the approved primary-first,
-destructive-second order. If it cannot represent the required centered order,
-use or add an appropriate shared centered variant rather than reversing the
-approved button order. For the approved cancel-first order, use
-`layout/dialog_two_actions_cancel_first.xml`.
+Use `layout/dialog_two_actions_cancel_first.xml` for this cancel-left,
+action-right order. `layout/dialog_two_actions.xml` (action-first) predates this
+ruling: do not use it for new dialogs, and move an existing dialog onto the
+cancel-first order when that screen is next revised rather than in a blind
+app-wide reorder.
+
+### Three dialog actions
+
+`AppButton.Primary.DialogStacked`
+
+`AppButton.Destructive.DialogStacked`
+
+Use `layout/dialog_three_actions_cancel_first.xml` when three complete action
+labels would be cramped in one horizontal row. The shared layout stacks the
+actions in their approved top-to-bottom order: cancel/back-out first, alternate
+commitment second, final commitment third. It owns spacing and constraints;
+the shared styles own width, shape, typography, and theme color roles.
+
+The chat/image deletion choice is the first consumer: **Cancel**, **Delete Chat
+Only**, **Delete All**. Do not reorder those actions or reproduce the stacked
+geometry in a feature-local layout.
 
 ### Inline actions
 
@@ -859,7 +878,82 @@ Do not assign an id to an XML `<include>` tag that includes these layouts. Andro
 
 ## Maintaining this guide
 
+## Conversation mode segmented selector
+
+`Widget.App.ConversationModeSelector`
+
+Use this named style with `ConversationModeSelector` for a mutually exclusive
+Chat / Playground choice on an unsaved conversation. Do not recreate its pill,
+capsule, text colors, spacing, or animation in an activity layout.
+
+The complete theme/palette mapping is:
+
+- outer pill: `colorSurfaceContainerHigh`;
+- selected capsule: `colorSecondaryContainer`;
+- selected label: `colorOnSecondaryContainer`;
+- unselected label: `colorOnSurfaceVariant`.
+
+Geometry and motion are centralized in
+`conversation_mode_selector_*` resources in `dimens.xml` and `integers.xml`.
+The custom view owns the sliding/resizing selected capsule and exposes the two
+labels as mutually exclusive accessible choices. A host supplies only current
+mode, visibility, and a selection listener.
+
+## Compact action popup
+
+Use `CompactActionPopup` for small anchored management menus. It applies
+`Widget.App.CompactActionPopup`, which owns the shared surface treatment.
+Callers provide only ordered actions and enabled state; they must not set a
+screen-local popup background, palette, spacing, or typography. Generated
+Image Gallery long-press actions are the reference composition, and the drawer
+chat/folder menus reuse the same component.
+
 Keep this file as a current reference, not a development log.
+
+## Flat chat identity row
+
+Use the complete `Widget.App.FlatChatRow*` family with
+`layout/view_flat_chat_row.xml` for drawer chat rows and Search results:
+
+- `Widget.App.FlatChatRow` owns the flat, card-free row spacing and touch target;
+- `.Title` owns the one-line chat/folder identity;
+- `.Metadata` owns optional model, memory-state, and date lines;
+- `.Snippet` owns Search's matching-context line only.
+
+The shared layout has optional leading icon, companion-image, bookmark overlay,
+chevron, metadata, snippet, and date slots. Every adapter bind must reset every
+slot. When companion images are disabled the image frame is `GONE`, so the row
+reserves no empty column. Folder children add only the centralized
+`drawer_nested_indent`; they do not create a second row style.
+
+## Name-entry dialog
+
+Use `layout/dialog_name_entry.xml` with `Widget.App.NameEntry.Layout` and
+`Widget.App.NameEntry.Field` for simple Add/Rename name dialogs. The family owns
+outlined-field geometry, text appearance, padding, and inline error placement.
+The dialog host owns the title, current value, validation policy, and cancel-first
+actions. Add Folder and Rename Folder must use this one composition.
+
+## Search status
+
+`Widget.App.Search.Status` is the centered subordinate status text used for
+preparing, incomplete, unavailable, and empty Search states. It resolves through
+the shared subtle-text theme role and must not carry query text or snippets.
+
+## Drawer bottom actions
+
+`Widget.App.DrawerBottomAction` is the drawer's fixed-bottom action. Three of
+them sit across one row — Settings, New Folder, New Chat — each taking an equal
+share of the drawer width.
+
+It inherits `Widget.App.FlatChatRow.Title`, so all three read at the same size
+as the single Settings action the drawer used before, and it supplies the equal
+weight, centred gravity, single line, and the shared selectable-item touch
+feedback. These actions are deliberately text-only; do not add a start drawable
+or any other icon to them.
+
+Use it only for the drawer's fixed-bottom row. A full-width bottom row is what
+makes three equal actions legible; do not reuse it for narrow containers.
 
 For each style family, document only:
 

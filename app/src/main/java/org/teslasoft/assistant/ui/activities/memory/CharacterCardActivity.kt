@@ -25,20 +25,25 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowInsets
 import android.widget.ImageButton
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.addCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
+import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.memory.CardEntryRecord
 import org.teslasoft.assistant.preferences.memory.CardSections
@@ -49,7 +54,10 @@ import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.RpTagRecord
 import org.teslasoft.assistant.preferences.memory.RpTagTargetType
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.activities.ProfileImagesActivity
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
+import org.teslasoft.assistant.util.ProfileImageBinder
+import org.teslasoft.assistant.util.ProfileImageResolver
 
 /**
  * The two-zone character card (roleplay_cards_and_tags_spec §6a/§6b): one
@@ -97,13 +105,17 @@ class CharacterCardActivity : FragmentActivity() {
     private var textWarning: TextView? = null
     private var textWordCount: TextView? = null
     private var btnSave: ImageButton? = null
+    private var imgCardAvatar: ImageView? = null
     private var btnMemories: MaterialButton? = null
     private var textSaveFirst: TextView? = null
     private var sectionsContainer: LinearLayout? = null
 
     private var currentStatus: String = "alive"
+    private var selectedImageRef: String = ""
+    private var imageStateRestored = false
 
     companion object {
+        private const val STATE_IMAGE_REF = "state_image_ref"
         private val STATUS_KEYS = listOf("alive", "incapacitated", "dead", "enemy")
 
         fun statusLabelRes(status: String): Int = when (status) {
@@ -115,6 +127,19 @@ class CharacterCardActivity : FragmentActivity() {
     }
 
     private val isParty: Boolean get() = cardType == CardType.PARTY_MEMBER
+
+    private val pickPictureLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (!isParty && result.resultCode == RESULT_OK) {
+                val hash = result.data
+                    ?.getStringExtra(ProfileImagesActivity.EXTRA_RESULT_ASSIGNED_HASH)
+                if (!hash.isNullOrEmpty()) {
+                    selectedImageRef = hash
+                    updateAvatarUi()
+                    persistImageOnlyIfExisting(hash)
+                }
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -143,11 +168,16 @@ class CharacterCardActivity : FragmentActivity() {
         textWarning = findViewById(R.id.text_card_warning)
         textWordCount = findViewById(R.id.text_card_word_count)
         btnSave = findViewById(R.id.btn_card_save)
+        imgCardAvatar = findViewById(R.id.img_card_avatar)
         btnMemories = findViewById(R.id.btn_card_memories)
         textSaveFirst = findViewById(R.id.text_save_first)
         sectionsContainer = findViewById(R.id.sections_container)
 
         titleView?.setText(if (isParty) R.string.card_title_party_member else R.string.card_title_character)
+        imageStateRestored = savedInstanceState?.containsKey(STATE_IMAGE_REF) == true
+        selectedImageRef = savedInstanceState?.getString(STATE_IMAGE_REF).orEmpty()
+        imgCardAvatar?.visibility = if (isParty) View.GONE else View.VISIBLE
+        imgCardAvatar?.isEnabled = false
         if (isParty) {
             layoutSpeechStyle?.visibility = View.VISIBLE
             rowStatus?.visibility = View.VISIBLE
@@ -161,8 +191,13 @@ class CharacterCardActivity : FragmentActivity() {
         btnSave?.setOnClickListener { save() }
         btnStatus?.setOnClickListener { showStatusPicker() }
         btnMemories?.setOnClickListener { openMemories() }
+        imgCardAvatar?.setOnClickListener {
+            if (ready && !isParty) openGalleryForPicture()
+        }
+        fieldName?.doAfterTextChanged { updateAvatarContentDescription() }
 
         CardZoneUi.attachWordCount(this, zone1Fields(), textWordCount, textWarning)
+        updateAvatarUi()
         refreshStatus()
         refreshMemoriesButton()
         loadExisting()
@@ -187,7 +222,13 @@ class CharacterCardActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        updateAvatarUi()
         renderSections()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_IMAGE_REF, selectedImageRef)
     }
 
     /* ------------------------------ load ------------------------------ */
@@ -196,6 +237,7 @@ class CharacterCardActivity : FragmentActivity() {
         val id = cardId
         if (id == null) {
             ready = true
+            imgCardAvatar?.isEnabled = !isParty
             initialSnapshot = snapshot()
             return
         }
@@ -217,6 +259,7 @@ class CharacterCardActivity : FragmentActivity() {
                         refreshStatus()
                     }
                     ready = true
+                    imgCardAvatar?.isEnabled = false
                     initialSnapshot = snapshot()
                 }
             } else {
@@ -230,12 +273,67 @@ class CharacterCardActivity : FragmentActivity() {
                         fieldCorePersonality?.setText(it.corePersonality ?: "")
                         fieldPhysicalDescription?.setText(it.physicalDescription ?: "")
                         fieldGoalsDrives?.setText(it.goalsDrives ?: "")
+                        if (!imageStateRestored) selectedImageRef = it.imageRef.orEmpty()
                     }
                     ready = true
+                    imgCardAvatar?.isEnabled = true
+                    updateAvatarUi()
                     initialSnapshot = snapshot()
                 }
             }
         }
+    }
+
+    /* ------------------------------ picture ------------------------------ */
+
+    /** Roleplay Characters use the same user-side picture cascade as My
+     *  Personas: their own Profile Image, then the Personal Default, then the
+     *  generic user glyph. Party members deliberately have no image control. */
+    private fun updateAvatarUi() {
+        val imageView = imgCardAvatar ?: return
+        if (isParty) return
+        val file = ProfileImageResolver.resolveUserImageFile(this, selectedImageRef)
+        val shape = GlobalPreferences.getPreferences(this).getProfileImageShape()
+        ProfileImageBinder.bind(this, imageView, file, shape) { iv ->
+            iv.setImageResource(R.drawable.ic_user)
+            iv.imageTintList = ColorStateList.valueOf(
+                ContextCompat.getColor(iv.context, R.color.accent_900)
+            )
+        }
+        updateAvatarContentDescription()
+    }
+
+    private fun updateAvatarContentDescription() {
+        if (isParty) return
+        val name = fieldName?.text?.toString()?.trim().orEmpty()
+        val refForLabel = if (name.isNotEmpty()) selectedImageRef else ""
+        imgCardAvatar?.contentDescription =
+            ProfileImageResolver.userContentDescription(this, name, refForLabel)
+    }
+
+    private fun openGalleryForPicture() {
+        pickPictureLauncher.launch(
+            Intent(this, ProfileImagesActivity::class.java)
+                .putExtra(
+                    ProfileImagesActivity.EXTRA_ASSIGN_TARGET,
+                    ProfileImagesActivity.TARGET_COMPANION
+                )
+                .putExtra(
+                    ProfileImagesActivity.EXTRA_ASSIGN_CURRENT_HASH,
+                    selectedImageRef
+                )
+        )
+    }
+
+    /** Existing cards save a picture assignment immediately without writing
+     *  the rest of the form. New cards retain the selection until first Save. */
+    private fun persistImageOnlyIfExisting(hash: String) {
+        val id = cardId ?: return
+        Thread {
+            try {
+                MemoryStore.getInstance(this).setRoleplayCharacterImageRef(id, hash)
+            } catch (_: Exception) { /* Save still carries the selected image. */ }
+        }.start()
     }
 
     /* ------------------------------ word count (spec §8a) ------------------------------ */
@@ -347,11 +445,7 @@ class CharacterCardActivity : FragmentActivity() {
                         corePersonality = text(fieldCorePersonality),
                         physicalDescription = text(fieldPhysicalDescription),
                         goalsDrives = text(fieldGoalsDrives),
-                        // Preserve the assigned picture: this card has no
-                        // picture control, so a save must carry the stored
-                        // image_ref through rather than default it to null and
-                        // wipe an image the record already had (e.g. imported).
-                        imageRef = priorCharacter?.imageRef
+                        imageRef = selectedImageRef.ifEmpty { null }
                     ).also { runOnUiThread { priorCharacter = it } }
                 )
             }

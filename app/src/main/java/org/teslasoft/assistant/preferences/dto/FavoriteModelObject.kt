@@ -58,8 +58,28 @@ class FavoriteModelObject(
     /** This favorite's saved Show Reasoning preference (§7.4/§7.9). Controls
      *  whether available provider-supplied reasoning is requested/returned for
      *  display; it never disables the model's reasoning. Default On (true). */
-    var showReasoning: Boolean = true
+    var showReasoning: Boolean = true,
+    /** This favorite's saved sampling parameters (Model Parameters screen).
+     *  They belong to the model, so selecting the model applies them to the
+     *  chat regardless of provider routing. Each is null until the user saves
+     *  parameters for this model at least once; a favorite saved before this
+     *  feature existed — or one the user never opened Model Parameters for —
+     *  reads back all-null, meaning "no saved parameters" and so leaves the
+     *  chat's own values untouched on selection. All five are written together
+     *  by a save, so in practice they are all set or all null. Kept at the END
+     *  of the constructor so existing positional callers stay valid. */
+    var streaming: Boolean? = null,
+    var temperature: Float? = null,
+    var topP: Float? = null,
+    var frequencyPenalty: Float? = null,
+    var presencePenalty: Float? = null
 ) {
+    /** True when this favorite carries user-saved sampling parameters. A save
+     *  writes all five, so any one being present means the set is present. */
+    fun hasSamplingParameters(): Boolean =
+        temperature != null || topP != null || frequencyPenalty != null ||
+            presencePenalty != null || streaming != null
+
     companion object {
         /** Provider chooses each turn; no specific provider is remembered. The
          *  default for every model, favorite or not. */

@@ -139,6 +139,9 @@ class ChatPresentationContractTest {
         )
 
         assertTrue(layout.contains("org.teslasoft.assistant.ui.chat.MessageMetadataView"))
+        val metadataTag = viewTag(layout, "message_meta")
+        assertTrue(metadataTag.contains("android:layout_width=\"0dp\""))
+        assertTrue(metadataTag.contains("app:layout_constraintEnd_toEndOf=\"parent\""))
         assertTrue(metadataView.contains("Layout.getDesiredWidth"))
         assertTrue(metadataView.contains("MeasureSpec.getSize(widthMeasureSpec)"))
         assertTrue(metadataView.contains("\"\$model\\n\$tokens\""))

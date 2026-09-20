@@ -29,6 +29,12 @@ import java.io.FileOutputStream
  */
 object AtomicFileWriter {
 
+    enum class ByteWriteResult {
+        WRITTEN,
+        EXISTING_MATCH,
+        FAILED
+    }
+
     fun writeAndVerify(target: File, content: String): Boolean {
         val tmp = File(target.parentFile, target.name + ".tmp")
         return try {
@@ -59,6 +65,56 @@ object AtomicFileWriter {
                 // nothing left to clean
             }
             false
+        }
+    }
+
+    /**
+     * Binary counterpart used by generated-image registration. The target is
+     * never removed or replaced: an existing matching file makes a retried
+     * registration idempotent, while an existing different file is a hard
+     * failure. Only the dedicated `.catalogtmp` file is cleaned on failure,
+     * so this helper cannot damage a legacy/shared asset.
+     */
+    fun writeBytesAndVerify(target: File, content: ByteArray): ByteWriteResult {
+        val parent = target.parentFile ?: return ByteWriteResult.FAILED
+        if (!parent.exists() && !parent.mkdirs()) return ByteWriteResult.FAILED
+        if (target.exists()) {
+            return try {
+                if (target.readBytes().contentEquals(content)) {
+                    ByteWriteResult.EXISTING_MATCH
+                } else {
+                    ByteWriteResult.FAILED
+                }
+            } catch (_: Exception) {
+                ByteWriteResult.FAILED
+            }
+        }
+
+        val tmp = File(parent, target.name + ".catalogtmp")
+        return try {
+            FileOutputStream(tmp).use { out ->
+                out.write(content)
+                out.flush()
+                out.fd.sync()
+            }
+            if (!tmp.readBytes().contentEquals(content)) {
+                tmp.delete()
+                return ByteWriteResult.FAILED
+            }
+            if (!tmp.renameTo(target)) {
+                tmp.delete()
+                return ByteWriteResult.FAILED
+            }
+            if (target.readBytes().contentEquals(content)) {
+                ByteWriteResult.WRITTEN
+            } else {
+                // The published file is ours and failed read-back verification.
+                target.delete()
+                ByteWriteResult.FAILED
+            }
+        } catch (_: Exception) {
+            try { tmp.delete() } catch (_: Exception) { }
+            ByteWriteResult.FAILED
         }
     }
 }

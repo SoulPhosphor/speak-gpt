@@ -22,6 +22,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.CorruptionErrorHandlers
+import org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreCoordinator
+import org.teslasoft.assistant.preferences.backup.DirectProfileImageRestoreRecovery
 
 /**
  * Catalog of permanent Profile Images: which content hashes have a saved
@@ -51,7 +53,7 @@ class ProfileImageDb private constructor(context: Context) :
     ) {
 
     companion object {
-        private const val DATABASE_NAME = "profile_images.db"
+        const val DATABASE_NAME = "profile_images.db"
         private const val DATABASE_VERSION = 1
 
         private const val TABLE_IMAGES = "profile_images"
@@ -62,6 +64,12 @@ class ProfileImageDb private constructor(context: Context) :
         private var instance: ProfileImageDb? = null
 
         fun getInstance(context: Context): ProfileImageDb {
+            if (DirectDatabaseRestoreCoordinator.blocksStore(
+                    context.applicationContext, BackupType.USER_IMAGE
+                ) || DirectProfileImageRestoreRecovery.blocksStore(context.applicationContext)
+            ) {
+                throw IllegalStateException("Profile image database recovery is still pending")
+            }
             return instance ?: synchronized(this) {
                 instance ?: ProfileImageDb(context.applicationContext).also { instance = it }
             }
@@ -152,6 +160,26 @@ class ProfileImageDb private constructor(context: Context) :
     /** Removes the catalog row for [hash]. Used after its permanent file is deleted. */
     fun delete(hash: String) {
         writableDatabase.delete(TABLE_IMAGES, "$COL_HASH = ?", arrayOf(hash))
+    }
+
+    /** Exact logical catalog replacement for the outer portable-restore
+     * transaction. Pixel files are staged and validated by its participant. */
+    internal fun replaceAll(records: List<ProfileImageRecord>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete(TABLE_IMAGES, null, null)
+            for (record in records) {
+                val values = ContentValues().apply {
+                    put(COL_HASH, record.hash)
+                    put(COL_CREATED_AT, record.createdAt)
+                }
+                db.insertOrThrow(TABLE_IMAGES, null, values)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     /**

@@ -37,6 +37,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.R
 import uk.co.senab.photoview.PhotoViewAttacher
 import java.io.FileNotFoundException
@@ -46,8 +47,13 @@ import java.util.Base64
 import androidx.core.net.toUri
 import org.teslasoft.assistant.util.ShareUtil.Companion.shareBase64Image
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageAssetResolver
 
 class ImageBrowserActivity : FragmentActivity() {
+
+    companion object {
+        const val EXTRA_GENERATED_IMAGE_ID = "generated_image_id"
+    }
 
     private var image: ImageView? = null
     private var btnDownload: FloatingActionButton? = null
@@ -87,60 +93,76 @@ class ImageBrowserActivity : FragmentActivity() {
         attacher?.maximumScale = 10.0f
         attacher?.update()
 
-        val b: Bundle? = intent.extras
+        if (intent.extras == null) finish() else CoroutineScope(Dispatchers.Main).launch { load() }
+    }
 
-        if (b != null) {
-            CoroutineScope(Dispatchers.Main).launch {
-                load()
+    private suspend fun load() {
+        val imageId = intent.getStringExtra(EXTRA_GENERATED_IMAGE_ID)
+        if (!imageId.isNullOrBlank()) {
+            val source = withContext(Dispatchers.IO) {
+                when (val result = GeneratedImageAssetResolver.resolveCatalogImage(this@ImageBrowserActivity, imageId)) {
+                    is GeneratedImageAssetResolver.Result.Available -> {
+                        val bytes = runCatching { result.file.readBytes() }.getOrNull()
+                        if (bytes == null) null else Triple(result.file, result.mimeType, bytes)
+                    }
+                    else -> null
+                }
             }
+            if (source == null) {
+                finish()
+                return
+            }
+            val (file, mimeType, bytes) = source
+            bindImageSource(file, mimeType, bytes)
+            return
+        }
+
+        val sharedPreferences: SharedPreferences = getSharedPreferences("tmp", MODE_PRIVATE)
+        val url: String? = sharedPreferences.getString("tmp", null)
+
+        if (url != null) {
+            val imageType = url.substringAfter("data:image/").substringBefore(";")
+            val bytes = withContext(Dispatchers.IO) {
+                runCatching { Base64.getDecoder().decode(url.substringAfter(";base64,")) }.getOrNull()
+            }
+            if (bytes == null) { finish(); return }
+            bindImageSource(url.toUri(), "image/$imageType", bytes)
         } else {
             finish()
         }
     }
 
-    private fun load() {
-        val sharedPreferences: SharedPreferences = getSharedPreferences("tmp", MODE_PRIVATE)
-        val url: String? = sharedPreferences.getString("tmp", null)
+    private fun bindImageSource(loadModel: Any, mimeType: String, bytes: ByteArray) {
+        Glide.with(this).load(loadModel).into(image!!)
+        fileContents = bytes
+        Handler(Looper.getMainLooper()).postDelayed({
+            attacher?.update()
+            val fadeOut: Animation = AnimationUtils.loadAnimation(this, R.anim.fade_out)
+            layoutLoading?.startAnimation(fadeOut)
+            fadeOut.setAnimationListener(object : Animation.AnimationListener {
+                override fun onAnimationStart(animation: Animation) = Unit
+                override fun onAnimationEnd(animation: Animation) { layoutLoading?.visibility = LinearLayout.GONE }
+                override fun onAnimationRepeat(animation: Animation) = Unit
+            })
+        }, 500)
 
-        if (url != null) {
-            Glide.with(this).load(url.toUri()).into(image!!)
-
-            Handler(Looper.getMainLooper()).postDelayed({
-                attacher?.update()
-                val fadeOut: Animation = AnimationUtils.loadAnimation(this, R.anim.fade_out)
-                layoutLoading?.startAnimation(fadeOut)
-
-                fadeOut.setAnimationListener(object : Animation.AnimationListener {
-                    override fun onAnimationStart(animation: Animation) { /* UNUSED */ }
-                    override fun onAnimationEnd(animation: Animation) {
-                        layoutLoading?.visibility = LinearLayout.GONE
-                    }
-
-                    override fun onAnimationRepeat(animation: Animation) { /* UNUSED */ }
-                })
-            }, 500)
-
-            btnDownload?.setOnClickListener {
-                val imageType = url.substringAfter("data:image/").substringBefore(";")
-
-                val fileEncoded = url.replace("data:image/$imageType;base64,", "")
-                fileContents = Base64.getDecoder().decode(fileEncoded)
-
-                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "image/$imageType"
-                    putExtra(Intent.EXTRA_TITLE, if (imageType == "jpeg") "image.jpg" else "image.png")
-                    putExtra(DocumentsContract.EXTRA_INITIAL_URI, "/storage/emulated/0/Pictures/SpeakGPT/exported.${if (imageType == "jpeg") "jpg" else "png"}".toUri())
-                }
-                fileSaveIntentLauncher.launch(intent)
+        val subtype = mimeType.substringAfter('/', "png")
+        val extension = if (subtype == "jpeg") "jpg" else subtype
+        btnDownload?.setOnClickListener {
+            val saveIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = mimeType
+                putExtra(Intent.EXTRA_TITLE, "image.$extension")
+                putExtra(
+                    DocumentsContract.EXTRA_INITIAL_URI,
+                    "/storage/emulated/0/Pictures/SpeakGPT/exported.$extension".toUri()
+                )
             }
-
-            btnShare?.setOnClickListener {
-                val imageType = url.substringAfter("data:image/").substringBefore(";")
-                shareBase64Image(this, url, imageType)
-            }
-        } else {
-            finish()
+            fileSaveIntentLauncher.launch(saveIntent)
+        }
+        btnShare?.setOnClickListener {
+            val url = "data:$mimeType;base64," + Base64.getEncoder().encodeToString(bytes)
+            shareBase64Image(this, url, subtype)
         }
     }
 

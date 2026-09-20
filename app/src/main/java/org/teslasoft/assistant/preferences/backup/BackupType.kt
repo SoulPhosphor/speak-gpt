@@ -27,10 +27,10 @@ package org.teslasoft.assistant.preferences.backup
  * Memory, Lorebooks, Chats, User Image Database — Chats sits between Lorebooks
  * and User Image Database.
  *
- * USER_IMAGE is the profile-image CATALOG only (`profile_images.db`); the JPEG
- * files themselves are deliberately NOT a backup artifact (owner ruling: the
- * catalog is the record and can also be rebuilt from the files). No label may
- * imply the pictures are protected.
+ * USER_IMAGE is the legacy status/restore identifier for the profile-image
+ * catalog. Portable packages now also carry every valid gallery JPEG, but the
+ * separate Avatar/Profile Images category and label belong to the Phase 11.1
+ * screen design and must not be inferred from this old enum name.
  */
 enum class BackupType(val key: String) {
     MEMORY("memory"),

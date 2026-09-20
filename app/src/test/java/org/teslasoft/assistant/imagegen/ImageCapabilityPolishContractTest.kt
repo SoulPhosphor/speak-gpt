@@ -65,7 +65,7 @@ class ImageCapabilityPolishContractTest {
     @Test
     fun fullscreenSaveUsesTheDownArrow() {
         val xml = source("src/main/res/layout/activity_imageview.xml")
-        assertTrue(xml.contains("android:src=\"@drawable/ic_download\""))
+        assertTrue(xml.contains("android:src=\"@drawable/ic_download_for_offline\""))
         assertFalse(xml.contains("android:src=\"@drawable/ic_save\""))
     }
 }

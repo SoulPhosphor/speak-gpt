@@ -17,6 +17,13 @@
 **************************************************************************/
 -->
 <resources>
+    <dimen name="drawer_row_padding_start">20dp</dimen>
+    <dimen name="drawer_nested_indent">20dp</dimen>
+    <dimen name="conversation_mode_selector_height">56dp</dimen>
+    <dimen name="conversation_mode_selector_radius">28dp</dimen>
+    <dimen name="conversation_mode_selector_inset">4dp</dimen>
+    <dimen name="conversation_mode_selector_choice_min_width">104dp</dimen>
+    <dimen name="conversation_mode_selector_choice_padding">22dp</dimen>
     <!-- The vertical gap that separates the Zone 2 sections on every roleplay
          card (character, NPC, world, campaign share view_card_section). One
          place to tune the line spacing for all of them (owner ask, July 10
@@ -79,10 +86,14 @@
 
     <!-- Shared editable-value + slider control. Appearance and spacing for
          every sampling-parameter control live here rather than in screens. -->
-    <dimen name="sampling_slider_value_width">96dp</dimen>
-    <dimen name="sampling_slider_value_min_height">48dp</dimen>
-    <dimen name="sampling_slider_value_text_size">16sp</dimen>
+    <dimen name="sampling_slider_value_width">72dp</dimen>
+    <dimen name="sampling_slider_value_min_height">36dp</dimen>
+    <dimen name="sampling_slider_value_text_size">15sp</dimen>
+    <dimen name="sampling_slider_value_padding_horizontal">8dp</dimen>
+    <dimen name="sampling_slider_value_padding_vertical">6dp</dimen>
     <dimen name="sampling_slider_section_gap">12dp</dimen>
-    <dimen name="sampling_slider_value_gap">4dp</dimen>
-    <dimen name="sampling_slider_horizontal_margin">20dp</dimen>
+    <dimen name="sampling_slider_value_gap">6dp</dimen>
+    <dimen name="sampling_slider_horizontal_margin">12dp</dimen>
+    <dimen name="sampling_slider_track_height">6dp</dimen>
+    <dimen name="sampling_slider_thumb_radius">9dp</dimen>
 </resources>

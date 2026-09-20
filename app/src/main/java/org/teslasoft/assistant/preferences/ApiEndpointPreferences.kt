@@ -18,13 +18,16 @@ package org.teslasoft.assistant.preferences
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.teslasoft.assistant.imagegen.ToolCapabilityStore
+import org.teslasoft.assistant.preferences.backup.portable.ModelEndpointPortableCodec
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
+import org.teslasoft.assistant.reasoning.ReasoningCapabilityStore
+import org.teslasoft.assistant.reasoning.RejectedReasoningLevelStore
 import org.teslasoft.assistant.util.StableId
-import androidx.core.content.edit
-import org.json.JSONArray
 
 class ApiEndpointPreferences private constructor(
-    private var preferences: SharedPreferences,
+    private val state: ModelEndpointStateGenerationStore,
     private val secrets: SecretStore
 ) {
     companion object {
@@ -33,26 +36,25 @@ class ApiEndpointPreferences private constructor(
         fun getApiEndpointPreferences(context: Context): ApiEndpointPreferences {
             if (apiEndpointPreferences == null) {
                 apiEndpointPreferences = ApiEndpointPreferences(
-                    context.getSharedPreferences("api_endpoint", Context.MODE_PRIVATE),
+                    ModelEndpointStateGenerationStore.get(context),
                     EncryptedSecretStore(context.applicationContext)
                 )
             }
-
             return apiEndpointPreferences!!
         }
 
-        /** Test seam: inject an in-memory SharedPreferences and secret store. */
-        internal fun createForTest(preferences: SharedPreferences, secrets: SecretStore): ApiEndpointPreferences =
-            ApiEndpointPreferences(preferences, secrets)
+        /** Test seam: inject in-memory definition/favorite preferences and secrets. */
+        internal fun createForTest(
+            preferences: SharedPreferences,
+            secrets: SecretStore,
+            legacyFavoritePreferences: SharedPreferences = preferences
+        ): ApiEndpointPreferences = ApiEndpointPreferences(
+            ModelEndpointStateGenerationStore.createForTest(preferences, legacyFavoritePreferences),
+            secrets
+        )
     }
 
-    /**
-     * The endpoint's API key lives in the encrypted store keyed by
-     * `<id>_api_key`. Kept behind an interface so the identity/field logic can
-     * be unit-tested without the Android Keystore, AND so credential handling
-     * during a rename is explicit: a rename no longer moves the key between
-     * ids — the id is stable, so the same encrypted entry stays in place.
-     */
+    /** API keys remain encrypted and keyed only by the endpoint's stable id. */
     interface SecretStore {
         fun get(key: String): String
         fun set(key: String, value: String)
@@ -67,317 +69,222 @@ class ApiEndpointPreferences private constructor(
 
     private var listeners: ArrayList<OnApiEndpointChangeListener> = ArrayList()
 
-    fun getString(key: String, defValue: String): String {
-        return preferences.getString(key, defValue)!!
-    }
-
-    fun putString(key: String, value: String) {
-        preferences.edit { putString(key, value) }
-    }
-
-    fun getRejectedTtsVoices(endpointId: String): Set<String> = try {
-        val values = JSONArray(getString(endpointId + "_tts_rejected_voices", "[]"))
-        buildSet {
-            for (index in 0 until values.length()) {
-                values.optString(index).takeIf(String::isNotBlank)?.let(::add)
-            }
-        }
-    } catch (_: Throwable) {
-        emptySet()
-    }
+    fun getRejectedTtsVoices(endpointId: String): Set<String> =
+        state.read()?.endpoints?.firstOrNull { it.id == endpointId }
+            ?.rejectedTtsVoices?.toSet().orEmpty()
 
     fun rejectTtsVoice(endpointId: String, voiceId: String) {
-        val rejected = getRejectedTtsVoices(endpointId) + voiceId
-        putString(endpointId + "_tts_rejected_voices", JSONArray(rejected.sorted()).toString())
+        if (voiceId.isBlank()) return
+        val updated = state.update { current ->
+            current.copy(endpoints = current.endpoints.map { endpoint ->
+                if (endpoint.id == endpointId) endpoint.copy(
+                    rejectedTtsVoices = (endpoint.rejectedTtsVoices + voiceId).distinct().sorted()
+                ) else endpoint
+            })
+        }
+        if (updated) notifyChanged()
     }
-
-    // The public methods keep their `context` parameter for source
-    // compatibility with the many call sites, but the API key now flows through
-    // the [secrets] seam (which captured its context at construction), so the
-    // parameter is no longer read here — the id-only overloads below do the work
-    // and are what the unit tests drive.
 
     fun getApiEndpoint(context: Context, id: String): ApiEndpointObject = getApiEndpoint(id)
 
     internal fun getApiEndpoint(id: String): ApiEndpointObject {
-        val label = getString(id + "_label", "")
-        val host = getString(id + "_host", "")
-        val chatEndpoint = getString(id + "_chat_endpoint", ApiEndpointObject.DEFAULT_CHAT_ENDPOINT)
-        val speechEndpoint = getString(id + "_speech_endpoint", ApiEndpointObject.DEFAULT_SPEECH_ENDPOINT)
-        val authType = getString(id + "_auth_type", ApiEndpointObject.AUTH_BEARER)
-        val apiKey: String = secrets.get(id + "_api_key")
-        val model = getString(id + "_model", ApiEndpointObject.DEFAULT_MODEL)
-        val temperature = getString(id + "_temperature", ApiEndpointObject.DEFAULT_TEMPERATURE.toString()).toFloatOrNull()
-            ?: ApiEndpointObject.DEFAULT_TEMPERATURE
-        val topP = getString(id + "_top_p", ApiEndpointObject.DEFAULT_TOP_P.toString()).toFloatOrNull()
-            ?: ApiEndpointObject.DEFAULT_TOP_P
-        val frequencyPenalty = getString(id + "_frequency_penalty", ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY.toString()).toFloatOrNull()
-            ?: ApiEndpointObject.DEFAULT_FREQUENCY_PENALTY
-        val presencePenalty = getString(id + "_presence_penalty", ApiEndpointObject.DEFAULT_PRESENCE_PENALTY.toString()).toFloatOrNull()
-            ?: ApiEndpointObject.DEFAULT_PRESENCE_PENALTY
-        val maxTokens = getString(id + "_max_tokens", ApiEndpointObject.DEFAULT_MAX_TOKENS.toString()).toIntOrNull()
-            ?: ApiEndpointObject.DEFAULT_MAX_TOKENS
-        val storedContextModel = getString(id + "_context_window_model", "")
-        val contextWindowTokens = getString(id + "_context_window_tokens", "")
-            .toIntOrNull()
-            ?.takeIf { it > 0 && storedContextModel == model }
-        val endSeparator = getString(id + "_end_separator", "")
-        val prefix = getString(id + "_prefix", "")
-        val provider = getString(id + "_provider", "")
-        val connectTimeoutSeconds = ApiEndpointObject.coerceConnectTimeoutSeconds(
-            getString(id + "_timeout", ApiEndpointObject.DEFAULT_CONNECT_TIMEOUT_SECONDS.toString()).toIntOrNull()
-                ?: ApiEndpointObject.DEFAULT_CONNECT_TIMEOUT_SECONDS
-        )
-        val responseTimeoutSeconds = ApiEndpointObject.coerceResponseTimeoutSeconds(
-            getString(id + "_response_timeout", ApiEndpointObject.DEFAULT_RESPONSE_TIMEOUT_SECONDS.toString()).toIntOrNull()
-                ?: ApiEndpointObject.DEFAULT_RESPONSE_TIMEOUT_SECONDS
-        )
-        val imageCapabilityByModel = getString(id + "_image_capability_by_model", "")
-        val toolCapabilityByModel = getString(id + "_tool_capability_by_model", "")
-        val reasoningCapabilityByModel = getString(id + "_reasoning_capability_by_model", "")
-        val reasoningRejectedLevelsByModel = getString(id + "_reasoning_rejected_levels_by_model", "")
-        val providerDiscoveryPath = getString(id + "_provider_discovery_path", "")
-        // Routing identity. A stored value wins (and is sticky). When absent —
-        // an older profile saved before identity existed — it is derived once
-        // from the base URL: a recognized OpenRouter URL migrates to OPENROUTER,
-        // everything else is GENERIC. The derived value is persisted on the
-        // endpoint's next save (setApiEndpoint), which also enforces stickiness.
-        val identity = getString(id + "_identity", "").ifBlank {
-            if (ApiEndpointObject.isRecognizedOpenRouterUrl(host)) {
-                ApiEndpointObject.IDENTITY_OPENROUTER
-            } else {
-                ApiEndpointObject.IDENTITY_GENERIC
-            }
-        }
-
-        return ApiEndpointObject(
-            label, host, apiKey, chatEndpoint, authType,
-            model, temperature, topP, frequencyPenalty, presencePenalty,
-            maxTokens, endSeparator, prefix, provider,
-            connectTimeoutSeconds, responseTimeoutSeconds, id,
-            contextWindowTokens, storedContextModel,
-            imageCapabilityByModel, toolCapabilityByModel,
-            providerDiscoveryPath, identity,
-            reasoningCapabilityByModel, reasoningRejectedLevelsByModel, speechEndpoint
-        )
+        val endpoint = state.read()?.endpoints?.firstOrNull { it.id == id }
+        return endpoint?.toObject(secrets.get(id + "_api_key"))
+            ?: ApiEndpointObject("", "", secrets.get(id + "_api_key"), id = id)
     }
 
     fun deleteApiEndpoint(context: Context, id: String) = deleteApiEndpoint(id)
 
-    internal fun deleteApiEndpoint(id: String) {
-        preferences.edit { remove(id + "_label") }
-        preferences.edit { remove(id + "_host") }
-        preferences.edit { remove(id + "_chat_endpoint") }
-        preferences.edit { remove(id + "_speech_endpoint") }
-        preferences.edit { remove(id + "_auth_type") }
-        preferences.edit { remove(id + "_model") }
-        preferences.edit { remove(id + "_temperature") }
-        preferences.edit { remove(id + "_top_p") }
-        preferences.edit { remove(id + "_frequency_penalty") }
-        preferences.edit { remove(id + "_presence_penalty") }
-        preferences.edit { remove(id + "_max_tokens") }
-        preferences.edit { remove(id + "_context_window_tokens") }
-        preferences.edit { remove(id + "_context_window_model") }
-        preferences.edit { remove(id + "_end_separator") }
-        preferences.edit { remove(id + "_prefix") }
-        preferences.edit { remove(id + "_provider") }
-        preferences.edit { remove(id + "_timeout") }
-        preferences.edit { remove(id + "_response_timeout") }
-        preferences.edit { remove(id + "_image_capability_by_model") }
-        preferences.edit { remove(id + "_tool_capability_by_model") }
-        preferences.edit { remove(id + "_reasoning_capability_by_model") }
-        preferences.edit { remove(id + "_reasoning_rejected_levels_by_model") }
-        preferences.edit { remove(id + "_provider_discovery_path") }
-        preferences.edit { remove(id + "_identity") }
-        preferences.edit { remove(id + "_tts_rejected_voices") }
-        secrets.set(id + "_api_key", "null")
+    internal fun deleteApiEndpoint(id: String) = deleteApiEndpoint(id, deleteCredential = true)
 
-        for (listener in listeners) {
-            listener.onApiEndpointChange()
-        }
+    /** Portable restore removes only the non-secret definition. */
+    internal fun deleteApiEndpointDefinition(id: String) =
+        deleteApiEndpoint(id, deleteCredential = false)
+
+    private fun deleteApiEndpoint(id: String, deleteCredential: Boolean) {
+        check(state.update { current ->
+            current.copy(
+                endpoints = current.endpoints.filterNot { it.id == id },
+                favorites = current.favorites.filterNot { it["endpointId"] == id }
+            )
+        }) { "Unable to publish endpoint deletion" }
+        if (deleteCredential) secrets.set(id + "_api_key", "null")
+        notifyChanged()
     }
 
     fun setApiEndpoint(context: Context, endpoint: ApiEndpointObject): String = setApiEndpoint(endpoint)
 
-    /**
-     * Save under the endpoint's stable [ApiEndpointObject.id]. A brand-new
-     * profile (blank id) is minted a fresh id ONCE, in place; an existing
-     * profile keeps its id, so a rename (same id, new label) updates the record
-     * — the encrypted API key, favorite-model links and per-chat selection all
-     * stay attached because nothing moves to a new, name-derived id. Returns the
-     * id the profile was saved under.
-     */
-    internal fun setApiEndpoint(endpoint: ApiEndpointObject): String {
+    /** Save the complete non-secret definition atomically, then update its credential. */
+    internal fun setApiEndpoint(endpoint: ApiEndpointObject): String =
+        setApiEndpoint(endpoint, writeCredential = true, exactPortableIdentity = false)
+
+    /** Portable writes never read, overwrite, move, or delete a credential. */
+    internal fun setApiEndpointDefinition(endpoint: ApiEndpointObject): String =
+        setApiEndpoint(endpoint, writeCredential = false, exactPortableIdentity = true)
+
+    private fun setApiEndpoint(
+        endpoint: ApiEndpointObject,
+        writeCredential: Boolean,
+        exactPortableIdentity: Boolean
+    ): String {
         val id = StableId.resolve(endpoint.id, "ep-")
         endpoint.id = id
-        putString(id + "_label", endpoint.label)
-        putString(id + "_host", endpoint.host)
-        putString(id + "_chat_endpoint", endpoint.chatEndpoint)
-        putString(id + "_speech_endpoint", endpoint.speechEndpoint)
-        putString(id + "_auth_type", endpoint.authType)
-        putString(id + "_model", endpoint.model)
-        putString(id + "_temperature", endpoint.temperature.toString())
-        putString(id + "_top_p", endpoint.topP.toString())
-        putString(id + "_frequency_penalty", endpoint.frequencyPenalty.toString())
-        putString(id + "_presence_penalty", endpoint.presencePenalty.toString())
-        putString(id + "_max_tokens", endpoint.maxTokens.toString())
-        val contextWindow = endpoint.contextWindowTokens?.takeIf { it > 0 }
-        if (contextWindow != null &&
-            endpoint.contextWindowModelId == endpoint.model &&
-            endpoint.model.isNotBlank()
-        ) {
-            putString(id + "_context_window_tokens", contextWindow.toString())
-            putString(id + "_context_window_model", endpoint.model)
-        } else {
-            preferences.edit {
-                remove(id + "_context_window_tokens")
-                remove(id + "_context_window_model")
+        check(state.update { current ->
+            val previous = current.endpoints.firstOrNull { it.id == id }
+            val identity = if (exactPortableIdentity) {
+                endpoint.identity
+            } else if (previous?.identity == ApiEndpointObject.IDENTITY_OPENROUTER ||
+                ApiEndpointObject.isRecognizedOpenRouterUrl(endpoint.host)
+            ) {
+                ApiEndpointObject.IDENTITY_OPENROUTER
+            } else {
+                ApiEndpointObject.IDENTITY_GENERIC
             }
-        }
-        putString(id + "_end_separator", endpoint.endSeparator)
-        putString(id + "_prefix", endpoint.prefix)
-        putString(id + "_provider", endpoint.provider)
-        putString(id + "_timeout", ApiEndpointObject.coerceConnectTimeoutSeconds(endpoint.connectTimeoutSeconds).toString())
-        putString(id + "_response_timeout", ApiEndpointObject.coerceResponseTimeoutSeconds(endpoint.responseTimeoutSeconds).toString())
-        val capabilityJson = endpoint.imageCapabilityByModel
-        if (capabilityJson.isBlank() ||
-            capabilityJson == org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.EMPTY
-        ) {
-            preferences.edit { remove(id + "_image_capability_by_model") }
-        } else {
-            putString(id + "_image_capability_by_model", capabilityJson)
-        }
-        val toolCapabilityJson = endpoint.toolCapabilityByModel
-        if (toolCapabilityJson.isBlank() ||
-            toolCapabilityJson == org.teslasoft.assistant.imagegen.ToolCapabilityStore.EMPTY
-        ) {
-            preferences.edit { remove(id + "_tool_capability_by_model") }
-        } else {
-            putString(id + "_tool_capability_by_model", toolCapabilityJson)
-        }
-        val reasoningCapabilityJson = endpoint.reasoningCapabilityByModel
-        if (reasoningCapabilityJson.isBlank() ||
-            reasoningCapabilityJson == org.teslasoft.assistant.reasoning.ReasoningCapabilityStore.EMPTY
-        ) {
-            preferences.edit { remove(id + "_reasoning_capability_by_model") }
-        } else {
-            putString(id + "_reasoning_capability_by_model", reasoningCapabilityJson)
-        }
-        val reasoningRejectedJson = endpoint.reasoningRejectedLevelsByModel
-        if (reasoningRejectedJson.isBlank() ||
-            reasoningRejectedJson == org.teslasoft.assistant.reasoning.RejectedReasoningLevelStore.EMPTY
-        ) {
-            preferences.edit { remove(id + "_reasoning_rejected_levels_by_model") }
-        } else {
-            putString(id + "_reasoning_rejected_levels_by_model", reasoningRejectedJson)
-        }
-        // Blank means "use the default discovery path" — store nothing so the
-        // record doesn't accumulate an empty placeholder.
-        if (endpoint.providerDiscoveryPath.isBlank()) {
-            preferences.edit { remove(id + "_provider_discovery_path") }
-        } else {
-            putString(id + "_provider_discovery_path", endpoint.providerDiscoveryPath)
-        }
-        secrets.set(id + "_api_key", endpoint.apiKey)
-        // Routing identity is established once and never demoted: an endpoint
-        // already marked OPENROUTER stays OPENROUTER regardless of later
-        // base-URL edits; otherwise a recognized OpenRouter URL promotes it.
-        // A plain custom proxy (unrecognized URL) stays GENERIC.
-        val existingIdentity = getString(id + "_identity", "")
-        val identity = if (existingIdentity == ApiEndpointObject.IDENTITY_OPENROUTER ||
-            ApiEndpointObject.isRecognizedOpenRouterUrl(endpoint.host)
-        ) {
-            ApiEndpointObject.IDENTITY_OPENROUTER
-        } else {
-            ApiEndpointObject.IDENTITY_GENERIC
-        }
-        putString(id + "_identity", identity)
-        endpoint.identity = identity
-
-        for (listener in listeners) {
-            listener.onApiEndpointChange()
-        }
+            endpoint.identity = identity
+            val replacement = endpoint.toPortable(identity, previous?.rejectedTtsVoices.orEmpty())
+            val endpoints = current.endpoints.toMutableList()
+            val index = endpoints.indexOfFirst { it.id == id }
+            if (index >= 0) endpoints[index] = replacement else endpoints.add(replacement)
+            current.copy(endpoints = endpoints)
+        }) { "Unable to publish endpoint definition" }
+        if (writeCredential) secrets.set(id + "_api_key", endpoint.apiKey)
+        notifyChanged()
         return id
     }
 
-    /**
-     * Rename-safe edit: the endpoint carries its stable id, so this simply
-     * re-saves under it. Kept for source compatibility (older callers passed the
-     * old label); the label argument is no longer used to locate the record.
-     */
     fun editEndpoint(context: Context, label: String, endpoint: ApiEndpointObject) {
         setApiEndpoint(endpoint)
     }
 
     fun migrateFromLegacyEndpoint(context: Context) {
-        if (getApiEndpointsList(context).isEmpty()) {
+        if (getApiEndpointsList().isEmpty()) {
             val sp = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-            val label = "Default"
-            val host = sp.getString("custom_host", "https://api.openai.com/v1/")
-            val apiKey: String = EncryptedPreferences.getEncryptedPreference(context, "api", "api_key")
-
-            // The built-in Default profile keeps the reserved constant id so the
-            // default per-chat reference (Preferences.getApiEndpointId) resolves.
-            setApiEndpoint(ApiEndpointObject(label, host!!, apiKey, id = ApiEndpointObject.DEFAULT_ENDPOINT_ID))
+            val host = sp.getString("custom_host", "https://api.openai.com/v1/")!!
+            val apiKey = EncryptedPreferences.getEncryptedPreference(context, "api", "api_key")
+            setApiEndpoint(
+                ApiEndpointObject(
+                    "Default", host, apiKey, id = ApiEndpointObject.DEFAULT_ENDPOINT_ID
+                )
+            )
         }
     }
 
     fun getApiEndpointsList(context: Context): ArrayList<ApiEndpointObject> = getApiEndpointsList()
 
-    internal fun getApiEndpointsList(): ArrayList<ApiEndpointObject> {
-        val list = ArrayList<ApiEndpointObject>()
-        for (key in preferences.all.keys) {
-            if (key.endsWith("_label")) {
-                val id = key.removeSuffix("_label")
-                list.add(getApiEndpoint(id))
-            }
+    internal fun getApiEndpointsList(): ArrayList<ApiEndpointObject> = ArrayList(
+        state.read()?.endpoints.orEmpty().map { endpoint ->
+            endpoint.toObject(secrets.get(endpoint.id + "_api_key"))
         }
+    )
 
-        // R8 bug fix
-        if (list == null) {
-            return ArrayList()
-        }
-
-        return list
-    }
-
-    /**
-     * Read the raw image-capability-by-model JSON for [id], or the empty
-     * marker if nothing is recorded. Callers pass this to [ImageCapabilityStore]
-     * to read individual model entries.
-     */
     fun getImageCapabilityByModel(id: String): String =
-        getString(id + "_image_capability_by_model", "")
+        state.read()?.endpoints?.firstOrNull { it.id == id }?.imageCapabilityByModel.orEmpty()
 
-    /**
-     * Persist an updated image-capability-by-model JSON for [id]. Empty
-     * strings and [ImageCapabilityStore.EMPTY] both remove the stored value
-     * so a cleared record does not linger as an "{}" placeholder.
-     */
-    fun setImageCapabilityByModel(id: String, capabilityJson: String) {
-        if (capabilityJson.isBlank() ||
-            capabilityJson == org.teslasoft.assistant.preferences.includes.ImageCapabilityStore.EMPTY
-        ) {
-            preferences.edit { remove(id + "_image_capability_by_model") }
-        } else {
-            putString(id + "_image_capability_by_model", capabilityJson)
+    internal fun setRejectedTtsVoices(id: String, voiceIds: Set<String>) {
+        val updated = state.update { current ->
+            current.copy(endpoints = current.endpoints.map { endpoint ->
+                if (endpoint.id == id) endpoint.copy(
+                    rejectedTtsVoices = voiceIds.filter(String::isNotBlank).distinct().sorted()
+                ) else endpoint
+            })
         }
-        for (listener in listeners) {
-            listener.onApiEndpointChange()
-        }
+        if (updated) notifyChanged()
     }
 
-    fun getApiEndpointByUrlOrNull(context: Context, url: String): ApiEndpointObject? {
-        val list = getApiEndpointsList()
-        for (endpoint in list) {
-            if (endpoint.host == url) {
-                return endpoint
-            }
+    fun setImageCapabilityByModel(id: String, capabilityJson: String) {
+        val normalized = capabilityJson.takeUnless {
+            it.isBlank() || it == ImageCapabilityStore.EMPTY
+        }.orEmpty()
+        val updated = state.update { current ->
+            current.copy(endpoints = current.endpoints.map { endpoint ->
+                if (endpoint.id == id) endpoint.copy(imageCapabilityByModel = normalized) else endpoint
+            })
         }
-        return null
+        if (updated) notifyChanged()
+    }
+
+    fun getApiEndpointByUrlOrNull(context: Context, url: String): ApiEndpointObject? =
+        getApiEndpointsList().firstOrNull { it.host == url }
+
+    private fun notifyChanged() {
+        listeners.forEach { it.onApiEndpointChange() }
     }
 
     fun interface OnApiEndpointChangeListener {
         fun onApiEndpointChange()
+    }
+
+    private fun ModelEndpointPortableCodec.Endpoint.toObject(apiKey: String) = ApiEndpointObject(
+        label = label,
+        host = host,
+        apiKey = apiKey,
+        chatEndpoint = chatEndpoint,
+        authType = authType,
+        model = model,
+        temperature = temperature.toFloat(),
+        topP = topP.toFloat(),
+        frequencyPenalty = frequencyPenalty.toFloat(),
+        presencePenalty = presencePenalty.toFloat(),
+        maxTokens = maxTokens,
+        endSeparator = endSeparator,
+        prefix = prefix,
+        provider = provider,
+        connectTimeoutSeconds = connectTimeoutSeconds,
+        responseTimeoutSeconds = responseTimeoutSeconds,
+        id = id,
+        contextWindowTokens = contextWindowTokens,
+        contextWindowModelId = contextWindowModelId,
+        imageCapabilityByModel = imageCapabilityByModel,
+        toolCapabilityByModel = toolCapabilityByModel,
+        providerDiscoveryPath = providerDiscoveryPath,
+        identity = identity,
+        reasoningCapabilityByModel = reasoningCapabilityByModel,
+        reasoningRejectedLevelsByModel = reasoningRejectedLevelsByModel,
+        speechEndpoint = speechEndpoint
+    )
+
+    private fun ApiEndpointObject.toPortable(
+        storedIdentity: String,
+        rejectedVoices: List<String>
+    ): ModelEndpointPortableCodec.Endpoint {
+        val contextWindow = contextWindowTokens?.takeIf {
+            it > 0 && contextWindowModelId == model && model.isNotBlank()
+        }
+        return ModelEndpointPortableCodec.Endpoint(
+            id = id,
+            label = label,
+            host = host,
+            chatEndpoint = chatEndpoint,
+            speechEndpoint = speechEndpoint,
+            authType = authType,
+            model = model,
+            temperature = temperature.toDouble(),
+            topP = topP.toDouble(),
+            frequencyPenalty = frequencyPenalty.toDouble(),
+            presencePenalty = presencePenalty.toDouble(),
+            maxTokens = maxTokens,
+            endSeparator = endSeparator,
+            prefix = prefix,
+            provider = provider,
+            connectTimeoutSeconds = ApiEndpointObject.coerceConnectTimeoutSeconds(connectTimeoutSeconds),
+            responseTimeoutSeconds = ApiEndpointObject.coerceResponseTimeoutSeconds(responseTimeoutSeconds),
+            contextWindowTokens = contextWindow,
+            contextWindowModelId = if (contextWindow == null) "" else model,
+            imageCapabilityByModel = imageCapabilityByModel.takeUnless {
+                it.isBlank() || it == ImageCapabilityStore.EMPTY
+            }.orEmpty(),
+            toolCapabilityByModel = toolCapabilityByModel.takeUnless {
+                it.isBlank() || it == ToolCapabilityStore.EMPTY
+            }.orEmpty(),
+            reasoningCapabilityByModel = reasoningCapabilityByModel.takeUnless {
+                it.isBlank() || it == ReasoningCapabilityStore.EMPTY
+            }.orEmpty(),
+            reasoningRejectedLevelsByModel = reasoningRejectedLevelsByModel.takeUnless {
+                it.isBlank() || it == RejectedReasoningLevelStore.EMPTY
+            }.orEmpty(),
+            providerDiscoveryPath = providerDiscoveryPath,
+            identity = storedIdentity,
+            rejectedTtsVoices = rejectedVoices
+        )
     }
 }

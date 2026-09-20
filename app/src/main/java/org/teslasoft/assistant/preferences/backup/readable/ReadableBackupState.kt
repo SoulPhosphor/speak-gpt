@@ -45,6 +45,7 @@ object ReadableBackupState {
     private const val KEY_LAST_SUCCESS_SIZE = "readable.last_success_size"
     private const val KEY_SCOPE_ALL = "readable.scope_all"
     private const val KEY_FORMAT = "readable.format"
+    private const val KEY_CATEGORIES = "readable.categories"
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -120,5 +121,22 @@ object ReadableBackupState {
 
     fun setFormat(context: Context, format: ReadableChatBackup.Format) {
         try { prefs(context).edit(commit = true) { putString(KEY_FORMAT, format.name) } } catch (_: Exception) { }
+    }
+
+    fun getCategories(context: Context): Set<ReadableDataBackup.Category> {
+        val defaults = ReadableDataBackup.Category.entries.toSet()
+        val stored = try { prefs(context).getStringSet(KEY_CATEGORIES, null) } catch (_: Exception) { null }
+            ?: return defaults
+        return stored.mapNotNullTo(LinkedHashSet()) { name ->
+            ReadableDataBackup.Category.entries.firstOrNull { it.name == name }
+        }
+    }
+
+    fun setCategories(context: Context, categories: Set<ReadableDataBackup.Category>) {
+        try {
+            prefs(context).edit(commit = true) {
+                putStringSet(KEY_CATEGORIES, categories.mapTo(LinkedHashSet()) { it.name })
+            }
+        } catch (_: Exception) { }
     }
 }

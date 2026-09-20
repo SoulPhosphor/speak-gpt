@@ -251,6 +251,27 @@ class GenerationErrorClassifierTest {
         assertEquals(GenErrorCode.S2, code(RuntimeException("io.ktor.client.call.NoTransformationFoundException: ...")))
     }
 
+    @Test fun undeserializableCompletionBodyIsS2() {
+        // A body arrived but was not a valid chat completion: the endpoint
+        // answered with something the client could not parse (here, the exact
+        // failure a free OpenRouter model produced). It must read as an
+        // unreadable response, never as the unknown catch-all.
+        val missingFields = RuntimeException(
+            "io.ktor.serialization.JsonConvertException: Illegal input: Fields " +
+                "[id, created, model, choices] are required for type with serial " +
+                "name 'com.aallam.openai.api.chat.ChatCompletion', but they were " +
+                "missing at path: \$"
+        )
+        assertEquals(GenErrorCode.S2, code(missingFields))
+    }
+
+    @Test fun missingFieldExceptionClassNameIsS2() {
+        assertEquals(
+            GenErrorCode.S2,
+            code(RuntimeException("kotlinx.serialization.MissingFieldException: ..."))
+        )
+    }
+
     @Test fun s2KeepsStackTrace() {
         assertEquals(true, GenErrorCode.S2.includeStackTrace)
     }

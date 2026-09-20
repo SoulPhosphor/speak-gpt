@@ -20,6 +20,9 @@ import android.content.Context
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
+import org.teslasoft.assistant.preferences.backup.RecoveryOperationGate
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporter
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
 import org.teslasoft.assistant.preferences.lorebook.LoreBookEncryption
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 import org.teslasoft.assistant.preferences.memory.MemoryLog
@@ -38,11 +41,17 @@ import java.time.Instant
  *    inside the package — the two most sensitive stores never exist as
  *    plaintext on disk during an encrypted backup. Keys are ordinary
  *    exportable bytes; only their STORAGE is Keystore-bound.
- *  - User image catalog: row-level rebuilt plain SQLite copy (catalog only;
- *    the JPEGs are not backed up — standing owner ruling).
+ *  - Avatar/Profile Images: row-level rebuilt plain SQLite catalog plus every
+ *    valid content-addressed gallery JPEG, including unused images. Identity
+ *    assignments live with their owning records and are not changed here.
  *  - Chats: logical serialization ([ChatLogicalSerializer]) — the raw
  *    enc.*.xml files can never be portable. LOCKED storage fails the run
  *    visibly.
+ *  - Companions and roleplay: the existing validated logical archive, which
+ *    also contains Activation Prompts, System Prompts, Glamours, Roleplay
+ *    Characters, related roleplay records, and referenced profile images.
+ *  - Model & Endpoint Settings: credential-free endpoint definitions,
+ *    favorite-model parameters, provider preferences and routing choices.
  *
  * NOTE for the unencrypted tier: the SAME inner layout is used, so the
  * database keys are exposed in cleartext inside the file. That is within the
@@ -68,7 +77,11 @@ object PortableRecoveryWriter {
         data class Ok(
             val chatCount: Int,
             val artifactCount: Int,
-            val includedTypes: Set<BackupType>
+            val includedTypes: Set<BackupType>,
+            val generatedImageCount: Int = 0,
+            val generatedImageBytes: Long = 0L,
+            val profileImageCount: Int = 0,
+            val profileImageBytes: Long = 0L
         ) : Result()
 
         /** [chatFailure] refines CHATS_UNAVAILABLE with WHICH part of chat
@@ -100,7 +113,18 @@ object PortableRecoveryWriter {
          *  degraded flag). A recovery package must never capture a corrupt
          *  database as if it were a good copy — repair first (A1's
          *  "unavailable to use or save"). Visible, typed, never silent. */
-        STORE_DEGRADED
+        STORE_DEGRADED,
+
+        /** A profile picture assigned to an included identity is missing or no
+         *  longer matches its stored hash. Publishing an archive that omits an
+         *  assigned picture would be a falsely-complete recovery backup
+         *  (BR-07), so the write refuses and the previous automatic backup is
+         *  kept. Visible, typed, never silent. */
+        PROFILE_IMAGE_UNAVAILABLE,
+
+        /** Live authoritative state changed during both bounded capture
+         * attempts. No package is published from mixed generations. */
+        SOURCE_CHANGED_DURING_CAPTURE
     }
 
     /**
@@ -120,6 +144,30 @@ object PortableRecoveryWriter {
         recoverySecret: ByteArray?,
         passwordBlob: PortablePackageFormat.PasswordBlob?,
         appVersion: String
+    ): Result = RecoveryOperationGate.runExclusive {
+        for (attempt in 1..PortableBackupCaptureStability.MAX_ATTEMPTS) {
+            val before = PortableBackupMutationTokens.read(context)
+                ?: return@runExclusive Result.Failed(Reason.SNAPSHOT_FAILED)
+            runCatching { if (out.exists()) out.delete() }
+            val result = createPackageLocked(
+                context, out, recoverySecret, passwordBlob, appVersion, before, attempt
+            )
+            if (result !is Result.Failed ||
+                result.reason != Reason.SOURCE_CHANGED_DURING_CAPTURE ||
+                attempt == PortableBackupCaptureStability.MAX_ATTEMPTS
+            ) return@runExclusive result
+        }
+        Result.Failed(Reason.SOURCE_CHANGED_DURING_CAPTURE)
+    }
+
+    private fun createPackageLocked(
+        context: Context,
+        out: File,
+        recoverySecret: ByteArray?,
+        passwordBlob: PortablePackageFormat.PasswordBlob?,
+        appVersion: String,
+        beforeTokens: Map<String, String>,
+        captureAttempt: Int
     ): Result {
         val staging = PortableStaging.newRunDir(context)
         try {
@@ -132,6 +180,10 @@ object PortableRecoveryWriter {
             val createdAt = Instant.now().toString()
             val artifacts = ArrayList<PortablePackage.Artifact>()
             val includedTypes = LinkedHashSet<BackupType>()
+            var generatedImageCount = 0
+            var generatedImageBytes = 0L
+            var profileImageCount = 0
+            var profileImageBytes = 0L
 
             // ---- memory DB (ciphertext + key) ----
             if (MemoryStore.isProvisioned(context)) {
@@ -179,23 +231,89 @@ object PortableRecoveryWriter {
                 includedTypes.add(BackupType.LOREBOOK)
             }
 
-            // ---- user image catalog (plain SQLite; catalog only) ----
+            // ---- Avatar/Profile Images (plain SQLite catalog + complete
+            //      gallery bytes, including images not assigned anywhere) ----
             run {
                 val staged = File(staging, "user_images.snapshot")
                 if (RecoveryBackupManager.snapshotUserImageCatalog(context, staged)) {
                     RecoveryBackupManager.integrityCheckPlain(staged)
+                    val profileImages = ProfileImagePortableBackup.buildArtifacts(context, staged)
+                    if (profileImages is ProfileImagePortableBackup.Result.Failed) {
+                        return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    }
+                    profileImages as ProfileImagePortableBackup.Result.Ok
                     artifacts.add(
                         PortablePackage.Artifact(
                             entryName = "user_images.db", type = "sqlite-db", file = staged,
                             databaseKeyHex = null, keySemantics = null, schemaVersion = null
                         )
                     )
+                    artifacts.addAll(profileImages.artifacts)
+                    profileImageCount = profileImages.inventory.imageCount
+                    profileImageBytes = profileImages.inventory.imageBytes
                     includedTypes.add(BackupType.USER_IMAGE)
                 }
             }
 
+            // ---- generated images (portable logical catalog + every active
+            //      gallery byte, including Gallery-only images) ----
+            when (val generated = GeneratedImagePortableBackup.buildArtifacts(context, staging)) {
+                is GeneratedImagePortableBackup.Result.NothingToBackUp -> Unit
+                is GeneratedImagePortableBackup.Result.Failed ->
+                    return Result.Failed(Reason.SNAPSHOT_FAILED)
+                is GeneratedImagePortableBackup.Result.Ok -> {
+                    artifacts.addAll(generated.artifacts)
+                    generatedImageCount = generated.inventory.imageCount
+                    generatedImageBytes = generated.inventory.imageBytes
+                }
+            }
+
+            // ---- companions, prompts and roleplay (logical archive) ----
+            run {
+                val staged = File(staging, "companion_roleplay.zip")
+                when (CompanionBackupExporter.buildBackupZip(
+                    context, staged, validateAssignedImages = true
+                )) {
+                    CompanionBackupExporter.BuildResult.MemoryUnavailable,
+                    CompanionBackupExporter.BuildResult.LorebookUnavailable ->
+                        return Result.Failed(Reason.SNAPSHOT_FAILED)
+                    CompanionBackupExporter.BuildResult.ProfileImageUnavailable ->
+                        return Result.Failed(Reason.PROFILE_IMAGE_UNAVAILABLE)
+                    is CompanionBackupExporter.BuildResult.Ok -> artifacts.add(
+                        PortablePackage.Artifact(
+                            entryName = "companion_roleplay.zip",
+                            type = PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE,
+                            file = staged,
+                            databaseKeyHex = null,
+                            keySemantics = null,
+                            schemaVersion = CompanionBackupFormat.FORMAT_VERSION
+                        )
+                    )
+                }
+            }
+
+            // ---- Model & Endpoint Settings (never credentials) ----
+            run {
+                val staged = File(staging, "model_endpoint_settings.json")
+                if (ModelEndpointPortableBackup.write(context, staged) is
+                    ModelEndpointPortableBackup.Result.Failed
+                ) {
+                    return Result.Failed(Reason.SNAPSHOT_FAILED)
+                }
+                artifacts.add(
+                    PortablePackage.Artifact(
+                        entryName = "model_endpoint_settings.json",
+                        type = PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS,
+                        file = staged,
+                        databaseKeyHex = null,
+                        keySemantics = null,
+                        schemaVersion = ModelEndpointPortableCodec.SCHEMA_VERSION
+                    )
+                )
+            }
+
             // ---- chats (logical serialization; LOCKED fails visibly) ----
-            when (val chats = ChatLogicalSerializer.serialize(context)) {
+            when (val chats = ChatLogicalSerializer.serializeV2(context)) {
                 is ChatLogicalSerializer.Result.Unavailable ->
                     return Result.Failed(Reason.CHATS_UNAVAILABLE, chatFailure = chats.category)
                 is ChatLogicalSerializer.Result.Ok -> {
@@ -204,19 +322,57 @@ object PortableRecoveryWriter {
                     artifacts.add(
                         PortablePackage.Artifact(
                             entryName = "chats.json", type = "chats-json", file = staged,
-                            databaseKeyHex = null, keySemantics = null, schemaVersion = null
+                            databaseKeyHex = null, keySemantics = null, schemaVersion = 2
                         )
                     )
                     includedTypes.add(BackupType.CHATS)
-                    if (artifacts.size == 1 && chats.chatCount == 0) {
-                        // No databases exist and no chats exist: nothing real
-                        // to package — neutral, not a failure (owner ruling).
-                        return Result.Failed(Reason.NOTHING_TO_BACK_UP)
+                    when (PortableBackupCaptureStability.decide(
+                        beforeTokens,
+                        PortableBackupMutationTokens.read(context),
+                        captureAttempt
+                    )) {
+                        PortableBackupCaptureStability.Decision.STABLE -> Unit
+                        PortableBackupCaptureStability.Decision.RETRY,
+                        PortableBackupCaptureStability.Decision.REFUSE ->
+                            return Result.Failed(Reason.SOURCE_CHANGED_DURING_CAPTURE)
+                        PortableBackupCaptureStability.Decision.UNAVAILABLE ->
+                            return Result.Failed(Reason.SNAPSHOT_FAILED)
                     }
-
+                    val validatedArtifacts = artifacts.map { artifact ->
+                        PortablePackage.ValidatedArtifact(
+                            artifact.entryName,
+                            artifact.type,
+                            artifact.file,
+                            artifact.databaseKeyHex,
+                            artifact.keySemantics,
+                            artifact.schemaVersion
+                        )
+                    }
+                    val represented = PortableRestoreInventory.from(validatedArtifacts).available
+                    val semantic = PortableRecoverySemanticValidator.validate(
+                        context,
+                        validatedArtifacts,
+                        declaredCategories = PortableRestoreCategory.entries.toSet(),
+                        explicitlyEmptyCategories = PortableRestoreCategory.entries.toSet() - represented
+                    )
+                    if (semantic !is PortableRecoverySemanticValidator.Result.Valid) {
+                        return Result.Failed(
+                            if (semantic is PortableRecoverySemanticValidator.Result.TooLarge) {
+                                Reason.SNAPSHOT_FAILED
+                            } else Reason.PACKAGE_VERIFY_FAILED
+                        )
+                    }
+                    val declarations = PortableRecoverySemanticValidator.declarations(
+                        validatedArtifacts, semantic.recordCounts
+                    )
                     // ---- assemble + envelope + reopen-and-verify ----
                     val innerZip = File(staging, "inner.zip")
-                    PortablePackage.buildInnerZip(artifacts, createdAt, innerZip)
+                    PortablePackage.buildInnerZip(
+                        artifacts,
+                        createdAt,
+                        innerZip,
+                        categoryDeclarations = declarations
+                    )
                     // Producer metadata: identity lives in the header, never in
                     // the filename (owner filename architecture). The display
                     // name is captured AT CREATION TIME; a later app rename
@@ -239,7 +395,11 @@ object PortableRecoveryWriter {
                     return Result.Ok(
                         chatCount = chats.chatCount,
                         artifactCount = artifacts.size,
-                        includedTypes = includedTypes
+                        includedTypes = includedTypes,
+                        generatedImageCount = generatedImageCount,
+                        generatedImageBytes = generatedImageBytes,
+                        profileImageCount = profileImageCount,
+                        profileImageBytes = profileImageBytes
                     )
                 }
             }
@@ -265,7 +425,15 @@ object PortableRecoveryWriter {
                 PortablePackage.decodeWithSecret(packageFile, ByteArray(0), verifyStaging)
             }
             val inner = (decoded as? PortablePackage.DecodeResult.Ok)?.innerZip ?: return false
-            return PortablePackage.validateAndExtract(inner, verifyStaging) is PortablePackage.ValidateResult.Ok
+            val validated = PortablePackage.validateAndExtract(inner, verifyStaging)
+                as? PortablePackage.ValidateResult.Ok ?: return false
+            return PortableRecoverySemanticValidator.validate(
+                context,
+                validated.artifacts,
+                validated.declaredCategories,
+                validated.explicitlyEmptyCategories,
+                validated.categoryRecordCounts
+            ) is PortableRecoverySemanticValidator.Result.Valid
         } catch (_: Exception) {
             return false
         } finally {

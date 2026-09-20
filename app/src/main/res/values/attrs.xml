@@ -42,4 +42,14 @@
     <attr name="appDropdownLabelColor" format="color" />
     <attr name="appDropdownDisabledTextColor" format="color" />
     <attr name="appDropdownDisabledBorderColor" format="color" />
+
+    <!-- ParameterSectionHeader: a section title paired with the circled-i
+         information button used across the app. The title is shown inline; the
+         info text is not shown until the button is tapped, when it opens the
+         shared parameter information dialog. An empty parameterInfo hides the
+         button (a heading with nothing to explain). -->
+    <declare-styleable name="ParameterSectionHeader">
+        <attr name="parameterTitle" format="string" />
+        <attr name="parameterInfo" format="string" />
+    </declare-styleable>
 </resources>

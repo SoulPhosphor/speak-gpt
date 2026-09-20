@@ -23,11 +23,19 @@ import android.os.Looper
 import android.widget.Toast
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import org.teslasoft.assistant.imagegen.ImageGenerationJobRegistry
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
+import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexJournal
+import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
+import org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection
 import org.teslasoft.assistant.preferences.memory.MemoryStore
+import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.util.Hash
 import java.lang.Exception
 import java.lang.reflect.Type
 import androidx.core.content.edit
+import org.teslasoft.assistant.conversation.ConversationMode
+import org.teslasoft.assistant.conversation.PendingConversationCommitResult
 
 class ChatPreferences private constructor() {
     companion object {
@@ -37,6 +45,32 @@ class ChatPreferences private constructor() {
          *  with no ID; it never rewrites or migrates them. */
         fun storedChatId(chat: Map<String, String>): String =
             chat["id"] ?: Hash.hash(chat["name"].toString())
+
+        internal fun chatNameForId(
+            chats: List<Map<String, String>>,
+            chatId: String
+        ): String = chats.firstOrNull { storedChatId(it) == chatId }
+            ?.get("name")
+            .orEmpty()
+
+        internal fun hasChatTitle(
+            chats: List<Map<String, String>>,
+            title: String,
+            excludingChatId: String? = null
+        ): Boolean = chats.any {
+            storedChatId(it) != excludingChatId && it["name"] == title
+        }
+
+        /** The internal placeholder title a chat carries until it is auto-titled.
+         *  Displayed as "Untitled chat"; interchangeable, so a collision may be
+         *  renumbered instead of refusing to save the conversation. */
+        internal val AUTONAME_PLACEHOLDER = Regex("^_autoname_\\d+$")
+
+        internal fun nextAutonameNumber(chats: List<Map<String, String>>): String {
+            var number = 1
+            while (chats.any { it["name"] == "_autoname_$number" }) number++
+            return number.toString()
+        }
 
         fun getChatPreferences() : ChatPreferences {
             if (preferences == null) preferences = ChatPreferences()
@@ -128,82 +162,32 @@ class ChatPreferences private constructor() {
     }
 
     /**
-     * Summarizer state keys inside `settings.<chatId>`: the rolling summary,
-     * its projection contract, fold-in bookmark, over-length marker, failure
-     * episode, and per-chat error log.
+     * Phase 3 storage-only cleanup. Visible chat-list/folder metadata is
+     * removed by ChatNavigationRepository before this runs. Keeping this
+     * operation free of UI and name lookups makes every deletion caller go
+     * through the shared ownership/Lock decision coordinator.
      */
-    private val summarizerContentKeys = arrayOf(
-        "summarizer_summary", "summarizer_projection_version", "summarizer_folded",
-        "summarizer_over_length", "summarizer_episode", "summarizer_errors",
-        "manual_compaction_boundary", "use_summarized_conversation_projection",
-        "condensed_conversation_kind", "summarizer_catch_up_pending",
-        "summary_regeneration_lock_boundary", "compaction_regeneration_lock_boundary",
-        "condensed_regeneration_lock_migrated"
-    )
-
-    /**
-     * Deletion companion for decision 9 (conversation-summary-plan.md): the
-     * summary and ALL summarizer state die with the chat on every deletion
-     * path. The chat's settings file itself is (historically) left behind by
-     * deletion, so the summarizer keys — which hold condensed conversation
-     * content — are removed explicitly, including the toggle and window.
-     */
-    private fun clearSummarizerState(context: Context, chatId: String) {
-        try {
-            SecurePrefs.get(context, "settings.$chatId").edit(commit = true) {
-                for (key in summarizerContentKeys) remove(key)
-                remove("use_summarizer")
-                remove("summarizer_window")
+    internal fun cleanupDeletedChatData(context: Context, chatId: String): Boolean {
+        if (chatId.isBlank()) return false
+        val historyName = "chat_$chatId"
+        val settingsName = "settings.$chatId"
+        return try {
+            val history = SecurePrefs.get(context, historyName)
+            val settings = SecurePrefs.get(context, settingsName)
+            if (SecurePrefs.isLockedName(historyName) || SecurePrefs.isLockedName(settingsName)) {
+                return false
             }
-        } catch (_: Exception) { /* best-effort; content keys carry no plaintext outside SecurePrefs */ }
-    }
-
-    /**
-     * Deletes a chat, including all messages, from the chat list.
-     *
-     * @param context The context of the application.
-     * @param chatName The name of the chat to delete.
-     */
-    fun deleteChat(context: Context, chatName: String) {
-        if (chatWriteBlocked(context, "chat_list", "delete a chat")) return
-        val chatId: String
-        synchronized(CHAT_LIST_LOCK) {
-            val list = getChatMetadataList(context)
-
-            val entry = list.firstOrNull { it["name"] == chatName } ?: return
-            chatId = storedChatId(entry)
-            for (map: HashMap<String, String> in list) {
-                if (map["name"] == chatName) {
-                    list.remove(map)
-                    break
-                }
-            }
-
-            val json: String = Gson().toJson(list)
-
-            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-            settings.edit { putString("data", json) }
+            org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry.cancel(chatId)
+            val historyCleared = history.edit().clear().commit()
+            val settingsCleared = settings.edit().clear().commit()
+            val includesCleared = org.teslasoft.assistant.preferences.includes.ImageImporter
+                .deleteChatImagesForDeletion(context, chatId)
+            if (historyCleared) ChatStorageHealth.clearReadFailure(context, historyName)
+            if (settingsCleared) ChatStorageHealth.clearReadFailure(context, settingsName)
+            historyCleared && settingsCleared && includesCleared
+        } catch (_: Exception) {
+            false
         }
-
-        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
-        settings2.edit { clear() }
-
-        // The summary and all summarizer state die with the chat (decision 9).
-        clearSummarizerState(context, chatId)
-
-        // Locally stored attachment images belong to this chat only; a delete
-        // takes them with it (owner ruling). The user's ORIGINAL files are
-        // never touched — only the app's private extracted copies.
-        try {
-            org.teslasoft.assistant.preferences.includes.ImageImporter
-                .deleteChatImages(context, chatId)
-        } catch (_: Exception) { /* best-effort; reconciliation is the backstop */ }
-
-        // A user-confirmed delete settles this chat's unreadable-value state
-        // (the preserved ciphertext copy under files/storage_recovery/ is
-        // never touched); without this the journal row would keep reporting
-        // degraded chat storage forever.
-        ChatStorageHealth.clearReadFailure(context, "chat_$chatId")
     }
 
     /**
@@ -414,6 +398,18 @@ class ChatPreferences private constructor() {
     fun getChatById(context: Context, chatId: String) : ArrayList<HashMap<String, Any>> =
         getChatByIdResult(context, chatId).messages
 
+    /** Validates an imported transcript, then routes it through the guarded
+     * source/revision commit so Search never has an unobservable import path. */
+    fun importChatHistoryJson(context: Context, chatId: String, json: String): Boolean {
+        val messages = try {
+            val type: Type = TypeToken.getParameterized(ArrayList::class.java, HashMap::class.java).type
+            @Suppress("UNCHECKED_CAST")
+            (Gson().fromJson<Any>(json, type) as? ArrayList<HashMap<String, Any>>) ?: arrayListOf()
+        } catch (_: Exception) { return false }
+        return saveChatHistory(context, chatId, messages, synchronous = true) ==
+            ChatStorageHealth.WriteOutcome.OK
+    }
+
     /**
      * Shared handling for a value that exists but cannot be decrypted even
      * though its file opened (Keystore valid, ciphertext damaged — storage
@@ -470,6 +466,9 @@ class ChatPreferences private constructor() {
         messages: List<HashMap<String, Any>>,
         synchronous: Boolean = false
     ): ChatStorageHealth.WriteOutcome {
+        if (PortableRestoreProcessGate.blocksCurrentProcess(context)) {
+            return ChatStorageHealth.WriteOutcome.FAILED
+        }
         val name = "chat_$chatId"
         SecurePrefs.get(context, name)
         if (SecurePrefs.isLockedName(name)) {
@@ -481,17 +480,29 @@ class ChatPreferences private constructor() {
             return ChatStorageHealth.WriteOutcome.BLOCKED_CORRUPT
         }
         return try {
-            val editor = SecurePrefs.get(context, name)
-                .edit()
-                .putString("chat", Gson().toJson(messages))
-            if (synchronous) {
-                if (editor.commit()) {
-                    ChatStorageHealth.WriteOutcome.OK
-                } else {
-                    ChatStorageHealth.WriteOutcome.FAILED
-                }
-            } else {
+            val prefs = SecurePrefs.get(context, name)
+            val fingerprint = SearchableMessageProjection.projectionFingerprint(messages)
+            val previousFingerprint = prefs.getString(
+                ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, null
+            )
+            val searchableChanged = fingerprint != previousFingerprint
+            val revision = if (searchableChanged) ChatSearchIndexManager.newRevision() else null
+            if (revision != null && !ChatSearchIndexJournal.get(context).record(chatId, revision)) {
+                return ChatStorageHealth.WriteOutcome.FAILED
+            }
+            val editor = prefs.edit().putString("chat", Gson().toJson(messages))
+            if (revision != null) editor
+                .putString(ChatSearchIndexManager.SEARCH_REVISION_KEY, revision)
+                .putString(ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, fingerprint)
+            val committed = if (synchronous || searchableChanged) editor.commit() else {
                 editor.apply()
+                true
+            }
+            if (!committed) {
+                revision?.let { ChatSearchIndexJournal.get(context).clearExact(chatId, it) }
+                ChatStorageHealth.WriteOutcome.FAILED
+            } else {
+                if (revision != null) ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, revision)
                 ChatStorageHealth.WriteOutcome.OK
             }
         } catch (_: Exception) {
@@ -585,10 +596,7 @@ class ChatPreferences private constructor() {
             list[position].remove(MessageCompletionState.KEY_ERROR_TEXT)
         }
 
-        val json: String = Gson().toJson(list)
-
-        val settings: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
-        settings.edit { putString("chat", json) }
+        saveChatHistory(context, chatId, list, synchronous = true)
     }
 
     fun deleteMessage(context: Context, chatId: String, position: Int) {
@@ -602,10 +610,7 @@ class ChatPreferences private constructor() {
 
         list.removeAt(position)
 
-        val json: String = Gson().toJson(list)
-
-        val settings: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
-        settings.edit { putString("chat", json) }
+        saveChatHistory(context, chatId, list, synchronous = true)
 
         // Summarizer bookmark alignment: the fold-in bookmark counts the
         // chat's oldest stored messages. Deleting one of THOSE shifts every
@@ -664,8 +669,6 @@ class ChatPreferences private constructor() {
      * @return A unique chat ID as a String.
      */
     fun getAvailableChatIdForAutoname(context: Context) : String {
-        var x = 1
-
         var list = getChatMetadataList(context)
 
         // R8 Bugfix
@@ -674,51 +677,113 @@ class ChatPreferences private constructor() {
         // Dumb things goes gere
         if (list.isEmpty()) list = arrayListOf()
 
-        while (true) {
-            var isFound = false
-            for (map: HashMap<String, String> in list) {
-                if (map["name"] == "_autoname_$x" ||
-                    storedChatId(map) == Hash.hash("_autoname_$x")) {
-                    isFound = true
-                    break
-                }
-            }
-
-            if (!isFound) break
-
-            x++
-        }
-
-        return x.toString()
+        return nextAutonameNumber(list)
     }
 
     /**
-     * Adds a new chat to the chat list.
-     *
-     * @param context The context of the application.
-     * @param chatName The name of the chat to add.
+     * Phase 5's one first-user-action transaction. The provisional history and
+     * per-chat settings already exist, but the conversation is not discoverable
+     * until this method synchronously commits the first payload, durable mode,
+     * and chat-list row. The journal makes retries/process-death recovery
+     * idempotent; a row with the same stable UUID is never appended twice.
      */
-    fun addChat(context: Context, chatName: String) {
-        if (chatWriteBlocked(context, "chat_list", "create a chat")) return
-        synchronized(CHAT_LIST_LOCK) {
-            val list = getChatMetadataList(context)
-
-            val map: HashMap<String, String> = HashMap()
-
-            map["name"] = chatName
-            map["id"] = Hash.hash(chatName)
-            map["timestamp"] = System.currentTimeMillis().toString()
-            map["pinned"] = "false"
-
-            list.add(map)
-            val json: String = Gson().toJson(list)
-
-            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-            settings.edit { putString("data", json) }
+    fun commitPendingConversation(
+        context: Context,
+        chatId: String,
+        chatName: String,
+        mode: ConversationMode,
+        messages: ArrayList<HashMap<String, Any>>
+    ): PendingConversationCommitResult {
+        if (chatId.isBlank() || chatName.isBlank() || messages.isEmpty()) {
+            return PendingConversationCommitResult.CommitFailed
+        }
+        val historyName = "chat_$chatId"
+        val settingsName = "settings.$chatId"
+        if (chatWriteBlocked(context, "chat_list", "commit a new conversation") ||
+            chatWriteBlocked(context, historyName, "commit a new conversation") ||
+            chatWriteBlocked(context, settingsName, "commit a new conversation")
+        ) {
+            return PendingConversationCommitResult.StorageUnavailable
         }
 
-        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_${Hash.hash(chatName)}")
-        settings2.edit { putString("chat", "[]") }
+        synchronized(CHAT_LIST_LOCK) {
+            val listResult = getChatListResult(context, includeFirstMessage = false)
+            if (!ChatStorageHealth.isAuthoritative(listResult.state)) {
+                return PendingConversationCommitResult.StorageUnavailable
+            }
+            val existing = listResult.chats.firstOrNull { storedChatId(it) == chatId }
+            if (existing != null) {
+                // The row is the commit. Its title may legitimately differ by
+                // now (auto-titling renames a placeholder), and identity is the
+                // id, so this is done rather than a failure to retry forever.
+                SecurePrefs.get(context, "pending_conversation_journal")
+                    .edit().remove(chatId).commit()
+                return PendingConversationCommitResult.AlreadyCommitted
+            }
+            // Two provisional conversations can be handed the same placeholder
+            // title before either owns a row. Take the next free placeholder
+            // instead of refusing the commit and stranding the conversation.
+            // A title the user actually chose still may not be duplicated.
+            val committedName =
+                if (!hasChatTitle(listResult.chats, chatName)) chatName
+                else if (AUTONAME_PLACEHOLDER.matches(chatName)) {
+                    "_autoname_${nextAutonameNumber(listResult.chats)}"
+                } else return PendingConversationCommitResult.CommitFailed
+
+            val journal = SecurePrefs.get(context, "pending_conversation_journal")
+            val journalPayload = Gson().toJson(
+                mapOf("id" to chatId, "name" to committedName, "mode" to mode.storedValue)
+            )
+            if (!journal.edit().putString(chatId, journalPayload).commit()) {
+                return PendingConversationCommitResult.CommitFailed
+            }
+
+            val searchRevision = ChatSearchIndexManager.newRevision()
+            if (!ChatSearchIndexJournal.get(context).record(chatId, searchRevision)) {
+                return PendingConversationCommitResult.CommitFailed
+            }
+            val historyCommitted = SecurePrefs.get(context, historyName).edit()
+                .putString("chat", Gson().toJson(messages))
+                .putString(ChatSearchIndexManager.SEARCH_REVISION_KEY, searchRevision)
+                .putString(
+                    ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY,
+                    SearchableMessageProjection.projectionFingerprint(messages)
+                ).commit()
+            if (!historyCommitted) return PendingConversationCommitResult.CommitFailed
+
+            val settings = SecurePrefs.get(context, settingsName)
+            val settingsCommitted = settings.edit()
+                .putString(ConversationMode.MODE_KEY, mode.storedValue)
+                .putInt(ConversationMode.MODE_VERSION_KEY, ConversationMode.SCHEMA_VERSION)
+                .putBoolean(ConversationMode.PENDING_KEY, false)
+                .remove(ConversationMode.PENDING_NAME_KEY)
+                .commit()
+            if (!settingsCommitted) return PendingConversationCommitResult.CommitFailed
+
+            val row = hashMapOf(
+                "name" to committedName,
+                "id" to chatId,
+                "timestamp" to System.currentTimeMillis().toString(),
+                "pinned" to "false",
+                "search_title_revision" to ChatSearchIndexManager.newRevision(),
+                ConversationMode.MODE_KEY to mode.storedValue,
+                ConversationMode.MODE_VERSION_KEY to ConversationMode.SCHEMA_VERSION.toString()
+            )
+            val updated = ArrayList(listResult.chats)
+            updated.add(row)
+            val listCommitted = SecurePrefs.get(context, "chat_list").edit()
+                .putString("data", Gson().toJson(updated)).commit()
+            if (!listCommitted) {
+                // Keep the payload/settings for a safe retry, but make the
+                // provisional state explicit again because no visible row exists.
+                settings.edit().putBoolean(ConversationMode.PENDING_KEY, true).commit()
+                return PendingConversationCommitResult.CommitFailed
+            }
+
+            journal.edit().remove(chatId).commit()
+            ChatSearchIndexManager.get(context).scheduleChatRefresh(chatId, searchRevision)
+            return PendingConversationCommitResult.Ok
+        }
     }
 
     /**
@@ -729,42 +794,23 @@ class ChatPreferences private constructor() {
      * @return True if a chat with the given name already exists in the chat list, false otherwise.
      */
     fun checkDuplicate(context: Context, chatName: String, renamingChatId: String? = null) : Boolean {
-        val list = getChatMetadataList(context)
-
-        var isFound = false
-        for (map: HashMap<String, String> in list) {
-            if (storedChatId(map) != renamingChatId &&
-                (map["name"] == chatName ||
-                    (renamingChatId == null && storedChatId(map) == Hash.hash(chatName)))) {
-                isFound = true
-                break
-            }
-        }
-
-        return isFound
+        return hasChatTitle(getChatMetadataList(context), chatName, renamingChatId)
     }
 
     fun getChatName(context: Context, chatId: String) : String {
-        val list = getChatMetadataList(context)
-
-        var name = ""
-        for (map: HashMap<String, String> in list) {
-            if (map["id"] == chatId) {
-                name = map["name"].toString()
-                break
-            }
-        }
-
-        return name
+        return chatNameForId(getChatMetadataList(context), chatId)
     }
 
-    /** Changes only the title. The caller supplies the chat's existing ID.
-     *  History, settings, attachments and memory records stay at that ID. */
+    /** Changes only the title for every row with an explicit stable ID. The
+     * caller supplies that existing ID, so history, settings, attachments and
+     * memory records stay at it. A pre-ID legacy row remains on its historical
+     * title-hash compatibility path: its files move transactionally to the new
+     * title hash, without writing an ID into the row. */
     fun editChat(context: Context, chatName: String, previousName: String, chatId: String): Boolean {
         if (chatName == previousName) return true
 
         val oldId = chatId
-        val newId = oldId
+        var newId = oldId
 
         // Preserve the existing write gates for the list and chat history.
         // A title-only rename writes only the list.
@@ -778,10 +824,12 @@ class ChatPreferences private constructor() {
         }
 
         val outcome: ChatRenameTransaction.Outcome
+        var titleSearchRevision: String? = null
         synchronized(CHAT_LIST_LOCK) {
             val list = getChatMetadataList(context)
             val entry = list.firstOrNull { storedChatId(it) == oldId } ?: return false
             if (entry["name"] != previousName) return false
+            if (!entry.containsKey("id")) newId = Hash.hash(chatName)
 
             // Preserve unique titles, independently of the existing IDs.
             // Auto-naming may retry with another title.
@@ -793,7 +841,11 @@ class ChatPreferences private constructor() {
                 return false
             }
 
+            val revision = ChatSearchIndexManager.newRevision()
+            if (!ChatSearchIndexJournal.get(context).record(oldId, revision)) return false
+            titleSearchRevision = revision
             entry["name"] = chatName
+            entry["search_title_revision"] = revision
             val newListJson: String = Gson().toJson(list)
 
             // Only the retained legacy ID-move path needs a recovery journal.
@@ -807,6 +859,7 @@ class ChatPreferences private constructor() {
         }
 
         if (!outcome.success) {
+            titleSearchRevision?.let { ChatSearchIndexJournal.get(context).clearExact(oldId, it) }
             // The pointer never flipped: the old chat is still authoritative,
             // so the journal entry would drive no re-point anyway (recovery
             // sees the old id live) — drop it now to keep the journal clean.
@@ -826,7 +879,27 @@ class ChatPreferences private constructor() {
 
         // Title-only renames never enter the legacy cross-ID move path below.
         // Keep that path untouched here; no migration or cleanup is performed.
-        if (oldId == newId) return true
+        // The image UUID/ownership stays immutable. Only its retained
+        // origin-chat display label follows a successful title rename.
+        // Startup maintenance re-synchronizes it after a catalog outage.
+        if (oldId == newId) try {
+            ImageGenerationJobRegistry.updateOriginChatName(oldId, chatName)
+            GeneratedImageCatalogStore.renameOriginChat(context, oldId, chatName)
+        } catch (_: Exception) { }
+        if (oldId == newId) {
+            ChatSearchIndexManager.get(context).scheduleTitleRefresh(oldId, titleSearchRevision!!)
+            return true
+        }
+
+        // A no-ID legacy row necessarily follows its historical title-hash
+        // storage contract. Keep the same live generation and the same catalog
+        // ownership attached while the compatibility transaction moves that
+        // one chat from the old fallback hash to the new fallback hash.
+        try {
+            ImageGenerationJobRegistry.rename(oldId, newId)
+            ImageGenerationJobRegistry.updateOriginChatName(newId, chatName)
+            GeneratedImageCatalogStore.repointOriginChat(context, oldId, newId, chatName)
+        } catch (_: Exception) { }
 
         // Attachment image bytes live in a directory keyed by chat id. The
         // rename copied the include records (with their image hashes) to the
@@ -906,38 +979,4 @@ class ChatPreferences private constructor() {
             SecurePrefs.get(context, fileName).edit().clear().commit()
     }
 
-    fun deleteChatById(context: Context, chatId: String) {
-        if (chatWriteBlocked(context, "chat_list", "delete a chat")) return
-        synchronized(CHAT_LIST_LOCK) {
-            val list = getChatMetadataList(context)
-
-            for (map: HashMap<String, String> in list) {
-                if (map["id"] == chatId) {
-                    list.remove(map)
-                    break
-                }
-            }
-
-            val json: String = Gson().toJson(list)
-
-            val settings: SharedPreferences = SecurePrefs.get(context, "chat_list")
-            settings.edit { putString("data", json) }
-        }
-
-        val settings2: SharedPreferences = SecurePrefs.get(context, "chat_$chatId")
-        settings2.edit { clear() }
-
-        // The summary and all summarizer state die with the chat (decision 9).
-        clearSummarizerState(context, chatId)
-
-        // Locally stored attachment images go with the chat (owner ruling);
-        // the user's original files are untouched.
-        try {
-            org.teslasoft.assistant.preferences.includes.ImageImporter
-                .deleteChatImages(context, chatId)
-        } catch (_: Exception) { /* best-effort; reconciliation is the backstop */ }
-
-        // Same journal settlement as deleteChat — see the comment there.
-        ChatStorageHealth.clearReadFailure(context, "chat_$chatId")
-    }
 }

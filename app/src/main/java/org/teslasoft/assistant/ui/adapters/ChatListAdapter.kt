@@ -51,6 +51,7 @@ import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.Preferences
+import org.teslasoft.assistant.preferences.profileimages.ProfileImageShape
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.util.ProfileImageResolver
 import org.teslasoft.assistant.ui.activities.ChatActivity
@@ -340,7 +341,7 @@ class ChatListAdapter(
         // (including on a bulk-select re-render), so a recycled row never
         // keeps a stale photo or shows the glyph in its place.
         private var companionImageFile: File? = null
-        private var companionImageShape: String = "flower"
+        private var companionImageShape: String = ProfileImageShape.DEFAULT
 
         // True when this chat has only failed replies so far (no completed
         // reply yet). Set in bind() from the list data and re-checked by

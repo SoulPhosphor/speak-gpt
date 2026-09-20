@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences.backup
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -100,5 +101,265 @@ class ChatRestorePlannerTest {
     fun liveFileFilterMatchesTheSameShapes() {
         assertTrue(ChatRestorePlanner.isChatStorageFileName("enc.chat_list.xml"))
         assertFalse(ChatRestorePlanner.isChatStorageFileName("enc.other_store.xml"))
+    }
+
+    /* ---- manifest cross-check (Phase 9.2) ---- */
+
+    /** Builds the exact hashed-entry set a well-formed archive carries for the
+     *  given chat ids: the chat list plus each chat's history and settings. */
+    private fun entriesFor(vararg chatIds: String): Set<String> {
+        val set = linkedSetOf(ChatRestorePlanner.CHAT_LIST_ENTRY)
+        for (id in chatIds) {
+            set.add("enc.chat_$id.xml")
+            set.add("enc.settings.$id.xml")
+        }
+        return set
+    }
+
+    @Test
+    fun theReaderVersionMatchesTheProducer() {
+        // The reader must understand exactly the version the snapshot writes;
+        // a silent divergence is precisely what UNSUPPORTED_VERSION guards, so
+        // it must never be introduced by a producer bump left un-mirrored here.
+        assertEquals(
+            ChatSnapshotManifest.MANIFEST_VERSION,
+            ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION
+        )
+    }
+
+    @Test
+    fun aCoherentManifestHasNoDefect() {
+        assertNull(
+            ChatRestorePlanner.manifestDefect(
+                manifestVersion = ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                chatIds = listOf("1a2b3c4d", "de305d54-75b4-431b-adb2-eb6b9e546014"),
+                hashedEntryNames = entriesFor("1a2b3c4d", "de305d54-75b4-431b-adb2-eb6b9e546014")
+            )
+        )
+    }
+
+    @Test
+    fun anEmptyChatSetIsCoherentIfTheListIsPresent() {
+        // A backup of an account with no chats is a chat list and nothing else.
+        assertNull(
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                emptyList(),
+                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY)
+            )
+        )
+    }
+
+    @Test
+    fun anAbsentOrUnknownVersionIsRejected() {
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.UNSUPPORTED_VERSION,
+            ChatRestorePlanner.manifestDefect(null, listOf("a1"), entriesFor("a1"))
+        )
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.UNSUPPORTED_VERSION,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION + 1, listOf("a1"), entriesFor("a1")
+            )
+        )
+    }
+
+    @Test
+    fun anArchiveWithNoChatListIsRejected() {
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.MISSING_CHAT_LIST,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1"),
+                setOf("enc.chat_a1.xml", "enc.settings.a1.xml")
+            )
+        )
+    }
+
+    @Test
+    fun aChatWithHistoryButNoSettingsIsAccepted() {
+        // RecoveryBackupManager omits enc.settings.<id>.xml when the file does
+        // not exist (a chat with only default settings). That is a VALID backup
+        // and the reader must accept it, not reject the whole restore.
+        assertNull(
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1"),
+                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY, "enc.chat_a1.xml")
+            )
+        )
+    }
+
+    @Test
+    fun aChatWithSettingsButNoHistoryIsAccepted() {
+        assertNull(
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1"),
+                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY, "enc.settings.a1.xml")
+            )
+        )
+    }
+
+    @Test
+    fun aDeclaredChatWithNoPerChatFilesIsAccepted() {
+        // A brand-new or genuinely empty chat is an authoritative MISSING/EMPTY
+        // read: the producer counts it available and writes a chat-list row with
+        // no history or settings file. The reader must accept that too.
+        assertNull(
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1"),
+                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY)
+            )
+        )
+    }
+
+    @Test
+    fun theValidatorAcceptsWhatTheProducerActuallyBuilds() {
+        // Producer/validator agreement: mirror RecoveryBackupManager's file set
+        // for a mixed chat set — one chat with both files, one with history
+        // only, one with settings only, one with neither. This is the exact
+        // shape addEncFile's exists() guard yields, and it must validate.
+        val entries = linkedSetOf(ChatRestorePlanner.CHAT_LIST_ENTRY)
+        entries.add("enc.chat_both.xml"); entries.add("enc.settings.both.xml")
+        entries.add("enc.chat_histonly.xml")
+        entries.add("enc.settings.setonly.xml")
+        // "empty" contributes no per-chat file.
+        assertNull(
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("both", "histonly", "setonly", "empty"),
+                entries
+            )
+        )
+    }
+
+    @Test
+    fun aPerChatFileForAnUndeclaredChatIsRejected() {
+        // The manifest declares a1, but the archive also carries a2's files.
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.UNLISTED_CHAT_FILE,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1"),
+                entriesFor("a1") + setOf("enc.chat_a2.xml", "enc.settings.a2.xml")
+            )
+        )
+    }
+
+    @Test
+    fun aDuplicateChatIdIsRejected() {
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.DUPLICATE_CHAT_ID,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("a1", "a1"),
+                entriesFor("a1")
+            )
+        )
+    }
+
+    @Test
+    fun anUnsafeChatIdIsRejected() {
+        assertEquals(
+            ChatRestorePlanner.ManifestDefect.UNSAFE_CHAT_ID,
+            ChatRestorePlanner.manifestDefect(
+                ChatRestorePlanner.SUPPORTED_MANIFEST_VERSION,
+                listOf("../evil"),
+                setOf(ChatRestorePlanner.CHAT_LIST_ENTRY)
+            )
+        )
+    }
+
+    /* ---- final live-set verification (Phase 9.2) ---- */
+
+    private fun hashesFor(vararg pairs: Pair<String, String>): Map<String, String> =
+        linkedMapOf(*pairs)
+
+    @Test
+    fun anExactLiveSetHasNoDefect() {
+        val expected = hashesFor(
+            ChatRestorePlanner.CHAT_LIST_ENTRY to "aa",
+            "enc.chat_a1.xml" to "bb",
+            "enc.settings.a1.xml" to "cc"
+        )
+        assertNull(ChatRestorePlanner.liveSetDefect(expected, LinkedHashMap(expected)))
+    }
+
+    @Test
+    fun aMissingLiveFileIsADefect() {
+        val expected = hashesFor(
+            ChatRestorePlanner.CHAT_LIST_ENTRY to "aa",
+            "enc.chat_a1.xml" to "bb"
+        )
+        // The chat history did not land after the copy.
+        val live = hashesFor(ChatRestorePlanner.CHAT_LIST_ENTRY to "aa")
+        assertEquals(ChatRestorePlanner.LiveSetDefect.MISSING_FILE, ChatRestorePlanner.liveSetDefect(expected, live))
+    }
+
+    @Test
+    fun aLiveHashMismatchIsADefect() {
+        val expected = hashesFor(ChatRestorePlanner.CHAT_LIST_ENTRY to "aa")
+        // A truncated or partial copy left the wrong bytes.
+        val live = hashesFor(ChatRestorePlanner.CHAT_LIST_ENTRY to "zz")
+        assertEquals(ChatRestorePlanner.LiveSetDefect.HASH_MISMATCH, ChatRestorePlanner.liveSetDefect(expected, live))
+    }
+
+    @Test
+    fun anUnlistedLiveFileIsADefect() {
+        val expected = hashesFor(ChatRestorePlanner.CHAT_LIST_ENTRY to "aa")
+        // A superseded chat file whose delete did not take is still present —
+        // the mixed old/new set the verification exists to catch.
+        val live = hashesFor(
+            ChatRestorePlanner.CHAT_LIST_ENTRY to "aa",
+            "enc.chat_stale.xml" to "dd"
+        )
+        assertEquals(ChatRestorePlanner.LiveSetDefect.UNEXPECTED_FILE, ChatRestorePlanner.liveSetDefect(expected, live))
+    }
+
+    @Test
+    fun anEmptyExpectedSetRejectsAnyLiveChatFile() {
+        // Defense in depth: even with nothing expected, a live chat-storage file
+        // is unexpected. (The engine never restores an empty manifest — the
+        // reader requires the chat list — but the pure rule stays strict.)
+        assertEquals(
+            ChatRestorePlanner.LiveSetDefect.UNEXPECTED_FILE,
+            ChatRestorePlanner.liveSetDefect(emptyMap(), hashesFor("enc.chat_list.xml" to "aa"))
+        )
+        assertNull(ChatRestorePlanner.liveSetDefect(emptyMap(), emptyMap()))
+    }
+
+    /* ---- restored chat ids from entry names (Phase 9.3) ---- */
+
+    @Test
+    fun restoredChatIdsComeFromThePerChatEntries() {
+        val ids = ChatRestorePlanner.restoredChatIds(
+            listOf(
+                "enc.chat_list.xml",
+                "enc.chat_1a2b3c4d.xml",
+                "enc.settings.1a2b3c4d.xml",
+                "enc.chat_de305d54-75b4-431b-adb2-eb6b9e546014.xml"
+            )
+        )
+        // The list entry contributes no id; a chat named by either a history or
+        // a settings file is included exactly once.
+        assertEquals(
+            setOf("1a2b3c4d", "de305d54-75b4-431b-adb2-eb6b9e546014"),
+            ids
+        )
+    }
+
+    @Test
+    fun restoredChatIdsFromOnlyAChatListIsEmpty() {
+        assertTrue(ChatRestorePlanner.restoredChatIds(listOf("enc.chat_list.xml")).isEmpty())
+    }
+
+    @Test
+    fun restoredChatIdsDeduplicatesHistoryAndSettings() {
+        val ids = ChatRestorePlanner.restoredChatIds(
+            listOf("enc.chat_a1.xml", "enc.settings.a1.xml")
+        )
+        assertEquals(setOf("a1"), ids)
     }
 }

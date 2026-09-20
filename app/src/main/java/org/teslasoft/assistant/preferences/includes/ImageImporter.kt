@@ -139,12 +139,19 @@ object ImageImporter {
     /** Remove every image the chat ever stored. Called when a chat is deleted
      *  in full, so private copies cannot outlive their chat. */
     fun deleteChatImages(context: Context, chatId: String) {
+        deleteChatImagesForDeletion(context, chatId)
+    }
+
+    /** Journal-aware form used by coordinated chat deletion. False keeps the
+     * journal pending so an interrupted/failed filesystem cleanup is retried. */
+    fun deleteChatImagesForDeletion(context: Context, chatId: String): Boolean {
         val root = context.getExternalFilesDir(CHAT_IMAGES_ROOT)
             ?: File(context.filesDir, CHAT_IMAGES_ROOT)
         val subDir = File(root, sanitizeChatId(chatId))
-        if (!subDir.exists()) return
+        if (!subDir.exists()) return true
         subDir.listFiles()?.forEach { it.delete() }
         subDir.delete()
+        return !subDir.exists()
     }
 
     /**

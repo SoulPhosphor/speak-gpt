@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.ui.activities
 
+import android.content.Context
+import android.content.DialogInterface
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
@@ -70,38 +72,47 @@ import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupValid
 import org.teslasoft.assistant.preferences.backup.companion.CompanionRoleplayRestoreManager
 import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
 import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
+import org.teslasoft.assistant.ui.PortableRestoreOutcomeFlow
+import org.teslasoft.assistant.ui.PortableRestoreRecoveryFlow
 import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatBackup
+import org.teslasoft.assistant.preferences.backup.readable.ReadableDataBackup
+import org.teslasoft.assistant.preferences.backup.portable.ChatMergePlanner
+import org.teslasoft.assistant.preferences.backup.portable.PackageCrypto
+import org.teslasoft.assistant.preferences.backup.portable.PortablePackage
+import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
+import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreCategory
+import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreSelectionPlan
+import org.teslasoft.assistant.preferences.backup.portable.PortableStaging
+import org.teslasoft.assistant.preferences.backup.portable.RecoveryCode
+import org.teslasoft.assistant.preferences.backup.portable.RecoveryKeyFile
+import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestore
+import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestoreCoordinator
+import org.teslasoft.assistant.service.RestoreForegroundService
+import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
+import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationResult
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemorySeedCodec
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.widgets.AppDropdown
+import org.teslasoft.assistant.ui.views.RestoreCategoryView
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
+import java.util.Locale
 
 /**
- * "Memory Backup & Restore" — the Database Health & Backups screen. Section
- * order is owner-directed and EXACT (August 5 2026, supersedes the July 24
- * order — Companion & Roleplay Backup added directly after Portable Data
- * Copy): 1. Backup Status, 2. Database Health, 3. Recovery Backup,
- * 4. Human-Readable Chat Backup, 5. Portable Data Copy, 6. Companion &
- * Roleplay Backup, 7. Automatic Backups, 8. Reset. Backup Status leads
- * because it's always current on open, unlike Database Health's result lines
- * which stay blank until the check button is pressed. Do not reorder. The
- * two backup LOCATIONS (manual vs automatic) are kept separate.
- *
- * Four distinct systems live here and stay separate on screen (never
- * conflated — owner directive):
- *  - Recovery Backup — the portable recovery package (RecoveryBackupActivity).
- *  - Human-Readable Chat Backup — a ZIP of chats as readable Text/JSON files.
- *  - Portable Data Copy — the readable JSON export/import of memory data
- *    (import does NOT restore chats; the description says so).
- *  - Companion & Roleplay Backup — the ZIP disaster-recovery file for
- *    companions, personas, prompts, and roleplay structure
- *    (companion-roleplay-backup-plan.md; memories and lorebooks excluded).
+ * "Backup & Restore" — the app-wide recovery screen. Phase 11 keeps Backup
+ * Status first and Database Integrity second. Backup then contains Automatic
+ * Backups, Recovery Backup, Human-Readable Chat Backup, and the temporary
+ * owner-only legacy chat converter. Restore Data contains the portable
+ * category selection followed by the distinct direct-database restore tools.
+ * The older Portable Data Copy and Companion & Roleplay controls remain
+ * internally wired but are not visible; their content moves into the normal
+ * Recovery Backup package. Reset remains internally wired for its future
+ * destination but is not displayed here.
  *
  * NO TOASTS anywhere in this workflow (owner rule): results and failures are
  * persistent inline status text or Material dialogs. Location lines show a
@@ -171,7 +182,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private val inlineBusy = HashSet<BackupType>()
     private val inlineCompleted = HashSet<BackupType>()
 
-    // 3. Recovery Backup (manual)
+    // Backup: Recovery Backup (manual)
     private var btnCreateRecovery: MaterialButton? = null
     private var textManualLocation: TextView? = null
     private var btnChangeManualLocation: MaterialButton? = null
@@ -182,6 +193,9 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var recoveryTypeProtected = true
     private var btnRestoreType: TextView? = null
     private var btnRestoreDatabase: MaterialButton? = null
+    private var btnPortableRestore: MaterialButton? = null
+    private val restoreCategoryViews = LinkedHashMap<PortableRestoreCategory, RestoreCategoryView>()
+    private var modelCredentialsNote: TextView? = null
     private var restoreProgress: LinearLayout? = null
     private var restoreSpinner: CircularProgressIndicator? = null
     private var restoreProgressText: TextView? = null
@@ -192,18 +206,20 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var pendingUnlock: DatabaseRestoreManager.PendingCode? = null
     private var pendingPrepared: DatabaseRestoreManager.Prepared? = null
 
-    // 4. Human-Readable Chat Backup (Widget.App.Dropdown.* fields)
+    // Backup: Human-Readable Chat Backup (Widget.App.Dropdown.* fields)
     private var btnReadableScope: TextView? = null
     private var btnReadableFormat: TextView? = null
+    private var btnReadableContent: TextView? = null
     private var btnReadableCreate: MaterialButton? = null
     private var textReadableStatus: TextView? = null
 
-    // 5. Portable Data Copy
+    // Retained hidden wiring for the superseded Portable Data Copy.
     private var btnPortableExport: MaterialButton? = null
     private var btnPortableImport: MaterialButton? = null
+    private var btnLegacyConvert: MaterialButton? = null
     private var textPortableStatus: TextView? = null
 
-    // 6. Companion & Roleplay Backup (companion-roleplay-backup-plan.md §4)
+    // Retained hidden wiring for the superseded standalone Companion backup.
     private var btnCompanionDownload: MaterialButton? = null
     private var btnCompanionUpload: MaterialButton? = null
     private var companionProgress: LinearLayout? = null
@@ -211,10 +227,9 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var companionProgressText: TextView? = null
     private var textCompanionStatus: TextView? = null
 
-    // 7. Automatic Backups. The toggle and frequency dropdown are restored/
+    // Backup: Automatic Backups. The toggle and frequency dropdown are
     // visible (owner ruling, July 22 2026) and persist the user's choice
-    // ahead of the portable automatic WRITER existing (that piece is still
-    // unbuilt - these controls don't make anything run on a schedule yet).
+    // and drive the portable automatic Recovery-package writer.
     private var switchAutoBackup: MaterialSwitch? = null
     private var btnAutoFrequency: TextView? = null
     private var autoFrequency = BackupFrequency.DAILY
@@ -240,7 +255,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     // they cancel the picker, the toggle reverts to off.
     private var pendingEnableAfterPick = false
 
-    // 8. Reset
+    // Retained hidden Reset wiring for its future destination.
     private var btnReset: MaterialButton? = null
 
     private val importSeedLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -269,6 +284,18 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         if (uri != null) prepareRestoreFolder(uri) else endRestoreSelection()
     }
 
+    private val portableRestoreFilePicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) inspectPortableRestore(uri) else finishPortableRestoreFlow()
+    }
+
+    private val portableRecoveryKeyPicker = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) unlockPortableWithKeyFile(uri) else showPortableUnlockChoices()
+    }
+
     private val readableSaveLauncher = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip")
     ) { uri -> onReadableSaveAsResult(uri) }
@@ -290,12 +317,25 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     // destination has been verified.
     private var readableScopeAll = true
     private var readableFormat = ReadableChatBackup.Format.TEXT
+    private var readableCategories = ReadableDataBackup.Category.entries.toSet()
     private var stagedReadable: File? = null
     private var stagedReadableSha: ByteArray? = null
     private var stagedReadableFingerprints: Map<String, String>? = null
     private var stagedReadableIncremental = false
     private var restoreFlowActive = false
     private var nonCancelableDatabaseOperation = false
+    private var pendingPortableRestore: PendingPortableRestore? = null
+    private var renderedPortableCoordinatorVersion = -1L
+    private val portableCoordinatorObserver = UnifiedPortableRestoreCoordinator.Observer { state ->
+        runOnUiThread { renderCoordinatorState(state) }
+    }
+
+    private data class PendingPortableRestore(
+        val packageFile: File,
+        val decodeRoot: File,
+        val requested: List<PortableRestoreSelectionPlan.Selection>,
+        val inspection: PortablePackage.Inspection
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -312,6 +352,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (UnifiedPortableRestoreCoordinator.isActive()) {
+            setRestoreFlowActive(true)
+            renderCoordinatorState(UnifiedPortableRestoreCoordinator.snapshot())
+            return
+        }
+        if (PortableRestoreOutcomeFlow.showIfPending(this)) return
+        if (PortableRestoreRecoveryFlow.showIfPending(this)) return
         refreshLocations()
         refreshBackupStatus()
         refreshAutoStatus()
@@ -330,6 +377,17 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         }
         DatabaseRecoveryFlows.showPendingNoticeIfAny(this) { refreshBackupStatus() }
         sweepRepeatedBackupFailures()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val state = UnifiedPortableRestoreCoordinator.addObserver(portableCoordinatorObserver)
+        if (UnifiedPortableRestoreCoordinator.isActive()) renderCoordinatorState(state)
+    }
+
+    override fun onStop() {
+        UnifiedPortableRestoreCoordinator.removeObserver(portableCoordinatorObserver)
+        super.onStop()
     }
 
     private fun bindViews() {
@@ -370,6 +428,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         healthProgressTextUserImage = findViewById(R.id.health_progress_text_userimage)
 
         btnCreateRecovery = findViewById(R.id.btn_create_recovery)
+        btnPortableRestore = findViewById(R.id.btn_portable_restore)
         textManualLocation = findViewById(R.id.text_manual_location)
         btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
         btnCreateBackup = findViewById(R.id.btn_create_backup)
@@ -384,11 +443,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
         btnReadableScope = findViewById(R.id.btn_readable_scope)
         btnReadableFormat = findViewById(R.id.btn_readable_format)
+        btnReadableContent = findViewById(R.id.btn_readable_content)
         btnReadableCreate = findViewById(R.id.btn_readable_create)
         textReadableStatus = findViewById(R.id.text_readable_status)
 
         btnPortableExport = findViewById(R.id.btn_portable_export)
         btnPortableImport = findViewById(R.id.btn_portable_import)
+        btnLegacyConvert = findViewById(R.id.btn_legacy_convert)
         textPortableStatus = findViewById(R.id.text_portable_status)
 
         btnCompanionDownload = findViewById(R.id.btn_companion_download)
@@ -406,6 +467,101 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         btnChangeAutoLocation = findViewById(R.id.btn_change_auto_location)
 
         btnReset = findViewById(R.id.btn_memory_reset)
+        modelCredentialsNote = findViewById(R.id.restore_model_credentials_note)
+
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.CHATS, R.id.restore_category_chats,
+            R.string.restore_category_chats, R.string.restore_category_chats_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.GENERATED_IMAGES, R.id.restore_category_generated_images,
+            R.string.restore_category_generated_images, R.string.restore_category_generated_images_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.COMPANIONS, R.id.restore_category_companions,
+            R.string.restore_category_companions, R.string.restore_category_companions_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.GLAMOURS, R.id.restore_category_glamours,
+            R.string.restore_category_glamours, R.string.restore_category_glamours_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.ROLEPLAY, R.id.restore_category_roleplay,
+            R.string.restore_category_roleplay, R.string.restore_category_roleplay_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.PROFILE_IMAGES, R.id.restore_category_profile_images,
+            R.string.restore_category_profile_images, R.string.restore_category_profile_images_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.ACTIVATION_PROMPTS, R.id.restore_category_activation_prompts,
+            R.string.restore_category_activation_prompts, R.string.restore_category_activation_prompts_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.SYSTEM_PROMPTS, R.id.restore_category_system_prompts,
+            R.string.restore_category_system_prompts, R.string.restore_category_system_prompts_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS, R.id.restore_category_model_settings,
+            R.string.restore_category_model_settings, R.string.restore_category_model_settings_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.MODEL_RULES, R.id.restore_category_model_rules,
+            R.string.restore_category_model_rules, R.string.restore_category_model_rules_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.MEMORIES, R.id.restore_category_memories,
+            R.string.restore_category_memories, R.string.restore_category_memories_desc
+        )
+        bindPortableRestoreCategory(
+            PortableRestoreCategory.LOREBOOKS, R.id.restore_category_lorebooks,
+            R.string.restore_category_lorebooks, R.string.restore_category_lorebooks_desc
+        )
+    }
+
+    private fun bindPortableRestoreCategory(
+        category: PortableRestoreCategory,
+        viewId: Int,
+        title: Int,
+        description: Int
+    ) {
+        findViewById<RestoreCategoryView>(viewId).also {
+            it.bind(
+                category,
+                title,
+                description,
+                supportsMerge = portableCategorySupportsMerge(category),
+                onSelectionChanged = if (category == PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS) {
+                    ::showModelCredentialsNote
+                } else null
+            )
+            restoreCategoryViews[category] = it
+            if (category == PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS) {
+                showModelCredentialsNote(it.isCategorySelected)
+            }
+        }
+    }
+
+    private fun showModelCredentialsNote(selected: Boolean) {
+        modelCredentialsNote?.visibility = if (selected) View.VISIBLE else View.GONE
+    }
+
+    /** Every current category owns a stable-identity collection, so Merge is
+     * meaningful for all twelve. Keep this exhaustive gate: a future category
+     * cannot acquire Merge merely by being added to the enum. */
+    private fun portableCategorySupportsMerge(category: PortableRestoreCategory): Boolean = when (category) {
+        PortableRestoreCategory.CHATS,
+        PortableRestoreCategory.GENERATED_IMAGES,
+        PortableRestoreCategory.COMPANIONS,
+        PortableRestoreCategory.GLAMOURS,
+        PortableRestoreCategory.ROLEPLAY,
+        PortableRestoreCategory.PROFILE_IMAGES,
+        PortableRestoreCategory.ACTIVATION_PROMPTS,
+        PortableRestoreCategory.SYSTEM_PROMPTS,
+        PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS,
+        PortableRestoreCategory.MODEL_RULES,
+        PortableRestoreCategory.MEMORIES,
+        PortableRestoreCategory.LOREBOOKS -> true
     }
 
     @Suppress("DEPRECATION")
@@ -457,7 +613,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         /* ---- 2. Database Health ---- */
         btnCheckIntegrity?.setOnClickListener { onCheckIntegrity() }
 
-        /* ---- 3. Recovery Backup (manual) ---- */
+        /* ---- Backup: Recovery Backup (manual) ---- */
         // The installation-bound v1 controls (btn_change_manual_location,
         // btn_create_backup) are hidden AND unwired: the old writer must not be
         // reachable from this screen (owner correction, July 22 2026). The v1
@@ -469,18 +625,26 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     .putExtra(RecoveryBackupActivity.EXTRA_RECOVERY_PROTECTED, recoveryTypeProtected)
             )
         }
+        btnPortableRestore?.setOnClickListener { beginPortableRestore() }
         updateRestoreTypeLabel()
         btnRestoreType?.setOnClickListener { pickRestoreType() }
         btnRestoreDatabase?.setOnClickListener {
             showRestoreChoice(generalRestoreType, null)
         }
 
-        /* ---- 4. Human-Readable Chat Backup ---- */
+        /* ---- Backup: Human-Readable Chat Backup ---- */
         initReadableSection()
 
-        /* ---- 5. Portable Data Copy ---- */
+        /* ---- Hidden legacy Portable Data Copy wiring ---- */
         btnPortableImport?.setOnClickListener {
             importSeedLauncher.launch(arrayOf("application/json", "text/*"))
+        }
+        // Temporary legacy conversion. Shown in every build until migration
+        // is complete, but kept on its own screen and outside the permanent
+        // Restore From Backup flow.
+        btnLegacyConvert?.visibility = View.VISIBLE
+        btnLegacyConvert?.setOnClickListener {
+            startActivity(Intent(this, LegacyChatConverterActivity::class.java))
         }
         btnPortableExport?.setOnClickListener {
             if (!MemoryStore.isProvisioned(this)) {
@@ -491,13 +655,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             exportLauncher.launch("memory-export-$stamp.json")
         }
 
-        /* ---- 6. Companion & Roleplay Backup ---- */
+        /* ---- Hidden standalone Companion & Roleplay wiring ---- */
         btnCompanionDownload?.setOnClickListener { onCompanionDownload() }
         btnCompanionUpload?.setOnClickListener {
             companionImportLauncher.launch(arrayOf("*/*"))
         }
 
-        /* ---- 7. Automatic Backups: enabled flag + frequency + destination
+        /* ---- Backup: Automatic Backups. Enabled flag + frequency + destination
              drive the WorkManager job and the app-open catch-up check. A
              valid, writable destination is REQUIRED before enabling — flipping
              the toggle on with no folder opens the picker and completes the
@@ -620,6 +784,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
     private fun setRestoreFlowActive(active: Boolean) {
         restoreFlowActive = active
+        btnPortableRestore?.isEnabled = !active
         btnRestoreDatabase?.isEnabled = !active
         btnRestoreType?.isEnabled = !active
         DatabaseHealthState.databaseTypes.forEach { applyInlineState(it) }
@@ -710,6 +875,439 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             val result = DatabaseRestoreManager.prepareLastGood(applicationContext, type)
             runOnUiThread { handlePrepareResult(result, RestoreSource.CURRENT, inlineType) }
         }
+    }
+
+    /* ---- Unified portable restore ---- */
+
+    private fun beginPortableRestore() {
+        if (restoreFlowActive) return
+        val requested = restoreCategoryViews.mapNotNull { (category, view) ->
+            if (view.isCategorySelected) {
+                PortableRestoreSelectionPlan.Selection(category, view.selectedMode)
+            } else null
+        }
+        if (requested.isEmpty()) {
+            showNoticeDialog(getString(R.string.portable_restore_select_category))
+            return
+        }
+        if (UnifiedPortableRestore.journalRoot(applicationContext).exists()) {
+            showPortableFailure(getString(R.string.portable_restore_pending_recovery))
+            PortableRestoreRecoveryFlow.showIfPending(this)
+            return
+        }
+        setRestoreFlowActive(true)
+        setRestoreStatus(null, getString(R.string.restore_checking_backup), busy = true)
+        pendingPortableRestore = PendingPortableRestore(
+            packageFile = File(cacheDir, "pending"),
+            decodeRoot = File(cacheDir, "pending"),
+            requested = requested,
+            inspection = PortablePackage.Inspection("", "", "", "", "", null, false)
+        )
+        portableRestoreFilePicker.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+    }
+
+    private fun inspectPortableRestore(uri: Uri) {
+        val requested = pendingPortableRestore?.requested ?: return finishPortableRestoreFlow()
+        runOffThread {
+            val root = try { PortableStaging.newRunDir(applicationContext) } catch (_: Exception) { null }
+            val packageFile = root?.let { File(it, "recovery-backup.sgbak") }
+            val copied = root != null && packageFile != null && copyPortablePackage(uri, packageFile)
+            val inspected = if (copied) PortablePackage.inspect(packageFile!!) else null
+            runOnUiThread {
+                if (root == null || packageFile == null || inspected !is PortablePackage.InspectResult.Ok) {
+                    PortableStaging.delete(root)
+                    showPortableFailure(getString(R.string.backup_err_damaged))
+                    return@runOnUiThread
+                }
+                pendingPortableRestore = PendingPortableRestore(
+                    packageFile, root, requested, inspected.inspection
+                )
+                if (inspected.inspection.protection == PortablePackageFormat.PROTECTION_NONE) {
+                    decodePortableRestore(secret = ByteArray(0), password = null)
+                } else {
+                    setRestoreStatus(null, null, busy = false)
+                    showPortableUnlockChoices()
+                }
+            }
+        }
+    }
+
+    private fun copyPortablePackage(uri: Uri, destination: File): Boolean {
+        return try {
+            var total = 0L
+            contentResolver.openInputStream(uri)?.use { input ->
+                destination.outputStream().buffered().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > PackageCrypto.MAX_PACKAGE_BYTES) return false
+                        output.write(buffer, 0, count)
+                    }
+                }
+            } ?: return false
+            PackageCrypto.withinSizeCap(destination)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun showPortableUnlockChoices() {
+        val inspection = pendingPortableRestore?.inspection
+            ?: UnifiedPortableRestoreCoordinator.inspection()
+            ?: return finishPortableRestoreFlow()
+        if (isFinishing) return
+        val choices = ArrayList<Pair<String, () -> Unit>>()
+        choices.add(getString(R.string.portable_unlock_code) to ::showPortableRecoveryCode)
+        choices.add(getString(R.string.portable_unlock_key_file) to {
+            portableRecoveryKeyPicker.launch(arrayOf("application/json", "text/*", "*/*"))
+        })
+        if (inspection.hasPasswordSlot) {
+            choices.add(getString(R.string.portable_unlock_password) to ::showPortablePassword)
+        }
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.portable_unlock_title)
+            .setMessage(R.string.portable_unlock_message)
+            .setItems(choices.map { it.first }.toTypedArray()) { _, which -> choices[which].second() }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> cancelPortableUnlockFlow() }
+            .setOnCancelListener { cancelPortableUnlockFlow() }
+            .show()
+    }
+
+    private fun showPortableRecoveryCode() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.restore_recovery_code_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            setSingleLine(false)
+            setPadding(48, 12, 48, 12)
+        }
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.restore_recovery_code_title)
+            .setView(input)
+            .setPositiveButton(R.string.portable_unlock_action) { _, _ ->
+                when (val decoded = RecoveryCode.decode(input.text?.toString().orEmpty())) {
+                    is RecoveryCode.DecodeResult.Ok -> decodePortableRestore(decoded.secret, null)
+                    RecoveryCode.DecodeResult.Mistyped -> showPortableUnlockError(
+                        getString(R.string.backup_err_mistyped_code)
+                    )
+                }
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> showPortableUnlockChoices() }
+            .setOnCancelListener { showPortableUnlockChoices() }
+            .show()
+    }
+
+    private fun showPortablePassword() {
+        val input = EditText(this).apply {
+            hint = getString(R.string.portable_password_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine(true)
+            setPadding(48, 12, 48, 12)
+        }
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.portable_password_title)
+            .setView(input)
+            .setPositiveButton(R.string.portable_unlock_action) { _, _ ->
+                decodePortableRestore(null, input.text?.toString().orEmpty().toCharArray())
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> showPortableUnlockChoices() }
+            .setOnCancelListener { showPortableUnlockChoices() }
+            .show()
+    }
+
+    private fun unlockPortableWithKeyFile(uri: Uri) {
+        runOffThread {
+            val text = try {
+                contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            } catch (_: Exception) { null }
+            val parsed = text?.let(RecoveryKeyFile::parse)
+            runOnUiThread {
+                if (parsed is RecoveryKeyFile.ParseResult.Ok) {
+                    decodePortableRestore(parsed.secret, null)
+                } else {
+                    showPortableUnlockError(getString(R.string.portable_key_file_invalid))
+                }
+            }
+        }
+    }
+
+    private fun decodePortableRestore(secret: ByteArray?, password: CharArray?) {
+        val unlock = if (password != null) {
+            UnifiedPortableRestoreCoordinator.UnlockMaterial.Password(password)
+        } else {
+            UnifiedPortableRestoreCoordinator.UnlockMaterial.Secret(secret ?: ByteArray(0))
+        }
+        secret?.fill(0)
+        password?.fill('\u0000')
+        val pending = pendingPortableRestore
+        val accepted = if (pending != null) {
+            UnifiedPortableRestoreCoordinator.begin(
+                pending.packageFile,
+                pending.decodeRoot,
+                pending.requested,
+                pending.inspection,
+                unlock
+            ).also { if (it) pendingPortableRestore = null }
+        } else {
+            UnifiedPortableRestoreCoordinator.retryUnlock(unlock)
+        }
+        if (!accepted || !RestoreForegroundService.startUnified(applicationContext)) {
+            UnifiedPortableRestoreCoordinator.cancel()
+            showPortableFailure(getString(R.string.portable_restore_validation_failed))
+            return
+        }
+        setRestoreFlowActive(true)
+        setRestoreStatus(null, getString(R.string.restore_checking_backup), busy = true)
+    }
+
+    private fun showFolderCollision(
+        collision: ChatMergePlanner.FolderCollision
+    ) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.portable_folder_collision_title)
+            .setMessage(getString(R.string.portable_folder_collision_message, collision.backupFolder.name))
+            .setPositiveButton(R.string.portable_folder_create_new) { _, _ ->
+                showNewFolderName(collision)
+            }
+            .setNegativeButton(R.string.portable_folder_merge) { _, _ ->
+                continueAfterFolderDecision(
+                    collision,
+                    ChatMergePlanner.FolderResolution.MergeInto(collision.currentFolder.id)
+                )
+            }
+            .setNeutralButton(R.string.btn_cancel) { _, _ -> cancelCoordinatorRestore() }
+            .setOnCancelListener { cancelCoordinatorRestore() }
+            .show()
+    }
+
+    private fun showNewFolderName(
+        collision: ChatMergePlanner.FolderCollision
+    ) {
+        val input = EditText(this).apply {
+            hint = getString(R.string.portable_folder_name_hint)
+            setText(getString(R.string.portable_folder_restored_name, collision.backupFolder.name))
+            inputType = InputType.TYPE_CLASS_TEXT
+            setSingleLine(true)
+            setPadding(48, 12, 48, 12)
+        }
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.portable_folder_name_title)
+            .setView(input)
+            .setPositiveButton(R.string.portable_folder_create, null)
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> showFolderCollision(collision) }
+            .setOnCancelListener { showFolderCollision(collision) }
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+                val name = input.text?.toString().orEmpty().trim()
+                when {
+                    name.isBlank() -> input.error = getString(R.string.portable_folder_blank)
+                    portableCoordinatorFolderNameAlreadyUsed(name) ->
+                        input.error = getString(R.string.portable_folder_duplicate)
+                    else -> {
+                        runOffThread {
+                            val duplicate = currentFolderNameAlreadyUsed(name)
+                            runOnUiThread {
+                                if (isFinishing || !dialog.isShowing) return@runOnUiThread
+                                if (duplicate) {
+                                    input.error = getString(R.string.portable_folder_duplicate)
+                                } else {
+                                    dialog.dismiss()
+                                    continueAfterFolderDecision(
+                                        collision,
+                                        ChatMergePlanner.FolderResolution.CreateNew(name)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun portableCoordinatorFolderNameAlreadyUsed(
+        proposedName: String
+    ): Boolean {
+        val normalized = proposedName.trim().lowercase(Locale.ROOT)
+        return UnifiedPortableRestoreCoordinator.folderResolutions().values.any {
+                it is ChatMergePlanner.FolderResolution.CreateNew &&
+                    it.name.trim().lowercase(Locale.ROOT) == normalized
+            }
+    }
+
+    /** Called only from [runOffThread]. */
+    private fun currentFolderNameAlreadyUsed(proposedName: String): Boolean {
+        val normalized = proposedName.trim().lowercase(Locale.ROOT)
+        val snapshot = ChatNavigationRepository.get(applicationContext).snapshot()
+        return snapshot is ChatNavigationResult.Success && snapshot.value.folders.any {
+            it.folder.name.trim().lowercase(Locale.ROOT) == normalized
+        }
+    }
+
+    private fun showPortableConfirmation(
+        selections: List<PortableRestoreSelectionPlan.Selection>
+    ) {
+        val categories = selections.joinToString(", ") { portableCategoryName(it.category) }
+        val modes = selections.map { it.mode }.distinct()
+        val message = when {
+            modes.size > 1 -> getString(R.string.portable_confirm_mixed) + "\n\n" +
+                getString(R.string.portable_confirm_categories, categories)
+            modes.single() == org.teslasoft.assistant.preferences.backup.portable.PortableRestoreMode.REPLACE ->
+                getString(R.string.portable_confirm_replace, categories)
+            else -> getString(R.string.portable_confirm_merge, categories)
+        }
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.portable_confirm_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.health_btn_restore) { _, _ ->
+                if (UnifiedPortableRestoreCoordinator.confirm()) startUnifiedRestoreService()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> cancelCoordinatorRestore() }
+            .setOnCancelListener { cancelCoordinatorRestore() }
+            .show()
+    }
+
+    private fun continueAfterFolderDecision(
+        collision: ChatMergePlanner.FolderCollision,
+        resolution: ChatMergePlanner.FolderResolution
+    ) {
+        if (UnifiedPortableRestoreCoordinator.resolveFolder(
+                collision.backupFolder.id, resolution
+            )
+        ) startUnifiedRestoreService()
+        else showPortableFailure(getString(R.string.portable_restore_validation_failed))
+    }
+
+    private fun startUnifiedRestoreService() {
+        if (!RestoreForegroundService.startUnified(applicationContext)) {
+            UnifiedPortableRestoreCoordinator.cancel()
+            showPortableFailure(getString(R.string.portable_restore_validation_failed))
+        }
+    }
+
+    private fun cancelCoordinatorRestore() {
+        UnifiedPortableRestoreCoordinator.cancel()
+        finishPortableRestoreFlow()
+    }
+
+    private fun cancelPortableUnlockFlow() {
+        if (UnifiedPortableRestoreCoordinator.isActive()) cancelCoordinatorRestore()
+        else finishPortableRestoreFlow()
+    }
+
+    private fun renderCoordinatorState(
+        state: UnifiedPortableRestoreCoordinator.State
+    ) {
+        if (isFinishing || state.version == renderedPortableCoordinatorVersion) return
+        renderedPortableCoordinatorVersion = state.version
+        when (state) {
+            is UnifiedPortableRestoreCoordinator.State.Idle -> finishPortableRestoreFlow()
+            is UnifiedPortableRestoreCoordinator.State.Progress -> {
+                setRestoreFlowActive(true)
+                val applying = state.phase ==
+                    UnifiedPortableRestoreCoordinator.ProgressPhase.APPLYING ||
+                    state.phase == UnifiedPortableRestoreCoordinator.ProgressPhase.RESTARTING
+                setDatabaseMutationRunning(applying)
+                setRestoreStatus(
+                    null,
+                    getString(if (applying) R.string.portable_restore_progress
+                    else R.string.restore_checking_backup),
+                    busy = true
+                )
+            }
+            is UnifiedPortableRestoreCoordinator.State.UnlockFailed -> {
+                setDatabaseMutationRunning(false)
+                setRestoreStatus(null, null, busy = false)
+                showPortableUnlockError(portableErrorMessage(state.error))
+            }
+            is UnifiedPortableRestoreCoordinator.State.MissingCategories -> {
+                setDatabaseMutationRunning(false)
+                setRestoreStatus(null, null, busy = false)
+                val names = state.missing.joinToString(", ", transform = ::portableCategoryName)
+                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+                    .setTitle(R.string.portable_missing_title)
+                    .setMessage(getString(R.string.portable_missing_message, names))
+                    .setPositiveButton(R.string.portable_restore_available) { _, _ ->
+                        if (UnifiedPortableRestoreCoordinator.restoreAvailableCategories()) {
+                            startUnifiedRestoreService()
+                        }
+                    }
+                    .setNegativeButton(R.string.btn_cancel) { _, _ -> cancelCoordinatorRestore() }
+                    .setOnCancelListener { cancelCoordinatorRestore() }
+                    .show()
+            }
+            is UnifiedPortableRestoreCoordinator.State.FolderDecision -> {
+                setDatabaseMutationRunning(false)
+                setRestoreStatus(null, null, busy = false)
+                showFolderCollision(state.collision)
+            }
+            is UnifiedPortableRestoreCoordinator.State.Confirmation -> {
+                setDatabaseMutationRunning(false)
+                setRestoreStatus(null, null, busy = false)
+                showPortableConfirmation(state.selections)
+            }
+            is UnifiedPortableRestoreCoordinator.State.Terminal -> {
+                setDatabaseMutationRunning(false)
+                setRestoreFlowActive(false)
+                setRestoreStatus(null, null, busy = false)
+                refreshBackupStatus()
+                PortableRestoreOutcomeFlow.showIfPending(this)
+            }
+        }
+    }
+
+    private fun portableCategoryName(category: PortableRestoreCategory): String = getString(when (category) {
+        PortableRestoreCategory.CHATS -> R.string.restore_category_chats
+        PortableRestoreCategory.GENERATED_IMAGES -> R.string.restore_category_generated_images
+        PortableRestoreCategory.COMPANIONS -> R.string.restore_category_companions
+        PortableRestoreCategory.GLAMOURS -> R.string.restore_category_glamours
+        PortableRestoreCategory.ROLEPLAY -> R.string.restore_category_roleplay
+        PortableRestoreCategory.PROFILE_IMAGES -> R.string.restore_category_profile_images
+        PortableRestoreCategory.ACTIVATION_PROMPTS -> R.string.restore_category_activation_prompts
+        PortableRestoreCategory.SYSTEM_PROMPTS -> R.string.restore_category_system_prompts
+        PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS -> R.string.restore_category_model_settings
+        PortableRestoreCategory.MODEL_RULES -> R.string.restore_category_model_rules
+        PortableRestoreCategory.MEMORIES -> R.string.restore_category_memories
+        PortableRestoreCategory.LOREBOOKS -> R.string.restore_category_lorebooks
+    })
+
+    private fun portableErrorMessage(error: PortablePackageFormat.RestoreError): String = getString(when (error) {
+        PortablePackageFormat.RestoreError.MISTYPED_CODE -> R.string.backup_err_mistyped_code
+        PortablePackageFormat.RestoreError.WRONG_KEY_OR_HEADER -> R.string.backup_err_wrong_key_or_header
+        PortablePackageFormat.RestoreError.UNSUPPORTED_PROTECTION -> R.string.backup_err_unsupported_protection
+        PortablePackageFormat.RestoreError.TOO_LARGE -> R.string.portable_restore_too_large
+        PortablePackageFormat.RestoreError.NOT_A_V2_PACKAGE,
+        PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED -> R.string.backup_err_damaged
+    })
+
+    private fun showPortableUnlockError(message: String) {
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setMessage(message)
+            .setPositiveButton(R.string.btn_ok) { _, _ -> showPortableUnlockChoices() }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> cancelCoordinatorRestore() }
+            .setOnCancelListener { cancelCoordinatorRestore() }
+            .show()
+    }
+
+    private fun showPortableFailure(message: String, cleanup: Boolean = true) {
+        if (cleanup) finishPortableRestoreFlow()
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.portable_failure_title)
+            .setMessage(getString(R.string.portable_failure_message) + "\n\n" + message)
+            .setPositiveButton(R.string.btn_ok, null)
+            .show()
+    }
+
+    private fun finishPortableRestoreFlow() {
+        val pending = pendingPortableRestore
+        pendingPortableRestore = null
+        PortableStaging.delete(pending?.decodeRoot)
+        setDatabaseMutationRunning(false)
+        setRestoreFlowActive(false)
+        setRestoreStatus(null, null, busy = false)
     }
 
     private fun prepareRestoreFile(uri: Uri) {
@@ -944,6 +1542,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 getString(R.string.backup_err_wrong_key_or_header)
             DatabaseRestoreManager.Failure.SOURCE_UNAVAILABLE ->
                 getString(R.string.restore_source_unavailable)
+            DatabaseRestoreManager.Failure.PROFILE_IMAGE_ASSETS_MISSING ->
+                getString(R.string.restore_profile_image_assets_missing)
             DatabaseRestoreManager.Failure.RESTORE_FAILED ->
                 getString(R.string.restore_database_failed)
         }
@@ -978,10 +1578,12 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        PortableRestoreOutcomeFlow.onActivityDestroyed(this)
         pendingUnlock?.discard()
         pendingUnlock = null
         pendingPrepared?.discard()
         pendingPrepared = null
+        finishPortableRestoreFlow()
         cleanupStagedReadable()
         super.onDestroy()
     }
@@ -1046,9 +1648,11 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         // screen was reopened.
         readableScopeAll = ReadableBackupState.getScopeAll(this)
         readableFormat = ReadableBackupState.getFormat(this)
+        readableCategories = ReadableBackupState.getCategories(this)
         updateReadableSelectorLabels()
         btnReadableScope?.setOnClickListener { pickReadableScope() }
         btnReadableFormat?.setOnClickListener { pickReadableFormat() }
+        btnReadableContent?.setOnClickListener { pickReadableContent() }
         btnReadableCreate?.setOnClickListener { onCreateReadableBackup() }
         showReadableLastSuccess()
     }
@@ -1065,6 +1669,15 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 ReadableChatBackup.Format.BOTH -> R.string.backup_readable_format_both
             }
         )
+        btnReadableContent?.text = when (readableCategories.size) {
+            ReadableDataBackup.Category.entries.size -> getString(R.string.backup_readable_content_all)
+            0 -> getString(R.string.backup_readable_content_none)
+            else -> resources.getQuantityString(
+                R.plurals.backup_readable_content_count,
+                readableCategories.size,
+                readableCategories.size
+            )
+        }
     }
 
     private fun pickReadableScope() {
@@ -1098,6 +1711,36 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         }
     }
 
+    private fun pickReadableContent() {
+        val categories = ReadableDataBackup.Category.entries
+        val labels = categories.map(::readableCategoryName).toTypedArray()
+        val checked = BooleanArray(categories.size) { categories[it] in readableCategories }
+        val selected = readableCategories.toMutableSet()
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.backup_readable_content_title)
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                if (isChecked) selected.add(categories[which]) else selected.remove(categories[which])
+            }
+            .setPositiveButton(R.string.backup_readable_done) { _, _ ->
+                readableCategories = selected.toSet()
+                ReadableBackupState.setCategories(this, readableCategories)
+                updateReadableSelectorLabels()
+            }
+            .setNegativeButton(R.string.btn_cancel, null)
+            .show()
+    }
+
+    private fun readableCategoryName(category: ReadableDataBackup.Category): String = getString(when (category) {
+        ReadableDataBackup.Category.CHATS -> R.string.restore_category_chats
+        ReadableDataBackup.Category.GENERATED_IMAGES -> R.string.restore_category_generated_images
+        ReadableDataBackup.Category.IDENTITIES -> R.string.backup_readable_category_identities
+        ReadableDataBackup.Category.PROFILE_IMAGES -> R.string.restore_category_profile_images
+        ReadableDataBackup.Category.MODEL_SETTINGS -> R.string.restore_category_model_settings
+        ReadableDataBackup.Category.MEMORIES -> R.string.restore_category_memories
+        ReadableDataBackup.Category.MODEL_RULES -> R.string.restore_category_model_rules
+        ReadableDataBackup.Category.LOREBOOKS -> R.string.restore_category_lorebooks
+    })
+
     private fun setReadableStatus(text: String) {
         textReadableStatus?.text = text
         textReadableStatus?.visibility = View.VISIBLE
@@ -1118,33 +1761,38 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     /** Build + verify the ZIP in private staging FIRST; Save As launches only
      *  when the staged file is real and verified. */
     private fun onCreateReadableBackup() {
+        if (readableCategories.isEmpty()) {
+            showNoticeDialog(getString(R.string.backup_readable_select_content))
+            return
+        }
         btnReadableCreate?.isEnabled = false
         setReadableStatus(getString(R.string.backup_readable_preparing))
         cleanupStagedReadable()
         val allChats = readableScopeAll
         val format = readableFormat
+        val categories = readableCategories
         runOffThread {
             val staged = File(cacheDir, "readable_stage_${System.nanoTime()}.zip")
-            when (val result = ReadableChatBackup.build(this, staged, allChats, format)) {
-                is ReadableChatBackup.BuildResult.NothingNew -> runOnUiThread {
+            when (val result = ReadableDataBackup.build(this, staged, allChats, format, categories)) {
+                is ReadableDataBackup.Result.NothingNew -> runOnUiThread {
                     btnReadableCreate?.isEnabled = true
                     setReadableStatus(getString(R.string.backup_readable_none))
                 }
-                is ReadableChatBackup.BuildResult.NothingToBackUp -> runOnUiThread {
+                is ReadableDataBackup.Result.NothingToBackUp -> runOnUiThread {
                     btnReadableCreate?.isEnabled = true
                     setReadableStatus(getString(R.string.recovery_fail_nothing))
                 }
-                is ReadableChatBackup.BuildResult.ChatsUnreadable -> runOnUiThread {
+                is ReadableDataBackup.Result.ChatsUnreadable -> runOnUiThread {
                     btnReadableCreate?.isEnabled = true
                     setReadableStatus(getString(R.string.backup_readable_fail_chats))
                     showNoticeDialog(getString(R.string.backup_readable_fail_chats))
                 }
-                is ReadableChatBackup.BuildResult.Failed -> runOnUiThread {
+                is ReadableDataBackup.Result.Failed -> runOnUiThread {
                     btnReadableCreate?.isEnabled = true
                     setReadableStatus(getString(R.string.backup_readable_fail_generic))
                     showNoticeDialog(getString(R.string.backup_readable_fail_generic))
                 }
-                is ReadableChatBackup.BuildResult.Ok -> {
+                is ReadableDataBackup.Result.Ok -> {
                     val sha = sha256(staged)
                     runOnUiThread {
                         stagedReadable = staged
@@ -1912,13 +2560,17 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             // Collect/assemble first, in its own failure scope, so a read-side
             // problem is never reported as a destination-write problem.
             try {
-                val build = CompanionBackupExporter.buildBackupZip(this, staged)
+                val build = CompanionBackupExporter.buildBackupZip(
+                    this, staged, validateAssignedImages = true
+                )
                 val refusalMessage = when (build) {
                     is CompanionBackupExporter.BuildResult.Ok -> null
                     CompanionBackupExporter.BuildResult.MemoryUnavailable ->
                         R.string.companion_backup_err_needs_memory_repair
                     CompanionBackupExporter.BuildResult.LorebookUnavailable ->
                         R.string.companion_backup_err_needs_lorebook_repair
+                    CompanionBackupExporter.BuildResult.ProfileImageUnavailable ->
+                        R.string.companion_backup_err_image_unavailable
                 }
                 if (refusalMessage != null) {
                     runCatching { if (staged.exists()) staged.delete() }

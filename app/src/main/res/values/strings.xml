@@ -1,4 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="conversation_mode_chat">Chat</string>
+    <string name="conversation_mode_playground">Playground</string>
+    <string name="new_conversation_create_failed">The new conversation could not be saved. Your draft was not sent.</string>
     <string name="app_name" translatable="false">Phosphor Shines</string>
     <string name="app_name_lite" translatable="false">Phosphor Shines Lite</string>
 
@@ -175,6 +178,16 @@
     <string name="chat_export_cancel">Cancel Export</string>
     <string name="chat_export_action">Export</string>
     <string name="chat_delete_title">Delete Chat</string>
+    <string name="chat_delete_selected_message">Would you like to delete selected chats?</string>
+    <string name="chat_delete_images_keep_message">Images created in this chat will still be available in the Image Gallery.</string>
+    <string name="chat_delete_images_all_message">Any images created in this chat will be deleted also.</string>
+    <string name="chat_delete_images_unlocked_message">Any unlocked images created in this chat will be deleted also. Locked images will be kept.</string>
+    <string name="chat_delete_chat_only">Delete Chat Only</string>
+    <string name="chat_delete_all">Delete All</string>
+    <string name="chat_menu_pin">Pin</string>
+    <string name="chat_menu_unpin">Unpin</string>
+    <string name="folder_delete_title">Delete Folder?</string>
+    <string name="folder_delete_message">Deleting this folder will permanently delete all chats inside it. This cannot be undone.</string>
     <string name="control_center_general">General</string>
     <string name="control_center_image_generation">Image generation</string>
     <string name="control_center_appearance">Appearance</string>
@@ -625,6 +638,8 @@
     <string name="image_gen_row_shape">Default Shape</string>
     <string name="image_gen_row_quality">Default Quality</string>
     <string name="image_gen_enable_imagine">Enable /imagine</string>
+    <string name="image_gen_delete_with_chat">Delete Images with Chat?</string>
+    <string name="image_gen_delete_with_chat_desc">When deleting a chat, choose whether to keep or delete images created in it.</string>
     <string name="image_gen_option_automatic">Automatic</string>
     <string name="image_gen_shape_square">Square</string>
     <string name="image_gen_shape_portrait">Portrait</string>
@@ -659,6 +674,7 @@
     <string name="image_gen_creating_title">Creating Image</string>
     <string name="image_gen_loading_result">Loading Image…</string>
     <string name="image_gen_load_failed">The generated image could not be displayed.</string>
+    <string name="image_gen_no_longer_available">Image No Longer Available</string>
     <string name="image_gen_prompt_title">Image Prompt</string>
     <string name="image_gen_prompt_action">Prompt</string>
     <string name="image_gen_prompt_unavailable">The prompt is unavailable for this older image.</string>
@@ -1214,7 +1230,121 @@
          Controls; every string inside those sections is unchanged. No row
          subtitle is authored here — the owner has not approved subtitle wording
          for this row. -->
-    <string name="title_memory_backup_restore">Memory Backup &amp; Restore</string>
+    <string name="title_memory_backup_restore">Backup &amp; Restore</string>
+    <string name="backup_section_title">Backup</string>
+    <string name="restore_data_section">Restore Data</string>
+    <string name="restore_data_hint">Select the data to restore and choose Merge or Replace for each category.</string>
+    <string name="restore_from_backup">Restore From Backup</string>
+    <string name="restore_mode_label">Restore Mode</string>
+    <string name="restore_mode_merge">Merge</string>
+    <string name="restore_mode_replace">Replace</string>
+    <string name="restore_mode_accessibility">Restore Mode: %1$s</string>
+    <string name="restore_category_chats">Chats</string>
+    <string name="restore_category_chats_desc">Chats, folders, and the generated images used in those chats.</string>
+    <string name="restore_category_generated_images">Generated Images</string>
+    <string name="restore_category_generated_images_desc">The complete generated-image gallery, including images whose original chats were deleted.</string>
+    <string name="restore_category_companions">Companions</string>
+    <string name="restore_category_companions_desc">Companions and the pictures assigned to them.</string>
+    <string name="restore_category_glamours">Glamours</string>
+    <string name="restore_category_glamours_desc">Glamours and the pictures assigned to them.</string>
+    <string name="restore_category_roleplay">Roleplay</string>
+    <string name="restore_category_roleplay_desc">Roleplay data and assigned Roleplay Character pictures. Glamours are not included.</string>
+    <string name="restore_category_profile_images">Avatar/Profile Images</string>
+    <string name="restore_category_profile_images_desc">The complete avatar-image gallery, including unused images. Assignments are not changed.</string>
+    <string name="restore_category_activation_prompts">Activation Prompts</string>
+    <string name="restore_category_activation_prompts_desc">Saved Activation Prompts and their stable identities.</string>
+    <string name="restore_category_system_prompts">System Prompts</string>
+    <string name="restore_category_system_prompts_desc">Saved System Prompts and the current selection.</string>
+    <string name="restore_category_model_settings">Model &amp; Endpoint Settings</string>
+    <string name="restore_category_model_settings_desc">Endpoint and model definitions, favorites, model settings, and preferred provider routing. Credentials are not included.</string>
+    <string name="restore_model_credentials_note">Credentials are not restored or removed. Existing credentials stay on this device. Newly restored endpoints need credentials before use.</string>
+    <string name="restore_category_model_rules">Model Rules</string>
+    <string name="restore_category_model_rules_desc">Model Rules, their tags, and their stable endpoint and model links.</string>
+    <string name="restore_category_memories">Memories</string>
+    <string name="restore_category_memories_desc">Saved memories and their supported relationships.</string>
+    <string name="restore_category_lorebooks">Lorebooks</string>
+    <string name="restore_category_lorebooks_desc">Lorebooks, entries, triggers, and their supported relationships.</string>
+    <string name="portable_restore_select_category">Select at least one category to restore.</string>
+    <string name="portable_restore_nothing_available">This backup does not contain any of the selected categories.</string>
+    <string name="portable_restore_validation_failed">The selected data could not be validated safely.</string>
+    <string name="portable_restore_pending_recovery">A previous restore still needs to be recovered. Close and reopen the app, then try again.</string>
+    <string name="portable_restore_too_large">This backup is too large to restore safely.</string>
+    <string name="portable_unlock_title">Unlock Recovery Backup</string>
+    <string name="portable_unlock_message">Use the Recovery Code, Recovery Key file, or password for this backup.</string>
+    <string name="portable_unlock_code">Enter Recovery Code</string>
+    <string name="portable_unlock_key_file">Choose Recovery Key File</string>
+    <string name="portable_unlock_password">Enter Password</string>
+    <string name="portable_unlock_action">Unlock</string>
+    <string name="portable_password_title">Enter Password</string>
+    <string name="portable_password_hint">Password</string>
+    <string name="portable_key_file_invalid">This Recovery Key file is not valid.</string>
+    <string name="portable_missing_title">Some Selected Data Is Not in This Backup</string>
+    <string name="portable_missing_message">This backup does not contain: %1$s. You can cancel and change your selections, or restore the selected categories that are available.</string>
+    <string name="portable_restore_available">Restore Available Categories</string>
+    <string name="portable_folder_collision_title">Folder Name Already Exists</string>
+    <string name="portable_folder_collision_message">The backup contains a folder named “%1$s,” but the current folder with that name has a different identity. Choose how to restore its chats.</string>
+    <string name="portable_folder_merge">Merge</string>
+    <string name="portable_folder_create_new">Create New Folder</string>
+    <string name="portable_folder_name_title">Name Restored Folder</string>
+    <string name="portable_folder_name_hint">Folder Name</string>
+    <string name="portable_folder_create">Create Folder</string>
+    <string name="portable_folder_blank">Enter a folder name.</string>
+    <string name="portable_folder_duplicate">A folder with this name already exists.</string>
+    <string name="portable_folder_restored_name">%1$s (Restored)</string>
+    <string name="portable_confirm_title">Restore Selected Data?</string>
+    <string name="portable_confirm_replace">Replace will remove the current data in these categories and restore the backup versions: %1$s. Unselected categories will not be changed.</string>
+    <string name="portable_confirm_merge">Merge will add backup data to these categories without removing current items: %1$s. Identity conflicts will keep the current item and appear in the restore report.</string>
+    <string name="portable_confirm_mixed">This restore will use the selected mode for each category. Unselected categories will not be changed. Review the category list before continuing.</string>
+    <string name="portable_confirm_categories">Selected categories: %1$s.</string>
+    <string name="portable_restore_progress">Restoring selected data. Please wait. Do not close the app.</string>
+    <string name="portable_success_title">Restore Complete</string>
+    <string name="portable_success_message">The selected data was restored.</string>
+    <string name="portable_failure_title">Restore Failed</string>
+    <string name="portable_failure_message">Nothing was changed.</string>
+    <string name="portable_restore_failure_reason">Reason: %1$s.</string>
+    <string name="portable_restore_category_failure">%1$s could not be restored. Reason: %2$s</string>
+    <string name="portable_restore_cleanup_pending">The selected data was restored, but cleanup could not finish. Choose Okay to finish recovery before starting another restore.</string>
+    <string name="portable_restore_recovery_title">Restore Recovery Needed</string>
+    <string name="portable_restore_recovery_message">The app could not restore all previous data after the restore failed. Some selected data may have changed. Choose Okay to retry recovery before using Backup &amp; Restore again.</string>
+    <string name="portable_restore_pending_message">A previous restore still has recovery or cleanup work to finish. Complete it before continuing so the app can verify a consistent data state.</string>
+    <string name="portable_restore_retry_recovery">Try Recovery Again</string>
+    <string name="portable_restore_retry_progress">Recovering the previous data. Please wait. Do not close the app.</string>
+    <string name="portable_restore_reason_empty_selection">No restore categories were selected.</string>
+    <string name="portable_restore_reason_duplicate_category">The restore request contains the same category more than once.</string>
+    <string name="portable_restore_reason_pending_recovery">A previous restore still needs recovery.</string>
+    <string name="portable_restore_reason_validation_failed">The backup data did not pass validation.</string>
+    <string name="portable_restore_reason_staging_failed">The app could not safely prepare the backup data.</string>
+    <string name="portable_restore_reason_journal_failed">The app could not save the recovery information required for this restore.</string>
+    <string name="portable_restore_reason_apply_failed">The app could not finish writing the restored data.</string>
+    <string name="portable_restore_reason_rollback_failed">The app could not restore all previous data.</string>
+    <string name="portable_restore_reason_missing_artifact">The required category data is missing from the staged backup.</string>
+    <string name="portable_restore_reason_dependency_validation">A required dependency did not pass validation.</string>
+    <string name="portable_chat_invalid_file_type">The Chats data is not a recognized chat backup.</string>
+    <string name="portable_chat_unsupported_format">The Chats data uses a format this version cannot restore.</string>
+    <string name="portable_chat_incomplete">The Chats data was marked incomplete.</string>
+    <string name="portable_chat_malformed">The Chats data is malformed or incomplete.</string>
+    <string name="portable_chat_unsafe_id">The Chats data contains an invalid chat identity.</string>
+    <string name="portable_chat_identity_mismatch">A chat identity does not match its stored data.</string>
+    <string name="portable_chat_duplicate_id">The Chats data contains the same chat identity with different content.</string>
+    <string name="portable_chat_malformed_message_id">The Chats data contains an invalid message identity.</string>
+    <string name="portable_chat_duplicate_message_id">The Chats data contains a duplicate message identity.</string>
+    <string name="portable_chat_malformed_folders">The chat folder definitions are malformed.</string>
+    <string name="portable_chat_missing_folder">A chat refers to a folder definition that is missing.</string>
+    <string name="portable_chat_unreferenced_folder">The backup contains a folder that is not assigned to any backed-up chat.</string>
+    <string name="portable_chat_unsupported_setting">The Chats data contains a setting type this version cannot restore.</string>
+    <string name="portable_chat_forbidden_credential">The Chats data contains a credential, which is not allowed in a portable backup.</string>
+    <string name="portable_report_title">Restore Report</string>
+    <string name="portable_report_intro">The restore completed with these details:</string>
+    <string name="portable_report_conflict_count">%1$s: %2$d identity conflicts kept the current items.</string>
+    <string name="portable_report_conflicts">%1$s: current items kept — %2$s.</string>
+    <plurals name="portable_report_longer_chats">
+        <item quantity="one">A longer version of %d chat was kept.</item>
+        <item quantity="other">Longer versions of %d chats were kept.</item>
+    </plurals>
+    <plurals name="portable_report_protected_images">
+        <item quantity="one">%d current image was kept because unselected data still uses it.</item>
+        <item quantity="other">%d current images were kept because unselected data still uses them.</item>
+    </plurals>
 
     <!-- Memory Assistant (Phase 6). Every user-visible sentence here is the
          owner's approved wording (memory_assistant_design.md §1–§2 + the
@@ -2016,6 +2146,18 @@
     <string name="backup_err_wrong_key_or_header">This Recovery Code belongs to a different Recovery Key, or the backup header is damaged.</string>
     <string name="backup_err_damaged">The backup is damaged or has been altered.</string>
     <string name="backup_err_unsupported_protection">Unsupported or invalid backup protection settings.</string>
+    <!-- Restore From Backup (owner-approved wording, verbatim; do not reword
+         without asking). Chats-only same-install restore of the Phase 9 engine:
+         the warning names chats and data, never "all settings", so it stays
+         honest about what the restore actually replaces. -->
+    <string name="chat_restore_button">Restore From Backup</string>
+    <string name="chat_restore_confirm_message">Replacing from backup will delete any and all current chats and data. This cannot be undone.</string>
+    <string name="chat_restore_confirm_replace">Replace</string>
+    <string name="chat_restore_progress">Replacing data from backup. Please wait. Do not shut down your app while this is working.</string>
+    <string name="chat_restore_failed_title">Restoring from backup failed. Nothing was changed.</string>
+    <string name="chat_restore_failure_reason">Reason: %1$s</string>
+    <string name="chat_restore_read_error">The backup file could not be read.</string>
+    <string name="chat_restore_channel">Restore</string>
     <!-- Manual Recovery Backup flow (owner-approved wording, July 22 2026 —
          verbatim; do not reword without asking). Section 5/6 rulings. -->
     <string name="recovery_create">Create Recovery Backup</string>
@@ -2096,8 +2238,8 @@
     <string name="backup_location_unavailable">Folder unavailable. Choose a new location.</string>
     <!-- 4. Human-Readable Chat Backup (new section — owner directive, July 22
          2026: separate from Recovery Backup and from Portable Data Copy). -->
-    <string name="backup_readable_section">Human-Readable Chat Backup</string>
-    <string name="backup_readable_desc">Saves your chats as ordinary files you can open anywhere, packed into one ZIP.</string>
+    <string name="backup_readable_section">Human-Readable Data Backup</string>
+    <string name="backup_readable_desc">Saves selected data as ordinary JSON, text, and image files you can use without the app, packed into one ZIP. Backup Style and Format apply to chats.</string>
     <string name="backup_readable_scope_label">Backup Style</string>
     <string name="backup_readable_scope_all">All Chats</string>
     <string name="backup_readable_scope_incremental">New and Changed Chats Only</string>
@@ -2105,17 +2247,28 @@
     <string name="backup_readable_format_text">Text</string>
     <string name="backup_readable_format_json">JSON</string>
     <string name="backup_readable_format_both">Text + JSON</string>
-    <string name="backup_readable_create">Create Readable Chat Backup</string>
+    <string name="backup_readable_content_label">Content</string>
+    <string name="backup_readable_content_title">Choose Readable Content</string>
+    <string name="backup_readable_content_all">All Content</string>
+    <string name="backup_readable_content_none">No Content Selected</string>
+    <string name="backup_readable_category_identities">Companions, Glamours, Roleplay &amp; Prompts</string>
+    <string name="backup_readable_select_content">Select at least one type of content to back up.</string>
+    <string name="backup_readable_done">Done</string>
+    <plurals name="backup_readable_content_count">
+        <item quantity="one">%d Category Selected</item>
+        <item quantity="other">%d Categories Selected</item>
+    </plurals>
+    <string name="backup_readable_create">Create Human-Readable Backup</string>
     <string name="backup_readable_preparing">Preparing backup. You will choose where to save it when it is ready.</string>
     <string name="backup_readable_saving">Saving backup…</string>
     <string name="backup_readable_none">No new or updated chats.</string>
     <string name="backup_readable_cancelled">Backup cancelled. Nothing was saved.</string>
-    <string name="backup_readable_saved_to">Readable chat backup saved to %1$s</string>
-    <string name="backup_readable_saved_generic">Readable chat backup saved.</string>
+    <string name="backup_readable_saved_to">Human-readable backup saved to %1$s</string>
+    <string name="backup_readable_saved_generic">Human-readable backup saved.</string>
     <!-- Title Case label (owner correction, July 23 2026 — was sentence case,
          inconsistent with every other "Label: value" status line on this
          screen, e.g. backup_current_location). -->
-    <string name="backup_readable_last_success">Last Readable Chat Backup: %1$s</string>
+    <string name="backup_readable_last_success">Last Human-Readable Backup: %1$s</string>
     <!-- Shown directly under backup_readable_last_success, same Title Case
          "Label: value" formatting. The value is the FINAL verified
          destination ZIP's exact size (never the staged/temporary file),
@@ -2123,7 +2276,7 @@
          confirms the backup is intact — see MemoryBackupRestoreActivity
          .onReadableSaveAsResult. %1$s is a formatted size (ByteSizeFormatter,
          e.g. "4.8 MB") or backup_size_unavailable. -->
-    <string name="backup_readable_file_size">Chat Backup File Size: %1$s</string>
+    <string name="backup_readable_file_size">Backup File Size: %1$s</string>
     <string name="backup_readable_fail_chats">Your chats could not be read. No backup was created.</string>
     <string name="backup_readable_fail_generic">The backup could not be created.</string>
     <string name="backup_readable_fail_verify">The backup could not be verified. No backup was saved.</string>
@@ -2138,6 +2291,40 @@
     <string name="backup_portable_export_done">Portable data copy saved.</string>
     <string name="backup_portable_saved_to">Portable data copy saved to %1$s</string>
     <string name="backup_portable_import_title">Import Portable Data Copy</string>
+
+    <!-- Temporary legacy conversion. These strings leave with the feature. -->
+    <string name="legacy_convert_action">Convert Legacy Chats</string>
+    <string name="legacy_convert_title">Convert legacy chats</string>
+    <string name="legacy_convert_screen_intro">Temporary migration tool. It converts chats from an older unencrypted Recovery Package into the current chat-recovery format.</string>
+    <string name="legacy_convert_input_title">Old Recovery Package</string>
+    <string name="legacy_convert_input_hint">Use the unencrypted Recovery Package created by the older pre-release. The selected source file is read only.</string>
+    <string name="legacy_convert_confirm_title">Convert an old chat backup?</string>
+    <string name="legacy_convert_confirm_body">The selected backup will be read and converted into a new Chats-Recovery file. Nothing in this installation will be restored, replaced or deleted.\n\nAfter conversion, Android will ask where to save the new file. You can then choose that saved file in Restore From Backup to test the normal restore path.</string>
+    <string name="legacy_convert_choose_file">Choose File</string>
+    <string name="legacy_convert_working">Converting conversations…</string>
+    <string name="legacy_convert_choose_save_location">Conversion finished without changing this installation. Choose where to save the converted Chats-Recovery file.</string>
+    <string name="legacy_convert_saving">Saving and verifying the converted Chats-Recovery file…</string>
+
+    <!-- Outcomes. Each names the actual cause and what can be done next. -->
+    <string name="legacy_convert_done">Converted %1$d conversations, %2$d messages and %3$d saved settings into the recovery file.</string>
+    <string name="legacy_convert_saved_next_step">The converted file was saved and verified. Now return to Memory Backup &amp; Restore, choose Restore From Backup, and manually select the saved file to test the real restore system.</string>
+    <string name="legacy_convert_save_cancelled">The conversion was cancelled before a file was saved. Nothing in this installation was changed.</string>
+    <string name="legacy_convert_err_encrypted">This temporary converter only accepts an unencrypted Recovery Package. Create the backup with Unencrypted selected in the older pre-release.</string>
+    <string name="legacy_convert_err_package">The selected file could not be opened as an older Recovery Package. It may be damaged. The source file was not changed.</string>
+    <string name="legacy_convert_err_no_chats">That copy contains no conversations. It may hold only memory or lorebook data.</string>
+    <string name="legacy_convert_err_unreadable">The conversations could not be read out of the copy after it was opened.</string>
+    <string name="legacy_convert_err_rejected">The conversations were readable but could not be trusted, so nothing was written. Cause: %1$s</string>
+    <string name="legacy_convert_err_archive">The current-format Chats-Recovery file could not be built and verified. Nothing in this installation was changed.</string>
+    <string name="legacy_convert_err_save">The converted Chats-Recovery file could not be saved and verified at that location. Run the converter again and choose another location.</string>
+
+    <!-- Rejection causes, substituted into legacy_convert_err_rejected. -->
+    <string name="legacy_convert_reason_not_chats">the file is not a conversation export</string>
+    <string name="legacy_convert_reason_format">the export was written in a format this build cannot read</string>
+    <string name="legacy_convert_reason_incomplete">the older version marked this export incomplete</string>
+    <string name="legacy_convert_reason_malformed">the export is structurally damaged</string>
+    <string name="legacy_convert_reason_identity">a conversation no longer matches the identity it was exported under</string>
+    <string name="legacy_convert_reason_duplicate">two entries point to the same old conversation but contain different data</string>
+    <string name="legacy_convert_reason_setting">a saved setting uses a type this build cannot restore</string>
     <!-- 6. Companion & Roleplay Backup (companion-roleplay-backup-plan.md;
          all wording owner-approved verbatim, §8/§9). One backup category,
          no per-item selection. Memories and lorebooks are deliberately NOT
@@ -2163,6 +2350,7 @@
     <string name="companion_backup_err_restore_write_failed">The restore failed because this device storage could not be written to. Please free up space and try again.</string>
     <string name="companion_backup_err_data_unreadable">The operation failed because the application data could not be read. Please retry or check the database health.</string>
     <string name="companion_backup_err_save_location_failed">The backup could not be saved to the chosen location. Please select a different folder and try again.</string>
+    <string name="companion_backup_err_image_unavailable">This backup wasn\'t created because a required profile picture is missing or damaged. Your existing backup is unchanged. Reassign or remove the affected picture, then try again.</string>
     <!-- §9 replace confirmation. -->
     <string name="companion_backup_confirm_title">Replace companion and roleplay data?</string>
     <string name="companion_backup_confirm_body">This backup will replace your existing companions, personas, system prompts, activation prompts, and roleplay cards with the contents of the backup file. Memories, lorebooks, conversations, API settings, and other app settings will not be changed.</string>
@@ -2253,7 +2441,7 @@
     <string name="backup_operation_failed_title">Something went wrong</string>
     <string name="backup_operation_failed_body">The operation could not be completed. Details were saved to the app\'s local logs.</string>
     <!-- Memory Manager hub row subtitle -->
-    <string name="row_memory_backup_restore_subtitle">Back up and restore chats, memories, lorebooks, and user image data.</string>
+    <string name="row_memory_backup_restore_subtitle">Back up and restore chats, memories, settings, and user-created data.</string>
 
     <!-- ================================================================
          Database Health Build Phase 3 — detection → dialog → repair/replace.
@@ -2301,6 +2489,7 @@
     <string name="restore_repair_failed">Repair Failed.</string>
     <string name="restore_no_current_backup">No usable backup was found in the current automatic backup location.</string>
     <string name="restore_no_appropriate_database">Database import failed. No appropriate database found.</string>
+    <string name="restore_profile_image_assets_missing">This profile-image backup can\'t be restored because the picture files it needs are not included and are not already on this device. Your current pictures were left unchanged. Restore from a full Recovery Backup instead.</string>
     <string name="restore_no_valid_file">No valid databases found in file.</string>
     <string name="restore_no_valid_folder">No valid databases found in folder.</string>
     <string name="restore_automatic_key_or_damage">This automatic backup cannot be opened with this app installation’s database key, or the file is damaged. Choose a Recovery Backup if this file came from another installation.</string>
@@ -3282,10 +3471,18 @@
     <!-- Summarizer Errors dialog (decision 16 + errors addendum §1). -->
     <string name="summarizer_errors_title">Summarizer Errors</string>
     <string name="summarizer_errors_status_behind">The summary is behind because one or more updates failed. No messages were lost. Until it catches up, unsummarized messages are being sent to the AI in full.</string>
-    <string name="summarizer_errors_status_caught_up">The summarizer has caught up. No messages were lost. The errors below are kept for review until you delete them.</string>
-    <string name="summarizer_errors_status_off">The summarizer is off for this chat. No messages were lost. All messages are being sent to the AI in full. The errors below are kept for review until you delete them.</string>
+    <string name="summarizer_errors_status_caught_up">The summarizer has caught up. No messages were lost. The errors below are kept for review until you hide them.</string>
+    <string name="summarizer_errors_status_off">The summarizer is off for this chat. No messages were lost. All messages are being sent to the AI in full. The errors below are kept for review until you hide them.</string>
     <string name="summarizer_errors_copy">Copy</string>
     <string name="summarizer_errors_delete">Delete</string>
+    <!-- Per-entry and whole-list actions in the Summarizer Errors dialog
+         (owner ruling, Aug 31 2026). Hide removes that one entry; Hide All
+         clears the list and drops the top-bar badge until the next failure;
+         Okay just closes. Title Caps by owner standing rule. -->
+    <string name="summarizer_errors_hide">Hide</string>
+    <string name="summarizer_errors_hide_all">Hide All</string>
+    <string name="summarizer_errors_copy_all">Copy All</string>
+    <string name="summarizer_errors_okay">Okay</string>
     <string name="summarizer_errors_repeated">Repeated %1$d times.</string>
     <string name="summarizer_errors_profile_line">Profile: %1$s</string>
     <string name="summarizer_errors_model_line">Model: %1$s</string>
@@ -3387,6 +3584,18 @@
     <string name="reasoning_settings_title">Reasoning Settings</string>
     <string name="reasoning_show_reasoning_label">Show Reasoning</string>
     <string name="reasoning_settings_saved_toast">Saved</string>
+
+    <!-- Model Parameters screen (favorite's saved sampling parameters). Opened
+         by the Tune button on a favorite row; saving stores the parameters on
+         the favorite so selecting the model applies them to the chat. -->
+    <string name="model_parameters_title">Model Parameters</string>
+    <string name="model_parameters_saved_toast">Saved</string>
+    <!-- Content description / tooltip for the Tune button on a favorite row.
+         %1$s = model name. -->
+    <string name="model_parameters_button_desc">Model parameters for %1$s</string>
+    <!-- Accessibility label for the circled-i information button beside a
+         parameter's title. -->
+    <string name="parameter_info_button_desc">About this setting</string>
     <!-- Accessibility descriptions for the per-message reasoning indicator
          glyph (owner design, Aug 2026). Screen-reader only; the owner requires
          Title Case even though they are not shown on screen. -->
@@ -3463,4 +3672,57 @@
     <string name="tts_manager_remove">Remove TTS Selection: %1$s, %2$s, %3$s</string>
     <string name="tts_voices_currently_unavailable">Voices currently not available.</string>
     <string name="tts_select_new_voice">Select New Voice</string>
+    <string name="image_gallery_title">Image Gallery</string>
+    <string name="image_gallery_select">Select</string>
+    <string name="image_gallery_cancel_selection">Cancel Selection</string>
+    <string name="image_gallery_selection_count">%1$d Selected</string>
+    <string name="image_gallery_sort">Sort</string>
+    <string name="image_gallery_newest">Newest to Oldest</string>
+    <string name="image_gallery_oldest">Oldest to Newest</string>
+    <string name="image_gallery_columns">Columns</string>
+    <string name="image_gallery_show_labels">Show Labels</string>
+    <string name="image_gallery_empty">No Generated Images</string>
+    <string name="image_gallery_locked">Locked</string>
+    <string name="image_gallery_go_to_chat">Go to Chat</string>
+    <string name="image_gallery_add_to_avatar">Add to Avatar Gallery</string>
+    <string name="image_gallery_lock">Lock</string>
+    <string name="image_gallery_unlock">Unlock</string>
+    <string name="image_gallery_delete">Delete</string>
+    <string name="image_gallery_delete_selected">Delete Selected</string>
+    <string name="image_gallery_delete_one_title">Delete This Image?</string>
+    <string name="image_gallery_delete_selected_title">Delete Selected Images?</string>
+    <string name="image_gallery_okay">Okay</string>
+    <string name="image_gallery_save_image">Save Image</string>
+    <string name="image_gallery_unavailable">The image is no longer available.</string>
+    <string name="image_gallery_catalog_unavailable">Image Gallery is temporarily unavailable.</string>
+    <string name="image_gallery_avatar_save_failed">The avatar image could not be saved.</string>
+    <string name="search_title">Search</string>
+    <string name="search_whole_words">Whole Words</string>
+    <string name="search_match_case">Match Case</string>
+    <string name="search_preparing">Preparing Search…</string>
+    <string name="search_rebuilding">Rebuilding Search Index…</string>
+    <string name="search_incomplete">Some chats are temporarily unavailable and are not included in these results.</string>
+    <string name="search_unavailable">Search is temporarily unavailable.</string>
+    <string name="search_no_results">No Matches</string>
+    <string name="search_rebuild">Rebuild Search Index</string>
+    <string name="chat_settings_companion_images">Show Companion Images in Chat List</string>
+    <string name="drawer_new_chat">New Chat</string>
+    <string name="drawer_new_folder">New Folder</string>
+    <string name="drawer_folders">Folders</string>
+    <string name="drawer_pinned_chats">Pinned Chats</string>
+    <string name="folder_add">Add Folder</string>
+    <string name="folder_add_title">Add Folder</string>
+    <string name="folder_rename_title">Rename Folder</string>
+    <string name="folder_name">Folder Name</string>
+    <string name="folder_name_blank">Enter a folder name.</string>
+    <string name="folder_name_duplicate">A folder with this name already exists.</string>
+    <string name="folder_pin">Pin</string>
+    <string name="folder_unpin">Unpin</string>
+    <string name="folder_rename">Rename</string>
+    <string name="folder_delete">Delete</string>
+    <string name="chat_move_to_folder">Move to Folder</string>
+    <string name="folder_none">No Folder</string>
+    <string name="drawer_open">Open Drawer</string>
+    <string name="drawer_close">Close Drawer</string>
+    <string name="drawer_brand">Soul Phosphor</string>
 </resources>

@@ -159,13 +159,63 @@ object CompanionRoleplayRestoreManager {
         return proceed(appContext, manifest, archiveFile, existingLorebookIds)
     }
 
+    /**
+     * Unified portable restore entry point. Lorebook resolution was completed
+     * by the immutable final-state planner, so apply consumes that exact plan
+     * and never queries a newer live lorebook generation.
+     */
+    internal fun restore(
+        context: Context,
+        manifest: CompanionBackupManifest,
+        archiveFile: File,
+        planned: CompanionRestorePlanner.Plan
+    ): RestoreResult {
+        val appContext = context.applicationContext
+        val dbInvolved = MemoryStore.isProvisioned(appContext) || manifest.hasRoleplayRecords()
+        if (dbInvolved && DatabaseHealthState.isDegraded(appContext, BackupType.MEMORY)) {
+            return RestoreResult.Failed(FailReason.MEMORY_UNAVAILABLE)
+        }
+        return proceed(appContext, manifest, archiveFile, planned)
+    }
+
+    /**
+     * Unified selected-category restore owns companion_memory.db through its
+     * shared database participant. This half applies only the archive's image
+     * assets and planned settings; the outer journal supplies the cross-
+     * participant rollback boundary.
+     */
+    internal fun restoreSettingsAndImages(
+        context: Context,
+        manifest: CompanionBackupManifest,
+        archiveFile: File,
+        planned: CompanionRestorePlanner.Plan
+    ): RestoreResult = proceed(
+        context.applicationContext,
+        manifest,
+        archiveFile,
+        planned,
+        includeDatabase = false
+    )
+
     private fun proceed(
         appContext: Context,
         manifest: CompanionBackupManifest,
         archiveFile: File,
         existingLorebookIds: Set<String>
+    ): RestoreResult = proceed(
+        appContext,
+        manifest,
+        archiveFile,
+        CompanionRestorePlanner.plan(manifest, existingLorebookIds)
+    )
+
+    private fun proceed(
+        appContext: Context,
+        manifest: CompanionBackupManifest,
+        archiveFile: File,
+        plan: CompanionRestorePlanner.Plan,
+        includeDatabase: Boolean = true
     ): RestoreResult {
-        val plan = CompanionRestorePlanner.plan(manifest, existingLorebookIds)
         val settingsOld = CompanionSettingsApplier.snapshot(appContext)
 
         // ---- 1. Images first (additive) ----
@@ -186,7 +236,8 @@ object CompanionRoleplayRestoreManager {
             return RestoreResult.Failed(FailReason.IMAGES_WRITE_FAILED)
         }
 
-        val dbInvolved = MemoryStore.isProvisioned(appContext) || manifest.hasRoleplayRecords()
+        val dbInvolved = includeDatabase &&
+            (MemoryStore.isProvisioned(appContext) || manifest.hasRoleplayRecords())
         val provisionedByRestore = dbInvolved && !MemoryStore.isProvisioned(appContext)
         val token = "crb-" + UUID.randomUUID()
 
@@ -244,7 +295,7 @@ object CompanionRoleplayRestoreManager {
 
         // ---- 5. Done: settle the journal, refresh cached stores ----
         CompanionRestoreJournal.clear(appContext)
-        MemoryStore.invalidateInstance()
+        if (dbInvolved) MemoryStore.invalidateInstance()
         return RestoreResult.Success(plan.removedLinks)
     }
 

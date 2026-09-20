@@ -102,7 +102,16 @@ object RecoveryBackupManager {
      *        deletion stays disabled until a rotation policy is explicitly
      *        approved).
      */
-    fun createBackup(context: Context, treeUri: Uri, rotateOldCopies: Boolean = true): List<TypeResult> {
+    fun createBackup(context: Context, treeUri: Uri, rotateOldCopies: Boolean = true): List<TypeResult> =
+        RecoveryOperationGate.runExclusive {
+            createBackupLocked(context, treeUri, rotateOldCopies)
+        }
+
+    private fun createBackupLocked(
+        context: Context,
+        treeUri: Uri,
+        rotateOldCopies: Boolean
+    ): List<TypeResult> {
         val runAt = System.currentTimeMillis()
         return BackupType.displayOrder.map { runOne(context, it, treeUri, runAt, rotateOldCopies) }
     }
@@ -315,6 +324,19 @@ object RecoveryBackupManager {
             }
         }
         return staged.exists() && staged.length() > 0
+    }
+
+    /**
+     * Build and fully verify a same-install chats recovery archive at an
+     * explicit staging path. This narrow entry point exists for the temporary
+     * legacy converter, which hands the verified file to Android's Save As
+     * picker instead of bypassing the normal restore workflow.
+     */
+    internal fun createVerifiedChatRecoveryArchive(context: Context, staged: File): Boolean {
+        if (staged.exists()) staged.delete()
+        if (!snapshotChats(context.applicationContext, staged)) return false
+        verifyStaged(context.applicationContext, BackupType.CHATS, staged)
+        return true
     }
 
     private fun addEncFile(sharedPrefsDir: File, logicalName: String, out: LinkedHashMap<String, File>) {

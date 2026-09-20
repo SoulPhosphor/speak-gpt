@@ -77,4 +77,18 @@ class GeneratedImageStorageTest {
             GeneratedImageStorage.cacheFileName(b)
         )
     }
+
+    @Test
+    fun catalogNameUsesImmutableUuidNotContentOrLabel() {
+        val uuid = "550e8400-e29b-41d4-a716-446655440000"
+        assertEquals("$uuid.webp", GeneratedImageStorage.catalogFileName(uuid, "webp"))
+        assertEquals("$uuid.png", GeneratedImageStorage.catalogFileName(uuid, "PNG"))
+        assertEquals(uuid, GeneratedImageStorage.catalogFileName(uuid, "png")!!.substringBeforeLast('.'))
+    }
+
+    @Test
+    fun unsafeCatalogIdentityOrExtensionIsRejected() {
+        assertEquals(null, GeneratedImageStorage.catalogFileName("../image", "png"))
+        assertEquals(null, GeneratedImageStorage.catalogFileName("image-id", "../png"))
+    }
 }

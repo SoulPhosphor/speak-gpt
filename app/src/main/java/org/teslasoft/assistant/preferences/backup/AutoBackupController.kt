@@ -134,21 +134,49 @@ object AutoBackupController {
             // known — never conditioned on success.
             RecoveryBackupState.recordAutoAttempt(appContext, now)
 
-            // The verified recovery-backup engine, into the AUTOMATIC folder,
-            // rotation OFF (never deletes an older copy). Per-type success/
-            // failure is recorded by the manager itself (unchanged, shared with
-            // the manual path); this pass additionally records the SET's own
-            // last-attempt/last-success/last-category below.
-            val results = RecoveryBackupManager.createBackup(appContext, Uri.parse(uriStr), rotateOldCopies = false)
-
-            val permissionFailed = results.any { it.category == BackupFailureCategory.DESTINATION_PERMISSION }
-            // A real per-type failure: success == false AND category != null.
-            // "Nothing to back up" (category == null) is a NEUTRAL state and is
-            // NEVER counted as a failure of the automatic pass.
-            val realFailure = results.firstOrNull { !it.success && it.category != null }
-            val hadAnyFailure = permissionFailed || realFailure != null
-
-            if (!AutoBackupScheduler.shouldAdvanceSchedule(hadAnyFailure)) {
+            // One complete portable package, using the same Protected /
+            // Unencrypted choice as the manual Recovery flow. The retired raw
+            // per-database writer is intentionally unreachable from automatic
+            // backup: every new automatic file must survive a new device or
+            // reinstall. Existing files are left untouched and rotation stays
+            // disabled.
+            when (val result = AutomaticPortableBackupWriter.create(
+                appContext,
+                Uri.parse(uriStr),
+                RecoveryBackupState.getLastRecoveryProtected(appContext)
+            )) {
+                is AutomaticPortableBackupWriter.Result.Success -> {
+                    for (type in BackupType.displayOrder) {
+                        if (type in result.includedTypes) {
+                            RecoveryBackupState.recordSuccess(appContext, type, now)
+                        } else {
+                            RecoveryBackupState.recordNothingToBackUp(appContext, type, now)
+                        }
+                    }
+                    RecoveryBackupState.recordAutoSuccess(appContext, now, result.sizeBytes)
+                    return Outcome.COMPLETED
+                }
+                AutomaticPortableBackupWriter.Result.NothingToBackUp -> {
+                    for (type in BackupType.displayOrder) {
+                        RecoveryBackupState.recordNothingToBackUp(appContext, type, now)
+                    }
+                    RecoveryBackupState.recordAutoSuccess(appContext, now, 0L)
+                    return Outcome.COMPLETED
+                }
+                is AutomaticPortableBackupWriter.Result.Failed -> {
+                    for (type in BackupType.displayOrder) {
+                        RecoveryBackupState.recordFailure(appContext, type, now, result.category)
+                    }
+                    val results = BackupType.displayOrder.map { type ->
+                        RecoveryBackupManager.TypeResult(
+                            type = type,
+                            success = false,
+                            category = result.category,
+                            insufficientStorage = result.insufficientStorage
+                        )
+                    }
+                    val permissionFailed =
+                        result.category == BackupFailureCategory.DESTINATION_PERMISSION
                 // NEVER recorded as success: a failed (or permission-blocked)
                 // attempt must not be treated as though the scheduled backup
                 // succeeded. lastSuccess is left untouched, so the next-due
@@ -157,25 +185,19 @@ object AutoBackupController {
                 // verify) is derived by the pure AutoBackupScheduler
                 // .autoFailureReason and drives the status line's message.
                 val reason = AutoBackupScheduler.autoFailureReason(results)
-                    ?: AutoBackupFailureReason.UNEXPECTED // defensive: hadAnyFailure was true
+                    ?: AutoBackupFailureReason.UNEXPECTED
                 RecoveryBackupState.recordAutoFailure(appContext, reason)
-                return if (permissionFailed) {
-                    MemoryLog.log(appContext, "AutoBackup", "warning",
-                        "Automatic backup could not reach its folder; blocked until the destination is repaired.")
-                    Outcome.PERMISSION_LOST
-                } else {
-                    MemoryLog.log(appContext, "AutoBackup", "warning",
-                        "Automatic backup completed with one or more per-type failures (recorded per type): ${reason.name}.")
-                    Outcome.RETRYABLE_FAILURE
+                    return if (permissionFailed) {
+                        MemoryLog.log(appContext, "AutoBackup", "warning",
+                            "Automatic backup could not reach its folder; blocked until the destination is repaired.")
+                        Outcome.PERMISSION_LOST
+                    } else {
+                        MemoryLog.log(appContext, "AutoBackup", "warning",
+                            "Automatic backup completed with one or more per-type failures (recorded per type): ${reason.name}.")
+                        Outcome.RETRYABLE_FAILURE
+                    }
                 }
             }
-
-            // Fully successful: every type either backed up cleanly or had
-            // nothing to back up. ONLY here does the schedule advance, and
-            // ONLY here is a total file size recorded (pure sum logic in
-            // AutoBackupScheduler.totalVerifiedSize — unit-tested).
-            RecoveryBackupState.recordAutoSuccess(appContext, now, AutoBackupScheduler.totalVerifiedSize(results))
-            return Outcome.COMPLETED
         } catch (e: Exception) {
             // The manager never throws, but stay defensive: never silently
             // record success on an unexpected exception. This is the ONLY path
