@@ -81,18 +81,18 @@ jobs:
           ./gradlew --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk phosphor-shines.apk
 
-      - name: Build debug-signed test APK
+      - name: Build side-by-side Beta APK
         if: steps.signing.outputs.configured != 'true'
         run: |
-          ./gradlew --no-daemon assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk phosphor-shines.apk
+          ./gradlew --no-daemon assembleBeta
+          cp app/build/outputs/apk/beta/app-beta.apk phosphor-shines-beta.apk
 
       - name: Write release notes
         run: |
           cat > notes.md << 'NOTES'
           ## How to install Phosphor Shines on your Android phone
 
-          1. Click **phosphor-shines.apk** below to download it
+          1. Click **phosphor-shines-beta.apk** below to download it
           2. Transfer the file to your Android phone (or open this page on your phone and download directly)
           3. Tap the downloaded file to install it
           4. If your phone asks about installing from unknown sources, tap Allow
@@ -100,10 +100,10 @@ jobs:
           if [ "${{ steps.signing.outputs.configured }}" != "true" ]; then
             cat >> notes.md << 'NOTES'
 
-          > **Note:** This is a debug-signed TEST build (release signing secrets
-          > are not configured for this repository). It installs over previous
-          > debug builds without losing data, but do not distribute it: the
-          > debug signing key is public.
+          > **Note:** This is a debug-signed BETA build with the separate
+          > application ID com.soulphosphor.phosphorshines.beta. It installs
+          > alongside the main app instead of replacing it, so the two apps
+          > keep separate app data.
           NOTES
           fi
 
@@ -124,8 +124,8 @@ jobs:
               --notes-file notes.md \
               --latest
           else
-            gh release create latest phosphor-shines.apk \
-              --title "Phosphor Shines (Debug-signed test build)" \
+            gh release create latest phosphor-shines-beta.apk \
+              --title "Phosphor Shines Beta (Side-by-side test build)" \
               --notes-file notes.md \
               --prerelease
           fi
