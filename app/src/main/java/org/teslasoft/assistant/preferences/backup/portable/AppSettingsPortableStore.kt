@@ -57,36 +57,38 @@ object AppSettingsPortableStore {
         it
     }
 
-    fun replace(context: Context, data: AppSettingsPortableData): Boolean = try {
-        val app = context.applicationContext
-        val defaultSettings = SecurePrefs.get(app, AppTtsVoicePreferences.STORE_NAME)
-        if (SecurePrefs.isLockedName(AppTtsVoicePreferences.STORE_NAME)) return false
-        val normalized = (AppSettingsPortableCodec.parse(AppSettingsPortableCodec.encode(data)) as?
-            AppSettingsPortableCodec.Result.Ok)?.data ?: return false
-        if (!replaceMap(app.getSharedPreferences("settings", Context.MODE_PRIVATE),
-                AppSettingsPortabilityPolicy.Store.GLOBAL_SETTINGS, normalized.globalSettings)) return false
-        if (!replaceMap(defaultSettings,
-                AppSettingsPortabilityPolicy.Store.DEFAULT_SETTINGS, normalized.defaultSettings)) return false
-        if (!replaceMap(app.getSharedPreferences("storage_health", Context.MODE_PRIVATE),
-                AppSettingsPortabilityPolicy.Store.STORAGE_OPTIONS, normalized.storageOptions)) return false
+    fun replace(context: Context, data: AppSettingsPortableData): Boolean {
+        return try {
+            val app = context.applicationContext
+            val defaultSettings = SecurePrefs.get(app, AppTtsVoicePreferences.STORE_NAME)
+            if (SecurePrefs.isLockedName(AppTtsVoicePreferences.STORE_NAME)) return false
+            val normalized = (AppSettingsPortableCodec.parse(AppSettingsPortableCodec.encode(data)) as?
+                AppSettingsPortableCodec.Result.Ok)?.data ?: return false
+            if (!replaceMap(app.getSharedPreferences("settings", Context.MODE_PRIVATE),
+                    AppSettingsPortabilityPolicy.Store.GLOBAL_SETTINGS, normalized.globalSettings)) return false
+            if (!replaceMap(defaultSettings,
+                    AppSettingsPortabilityPolicy.Store.DEFAULT_SETTINGS, normalized.defaultSettings)) return false
+            if (!replaceMap(app.getSharedPreferences("storage_health", Context.MODE_PRIVATE),
+                    AppSettingsPortabilityPolicy.Store.STORAGE_OPTIONS, normalized.storageOptions)) return false
 
-        val catalogPrefs = app.getSharedPreferences("logit_bias_config", Context.MODE_PRIVATE)
-        val oldIds = LogitBiasConfigPreferences.getLogitBiasConfigPreferences(app).getAllConfigs()
-            .mapNotNull { it["id"] }.toSet()
-        if (!replaceMap(catalogPrefs, AppSettingsPortabilityPolicy.Store.LOGIT_CATALOG,
-                normalized.logitBiasCatalog)) return false
-        for (id in oldIds + normalized.logitBiasConfigs.keys) {
-            if (!replaceMap(app.getSharedPreferences("logit_bias_config_$id", Context.MODE_PRIVATE),
-                    AppSettingsPortabilityPolicy.Store.LOGIT_CONFIG,
-                    normalized.logitBiasConfigs[id].orEmpty())) return false
+            val catalogPrefs = app.getSharedPreferences("logit_bias_config", Context.MODE_PRIVATE)
+            val oldIds = LogitBiasConfigPreferences.getLogitBiasConfigPreferences(app).getAllConfigs()
+                .mapNotNull { it["id"] }.toSet()
+            if (!replaceMap(catalogPrefs, AppSettingsPortabilityPolicy.Store.LOGIT_CATALOG,
+                    normalized.logitBiasCatalog)) return false
+            for (id in oldIds + normalized.logitBiasConfigs.keys) {
+                if (!replaceMap(app.getSharedPreferences("logit_bias_config_$id", Context.MODE_PRIVATE),
+                        AppSettingsPortabilityPolicy.Store.LOGIT_CONFIG,
+                        normalized.logitBiasConfigs[id].orEmpty())) return false
+            }
+
+            val savedSources = File(app.filesDir, "tts/saved_sources.json")
+            val parent = savedSources.parentFile ?: return false
+            if (!parent.isDirectory && !parent.mkdirs()) return false
+            AtomicFileWriter.writeAndVerify(savedSources, normalized.savedTtsSourcesJson)
+        } catch (_: Exception) {
+            false
         }
-
-        val savedSources = File(app.filesDir, "tts/saved_sources.json")
-        val parent = savedSources.parentFile ?: return false
-        if (!parent.isDirectory && !parent.mkdirs()) return false
-        AtomicFileWriter.writeAndVerify(savedSources, normalized.savedTtsSourcesJson)
-    } catch (_: Exception) {
-        false
     }
 
     private fun read(
