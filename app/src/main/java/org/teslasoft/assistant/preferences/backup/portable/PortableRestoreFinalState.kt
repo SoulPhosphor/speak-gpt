@@ -117,7 +117,8 @@ class PortableRestoreFinalState private constructor(
         MEMORY_ROWS,
         MODEL_RULE_ROWS,
         LOREBOOKS,
-        MODEL_ENDPOINT_SETTINGS
+        MODEL_ENDPOINT_SETTINGS,
+        APP_SETTINGS
     }
 
     sealed interface ReferenceChange {

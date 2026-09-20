@@ -312,6 +312,24 @@ object PortableRecoveryWriter {
                 )
             }
 
+            // ---- Settings and Preferences (audited, credential-free) ----
+            run {
+                val staged = File(staging, AppSettingsPortableCodec.ENTRY_NAME)
+                val settings = AppSettingsPortableStore.write(context, staged).getOrElse {
+                    return Result.Failed(Reason.SNAPSHOT_FAILED)
+                }
+                artifacts.add(
+                    PortablePackage.Artifact(
+                        entryName = AppSettingsPortableCodec.ENTRY_NAME,
+                        type = PortablePackage.TYPE_APP_SETTINGS,
+                        file = staged,
+                        databaseKeyHex = null,
+                        keySemantics = null,
+                        schemaVersion = AppSettingsPortableCodec.SCHEMA_VERSION
+                    )
+                )
+            }
+
             // ---- chats (logical serialization; LOCKED fails visibly) ----
             when (val chats = ChatLogicalSerializer.serializeV2(context)) {
                 is ChatLogicalSerializer.Result.Unavailable ->

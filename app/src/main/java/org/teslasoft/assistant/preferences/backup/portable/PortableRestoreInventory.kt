@@ -27,6 +27,7 @@ enum class PortableRestoreCategory(val key: String) {
     ACTIVATION_PROMPTS("activation_prompts"),
     SYSTEM_PROMPTS("system_prompts"),
     MODEL_ENDPOINT_SETTINGS("model_endpoint_settings"),
+    SETTINGS("settings"),
     MODEL_RULES("model_rules"),
     MEMORIES("memories"),
     LOREBOOKS("lorebooks")
@@ -75,6 +76,8 @@ object PortableRestoreInventory {
                 }
                 PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS ->
                     categories.add(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS)
+                PortablePackage.TYPE_APP_SETTINGS ->
+                    categories.add(PortableRestoreCategory.SETTINGS)
                 PortablePackage.TYPE_SQLCIPHER_DB -> when (artifact.entryName) {
                     "memory.db" -> categories.addAll(
                         listOf(

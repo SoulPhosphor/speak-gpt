@@ -506,6 +506,10 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             R.string.restore_category_model_settings, R.string.restore_category_model_settings_desc
         )
         bindPortableRestoreCategory(
+            PortableRestoreCategory.SETTINGS, R.id.restore_category_settings,
+            R.string.restore_category_settings, R.string.restore_category_settings_desc
+        )
+        bindPortableRestoreCategory(
             PortableRestoreCategory.MODEL_RULES, R.id.restore_category_model_rules,
             R.string.restore_category_model_rules, R.string.restore_category_model_rules_desc
         )
@@ -546,8 +550,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         modelCredentialsNote?.visibility = if (selected) View.VISIBLE else View.GONE
     }
 
-    /** Every current category owns a stable-identity collection, so Merge is
-     * meaningful for all twelve. Keep this exhaustive gate: a future category
+    /** Collection categories own stable identities and support Merge. Keep
+     * this exhaustive gate: a future category
      * cannot acquire Merge merely by being added to the enum. */
     private fun portableCategorySupportsMerge(category: PortableRestoreCategory): Boolean = when (category) {
         PortableRestoreCategory.CHATS,
@@ -562,6 +566,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         PortableRestoreCategory.MODEL_RULES,
         PortableRestoreCategory.MEMORIES,
         PortableRestoreCategory.LOREBOOKS -> true
+        PortableRestoreCategory.SETTINGS -> false
     }
 
     @Suppress("DEPRECATION")
@@ -1269,6 +1274,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         PortableRestoreCategory.ACTIVATION_PROMPTS -> R.string.restore_category_activation_prompts
         PortableRestoreCategory.SYSTEM_PROMPTS -> R.string.restore_category_system_prompts
         PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS -> R.string.restore_category_model_settings
+        PortableRestoreCategory.SETTINGS -> R.string.restore_category_settings
         PortableRestoreCategory.MODEL_RULES -> R.string.restore_category_model_rules
         PortableRestoreCategory.MEMORIES -> R.string.restore_category_memories
         PortableRestoreCategory.LOREBOOKS -> R.string.restore_category_lorebooks

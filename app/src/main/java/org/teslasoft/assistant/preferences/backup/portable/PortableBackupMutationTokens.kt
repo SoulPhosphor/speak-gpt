@@ -32,7 +32,10 @@ internal object PortableBackupMutationTokens {
             "profile_image_database" to digestDatabase(app, ProfileImageDb.DATABASE_NAME),
             "generated_image_database" to digestDatabase(app, GeneratedImageCatalogStore.DATABASE_NAME),
             "profile_image_assets" to digestTree(app.getExternalFilesDir("profile_images"), includeContents = true),
-            "generated_image_assets" to digestTree(app.getExternalFilesDir("images"), includeContents = true)
+            "generated_image_assets" to digestTree(app.getExternalFilesDir("images"), includeContents = true),
+            "saved_tts_sources" to digestTree(
+                File(app.filesDir, "tts/saved_sources.json"), includeContents = true
+            )
         )
     } catch (_: Exception) {
         null

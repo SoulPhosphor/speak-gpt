@@ -135,9 +135,18 @@ object PortableRecoverySemanticValidator {
                 ModelEndpointPortableCodec.Result.Ok)?.data ?: return Result.Invalid
         }
 
+        val settingsArtifact = artifact(artifacts, PortablePackage.TYPE_APP_SETTINGS)
+        val settings = settingsArtifact?.let { source ->
+            if (source.stagedFile.length() > PortableRecoveryLimits.APP_SETTINGS_BYTES) {
+                return Result.TooLarge
+            }
+            (AppSettingsPortableCodec.parse(source.stagedFile.readText(Charsets.UTF_8)) as?
+                AppSettingsPortableCodec.Result.Ok)?.data ?: return Result.Invalid
+        }
+
         if (!requiredArtifactsAgreeWithInventory(
                 available, inventory.explicitlyEmpty, chats, generated, identities, profile,
-                memoryArtifactPresent, lorebookArtifactPresent, endpoints
+                memoryArtifactPresent, lorebookArtifactPresent, endpoints, settings
             )
         ) return Result.Invalid
 
@@ -175,12 +184,15 @@ object PortableRecoverySemanticValidator {
                 (identities?.systemPrompts?.size?.toLong() ?: 0L),
             PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS to
                 (endpoints?.let { it.endpoints.size + it.favorites.size }?.toLong() ?: 0L),
+            PortableRestoreCategory.SETTINGS to (settings?.recordCount ?: 0L),
             PortableRestoreCategory.MODEL_RULES to rowCount(modelRules),
             PortableRestoreCategory.MEMORIES to rowCount(memories),
             PortableRestoreCategory.LOREBOOKS to
                 (lorebooks?.let { it.books.size + it.entries.size + it.deletedEntries.size }?.toLong() ?: 0L)
         )
-        if (declaredRecordCounts.isNotEmpty() && declaredRecordCounts != counts) {
+        if (declaredRecordCounts.isNotEmpty() &&
+            declaredRecordCounts != counts.filterKeys(declaredRecordCounts.keys::contains)
+        ) {
             return Result.Invalid
         }
         return Result.Valid(inventory, counts)
@@ -209,7 +221,8 @@ object PortableRecoverySemanticValidator {
         profile: ProfileImagePortableRestoreManager.Prepared?,
         memoryPresent: Boolean,
         lorebooksPresent: Boolean,
-        endpoints: ModelEndpointPortableCodec.Data?
+        endpoints: ModelEndpointPortableCodec.Data?,
+        settings: AppSettingsPortableData?
     ): Boolean {
         fun present(category: PortableRestoreCategory, value: Boolean): Boolean =
             if (category in empty) !value else category !in available || value
@@ -220,7 +233,8 @@ object PortableRecoverySemanticValidator {
             present(PortableRestoreCategory.MEMORIES, memoryPresent) &&
             present(PortableRestoreCategory.MODEL_RULES, memoryPresent) &&
             present(PortableRestoreCategory.LOREBOOKS, lorebooksPresent) &&
-            present(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS, endpoints != null)
+            present(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS, endpoints != null) &&
+            present(PortableRestoreCategory.SETTINGS, settings != null)
     }
 
     private fun artifact(
@@ -282,6 +296,7 @@ object PortableRecoverySemanticValidator {
                 (artifact.type == PortablePackage.TYPE_SQLITE_DB && artifact.entryName == "user_images.db")
             PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS ->
                 artifact.type == PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS
+            PortableRestoreCategory.SETTINGS -> artifact.type == PortablePackage.TYPE_APP_SETTINGS
             PortableRestoreCategory.MODEL_RULES,
             PortableRestoreCategory.MEMORIES -> artifact.type == PortablePackage.TYPE_SQLCIPHER_DB &&
                 artifact.entryName == "memory.db"

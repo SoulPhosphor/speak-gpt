@@ -11,6 +11,7 @@ class PortableRecoveryLimitsTest {
             "chats.json" to PortablePackage.TYPE_CHATS_JSON,
             "generated_images/catalog.json" to PortablePackage.TYPE_GENERATED_IMAGES_CATALOG,
             "model_endpoint_settings.json" to PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS,
+            AppSettingsPortableCodec.ENTRY_NAME to PortablePackage.TYPE_APP_SETTINGS,
             "companion_roleplay.zip" to PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE,
             "memory.db" to PortablePackage.TYPE_SQLCIPHER_DB,
             "lorebook.db" to PortablePackage.TYPE_SQLCIPHER_DB,
@@ -34,6 +35,7 @@ class PortableRecoveryLimitsTest {
         assertTrue(PortableRecoveryLimits.CHATS_JSON_BYTES == 64L * 1024L * 1024L)
         assertTrue(PortableRecoveryLimits.GENERATED_IMAGE_CATALOG_BYTES == 32L * 1024L * 1024L)
         assertTrue(PortableRecoveryLimits.MODEL_ENDPOINT_SETTINGS_BYTES == 8L * 1024L * 1024L)
+        assertTrue(PortableRecoveryLimits.APP_SETTINGS_BYTES == 16L * 1024L * 1024L)
         assertTrue(PortableRecoveryLimits.COMPANION_ROLEPLAY_ARCHIVE_BYTES == 512L * 1024L * 1024L)
         assertTrue(PortableRecoveryLimits.DATABASE_BYTES == 512L * 1024L * 1024L)
         assertTrue(PortableRecoveryLimits.IMAGE_ASSET_BYTES == 64L * 1024L * 1024L)

@@ -189,6 +189,51 @@ class PortablePackageTest {
     }
 
     @Test
+    fun versionThreeManifestWithoutSettingsCategoryRemainsRestorable() {
+        val artifacts = buildArtifacts()
+        val declarations = PortableRestoreCategory.entries.map { category ->
+            val names = when (category) {
+                PortableRestoreCategory.CHATS -> setOf("chats.json")
+                PortableRestoreCategory.MEMORIES,
+                PortableRestoreCategory.MODEL_RULES -> setOf("memory.db")
+                else -> emptySet()
+            }
+            PortablePackage.CategoryDeclaration(
+                category,
+                if (names.isEmpty()) PortablePackage.CategoryRepresentation.EMPTY
+                else PortablePackage.CategoryRepresentation.ARTIFACTS,
+                names,
+                0L
+            )
+        }
+        val current = tmp.newFile("pre_settings_source.zip").apply { delete() }
+        PortablePackage.buildInnerZip(
+            artifacts,
+            "2026-09-19T00:00:00Z",
+            current,
+            categoryDeclarations = declarations
+        )
+        val legacy = rewriteManifest(current, "pre_settings_v3.zip") { manifest ->
+            manifest.put("manifest_version", 3)
+            val categories = manifest.getJSONArray("categories")
+            val filtered = org.json.JSONArray()
+            repeat(categories.length()) { index ->
+                val category = categories.getJSONObject(index)
+                if (category.getString("category") != PortableRestoreCategory.SETTINGS.key) {
+                    filtered.put(category)
+                }
+            }
+            manifest.put("categories", filtered)
+        }
+
+        val result = PortablePackage.validateAndExtract(legacy, tmp.newFolder())
+        assertTrue(result is PortablePackage.ValidateResult.Ok)
+        result as PortablePackage.ValidateResult.Ok
+        assertEquals(3, result.manifestVersion)
+        assertFalse(PortableRestoreCategory.SETTINGS in result.declaredCategories.orEmpty())
+    }
+
+    @Test
     fun currentManifestRejectsMissingDuplicateAndContradictoryCategoryDeclarations() {
         fun currentInner(name: String): File {
             val artifacts = buildArtifacts()

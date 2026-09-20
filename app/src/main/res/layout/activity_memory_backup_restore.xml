@@ -718,6 +718,11 @@
                 android:text="@string/restore_model_credentials_note" />
 
             <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_settings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
                 android:id="@+id/restore_category_model_rules"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />

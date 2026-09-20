@@ -1258,6 +1258,8 @@
     <string name="restore_category_model_settings">Model &amp; Endpoint Settings</string>
     <string name="restore_category_model_settings_desc">Endpoint and model definitions, favorites, model settings, and preferred provider routing. Credentials are not included.</string>
     <string name="restore_model_credentials_note">Credentials are not restored or removed. Existing credentials stay on this device. Newly restored endpoints need credentials before use.</string>
+    <string name="restore_category_settings">Settings and Preferences</string>
+    <string name="restore_category_settings_desc">Includes all settings and preferences for chat behavior, memory assistant, diagnostics, and other detailed saved preferences. Credentials and device-specific data, such as your API key, are not included.</string>
     <string name="restore_category_model_rules">Model Rules</string>
     <string name="restore_category_model_rules_desc">Model Rules, their tags, and their stable endpoint and model links.</string>
     <string name="restore_category_memories">Memories</string>

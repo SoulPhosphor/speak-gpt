@@ -55,7 +55,8 @@ import java.util.zip.ZipOutputStream
 object PortablePackage {
 
     const val MANIFEST_ENTRY = "manifest.json"
-    const val MANIFEST_VERSION = 3
+    const val MANIFEST_VERSION = 4
+    private const val PRE_SETTINGS_MANIFEST_VERSION = 3
     const val MAX_ENTRIES = 10_000
     const val MAX_ENTRY_BYTES: Long = 1L shl 30      // 1 GiB per entry
     const val MAX_TOTAL_BYTES: Long = 2L shl 30      // 2 GiB uncompressed total
@@ -72,6 +73,7 @@ object PortablePackage {
     const val TYPE_CHATS_JSON = "chats-json"
     const val TYPE_COMPANION_ROLEPLAY_ARCHIVE = "companion-roleplay-archive"
     const val TYPE_MODEL_ENDPOINT_SETTINGS = "model-endpoint-settings"
+    const val TYPE_APP_SETTINGS = "app-settings"
     const val TYPE_GENERATED_IMAGES_CATALOG = "generated-images-catalog"
     const val TYPE_GENERATED_IMAGE_ASSET = "generated-image-asset"
     const val TYPE_PROFILE_IMAGE_ASSET = "profile-image-asset"
@@ -520,6 +522,14 @@ object PortablePackage {
                             return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
                         }
                     }
+                    if (meta.optString("type", "") == TYPE_APP_SETTINGS) {
+                        if (staged.length() > PortableRecoveryLimits.APP_SETTINGS_BYTES ||
+                            AppSettingsPortableCodec.parse(staged.readText(Charsets.UTF_8))
+                                !is AppSettingsPortableCodec.Result.Ok
+                        ) {
+                            return ValidateResult.Failed(PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED)
+                        }
+                    }
                     out.add(
                         ValidatedArtifact(
                             entryName = name,
@@ -585,7 +595,15 @@ object PortablePackage {
         val version = if (manifest.has("manifest_version")) {
             manifest.optInt("manifest_version", -1)
         } else 2
-        if (version == MANIFEST_VERSION) return parseCurrentInventory(manifest, artifacts)
+        if (version == MANIFEST_VERSION) return parseExactInventory(
+            manifest, artifacts, PortableRestoreCategory.entries.toSet(), version
+        )
+        if (version == PRE_SETTINGS_MANIFEST_VERSION) return parseExactInventory(
+            manifest,
+            artifacts,
+            PortableRestoreCategory.entries.toSet() - PortableRestoreCategory.SETTINGS,
+            version
+        )
         if (version != 2 || manifest.has("categories")) return ManifestInventoryResult.Invalid
 
         val declared = if (manifest.has("restore_categories")) {
@@ -602,9 +620,11 @@ object PortablePackage {
         )
     }
 
-    private fun parseCurrentInventory(
+    private fun parseExactInventory(
         manifest: JSONObject,
-        artifacts: Map<String, JSONObject>
+        artifacts: Map<String, JSONObject>,
+        expectedCategories: Set<PortableRestoreCategory>,
+        manifestVersion: Int
     ): ManifestInventoryResult {
         if (manifest.optInt("limits_policy_version", -1) != PortableRecoveryLimits.POLICY_VERSION ||
             manifest.has("restore_categories")
@@ -652,11 +672,11 @@ object PortablePackage {
             }
             counts[category] = count
         }
-        if (declared != PortableRestoreCategory.entries.toSet() || claimedArtifacts != artifacts.keys) {
+        if (declared != expectedCategories || claimedArtifacts != artifacts.keys) {
             return ManifestInventoryResult.Invalid
         }
         return ManifestInventoryResult.Ok(
-            ManifestInventory(declared, empty, counts, MANIFEST_VERSION)
+            ManifestInventory(declared, empty, counts, manifestVersion)
         )
     }
 
@@ -692,6 +712,7 @@ object PortablePackage {
             ) && (item.optString("type") != TYPE_SQLITE_DB || name == "user_images.db")
             PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS ->
                 item.optString("type") == TYPE_MODEL_ENDPOINT_SETTINGS
+            PortableRestoreCategory.SETTINGS -> item.optString("type") == TYPE_APP_SETTINGS
             PortableRestoreCategory.MODEL_RULES,
             PortableRestoreCategory.MEMORIES -> name == "memory.db" &&
                 item.optString("type") == TYPE_SQLCIPHER_DB
@@ -721,6 +742,7 @@ object PortablePackage {
         TYPE_CHATS_JSON -> name == "chats.json"
         TYPE_COMPANION_ROLEPLAY_ARCHIVE -> name == "companion_roleplay.zip"
         TYPE_MODEL_ENDPOINT_SETTINGS -> name == "model_endpoint_settings.json"
+        TYPE_APP_SETTINGS -> name == AppSettingsPortableCodec.ENTRY_NAME
         TYPE_GENERATED_IMAGES_CATALOG -> name == "generated_images/catalog.json"
         TYPE_GENERATED_IMAGE_ASSET -> {
             val fileName = name.removePrefix("generated_images/assets/")

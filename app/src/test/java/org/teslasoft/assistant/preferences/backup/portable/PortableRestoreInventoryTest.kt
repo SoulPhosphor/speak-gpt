@@ -30,6 +30,7 @@ class PortableRestoreInventoryTest {
                 artifact("companion_roleplay.zip", PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE),
                 artifact("user_images.db", PortablePackage.TYPE_SQLITE_DB),
                 artifact("model_endpoint_settings.json", PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS),
+                artifact(AppSettingsPortableCodec.ENTRY_NAME, PortablePackage.TYPE_APP_SETTINGS),
                 artifact("memory.db", PortablePackage.TYPE_SQLCIPHER_DB),
                 artifact("lorebook.db", PortablePackage.TYPE_SQLCIPHER_DB)
             )

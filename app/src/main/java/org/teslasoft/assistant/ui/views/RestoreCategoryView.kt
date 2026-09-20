@@ -19,6 +19,7 @@ package org.teslasoft.assistant.ui.views
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.annotation.StringRes
@@ -70,6 +71,7 @@ class RestoreCategoryView @JvmOverloads constructor(
         if (!mergeSupported) mode = PortableRestoreMode.REPLACE
         check.setText(title)
         description.setText(explanation)
+        modeView.visibility = if (mergeSupported) View.VISIBLE else View.GONE
         modeView.isEnabled = check.isChecked && mergeSupported
         updateModeLabel()
         AppDropdown.sizeToOptions(modeView, modeLabels()) {

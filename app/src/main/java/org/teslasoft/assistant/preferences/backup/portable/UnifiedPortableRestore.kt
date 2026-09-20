@@ -75,6 +75,12 @@ object UnifiedPortableRestore {
         if (modes.size != request.selections.size) {
             return BuildResult.Failed(BuildFailure.DEPENDENCY_VALIDATION_FAILED)
         }
+        if (modes[PortableRestoreCategory.SETTINGS]?.let { it != PortableRestoreMode.REPLACE } == true) {
+            return BuildResult.Failed(
+                BuildFailure.DEPENDENCY_VALIDATION_FAILED,
+                PortableRestoreCategory.SETTINGS
+            )
+        }
         val parsedBackup = parseBackup(app, artifacts, request, modes)
             ?: return BuildResult.Failed(BuildFailure.MISSING_CATEGORY_ARTIFACT)
         val identitySelections = request.selections.filter { it.category in IDENTITY_CATEGORIES }
@@ -157,6 +163,9 @@ object UnifiedPortableRestore {
         planned.lorebooks?.let {
             participants.add(LorebookRestoreParticipant(app, it, File(stagingRoot, "lorebooks")))
         }
+        planned.settings?.let {
+            participants.add(AppSettingsRestoreParticipant(app, File(stagingRoot, "app_settings"), it))
+        }
         return BuildResult.Ready(participants, chatParticipant, planned.finalState)
     }
 
@@ -169,7 +178,8 @@ object UnifiedPortableRestore {
         val memories: MemoryPortableRows? = null,
         val modelRules: MemoryPortableRows? = null,
         val lorebooks: LorebookPortableData? = null,
-        val modelEndpoints: ModelEndpointPortableCodec.Data? = null
+        val modelEndpoints: ModelEndpointPortableCodec.Data? = null,
+        val settings: AppSettingsPortableData? = null
     )
 
     private data class LiveState(
@@ -184,7 +194,8 @@ object UnifiedPortableRestore {
         val memories: MemoryPortableRows? = null,
         val modelRules: MemoryPortableRows? = null,
         val lorebooks: LorebookPortableData? = null,
-        val modelEndpoints: ModelEndpointPortableCodec.Data? = null
+        val modelEndpoints: ModelEndpointPortableCodec.Data? = null,
+        val settings: AppSettingsPortableData? = null
     )
 
     private data class PlannedChat(
@@ -206,7 +217,8 @@ object UnifiedPortableRestore {
         val sharedMemory: CompanionMemoryRestoreParticipant.PreparedPlan? = null,
         val profileImages: ProfileImageRestoreParticipant.PreparedPlan? = null,
         val modelEndpoints: ModelEndpointRestoreParticipant.PreparedPlan? = null,
-        val lorebooks: LorebookRestoreParticipant.PreparedPlan? = null
+        val lorebooks: LorebookRestoreParticipant.PreparedPlan? = null,
+        val settings: AppSettingsRestoreParticipant.PreparedPlan? = null
     )
 
     private sealed interface PlanningResult {
@@ -294,6 +306,13 @@ object UnifiedPortableRestore {
             (ModelEndpointPortableCodec.parse(source.readText(Charsets.UTF_8)) as?
                 ModelEndpointPortableCodec.Result.Ok)?.data ?: return null
         } else null
+        val settings = if (PortableRestoreCategory.SETTINGS in modes) {
+            val source = artifact(artifacts, PortablePackage.TYPE_APP_SETTINGS)?.stagedFile
+                ?: return null
+            if (!source.isFile || source.length() > PortableRecoveryLimits.APP_SETTINGS_BYTES) return null
+            (AppSettingsPortableCodec.parse(source.readText(Charsets.UTF_8)) as?
+                AppSettingsPortableCodec.Result.Ok)?.data ?: return null
+        } else null
 
             ParsedBackup(
                 chats,
@@ -304,7 +323,8 @@ object UnifiedPortableRestore {
                 memories,
                 rules,
                 lorebooks,
-                endpoints
+                endpoints,
+                settings
             )
         } catch (_: Exception) {
             null
@@ -439,6 +459,14 @@ object UnifiedPortableRestore {
             current
         } else null
 
+        val settings = if (PortableRestoreCategory.SETTINGS in modes) {
+            val current = AppSettingsPortableStore.capture(context).getOrNull()
+                ?: return PortableRestoreDependencyRead.Unavailable("current app settings are unavailable")
+            generations[PortableRestoreFinalState.Source.APP_SETTINGS] =
+                Hash.hash(AppSettingsPortableCodec.encode(current))
+            current
+        } else null
+
         return PortableRestoreDependencyRead.Available(
             PortableRestoreStablePlanner.Capture(
                 LiveState(
@@ -453,7 +481,8 @@ object UnifiedPortableRestore {
                     memories,
                     rules,
                     lorebooks,
-                    endpoints
+                    endpoints,
+                    settings
                 ),
                 generations
             )
@@ -729,6 +758,14 @@ object UnifiedPortableRestore {
             )
         }
 
+        val settingsParticipant = if (PortableRestoreCategory.SETTINGS in modes) {
+            val current = live.settings
+                ?: return PlanningResult.Unavailable("current app settings are unavailable")
+            val incoming = backup.settings
+                ?: return PlanningResult.Unavailable("backup app settings are unavailable")
+            AppSettingsRestoreParticipant.PreparedPlan(current, incoming)
+        } else null
+
         val remaps = request.folderResolutions.mapNotNull { (source, resolution) ->
             (resolution as? ChatMergePlanner.FolderResolution.MergeInto)?.let {
                 source to it.currentFolderId
@@ -763,7 +800,8 @@ object UnifiedPortableRestore {
                 sharedParticipant,
                 profileParticipant,
                 endpointParticipant,
-                lorebookParticipant
+                lorebookParticipant,
+                settingsParticipant
             )
         )
     }
@@ -854,6 +892,9 @@ object UnifiedPortableRestore {
             ),
             LorebookRestoreParticipant(
                 context, emptyList(), PortableRestoreMode.MERGE, File(root, "lorebooks")
+            ),
+            AppSettingsRestoreParticipant(
+                context, File(root, "app_settings")
             )
         ).associateBy { it.categoryKey }
         val recovered = SelectedCategoryRestoreTransaction.recover(journal, participants)

@@ -58,6 +58,12 @@ class PortableRecoverySemanticValidatorTest {
                 schemaVersion = ModelEndpointPortableCodec.SCHEMA_VERSION
             ),
             artifact(
+                AppSettingsPortableCodec.ENTRY_NAME,
+                PortablePackage.TYPE_APP_SETTINGS,
+                "{}".toByteArray(),
+                schemaVersion = AppSettingsPortableCodec.SCHEMA_VERSION
+            ),
+            artifact(
                 "memory.db",
                 PortablePackage.TYPE_SQLCIPHER_DB,
                 "not-sqlcipher".toByteArray(),

@@ -268,6 +268,7 @@ object PortableRestoreOutcomeFlow {
             PortableRestoreCategory.ACTIVATION_PROMPTS -> R.string.restore_category_activation_prompts
             PortableRestoreCategory.SYSTEM_PROMPTS -> R.string.restore_category_system_prompts
             PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS -> R.string.restore_category_model_settings
+            PortableRestoreCategory.SETTINGS -> R.string.restore_category_settings
             PortableRestoreCategory.MODEL_RULES -> R.string.restore_category_model_rules
             PortableRestoreCategory.MEMORIES -> R.string.restore_category_memories
             PortableRestoreCategory.LOREBOOKS -> R.string.restore_category_lorebooks
