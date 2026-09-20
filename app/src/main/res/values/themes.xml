@@ -118,22 +118,6 @@
         <item name="layout_constraintWidth_percent">0.42</item>
     </style>
 
-    <!-- Readable shared vertical-dialog actions. Width lives in this family;
-         dialog_three_actions_cancel_first owns only the three-button order. -->
-    <style name="AppButton.Primary.DialogStacked" parent="AppButton.Primary">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="layout_constraintWidth_default">percent</item>
-        <item name="layout_constraintWidth_percent">0.72</item>
-    </style>
-
-    <style name="AppButton.Destructive.DialogStacked" parent="AppButton.Destructive">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="layout_constraintWidth_default">percent</item>
-        <item name="layout_constraintWidth_percent">0.72</item>
-    </style>
-
     <!-- Inline action button (owner ruling, July 24 2026): a primary button
          that sizes to its OWN text (wrap_content width) so a pair can sit
          side by side, each only as wide as its label — deliberately NOT equal
@@ -875,14 +859,6 @@
         <item name="android:background">@color/transparent</item>
     </style>
 
-    <!-- Phase 5 shared blank-conversation selector. Palette comes from
-         Material roles in ConversationModeSelector; geometry is centralized. -->
-    <style name="Widget.App.ConversationModeSelector" parent="">
-        <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">@dimen/conversation_mode_selector_height</item>
-        <item name="android:layout_gravity">center_horizontal</item>
-    </style>
-
     <!-- Chat composer surface: the editor and control row use the same
          theme-resolved surface as the incoming AI bubble. -->
     <style name="Widget.App.Chat.ComposerSurface" parent="">
@@ -1160,13 +1136,6 @@
         <item name="android:textColorHint">?attr/appDropdownLabelColor</item>
     </style>
 
-    <!-- One centrally themed compact anchored menu. Gallery and drawer
-         management actions use CompactActionPopup rather than screen-local
-         popup backgrounds, colors, padding, or typography. -->
-    <style name="Widget.App.CompactActionPopup" parent="">
-        <item name="android:popupBackground">?attr/colorSurfaceContainerHigh</item>
-    </style>
-
     <style name="Widget.App.Dropdown.Option" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">40dp</item>
@@ -1334,81 +1303,6 @@
         <item name="android:textSize">15sp</item>
     </style>
 
-    <style name="Widget.App.CheckOption.CheckBox" parent="Widget.Material3.CompoundButton.CheckBox">
-        <item name="android:minHeight">40dp</item>
-        <item name="android:paddingVertical">4dp</item>
-        <item name="android:textColor">?attr/appTextColor</item>
-        <item name="android:textSize">15sp</item>
-    </style>
-
-    <!-- Flat identity rows shared by the drawer and Search. They deliberately
-         have no card/tile background; hierarchy comes from type and spacing. -->
-    <style name="Widget.App.FlatChatRow" parent="">
-        <item name="android:gravity">center_vertical</item>
-        <item name="android:minHeight">56dp</item>
-        <item name="android:paddingStart">20dp</item>
-        <item name="android:paddingTop">10dp</item>
-        <item name="android:paddingEnd">20dp</item>
-        <item name="android:paddingBottom">10dp</item>
-        <item name="android:clickable">true</item>
-        <item name="android:focusable">true</item>
-        <item name="android:background">?attr/selectableItemBackground</item>
-    </style>
-
-    <style name="Widget.App.FlatChatRow.Title" parent="">
-        <item name="android:textColor">?attr/appTextColor</item>
-        <item name="android:textSize">17sp</item>
-    </style>
-
-    <!-- The drawer's fixed-bottom action row. Three equal-width text actions
-         across the full-width drawer, at the same size the single Settings
-         action always used (Widget.App.FlatChatRow.Title, 17sp) so the row
-         reads as one set. Deliberately text-only: no icons inside these
-         actions (owner ruling, Sep 2 2026). -->
-    <style name="Widget.App.DrawerBottomAction" parent="Widget.App.FlatChatRow.Title">
-        <item name="android:layout_width">0dp</item>
-        <item name="android:layout_height">match_parent</item>
-        <item name="android:layout_weight">1</item>
-        <item name="android:background">?attr/selectableItemBackground</item>
-        <item name="android:clickable">true</item>
-        <item name="android:focusable">true</item>
-        <item name="android:gravity">center</item>
-        <item name="android:maxLines">1</item>
-        <item name="android:paddingStart">4dp</item>
-        <item name="android:paddingEnd">4dp</item>
-    </style>
-
-    <style name="Widget.App.FlatChatRow.Metadata" parent="">
-        <item name="android:layout_marginTop">2dp</item>
-        <item name="android:textColor">?attr/appSubtleTextColor</item>
-        <item name="android:textSize">13sp</item>
-    </style>
-
-    <style name="Widget.App.FlatChatRow.Snippet" parent="Widget.App.FlatChatRow.Metadata">
-        <item name="android:textColor">?attr/appTextColor</item>
-        <item name="android:textSize">14sp</item>
-    </style>
-
-    <style name="Widget.App.Search.Status" parent="">
-        <item name="android:textColor">?attr/appSubtleTextColor</item>
-        <item name="android:textSize">14sp</item>
-    </style>
-
-    <style name="Widget.App.NameEntry.Layout" parent="Widget.Material3.TextInputLayout.OutlinedBox">
-        <item name="android:layout_marginStart">24dp</item>
-        <item name="android:layout_marginTop">8dp</item>
-        <item name="android:layout_marginEnd">24dp</item>
-        <item name="boxCornerRadiusTopStart">12dp</item>
-        <item name="boxCornerRadiusTopEnd">12dp</item>
-        <item name="boxCornerRadiusBottomStart">12dp</item>
-        <item name="boxCornerRadiusBottomEnd">12dp</item>
-    </style>
-
-    <style name="Widget.App.NameEntry.Field" parent="Widget.Material3.TextInputEditText.OutlinedBox">
-        <item name="android:textColor">?attr/appTextColor</item>
-        <item name="android:textSize">16sp</item>
-    </style>
-
     <style name="Widget.App.Field.Box" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
@@ -1434,11 +1328,6 @@
         <item name="android:layout_marginTop">0dp</item>
         <item name="android:layout_marginBottom">@dimen/sampling_slider_value_gap</item>
         <item name="android:minHeight">@dimen/sampling_slider_value_min_height</item>
-        <!-- Compact padding: the value never exceeds two decimals, so the box
-             should be small and tidy rather than the full-field 12dp padding
-             it inherits. -->
-        <item name="android:paddingHorizontal">@dimen/sampling_slider_value_padding_horizontal</item>
-        <item name="android:paddingVertical">@dimen/sampling_slider_value_padding_vertical</item>
         <item name="android:gravity">center</item>
         <item name="android:inputType">numberDecimal|numberSigned</item>
         <item name="android:maxLines">1</item>
@@ -1454,31 +1343,6 @@
         <item name="android:layout_marginStart">@dimen/sampling_slider_horizontal_margin</item>
         <item name="android:layout_marginEnd">@dimen/sampling_slider_horizontal_margin</item>
         <item name="labelBehavior">gone</item>
-        <!-- A cleaner, less "clunky" slider: a slim continuous track with no
-             tick marks and a right-sized thumb, themed through the palette. -->
-        <item name="tickVisible">false</item>
-        <item name="trackHeight">@dimen/sampling_slider_track_height</item>
-        <item name="thumbRadius">@dimen/sampling_slider_thumb_radius</item>
-        <item name="trackCornerRadius">@dimen/sampling_slider_track_height</item>
-        <item name="trackColorActive">?attr/colorPrimary</item>
-        <item name="trackColorInactive">?attr/colorSurfaceVariant</item>
-        <item name="thumbColor">?attr/colorPrimary</item>
-        <item name="haloColor">?attr/colorPrimary</item>
-    </style>
-
-    <!-- One parameter's card on the Model Parameters screen: a fully rounded
-         surface tinted like the Quick Settings parameter tiles, so the two
-         screens read as the same design. -->
-    <style name="Widget.App.ParameterCard" parent="">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">12dp</item>
-        <item name="android:orientation">vertical</item>
-        <item name="android:background">@drawable/btn_accent_24</item>
-        <item name="android:backgroundTint">?attr/colorSecondaryContainer</item>
-        <item name="android:paddingHorizontal">16dp</item>
-        <item name="android:paddingTop">8dp</item>
-        <item name="android:paddingBottom">16dp</item>
     </style>
 
     <!-- A small, right-sized numeric input blank (owner spec, July 23 2026 —

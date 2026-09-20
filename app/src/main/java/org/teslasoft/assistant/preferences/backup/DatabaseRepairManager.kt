@@ -56,10 +56,7 @@ object DatabaseRepairManager {
         /** Absolute path of the preserved (quarantined) damaged database, for
          *  the A6 dialog's "saved here" line. Null when quarantine failed. */
         val quarantinePath: String?,
-        val detail: String?,
-        /** Non-null only when the legacy restore path would have emitted its
-         *  post-swap failure log. Pre-mutation refusals remain unlogged. */
-        val restoreFailureLogDetail: String? = null
+        val detail: String?
     )
 
     private val SIDECAR_SUFFIXES = listOf("-wal", "-shm", "-journal")
@@ -159,6 +156,33 @@ object DatabaseRepairManager {
         }
     }
 
+    /** Put a pre-restore snapshot back after a failed swap. The preserved copy
+     *  remains in storage_recovery; rollback copies it rather than consuming
+     *  the user's safety copy. */
+    internal fun restoreQuarantinedFiles(
+        context: Context,
+        type: BackupType,
+        quarantinePath: String
+    ): Boolean = try {
+        val active = context.getDatabasePath(dbFileName(type))
+        val preserved = File(quarantinePath)
+        if (!preserved.exists()) {
+            false
+        } else {
+            deleteActiveFiles(context, type)
+            preserved.copyTo(active, overwrite = true)
+            for (suffix in SIDECAR_SUFFIXES) {
+                val preservedSidecar = File(quarantinePath + suffix)
+                if (preservedSidecar.exists()) {
+                    preservedSidecar.copyTo(File(active.path + suffix), overwrite = true)
+                }
+            }
+            true
+        }
+    } catch (_: Exception) {
+        false
+    }
+
     /**
      * Install an already-staged and verified database snapshot. This is shared
      * by same-install automatic artifacts and portable Recovery Packages.
@@ -176,36 +200,141 @@ object DatabaseRepairManager {
         sourceKey: ByteArray?,
         sourcePlaintext: Boolean = false
     ): Outcome {
-        val appContext = context.applicationContext
         require(type != BackupType.CHATS) { "chats are not a database" }
-        val outcome = DirectDatabaseRestoreCoordinator.install(
-            appContext,
-            type,
-            verifiedSnapshot,
-            sourceKey,
-            sourcePlaintext
-        )
-        if (outcome.ok) {
+        val appContext = context.applicationContext
+        val active = appContext.getDatabasePath(dbFileName(type))
+
+        // Verify again immediately before the destructive boundary.
+        try {
+            when (type) {
+                BackupType.MEMORY -> {
+                    val key = sourceKey ?: return Outcome(false, null, "backup key unavailable")
+                    RecoveryBackupManager.integrityCheckCipher(
+                        verifiedSnapshot, key, "meta"
+                    )
+                }
+                BackupType.LOREBOOK -> if (sourcePlaintext) {
+                    RecoveryBackupManager.integrityCheckPlain(
+                        verifiedSnapshot, "memory_entries"
+                    )
+                } else {
+                    val key = sourceKey ?: return Outcome(false, null, "backup key unavailable")
+                    RecoveryBackupManager.integrityCheckCipher(
+                        verifiedSnapshot, key, "memory_entries"
+                    )
+                }
+                BackupType.USER_IMAGE -> RecoveryBackupManager.integrityCheckPlain(
+                    verifiedSnapshot, "profile_images"
+                )
+                BackupType.CHATS -> Unit
+            }
+        } catch (e: Exception) {
+            return Outcome(false, null, "backup verification failed: ${e.javaClass.simpleName}")
+        }
+
+        // Close cached handles before making the safety copy. This path is
+        // also available for a healthy database, so unlike repair we cannot
+        // assume the degraded gate already stopped every ordinary store use.
+        invalidateStore(appContext, type)
+        val quarantinePath = if (active.exists()) {
+            quarantine(appContext, type, forRestore = true)
+                ?: return Outcome(false, null, "quarantine failed — restore refused")
+        } else null
+
+        val staged = File(active.parentFile, "${active.name}.restore-${SnapshotRegistry.uniqueSuffix()}.tmp")
+        val keyName = when (type) {
+            BackupType.MEMORY -> DatabaseKeys.KEY_MEMORY
+            BackupType.LOREBOOK -> DatabaseKeys.KEY_LOREBOOK
+            else -> null
+        }
+        val oldKey = keyName?.let { DatabaseKeys.readExisting(appContext, it) }
+        val keyChanged = keyName != null && sourceKey != null &&
+            (oldKey == null || !oldKey.contentEquals(sourceKey))
+        var liveFilesTouched = false
+
+        return try {
+            verifiedSnapshot.copyTo(staged, overwrite = true)
+            when (type) {
+                BackupType.MEMORY ->
+                    RecoveryBackupManager.integrityCheckCipher(staged, sourceKey, "meta")
+                BackupType.LOREBOOK -> if (sourcePlaintext) {
+                    RecoveryBackupManager.integrityCheckPlain(staged, "memory_entries")
+                } else {
+                    RecoveryBackupManager.integrityCheckCipher(
+                        staged, sourceKey, "memory_entries"
+                    )
+                }
+                BackupType.USER_IMAGE ->
+                    RecoveryBackupManager.integrityCheckPlain(staged, "profile_images")
+                BackupType.CHATS -> Unit
+            }
+
+            if (keyChanged && !DatabaseKeys.replaceExisting(appContext, keyName!!, sourceKey!!)) {
+                staged.delete()
+                return Outcome(false, quarantinePath, "could not store the restored database key")
+            }
+
+            invalidateStore(appContext, type)
+            liveFilesTouched = true
+            deleteActiveFiles(appContext, type)
+            if (!staged.renameTo(active)) {
+                staged.copyTo(active, overwrite = true)
+                staged.delete()
+            }
+
+            when (type) {
+                BackupType.MEMORY ->
+                    RecoveryBackupManager.integrityCheckCipher(active, sourceKey, "meta")
+                BackupType.LOREBOOK -> if (sourcePlaintext) {
+                    RecoveryBackupManager.integrityCheckPlain(active, "memory_entries")
+                } else {
+                    RecoveryBackupManager.integrityCheckCipher(
+                        active, sourceKey, "memory_entries"
+                    )
+                }
+                BackupType.USER_IMAGE ->
+                    RecoveryBackupManager.integrityCheckPlain(active, "profile_images")
+                BackupType.CHATS -> Unit
+            }
+
+            invalidateStore(appContext, type)
             DatabaseHealthState.clearDegraded(appContext, type, "restored from verified backup")
             DatabaseHealthState.logHealth(
                 appContext, "info",
                 "${DatabaseHealthState.displayNoun(type)} database restored from a verified backup. " +
-                    (outcome.quarantinePath?.let { "Previous database preserved at $it." }
+                    (quarantinePath?.let { "Previous database preserved at $it." }
                         ?: "No previous database file existed.")
             )
-        } else if (outcome.restoreFailureLogDetail != null) {
+            Outcome(true, quarantinePath, null)
+        } catch (e: Exception) {
+            try { if (staged.exists()) staged.delete() } catch (_: Exception) { }
+            if (keyChanged && keyName != null) {
+                if (oldKey != null) DatabaseKeys.replaceExisting(appContext, keyName, oldKey)
+                else DatabaseKeys.clearExisting(appContext, keyName)
+            }
+            val rolledBack = if (!liveFilesTouched) {
+                true
+            } else if (quarantinePath != null) {
+                restoreQuarantinedFiles(appContext, type, quarantinePath)
+            } else {
+                deleteActiveFiles(appContext, type)
+                true
+            }
+            invalidateStore(appContext, type)
             DatabaseHealthState.logHealth(
                 appContext, "error",
                 "Restore of the ${DatabaseHealthState.displayNoun(type)} database failed " +
-                    "(${outcome.restoreFailureLogDetail}). " +
-                    if (DirectDatabaseRestoreCoordinator.hasPending(appContext)) {
-                        "The previous database remains preserved but could not be put back automatically."
-                    } else {
+                    "(${e.javaClass.simpleName}). " +
+                    (if (rolledBack) {
                         "The previous database was put back and remains preserved."
-                    }
+                    } else {
+                        "The previous database remains preserved but could not be put back automatically."
+                    })
             )
+            Outcome(false, quarantinePath, e.javaClass.simpleName)
+        } finally {
+            oldKey?.fill(0)
         }
-        return outcome
     }
 
     /**
@@ -216,10 +345,7 @@ object DatabaseRepairManager {
      * On success the caller shows the `Database Repaired` dialog — a repair is
      * ALWAYS disclosed, never silent (owner ruling).
      */
-    fun attemptRepair(context: Context, type: BackupType): Outcome =
-        RecoveryOperationGate.runExclusive { attemptRepairLocked(context, type) }
-
-    private fun attemptRepairLocked(context: Context, type: BackupType): Outcome {
+    fun attemptRepair(context: Context, type: BackupType): Outcome {
         val appContext = context.applicationContext
         DatabaseHealthState.logHealth(appContext, "warning",
             "Repair of the ${DatabaseHealthState.displayNoun(type)} database attempted.")
@@ -305,19 +431,7 @@ object DatabaseRepairManager {
      * dialog — a fresh empty database is never presented as if nothing
      * happened.
      */
-    fun startFresh(
-        context: Context,
-        type: BackupType,
-        priorQuarantinePath: String?
-    ): Outcome = RecoveryOperationGate.runExclusive {
-        startFreshLocked(context, type, priorQuarantinePath)
-    }
-
-    private fun startFreshLocked(
-        context: Context,
-        type: BackupType,
-        priorQuarantinePath: String?
-    ): Outcome {
+    fun startFresh(context: Context, type: BackupType, priorQuarantinePath: String?): Outcome {
         val appContext = context.applicationContext
         val quarantinePath = priorQuarantinePath ?: quarantine(appContext, type)
             ?: return Outcome(false, null, "quarantine failed — fresh start refused")

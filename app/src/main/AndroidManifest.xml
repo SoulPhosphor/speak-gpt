@@ -120,12 +120,6 @@
         </activity>
 
         <activity
-            android:name=".ui.activities.ModelParametersActivity"
-            android:exported="false"
-            android:label="@string/model_parameters_title">
-        </activity>
-
-        <activity
             android:name=".ui.activities.ProviderFilterPanelActivity"
             android:exported="false"
             android:label="@string/provider_filters_title">
@@ -168,17 +162,6 @@
             android:name=".ui.activities.ProfileImagesActivity"
             android:exported="false"
             android:label="@string/title_profile_images" />
-
-        <activity
-            android:name=".ui.activities.ImageGalleryActivity"
-            android:exported="false"
-            android:label="@string/image_gallery_title" />
-
-        <activity
-            android:name=".ui.activities.SearchActivity"
-            android:exported="false"
-            android:label="@string/search_title"
-            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".ui.activities.ProfileImagePropertiesActivity"
@@ -398,11 +381,6 @@
             android:label="@string/title_memory_backup_restore"
             android:launchMode="singleTask">
         </activity>
-
-        <activity
-            android:name=".ui.activities.LegacyChatConverterActivity"
-            android:exported="false"
-            android:label="@string/legacy_convert_title" />
 
         <activity
             android:name=".ui.activities.RecoveryBackupActivity"
@@ -666,15 +644,6 @@
              FOREGROUND_SERVICE_DATA_SYNC permission is declared above. -->
         <service
             android:name=".service.MemoryAnalysisForegroundService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <!-- Chat restore keep-alive: runs the whole-chat-set replacement in the
-             background so it survives leaving the screen, and finishes even if
-             the app is closed (the restore journal + resumeIfPending complete an
-             interrupted swap on next launch). dataSync — background data work. -->
-        <service
-            android:name=".service.RestoreForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
     </application>

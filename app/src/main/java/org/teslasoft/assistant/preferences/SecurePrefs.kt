@@ -122,30 +122,6 @@ object SecurePrefs {
     fun isLockedName(name: String): Boolean = name in lockedThisProcess
 
     /**
-     * Drop cached handles for [names] so the next [get] re-opens them from disk
-     * (Phase 9.1 step 10). After a chat-set replacement swaps the encrypted
-     * files under these names, a handle cached in this process still points at
-     * the pre-restore bytes; evicting it is defense in depth. It is NOT a
-     * substitute for the required controlled restart — live references already
-     * handed out keep their old view until the process restarts.
-     */
-    @Synchronized
-    fun invalidateCache(names: Collection<String>) {
-        for (name in names) cache.remove(name)
-    }
-
-    /** Drop the entire in-memory handle cache and per-process lock state so a
-     *  test that reuses this process singleton reads from a fresh filesystem.
-     *  Test-only: production never wants to forget every open handle at once. */
-    @androidx.annotation.VisibleForTesting
-    @Synchronized
-    fun clearCacheForTest() {
-        cache.clear()
-        lockedThisProcess.clear()
-        loggedThisProcess.clear()
-    }
-
-    /**
      * Whether the authoritative chat list is currently LOCKED. Triggers
      * classification if the file has not been opened yet this process, so
      * activity gates can call it first thing.
@@ -250,24 +226,6 @@ object SecurePrefs {
             override fun commit(): Boolean = false
             override fun apply() {}
         }
-    }
-
-    /**
-     * Logical names of every encrypted preferences file whose name starts with
-     * [prefix]. Recovery passes need this to find a store that no index points
-     * at any more — the same directory scan [listOutageNames] already relies on.
-     */
-    fun encryptedNamesStartingWith(context: Context, prefix: String): List<String> = try {
-        val dir = File(context.applicationContext.dataDir, "shared_prefs")
-        (dir.listFiles() ?: emptyArray())
-            .map { it.name }
-            .filter { it.startsWith(ENC_PREFIX + prefix) && it.endsWith(".xml") }
-            .map { it.removePrefix(ENC_PREFIX).removeSuffix(".xml") }
-            // Snapshot/backup copies carry an extra "." suffix segment; they are
-            // preserved evidence, never a live store to act on.
-            .filter { it.isNotBlank() && !it.removePrefix(prefix).contains('.') }
-    } catch (_: Exception) {
-        emptyList()
     }
 
     private fun encryptedFileExists(context: Context, name: String): Boolean = try {

@@ -452,7 +452,7 @@
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toStartOf="@+id/btn_summary"
                 app:layout_constraintTop_toTopOf="parent"
-                app:srcCompat="@drawable/ic_report"
+                app:srcCompat="@drawable/ic_data_alert"
                 tools:visibility="visible" />
 
             <TextView
@@ -513,17 +513,6 @@
                 app:layout_constraintTop_toTopOf="parent" />
         </androidx.constraintlayout.widget.ConstraintLayout>
 
-        <org.teslasoft.assistant.ui.chat.ConversationModeSelector
-            android:id="@+id/conversation_mode_selector"
-            style="@style/Widget.App.ConversationModeSelector"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="12dp"
-            android:visibility="gone"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/action_bar"
-            tools:visibility="visible" />
-
         <!-- Database Health A2 banner (§15.2a): persistent, dismissible,
              re-shown per new chat while a database stays disabled. GONE by
              default, so the messages list sits exactly where it always did;
@@ -540,7 +529,7 @@
             android:visibility="gone"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/conversation_mode_selector"
+            app:layout_constraintTop_toBottomOf="@+id/action_bar"
             tools:visibility="visible">
 
             <TextView
@@ -573,20 +562,10 @@
             </LinearLayout>
         </LinearLayout>
 
-        <androidx.fragment.app.FragmentContainerView
-            android:id="@+id/playground_panel"
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:visibility="gone"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@+id/conversation_mode_selector" />
-
         <!-- The message viewport now ends at the live composer instead of
              extending behind it with a guessed fixed bottom padding. As the
              composer grows, or as its IME inset grows, the viewport follows. -->
-        <org.teslasoft.assistant.ui.chat.ChatTranscriptRecyclerView
+        <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/messages"
             android:layout_width="match_parent"
             android:layout_height="0dp"

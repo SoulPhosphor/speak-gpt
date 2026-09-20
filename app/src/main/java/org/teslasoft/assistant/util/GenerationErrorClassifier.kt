@@ -238,21 +238,9 @@ object GenerationErrorClassifier {
         if (status == 404 || (status == null && lower.contains("not found"))) {
             return result(GenErrorCode.S1).copy(httpStatus = status ?: 404)
         }
-        // 6. Response-shape failure / content rejection. A body arrived but the
-        // client could not read it as the expected type: either Ktor found no
-        // converter for it (NoTransformationFoundException / "expected response
-        // body of the type") or the converter parsed it and it was not a valid
-        // chat completion (Ktor's JsonConvertException wrapping kotlinx's
-        // MissingFieldException, e.g. an endpoint that answers with an error
-        // envelope or an empty body in place of the completion). Both are S2 —
-        // the response was received but could not be used. Provider-identified
-        // limits, auth, and status-coded rejections are matched above, so only a
-        // genuinely unreadable body reaches here.
+        // 6. Response-shape failure / content rejection.
         if (lower.contains("notransformationfoundexception") ||
-            lower.contains("expected response body of the type") ||
-            lower.contains("jsonconvertexception") ||
-            lower.contains("missingfieldexception") ||
-            lower.contains("required for type with serial name")
+            lower.contains("expected response body of the type")
         ) {
             return result(GenErrorCode.S2)
         }

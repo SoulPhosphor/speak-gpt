@@ -86,7 +86,6 @@ import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.util.summarizer.SummarizerController
 import org.teslasoft.assistant.util.summarizer.CondensedRegenerationLock
 import com.google.android.material.elevation.SurfaceColors
-import com.google.android.material.color.MaterialColors
 import io.noties.markwon.AbstractMarkwonPlugin
 import io.noties.markwon.core.spans.CodeBlockSpan
 import kotlinx.coroutines.Dispatchers
@@ -108,9 +107,7 @@ import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.MessageCompletionState
 import org.teslasoft.assistant.reasoning.ReasoningIndicator
 import org.teslasoft.assistant.preferences.Preferences
-import org.teslasoft.assistant.preferences.profileimages.ProfileImageShape
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
-import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageAssetResolver
 import org.teslasoft.assistant.ui.activities.ImageBrowserActivity
 import org.teslasoft.assistant.ui.chat.ChatMarkdownRenderer
 import org.teslasoft.assistant.ui.chat.ChatMessagePlacement
@@ -129,7 +126,6 @@ import java.io.File
 import java.io.InputStreamReader
 import java.util.Base64
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import androidx.core.content.edit
@@ -138,9 +134,8 @@ import org.teslasoft.assistant.util.ShareUtil.Companion.sharePlainText
 
 class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, private val selectorProjection: ArrayList<HashMap<String, Any>>, private val context: FragmentActivity, private val preferences: Preferences, private var chatId: String) : RecyclerView.Adapter<RecyclerView.ViewHolder>(), EditMessageDialogFragment.StateChangesListener {
 
-    private val generatedImageDataUrls = ConcurrentHashMap<String, String>()
+    private val generatedImageDataUrls = HashMap<String, String>()
     private var listener: OnUpdateListener? = null
-    private var searchTargetPosition = RecyclerView.NO_POSITION
     private var bulkActionMode = false
     private var manualCompactionBoundary = 0
     private var summaryRegenerationLockBoundary = 0
@@ -152,7 +147,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     // which case the row falls through to the built-in glyph.
     // [companionImageShape] is the current Default Shape to render it with.
     private var companionImageFile: File? = null
-    private var companionImageShape: String = ProfileImageShape.DEFAULT
+    private var companionImageShape: String = "flower"
     private var companionNameStyle: ChatNameStyle.Resolved? = null
 
     // The chat's current companion name, used only as the display fallback for
@@ -164,7 +159,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     // Persona's, else the Default Personal Avatar. Null only when none of those
     // is set, in which case the user bubble shows the generic person icon.
     private var userImageFile: File? = null
-    private var userImageShape: String = ProfileImageShape.DEFAULT
+    private var userImageShape: String = "flower"
 
     /** Supplies the already-resolved assistant presentation in one update.
      *  Storage and identity resolution stay in ChatActivity; rows only render. */
@@ -535,20 +530,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         this.listener = listener
     }
 
-    /** Brief, recycling-safe emphasis for an exact Search destination. */
-    fun emphasizeSearchTarget(position: Int) {
-        val previous = searchTargetPosition
-        searchTargetPosition = position
-        if (previous != RecyclerView.NO_POSITION) notifyItemChanged(previous)
-        notifyItemChanged(position)
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (searchTargetPosition == position) {
-                searchTargetPosition = RecyclerView.NO_POSITION
-                notifyItemChanged(position)
-            }
-        }, 1800L)
-    }
-
     fun setSpeakingPosition(position: Int) {
         if (position == speakingPosition) return
         val old = speakingPosition
@@ -666,7 +647,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         // speaker name as ordinary responses, so this stays hidden.
         private val bubbleName: TextView? = itemView.findViewById(R.id.bubble_name)
         private var boundGeneratedImagePath: String? = null
-        private var boundGeneratedImageKey: String? = null
         private val btnCopy: ImageButton = itemView.findViewById(R.id.btn_copy)
         private val btnEdit: ImageButton = itemView.findViewById(R.id.btn_edit)
         private val btnMore: ImageButton? = itemView.findViewById(R.id.btn_more)
@@ -800,11 +780,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             } else {
                 updatePresentation(chatMessage)
             }
-            if (position == searchTargetPosition) {
-                ui.setBackgroundColor(
-                    MaterialColors.getColor(ui, com.google.android.material.R.attr.colorSecondaryContainer)
-                )
-            }
             updatePortraitFlowGeometry()
 
             ui.setOnLongClickListener {
@@ -876,7 +851,6 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 processGeneratedImageFile(display)
             } else {
                 boundGeneratedImagePath = null
-                boundGeneratedImageKey = null
                 Glide.with(context).clear(generatedImage)
                 (debugContext as FragmentActivity).runOnUiThread {
                     applyMarkdown(display)
@@ -1485,11 +1459,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val icon: Int
             val desc: Int
             when (indicator) {
-                // Off uses the empty-bars glyph so it reads as "no signal" within
-                // the same Wi-Fi strength family, rather than the struck-through
-                // "disconnected" glyph (owner ruling, Aug 31 2026). It shares the
-                // empty-bars icon with Minimal; accessibility text still says "Off".
-                ReasoningIndicator.OFF -> { icon = R.drawable.ic_signal_wifi_0_bar; desc = R.string.reasoning_indicator_off_desc }
+                ReasoningIndicator.OFF -> { icon = R.drawable.ic_signal_wifi_off; desc = R.string.reasoning_indicator_off_desc }
                 ReasoningIndicator.MINIMAL -> { icon = R.drawable.ic_signal_wifi_0_bar; desc = R.string.reasoning_indicator_minimal_desc }
                 ReasoningIndicator.LOW -> { icon = R.drawable.ic_network_wifi_1_bar; desc = R.string.reasoning_indicator_low_desc }
                 ReasoningIndicator.MEDIUM -> { icon = R.drawable.ic_network_wifi_2_bar; desc = R.string.reasoning_indicator_medium_desc }
@@ -2841,20 +2811,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
          *  through this path — they render as Includes summary rows under
          *  the user's own message. */
         private fun processGeneratedImageFile(chatMessage: HashMap<String, Any>) {
-            val legacyHash = chatMessage["message"].toString().removePrefix("~file:")
-            val metadata = GeneratedImageMetadata.fromJson(
-                chatMessage[GeneratedImageMetadata.KEY]?.toString()
-            )
-            val bindingKey = metadata?.imageId?.takeIf { it.isNotBlank() }
-                ?: "legacy:$legacyHash"
-            boundGeneratedImageKey = bindingKey
-            boundGeneratedImagePath = null
+            val path = chatMessage["message"].toString().removePrefix("~file:")
 
             imageFrame.visibility = View.VISIBLE
             generatedImage.visibility = View.INVISIBLE
             generatedImageLoading.visibility = View.VISIBLE
             generatedImageError.visibility = View.GONE
-            generatedImageError.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
             btnImagePrompt.visibility = View.VISIBLE
             btnImageDownload.visibility = View.GONE
             btnImageShare.visibility = View.GONE
@@ -2863,42 +2825,49 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             generatedImage.setOnLongClickListener(null)
             btnImagePrompt.setOnClickListener { showGeneratedImagePrompt(chatMessage) }
 
-            // Catalog lookup, file IO and Base64 encoding all stay off main.
-            context.lifecycleScope.launch(Dispatchers.IO) {
-                val resolved = try {
-                    GeneratedImageAssetResolver.resolve(context, metadata, legacyHash)
-                } catch (_: Exception) {
-                    GeneratedImageAssetResolver.Result.Missing(explicitlyDeleted = false)
-                }
-                when (resolved) {
-                    is GeneratedImageAssetResolver.Result.Available -> {
-                        val fullPath = resolved.file.absolutePath
-                        val cached = generatedImageDataUrls[fullPath]
-                        val dataUrl = cached ?: try {
-                            "data:${resolved.mimeType};base64," +
-                                Base64.getEncoder().encodeToString(resolved.file.readBytes())
+            try {
+                // Rebuilt generated images store their REAL detected type
+                // (image-generation-rebuild-plan.md §4.5), while legacy
+                // markers are always .png files. Resolve the marker against
+                // the supported types, falling back to the legacy name.
+                val imagesDir = context.getExternalFilesDir("images")?.absolutePath
+                val stored = org.teslasoft.assistant.imagegen.ImageFormat.entries
+                    .map { format -> format to File("$imagesDir/$path.${format.fileExtension}") }
+                    .firstOrNull { it.second.exists() }
+                val mimeType = stored?.first?.mimeType ?: "image/png"
+                val fullPath = stored?.second?.absolutePath ?: "$imagesDir/$path.png"
+                boundGeneratedImagePath = fullPath
+
+                val cached = generatedImageDataUrls[fullPath]
+                if (cached == null) {
+                    // A generated image may be tens of megabytes. Encode off
+                    // the UI thread so the Loading Image state can actually
+                    // animate instead of the row appearing frozen.
+                    context.lifecycleScope.launch(Dispatchers.IO) {
+                        val dataUrl = try {
+                            val bytes = File(fullPath).readBytes()
+                            "data:$mimeType;base64," +
+                                Base64.getEncoder().encodeToString(bytes)
                         } catch (_: Exception) {
                             null
                         }
                         withContext(Dispatchers.Main) {
-                            if (boundGeneratedImageKey != bindingKey) return@withContext
-                            boundGeneratedImagePath = fullPath
+                            if (boundGeneratedImagePath != fullPath) return@withContext
                             if (dataUrl == null) {
                                 showGeneratedImageLoadFailure()
                                 return@withContext
                             }
                             generatedImageDataUrls[fullPath] = dataUrl
                             loadImage(dataUrl)
-                            updateImageActions(dataUrl, resolved.mimeType)
+                            updateImageActions(dataUrl, mimeType)
                         }
                     }
-                    is GeneratedImageAssetResolver.Result.Missing -> withContext(Dispatchers.Main) {
-                        if (boundGeneratedImageKey == bindingKey) showGeneratedImageMissing()
-                    }
-                    is GeneratedImageAssetResolver.Result.CatalogUnavailable -> withContext(Dispatchers.Main) {
-                        if (boundGeneratedImageKey == bindingKey) showGeneratedImageMissing()
-                    }
+                } else {
+                    loadImage(cached)
+                    updateImageActions(cached, mimeType)
                 }
+            } catch (_: Exception) {
+                showGeneratedImageLoadFailure()
             }
         }
 
@@ -2978,35 +2947,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private fun showGeneratedImageLoadFailure() {
             generatedImageLoading.visibility = View.GONE
             generatedImage.visibility = View.INVISIBLE
-            generatedImageError.text = context.getString(R.string.image_gen_load_failed)
-            generatedImageError.contentDescription = context.getString(R.string.image_gen_load_failed)
-            generatedImageError.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0)
             generatedImageError.visibility = View.VISIBLE
             btnImageDownload.visibility = View.GONE
             btnImageShare.visibility = View.GONE
             btnImageCopy.visibility = View.GONE
-        }
-
-        private fun showGeneratedImageMissing() {
-            generatedImageLoading.visibility = View.GONE
-            generatedImage.visibility = View.INVISIBLE
-            generatedImageError.setText(R.string.image_gen_no_longer_available)
-            generatedImageError.contentDescription =
-                context.getString(R.string.image_gen_no_longer_available)
-            generatedImageError.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                0,
-                R.drawable.ic_cancel,
-                0,
-                0
-            )
-            generatedImageError.compoundDrawablePadding =
-                (8 * context.resources.displayMetrics.density).toInt()
-            generatedImageError.visibility = View.VISIBLE
-            btnImageDownload.visibility = View.GONE
-            btnImageShare.visibility = View.GONE
-            btnImageCopy.visibility = View.GONE
-            generatedImage.setOnClickListener(null)
-            generatedImage.setOnLongClickListener(null)
         }
 
         /**

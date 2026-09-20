@@ -25,7 +25,6 @@ import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.CorruptionErrorHandlers
 import org.teslasoft.assistant.preferences.backup.DatabaseDegradedException
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
-import org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreCoordinator
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.FavoriteModelsPreferences
 import org.teslasoft.assistant.preferences.Preferences
@@ -142,12 +141,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         private var libraryLoaded = false
 
         fun getInstance(context: Context): MemoryStore {
-            if (DirectDatabaseRestoreCoordinator.blocksStore(
-                    context.applicationContext, BackupType.MEMORY
-                )
-            ) {
-                throw IllegalStateException("Memory store recovery is still pending")
-            }
             // Degraded gate (Database Health Build Phase 3, §15.2a): once
             // damage is CONFIRMED the store is genuinely OFF — reads and
             // writes both — until a repair/restore succeeds, because reading
@@ -156,9 +149,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             // stops being handed out the moment the flag is set. Same failure
             // envelope as the locked-key IllegalStateException below, so
             // every existing best-effort call site degrades identically.
-            if (DatabaseHealthState.isDegraded(context.applicationContext, BackupType.MEMORY) &&
-                !DirectDatabaseRestoreCoordinator.allowsRecoveryOpen(BackupType.MEMORY)
-            ) {
+            if (DatabaseHealthState.isDegraded(context.applicationContext, BackupType.MEMORY)) {
                 throw DatabaseDegradedException(BackupType.MEMORY)
             }
             return instance ?: synchronized(this) {
@@ -5714,19 +5705,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
-    /** Commit ONLY the image for an existing user-side Roleplay Character,
-     *  by its stable id. This mirrors My Persona's immediate-save image path:
-     *  choosing a picture cannot accidentally commit other unsaved card
-     *  fields, and a blank hash clears only image_ref. */
-    fun setRoleplayCharacterImageRef(id: String, imageRef: String?) {
-        writableDatabase.update(
-            "roleplay_characters", ContentValues().apply {
-                put("image_ref", imageRef?.ifEmpty { null })
-            },
-            "roleplay_character_id = ?", arrayOf(id)
-        )
-    }
-
     fun setRoleplayCharacterStatus(id: String, status: String) {
         writableDatabase.update(
             "roleplay_characters", ContentValues().apply { put("status", status) },
@@ -7777,41 +7755,6 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
         }
         return out
     }
-
-    /** Exact logical rows for the independently selectable Memories and Model
-     * Rules portable categories. Derived/temporary tables are intentionally
-     * outside these user-data snapshots. */
-    fun exportPortableRows(group: MemoryPortableGroup): MemoryPortableRows =
-        MemoryPortableRowFormat.read(readableDatabase, group)
-
-    /** One consistent snapshot for the shared portable-restore participant. */
-    fun exportSharedRestoreRows(): MemorySharedRestoreRows {
-        val db = readableDatabase
-        db.beginTransaction()
-        return try {
-            val rows = MemorySharedRestoreRowFormat.read(db)
-            db.setTransactionSuccessful()
-            rows
-        } finally {
-            db.endTransaction()
-        }
-    }
-
-    /** Category-scoped exact replacement below the outer restore journal.
-     * This never clears Companion/Roleplay rows while restoring Memories, and
-     * never clears Memories while restoring Model Rules. */
-    fun replacePortableRows(group: MemoryPortableGroup, rows: MemoryPortableRows): Boolean =
-        MemoryPortableRowFormat.replace(writableDatabase, group, rows)
-
-    /**
-     * The only physical write used by unified portable restore. Apply and
-     * rollback both pass their exact staged row set through this same
-     * SQLCipher transaction and foreign-key validation boundary.
-     */
-    fun replaceSharedRestoreRows(
-        rows: MemorySharedRestoreRows,
-        affectedTables: Set<String>
-    ): Boolean = MemorySharedRestoreRowFormat.replace(writableDatabase, rows, affectedTables)
 
     /**
      * The §6.3 step-2 replace: delete the existing §2.4 record sets, insert

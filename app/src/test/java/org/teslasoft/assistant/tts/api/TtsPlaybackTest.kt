@@ -16,7 +16,6 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.ConscryptMode
 import org.robolectric.annotation.LooperMode
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
-import org.teslasoft.assistant.preferences.ModelEndpointStateGenerationStore
 import org.teslasoft.assistant.preferences.tts.SavedTtsSource
 import org.teslasoft.assistant.preferences.tts.TtsRoutingSettings
 import java.io.File
@@ -113,21 +112,6 @@ class TtsPlaybackTest {
         val player = players.single()
         val queued = player.prepared!!
         context.getSharedPreferences("api_endpoint", Context.MODE_PRIVATE).edit().putString("ep_host", "changed").commit()
-        queued.onPrepared(player)
-        Shadows.shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(0, starts)
-        assertTrue(player.released)
-        assertFalse(File(player.path).exists())
-    }
-
-    @Test fun endpointGenerationSwitchCancelsQueuedPlayback() {
-        val playback = playback()
-        start(playback)
-        val player = players.single()
-        val queued = player.prepared!!
-        context.getSharedPreferences("api_endpoint", Context.MODE_PRIVATE).edit()
-            .putString(ModelEndpointStateGenerationStore.ACTIVE_GENERATION_KEY, "new-generation")
-            .commit()
         queued.onPrepared(player)
         Shadows.shadowOf(Looper.getMainLooper()).idle()
         assertEquals(0, starts)

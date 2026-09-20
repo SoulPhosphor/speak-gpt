@@ -170,10 +170,6 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.teslasoft.assistant.R
-import org.teslasoft.assistant.conversation.ConversationMode
-import org.teslasoft.assistant.conversation.CompanionSelectionPolicy
-import org.teslasoft.assistant.conversation.NewConversationCoordinator
-import org.teslasoft.assistant.conversation.PendingConversationState
 import org.teslasoft.assistant.preferences.ApiEndpointPreferences
 import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.ActivationPromptPreferences
@@ -212,9 +208,7 @@ import org.teslasoft.assistant.preferences.includes.PersistentIncludeContext
 import org.teslasoft.assistant.preferences.includes.SummarizerSafeIncludeProjectionBuilder
 import org.teslasoft.assistant.preferences.includes.StableAttachmentReference
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatFormats
-import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
-import org.teslasoft.assistant.preferences.chatsearch.SearchTargetResolver
-import org.teslasoft.assistant.ui.util.ChatDeletionRequestCoordinator
+import org.teslasoft.assistant.ui.util.ChatDeleteDialog
 import org.teslasoft.assistant.ui.util.ChatExportDialog
 import org.teslasoft.assistant.ui.util.EditChatTitleDialog
 import org.teslasoft.assistant.ui.util.IncludeEditDialog
@@ -242,10 +236,6 @@ import org.teslasoft.assistant.stt.LocalWhisperStorage
 import org.teslasoft.assistant.service.GenerationForegroundService
 import org.teslasoft.assistant.service.HandsFreeService
 import org.teslasoft.assistant.theme.ThemeManager
-import org.teslasoft.assistant.ui.DatabaseRecoveryFlows
-import org.teslasoft.assistant.ui.PortableRestoreOutcomeFlow
-import org.teslasoft.assistant.ui.PortableRestoreRecoveryFlow
-import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
 import org.teslasoft.assistant.ui.adapters.chat.ChatAdapter
 import org.teslasoft.assistant.usage.ConversationUsageSummary
 import org.teslasoft.assistant.usage.ProviderUsageAttempt
@@ -264,15 +254,11 @@ import org.teslasoft.assistant.ui.chat.ChatExportMessage
 import org.teslasoft.assistant.ui.chat.ChatExportOptions
 import org.teslasoft.assistant.ui.chat.ChatExportPdfWriter
 import org.teslasoft.assistant.ui.chat.ChatImeInsetLayout
-import org.teslasoft.assistant.ui.chat.ChatTranscriptRecyclerView
 import org.teslasoft.assistant.ui.chat.StreamingBubbleScrollPolicy
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.chat.ChatSpeakerNames
-import org.teslasoft.assistant.ui.chat.ConversationModeSelector
-import org.teslasoft.assistant.ui.drawer.ChatDrawerController
 import org.teslasoft.assistant.ui.fragments.dialogs.EditApiEndpointDialogFragment
 import org.teslasoft.assistant.ui.fragments.dialogs.QuickSettingsBottomSheetDialogFragment
-import org.teslasoft.assistant.ui.fragments.tabs.PlaygroundFragment
 import org.teslasoft.assistant.ui.onboarding.WelcomeActivity
 import org.teslasoft.assistant.ui.permission.CameraPermissionActivity
 import org.teslasoft.assistant.ui.permission.MicrophonePermissionActivity
@@ -345,30 +331,9 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 
 class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
-    ImageGenerationJobRegistry.Listener, PlaygroundFragment.PendingCommitHost {
+    ImageGenerationJobRegistry.Listener {
 
     companion object {
-        /** Replace the current app task with exactly one conversation screen. */
-        fun rootIntent(
-            context: Context,
-            chatId: String,
-            chatName: String,
-            pendingConversation: Boolean = false
-        ): Intent = Intent(context, ChatActivity::class.java)
-            .setAction(Intent.ACTION_VIEW)
-            .putExtra("chatId", chatId)
-            .putExtra("name", chatName)
-            .putExtra("pendingConversation", pendingConversation)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-
-        /** How long a manual dictation turn waits for the recogniser's final
-         *  fragment after the user taps stop, before delivering what it has. */
-        private const val DICTATION_FINAL_RESULT_GRACE_MS = 1500L
-
-        /** Gap before reopening the mic mid-dictation, matching the hands-free
-         *  reopen so the recogniser has released the previous session. */
-        private const val DICTATION_REOPEN_DELAY_MS = 80L
-
         // Broadcast action posted by the keep-alive notifications' "Hang Up"
         // action and handled by the live ChatActivity. Package-scoped and
         // non-exported; see hangUpReceiver.
@@ -443,23 +408,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private var btnSettings: ImageButton? = null
     private var btnChatMenu: ImageButton? = null
     private var progress: CircularProgressIndicator? = null
-    private var chat: ChatTranscriptRecyclerView? = null
+    private var chat: RecyclerView? = null
     private var activityTitle: TextView? = null
     private var btnQuickSettings: ImageButton? = null
     private var fileContents: ByteArray? = null
     private var pendingChatExportBytes: ByteArray? = null
     private var actionBar: ConstraintLayout? = null
     private var btnBack: ImageButton? = null
-    private var conversationModeSelector: ConversationModeSelector? = null
-    private var drawerController: ChatDrawerController? = null
-    private var playgroundPanel: View? = null
-    private var conversationMode: ConversationMode = ConversationMode.CHAT
-    private var pendingConversation = false
-
-    /** True while this screen is being replaced by a fresh copy of itself after
-     *  a Quick Settings change. The replacement owns the same conversation, so
-     *  this finish must not treat it as an abandoned provisional chat. */
-    private var recreatingForSettings = false
 
     // Conversation summarizer (conversation-summary-plan.md decisions 11 +
     // 16): data_alert first in the icon row (with the 1–5 count badge),
@@ -602,7 +557,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     // Init states
     private var isRecording = false
-    private var transcriptionInProgress = false
     private var keyboardMode = false
     private var isTTSInitialized = false
     private var autoLangDetect = false
@@ -650,14 +604,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val apiEndpointPreferences: ApiEndpointPreferences,
         val logitBiasPreferences: LogitBiasPreferences,
         val apiEndpointObject: ApiEndpointObject,
-        val historyResult: ChatPreferences.ChatHistoryResult,
-        val pendingConversation: Boolean,
-        val conversationMode: ConversationMode
+        val historyResult: ChatPreferences.ChatHistoryResult
     )
 
     private data class ChatStartupResult(
         val storageLocked: Boolean,
-        val restoreRecoveryRequired: Boolean = false,
         val preparedChat: PreparedChatStartup? = null
     )
 
@@ -720,16 +671,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // silence window.
     private var handsFreeBuffer: String = ""
     private var handsFreeSubmitRunnable: Runnable? = null
-
-    // Manual (single-turn) Google dictation. The OS recogniser ends its own
-    // session after a short pause, which is why one press used to come back
-    // after a single word. A manual dictation turn now buffers each fragment
-    // and reopens the mic, so the turn ends when the USER taps the mic again —
-    // the same press-to-start/press-to-stop control the Whisper button has.
-    // Hands-free is untouched: it keeps ending turns on its own configured
-    // Silence Wait timer.
-    private var dictationBuffer: String = ""
-    private var dictationStopRequested = false
 
     // Monotonic token guarding the readback→listen handoff. The mic can be
     // re-armed by either the TTS completion callback or the playback-state
@@ -892,25 +833,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         btnSend?.visibility = if (visible) View.INVISIBLE else View.VISIBLE
     }
 
-    /**
-     * Blocks new mic/send work without disabling whichever control currently
-     * owns Stop. Android does not dispatch click or touch listeners to a
-     * disabled View, so a visible red stop control must remain enabled even
-     * while generation cleanup or the hidden auto-title request is still busy.
-     */
-    private fun disableTurnControlsUnlessTheyAreStops() {
-        btnMicro?.isEnabled = transcriptionInProgress ||
-            (readbackKeepAliveActive && !isHandsFreeEngaged())
-        btnSend?.isEnabled = isHandsFreeEngaged()
-    }
-
     private fun restoreUIState() {
         runOnUiThread {
             setGenerationProgressVisible(false)
             btnMicro?.isEnabled = true
             btnSend?.isEnabled = true
             isRecording = false
-            transcriptionInProgress = false
             // If a plain read-aloud is now playing (non-hands-free), keep the mic
             // as a STOP control rather than resetting it to idle — this runs in the
             // generateResponse finally right after pronounce() started the readback.
@@ -1011,19 +939,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         messageInput?.hint = getString(R.string.hint_listening)
     }
 
-    /** Keep the mic as an enabled, visible Stop while speech becomes text. */
-    private fun micTranscribing() {
-        btnMicro?.apply {
-            isEnabled = true
-            visibility = View.VISIBLE
-            setImageResource(R.drawable.ic_stop_recording)
-            background = null
-            setColorFilter(ResourcesCompat.getColor(resources, R.color.hands_free_active_red, theme))
-            backgroundTintList = null
-        }
-        messageInput?.hint = getString(R.string.hint_transcribing)
-    }
-
     /**
      * The mic button turned into a STOP control while a plain (non-hands-free)
      * read-aloud is playing — the auto read-after-reply OR a manual speaker-button
@@ -1034,7 +949,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun micReadbackStop() {
         btnMicro?.apply {
-            isEnabled = true
             visibility = View.VISIBLE
             setImageResource(R.drawable.ic_stop_recording)
             background = null
@@ -1060,7 +974,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      */
     private fun micHandsFreeActive(listening: Boolean) {
         btnSend?.apply {
-            isEnabled = true
             setImageResource(R.drawable.ic_stop_recording)
             setBackgroundResource(R.drawable.btn_accent_tonal_v5)
             setColorFilter(ResourcesCompat.getColor(resources, R.color.white, theme))
@@ -1169,9 +1082,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         override fun onEndOfSpeech() {
             // In hands-free mode the loop manages the recording state itself.
             if (preferences?.getHandsFreeMode() == true && !handsFreeStopped) return
-            // A manual dictation turn is ended by the user, not by the OS
-            // recogniser deciding you paused. Keep the mic open.
-            if (isRecording && !dictationStopRequested) return
             isRecording = false
             micIdle()
         }
@@ -1214,21 +1124,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 stopHandsFreeLoop("recognizer error $error (after ${handsFreeTurnRetries} rebuild retries)", notify = true)
                 return
             }
-            if (dictationStopRequested) {
-                // The stop tap flushed an empty final session; deliver what was
-                // already buffered rather than discarding the turn.
-                finishDictationTurn()
-                return
-            }
-            // A pause the recogniser reported as "no match"/"timeout" is not the
-            // end of a manual turn. Reopen and keep listening.
-            val pauseDuringDictation = isRecording &&
-                (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
-            if (pauseDuringDictation) {
-                restartDictation()
-                return
-            }
-            dictationBuffer = ""
             isRecording = false
             micIdle()
         }
@@ -1241,8 +1136,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 btnSend?.isEnabled = true
                 setGenerationProgressVisible(false)
                 isRecording = false
-                dictationBuffer = ""
-                dictationStopRequested = false
                 micIdle()
                 return
             }
@@ -1289,50 +1182,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 return
             }
 
-            if (recognizedText.isNotEmpty()) {
-                dictationBuffer = if (dictationBuffer.isEmpty()) recognizedText
-                                  else "$dictationBuffer $recognizedText"
-            }
-            if (dictationStopRequested) {
-                finishDictationTurn()
-                return
-            }
-            if (isRecording) {
-                // Mid-turn fragment: keep the mic open for the rest of what the
-                // user is saying instead of submitting this piece on its own.
-                restartDictation()
-                return
-            }
             isRecording = false
             micIdle()
-            val dictated = dictationBuffer.trim()
-            dictationBuffer = ""
-            if (dictated.isNotEmpty()) submitRecognizedText(dictated)
+            if (recognizedText.isNotEmpty()) submitRecognizedText(recognizedText)
         }
-    }
-
-    /** Reopen the recogniser for the rest of a manual dictation turn. */
-    private fun restartDictation() {
-        if (isFinishing || isDestroyed || cancelState || !isRecording) return
-        handsFreeHandler.postDelayed({
-            if (!isFinishing && !isDestroyed && isRecording && !cancelState &&
-                !dictationStopRequested && preferences?.getHandsFreeMode() != true
-            ) {
-                startRecognition(false)
-            }
-        }, DICTATION_REOPEN_DELAY_MS)
-    }
-
-    /** Deliver a manual dictation turn the user ended with a second mic tap. */
-    private fun finishDictationTurn() {
-        if (!dictationStopRequested) return
-        dictationStopRequested = false
-        val dictated = dictationBuffer.trim()
-        dictationBuffer = ""
-        isRecording = false
-        micIdle()
-        setGenerationProgressVisible(false)
-        if (dictated.isNotEmpty()) submitRecognizedText(dictated)
     }
 
     /** §5 spoken approval, the deny-and-continue case: the utterance waits
@@ -1441,20 +1294,38 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             return
         }
 
-        // Voice/hands-free crosses the same prepared-turn and durable first
-        // commit boundary as a typed send. The recognized words remain in the
-        // composer if storage refuses that commit; no request starts early.
-        messageInput?.setText(recognizedText)
-        messageInput?.setSelection(recognizedText.length)
-        prepareTypedTurn(recognizedText)
+        putMessage(prefix + recognizedText + endSeparator, false)
+
+        chatMessages.add(
+            ChatMessage(
+                role = ChatRole.User,
+                content = prefix + recognizedText + endSeparator
+            )
+        )
+
+        saveSettings()
+
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
+        setGenerationProgressVisible(true)
+
+        onSpeechResultsScope = CoroutineScope(Dispatchers.Main)
+        onSpeechResultsScope?.launch {
+            progress?.setOnClickListener {
+                cancel()
+                restoreUIState()
+            }
+
+            try {
+                generateResponse(prefix + recognizedText + endSeparator, true)
+            } catch (_: CancellationException) {
+                restoreUIState()
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
-
-        if (PortableRestoreRecoveryFlow.showIfPending(this)) return
-        if (PortableRestoreProcessGate.blocksCurrentProcess(this)) return
-        if (chatStartupComplete && PortableRestoreOutcomeFlow.showIfPending(this)) return
 
         preloadAmoled()
         reloadAmoled()
@@ -1538,7 +1409,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // (an editor, Profile Image settings). Re-resolve both sides, display-only.
         refreshCompanionAvatar()
         refreshUserAvatar()
-        drawerController?.refresh()
     }
 
     /** Force the chat's top action bar and its buttons back to fully visible. */
@@ -2375,16 +2245,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 val startupResult = startupAttempt.getOrElse { throw it }
 
-                if (startupResult.restoreRecoveryRequired) {
-                    startActivity(
-                        Intent(this, MemoryBackupRestoreActivity::class.java)
-                            .setAction(Intent.ACTION_VIEW)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    )
-                    finish()
-                    return@runOnUiThread
-                }
-
                 if (startupResult.storageLocked) {
                     startActivity(Intent(this, ChatStorageLockedActivity::class.java).setAction(Intent.ACTION_VIEW))
                     finish()
@@ -2401,9 +2261,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * Keystore outage can never masquerade as an empty API key or empty chat.
      */
     private fun prepareChatStartup(): ChatStartupResult {
-        if (!PortableRestoreProcessGate.awaitStartupRecovery()) {
-            return ChatStartupResult(storageLocked = false, restoreRecoveryRequired = true)
-        }
         if (SecurePrefs.isChatStorageLocked(this)) {
             return ChatStartupResult(storageLocked = true)
         }
@@ -2423,21 +2280,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         )
         val chatPreferences = ChatPreferences.getChatPreferences()
         val historyResult = chatPreferences.getChatByIdResult(this, preparedChatId)
-        val coordinator = NewConversationCoordinator(this)
-        var preparedPending = intent.getBooleanExtra("pendingConversation", false) ||
-            coordinator.isPending(preparedChatId)
-        val preparedMode = coordinator.readMode(preparedChatId)
-        // If the process died after the first payload/settings commit but
-        // before (or immediately after) the chat-list commit, finish the
-        // journal idempotently. Never append or dispatch the turn again.
-        if (preparedPending && coordinator.hasCommitJournal(preparedChatId) &&
-            historyResult.messages.isNotEmpty()
-        ) {
-            preparedPending = !coordinator.commitPendingConversation(
-                PendingConversationState(preparedChatId, preparedChatName, preparedMode),
-                historyResult.messages
-            ).succeeded
-        }
         if (ChatStorageHealth.isAuthoritative(historyResult.state) &&
             LegacyReasoningRepair.repairHistory(historyResult.messages)
         ) {
@@ -2462,9 +2304,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 preparedEndpointPreferences,
                 preparedLogitBiasPreferences,
                 preparedEndpoint,
-                historyResult,
-                preparedPending,
-                preparedMode
+                historyResult
             )
         )
     }
@@ -2477,8 +2317,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         apiEndpointPreferences = prepared.apiEndpointPreferences
         logitBiasPreferences = prepared.logitBiasPreferences
         apiEndpointObject = prepared.apiEndpointObject
-        pendingConversation = prepared.pendingConversation
-        conversationMode = prepared.conversationMode
         title = chatName
 
         // Hands-free is a live, per-session control started from the conversation
@@ -2494,9 +2332,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
                 OnBackInvokedDispatcher.PRIORITY_DEFAULT
             ) {
-                if (drawerController?.isOpen() == true) {
-                    drawerController?.close()
-                } else if (includeStripController?.collapseIfExpanded() == true) {
+                if (includeStripController?.collapseIfExpanded() == true) {
                     // The expanded Includes overlay consumes Back first.
                 } else if (bulkSelectionMode) {
                     deselectAll()
@@ -2507,9 +2343,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } else {
             onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
-                    if (drawerController?.isOpen() == true) {
-                        drawerController?.close()
-                    } else if (includeStripController?.collapseIfExpanded() == true) {
+                    if (includeStripController?.collapseIfExpanded() == true) {
                         // The expanded Includes overlay consumes Back first.
                     } else if (bulkSelectionMode) {
                         deselectAll()
@@ -2521,10 +2355,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         setContentView(R.layout.activity_chat)
-        drawerController = ChatDrawerController.install(
-            this,
-            findViewById(R.id.expandable_window_root)
-        ) { chatId }
 
         // Listen for the notification "Hang Up" action. Registered for the life of
         // the activity (not just the foreground window) so it still fires while the
@@ -2574,11 +2404,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         chatStartupComplete = true
-        if (!PortableRestoreRecoveryFlow.showIfPending(this)) {
-            if (!PortableRestoreOutcomeFlow.showIfPending(this)) {
-                DatabaseRecoveryFlows.showPendingNoticeIfAny(this)
-            }
-        }
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -2658,7 +2483,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     public override fun onDestroy() {
-        PortableRestoreOutcomeFlow.onActivityDestroyed(this)
         // Tombstone for the event log: when the OS (or a navigation flow)
         // destroys this screen while a voice conversation is live, everything
         // below silently kills the readback and the loop. Without this line
@@ -2767,12 +2591,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         imageImportScopes.clear()
 
-        if (isFinishing && pendingConversation && chatId.isNotBlank() && !recreatingForSettings) {
-            // Only a conversation that is genuinely empty is discarded here;
-            // the coordinator finishes the first commit for one that holds
-            // turns rather than deleting it.
-            NewConversationCoordinator(this).abandonPendingConversation(chatId, chatName)
-        }
         super.onDestroy()
     }
 
@@ -2981,7 +2799,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         keyboardInput?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             scheduleComposerHeightUpdate()
         }
-        chat?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+        chat?.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (bottom - top != oldBottom - oldTop) restoreTranscriptAnchorAfterResize()
             scheduleComposerHeightUpdate()
         }
         composerSurface?.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
@@ -3045,7 +2864,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             healthBannerDismissed = true
             healthBanner?.visibility = View.GONE
         }
-        initializeConversationModeUi()
 
         val radius = resources.getDimension(R.dimen.chat_action_menu_blur_radius)
         val decorView = window.decorView
@@ -3140,8 +2958,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )!!, this
         )
 
-        btnBack?.contentDescription = getString(R.string.drawer_open)
-        btnBack?.setOnClickListener { drawerController?.open() }
+        btnBack?.setOnClickListener {
+            finishActivity()
+        }
 
         activityTitle?.setOnClickListener {
             // While a chat is still waiting on its AI-generated name, chatName
@@ -3174,7 +2993,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // any refresh requested before this adapter was attached.
         onAvatarTargetReady()
 
-        chat?.post { positionInitialTranscript() }
+        chat?.post {
+            chat?.scrollToPosition(adapter?.itemCount!! - 1)
+        }
 
         chat?.setOnTouchListener { _, event -> run {
             if (event.action == MotionEvent.ACTION_DOWN ||
@@ -3204,34 +3025,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 override fun onAnimationRepeat(animation: Animation) { /* UNUSED */ }
             })
         }, 50)
-    }
-
-    private fun positionInitialTranscript() {
-        val hasTarget = intent.hasExtra(SearchTargetResolver.EXTRA_MESSAGE_ID) ||
-            intent.hasExtra(SearchTargetResolver.EXTRA_LEGACY_ORDINAL)
-        if (!hasTarget) {
-            chat?.scrollToTranscriptEnd()
-            return
-        }
-        val ordinal = if (intent.hasExtra(SearchTargetResolver.EXTRA_LEGACY_ORDINAL)) {
-            intent.getIntExtra(SearchTargetResolver.EXTRA_LEGACY_ORDINAL, -1).takeIf { it >= 0 }
-        } else null
-        val target = SearchTargetResolver.resolve(
-            messages = messages,
-            messageId = intent.getStringExtra(SearchTargetResolver.EXTRA_MESSAGE_ID),
-            legacyOrdinal = ordinal,
-            legacyRole = intent.getStringExtra(SearchTargetResolver.EXTRA_LEGACY_ROLE),
-            fingerprint = intent.getStringExtra(SearchTargetResolver.EXTRA_FINGERPRINT)
-        )
-        if (target == null) {
-            chat?.scrollToTranscriptEnd()
-            return
-        }
-        (chat?.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
-            target,
-            (chat?.height ?: 0) / 4
-        ) ?: chat?.scrollToPosition(target)
-        adapter?.emphasizeSearchTarget(target)
     }
 
     private val itemTouchCallback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT) {
@@ -3533,6 +3326,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         button.isEnabled = visible
     }
 
+    /** The transcript row nearest the composer, and where its top edge sat
+     *  measured up from the bottom of the chat viewport — the edge that moves
+     *  when the keyboard arrives or leaves. */
+    private var transcriptAnchorPosition = RecyclerView.NO_POSITION
+    private var transcriptAnchorTopFromBottom = 0
+    private var transcriptAnchorPending = false
+
     /**
      * Notes where the conversation is sitting, measured from the composer's
      * top edge, while the chat viewport is still its old size.
@@ -3543,7 +3343,54 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * moment the pre-resize geometry can still be read.
      */
     private fun captureTranscriptAnchor() {
-        chat?.captureResizeAnchor()
+        val recycler = chat ?: return
+        if (recycler.height <= 0) return
+        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
+        val position = layoutManager.findLastVisibleItemPosition()
+        if (position == RecyclerView.NO_POSITION) return
+        val anchor = layoutManager.findViewByPosition(position) ?: return
+        transcriptAnchorPosition = position
+        transcriptAnchorTopFromBottom = anchor.top - recycler.height
+        transcriptAnchorPending = true
+    }
+
+    /**
+     * Puts the noted row back the same distance up from the viewport's new
+     * bottom edge, so the conversation travels with the composer instead of
+     * standing still while the composer moves.
+     *
+     * Whatever line sat immediately above the message box is still there once
+     * the keyboard is up, and the same lines come back down with the box when
+     * the keyboard goes away. It runs on the viewport's own resize rather than
+     * on a timer or an inset animation callback, so it cannot land before the
+     * resize it is compensating for.
+     *
+     * Restoring the noted position rather than shifting by the height
+     * difference is what makes it exact in both directions: a growing viewport
+     * is already partly corrected by the transcript itself, and a blind shift
+     * would double that correction and push the newest message under the
+     * composer.
+     */
+    private fun restoreTranscriptAnchorAfterResize() {
+        if (!transcriptAnchorPending) return
+        transcriptAnchorPending = false
+        val recycler = chat ?: return
+        val position = transcriptAnchorPosition
+        // A reply arriving or growing never takes this over: the noted position
+        // wins, so the conversation cannot be moved out from under the user
+        // while they have the keyboard open.
+        if (position == RecyclerView.NO_POSITION ||
+            position >= (adapter?.itemCount ?: 0)
+        ) {
+            return
+        }
+        recycler.post {
+            val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return@post
+            layoutManager.scrollToPositionWithOffset(
+                position,
+                recycler.height + transcriptAnchorTopFromBottom
+            )
+        }
     }
 
     /**
@@ -4430,11 +4277,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
 
-        // Secondary stop interceptor for the enabled readback control. Android
-        // does not dispatch this listener while a View is disabled, so every
-        // busy-state disable goes through disableTurnControlsUnlessTheyAreStops()
-        // and preserves the button that currently owns Stop. Excludes
-        // hands-free: there the conversation button owns Stop, not the mic.
+        // Touch interceptor: lets a tap during AI generation cancel everything
+        // even though the click handler is otherwise disabled by isEnabled=false
+        // in the generation/TTS code paths. OnTouchListener fires regardless of
+        // View.isEnabled, so a stop tap always lands. Excludes hands-free: during
+        // a conversation the conversation button is the stop control, not the mic.
         btnMicro?.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_UP && isAiCurrentlyBusy() &&
                 !isRecording && !isHandsFreeEngaged()
@@ -4482,9 +4329,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             onConversationButtonTapped()
         }
 
-        // Legacy mirror of the mic interceptor. Live hands-free Stop is kept
-        // enabled and therefore uses the normal click listener above; this
-        // remains only as a defensive route for an older disabled busy state.
+        // Mirror of the mic's touch interceptor: while the button is disabled
+        // (during generation/readback) a tap still lands here so the user can
+        // stop a live conversation or cancel a busy turn. When enabled, returns
+        // false so the click listener above handles the normal tap.
         btnSend?.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_UP && btnSend?.isEnabled == false) {
                 onConversationButtonTapped()
@@ -4585,78 +4433,32 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         initSummarizer()
     }
 
-    /**
-     * Whether this chat has a chat-list row, and whether that row is pinned.
-     *
-     * Read from the chat list itself rather than the whole navigation snapshot.
-     * The snapshot additionally requires the folder catalog to be readable, so
-     * a folder-metadata problem used to remove Pin, Export Chat and Delete from
-     * a perfectly healthy saved chat's menu. Folder organization has no bearing
-     * on whether a chat can be exported or deleted.
-     */
-    private data class SavedChatRow(val id: String, val pinned: Boolean)
-
-    private fun readSavedChatRow(): SavedChatRow? {
-        if (chatId.isBlank()) return null
-        val list = ChatPreferences.getChatPreferences()
-            .getChatListResult(this, includeFirstMessage = false)
-        if (!ChatStorageHealth.isAuthoritative(list.state)) return null
-        val row = list.chats.firstOrNull { ChatPreferences.storedChatId(it) == chatId }
-            ?: return null
-        return SavedChatRow(chatId, row["pinned"] == "true")
-    }
-
     private fun showChatOptionsMenu(anchor: View) {
-        lifecycleScope.launch {
-            val savedChat = withContext(Dispatchers.IO) { readSavedChatRow() }
-            if (isFinishing || isDestroyed) return@launch
-            PopupMenu(this@ChatActivity, anchor).apply {
-                savedChat?.let {
-                    menu.add(
-                        Menu.NONE,
-                        4,
-                        0,
-                        if (it.pinned) R.string.chat_menu_unpin else R.string.chat_menu_pin
-                    )
-                }
-                if (savedChat != null) {
-                    menu.add(Menu.NONE, 1, 1, R.string.chat_menu_export)
-                }
-                menu.add(Menu.NONE, 2, 2, R.string.alert_debug_section_logs)
-                if (savedChat != null) {
-                    menu.add(Menu.NONE, 3, 3, R.string.btn_delete)
-                }
-                setOnMenuItemClickListener { item ->
-                    when (item.itemId) {
-                        4 -> {
-                            savedChat?.let { chat ->
-                                lifecycleScope.launch(Dispatchers.IO) {
-                                    ChatNavigationRepository.get(this@ChatActivity)
-                                        .setChatPinned(chat.id, !chat.pinned)
-                                }
-                            }
-                            true
-                        }
-                        1 -> {
-                            showChatExportDialog()
-                            true
-                        }
-                        2 -> {
-                            startActivity(
-                                Intent(this@ChatActivity, LogCabinActivity::class.java)
-                                    .putExtra("chatId", chatId)
-                            )
-                            true
-                        }
-                        3 -> {
-                            showChatDeleteDialog()
-                            true
-                        }
-                        else -> false
+        PopupMenu(this, anchor).apply {
+            menu.add(Menu.NONE, 1, 0, R.string.chat_menu_export)
+            menu.add(Menu.NONE, 2, 1, R.string.alert_debug_section_logs)
+            menu.add(Menu.NONE, 3, 2, R.string.btn_delete)
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    1 -> {
+                        showChatExportDialog()
+                        true
                     }
+                    2 -> {
+                        startActivity(
+                            Intent(this@ChatActivity, LogCabinActivity::class.java)
+                                .putExtra("chatId", chatId)
+                        )
+                        true
+                    }
+                    3 -> {
+                        showChatDeleteDialog()
+                        true
+                    }
+                    else -> false
                 }
-                show()
             }
+            show()
         }
     }
 
@@ -4667,18 +4469,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun showChatDeleteDialog() {
-        if (chatId.isBlank() || deletingChat) return
-        ChatDeletionRequestCoordinator.requestChats(
-            activity = this,
-            chatIds = setOf(chatId),
-            beforeExecution = {
-                deletingChat = true
-                pendingChatExportBytes = null
-                cancelAllAiActivity("chat deletion")
-            },
-            onCommitted = { finishActivity() },
-            onFailed = { deletingChat = false }
-        )
+        ChatDeleteDialog.show(this) {
+            deleteCurrentChat()
+        }
     }
 
     private fun exportChat(options: ChatExportOptions) {
@@ -4770,6 +4563,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
+    private fun deleteCurrentChat() {
+        if (chatId.isBlank() || deletingChat) return
+        deletingChat = true
+        pendingChatExportBytes = null
+        cancelAllAiActivity("chat deletion")
+        ChatPreferences.getChatPreferences().deleteChatById(this, chatId)
+        finishActivity()
+    }
+
     /* ==================== Conversation summarizer ====================
      * conversation-summary-plan.md §5 + conversation-summary-errors.md.
      * Transmission is bookmark-based (decision 15): each regular request
@@ -4834,13 +4636,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 )
                 summarizerStatusHandler.postDelayed(hideSummarizerStatus, 3000L)
             }
-            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed ->
-                // A failure is already recorded in this chat's Summarizer Errors
-                // log — badge, the dedicated error sound, and the errors dialog —
-                // so a transient failure chip here would only repeat it. Hide the
-                // chip and let the error log be the single record of the failure
-                // (owner ruling, Aug 31 2026).
-                summarizerOperationChip?.visibility = View.GONE
+            is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Failed -> {
+                summarizerOperationChip?.visibility = View.VISIBLE
+                summarizerOperationSpinner?.visibility = View.GONE
+                summarizerOperationSuccess?.visibility = View.GONE
+                summarizerOperationCancel?.visibility = View.GONE
+                summarizerOperationText?.setText(
+                    org.teslasoft.assistant.util.summarizer.SummarizerOperationMessages
+                        .failureMessageRes(state.kind, state.category)
+                )
+            }
             is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Cancelled ->
                 if (!projectionStatusVisible) summarizerOperationChip?.visibility = View.GONE
         }
@@ -4881,23 +4686,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             btnSummarizerErrors?.visibility = View.VISIBLE
             summarizerErrorBadge?.visibility = View.VISIBLE
             summarizerErrorBadge?.text = errors.size.toString()
-            // Alert (red on white, theme-independent) while a failure is still
-            // unacknowledged; neutral reminder once the user has opened the list
-            // (owner ruling, Aug 31 2026).
-            val badge = summarizerErrorBadge
-            if (badge != null) {
-                if (preferences?.getSummarizerErrorsUnseen() == true) {
-                    badge.setBackgroundResource(R.drawable.bg_summarizer_badge_alert)
-                    badge.setTextColor(androidx.core.content.ContextCompat.getColor(this, R.color.light_red))
-                } else {
-                    badge.setBackgroundResource(R.drawable.bg_summarizer_badge)
-                    badge.setTextColor(
-                        com.google.android.material.color.MaterialColors.getColor(
-                            badge, com.google.android.material.R.attr.colorOnPrimary
-                        )
-                    )
-                }
-            }
         }
     }
 
@@ -5323,31 +5111,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         summarizerStatusHandler.postDelayed(hideSummarizerStatus, 4000L)
     }
 
-    /** Summarizer Errors dialog (decision 16 + errors doc §1, owner ruling
-     *  Aug 31 2026): one status paragraph, the stored entries newest first —
-     *  each with its own Copy and Hide — then the whole-list Hide All / Copy
-     *  All / Okay. Opening the list acknowledges the failure, relaxing the
-     *  top-bar badge from its alert look to the neutral reminder. */
+    /** Summarizer Errors dialog (decision 16 + errors doc §1): one status
+     *  paragraph, the stored entries newest first, then Copy and Delete. */
     private fun showSummarizerErrorsDialog() {
-        if (org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
-                .fromJson(preferences?.getSummarizerErrors()).isEmpty()
-        ) {
+        val entries = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
+            .fromJson(preferences?.getSummarizerErrors())
+        if (entries.isEmpty()) {
             refreshSummarizerIcons()
             return
         }
 
-        preferences?.setSummarizerErrorsUnseen(false)
-        refreshSummarizerIcons()
-
         val view = layoutInflater.inflate(R.layout.dialog_summarizer_errors, null)
         val status = view.findViewById<TextView>(R.id.summarizer_errors_status)
         val container = view.findViewById<LinearLayout>(R.id.summarizer_errors_container)
-        val hideAll = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_cancel_action)
-        val copyAll = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_middle_action)
-        val okay = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_final_action)
-        hideAll?.setText(R.string.summarizer_errors_hide_all)
-        copyAll?.setText(R.string.summarizer_errors_copy_all)
-        okay?.setText(R.string.summarizer_errors_okay)
+        val copy = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_primary_action)
+        val delete = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_destructive_action)
+        copy?.setText(R.string.summarizer_errors_copy)
+        delete?.setText(R.string.summarizer_errors_delete)
 
         val statusText = when {
             preferences?.getChatUseSummarizer() != true ->
@@ -5359,62 +5139,30 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         status?.text = statusText
 
+        for (entry in entries) {
+            val row = layoutInflater.inflate(R.layout.view_summarizer_error_entry, container, false)
+            row.findViewById<TextView>(R.id.summarizer_error_entry_text).text =
+                org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages.renderEntry(this, entry)
+            container?.addView(row)
+        }
+
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(R.string.summarizer_errors_title)
             .setView(view)
             .create()
 
-        fun currentEntries() = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
-            .fromJson(preferences?.getSummarizerErrors())
-
-        fun copyToClipboard(text: String) {
+        copy?.setOnClickListener {
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            val text = org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages
+                .renderLog(this, statusText, entries)
             clipboard.setPrimaryClip(ClipData.newPlainText("Summarizer Errors", text))
         }
-
-        fun populate() {
-            container?.removeAllViews()
-            currentEntries().forEachIndexed { index, entry ->
-                val row = layoutInflater.inflate(R.layout.view_summarizer_error_entry, container, false)
-                row.findViewById<TextView>(R.id.summarizer_error_entry_text).text =
-                    org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages.renderEntry(this, entry)
-                row.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_error_copy)
-                    .setOnClickListener {
-                        copyToClipboard(
-                            org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages.renderEntry(this, entry)
-                        )
-                    }
-                row.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_summarizer_error_hide)
-                    .setOnClickListener {
-                        val remaining = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
-                            .removeAt(currentEntries(), index)
-                        preferences?.setSummarizerErrors(
-                            org.teslasoft.assistant.util.summarizer.SummarizerErrorLog.toJson(remaining)
-                        )
-                        if (remaining.isEmpty()) preferences?.setSummarizerEpisode("")
-                        refreshSummarizerIcons()
-                        if (remaining.isEmpty()) dialog.dismiss() else populate()
-                    }
-                container?.addView(row)
-            }
-        }
-        populate()
-
-        hideAll?.setOnClickListener {
+        delete?.setOnClickListener {
             preferences?.setSummarizerErrors("")
             preferences?.setSummarizerEpisode("")
-            preferences?.setSummarizerErrorsUnseen(false)
             refreshSummarizerIcons()
             dialog.dismiss()
         }
-        copyAll?.setOnClickListener {
-            copyToClipboard(
-                org.teslasoft.assistant.util.summarizer.SummarizerErrorMessages
-                    .renderLog(this, statusText, currentEntries())
-            )
-        }
-        okay?.setOnClickListener { dialog.dismiss() }
-
         dialog.show()
     }
 
@@ -5672,21 +5420,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun stopWhisper() {
-        val activeRecorder = recorder
-        recorder = null
-        try {
-            activeRecorder?.stop()
-        } catch (_: Exception) {
-            try { activeRecorder?.release() } catch (_: Exception) { /* ignore */ }
-            restoreUIState()
-            showAudioCaptureErrorDialog()
-            return
+        recorder?.apply {
+            stop()
+            release()
         }
-        try { activeRecorder?.release() } catch (_: Exception) { /* ignore */ }
+        recorder = null
 
-        transcriptionInProgress = true
-        micTranscribing()
-        disableTurnControlsUnlessTheyAreStops()
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
         setGenerationProgressVisible(true)
 
         if (!cancelState) {
@@ -5706,7 +5447,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         } else {
             cancelState = false
-            restoreUIState()
+            micIdle()
+            isRecording = false
         }
     }
 
@@ -5722,7 +5464,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             val transcription = openAIAI?.transcription(transcriptionRequest)!!.text
 
             if (transcription.trim() == "") {
-                restoreUIState()
+                isRecording = false
+                btnMicro?.isEnabled = true
+                btnSend?.isEnabled = true
+                setGenerationProgressVisible(false)
+                micIdle()
             } else {
                 playTranscriptionDoneSignal()
                 // Sample the box BEFORE inserting (already-typed text never auto-sends).
@@ -5739,9 +5485,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
                     saveSettings()
 
-                    transcriptionInProgress = false
-                    micIdle()
-                    disableTurnControlsUnlessTheyAreStops()
+                    btnMicro?.isEnabled = false
+                    btnSend?.isEnabled = false
                     setGenerationProgressVisible(true)
 
                     processRecordingScope = CoroutineScope(Dispatchers.Main)
@@ -5765,7 +5510,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         } catch (_: Exception) {
             Toast.makeText(this, "Failed to record audio", Toast.LENGTH_SHORT).show()
-            restoreUIState()
+            btnMicro?.isEnabled = true
+            btnSend?.isEnabled = true
+            setGenerationProgressVisible(false)
         }
     }
 
@@ -6254,9 +6001,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // so if it moves before transcription finishes the user stopped mid-way
         // and the result must be discarded (see the guard below).
         val turnToken = whisperTurnToken
-        transcriptionInProgress = true
-        micTranscribing()
-        disableTurnControlsUnlessTheyAreStops()
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
         setGenerationProgressVisible(true)
 
         if (cancelState) {
@@ -6337,9 +6083,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // is on, push the transcript as a user turn and kick generation;
         // otherwise drop it into the message input box.
         // Transcription phase is over either way — drop the status hint.
-        transcriptionInProgress = false
+        messageInput?.hint = getString(R.string.hint_message)
         if (transcription.isNullOrBlank()) {
-            restoreUIState()
+            isRecording = false
+            btnMicro?.isEnabled = true
+            btnSend?.isEnabled = true
+            setGenerationProgressVisible(false)
+            micIdle()
             // Hands-free: a blank result (background noise tripped the VAD, or
             // whisper produced nothing) shouldn't end the conversation — just
             // re-open the mic for another turn.
@@ -6362,8 +6112,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             )
             saveSettings()
 
-            micIdle()
-            disableTurnControlsUnlessTheyAreStops()
+            btnMicro?.isEnabled = false
+            btnSend?.isEnabled = false
             setGenerationProgressVisible(true)
 
             processRecordingScope = CoroutineScope(Dispatchers.Main)
@@ -6397,18 +6147,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (preferences?.getHandsFreeMode() == true) {
                 stopHandsFreeLoop("mic button tapped while listening (google)")
             } else {
-                // The user ends this turn. Ask the recogniser for its final
-                // fragment, then deliver everything buffered so far. The
-                // delayed fallback covers a device that answers a stop with
-                // neither a result nor an error, so the words already spoken
-                // are never stranded.
-                dictationStopRequested = true
                 micIdle()
+                recognizer?.stopListening()
                 isRecording = false
-                try { recognizer?.stopListening() } catch (_: Exception) { /* ignore */ }
-                handsFreeHandler.postDelayed({
-                    if (dictationStopRequested) finishDictationTurn()
-                }, DICTATION_FINAL_RESULT_GRACE_MS)
             }
         } else {
             try {
@@ -6419,7 +6160,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 tts!!.stop()
             } catch (_: java.lang.Exception) {/* unused */}
             if (preferences?.getHandsFreeMode() == true) micHandsFreeActive(listening = true)
-            else { dictationBuffer = ""; dictationStopRequested = false; micRecording() }
+            else micRecording()
             if (ContextCompat.checkSelfPermission(
                     this, Manifest.permission.RECORD_AUDIO
                 ) == PackageManager.PERMISSION_GRANTED
@@ -6561,29 +6302,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 override fun onUpdate() {
                     refreshCompanionAvatar()
                     refreshUserAvatar()
-                    // Quick Settings writes the chat's model, prefix and end
-                    // separator straight to storage. This screen caches them,
-                    // and requests are built from the cached copy — so without
-                    // re-reading them here the conversation keeps sending the
-                    // model it started with (commonly the older per-chat
-                    // default) while Quick Settings shows the new one.
-                    loadModel()
                 }
 
                 override fun onForceUpdate() {
-                    // Rebuilding the screen finishes this one. A provisional
-                    // conversation must survive that: carry its provisional
-                    // state into the new screen, and do not let this finish
-                    // run the abandon path against the chat the replacement
-                    // screen is about to open.
-                    recreatingForSettings = true
-                    startActivity(
-                        Intent(this@ChatActivity, ChatActivity::class.java)
-                            .putExtra("chatId", chatId)
-                            .putExtra("name", chatName)
-                            .putExtra("pendingConversation", pendingConversation)
-                            .setAction(Intent.ACTION_VIEW)
-                    )
+                    startActivity(Intent(this@ChatActivity, ChatActivity::class.java).putExtra("chatId", chatId).putExtra("name", chatName).setAction(Intent.ACTION_VIEW))
                     finishActivity()
                 }
             })
@@ -7301,8 +7023,32 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * empty chat, so existing conversations are never retroactively changed.
      */
     private fun seedPersonaAndActivationDefaults() {
-        if (!ensureActiveCompanion(promptWhenEmpty = true)) return
         if (preferences?.isPersonaActivationSeeded() == true) return
+
+        if (preferences?.getPersonaId().isNullOrEmpty()) {
+            val personaPrefs = PersonaPreferences.getPersonaPreferences(this)
+            val personasList = personaPrefs.getPersonasList()
+
+            if (personasList.isEmpty()) {
+                // Rule 3: no companion exists. Ask the owner to create one and
+                // open the creation screen. Do NOT mark seeding done — when
+                // they return with a companion made, this runs again and seeds
+                // it (rules 1/2).
+                promptCreateFirstCompanion()
+                return
+            }
+
+            val lastPersona = preferences?.getLastSuccessfulPersonaId().orEmpty()
+            if (lastPersona.isNotEmpty() && personaPrefs.getPersona(lastPersona).label.isNotEmpty()) {
+                // Rule 1: continue with the companion you last used.
+                preferences?.setPersonaId(lastPersona)
+            } else {
+                // Rule 2: first-ever use, or the last-used companion was since
+                // deleted — open with the companion at the top of the list. Use
+                // its stable id, never a hash of its (mutable) label.
+                preferences?.setPersonaId(personasList.first().id)
+            }
+        }
 
         preferences?.setPersonaActivationSeeded(true)
 
@@ -7326,31 +7072,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
         }
-    }
-
-    /**
-     * Preserve a valid Companion selection. If it is empty or points to a
-     * deleted Companion, recover the last successful selection and then the
-     * first listed Companion. Existing chats are repaired too, so Quick
-     * Settings cannot fall through to "No Companion" while one exists.
-     */
-    private fun ensureActiveCompanion(promptWhenEmpty: Boolean): Boolean {
-        val personas = PersonaPreferences.getPersonaPreferences(this).getPersonasList()
-        val current = preferences?.getPersonaId().orEmpty()
-        val resolved = CompanionSelectionPolicy.resolve(
-            currentId = current,
-            lastSuccessfulId = preferences?.getLastSuccessfulPersonaId(),
-            availableIds = personas.map { it.id }
-        )
-        if (resolved == null) {
-            if (promptWhenEmpty) promptCreateFirstCompanion()
-            return false
-        }
-        if (resolved != current) {
-            preferences?.setPersonaId(resolved)
-            refreshCompanionAvatar()
-        }
-        return true
     }
 
     /**
@@ -7408,9 +7129,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     * Setup SpeakGPT with activation prompt.
     * */
     private fun setup() {
-        if (messages.isNotEmpty()) {
-            ensureActiveCompanion(promptWhenEmpty = false)
-        }
         if (messages.isEmpty()) {
             seedPersonaAndActivationDefaults()
             seedLoreBooksForNewChat()
@@ -7426,7 +7144,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                     )
                 )
 
-                disableTurnControlsUnlessTheyAreStops()
+                btnMicro?.isEnabled = false
+                btnSend?.isEnabled = false
                 setGenerationProgressVisible(true)
 
                 setupScope = CoroutineScope(Dispatchers.Main)
@@ -7454,90 +7173,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         model = preferences!!.getModel()
         endSeparator = preferences!!.getEndSeparator()
         prefix = preferences!!.getPrefix()
-    }
-
-    private fun initializeConversationModeUi() {
-        conversationModeSelector = findViewById(R.id.conversation_mode_selector)
-        playgroundPanel = findViewById(R.id.playground_panel)
-        conversationModeSelector?.visibility = if (pendingConversation) View.VISIBLE else View.GONE
-        conversationModeSelector?.setMode(conversationMode, animate = false)
-        conversationModeSelector?.setOnModeChangedListener { selected ->
-            if (!pendingConversation) return@setOnModeChangedListener
-            val coordinator = NewConversationCoordinator(this)
-            if (!coordinator.setPendingMode(chatId, selected)) {
-                conversationModeSelector?.setMode(conversationMode, animate = false)
-                showPendingCommitFailure()
-                return@setOnModeChangedListener
-            }
-            conversationMode = selected
-            renderConversationMode()
-        }
-
-        val tag = "embedded-playground-$chatId"
-        if (supportFragmentManager.findFragmentByTag(tag) == null) {
-            supportFragmentManager.beginTransaction()
-                .add(
-                    R.id.playground_panel,
-                    PlaygroundFragment.embedded(chatId, pendingConversation),
-                    tag
-                )
-                .commitNow()
-        }
-        renderConversationMode()
-    }
-
-    private fun renderConversationMode() {
-        val playground = conversationMode == ConversationMode.PLAYGROUND
-        playgroundPanel?.visibility = if (playground) View.VISIBLE else View.GONE
-        chat?.visibility = if (playground) View.GONE else View.VISIBLE
-        keyboardInput?.visibility = if (playground) View.GONE else View.VISIBLE
-        summarizerOperationChip?.visibility = View.GONE
-        visionActions?.visibility = View.GONE
-        toolActions?.visibility = View.GONE
-        includeStrip?.visibility = if (playground) View.GONE
-            else if (pendingIncludes.isEmpty()) View.GONE else View.VISIBLE
-        if (playground) {
-            healthBanner?.visibility = View.GONE
-        } else {
-            updateHealthBanner(allowAudioCue = false)
-            refreshIncludeStrip()
-        }
-    }
-
-    private fun finishPendingCommit() {
-        pendingConversation = false
-        conversationModeSelector?.visibility = View.GONE
-        intent.putExtra("pendingConversation", false)
-    }
-
-    private fun showPendingCommitFailure() {
-        restoreUIState()
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.label_error)
-            .setMessage(R.string.new_conversation_create_failed)
-            .setPositiveButton(R.string.btn_ok, null)
-            .show()
-    }
-
-    override fun commitPendingPlaygroundTurn(input: String): Boolean {
-        if (!pendingConversation) return true
-        val first = hashMapOf<String, Any>(
-            "message" to input,
-            "isBot" to false,
-            ChatAdapter.KEY_MESSAGE_TIME to System.currentTimeMillis().toString()
-        )
-        val payload = arrayListOf(first)
-        val result = NewConversationCoordinator(this).commitPendingConversation(
-            PendingConversationState(chatId, chatName, ConversationMode.PLAYGROUND),
-            payload
-        )
-        if (!result.succeeded) {
-            showPendingCommitFailure()
-            return false
-        }
-        conversationMode = ConversationMode.PLAYGROUND
-        finishPendingCommit()
-        return true
     }
 
     /** SYSTEM INITIALIZATION END **/
@@ -7619,13 +7254,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 return
             }
         }
-        // A pending conversation has no chat-list row yet. Do not asynchronously
-        // rewrite the still-empty list immediately before its first durable
-        // commit; the commit itself creates the row with the current timestamp.
-        // Existing chats continue to move to the top as soon as a turn starts.
-        if (!pendingConversation) {
-            ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
-        }
+        // Put timestamp to chat to sort chats by last message
+        ChatPreferences.getChatPreferences().putTimestampToChatById(this, chatId)
         try {
             if (mediaPlayer?.isPlaying == true) {
                 mediaPlayer?.stop()
@@ -7635,36 +7265,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         } catch (_: java.lang.Exception) {/* unused */}
         stopReadback()
         if (message != "") {
-            val m = preparedTurn?.storedMessage ?: (prefix + message + endSeparator)
-            var firstTurnCommitted = false
-            if (pendingConversation && shouldAdd) {
-                val first = hashMapOf<String, Any>(
-                    "message" to m,
-                    "isBot" to false,
-                    ChatAdapter.KEY_MESSAGE_TIME to System.currentTimeMillis().toString()
-                )
-                val firstIncludes = (preparedTurn?.pendingIncludes ?: pendingIncludes)
-                    .map { it.forSentMessage() }
-                if (firstIncludes.isNotEmpty()) {
-                    first[INCLUDES_KEY] = ChatInclude.listToJson(firstIncludes)
-                }
-                val committedHistory = ArrayList(messages).apply { add(first) }
-                val result = NewConversationCoordinator(this).commitPendingConversation(
-                    PendingConversationState(chatId, chatName, ConversationMode.CHAT),
-                    committedHistory
-                )
-                if (!result.succeeded) {
-                    showPendingCommitFailure()
-                    return
-                }
-                messages.add(first)
-                adapter?.notifyItemInserted(messages.size - 1)
-                updateMessagesSelectionProjection()
-                scroll(true)
-                conversationMode = ConversationMode.CHAT
-                finishPendingCommit()
-                firstTurnCommitted = true
-            }
             val explicitlyArmedImagine = explicitImagineDraft &&
                 ImagineCommand.isImagineAttempt(message)
             clearComposerAfterCommittedSend()
@@ -7677,7 +7277,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // mic re-arms once the reply finishes reading back.
             resumeHandsFreeForManualTurn()
 
-            if (shouldAdd && !firstTurnCommitted) putMessage(m, false)
+            val m = preparedTurn?.storedMessage ?: (prefix + message + endSeparator)
+
+            if (shouldAdd) putMessage(m, false)
 
             // Attachments waiting in the strip belong to THIS message: they
             // move into its record so the document text is saved atomically
@@ -7710,7 +7312,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 savePendingIncludes(synchronous = true)
             }
 
-            disableTurnControlsUnlessTheyAreStops()
+            btnMicro?.isEnabled = false
+            btnSend?.isEnabled = false
             setGenerationProgressVisible(true)
 
             // Rebuilt /imagine (image-generation-rebuild-plan.md §2.1): the
@@ -7862,7 +7465,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      *  the busy state; the single terminal state arrives through
      *  [onImageJobFinished]. */
     private fun sendCoordinatorImageRequest(request: ImageGenerationRequest) {
-        disableTurnControlsUnlessTheyAreStops()
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
         setGenerationProgressVisible(true)
         progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
         showImageProgressCard()
@@ -7870,7 +7474,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // after onCreate must still receive the terminal state here.
         ImageGenerationJobRegistry.attach(chatId, this)
         ImageGenerationJobRegistry.start(
-            this, chatId, chatName, request, ImageGenerationJobRegistry.Origin.IMAGINE
+            this, chatId, request, ImageGenerationJobRegistry.Origin.IMAGINE
         )
     }
 
@@ -7975,7 +7579,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val activeJob = ImageGenerationJobRegistry.activeJob(chatId) ?: return
         showImageProgressCard()
         if (activeJob.origin == ImageGenerationJobRegistry.Origin.IMAGINE) {
-            disableTurnControlsUnlessTheyAreStops()
+            btnMicro?.isEnabled = false
+            btnSend?.isEnabled = false
             setGenerationProgressVisible(true)
             progress?.setOnClickListener { ImageGenerationJobRegistry.cancel(chatId) }
         }
@@ -8401,7 +8006,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // assigned after onCreate must still receive the terminal state.
             ImageGenerationJobRegistry.attach(chatId, this@ChatActivity)
             ImageGenerationJobRegistry.start(
-                this@ChatActivity, chatId, chatName, request, ImageGenerationJobRegistry.Origin.TOOL
+                this@ChatActivity, chatId, request, ImageGenerationJobRegistry.Origin.TOOL
             )
         }
         return when (val terminal = job.await()) {
@@ -9048,7 +8653,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val summarizerState = frozenSummarizerState()
         protectRequestImagePayloads(canonical)
 
-        disableTurnControlsUnlessTheyAreStops()
+        btnMicro?.isEnabled = false
+        btnSend?.isEnabled = false
         setGenerationProgressVisible(true)
 
         parseMessageScope = CoroutineScope(Dispatchers.Main)
@@ -9425,9 +9031,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // release that too, or the mic stays open with nothing consuming it.
         try { LocalWhisperEngine.get().cancel() } catch (_: Exception) { /* ignore */ }
         isRecording = false
-        transcriptionInProgress = false
-        dictationBuffer = ""
-        dictationStopRequested = false
         micIdle()
         // Any stop (in-app, notification Hang Up, mid-generation tap) also ends a
         // hands-free conversation: clear the engaged flag and reset the
@@ -9591,8 +9194,6 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         map["message"] = message
         map["isBot"] = isBot
-        map[org.teslasoft.assistant.preferences.chatsearch.SearchableMessageProjection.MESSAGE_ID_KEY] =
-            java.util.UUID.randomUUID().toString()
 
         // When this message was created, for the Message Details popup. Stored
         // as a string so it round-trips through the generic Gson history map
@@ -9613,35 +9214,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
         updateMessagesSelectionProjection()
 
-        commitPendingConversationIfNeeded()
-
         scroll(true)
-    }
-
-    /**
-     * A provisional conversation becomes a real, listed chat as soon as it
-     * holds a turn.
-     *
-     * The typed-send path commits its own first turn before recording it. Every
-     * other way a turn reaches this screen — voice auto-send through cloud or
-     * on-device transcription, an image turn, a hands-free turn — records the
-     * turn through putMessage and used to leave the conversation provisional
-     * indefinitely: its history was written under its id, but no chat-list row
-     * ever appeared, so it was missing from the drawer and was then discarded
-     * when the screen closed. Committing here covers those paths with the same
-     * durable write, and is a no-op once the conversation is committed.
-     *
-     * A failed commit deliberately leaves the conversation provisional: the
-     * turns stay on disk, the commit journal retries at the next start, and
-     * closing the screen no longer destroys them.
-     */
-    private fun commitPendingConversationIfNeeded() {
-        if (!pendingConversation || chatId.isBlank() || messages.isEmpty()) return
-        val committed = NewConversationCoordinator(this).commitPendingConversation(
-            PendingConversationState(chatId, chatName, conversationMode),
-            ArrayList(messages)
-        ).succeeded
-        if (committed) finishPendingCommit()
     }
 
     // ---- Streamed-reply completion state (Round 3) ------------------------
@@ -12015,7 +11588,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
             if (placeholderName.trim().contains("_autoname_")) {
                 autoNameAttempts++
-                disableTurnControlsUnlessTheyAreStops()
+                btnMicro?.isEnabled = false
+                btnSend?.isEnabled = false
                 setGenerationProgressVisible(false)
 
                 // Preserve the normal leading System prefix byte-for-byte so providers

@@ -22,8 +22,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.teslasoft.assistant.preferences.ChatPreferences
-import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStorageState
-import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
 import java.io.File
 
 /**
@@ -54,25 +52,12 @@ object GeneratedImageFiles {
         scope.launch {
             try {
                 val remaining = candidates.toMutableSet()
-                // A gallery row is an independent active reference even after
-                // its chat message is gone. If catalog state cannot be read,
-                // keep every candidate rather than treating that outage as an
-                // empty gallery and destroying an asset.
-                for (hash in candidates) {
-                    val catalogReference =
-                        GeneratedImageCatalogStore.hasActiveFileHash(app, hash)
-                    if (catalogReference.state != GeneratedImageCatalogStorageState.AVAILABLE) {
-                        return@launch
-                    }
-                    if (catalogReference.value) remaining.remove(hash)
-                }
-                if (remaining.isEmpty()) return@launch
                 val chatPreferences = ChatPreferences.getChatPreferences()
                 val chats = chatPreferences
                     .getChatListResult(app, includeFirstMessage = false).chats
                 for (chat in chats) {
                     if (remaining.isEmpty()) break
-                    val chatId = ChatPreferences.storedChatId(chat)
+                    val chatId = chat["id"] ?: continue
                     val history = chatPreferences.getChatByIdResult(app, chatId)
                     // A LOCKED/CORRUPT/FAILED history might still reference
                     // the file — abort and keep everything rather than guess.

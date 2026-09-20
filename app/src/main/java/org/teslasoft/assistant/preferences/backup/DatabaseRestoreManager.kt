@@ -23,14 +23,10 @@ import android.provider.OpenableColumns
 import org.teslasoft.assistant.preferences.backup.portable.PackageCrypto
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackage
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
-import org.teslasoft.assistant.preferences.backup.portable.PortableRecoverySemanticValidator
 import org.teslasoft.assistant.preferences.backup.portable.PortableStaging
-import org.teslasoft.assistant.preferences.backup.portable.ProfileImagePortableBackup
-import org.teslasoft.assistant.preferences.backup.portable.ProfileImagePortableRestoreManager
 import org.teslasoft.assistant.preferences.backup.portable.RecoveryCode
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 import org.teslasoft.assistant.preferences.memory.MemorySeedCodec
-import org.teslasoft.assistant.preferences.profileimages.ProfileImageFileNaming
 import java.io.File
 import java.time.Instant
 
@@ -63,11 +59,6 @@ object DatabaseRestoreManager {
         INVALID_RECOVERY_CODE,
         WRONG_RECOVERY_KEY,
         SOURCE_UNAVAILABLE,
-        /** A legacy standalone Profile Image database lists picture files that
-         *  this package does not carry and that are not already on this device.
-         *  Installing only the catalog would leave it pointing at missing
-         *  files (BR-08), so restore is refused with the live catalog intact. */
-        PROFILE_IMAGE_ASSETS_MISSING,
         RESTORE_FAILED
     }
 
@@ -80,13 +71,7 @@ object DatabaseRestoreManager {
         val sourceKey: ByteArray?,
         val sourcePlaintext: Boolean,
         val backupAtMillis: Long,
-        private val stagingRoot: File,
-        /** Present only for a portable Profile Image restore: the package's
-         *  `user_images.db` plus its `profile_image_asset` entries, so the
-         *  restore installs catalog and picture bytes together through the
-         *  profile-image participant in Replace mode (BR-08, item 5). Null for
-         *  every other source, which uses the plain snapshot swap. */
-        internal val profileImageArtifacts: List<PortablePackage.ValidatedArtifact>? = null
+        private val stagingRoot: File
     ) {
         fun discard() {
             sourceKey?.fill(0)
@@ -326,24 +311,6 @@ object DatabaseRestoreManager {
             )
         }
 
-        val semantic = PortableRecoverySemanticValidator.validate(
-            context.applicationContext,
-            validated.artifacts,
-            validated.declaredCategories,
-            validated.explicitlyEmptyCategories,
-            validated.categoryRecordCounts
-        )
-        if (semantic !is PortableRecoverySemanticValidator.Result.Valid) {
-            PortableStaging.delete(root)
-            return PrepareResult.Failed(
-                mapPortableFailure(
-                    if (semantic is PortableRecoverySemanticValidator.Result.TooLarge) {
-                        PortablePackageFormat.RestoreError.TOO_LARGE
-                    } else PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED
-                )
-            )
-        }
-
         val databases = validated.artifacts.mapNotNull { artifact ->
             typeForPortableEntry(artifact.entryName)?.let { it to artifact }
         }
@@ -353,69 +320,17 @@ object DatabaseRestoreManager {
         }
         val selected = databases.firstOrNull { it.first == requestedType }
         if (selected != null) {
-            return preparePortableDatabase(selected.first, selected.second, validated.artifacts, atMillis, root)
+            return preparePortableArtifact(selected.first, selected.second, atMillis, root)
         }
         if (databases.size == 1) {
             val only = databases.single()
-            return when (val prepared =
-                preparePortableDatabase(only.first, only.second, validated.artifacts, atMillis, root)) {
+            return when (val prepared = preparePortableArtifact(only.first, only.second, atMillis, root)) {
                 is PrepareResult.Ready -> PrepareResult.Mismatch(only.first, prepared.prepared)
                 else -> prepared
             }
         }
         PortableStaging.delete(root)
         return PrepareResult.Failed(Failure.NO_APPROPRIATE_DATABASE)
-    }
-
-    /** A portable Profile Image database installs its catalog AND its picture
-     *  bytes together (item 5); every other database type keeps the plain
-     *  snapshot swap. */
-    private fun preparePortableDatabase(
-        type: BackupType,
-        artifact: PortablePackage.ValidatedArtifact,
-        allArtifacts: List<PortablePackage.ValidatedArtifact>,
-        atMillis: Long,
-        root: File
-    ): PrepareResult {
-        if (type == BackupType.USER_IMAGE) {
-            return preparePortableProfileImages(artifact, allArtifacts, atMillis, root)
-        }
-        return preparePortableArtifact(type, artifact, atMillis, root)
-    }
-
-    /** Prepare a portable Profile Image restore that carries both the catalog
-     *  and its `profile_image_asset` bytes. The package must close (every
-     *  catalog row has a matching, hash-valid asset); otherwise the package is
-     *  damaged. The restore itself runs through the profile-image participant
-     *  in Replace mode so catalog and bytes commit and roll back together. */
-    private fun preparePortableProfileImages(
-        catalog: PortablePackage.ValidatedArtifact,
-        allArtifacts: List<PortablePackage.ValidatedArtifact>,
-        atMillis: Long,
-        root: File
-    ): PrepareResult {
-        val relevant = allArtifacts.filter {
-            (it.type == PortablePackage.TYPE_SQLITE_DB && it.entryName == "user_images.db") ||
-                it.type == PortablePackage.TYPE_PROFILE_IMAGE_ASSET
-        }
-        if (ProfileImagePortableRestoreManager.prepare(relevant) !is
-            ProfileImagePortableRestoreManager.Result.Ready
-        ) {
-            PortableStaging.delete(root)
-            return PrepareResult.Failed(Failure.DAMAGED_OR_ALTERED)
-        }
-        return PrepareResult.Ready(
-            Prepared(
-                BackupType.USER_IMAGE,
-                Kind.DATABASE_SNAPSHOT,
-                catalog.stagedFile,
-                sourceKey = null,
-                sourcePlaintext = true,
-                backupAtMillis = atMillis,
-                stagingRoot = root,
-                profileImageArtifacts = relevant
-            )
-        )
     }
 
     private fun preparePortableArtifact(
@@ -554,17 +469,8 @@ object DatabaseRestoreManager {
                         if (type == BackupType.MEMORY) "meta" else "memory_entries"
                     )
                 }
-                BackupType.USER_IMAGE -> {
+                BackupType.USER_IMAGE ->
                     RecoveryBackupManager.integrityCheckPlain(local, "profile_images")
-                    // A standalone catalog carries no picture bytes. Installing
-                    // it would point at files that may not exist here, so allow
-                    // it only when every referenced picture is already present
-                    // and hash-valid on this device (BR-08, item 6).
-                    if (!localProfileImageAssetsPresent(context, local)) {
-                        PortableStaging.delete(root)
-                        return PrepareResult.Failed(Failure.PROFILE_IMAGE_ASSETS_MISSING)
-                    }
-                }
                 BackupType.CHATS -> {
                     PortableStaging.delete(root)
                     return PrepareResult.Failed(Failure.NO_APPROPRIATE_DATABASE)
@@ -590,41 +496,11 @@ object DatabaseRestoreManager {
                     DatabaseRevertManager.Candidate(prepared.stagedFile, prepared.backupAtMillis)
                 )
             )
-            Kind.DATABASE_SNAPSHOT -> {
-                val profileArtifacts = prepared.profileImageArtifacts
-                if (prepared.type == BackupType.USER_IMAGE && profileArtifacts != null) {
-                    restoreProfileImagesThroughParticipant(context, profileArtifacts)
-                } else {
-                    DatabaseRepairManager.restoreSnapshot(
-                        context, prepared.type, prepared.stagedFile,
-                        prepared.sourceKey, prepared.sourcePlaintext
-                    )
-                }
-            }
+            Kind.DATABASE_SNAPSHOT -> DatabaseRepairManager.restoreSnapshot(
+                context, prepared.type, prepared.stagedFile,
+                prepared.sourceKey, prepared.sourcePlaintext
+            )
         }
-
-    /** A legacy standalone catalog's referenced pictures must all be present
-     *  and hash-valid on this device before its catalog may be installed
-     *  (BR-08, item 6). Reads only the profile-image directory — it never
-     *  provisions the live store. */
-    private fun localProfileImageAssetsPresent(context: Context, catalog: File): Boolean {
-        val hashes = ProfileImagePortableRestoreManager.readCatalogHashes(catalog) ?: return false
-        val dir = context.applicationContext.getExternalFilesDir("profile_images")
-        return hashes.all { hash ->
-            val file = dir?.let { File(it, ProfileImageFileNaming.permanentFileName(hash)) }
-            file != null && ProfileImagePortableBackup.isValidAsset(file, hash)
-        }
-    }
-
-    /** Install a portable Profile Image catalog and its bytes together through
-     *  the profile-image participant in Replace mode, so the catalog and files
-     *  commit and roll back as one (BR-08, item 5). */
-    private fun restoreProfileImagesThroughParticipant(
-        context: Context,
-        artifacts: List<PortablePackage.ValidatedArtifact>
-    ): DatabaseRepairManager.Outcome {
-        return DirectProfileImageRestoreRecovery.execute(context, artifacts)
-    }
 
     private fun listAutomaticEntries(
         context: Context,

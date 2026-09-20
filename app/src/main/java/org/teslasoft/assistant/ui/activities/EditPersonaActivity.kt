@@ -160,10 +160,6 @@ class EditPersonaActivity : FragmentActivity() {
     private var imgPersonaAvatar: ImageView? = null
     private var btnSave: ImageButton? = null
     private var btnDelete: ImageButton? = null
-    // The Save icon flashes green to confirm a save, then returns to its normal
-    // tint; these hold the pending revert and the captured normal tint.
-    private var saveButtonRevert: Runnable? = null
-    private var saveButtonRegularTint: ColorStateList? = null
     private var promptTabRow: LinearLayout? = null
     private var promptTabName: TextView? = null
     private var btnAddPrompt: ImageButton? = null
@@ -1079,27 +1075,11 @@ class EditPersonaActivity : FragmentActivity() {
         finish()
     }
 
-    /** Flashes the disk icon green to confirm a save, then returns it to its
-     *  normal tint after a couple of seconds — the green is a brief confirmation,
-     *  not a persistent state (owner ruling, Aug 31 2026). On creation the editor
-     *  closes right after, so the revert simply never runs. */
+    /** Marks a successful save directly on the disk icon. Existing companion
+     *  editors remain open so the green confirmation stays visible; creation
+     *  still closes after handing its result back to the caller. */
     private fun markSaveButtonGreen() {
-        val button = btnSave ?: return
-        if (saveButtonRevert == null) {
-            // Capture the normal tint the first time, before it goes green, so
-            // the revert restores whatever the current theme uses.
-            saveButtonRegularTint = button.backgroundTintList
-        } else {
-            button.removeCallbacks(saveButtonRevert)
-        }
-        button.backgroundTintList =
-            ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.light_green, theme))
-        val revert = Runnable {
-            saveButtonRegularTint?.let { button.backgroundTintList = it }
-            saveButtonRevert = null
-        }
-        saveButtonRevert = revert
-        button.postDelayed(revert, 2500L)
+        btnSave?.backgroundTintList = ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.light_green, theme))
     }
 
     /** Serialised form of the editable fields, used only for change detection

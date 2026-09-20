@@ -26,11 +26,6 @@ import com.google.android.material.color.DynamicColors
 import org.conscrypt.Conscrypt
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.imagegen.ImageGenerationMigration
-import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogMaintenance
-import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionCoordinator
-import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
-import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
-import org.teslasoft.assistant.conversation.NewConversationCoordinator
 import org.teslasoft.assistant.preferences.GlobalPreferences
 import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.Preferences
@@ -41,12 +36,7 @@ import org.teslasoft.assistant.preferences.backup.AutoBackupController
 import org.teslasoft.assistant.preferences.backup.AutoBackupScheduling
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
-import org.teslasoft.assistant.preferences.backup.DirectDatabaseRestoreCoordinator
-import org.teslasoft.assistant.preferences.backup.DirectProfileImageRestoreRecovery
 import org.teslasoft.assistant.preferences.backup.StartupDatabaseCheck
-import org.teslasoft.assistant.preferences.backup.portable.GeneratedImagePortableRestoreManager
-import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
-import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestoreCoordinator
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -120,38 +110,7 @@ class MainApplication : Application() {
         // integrity_check surfaced loudly per the spec, then the rotating
         // automatic backup if one is due. Off the main thread; app start must
         // not wait on SQLCipher.
-        PortableRestoreProcessGate.beginStartupRecoveryIfNeeded(this)
         Thread {
-            try {
-                // A direct database replacement owns a per-store key/file
-                // journal. Settle it before the outer portable transaction or
-                // any ordinary startup reader can open an affected store.
-                if (!DirectDatabaseRestoreCoordinator.recoverAll(this)) {
-                    PortableRestoreProcessGate.finishStartupRecovery(false)
-                    return@Thread
-                }
-                if (!DirectProfileImageRestoreRecovery.recoverPending(this)) {
-                    PortableRestoreProcessGate.finishStartupRecovery(false)
-                    return@Thread
-                }
-                // The outer selected-category restore may span several stores.
-                // Settle its exact rollback snapshots before any startup task
-                // observes or mutates a possibly mixed category set.
-                if (!UnifiedPortableRestoreCoordinator.recoverPending(this)) {
-                    PortableRestoreProcessGate.finishStartupRecovery(false)
-                    return@Thread
-                }
-                if (!PortableRestoreProcessGate.clearRecoveredPreviousProcess(this) &&
-                    PortableRestoreProcessGate.blocksCurrentProcess(this)
-                ) {
-                    PortableRestoreProcessGate.finishStartupRecovery(false)
-                    return@Thread
-                }
-                PortableRestoreProcessGate.finishStartupRecovery(true)
-            } catch (_: Exception) {
-                PortableRestoreProcessGate.finishStartupRecovery(false)
-                return@Thread
-            }
             try {
                 // Seed the app-wide image-generation settings from the default
                 // settings profile, once (image-generation-rebuild-plan.md §14).
@@ -163,37 +122,12 @@ class MainApplication : Application() {
             }
             try {
                 // Finish (or discard) a chat recovery restore interrupted by
-                // process death (Build Phase 3 item 5) — BEFORE generated-image
-                // catalog maintenance and BEFORE the outage reconcile and rename
-                // recovery (Phase 9.3 startup ordering). All of those read or
-                // rebase the chat files this may still be replacing from verified
-                // staging, so the swap and its dependent-store rebase must settle
-                // before any of them run against a possibly mixed old/new set.
+                // process death (Build Phase 3 item 5) — BEFORE the outage
+                // reconcile and rename recovery, both of which read the chat
+                // files this may still be replacing from verified staging.
                 org.teslasoft.assistant.preferences.backup.ChatRestoreManager.resumeIfPending(this)
             } catch (e: Exception) {
                 MemoryLog.log(this, "ChatRestore", "error", "Chat-restore recovery at startup failed: ${e.message}")
-            }
-            try {
-                // Durable generated-image catalog maintenance is resumable and
-                // deliberately stays on this worker: backfill authoritative
-                // histories before reconciling only journal-proven interrupted
-                // registrations. Runs AFTER the restore resume above so a chat
-                // set replaced by a restore is rescanned from its new histories.
-                // A Phase 10 generated-image replacement may have been
-                // interrupted after file or catalog mutation. Roll it back
-                // before backfill/reconciliation observes a mixed set. If the
-                // rollback cannot finish, leave the journal intact and do not
-                // mutate the catalog further; the next startup retries.
-                if (GeneratedImagePortableRestoreManager.recoverPending(this)) {
-                    GeneratedImageCatalogMaintenance.run(this)
-                }
-            } catch (e: Exception) {
-                MemoryLog.log(
-                    this,
-                    "GeneratedImageCatalog",
-                    "error",
-                    "Generated-image catalog maintenance at startup failed: ${e.message}"
-                )
             }
             try {
                 // Settle a Companion & Roleplay restore interrupted by process
@@ -221,15 +155,6 @@ class MainApplication : Application() {
                 MemoryLog.log(this, "SecurePrefs", "error", "Storage-outage reconciliation at startup failed: ${e.message}")
             }
             try {
-                // Phase 3: the outage pass above must restore authoritative
-                // chat storage before a committed deletion journal is resumed.
-                // Fail-safe retries retain bytes and keep the journal pending.
-                ChatDeletionCoordinator.get(this).recover()
-            } catch (_: Exception) {
-                // No mutation follows a failed recovery attempt; the durable
-                // journal is retried at the next startup/deletion request.
-            }
-            try {
                 // Finish any chat rename whose memory re-point didn't complete
                 // last session (process death or a SQLCipher failure between the
                 // prefs pointer flip and MemoryStore.repointChat). Runs after
@@ -242,19 +167,6 @@ class MainApplication : Application() {
             } catch (e: Exception) {
                 MemoryLog.log(this, "RenameJournal", "error", "Rename reconciliation at startup failed: ${e.message}")
             }
-            try {
-                NewConversationCoordinator(this).recoverPendingCommits()
-            } catch (_: Exception) {
-                // The encrypted journal remains authoritative and retries later.
-            }
-            try {
-                ChatNavigationRepository.get(this).migrateSchema()
-            } catch (_: Exception) {
-                // Folder metadata remains untouched and unavailable on failure.
-            }
-            // Search is derived and disposable. This idempotent call resumes a
-            // first-use or policy/locale rebuild after source restore/recovery.
-            ChatSearchIndexManager.get(this).ensureReady()
             try {
                 // Crash-triggered integrity checking (Build Phase 1 gate,
                 // Build Phase 3 response). The whole-database PRAGMA

@@ -76,7 +76,8 @@ object RecoveryFileNaming {
         (if (protected) "Protected" else "Unencrypted") +
         "-${stamp(epochMillis, zone)}${seqSuffix(seq)}$EXT"
 
-    /** An AUTOMATIC portable recovery package. */
+    /** An AUTOMATIC portable recovery package. (Naming only — the automatic
+     *  writer itself is not authorized yet, owner ruling July 22 2026.) */
     fun automaticRecoveryPackage(
         brand: String,
         protected: Boolean,

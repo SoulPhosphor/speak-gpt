@@ -95,17 +95,6 @@ object SummarizerErrorLog {
 
     fun toJson(entries: List<SummarizerErrorEntry>): String = gson.toJson(entries)
 
-    /**
-     * Removes one stored entry by its position in the newest-first list — the
-     * per-entry Hide action. An out-of-range index returns the list unchanged.
-     */
-    fun removeAt(entries: List<SummarizerErrorEntry>, index: Int): List<SummarizerErrorEntry> =
-        if (index in entries.indices) {
-            entries.toMutableList().also { it.removeAt(index) }
-        } else {
-            entries
-        }
-
     data class RecordResult(
         val entries: List<SummarizerErrorEntry>,
         /** True when this failure starts a new episode — play the sound once. */
@@ -156,31 +145,6 @@ object SummarizerErrorLog {
         )
         val updated = (listOf(entry) + current).take(MAX_ENTRIES)
         return RecordResult(updated, newEpisode = true)
-    }
-}
-
-/**
- * Builds the readable technical error shown under a Summarizer Errors entry's
- * plain-language message — the "actual error beneath the explanation," matching
- * how a chat generation error presents its provider error (owner ruling, Aug 31
- * 2026). It keeps each distinct message down the exception's cause chain (or the
- * exception type when a link carries no message), but never the multi-frame
- * stack trace, which read like a crash dump in the dialog and still lives in the
- * app's own error/crash logs. Returns null when there is nothing readable.
- */
-object SummarizerErrorDetail {
-
-    fun readable(error: Throwable?): String? {
-        if (error == null) return null
-        val lines = LinkedHashSet<String>()
-        val seen = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Throwable, Boolean>())
-        var current: Throwable? = error
-        while (current != null && seen.add(current) && lines.size < 8) {
-            val message = current.message?.trim()?.ifBlank { null }
-            lines.add(message ?: current::class.qualifiedName ?: current::class.simpleName ?: "error")
-            current = current.cause
-        }
-        return lines.joinToString("\n").ifBlank { null }
     }
 }
 

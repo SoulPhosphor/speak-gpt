@@ -113,7 +113,7 @@ class GlobalPreferences private constructor(private var gp: SharedPreferences) {
     /**
      * Default Shape applied to uploaded Profile Images (never to built-in
      * glyph avatars or the generic user icon). One of "flower" | "circle" |
-     * "square"; defaults to "circle".
+     * "square"; defaults to "flower" (the existing clover geometry).
      *
      * @return the shape key
      * */

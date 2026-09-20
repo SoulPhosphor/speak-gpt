@@ -101,16 +101,5 @@ class EncryptedPreferences {
                 false
             }
         }
-
-        /** Synchronously remove recovery-only secret material after its
-         * durable transaction journal has been retired. */
-        fun removeEncryptedPreferenceCommit(context: Context, file: String, key: String): Boolean {
-            return try {
-                val preferences = getEncryptedSharedPreferences(context, file)
-                preferences.edit().remove(key).commit() && !preferences.contains(key)
-            } catch (_: Exception) {
-                false
-            }
-        }
     }
 }

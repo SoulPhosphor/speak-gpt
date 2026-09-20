@@ -148,9 +148,7 @@ object RenameJournal {
             )
             return
         }
-        val liveIds = listResult.chats.mapTo(LinkedHashSet()) {
-            ChatPreferences.storedChatId(it)
-        }
+        val liveIds = listResult.chats.mapNotNull { it["id"] }.toSet()
         val provisioned = try {
             MemoryStore.isProvisioned(context)
         } catch (_: Exception) {

@@ -52,20 +52,19 @@ class ChatPreferencesHotPathTest {
     }
 
     @Test
-    fun renameChangesOnlyTitleAndAutoNamesFollowCurrentTitles() {
+    fun renameChangesOnlyTitleAndAutoNamesDoNotReuseAnExistingId() {
         val source = chatPreferencesSource().readText()
         val rename = source.substringAfter("fun editChat(")
             .substringBefore("private fun securePrefsFileAccess")
-        assertTrue(rename.contains("if (!entry.containsKey(\"id\")) newId = Hash.hash(chatName)"))
+        assertFalse(rename.contains("Hash.hash("))
         assertFalse(rename.contains("entry[\"id\"] ="))
         assertTrue(rename.contains("entry[\"name\"] = chatName"))
         assertTrue(rename.contains("val oldId = chatId"))
-        assertTrue(rename.contains("var newId = oldId"))
-        assertTrue(rename.contains("if (oldId == newId) {"))
+        assertTrue(rename.contains("val newId = oldId"))
+        assertTrue(rename.contains("if (oldId == newId) return true"))
         val autoName = source.substringAfter("fun getAvailableChatIdForAutoname(")
-            .substringBefore("fun commitPendingConversation(")
-        assertTrue(autoName.contains("return nextAutonameNumber(list)"))
-        assertFalse(autoName.contains("Hash.hash("))
+            .substringBefore("fun addChat(")
+        assertTrue(autoName.contains("storedChatId(map) == Hash.hash(\"_autoname_\$x\")"))
     }
 
     private fun chatPreferencesSource(): File {

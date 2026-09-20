@@ -18,8 +18,10 @@ package org.teslasoft.assistant.preferences.backup
 
 import android.content.Context
 import androidx.core.content.edit
+import org.json.JSONArray
 import org.json.JSONObject
 import org.teslasoft.assistant.preferences.ChatPreferences
+import org.teslasoft.assistant.preferences.RenameJournal
 import org.teslasoft.assistant.preferences.SnapshotRegistry
 import java.io.File
 import java.security.MessageDigest
@@ -45,15 +47,10 @@ import java.util.zip.ZipFile
  *  in memory, so the process must not keep running on them.
  *
  * Boundaries (plan): repairs damaged chat FILES on this phone; it cannot
- * cure a lost Keystore key (Round-4 lock machinery owns that case). The
- * pending-operation gate and the dependent-store rebase are owned by
- * [ChatSetReplacementCoordinator], which this manager calls before staging and
- * after the verified swap. Lock order respected: CHAT_LIST_LOCK is taken here,
- * always BEFORE the SecurePrefs monitor and never the reverse — the verified
- * order documented in ChatSnapshotManifest. The dependent-store rebase runs
- * inside CHAT_LIST_LOCK and does reach SecurePrefs (cache eviction, the Search
- * journal), which is exactly that outer→inner order, so it cannot invert with
- * any existing path.
+ * cure a lost Keystore key (Round-4 lock machinery owns that case). Honors
+ * [RenameJournal.hasPending] — a half-finished rename must settle first.
+ * Lock order respected: CHAT_LIST_LOCK is taken here; SecurePrefs' monitor
+ * is never taken inside it by this code.
  */
 object ChatRestoreManager {
 
@@ -63,15 +60,6 @@ object ChatRestoreManager {
     private const val KEY_FILES = "chatrestore.files"
 
     data class Result(val ok: Boolean, val detail: String?)
-
-    /** The converter uses the restore engine's own reader as its final gate. */
-    internal fun archivePassesValidation(archive: File): Boolean =
-        try {
-            readAndVerifyArchive(archive)
-            true
-        } catch (_: Exception) {
-            false
-        }
 
     private fun prefs(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -85,22 +73,17 @@ object ChatRestoreManager {
      */
     fun restoreFromArchive(context: Context, archive: File): Result {
         val appContext = context.applicationContext
-        // Phase 9.1 steps 1–2: settle every recoverable pending operation, then
-        // refuse with a typed reason if any incompatible journal is still
-        // pending. The coordinator owns this so a future replace/import reuses
-        // the same gate rather than re-checking journals ad hoc.
-        ChatSetReplacementCoordinator.settleOrRefuse(appContext)?.let {
-            return Result(false, it.detail())
+        if (RenameJournal.hasPending(appContext)) {
+            return Result(false, "a chat rename is still being reconciled")
         }
 
         // ---- 1. validate the whole archive before touching anything ----
-        val verified: VerifiedArchive
+        val entries: Map<String, ByteArray>
         try {
-            verified = readAndVerifyArchive(archive)
+            entries = readAndVerifyArchive(archive)
         } catch (e: Exception) {
             return Result(false, "archive failed verification: ${e.javaClass.simpleName}")
         }
-        val entries = verified.entries
 
         // ---- 2. extract to staging + re-verify the staged bytes ----
         val staging = File(appContext.filesDir, "chat_restore_staging/${SnapshotRegistry.uniqueSuffix()}")
@@ -119,61 +102,14 @@ object ChatRestoreManager {
             try { staging.deleteRecursively() } catch (_: Exception) { }
             return Result(false, "staging failed: ${e.javaClass.simpleName}")
         }
-        // The journal carries each staged file's expected SHA-256, so a swap
-        // resumed after process death re-verifies the staged bytes by hash —
-        // not merely their presence — before it replaces anything. A journal
-        // commit that does not land stops the restore before it touches a file.
-        val expectedHashes = entries.mapValues { hex(sha256(it.value)) }
-        if (!writeJournal(appContext, ChatRestorePlanner.PHASE_STAGED, staging.absolutePath, expectedHashes)) {
-            try { staging.deleteRecursively() } catch (_: Exception) { }
-            return Result(false, "could not journal the staged restore")
-        }
+        writeJournal(appContext, ChatRestorePlanner.PHASE_STAGED, staging.absolutePath, entries.keys)
 
         // ---- 3. the journaled swap, under the chat-list lock ----
         return synchronized(ChatPreferences.CHAT_LIST_LOCK) {
             try {
-                // Re-check the pending-operation gate INSIDE the lock, before any
-                // file is touched. settleOrRefuse ran before staging, and chat
-                // mutations that appeared since could have journaled a rename or
-                // deletion or created a provisional conversation whose files this
-                // swap would sweep. Every chat mutation takes CHAT_LIST_LOCK
-                // (provisional creation included, since Phase 9.1), so nothing can
-                // interleave while this holds the lock; anything that completed in
-                // the window between settleOrRefuse and here is caught now and the
-                // restore refuses rather than replacing over it. No settling is
-                // done inside the lock — only the check.
-                ChatSetReplacementCoordinator.pendingBlockNow(appContext)?.let {
-                    return@synchronized Result(false, it.detail())
-                }
                 quarantineCurrentChatFiles(appContext)
-                // A SWAPPING commit that does not land stops before any file is
-                // replaced: the persisted phase is still STAGED, so startup
-                // discards the staging and leaves the live files untouched.
-                if (!writeJournal(appContext, ChatRestorePlanner.PHASE_SWAPPING, staging.absolutePath, expectedHashes)) {
-                    return@synchronized Result(false, "could not journal the swap")
-                }
+                writeJournal(appContext, ChatRestorePlanner.PHASE_SWAPPING, staging.absolutePath, entries.keys)
                 performSwap(appContext, staging, entries.keys)
-                // Prove the live set is exactly the manifest before the journal
-                // is cleared: a failed delete or truncated copy fails the restore
-                // here, and the still-SWAPPING journal keeps recovery pointed at
-                // verified staging and the pre-restore quarantine.
-                verifyLiveSet(appContext, expectedHashes)
-                // Phase 9.1 steps 9–11: source generation, cache invalidation,
-                // and the dependent-store rebase. The journal is cleared (step 12)
-                // ONLY when the rebase is durable — otherwise the verified swap
-                // stands but a dependent store (e.g. the Search index) is stale,
-                // so the SWAPPING journal and staging are kept and the resume path
-                // retries the rebase idempotently at the next start rather than
-                // reporting a success that left a stale derived store behind.
-                if (!ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
-                        appContext, verified.declaredChatIds
-                    )
-                ) {
-                    return@synchronized Result(
-                        false,
-                        "chat set replaced but a dependent store did not rebase; it will be retried at the next start"
-                    )
-                }
                 clearJournal(appContext)
                 try { staging.deleteRecursively() } catch (_: Exception) { }
                 DatabaseHealthState.logHealth(appContext, "info",
@@ -199,36 +135,20 @@ object ChatRestoreManager {
             val p = prefs(appContext)
             val phase = p.getString(KEY_PHASE, null) ?: return
             val stagingPath = p.getString(KEY_STAGING, null)
-            val expectedHashes = readJournalHashes(p.getString(KEY_FILES, null))
-            val names = expectedHashes.keys
+            val names = readJournalFiles(p.getString(KEY_FILES, null))
             val staging = stagingPath?.let { File(it) }
-            val stagingComplete = staging != null && expectedHashes.isNotEmpty() &&
-                stagedBytesMatch(staging, expectedHashes)
+            val stagingComplete = staging != null && names.isNotEmpty() &&
+                names.all { File(staging, it).exists() }
             when (ChatRestorePlanner.planRecovery(phase, stagingComplete)) {
                 ChatRestorePlanner.Recovery.NOTHING -> return
                 ChatRestorePlanner.Recovery.RESUME_SWAP -> {
                     synchronized(ChatPreferences.CHAT_LIST_LOCK) {
                         performSwap(appContext, staging!!, names)
-                        // Same final-set proof as the live path: if the resumed
-                        // swap does not produce exactly the manifest set this
-                        // throws, the journal is NOT cleared, and the next start
-                        // retries from the still-verified staging.
-                        verifyLiveSet(appContext, expectedHashes)
                     }
-                    // The swap that finished here also replaced the authoritative
-                    // set, so rebase the dependent stores. Clear the journal ONLY
-                    // when the rebase is durable; a rebase that did not complete
-                    // keeps the journal and staging so the next start retries it
-                    // idempotently, rather than leaving a stale derived store.
-                    if (ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
-                            appContext, ChatRestorePlanner.restoredChatIds(names)
-                        )
-                    ) {
-                        clearJournal(appContext)
-                        try { staging!!.deleteRecursively() } catch (_: Exception) { }
-                        DatabaseHealthState.logHealth(appContext, "warning",
-                            "An interrupted chat restore was finished from its verified staging at startup.")
-                    }
+                    clearJournal(appContext)
+                    try { staging!!.deleteRecursively() } catch (_: Exception) { }
+                    DatabaseHealthState.logHealth(appContext, "warning",
+                        "An interrupted chat restore was finished from its verified staging at startup.")
                 }
                 ChatRestorePlanner.Recovery.DISCARD_STAGING -> {
                     clearJournal(appContext)
@@ -246,22 +166,11 @@ object ChatRestoreManager {
 
     // ---- internals ----------------------------------------------------------
 
-    /** A verified archive: the exact name → bytes to write, plus the manifest's
-     *  full declared chat-id set. The declared set is a superset of the ids the
-     *  entries name — a declared-but-empty chat carries no per-chat file — so it
-     *  is what the rebase must invalidate/requeue, not just the ids with files. */
-    private data class VerifiedArchive(
-        val entries: Map<String, ByteArray>,
-        val declaredChatIds: Set<String>
-    )
-
     /** Full validation: manifest present + complete, every listed file
      *  present with matching SHA-256, no unexpected entries, every name on
-     *  the strict chat-storage whitelist. Returns the entries and the manifest's
-     *  declared chat-id set. */
-    private fun readAndVerifyArchive(archive: File): VerifiedArchive {
+     *  the strict chat-storage whitelist. Returns name → bytes. */
+    private fun readAndVerifyArchive(archive: File): Map<String, ByteArray> {
         val out = LinkedHashMap<String, ByteArray>()
-        val declaredChatIds = LinkedHashSet<String>()
         ZipFile(archive).use { zip ->
             val manifestEntry = zip.getEntry("manifest.json")
                 ?: throw IllegalStateException("missing manifest")
@@ -270,24 +179,6 @@ object ChatRestoreManager {
             )
             if (!meta.optBoolean("complete", false)) throw IllegalStateException("archive marked incomplete")
             val fileHashes = meta.getJSONObject("file_hashes")
-
-            // Phase 9.2 cross-check: the manifest's declared version and chat
-            // set must match the exact archive entries before any file is read
-            // or touched. Ignoring this is how a downlevel archive, a set with
-            // no chat list, or a per-chat file for an undeclared chat could pass.
-            val manifestVersion = if (meta.has("manifest_version")) meta.getInt("manifest_version") else null
-            if (!meta.has("chats")) throw IllegalStateException("manifest has no chat set")
-            val chatsArray = meta.getJSONArray("chats")
-            val chatIds = (0 until chatsArray.length()).map { chatsArray.getJSONObject(it).getString("chat_id") }
-            declaredChatIds.addAll(chatIds)
-            val hashedEntryNames = HashSet<String>().apply {
-                val keys = fileHashes.keys()
-                while (keys.hasNext()) add(keys.next())
-            }
-            ChatRestorePlanner.manifestDefect(manifestVersion, chatIds, hashedEntryNames)?.let {
-                throw IllegalStateException("manifest cross-check failed: $it")
-            }
-
             val names = fileHashes.keys()
             while (names.hasNext()) {
                 val name = names.next()
@@ -310,7 +201,7 @@ object ChatRestoreManager {
             }
         }
         if (out.isEmpty()) throw IllegalStateException("archive holds no chat files")
-        return VerifiedArchive(out, declaredChatIds)
+        return out
     }
 
     /** Copy every current chat-storage file into an indexed pre-restore
@@ -339,87 +230,28 @@ object ChatRestoreManager {
 
     /** The wholesale replacement: delete every current chat-storage file
      *  (already quarantined), then copy the staged set in. Idempotent — safe
-     *  to re-run from startup recovery.
-     *
-     *  A delete or copy that does not take is a FAILURE, not something to
-     *  swallow (Phase 9.2): a superseded file left behind, or a staged file
-     *  that did not copy, is exactly the mixed old/new set this restore exists
-     *  to prevent. Throwing here stops the restore with the journal still
-     *  SWAPPING and the pre-restore quarantine intact, so recovery re-runs the
-     *  copy from verified staging rather than leaving a half-replaced set. */
+     *  to re-run from startup recovery. */
     private fun performSwap(context: Context, staging: File, names: Collection<String>) {
         val dir = sharedPrefsDir(context)
         for (file in (dir.listFiles() ?: emptyArray())) {
             if (ChatRestorePlanner.isChatStorageFileName(file.name) && file.name !in names) {
-                if (!file.delete() && file.exists()) {
-                    throw IllegalStateException("could not delete a superseded chat file: ${file.name}")
-                }
+                try { file.delete() } catch (_: Exception) { }
             }
         }
         for (name in names) {
             val staged = File(staging, name)
-            // copyTo throws on an I/O failure; a target that ends up absent or
-            // the wrong length is caught by the final live-set verification.
             staged.copyTo(File(dir, name), overwrite = true)
         }
     }
 
-    /** Verify the live chat-storage set EXACTLY matches the manifest after a
-     *  swap (Phase 9.2 "verify the final active set"): every expected file
-     *  present with its expected hash, and no unlisted chat-storage file left
-     *  behind. Throws on any defect so the swap is not treated as complete and
-     *  the journal is not cleared — recovery keeps the pre-restore quarantine
-     *  as the source until a verified set is in place. */
-    private fun verifyLiveSet(context: Context, expected: Map<String, String>) {
-        val dir = sharedPrefsDir(context)
-        val liveHashes = LinkedHashMap<String, String>()
-        for (file in (dir.listFiles() ?: emptyArray())) {
-            if (ChatRestorePlanner.isChatStorageFileName(file.name)) {
-                liveHashes[file.name] = hex(sha256(file.readBytes()))
+    private fun writeJournal(context: Context, phase: String, stagingPath: String, names: Collection<String>) {
+        try {
+            prefs(context).edit(commit = true) {
+                putString(KEY_PHASE, phase)
+                putString(KEY_STAGING, stagingPath)
+                putString(KEY_FILES, JSONArray(names.toList()).toString())
             }
-        }
-        ChatRestorePlanner.liveSetDefect(expected, liveHashes)?.let {
-            throw IllegalStateException("final live set does not match the manifest: $it")
-        }
-    }
-
-    /** Durably records the restore journal and returns whether the commit
-     *  actually landed. A failed commit must stop the restore before it
-     *  quarantines or swaps — never proceed on an unrecorded plan. [fileHashes]
-     *  maps each staged entry name to its expected SHA-256 so recovery can
-     *  re-verify the staged bytes, not just their presence. */
-    private fun writeJournal(
-        context: Context,
-        phase: String,
-        stagingPath: String,
-        fileHashes: Map<String, String>
-    ): Boolean {
-        return try {
-            val files = JSONObject()
-            for ((name, hash) in fileHashes) files.put(name, hash)
-            val editor = prefs(context).edit()
-            editor.putString(KEY_PHASE, phase)
-            editor.putString(KEY_STAGING, stagingPath)
-            editor.putString(KEY_FILES, files.toString())
-            editor.commit()
-        } catch (_: Exception) {
-            false
-        }
-    }
-
-    /** Every journaled file exists in staging AND its bytes hash to the
-     *  expected value. A swap is finished from staging only when the staged
-     *  bytes are proven, so a truncated or altered staging can never be copied
-     *  over the live set — the pre-restore quarantine stays the recovery
-     *  source instead. */
-    private fun stagedBytesMatch(staging: File, expected: Map<String, String>): Boolean {
-        for ((name, hash) in expected) {
-            val staged = File(staging, name)
-            if (!staged.exists()) return false
-            val actual = try { hex(sha256(staged.readBytes())) } catch (_: Exception) { return false }
-            if (actual != hash) return false
-        }
-        return true
+        } catch (_: Exception) { }
     }
 
     private fun clearJournal(context: Context) {
@@ -432,21 +264,11 @@ object ChatRestoreManager {
         } catch (_: Exception) { }
     }
 
-    /** Reads the journal's expected name → SHA-256 map. An old-format journal
-     *  (a plain name array) or unreadable JSON yields an empty map, which
-     *  recovery treats as "cannot verify" — the conservative outcome that keeps
-     *  a swap from finishing against unproven staging. */
-    private fun readJournalHashes(json: String?): Map<String, String> = try {
-        if (json.isNullOrEmpty()) emptyMap()
-        else {
-            val obj = JSONObject(json)
-            val out = LinkedHashMap<String, String>()
-            val keys = obj.keys()
-            while (keys.hasNext()) { val k = keys.next(); out[k] = obj.getString(k) }
-            out
-        }
+    private fun readJournalFiles(json: String?): List<String> = try {
+        if (json.isNullOrEmpty()) emptyList()
+        else JSONArray(json).let { arr -> (0 until arr.length()).map { arr.getString(it) } }
     } catch (_: Exception) {
-        emptyMap()
+        emptyList()
     }
 
     private fun sha256(bytes: ByteArray): ByteArray =

@@ -21,10 +21,6 @@ try {
     gitSha = "unknown"
 }
 def buildDate = new java.text.SimpleDateFormat("yyyy-MM-dd").format(new Date())
-def instrumentationAbi = providers.gradleProperty("recoveryInstrumentationAbi").orNull
-if (instrumentationAbi != null && instrumentationAbi !in ["arm64-v8a", "x86_64"]) {
-    throw new GradleException("Unsupported recovery instrumentation ABI: ${instrumentationAbi}")
-}
 
 android {
     namespace 'org.teslasoft.assistant'
@@ -51,7 +47,6 @@ android {
 
         buildConfigField "String", "GIT_SHA", "\"${gitSha}\""
         buildConfigField "String", "BUILD_DATE", "\"${buildDate}\""
-        manifestPlaceholders.recoveryTestDocumentsProviderEnabled = instrumentationAbi != null
 
         // Instrumentation tests (app/src/androidTest) exercise the real
         // SQLCipher-backed MemoryStore — onCreate/onUpgrade/import/deletion.
@@ -63,10 +58,7 @@ android {
         ndk {
             // Only ship arm64 binaries. The target user runs a Pixel 8 and
             // we don't need to bloat the APK with x86_64 / armeabi-v7a.
-            // Production remains arm64-only. Phase 12.9 may request an x86_64
-            // instrumentation APK so the recovery suite can execute on a
-            // GitHub-hosted emulator instead of merely compiling in CI.
-            abiFilters instrumentationAbi ?: "arm64-v8a"
+            abiFilters "arm64-v8a"
         }
 
         externalNativeBuild {
@@ -119,22 +111,10 @@ android {
 
         debug {
             debuggable false
-            // The disposable x86_64 test APK shares its classloader with the
-            // separately built instrumentation APK. R8 cannot see those test-
-            // only calls and would remove runner APIs such as Trace.beginSection.
-            // Normal arm64 debug artifacts remain minified exactly as before.
-            minifyEnabled instrumentationAbi == null
-            shrinkResources instrumentationAbi == null
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             multiDexEnabled true
-            signingConfig signingConfigs.debug
-        }
-
-        beta {
-            initWith debug
-            applicationIdSuffix ".beta"
-            versionNameSuffix "-beta"
-            matchingFallbacks = ['debug']
             signingConfig signingConfigs.debug
         }
     }
@@ -224,12 +204,12 @@ dependencies {
     // memory-system spec mandates encryption at rest for exactly this data
     // (protected topics, relationship history). Maven Central artifact; the
     // key lives in EncryptedPreferences (see MemoryDatabaseKey).
-    implementation 'net.zetetic:sqlcipher-android:4.17.0'
+    implementation 'net.zetetic:sqlcipher-android:4.16.0'
     // sqlcipher-android's POM declares androidx.sqlite only at RUNTIME scope,
     // but its SQLiteOpenHelper/SQLiteDatabase implement androidx.sqlite.db
     // interfaces — without this explicit compile dependency, Kotlin can't
-    // resolve those supertypes and every encrypted-store call site fails to
-    // compile. Version matches the one sqlcipher-android 4.17.0 resolves.
+    // resolve those supertypes and every MemoryStore call site fails to
+    // compile. Version matches the one sqlcipher-android 4.16.0 resolves.
     implementation 'androidx.sqlite:sqlite:2.6.2'
 
     // WorkManager drives the Automatic Backups periodic job — the reliable
@@ -237,10 +217,6 @@ dependencies {
     // only run when the user opens the app). One unique periodic job; the
     // worker's own due gate makes a deferred/early fire harmless.
     implementation 'androidx.work:work-runtime-ktx:2.10.0'
-    // AndroidJUnitRunner calls Trace.beginSection during startup. Keep the
-    // application-side class new enough for the runner's shared classloader;
-    // an older transitive tracing artifact crashes before any device test runs.
-    implementation 'androidx.tracing:tracing:1.2.0'
 
     // JVM unit tests (app/src/test); run in CI via "gradlew test".
     testImplementation 'junit:junit:4.13.2'

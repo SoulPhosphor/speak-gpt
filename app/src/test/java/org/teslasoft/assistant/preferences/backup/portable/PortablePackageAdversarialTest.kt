@@ -113,8 +113,7 @@ class PortablePackageAdversarialTest {
 
     private fun manifestFor(vararg artifacts: Pair<String, ByteArray>): ByteArray {
         val entries = artifacts.joinToString(",") { (name, data) ->
-            val type = if (name == "chats.json") PortablePackage.TYPE_CHATS_JSON else "x"
-            """{"name":"$name","type":"$type","sha256":"${sha256Hex(data)}"}"""
+            """{"name":"$name","type":"x","sha256":"${sha256Hex(data)}"}"""
         }
         return """{"artifacts":[$entries]}""".toByteArray(Charsets.UTF_8)
     }
@@ -131,8 +130,8 @@ class PortablePackageAdversarialTest {
         val data = ByteArray(64) { 5 }
         val zip = tmp.newFile("ok.zip")
         RawZip().apply {
-            add("chats.json", data)
-            add(PortablePackage.MANIFEST_ENTRY, manifestFor("chats.json" to data))
+            add("a.bin", data)
+            add(PortablePackage.MANIFEST_ENTRY, manifestFor("a.bin" to data))
         }.writeTo(zip)
         assertTrue(PortablePackage.validateAndExtract(zip, tmp.newFolder()) is PortablePackage.ValidateResult.Ok)
     }
