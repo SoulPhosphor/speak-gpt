@@ -60,8 +60,13 @@ class BackupRestoreScreenContractTest {
         assertTrue(row.contains("@string/restore_mode_label"))
         assertTrue(row.contains("Widget.App.Dropdown.CanonicalValue"))
         assertTrue(row.contains("Widget.App.Dropdown.CanonicalLabel"))
-        assertTrue(layout.split("org.teslasoft.assistant.ui.views.RestoreCategoryView").size - 1 == 12)
+        assertTrue(layout.split("org.teslasoft.assistant.ui.views.RestoreCategoryView").size - 1 == 13)
         assertTrue(layout.contains("@+id/restore_model_credentials_note"))
+        val view = find(
+            "src/main/java/org/teslasoft/assistant/ui/views/RestoreCategoryView.kt",
+            "app/src/main/java/org/teslasoft/assistant/ui/views/RestoreCategoryView.kt"
+        ).readText()
+        assertTrue(view.contains("modeView.visibility = if (mergeSupported) View.VISIBLE else View.GONE"))
     }
 
     @Test
