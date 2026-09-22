@@ -21,6 +21,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariantRules
 
 /**
  * The pure §6.3/§6.4 planning rules: which lorebook links survive, what the
@@ -40,6 +41,7 @@ class CompanionRestorePlannerTest {
         autoLoad: Boolean = false
     ) = CompanionProfileEntry(
         id = id, label = label, prompt = "prompt-$id",
+        promptVariants = PortablePromptVariantRules.legacySingleVariant(id, "prompt-$id"),
         activationPromptId = "ap-$id",
         coreLoreBookId = core, coreLoreBookName = coreName,
         additionalLoreBookIds = additional, additionalLoreBookNames = additionalNames,

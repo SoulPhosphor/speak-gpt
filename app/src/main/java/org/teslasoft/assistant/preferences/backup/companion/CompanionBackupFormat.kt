@@ -28,8 +28,15 @@ object CompanionBackupFormat {
     /** `format` marker inside backup.json — the file-type check. */
     const val FORMAT_MARKER = "companion-roleplay-backup"
 
-    /** Highest `format_version` this build can read (and the one it writes). */
-    const val FORMAT_VERSION = 1
+    /**
+     * Highest `format_version` this build can read (and the one it writes).
+     * Version 2 adds each companion's ordered `prompt_variants`; version 1
+     * archives (single `prompt`) are still read (multi-prompt-backup-restore-plan.md).
+     */
+    const val FORMAT_VERSION = 2
+
+    /** The first format version that carries `prompt_variants`. */
+    const val PROMPT_VARIANTS_VERSION = 2
 
     /** The manifest entry inside the ZIP. */
     const val MANIFEST_ENTRY = "backup.json"

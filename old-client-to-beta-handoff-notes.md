@@ -56,14 +56,17 @@ Confirmed by reading `beta/new-client`, to save the new-client session time:
   `chat-logical-v2`. For v1 it treats folders as empty and does not require a
   `folders` array. The old client has **no chat-folder feature**, so its v1
   chat export is complete and restorable as-is.
-- The companion archive format (`CompanionBackupFormat`) is identical on both
-  branches: marker `companion-roleplay-backup`, `FORMAT_VERSION = 1`, manifest
-  `backup.json`, images under `images/`. The old client's existing
-  `CompanionBackupExporter.buildBackupZip(context, staged)` produces an archive
-  the new client reads.
-- The companion codec decode (`CompanionBackupCodec`) is **lenient**: it reads
-  known keys via `optString`/`opt*` and ignores unknown ones. Additive fields
-  in a future archive version will not break older/newer readers.
+- The companion archive contract (`CompanionBackupFormat`,
+  `CompanionBackupData`, `CompanionBackupCodec`, `PortablePromptVariant`) is
+  byte-identical on both branches as of Beta commit
+  `580da22cd33f605abe6a660307e7230bd67af1a6`: marker
+  `companion-roleplay-backup`, `FORMAT_VERSION = 2`, manifest `backup.json`,
+  images under `images/`. The old client's
+  `CompanionBackupExporter.buildBackupZip(context, staged)` produces a
+  version-2 archive the new client reads.
+- The companion codec is lenient about most fields, but a version-2 archive's
+  `prompt_variants` are read strictly (see §4). Version-1 archives are still
+  accepted.
 - Model rules are tables inside `memory.db` (`model_rules`,
   `model_rule_tags`, `model_rule_tag_links`, `model_rule_profiles`). They ride
   in the existing `memory.db` artifact — no separate export needed.
@@ -72,62 +75,41 @@ Confirmed by reading `beta/new-client`, to save the new-client session time:
   at the mapping boundary); app settings use `AppSettingsPortabilityPolicy`,
   which denies api keys/tokens/secrets and runtime state.
 
-## 4. OPEN ITEM — companion multi-prompt versions (needs the new client first)
+## 4. RESOLVED — companion multi-prompt versions
 
-**The gap (a real, pre-existing defect on both branches):** a companion
-(`PersonaObject`) can hold multiple prompt versions in
-`promptVariants: ArrayList<CompanionPromptVariant>` (each has `id`, `name`,
-`text`, `isDefault`). But:
+Resolved by companion archive **version 2**, defined and proven on
+`beta/new-client` at commit `580da22cd33f605abe6a660307e7230bd67af1a6`
+(contract: `companion-roleplay-backup-plan.md` §3.1 on that branch), then
+mirrored here.
 
-- `CompanionBackupData.CompanionProfileEntry` carries only a single `prompt`
-  string.
-- `CompanionBackupExporter` maps `prompt = p.prompt` (the default variant's
-  text) and **drops `promptVariants`** — on `main` *and* `beta/new-client`.
-- `CompanionBackupCodec` encodes/decodes only `prompt`.
-- The new client's restore (`CompanionRoleplayRestoreManager`) does **not**
-  write `promptVariants` back onto the persona.
+Each `companion_profiles` entry keeps `prompt` and adds `prompt_variants`:
 
-So today, migrating keeps each companion's default/current prompt but loses its
-alternate versions. The owner has confirmed companions have multiple versions
-and they must be preserved.
+```json
+"prompt": "<default variant text>",
+"prompt_variants": [
+  { "id": "<string>", "name": "<string>", "text": "<string>", "isDefault": <boolean> }
+]
+```
 
-**Why it can't be solved from the export alone:** the backup format has no slot
-for the versions, and the restore side ignores them. This is an import-first
-problem.
+The new client rejects a version-2 archive as damaged unless, for every
+companion: the array is present and nonempty; each variant has exactly those
+four fields with those types; ids are nonblank and unique; exactly one
+variant is the default; and `prompt` equals the default variant's text.
+Blank names and text are allowed; order and ids are preserved exactly.
 
-**What a full fix requires (to be designed on the new client, then mirrored in
-the export):**
+The old-client exporter (this branch) now copies every
+`PersonaObject.promptVariants` entry — id, name, text, order — without
+writing to live preferences. The default flag follows the app's existing
+effective-default rule: if a stored list has no default (the app never
+creates that state), every prompt is still copied and the first one is made
+the default (owner ruling, September 22 2026). A companion with no variant
+list is exported as one deterministic "Prompt 1" variant, exactly as the new
+client reads a version-1 archive. `CompanionBackupExporterPromptVariantsTest`
+checks the emitted manifest against the same synthetic fixture the new
+client uses.
 
-1. **Format:** add a per-companion `prompt_variants` array to the companion
-   archive — each entry `{ id, name, text, isDefault }`. Additive and optional
-   so older backups (no field) still restore as a single default prompt. A
-   `CompanionPromptVariant` DTO already exists on both branches and has
-   `toJson`/`fromJson`/`migrateFromSinglePrompt` helpers to reuse.
-2. **New-client restore:** on import, if `prompt_variants` is present, write it
-   to the persona's `_prompt_variants` store and keep `prompt` consistent with
-   the default variant; if absent, fall back to
-   `CompanionPromptVariant.migrateFromSinglePrompt(prompt, personaId)` (current
-   behavior). Decide format-version handling on the new-client side.
-3. **Old-client export (this branch, afterwards):** capture
-   `p.promptVariants` into the archive using the same field shape the new
-   client defined.
-
-**Sequencing:** do steps 1–2 on `beta/new-client` first (a dedicated session
-auditing the receiving side), then step 3 here so the shipment matches the
-receiving dock.
-
-## 5. First task for the new-client audit session
-
-Before any export work on multi-prompts:
-
-1. Audit the new client's companion import/restore path end to end
-   (`CompanionBackupCodec` decode → `CompanionRoleplayRestoreManager` →
-   `PersonaPreferences`/`_prompt_variants`), and confirm exactly how a restored
-   companion's prompt(s) are written today.
-2. Decide the receiving format for prompt versions (field name, shape,
-   version/compat handling) driven by the new client's design.
-3. Record that decision so the export can conform. Then this branch adds the
-   matching capture.
+The old client's own companion restore is export-branch scope only and was
+not changed.
 
 ## 6. Files changed on `handoff/old-client-export`
 
@@ -145,7 +127,22 @@ Added (new client codecs copied verbatim + a thin old-store adapter + tests):
 - `.../test/.../portable/AppSettingsPortableCodecTest.kt`,
   `ModelEndpointPortableCodecTest.kt` (verbatim JVM tests)
 
+Added for the version-2 companion prompt contract (copied verbatim from
+Beta `580da22`):
+
+- `.../backup/portable/PortablePromptVariant.kt`
+- `.../test/.../portable/PortablePromptVariantTest.kt`
+- `.../test/.../companion/CompanionBackupCodecTest.kt` (replaces the old copy)
+- `.../test/.../companion/CompanionBackupExporterPromptVariantsTest.kt` (new,
+  export-side contract check)
+
 Modified:
+
+- `.../backup/companion/CompanionBackupFormat.kt`, `CompanionBackupData.kt`,
+  `CompanionBackupCodec.kt` — replaced with the Beta `580da22` versions.
+- `.../backup/companion/CompanionBackupExporter.kt` — prompt-variant mapping
+  (`profileEntries`, `portablePromptVariants`) identical to Beta; the old
+  client's image handling is unchanged.
 
 - `.../backup/portable/PortablePackage.kt` — added `TYPE_*` artifact-type
   constants (no format/envelope change).
@@ -161,5 +158,5 @@ Modified:
 - Do not modify `beta/new-client` from the export session (avoid crossovers).
 - Do not add a new migration format; keep the version-2 package.
 - Do not export profile-image or generated-image files (owner decision).
-- Do not add prompt-version export until the new client defines the receiving
-  format.
+- Do not change the companion archive contract here; it follows
+  `beta/new-client` (currently commit `580da22`).
