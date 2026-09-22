@@ -1,313 +1,248 @@
-# Old client to Beta backup handoff plan
+# Old client to Beta handoff — implementation instructions
+
+## This is an implementation task
+
+Do not produce another inventory, proposal, architecture document, or phased plan.
+
+Read these instructions, inspect the named files only as needed to adapt them, implement the old-client exporter, run the normal build/tests, and commit the working code to the handoff branch.
+
+Stop and ask the owner only if the old client genuinely lacks enough stored information to produce one of the required Beta artifacts. Ordinary compile errors, dependency differences, and old-versus-new storage adapters are implementation work, not reasons to return another plan.
 
 ## Goal
 
-Add a focused handoff path that lets the installed old client export its existing user data into a portable backup that `beta/new-client` can restore.
+Make the old client create one portable Recovery Backup containing its existing non-secret user data in artifacts that `beta/new-client` already understands.
 
-The old client remains the safe source of truth while the Beta restore is tried. No live-device test is required during implementation. The first real restore can fail without endangering the old client's data.
+The owner will later create that backup from the real old-client data and try restoring it into the side-by-side Beta. No live-device restore is required in this implementation task. A failed later Beta restore does not endanger the data still held by the old client.
 
-## Branch boundaries
+## Branch rules
 
-- `main` is read-only and remains the old client.
-- This plan lives on `beta/new-client`.
-- Old-client exporter work must be done on a separate branch created from the current `main`, such as `handoff/old-client-export`. It must never be merged into `main`.
-- Any importer correction belongs only on `beta/new-client`.
-- Do not merge `main` into `beta/new-client`; the commit unique to `main` intentionally reverts the new client.
-- Do not install the new-client code over the old client merely to gain access to its private data.
+1. Treat `main` as read-only.
+2. Create `handoff/old-client-export` from the current `main`.
+3. Commit all old-client exporter work only to that branch.
+4. Never merge the handoff branch into `main`.
+5. Do not merge `main` into `beta/new-client`.
+6. Do not install the new-client code over the old client.
+7. Do not change `beta/new-client` during the exporter implementation unless an actual package produced by the finished exporter exposes a real Beta incompatibility.
 
-## Confirmed current state
+## Compatibility decision already made
 
-Both clients use the same `PHOSBKP2` portable-package envelope, and the Beta reader intentionally accepts older manifests. A backup made by the current old client can therefore be opened by the Beta when its artifacts are otherwise valid.
+Do not invent a new migration format.
 
-The current old-client recovery writer exports only:
+Keep the old client's existing `PHOSBKP2` outer package and existing version-2 inner manifest behavior. The following file is already byte-identical between `main` and `beta/new-client`:
 
-- `chats.json`, including per-chat settings other than credentials;
-- `memory.db`;
-- `lorebook.db`;
-- `user_images.db`, which is only the profile-image catalog.
+`app/src/main/java/org/teslasoft/assistant/preferences/backup/portable/PortablePackageFormat.kt`
 
-It does not put the following into the unified recovery package:
+The Beta intentionally accepts older version-2 packages and infers available restore categories from recognized artifact names and types when exact category declarations are absent. Therefore the old client does not need the Beta's complete restore engine, transaction system, manifest version 4, or semantic planner backported into it.
 
-- the actual profile-image files;
-- generated-image catalog and image files;
-- companions;
-- glamours/personas;
-- roleplay data;
-- activation prompts;
-- system prompts;
-- model endpoint definitions, favorites, and routing preferences;
-- global Settings and Preferences.
-
-The side-by-side Beta has Android application ID `com.soulphosphor.phosphorshines.beta`. It cannot read the old client's private preferences, databases, keys, or files directly.
-
-The Beta settings work adds manifest version 4 and a Replace-only `settings` category. Versions 2 and 3 remain accepted, and a package without Settings and Preferences leaves that category unavailable rather than inventing empty settings.
-
-## Reviewed code map — do not rediscover
-
-The following connections were verified directly against the current branch contents before this plan was written.
-
-### Shared package envelope
-
-- Old client: `app/src/main/java/org/teslasoft/assistant/preferences/backup/portable/PortablePackageFormat.kt`
-- Beta: the same path on `beta/new-client`
-- The file is byte-identical on both branches at the time of review.
-- Both use the eight-byte `PHOSBKP2` magic and outer format version 2.
-- `PortablePackage.envelope(...)` is therefore already the common outer transport. The handoff does not need a new envelope or a separate file type.
-
-### Existing old-client writer on `main`
-
-The current export path is:
-
-- `app/src/main/java/org/teslasoft/assistant/preferences/backup/portable/PortableRecoveryWriter.kt`
-- It builds its artifacts in private staging, calls `PortablePackage.buildInnerZip(...)`, envelopes the ZIP, then reopens and validates the finished file before reporting success.
-- Keep that workflow and extend its artifact list.
-
-Its current artifact connections are:
-
-| Artifact | Existing old-client capture path | What Beta infers |
-|---|---|---|
-| `memory.db` | `MemoryStore.isProvisioned` + `DatabaseKeys.getOrCreate` + `RecoveryBackupManager.snapshotCipher` | Memories and Model rules |
-| `lorebook.db` | `LoreBookEncryption.obtainPassword` + `RecoveryBackupManager.snapshotCipher` | Lorebooks |
-| `user_images.db` | `RecoveryBackupManager.snapshotUserImageCatalog` | Profile images, but catalog alone is incomplete |
-| `chats.json` | `ChatLogicalSerializer.serialize(context)` | Chats and their per-chat settings |
-
-The old writer currently calls:
+Extend the artifact list passed to the old client's existing:
 
 ```kotlin
 PortablePackage.buildInnerZip(artifacts, createdAt, innerZip)
 ```
 
-It supplies no exact category declarations. Beta treats that as a compatible version-2 inventory and infers only the categories represented by recognized artifacts.
+Then keep its existing envelope and reopen-and-verify flow.
 
-### Existing chat connection
+## Existing old-client writer to modify
 
-- Old client serializer: `app/src/main/java/org/teslasoft/assistant/preferences/backup/portable/ChatLogicalSerializer.kt`
-- It serializes chat list/history plus each chat's typed settings.
-- It explicitly excludes the legacy per-chat `api_key`.
-- Beta's current writer calls `ChatLogicalSerializer.serializeV2(context)`, which also carries the current folder representation.
-- The handoff implementation should port/use the V2 chat serialization needed to preserve folders rather than discarding folder organization.
-
-### Exact Beta exporter connections to backport selectively
-
-The current Beta writer already demonstrates how every missing artifact is built:
+Modify:
 
 `app/src/main/java/org/teslasoft/assistant/preferences/backup/portable/PortableRecoveryWriter.kt`
 
-Use these existing connections as the implementation checklist:
+Keep its current staging, degraded-store refusal, encryption choice, envelope creation, output verification, failure cleanup, and these existing artifact blocks:
 
-| Handoff content | Current Beta capture call | Produced artifact |
+| Existing artifact | Existing capture |
+|---|---|
+| `memory.db` | `MemoryStore`, `DatabaseKeys`, and `RecoveryBackupManager.snapshotCipher` |
+| `lorebook.db` | `LoreBookEncryption.obtainPassword` and `RecoveryBackupManager.snapshotCipher` |
+| `user_images.db` | `RecoveryBackupManager.snapshotUserImageCatalog` |
+| `chats.json` | `ChatLogicalSerializer` |
+
+Extend this writer with the missing artifacts below.
+
+## Required output artifacts
+
+The finished old-client Recovery Backup must use these exact Beta-recognized names and types:
+
+| Content | Entry name | Artifact type |
 |---|---|---|
-| Profile catalog and all profile JPEGs | `ProfileImagePortableBackup.buildArtifacts(context, stagedCatalog)` after `snapshotUserImageCatalog` | `user_images.db` plus profile-image assets |
-| Generated-image catalog and all active/Gallery-only assets | `GeneratedImagePortableBackup.buildArtifacts(context, staging)` | generated-image catalog plus assets |
-| Companions, glamours, roleplay, activation prompts, and system prompts | `CompanionBackupExporter.buildBackupZip(context, staged, validateAssignedImages = true)` | `companion_roleplay.zip` |
-| Credential-free model endpoints, favorites, provider preferences, and routing | `ModelEndpointPortableBackup.write(context, staged)` | `model_endpoint_settings.json` |
-| Global Settings and Preferences | `AppSettingsPortableStore.write(context, staged)` | `app_settings.json` |
-| Chats and folders | `ChatLogicalSerializer.serializeV2(context)` | `chats.json`, schema 2 |
+| Chats and per-chat settings | `chats.json` | `chats-json` |
+| Memory and model-rule database | `memory.db` | `sqlcipher-db` |
+| Lorebooks | `lorebook.db` | `sqlcipher-db` |
+| Profile-image catalog | `user_images.db` | `sqlite-db` |
+| Profile-image files | `profile_images/assets/profile_<sha256>.jpg` | `profile-image-asset` |
+| Generated-image catalog | `generated_images/catalog.json` | `generated-images-catalog` |
+| Generated-image files | `generated_images/assets/<validated filename>` | `generated-image-asset` |
+| Companions, glamours, roleplay, activation prompts, and system prompts | `companion_roleplay.zip` | `companion-roleplay-archive` |
+| Model endpoint definitions, favorites, and routing | `model_endpoint_settings.json` | `model-endpoint-settings` |
+| Global Settings and Preferences | `app_settings.json` | `app-settings` |
 
-Do not blindly copy the whole Beta writer into the old client. Backport only the serializers, codecs, and asset collectors required for export, using the old client's existing stores.
+A `memory.db` artifact represents both Memories and Model rules. A `companion_roleplay.zip` artifact represents Companions, Glamours, Roleplay, Activation prompts, and System prompts.
 
-### Settings and Preferences connection already mapped
+If a content group is genuinely empty, follow the relevant Beta exporter behavior. Do not invent fake records. Artifacts such as settings, chats, endpoint settings, and the companion archive may still validly describe an empty logical collection.
 
-The Beta implementation is:
+## Direct code changes
+
+### 1. Complete profile-image portability
+
+The old writer currently exports only `user_images.db`. Its own comment confirms that JPEGs are omitted. That is not usable for a side-by-side Beta because the Beta cannot see files in the old application's private directory.
+
+Copy or adapt from `beta/new-client`:
+
+`app/src/main/java/org/teslasoft/assistant/preferences/backup/portable/ProfileImagePortableBackup.kt`
+
+After the existing `snapshotUserImageCatalog` succeeds, call the equivalent of:
+
+```kotlin
+ProfileImagePortableBackup.buildArtifacts(context, stagedCatalog)
+```
+
+Add the catalog artifact and every returned profile-image asset. If a catalog row requires an image that cannot be read or validated, fail the backup instead of publishing a catalog-only package.
+
+Do not alter image assignments or live catalog rows.
+
+### 2. Add generated images
+
+Copy or adapt from `beta/new-client`:
+
+- `GeneratedImagePortableBackup.kt`
+- `GeneratedImagePortableCatalog.kt`
+
+Use the old client's generated-image stores as the source and emit the exact Beta logical catalog plus every active or Gallery-only asset required by that catalog.
+
+If the Beta exporter references new-client-only catalog classes that do not exist on `main`, write a narrow old-store adapter that produces the same `generated_images/catalog.json` schema. Do not change the Beta schema and do not migrate the old live store.
+
+Add every artifact returned by the generated-image exporter. Treat a genuine empty gallery as empty; treat an unreadable required file as backup failure.
+
+### 3. Add companions, prompts, and roleplay
+
+Use the existing companion archive machinery. The Beta writer's required call is:
+
+```kotlin
+CompanionBackupExporter.buildBackupZip(
+    context,
+    stagedArchive,
+    validateAssignedImages = true
+)
+```
+
+The target entry is `companion_roleplay.zip` with type `companion-roleplay-archive`.
+
+Start with the `CompanionBackupExporter`, format, codec, and validator already present on `main`. Bring over only Beta corrections needed to produce the current validated archive. The archive must carry companions, glamours/personas, roleplay characters and related records, activation prompts, system prompts, and its required assigned profile images.
+
+Any missing required assigned image, unreadable Memory data, or unreadable Lorebook relationship must fail the backup visibly.
+
+### 4. Add model and endpoint settings
+
+The Beta target encoder is:
+
+- `ModelEndpointPortableBackup.kt`
+- `ModelEndpointPortableCodec.kt`
+
+Produce `model_endpoint_settings.json` with type `model-endpoint-settings`.
+
+The old client may not contain the Beta's `ModelEndpointStateGenerationStore`. If it does not, read the authoritative old-client endpoint, favorite-model, provider, and routing stores directly and adapt them into the Beta codec's data model.
+
+Include definitions, IDs, labels, URLs, supported model configuration, favorite parameters, provider preferences, and routing choices handled by the Beta codec. Preserve stable IDs.
+
+Never include API keys, bearer tokens, OAuth values, or other credentials.
+
+### 5. Add Settings and Preferences
+
+Copy or adapt these files from `beta/new-client`:
 
 - `AppSettingsPortableData.kt`
-  - `AppSettingsPortableCodec`, format `app-settings-v1`, schema 1;
-  - `AppSettingsPortabilityPolicy` shared export/import classification.
 - `AppSettingsPortableStore.kt`
-  - captures portable values;
-  - writes `app_settings.json`;
-  - replaces only portable keys during Beta restore.
-- `AppSettingsRestoreParticipant.kt`
-  - stages the exact current and desired settings snapshots for rollback.
 
-The captured old-client sources are already known:
+Use the same `AppSettingsPortableCodec`, `AppSettingsPortabilityPolicy`, format `app-settings-v1`, and schema version 1. Emit `app_settings.json` with type `app-settings`.
 
-| Source | Portable contents |
+Capture the already-mapped sources:
+
+| Source | Required treatment |
 |---|---|
-| Plain `settings` SharedPreferences | portable user configuration by default, subject to the shared deny policy |
-| Encrypted default `settings.` store obtained through `SecurePrefs` / `AppTtsVoicePreferences.STORE_NAME` | durable default TTS/voice/model selections and other allowed defaults |
-| `storage_health` SharedPreferences | only the explicit backup/readable-backup user-choice allowlist |
-| `files/tts/saved_sources.json` | validated credential-free saved TTS sources and routing |
-| `logit_bias_config` and `logit_bias_config_<stableId>` | validated catalog and individual configurations |
+| Plain `settings` SharedPreferences | Include portable user settings through the shared policy |
+| Encrypted default `settings.` store through `SecurePrefs` and `AppTtsVoicePreferences.STORE_NAME` | Include allowed durable defaults |
+| `storage_health` | Include only the existing explicit user-choice allowlist |
+| `files/tts/saved_sources.json` | Include after the existing strict validation |
+| `logit_bias_config` and `logit_bias_config_<stableId>` | Include catalog and matching configurations |
 
-The portability policy already denies credential-shaped keys, `api_key`, the duplicate `system_message`, transient summarizer/runtime state, SAF locations, operational history, logs, caches, and downloaded model binaries. The old-client exporter should reuse this exact codec and policy rather than implement a second settings filter.
+Reuse the exact Beta deny policy. Do not make a second list. Credentials, API keys, tokens, recovery keys, SAF locations, logs, caches, transient work state, runtime history, and downloaded models remain excluded.
 
-### Beta manifest and reader connection
+### 6. Preserve chats and folders
 
-The current Beta reader is intentionally backward-compatible:
+The existing old serializer already exports chat UUIDs, histories, and typed per-chat settings while excluding the per-chat `api_key`.
 
-- `PortablePackage.kt`
-  - current `MANIFEST_VERSION = 4`;
-  - version 3 is accepted as the pre-Settings exact manifest;
-  - version 2 is accepted conservatively and its categories are inferred from recognized artifacts when no exact declaration exists.
-- `PortableRestoreInventory.from(...)`
-  - maps artifact types/names to available restore categories.
-- `PortableRecoverySemanticValidator.validate(...)`
-  - parses every artifact, reproduces category counts, and checks cross-category references and required assets.
-- `UnifiedPortableRestore.kt`
-  - builds the actual selected-category restore participants.
-- `PortableRestoreSelectionPlan.kt`
-  - distinguishes requested-but-missing categories and supports Restore Available Categories.
+Compare the old `ChatLogicalSerializer.serialize(context)` with Beta's `ChatLogicalSerializer.serializeV2(context)`. Port the V2 folder serialization so chat-folder organization is not discarded.
 
-The Beta writer obtains exact declarations by:
+Preserve every existing chat UUID byte-for-byte. Do not generate replacement UUIDs during export.
 
-1. converting the staged artifacts to `ValidatedArtifact`;
-2. calling `PortableRestoreInventory.from(...)`;
-3. calling `PortableRecoverySemanticValidator.validate(...)`;
-4. calling `PortableRecoverySemanticValidator.declarations(...)`;
-5. passing those declarations to `PortablePackage.buildInnerZip(...)`.
+### 7. Add the artifacts to the existing writer
 
-The old-client handoff writer should follow the same sequence so the file it publishes is already a normal current Beta recovery package.
+Insert the new capture blocks before the writer assembles `inner.zip`.
 
-### Confirmed profile-image incompatibility in old packages
+Use the exact Beta artifact constants where they can be copied without dragging in restore-only code. Otherwise use the exact type strings in the Required output artifacts table.
 
-This is the specific existing handoff defect, not a hypothetical concern:
+Do not port `UnifiedPortableRestore`, restore participants, restore journals, UI category selection, or database replacement code into the old client. This branch exports only.
 
-- The old writer's own comment states that `user_images.db` is a catalog-only snapshot and that its JPEGs are not backed up.
-- The Beta writer adds `ProfileImagePortableBackup.buildArtifacts(...)` and includes every valid content-addressed gallery JPEG.
-- The Beta semantic validator requires catalogs and referenced assets to form a closed, valid set.
-- Because the side-by-side Beta has a different Android application ID, the old client's private JPEG files are not present in the Beta sandbox.
+Keep the existing behavior that deletes the output and reports failure when finished-package verification fails.
 
-Therefore an old package containing a non-empty profile catalog can fail Beta semantic validation even though its chats and databases are structurally readable. The handoff exporter must include the profile assets; this cannot be deferred to the later manual restore attempt.
+## Existing reader behavior that this relies on
 
-### Existing verification relevant to this handoff
+The Beta's current reader already provides the receiving side:
 
-The settings change currently has codec/package/semantic/UI-contract coverage in:
+- `PortablePackage.kt` accepts version 2 and infers artifact-backed categories.
+- `PortableRestoreInventory.from(...)` maps the artifact names/types above to categories.
+- `PortableRecoverySemanticValidator.validate(...)` validates the logical content, category relationships, counts, and image closure.
+- `UnifiedPortableRestore.kt` creates the selected-category restore participants.
+- Packages without exact version-4 declarations do not invent empty categories.
+- Packages without Settings and Preferences remain readable; the new handoff package will include `app_settings.json`, so that category will be offered.
 
-- `AppSettingsPortableCodecTest.kt`;
-- `PortablePackageTest.kt`;
-- `PortableRecoverySemanticValidatorTest.kt`;
-- `BackupRestoreScreenContractTest.kt`.
+Do not reimplement this receiver in the old-client branch.
 
-These tests establish payload validation and manifest compatibility. They do not replace the single handoff compatibility fixture required later in this plan.
+## Old-client UI
 
-## Phase 1: Inventory the old client's handoff sources
+Do not design a new migration wizard.
 
-Read the current `main` implementation and make one concrete source map for every Beta restore category.
+The old client already has the Recovery Backup creation flow. Make that existing action produce the comprehensive compatible package.
 
-For each category, record:
+Only add or change visible text if the existing screen explicitly claims that the backup omits data now being added. Preserve the existing protected versus unencrypted choice and normal Save As flow.
 
-- the authoritative old-client store or files;
-- the existing old-client exporter or serializer that can be reused;
-- any Beta codec that must be backported only for export;
-- stable IDs and references that must be preserved;
-- the record-count calculation;
-- whether the category can be explicitly empty;
-- asset files that must accompany its catalog;
-- excluded credentials or device-specific values.
+## Data-safety rules
 
-The inventory must cover all current Beta restore categories:
-
-1. Chats
-2. Generated images
-3. Companions
-4. Glamours
-5. Roleplay
-6. Profile images
-7. Activation prompts
-8. System prompts
-9. Model endpoint settings
-10. Settings and Preferences
-11. Model rules
-12. Memories
-13. Lorebooks
-
-Do not assume that a database catalog is portable when its referenced files are absent.
-
-## Phase 2: Define one compatible handoff package
-
-Use the Beta's current portable artifact names, codecs, category declarations, and manifest rules. Do not create a second permanent transfer format.
-
-The handoff backup must:
-
-- use the existing `PHOSBKP2` envelope;
-- use the Beta's current exact category manifest when feasible;
-- declare every category as artifact-backed or explicitly empty;
-- preserve chat and content UUIDs byte-for-byte;
-- include complete catalogs and their referenced image assets;
-- contain category counts the Beta's semantic validator can reproduce;
-- preserve the old client's protected or unencrypted backup choice;
-- exclude API keys, tokens, recovery/database keys as user data, SAF locations, caches, logs, temporary state, and downloaded model binaries;
-- be validated by the same logical readers before it is published.
-
-Database encryption material required solely to decode a protected recovery artifact continues to follow the existing recovery-package design. It is not restored as an API credential or user setting.
-
-## Phase 3: Add export-only handoff support to the old client
-
-Work from a new branch based on the exact current `main`.
-
-Extend the old client's existing `PortableRecoveryWriter` rather than building a parallel backup screen and format.
-
-Requirements:
-
-- Keep the old client UI and storage model.
 - Add no database migration.
-- Do not rename, rewrite, repair, or reseed live IDs.
-- Read live data and write only to private staging plus the user-selected output file.
-- Reuse existing serializers where they already produce the Beta artifact.
-- Backport only the capture/codec code needed for missing categories.
-- Include actual profile and generated image bytes, not only database rows.
-- Include the new Settings and Preferences payload using the same schema and portability policy as `beta/new-client`.
-- Validate the complete package before reporting success.
-- If any required category cannot be read consistently, fail the handoff backup instead of silently omitting it.
-- Keep the ordinary old-client data intact after both success and failure.
+- Make no writes to live user databases, preferences, catalogs, UUIDs, or image assignments.
+- Write only to private staging and the user-selected backup destination.
+- Do not delete or rename live assets.
+- Do not silently omit an unreadable required artifact.
+- On failure, remove the incomplete output and leave the old client's data untouched.
+- Keep API credentials local.
+- Keep `main` untouched.
 
-The branch build must retain the original old-client application ID and use a signing identity compatible with the installed old client so it can update that installation without clearing its data.
+## Proportionate verification
 
-## Phase 4: Confirm Beta compatibility
+The owner does not yet have a handoff file in the Beta, so do not require a live restore for this task.
 
-Use the package produced by the old-client exporter as the contract.
+Required now:
 
-On `beta/new-client`:
+1. Run the existing unit-test suite on `handoff/old-client-export`.
+2. Build the old-client APK successfully.
+3. Confirm the APK retains the original old-client application ID, not the Beta suffix.
+4. Exercise package creation with test/fixture data if the repository already provides a usable fixture.
+5. Reopen the produced test package with the existing package reader and confirm every produced artifact passes hash/extraction validation.
+6. Run existing Beta package/semantic tests only if Beta code had to be changed.
 
-- verify the envelope, manifest, category inventory, artifacts, counts, and references are accepted;
-- verify every included category appears on the restore screen;
-- verify explicitly empty categories are distinguished from absent categories;
-- verify Settings and Preferences appears as Replace-only;
-- verify credentials and device-specific values are neither present nor cleared;
-- change Beta production code only if the handoff package exposes a real incompatibility.
+Do not build a broad new instrumentation matrix. The real practical test comes after the exporter exists: create the backup from the old client, restore it into the side-by-side Beta, and correct any actual failure while the old client's data remains safe.
 
-If the handoff exporter emits the existing current format correctly, this phase may require no Beta production change.
+## Completion requirements
 
-## Proportionate automated verification
+Do not finish with an audit report or another plan. Finish with implemented code on `handoff/old-client-export`.
 
-This work does not require a large new test matrix or a live-device migration before a usable backup exists.
+The final report must provide:
 
-Required automated checks are limited to:
-
-1. the old-client handoff branch compiles;
-2. `beta/new-client` compiles;
-3. one representative handoff package produced through the old-client export path is accepted by the Beta package and semantic validators;
-4. that package proves all thirteen categories are artifact-backed or explicitly empty;
-5. the fixture includes representative UUID references and image assets;
-6. a Settings and Preferences payload is accepted while a credential-smuggling payload is rejected;
-7. an induced export failure does not publish a partial handoff package.
-
-Existing backup/restore tests remain in place; do not duplicate them.
-
-## Later practical restore attempt
-
-After the exporter build exists:
-
-1. Keep the installed old client and its data.
-2. Create the existing recovery backup as an extra fallback.
-3. Install the compatible old-client handoff build without clearing app data.
-4. Create one full handoff backup.
-5. Install or open the side-by-side Beta.
-6. Restore the handoff backup into Beta.
-7. Inspect representative chats, memories, identities, images, model settings, and detailed preferences.
-8. If the restore fails, keep using the untouched old-client data, record the exact failure, and correct the exporter or Beta reader.
-9. After a successful restore, create a fresh Beta recovery backup.
-
-The old client is not retired or uninstalled as part of this work.
-
-## Completion criteria
-
-This handoff is complete when:
-
-- the old-client branch can create one verified comprehensive portable backup from existing old-client data;
-- the backup uses the Beta's supported format rather than a separate migration format;
-- Beta can inspect it and offer every included or explicitly empty category;
-- no old-client live data is changed by export;
-- `main` remains unchanged;
-- the owner has a backup file that can be used for the first practical Beta restore attempt.
+- branch name;
+- commit SHA;
+- exact artifacts now exported;
+- any required old-store adapters written;
+- tests/build commands and results;
+- APK or workflow artifact location;
+- confirmation that `main` and `beta/new-client` were not merged or overwritten;
+- any specific category that could not be exported, only if the stored old-client data genuinely lacks the information required by the Beta artifact.
