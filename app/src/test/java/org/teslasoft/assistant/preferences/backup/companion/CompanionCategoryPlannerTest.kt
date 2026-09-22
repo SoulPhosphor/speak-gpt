@@ -3,6 +3,8 @@ package org.teslasoft.assistant.preferences.backup.companion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariant
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariantRules
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreCategory
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreMode
 
@@ -145,6 +147,66 @@ class CompanionCategoryPlannerTest {
         )
     }
 
+    private val threeVariants = listOf(
+        PortablePromptVariant("v-1", "One", "first", false),
+        PortablePromptVariant("v-2", "Two", "second", true),
+        PortablePromptVariant("v-3", "", "", false)
+    )
+
+    private fun multiPrompt(id: String, variants: List<PortablePromptVariant> = threeVariants) =
+        profile(id, id, "second").copy(
+            prompt = variants.single { it.isDefault }.text,
+            promptVariants = variants
+        )
+
+    @Test
+    fun `replace takes the complete incoming variant list`() {
+        val current = manifest(profiles = listOf(profile("companion", "Companion", "old")))
+        val backup = manifest(profiles = listOf(multiPrompt("companion")))
+        val ready = CompanionCategoryPlanner.plan(
+            current, backup,
+            listOf(CompanionCategoryPlanner.Selection(PortableRestoreCategory.COMPANIONS, PortableRestoreMode.REPLACE))
+        ) as CompanionCategoryPlanner.Result.Ready
+        assertEquals(threeVariants, ready.manifest.companionProfiles.single().promptVariants)
+        assertEquals("second", ready.manifest.companionProfiles.single().prompt)
+    }
+
+    @Test
+    fun `merge of a new companion keeps its full variant list`() {
+        val current = manifest(profiles = listOf(profile("existing", "Existing", "x")))
+        val backup = manifest(profiles = listOf(multiPrompt("incoming")))
+        val ready = CompanionCategoryPlanner.plan(
+            current, backup,
+            listOf(CompanionCategoryPlanner.Selection(PortableRestoreCategory.COMPANIONS, PortableRestoreMode.MERGE))
+        ) as CompanionCategoryPlanner.Result.Ready
+        assertEquals(listOf("existing", "incoming"), ready.manifest.companionProfiles.map { it.id })
+        assertEquals(threeVariants, ready.manifest.companionProfiles.last().promptVariants)
+        assertTrue(ready.report.conflicts.isEmpty())
+    }
+
+    @Test
+    fun `same companion differing only by a variant is a conflict and current wins`() {
+        val edited = threeVariants.mapIndexed { i, v -> if (i == 2) v.copy(text = "edited") else v }
+        val current = manifest(profiles = listOf(multiPrompt("companion", edited)))
+        val backup = manifest(profiles = listOf(multiPrompt("companion")))
+        val ready = CompanionCategoryPlanner.plan(
+            current, backup,
+            listOf(CompanionCategoryPlanner.Selection(PortableRestoreCategory.COMPANIONS, PortableRestoreMode.MERGE))
+        ) as CompanionCategoryPlanner.Result.Ready
+        assertEquals(edited, ready.manifest.companionProfiles.single().promptVariants)
+        assertEquals("companion", ready.report.conflicts.single().itemId)
+    }
+
+    @Test
+    fun `identical variant lists merge without a conflict`() {
+        val ready = CompanionCategoryPlanner.plan(
+            manifest(profiles = listOf(multiPrompt("companion"))),
+            manifest(profiles = listOf(multiPrompt("companion"))),
+            listOf(CompanionCategoryPlanner.Selection(PortableRestoreCategory.COMPANIONS, PortableRestoreMode.MERGE))
+        ) as CompanionCategoryPlanner.Result.Ready
+        assertTrue(ready.report.conflicts.isEmpty())
+    }
+
     private fun manifest(
         profiles: List<CompanionProfileEntry> = emptyList(),
         activation: List<ActivationPromptEntry> = emptyList(),
@@ -180,7 +242,8 @@ class CompanionCategoryPlannerTest {
         activationPromptId: String = "",
         avatarRef: String = ""
     ) = CompanionProfileEntry(
-        id, label, prompt, activationPromptId, "", null, emptyList(), emptyMap(),
+        id, label, prompt, PortablePromptVariantRules.legacySingleVariant(id, prompt),
+        activationPromptId, "", null, emptyList(), emptyMap(),
         false, emptyList(), avatarRef
     )
 

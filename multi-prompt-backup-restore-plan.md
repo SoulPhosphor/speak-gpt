@@ -332,6 +332,9 @@ Add a short prompt-portability section to the relevant backup documentation list
 
 ### Phase A — new client
 
+Status: implemented on `beta/new-client`. The receiving contract is described
+in `companion-roleplay-backup-plan.md` §3.1 and §12.
+
 On `beta/new-client`:
 
 1. add failing version-2 codec, planner, merge/replace, rollback, and settings-key tests;

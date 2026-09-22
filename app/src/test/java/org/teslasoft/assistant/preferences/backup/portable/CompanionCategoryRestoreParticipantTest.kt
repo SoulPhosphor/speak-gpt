@@ -264,6 +264,7 @@ class CompanionCategoryRestoreParticipantTest {
         id = "c1",
         label = "Aria",
         prompt = "prompt",
+        promptVariants = PortablePromptVariantRules.legacySingleVariant("c1", "prompt"),
         activationPromptId = "",
         coreLoreBookId = core,
         coreLoreBookName = coreName,

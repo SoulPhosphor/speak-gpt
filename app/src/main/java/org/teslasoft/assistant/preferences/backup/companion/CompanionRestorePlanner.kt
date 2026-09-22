@@ -18,6 +18,7 @@ package org.teslasoft.assistant.preferences.backup.companion
 
 import org.json.JSONArray
 import org.json.JSONObject
+import org.teslasoft.assistant.preferences.dto.CompanionPromptVariant
 
 /**
  * Pure restore-planning rules (companion-roleplay-backup-plan.md §6.3/§6.4):
@@ -73,7 +74,13 @@ object CompanionRestorePlanner {
             val keptLastUsed = p.lastUsedLoreBookIds.filter { it in existingLorebookIds }
 
             personas[p.id + "_label"] = p.label
-            personas[p.id + "_prompt"] = p.prompt
+            // Both stored prompt representations: the complete ordered
+            // variant list (ids, names, text, default flag exactly as carried)
+            // and the legacy mirror of the default variant's text.
+            personas[p.id + "_prompt_variants"] =
+                CompanionPromptVariant.toJson(p.promptVariants.map { it.toCompanionVariant() })
+            personas[p.id + "_prompt"] =
+                p.promptVariants.singleOrNull { it.isDefault }?.text ?: p.prompt
             personas[p.id + "_activation_prompt_id"] = p.activationPromptId
             personas[p.id + "_core_lorebook_id"] = if (coreResolves) p.coreLoreBookId else ""
             personas[p.id + "_additional_lorebook_ids"] = keptAdditional.joinToString(",")

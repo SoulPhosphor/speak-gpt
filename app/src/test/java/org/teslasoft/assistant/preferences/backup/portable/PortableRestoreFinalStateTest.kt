@@ -121,6 +121,7 @@ class PortableRestoreFinalStateTest {
                     id = "companion-1",
                     label = "Aria",
                     prompt = "",
+                    promptVariants = PortablePromptVariantRules.legacySingleVariant("companion-1", ""),
                     activationPromptId = "",
                     coreLoreBookId = "book-1",
                     coreLoreBookName = "Book One",

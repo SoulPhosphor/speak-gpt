@@ -22,7 +22,10 @@ import org.teslasoft.assistant.preferences.PersonaPreferences
 import org.teslasoft.assistant.preferences.SystemPromptsPreferences
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
+import org.teslasoft.assistant.preferences.dto.CompanionPromptVariant
 import org.teslasoft.assistant.preferences.dto.PersonaObject
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariant
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariantRules
 import org.teslasoft.assistant.preferences.backup.portable.ProfileImagePortableBackup
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
@@ -116,31 +119,7 @@ object CompanionBackupExporter {
         val lorebookNames = captureLorebookNames(appContext, personas)
             ?: return BuildResult.LorebookUnavailable
 
-        // Every lorebook link carried by the backup carries its name (the
-        // restore report names removed connections — never an internal id).
-        // A link whose book no longer exists on THIS device has no name and
-        // nothing to reconnect, so it is not carried.
-        val profiles = personas.map { p ->
-            val coreKept = p.coreLoreBookId.isNotBlank() &&
-                lorebookNames.containsKey(p.coreLoreBookId)
-            val additionalKept = p.additionalLoreBookIdList()
-                .filter { lorebookNames.containsKey(it) }
-            CompanionProfileEntry(
-                id = p.id,
-                label = p.label,
-                prompt = p.prompt,
-                activationPromptId = p.activationPromptId,
-                coreLoreBookId = if (coreKept) p.coreLoreBookId else "",
-                coreLoreBookName = if (coreKept) lorebookNames[p.coreLoreBookId] else null,
-                additionalLoreBookIds = additionalKept,
-                additionalLoreBookNames = additionalKept.associateWith { lorebookNames.getValue(it) },
-                autoLoadLastLoreBooks = p.autoLoadLastLoreBooks,
-                lastUsedLoreBookIds = p.lastUsedLoreBookIdList(),
-                avatarRef = p.avatarRef,
-                chatNameFontId = p.chatNameFontId,
-                chatNameSizeSp = p.chatNameSizeSp
-            )
-        }
+        val profiles = profileEntries(personas, lorebookNames)
 
         val imageStore = ProfileImageStore.getInstance(appContext)
         val referencedHashes = collectImageHashes(profiles, roleplayTables)
@@ -177,6 +156,67 @@ object CompanionBackupExporter {
 
         writeZip(staged, manifest, imageFiles)
         return BuildResult.Ok(manifest)
+    }
+
+    /**
+     * Maps live companions to archive entries. Pure: nothing is written back
+     * to the companion store.
+     *
+     * Every lorebook link carried by the backup carries its name (the
+     * restore report names removed connections — never an internal id).
+     * A link whose book no longer exists on THIS device has no name and
+     * nothing to reconnect, so it is not carried.
+     */
+    internal fun profileEntries(
+        personas: List<PersonaObject>,
+        lorebookNames: Map<String, String>
+    ): List<CompanionProfileEntry> = personas.map { p ->
+        val coreKept = p.coreLoreBookId.isNotBlank() &&
+            lorebookNames.containsKey(p.coreLoreBookId)
+        val additionalKept = p.additionalLoreBookIdList()
+            .filter { lorebookNames.containsKey(it) }
+        val variants = portablePromptVariants(p)
+        CompanionProfileEntry(
+            id = p.id,
+            label = p.label,
+            prompt = PortablePromptVariantRules.defaultVariant(variants).text,
+            promptVariants = variants,
+            activationPromptId = p.activationPromptId,
+            coreLoreBookId = if (coreKept) p.coreLoreBookId else "",
+            coreLoreBookName = if (coreKept) lorebookNames[p.coreLoreBookId] else null,
+            additionalLoreBookIds = additionalKept,
+            additionalLoreBookNames = additionalKept.associateWith { lorebookNames.getValue(it) },
+            autoLoadLastLoreBooks = p.autoLoadLastLoreBooks,
+            lastUsedLoreBookIds = p.lastUsedLoreBookIdList(),
+            avatarRef = p.avatarRef,
+            chatNameFontId = p.chatNameFontId,
+            chatNameSizeSp = p.chatNameSizeSp
+        )
+    }
+
+    /**
+     * The companion's complete ordered prompt list, each id, name and text
+     * copied as-is. The default flag follows the app's own effective-default
+     * rule ([CompanionPromptVariant.defaultPrompt]: the first variant marked
+     * default, otherwise the first variant), so a stored list is carried with
+     * exactly the meaning the app already gives it. A companion with no
+     * variant list gets the same deterministic single "Prompt 1" variant the
+     * version-1 reader produces.
+     */
+    internal fun portablePromptVariants(persona: PersonaObject): List<PortablePromptVariant> {
+        val stored = persona.promptVariants
+        if (stored.isEmpty()) {
+            return PortablePromptVariantRules.legacySingleVariant(persona.id, persona.prompt)
+        }
+        val defaultIndex = stored.indexOfFirst { it.isDefault }.coerceAtLeast(0)
+        return stored.mapIndexed { index, variant ->
+            PortablePromptVariant(
+                id = variant.id,
+                name = variant.name,
+                text = variant.text,
+                isDefault = index == defaultIndex
+            )
+        }
     }
 
     /**

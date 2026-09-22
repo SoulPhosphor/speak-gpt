@@ -185,6 +185,7 @@ class PortableRecoverySemanticValidatorTest {
         id = "companion-1",
         label = "Companion",
         prompt = "Prompt",
+        promptVariants = PortablePromptVariantRules.legacySingleVariant("companion-1", "Prompt"),
         activationPromptId = "",
         coreLoreBookId = coreLorebookId,
         coreLoreBookName = coreLorebookId.takeIf(String::isNotEmpty)?.let { "Book" },

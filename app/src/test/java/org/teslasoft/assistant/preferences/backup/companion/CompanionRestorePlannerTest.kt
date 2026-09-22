@@ -17,10 +17,15 @@
 package org.teslasoft.assistant.preferences.backup.companion
 
 import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariant
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariantRules
+import org.teslasoft.assistant.preferences.dto.CompanionPromptVariant
+import java.util.UUID
 
 /**
  * The pure §6.3/§6.4 planning rules: which lorebook links survive, what the
@@ -40,6 +45,7 @@ class CompanionRestorePlannerTest {
         autoLoad: Boolean = false
     ) = CompanionProfileEntry(
         id = id, label = label, prompt = "prompt-$id",
+        promptVariants = PortablePromptVariantRules.legacySingleVariant(id, "prompt-$id"),
         activationPromptId = "ap-$id",
         coreLoreBookId = core, coreLoreBookName = coreName,
         additionalLoreBookIds = additional, additionalLoreBookNames = additionalNames,
@@ -146,7 +152,63 @@ class CompanionRestorePlannerTest {
         assertEquals("hash-p-1", personas["p-1_avatar_ref"])
         assertEquals("", personas["p-1_chat_name_font_id"])
         assertEquals("0", personas["p-1_chat_name_size_sp"])
-        assertEquals(10, personas.keys.count { it.startsWith("p-1_") })
+        assertEquals(
+            PortablePromptVariantRules.legacySingleVariant("p-1", "prompt-p-1").map { it.toCompanionVariant() },
+            CompanionPromptVariant.fromJson(personas["p-1_prompt_variants"] as String)
+        )
+        assertEquals(11, personas.keys.count { it.startsWith("p-1_") })
+    }
+
+    @Test
+    fun bothPromptRepresentationsAreWrittenWithOrderAndIdsExact() {
+        val variants = listOf(
+            PortablePromptVariant("v-z", "Zeta", "Last-created but first", false),
+            PortablePromptVariant("v-a", "Alpha", "Default\ntext ✦", true),
+            PortablePromptVariant("v-m", "", "", false)
+        )
+        val plan = CompanionRestorePlanner.plan(
+            manifest(listOf(profile().copy(prompt = "Default\ntext ✦", promptVariants = variants))),
+            existingLorebookIds = emptySet()
+        )
+        val personas = plan.settingsNew.personas
+        assertEquals("Default\ntext ✦", personas["p-1_prompt"])
+        val stored = JSONArray(personas["p-1_prompt_variants"] as String)
+        assertEquals(3, stored.length())
+        assertEquals(listOf("v-z", "v-a", "v-m"), (0 until 3).map { stored.getJSONObject(it).getString("id") })
+        assertEquals(
+            variants.map { it.toCompanionVariant() },
+            CompanionPromptVariant.fromJson(personas["p-1_prompt_variants"] as String)
+        )
+    }
+
+    @Test
+    fun versionOneParsedProfileRestoresAsOneVariant() {
+        val v1 = JSONObject(CompanionBackupCodec.toJson(manifest(listOf(profile()))))
+        v1.put("format_version", 1)
+        v1.getJSONArray("companion_profiles").getJSONObject(0).remove("prompt_variants")
+        val parsed = (CompanionBackupCodec.parse(v1.toString()) as CompanionBackupCodec.ParseResult.Ok).manifest
+
+        val personas = CompanionRestorePlanner.plan(parsed, emptySet()).settingsNew.personas
+        val stored = CompanionPromptVariant.fromJson(personas["p-1_prompt_variants"] as String)
+        assertEquals(1, stored.size)
+        assertEquals(UUID.nameUUIDFromBytes("p-1_prompt_1".toByteArray()).toString(), stored[0].id)
+        assertEquals("Prompt 1", stored[0].name)
+        assertEquals("prompt-p-1", stored[0].text)
+        assertTrue(stored[0].isDefault)
+        assertEquals("prompt-p-1", personas["p-1_prompt"])
+    }
+
+    @Test
+    fun journalCarriesTheVariantKeyUnchanged() {
+        val plan = CompanionRestorePlanner.plan(manifest(listOf(profile())), emptySet())
+        val journaled = CompanionSettingsPayloadCodec.fromJson(
+            CompanionSettingsPayloadCodec.toJson(plan.settingsNew)
+        )
+        assertEquals(plan.settingsNew.personas, journaled.personas)
+        assertEquals(
+            plan.settingsNew.personas["p-1_prompt_variants"],
+            journaled.personas["p-1_prompt_variants"]
+        )
     }
 
     @Test

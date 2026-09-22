@@ -1083,7 +1083,7 @@ object UnifiedPortableRestore {
         }
     )
 
-    private fun identityToken(manifest: CompanionBackupManifest): String = Hash.hash(
+    internal fun identityToken(manifest: CompanionBackupManifest): String = Hash.hash(
         CompanionBackupCodec.toJson(manifest.copy(appVersion = "", exportedAt = ""))
     )
 

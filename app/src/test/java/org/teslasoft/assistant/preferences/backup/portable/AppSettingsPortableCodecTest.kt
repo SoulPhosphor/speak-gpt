@@ -9,7 +9,7 @@ class AppSettingsPortableCodecTest {
     fun roundTripPreservesDetailedSettingsAndSavedSpeechSources() {
         val data = AppSettingsPortableData(
             globalSettings = mapOf(
-                "summarizer_prompt_1" to PortableSettingValue("string", "custom summary"),
+                "summarizer_slot_prompt_0" to PortableSettingValue("string", "custom summary"),
                 "memory_assistant_temperature" to PortableSettingValue("float", 0.65f),
                 "whisper_decoder_mode" to PortableSettingValue("string", "beam"),
                 "whisper_beam_size" to PortableSettingValue("int", 5),

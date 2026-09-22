@@ -16,6 +16,8 @@
 
 package org.teslasoft.assistant.preferences.backup.companion
 
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariant
+
 /**
  * In-memory model of a Companion & Roleplay Backup manifest
  * (companion-roleplay-backup-plan.md §2/§3). Plain data, no Android APIs.
@@ -51,7 +53,14 @@ data class CompanionBackupManifest(
 data class CompanionProfileEntry(
     val id: String,
     val label: String,
+    /** Legacy mirror of the default variant's text — never an independent value. */
     val prompt: String,
+    /**
+     * Every prompt variant, in stored order, with its stable id, name, text
+     * and default flag. A version-1 archive is read as one deterministic
+     * "Prompt 1" default variant holding [prompt].
+     */
+    val promptVariants: List<PortablePromptVariant>,
     val activationPromptId: String,
     val coreLoreBookId: String,
     /** Core lorebook's name at export time, or null when it was unknown. */

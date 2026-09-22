@@ -26,7 +26,9 @@ Per companion, all stored fields:
 
 - stable id
 - name (label)
-- instructions (the prompt)
+- instructions: every prompt variant, in stored order, each with its stable
+  variant id, name, text, and default flag (§3.1), plus the legacy `prompt`
+  value that mirrors the default variant's text
 - activation prompt link (id)
 - core lorebook link (id) — reference only, plus the lorebook's **name**
   captured at export time so a restore report can name a missing lorebook
@@ -86,7 +88,7 @@ One ZIP archive. Suggested file name: `companion-backup-YYYY-MM-DD.zip`
 
 - `backup.json` — the manifest, human-readable JSON:
   - `format`: `"companion-roleplay-backup"` (file-type marker)
-  - `format_version`: `1`
+  - `format_version`: `2` (version `1` archives are still read — §3.1)
   - `app_version`: from the package info
   - `exported_at`: ISO timestamp
   - one section per §2 record set, records carried with their stable ids
@@ -101,6 +103,54 @@ exactly why a raw database copy is forbidden.
 
 If the memory store is not provisioned (user never opted in) the roleplay
 section exports empty; the rest of the backup still works.
+
+### 3.1 Companion prompt variants (format version 2)
+
+Each object in `companion_profiles` keeps the legacy `prompt` field and adds
+`prompt_variants`, the companion's complete ordered prompt list:
+
+```json
+"prompt": "Default prompt text",
+"prompt_variants": [
+  { "id": "variant-main", "name": "Main", "text": "Default prompt text", "isDefault": true },
+  { "id": "variant-alt", "name": "Alternate", "text": "Alternate prompt text", "isDefault": false }
+]
+```
+
+A version-2 archive is sound only when, for every companion:
+
+- `prompt_variants` is present and holds at least one variant;
+- every variant has exactly the fields `id`, `name`, `text` (text values) and
+  `isDefault` (a boolean);
+- every `id` is nonblank and unique within the companion;
+- exactly one variant is the default;
+- `prompt` equals the default variant's text.
+
+Blank names and blank text are allowed. Order is preserved. Variant ids are
+never generated, rewritten, deduplicated, sorted, or renamed while reading
+or restoring; a version-2 archive that breaks any rule above is damaged
+(§6.1) and changes nothing.
+
+A version-1 archive has no `prompt_variants`. Each companion's `prompt` is
+read as one default variant named "Prompt 1" whose id is derived
+deterministically from `<companionId>_prompt_1` — the same identity the app
+assigns when it first loads a single-prompt companion. This conversion is
+in memory only; the backup file is never rewritten. A version above 2 is a
+newer format (§8).
+
+Restore writes both stored forms for every companion:
+`<companionId>_prompt_variants` (the ordered list) and `<companionId>_prompt`
+(the default variant's text). Both live in the `personas` preferences that
+the restore snapshot, journal, rollback, and interrupted-restore recovery
+already carry whole (§6.3). Merge and Replace treat the variant list as part
+of the companion: Replace takes the backup's complete list; Merge adds a
+companion whose id is absent and, when the same id differs in any variant,
+keeps the current companion and reports the conflict. Individual variants
+are not merged.
+
+The standalone Companion & Roleplay Backup and the complete portable
+Recovery Backup (`companion_roleplay.zip` artifact) use this same exporter,
+format, and restore path.
 
 ## 4. User interface
 
@@ -148,8 +198,9 @@ and status-text styles.
 1. Read the selected file completely.
 2. Validate: ZIP readable → `backup.json` present and parseable → `format`
    marker matches → `format_version` is supported (≤ current) → required
-   sections structurally sound → every image listed in the manifest exists
-   in the archive.
+   sections structurally sound (including every companion's prompt
+   variants, §3.1) → every image listed in the manifest exists in the
+   archive.
 3. Any validation failure shows the matching error dialog from §8 and
    changes **nothing**.
 
@@ -290,3 +341,34 @@ automatic/scheduled backups, per-item selection, multiple backup profiles,
 synchronization, account systems, conversation-history backup, unrelated
 refactoring, or a generic backup framework. The eventual whole-package
 backup with categories is a separate future effort.
+
+## 12. Prompt portability outside this archive
+
+Summarizer and Memory Assistant prompts are not companion data and are not
+duplicated into this archive. They are global `settings` preferences carried
+by the replace-only Settings and Preferences category (`app_settings.json`)
+of the portable Recovery Backup:
+
+- `summarizer_selected_slot`
+- `summarizer_slot_name_0` through `summarizer_slot_name_4`
+- `summarizer_slot_prompt_0` through `summarizer_slot_prompt_4`
+- `summarizer_slot_recency`
+- `image_summary_prompt`
+- `archivist_custom_prompt` (Associative Memory analysis; empty means the
+  shipped prompt)
+- `archivist_lorebook_prompt` (Lorebook Memory analysis; empty means the
+  shipped prompt)
+
+Untouched shipped defaults are code and are not written into a backup. Once
+stored, these values round-trip exactly through capture, restore, and
+rollback. Summarizer runtime state (summaries, folded state, errors, pending
+work, projections) stays excluded. `AppSettingsPromptPortabilityTest` is the
+contract test for these keys.
+
+When any of these systems gains a variable prompt collection, it must use
+the portable prompt-variant shape (§3.1) with stable ids that are never
+derived from editable names, store order and default/current selection
+explicitly, keep the Associative and Lorebook collections separate, serialize
+only persisted user state, and add its production keys to the contract test
+in the same change. If such a collection's own JSON changes incompatibly, it
+is versioned rather than silently reinterpreted.
