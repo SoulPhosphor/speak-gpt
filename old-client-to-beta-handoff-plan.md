@@ -42,6 +42,145 @@ The side-by-side Beta has Android application ID `com.soulphosphor.phosphorshine
 
 The Beta settings work adds manifest version 4 and a Replace-only `settings` category. Versions 2 and 3 remain accepted, and a package without Settings and Preferences leaves that category unavailable rather than inventing empty settings.
 
+## Reviewed code map — do not rediscover
+
+The following connections were verified directly against the current branch contents before this plan was written.
+
+### Shared package envelope
+
+- Old client: `app/src/main/java/org/teslasoft/assistant/preferences/backup/portable/PortablePackageFormat.kt`
+- Beta: the same path on `beta/new-client`
+- The file is byte-identical on both branches at the time of review.
+- Both use the eight-byte `PHOSBKP2` magic and outer format version 2.
+- `PortablePackage.envelope(...)` is therefore already the common outer transport. The handoff does not need a new envelope or a separate file type.
+
+### Existing old-client writer on `main`
+
+The current export path is:
+
+- `app/src/main/java/org/teslasoft/assistant/preferences/backup/portable/PortableRecoveryWriter.kt`
+- It builds its artifacts in private staging, calls `PortablePackage.buildInnerZip(...)`, envelopes the ZIP, then reopens and validates the finished file before reporting success.
+- Keep that workflow and extend its artifact list.
+
+Its current artifact connections are:
+
+| Artifact | Existing old-client capture path | What Beta infers |
+|---|---|---|
+| `memory.db` | `MemoryStore.isProvisioned` + `DatabaseKeys.getOrCreate` + `RecoveryBackupManager.snapshotCipher` | Memories and Model rules |
+| `lorebook.db` | `LoreBookEncryption.obtainPassword` + `RecoveryBackupManager.snapshotCipher` | Lorebooks |
+| `user_images.db` | `RecoveryBackupManager.snapshotUserImageCatalog` | Profile images, but catalog alone is incomplete |
+| `chats.json` | `ChatLogicalSerializer.serialize(context)` | Chats and their per-chat settings |
+
+The old writer currently calls:
+
+```kotlin
+PortablePackage.buildInnerZip(artifacts, createdAt, innerZip)
+```
+
+It supplies no exact category declarations. Beta treats that as a compatible version-2 inventory and infers only the categories represented by recognized artifacts.
+
+### Existing chat connection
+
+- Old client serializer: `app/src/main/java/org/teslasoft/assistant/preferences/backup/portable/ChatLogicalSerializer.kt`
+- It serializes chat list/history plus each chat's typed settings.
+- It explicitly excludes the legacy per-chat `api_key`.
+- Beta's current writer calls `ChatLogicalSerializer.serializeV2(context)`, which also carries the current folder representation.
+- The handoff implementation should port/use the V2 chat serialization needed to preserve folders rather than discarding folder organization.
+
+### Exact Beta exporter connections to backport selectively
+
+The current Beta writer already demonstrates how every missing artifact is built:
+
+`app/src/main/java/org/teslasoft/assistant/preferences/backup/portable/PortableRecoveryWriter.kt`
+
+Use these existing connections as the implementation checklist:
+
+| Handoff content | Current Beta capture call | Produced artifact |
+|---|---|---|
+| Profile catalog and all profile JPEGs | `ProfileImagePortableBackup.buildArtifacts(context, stagedCatalog)` after `snapshotUserImageCatalog` | `user_images.db` plus profile-image assets |
+| Generated-image catalog and all active/Gallery-only assets | `GeneratedImagePortableBackup.buildArtifacts(context, staging)` | generated-image catalog plus assets |
+| Companions, glamours, roleplay, activation prompts, and system prompts | `CompanionBackupExporter.buildBackupZip(context, staged, validateAssignedImages = true)` | `companion_roleplay.zip` |
+| Credential-free model endpoints, favorites, provider preferences, and routing | `ModelEndpointPortableBackup.write(context, staged)` | `model_endpoint_settings.json` |
+| Global Settings and Preferences | `AppSettingsPortableStore.write(context, staged)` | `app_settings.json` |
+| Chats and folders | `ChatLogicalSerializer.serializeV2(context)` | `chats.json`, schema 2 |
+
+Do not blindly copy the whole Beta writer into the old client. Backport only the serializers, codecs, and asset collectors required for export, using the old client's existing stores.
+
+### Settings and Preferences connection already mapped
+
+The Beta implementation is:
+
+- `AppSettingsPortableData.kt`
+  - `AppSettingsPortableCodec`, format `app-settings-v1`, schema 1;
+  - `AppSettingsPortabilityPolicy` shared export/import classification.
+- `AppSettingsPortableStore.kt`
+  - captures portable values;
+  - writes `app_settings.json`;
+  - replaces only portable keys during Beta restore.
+- `AppSettingsRestoreParticipant.kt`
+  - stages the exact current and desired settings snapshots for rollback.
+
+The captured old-client sources are already known:
+
+| Source | Portable contents |
+|---|---|
+| Plain `settings` SharedPreferences | portable user configuration by default, subject to the shared deny policy |
+| Encrypted default `settings.` store obtained through `SecurePrefs` / `AppTtsVoicePreferences.STORE_NAME` | durable default TTS/voice/model selections and other allowed defaults |
+| `storage_health` SharedPreferences | only the explicit backup/readable-backup user-choice allowlist |
+| `files/tts/saved_sources.json` | validated credential-free saved TTS sources and routing |
+| `logit_bias_config` and `logit_bias_config_<stableId>` | validated catalog and individual configurations |
+
+The portability policy already denies credential-shaped keys, `api_key`, the duplicate `system_message`, transient summarizer/runtime state, SAF locations, operational history, logs, caches, and downloaded model binaries. The old-client exporter should reuse this exact codec and policy rather than implement a second settings filter.
+
+### Beta manifest and reader connection
+
+The current Beta reader is intentionally backward-compatible:
+
+- `PortablePackage.kt`
+  - current `MANIFEST_VERSION = 4`;
+  - version 3 is accepted as the pre-Settings exact manifest;
+  - version 2 is accepted conservatively and its categories are inferred from recognized artifacts when no exact declaration exists.
+- `PortableRestoreInventory.from(...)`
+  - maps artifact types/names to available restore categories.
+- `PortableRecoverySemanticValidator.validate(...)`
+  - parses every artifact, reproduces category counts, and checks cross-category references and required assets.
+- `UnifiedPortableRestore.kt`
+  - builds the actual selected-category restore participants.
+- `PortableRestoreSelectionPlan.kt`
+  - distinguishes requested-but-missing categories and supports Restore Available Categories.
+
+The Beta writer obtains exact declarations by:
+
+1. converting the staged artifacts to `ValidatedArtifact`;
+2. calling `PortableRestoreInventory.from(...)`;
+3. calling `PortableRecoverySemanticValidator.validate(...)`;
+4. calling `PortableRecoverySemanticValidator.declarations(...)`;
+5. passing those declarations to `PortablePackage.buildInnerZip(...)`.
+
+The old-client handoff writer should follow the same sequence so the file it publishes is already a normal current Beta recovery package.
+
+### Confirmed profile-image incompatibility in old packages
+
+This is the specific existing handoff defect, not a hypothetical concern:
+
+- The old writer's own comment states that `user_images.db` is a catalog-only snapshot and that its JPEGs are not backed up.
+- The Beta writer adds `ProfileImagePortableBackup.buildArtifacts(...)` and includes every valid content-addressed gallery JPEG.
+- The Beta semantic validator requires catalogs and referenced assets to form a closed, valid set.
+- Because the side-by-side Beta has a different Android application ID, the old client's private JPEG files are not present in the Beta sandbox.
+
+Therefore an old package containing a non-empty profile catalog can fail Beta semantic validation even though its chats and databases are structurally readable. The handoff exporter must include the profile assets; this cannot be deferred to the later manual restore attempt.
+
+### Existing verification relevant to this handoff
+
+The settings change currently has codec/package/semantic/UI-contract coverage in:
+
+- `AppSettingsPortableCodecTest.kt`;
+- `PortablePackageTest.kt`;
+- `PortableRecoverySemanticValidatorTest.kt`;
+- `BackupRestoreScreenContractTest.kt`.
+
+These tests establish payload validation and manifest compatibility. They do not replace the single handoff compatibility fixture required later in this plan.
+
 ## Phase 1: Inventory the old client's handoff sources
 
 Read the current `main` implementation and make one concrete source map for every Beta restore category.
