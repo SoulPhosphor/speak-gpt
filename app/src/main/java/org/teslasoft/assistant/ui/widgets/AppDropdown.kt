@@ -50,12 +50,19 @@ object AppDropdown {
         }
     }
 
-    /** Open a border-continuous, feedback-free menu under [anchor]. */
+    /**
+     * Open a border-continuous, feedback-free menu under [anchor].
+     *
+     * [optionTypeface], when given, renders each option in its own typeface
+     * (keyed by the caller's original index) - used by font pickers so every
+     * font previews itself. Omitted, every option keeps the shared typography.
+     */
     fun show(
         anchor: TextView,
         labels: List<String>,
         selectedIndex: Int = labels.indexOf(anchor.text.toString()),
         isOptionEnabled: (Int) -> Boolean = { true },
+        optionTypeface: ((Int) -> Typeface?)? = null,
         onPick: (Int) -> Unit
     ) {
         if (labels.isEmpty() || !anchor.isEnabled) return
@@ -83,7 +90,12 @@ object AppDropdown {
 
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                 val textView = super.getView(position, convertView, parent) as TextView
-                textView.setTypeface(textView.typeface, Typeface.NORMAL)
+                if (optionTypeface != null) {
+                    // Set every time: recycled rows keep the previous option's font.
+                    textView.typeface = optionTypeface(menuOptions[position].first) ?: Typeface.DEFAULT
+                } else {
+                    textView.setTypeface(textView.typeface, Typeface.NORMAL)
+                }
                 textView.isEnabled = isEnabled(position)
                 textView.alpha = if (textView.isEnabled) 1f else 0.38f
                 return textView

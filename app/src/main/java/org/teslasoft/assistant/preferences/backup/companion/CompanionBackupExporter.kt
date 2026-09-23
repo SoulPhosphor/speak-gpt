@@ -190,7 +190,8 @@ object CompanionBackupExporter {
             lastUsedLoreBookIds = p.lastUsedLoreBookIdList(),
             avatarRef = p.avatarRef,
             chatNameFontId = p.chatNameFontId,
-            chatNameSizeSp = p.chatNameSizeSp
+            chatNameSizeSp = p.chatNameSizeSp,
+            chatNameFontStyle = p.chatNameFontStyle
         )
     }
 

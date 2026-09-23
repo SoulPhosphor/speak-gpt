@@ -19,6 +19,7 @@ package org.teslasoft.assistant.preferences
 import android.content.Context
 import android.content.SharedPreferences
 import org.teslasoft.assistant.preferences.includes.SummarizerProjectionContract
+import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.util.Hash
 import androidx.core.content.edit
 import org.teslasoft.assistant.preferences.tts.AppTtsVoicePreferences
@@ -640,10 +641,10 @@ class Preferences internal constructor(
         putGlobalString("chat_user_name_font", fontId, "roboto")
     }
 
-    fun getUserChatNameSizeSp(): Int = getGlobalInt("chat_user_name_size_sp", 18)
+    fun getUserChatNameSizeSp(): Int = getGlobalInt("chat_user_name_size_sp", ChatNameStyle.DEFAULT_SIZE_SP)
 
     fun setUserChatNameSizeSp(sizeSp: Int) {
-        putGlobalInt("chat_user_name_size_sp", sizeSp, 18)
+        putGlobalInt("chat_user_name_size_sp", sizeSp, ChatNameStyle.DEFAULT_SIZE_SP)
     }
 
     fun getAiChatNameFont(): String = getGlobalString("chat_ai_name_font", "roboto")
@@ -652,10 +653,24 @@ class Preferences internal constructor(
         putGlobalString("chat_ai_name_font", fontId, "roboto")
     }
 
-    fun getAiChatNameSizeSp(): Int = getGlobalInt("chat_ai_name_size_sp", 18)
+    fun getAiChatNameSizeSp(): Int = getGlobalInt("chat_ai_name_size_sp", ChatNameStyle.DEFAULT_SIZE_SP)
 
     fun setAiChatNameSizeSp(sizeSp: Int) {
-        putGlobalInt("chat_ai_name_size_sp", sizeSp, 18)
+        putGlobalInt("chat_ai_name_size_sp", sizeSp, ChatNameStyle.DEFAULT_SIZE_SP)
+    }
+
+    /** Default name styles (Name Style screen): italic joins the existing bold
+     *  settings so Normal / Bold / Italic / Bold Italic are both flags. */
+    fun getItalicUserChatName(): Boolean = getGlobalBoolean("chat_italic_user_name", false)
+
+    fun setItalicUserChatName(state: Boolean) {
+        putGlobalBoolean("chat_italic_user_name", state)
+    }
+
+    fun getItalicAiChatName(): Boolean = getGlobalBoolean("chat_italic_ai_name", false)
+
+    fun setItalicAiChatName(state: Boolean) {
+        putGlobalBoolean("chat_italic_ai_name", state)
     }
 
     /**

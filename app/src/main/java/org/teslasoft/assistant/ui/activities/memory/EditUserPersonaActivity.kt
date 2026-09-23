@@ -74,6 +74,7 @@ class EditUserPersonaActivity : FragmentActivity() {
         const val EXTRA_NAME = "name"
         const val EXTRA_PRESENTATION = "presentation"
         const val EXTRA_SHORT_DESCRIPTION = "shortDescription"
+        const val EXTRA_DISPLAY_NAME = "displayName"
         const val EXTRA_IMAGE_REF = "imageRef"
 
         /** RESULT_OK carries one of [ACTION_SAVE] / [ACTION_DELETE]. */
@@ -83,6 +84,7 @@ class EditUserPersonaActivity : FragmentActivity() {
         const val EXTRA_RESULT_NAME = "result_name"
         const val EXTRA_RESULT_PRESENTATION = "result_presentation"
         const val EXTRA_RESULT_SHORT_DESCRIPTION = "result_short_description"
+        const val EXTRA_RESULT_DISPLAY_NAME = "result_display_name"
         const val EXTRA_RESULT_IMAGE_REF = "result_image_ref"
 
         /** The My Personas list row caps its subtitle at this many lines, with
@@ -98,6 +100,7 @@ class EditUserPersonaActivity : FragmentActivity() {
             name: String,
             presentation: String,
             shortDescription: String,
+            displayName: String,
             imageRef: String
         ): Intent {
             return Intent(context, EditUserPersonaActivity::class.java)
@@ -105,6 +108,7 @@ class EditUserPersonaActivity : FragmentActivity() {
                 .putExtra(EXTRA_NAME, name)
                 .putExtra(EXTRA_PRESENTATION, presentation)
                 .putExtra(EXTRA_SHORT_DESCRIPTION, shortDescription)
+                .putExtra(EXTRA_DISPLAY_NAME, displayName)
                 .putExtra(EXTRA_IMAGE_REF, imageRef)
         }
     }
@@ -118,6 +122,7 @@ class EditUserPersonaActivity : FragmentActivity() {
     private var imgPersonaAvatar: ImageView? = null
     private var fieldName: TextInputEditText? = null
     private var textNameError: TextView? = null
+    private var fieldDisplayName: TextInputEditText? = null
     private var fieldShortDescription: TextInputEditText? = null
     private var textShortDescriptionWarning: TextView? = null
     private var fieldPresentation: TextInputEditText? = null
@@ -191,6 +196,7 @@ class EditUserPersonaActivity : FragmentActivity() {
         imgPersonaAvatar = findViewById(R.id.img_persona_avatar)
         fieldName = findViewById(R.id.field_persona_name)
         textNameError = findViewById(R.id.text_persona_name_error)
+        fieldDisplayName = findViewById(R.id.field_display_name)
         fieldShortDescription = findViewById(R.id.field_short_description)
         textShortDescriptionWarning = findViewById(R.id.text_short_description_warning)
         fieldPresentation = findViewById(R.id.field_presentation)
@@ -206,6 +212,7 @@ class EditUserPersonaActivity : FragmentActivity() {
         fieldName?.setText(intent.getStringExtra(EXTRA_NAME))
         fieldPresentation?.setText(intent.getStringExtra(EXTRA_PRESENTATION))
         fieldShortDescription?.setText(intent.getStringExtra(EXTRA_SHORT_DESCRIPTION))
+        fieldDisplayName?.setText(intent.getStringExtra(EXTRA_DISPLAY_NAME))
 
         // Restore the pending pick across recreation; else the saved imageRef.
         selectedImageRef = savedInstanceState?.getString(STATE_IMAGE_REF)
@@ -360,6 +367,7 @@ class EditUserPersonaActivity : FragmentActivity() {
             .putExtra(EXTRA_RESULT_NAME, name)
             .putExtra(EXTRA_RESULT_PRESENTATION, presentation)
             .putExtra(EXTRA_RESULT_SHORT_DESCRIPTION, fieldShortDescription?.text?.toString()?.trim().orEmpty())
+            .putExtra(EXTRA_RESULT_DISPLAY_NAME, fieldDisplayName?.text?.toString()?.trim().orEmpty())
             .putExtra(EXTRA_RESULT_IMAGE_REF, selectedImageRef)
         setResult(RESULT_OK, result)
         flashSaveButtonGreen()
@@ -383,6 +391,7 @@ class EditUserPersonaActivity : FragmentActivity() {
      *  alone must not trigger the discard prompt. */
     private fun snapshot(): String = listOf(
         fieldName?.text?.toString().orEmpty(),
+        fieldDisplayName?.text?.toString().orEmpty(),
         fieldShortDescription?.text?.toString().orEmpty(),
         fieldPresentation?.text?.toString().orEmpty()
     ).joinToString("")

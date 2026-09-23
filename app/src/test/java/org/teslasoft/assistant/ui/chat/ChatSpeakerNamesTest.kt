@@ -37,4 +37,22 @@ class ChatSpeakerNamesTest {
     fun nothingToStampWhenEverythingIsBlank() {
         assertNull(ChatSpeakerNames.activeUserName(null, null, "  ", roleplayWins = true))
     }
+
+    @Test
+    fun identityCarriesTheSourceOfTheNameUsed() {
+        val rp = ChatSpeakerNames.activeUserIdentity("r1", "Rook", "g1", "Vesper", "Sam", roleplayWins = true)
+        assertEquals("Rook", rp.name)
+        assertEquals("roleplay:r1", rp.sourceKey)
+
+        val glamour = ChatSpeakerNames.activeUserIdentity("r1", "Rook", "g1", "Vesper", "Sam", roleplayWins = false)
+        assertEquals("Vesper", glamour.name)
+        assertEquals("glamour:g1", glamour.sourceKey)
+    }
+
+    @Test
+    fun blankGlamourDisplayNameFallsBackToTheDefaultStyle() {
+        val identity = ChatSpeakerNames.activeUserIdentity(null, null, "g1", "", "Sam", roleplayWins = true)
+        assertEquals("Sam", identity.name)
+        assertNull(identity.sourceKey)
+    }
 }

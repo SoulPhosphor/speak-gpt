@@ -40,11 +40,44 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/action_bar">
 
+        <!-- Each dropdown row is the shared canonical labeled row: label and
+             control on one line, the control filling the rest of the width. -->
         <LinearLayout
             android:id="@+id/name_style_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:paddingHorizontal="20dp" />
+            android:paddingHorizontal="20dp"
+            android:paddingTop="8dp">
+
+            <include
+                android:id="@+id/row_type"
+                layout="@layout/view_memory_filter_dropdown" />
+
+            <include
+                android:id="@+id/row_name"
+                layout="@layout/view_memory_filter_dropdown" />
+
+            <TextView
+                style="@style/Widget.App.Dropdown.CanonicalLabel"
+                android:layout_marginTop="20dp"
+                android:text="@string/name_style_select_style" />
+
+            <include
+                android:id="@+id/row_font_size"
+                layout="@layout/view_memory_filter_dropdown" />
+
+            <include
+                android:id="@+id/row_font_style"
+                layout="@layout/view_memory_filter_dropdown" />
+
+            <include
+                android:id="@+id/row_font"
+                layout="@layout/view_memory_filter_dropdown" />
+
+            <TextView
+                android:id="@+id/text_preview"
+                style="@style/Widget.App.NameStyle.Preview" />
+        </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

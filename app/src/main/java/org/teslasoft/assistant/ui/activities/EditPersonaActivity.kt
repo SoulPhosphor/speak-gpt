@@ -90,6 +90,7 @@ class EditPersonaActivity : FragmentActivity() {
         const val EXTRA_AVATAR_REF = "avatarRef"
         const val EXTRA_CHAT_NAME_FONT_ID = "chatNameFontId"
         const val EXTRA_CHAT_NAME_SIZE_SP = "chatNameSizeSp"
+        const val EXTRA_CHAT_NAME_FONT_STYLE = "chatNameFontStyle"
         const val EXTRA_POSITION = "position"
         const val EXTRA_ID = "id"
 
@@ -116,6 +117,7 @@ class EditPersonaActivity : FragmentActivity() {
                 .putExtra(EXTRA_AVATAR_REF, persona.avatarRef)
                 .putExtra(EXTRA_CHAT_NAME_FONT_ID, persona.chatNameFontId)
                 .putExtra(EXTRA_CHAT_NAME_SIZE_SP, persona.chatNameSizeSp)
+                .putExtra(EXTRA_CHAT_NAME_FONT_STYLE, persona.chatNameFontStyle)
                 .putExtra(EXTRA_POSITION, position)
         }
 
@@ -139,7 +141,8 @@ class EditPersonaActivity : FragmentActivity() {
                 avatarRef = data.getStringExtra(EXTRA_AVATAR_REF) ?: "",
                 id = data.getStringExtra(EXTRA_ID) ?: "",
                 chatNameFontId = data.getStringExtra(EXTRA_CHAT_NAME_FONT_ID) ?: "",
-                chatNameSizeSp = data.getIntExtra(EXTRA_CHAT_NAME_SIZE_SP, 0)
+                chatNameSizeSp = data.getIntExtra(EXTRA_CHAT_NAME_SIZE_SP, 0),
+                chatNameFontStyle = data.getStringExtra(EXTRA_CHAT_NAME_FONT_STYLE) ?: ""
             )
         }
     }
@@ -183,6 +186,8 @@ class EditPersonaActivity : FragmentActivity() {
     private var selectedAvatarRef: String = ""
     private var selectedChatNameFontId: String = ""
     private var selectedChatNameSizeSp: Int = 0
+    // Set only on the Name Style screen; carried through so a save keeps it.
+    private var chatNameFontStyle: String = ""
 
     private var promptVariants: ArrayList<CompanionPromptVariant> = arrayListOf()
     private var activeTabIndex: Int = 0
@@ -369,6 +374,7 @@ class EditPersonaActivity : FragmentActivity() {
         checkboxAutoload?.isChecked = intent.getBooleanExtra(EXTRA_AUTOLOAD, false)
         selectedChatNameFontId = intent.getStringExtra(EXTRA_CHAT_NAME_FONT_ID) ?: ""
         selectedChatNameSizeSp = intent.getIntExtra(EXTRA_CHAT_NAME_SIZE_SP, 0)
+        chatNameFontStyle = intent.getStringExtra(EXTRA_CHAT_NAME_FONT_STYLE) ?: ""
 
         // Restore the pending pick across recreation; else the saved avatarRef.
         selectedAvatarRef = savedInstanceState?.getString(STATE_AVATAR_REF)
@@ -1032,7 +1038,8 @@ class EditPersonaActivity : FragmentActivity() {
             avatarRef = selectedAvatarRef,
             id = personaId,
             chatNameFontId = selectedChatNameFontId,
-            chatNameSizeSp = selectedChatNameSizeSp
+            chatNameSizeSp = selectedChatNameSizeSp,
+            chatNameFontStyle = chatNameFontStyle
         )
     }
 

@@ -445,7 +445,11 @@ class CharacterCardActivity : FragmentActivity() {
                         corePersonality = text(fieldCorePersonality),
                         physicalDescription = text(fieldPhysicalDescription),
                         goalsDrives = text(fieldGoalsDrives),
-                        imageRef = selectedImageRef.ifEmpty { null }
+                        imageRef = selectedImageRef.ifEmpty { null },
+                        // Name Style owns these; a card save keeps them.
+                        nameFontId = priorCharacter?.nameFontId,
+                        nameSizeSp = priorCharacter?.nameSizeSp,
+                        nameFontStyle = priorCharacter?.nameFontStyle
                     ).also { runOnUiThread { priorCharacter = it } }
                 )
             }

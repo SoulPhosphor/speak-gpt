@@ -101,7 +101,15 @@ data class UserPersonaRecord(
     val imageRef: String? = null,
     // v16: the user-authored one-liner shown as the My Personas list-row
     // subtitle. null/blank means the row shows no subtitle.
-    val shortDescription: String? = null
+    val shortDescription: String? = null,
+    // v32: the name shown beside the user's chat messages while this Glamour
+    // is active. null/blank means the Default Displayed Username applies.
+    val displayName: String? = null,
+    // v32: this Glamour's chat-name style overrides (Name Style screen). Each
+    // is null to inherit the default user name style; see ChatNameStyle.
+    val nameFontId: String? = null,
+    val nameSizeSp: Int? = null,
+    val nameFontStyle: String? = null
 )
 
 data class RoleplayCharacterRecord(
@@ -122,7 +130,12 @@ data class RoleplayCharacterRecord(
     val goalsDrives: String? = null,
     // Profile Images (DB v15): bare hash of the assigned image, or null for
     // none. The catalog/files live in profile_images.db; this only references.
-    val imageRef: String? = null
+    val imageRef: String? = null,
+    // v32: this character's chat-name style overrides (Name Style screen).
+    // Each is null to inherit the default user name style; see ChatNameStyle.
+    val nameFontId: String? = null,
+    val nameSizeSp: Int? = null,
+    val nameFontStyle: String? = null
 )
 
 /**

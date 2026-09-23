@@ -57,7 +57,10 @@ class PersonaObject(
     /* Optional chat-name typography overrides. Empty/zero means inherit the
      * Appearance AI-name default; the two values may be overridden separately. */
     var chatNameFontId: String = "",
-    var chatNameSizeSp: Int = 0
+    var chatNameSizeSp: Int = 0,
+    /* Optional chat-name font style override (Name Style screen): "" inherits
+     * the default companion style, else one of ChatNameStyle's style ids. */
+    var chatNameFontStyle: String = ""
 ) {
     /** Parsed view of [additionalLoreBookIds]. */
     fun additionalLoreBookIdList(): ArrayList<String> = splitIds(additionalLoreBookIds)

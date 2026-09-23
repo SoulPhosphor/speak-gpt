@@ -190,6 +190,17 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         notifyDataSetChanged()
     }
 
+    // Glamour / Roleplay Character name-style overrides keyed by the source a
+    // user message was stamped with (ChatSpeakerNames.USER_NAME_SOURCE_KEY).
+    // Resolved by ChatActivity; rows only look them up.
+    private var userNameStyles: Map<String, ChatNameStyle.Override> = emptyMap()
+
+    fun setUserNameStyles(styles: Map<String, ChatNameStyle.Override>) {
+        if (styles == userNameStyles) return
+        userNameStyles = styles
+        notifyDataSetChanged()
+    }
+
     // Adapter position of the message currently being read aloud via its
     // speak button, or -1. Set the moment the press is registered (before the
     // audio is even prepared) and cleared by the host when playback finishes,
@@ -1909,7 +1920,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
             val nameStyle = if (isBot) {
                 companionNameStyle ?: ChatNameStyle.ai(preferences)
             } else {
-                ChatNameStyle.user(preferences)
+                ChatNameStyle.withOverride(
+                    ChatNameStyle.user(preferences),
+                    chatMessage[ChatSpeakerNames.USER_NAME_SOURCE_KEY]?.toString()?.let { userNameStyles[it] }
+                )
             }
 
             // Generated images use the same row-level speaker label as ordinary

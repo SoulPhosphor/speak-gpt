@@ -332,6 +332,41 @@ class MemorySeedCodecTest {
     }
 
     @Test
+    fun nameStyleFieldsRoundTripAndOlderBackupsLeaveThemEmpty() {
+        // v32: Glamour Display Name plus Glamour / Roleplay Character name
+        // style overrides. Older backups without them restore as null (inherit).
+        val json = """
+            {
+              "schema_version": "1.11.0",
+              "companions": [], "entities": [], "memories": [], "modes": [],
+              "directives": [], "worlds": [], "proposals": [],
+              "roleplay_characters": [
+                { "roleplay_character_id": "rp-1", "name": "Rook", "played_by": "user",
+                  "description": "", "status": "active", "name_font_id": "kalnia",
+                  "name_size_sp": 24, "name_font_style": "bold_italic" },
+                { "roleplay_character_id": "rp-2", "name": "Wren", "played_by": "user",
+                  "description": "", "status": "active" }
+              ],
+              "user_personas": [
+                { "persona_id": "up-1", "name": "Explorer", "presentation": "curious",
+                  "status": "active", "display_name": "Vesper", "name_font_style": "italic" },
+                { "persona_id": "up-2", "name": "Formal", "presentation": "poised",
+                  "status": "active" }
+              ]
+            }
+        """.trimIndent()
+
+        val data = MemorySeedCodec.parse(json)
+        assertEquals("Vesper", data.userPersonas.first().displayName)
+        assertEquals("italic", data.userPersonas.first().nameFontStyle)
+        assertEquals(null, data.userPersonas[1].displayName)
+        assertEquals(24, data.roleplayCharacters.first().nameSizeSp)
+        assertEquals(null, data.roleplayCharacters[1].nameFontId)
+
+        assertEquals(data, MemorySeedCodec.parse(MemorySeedCodec.serialize(data)))
+    }
+
+    @Test
     fun modelRulesRoundTrip() {
         // Owner-approved rules §11 Revision 6: backups carry exact endpoint /
         // model targets, preserved legacy strings, tags, and draft provenance.

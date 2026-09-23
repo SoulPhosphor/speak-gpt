@@ -96,11 +96,13 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         val avatarRef = getString(id + "_avatar_ref", "")
         val chatNameFontId = getString(id + "_chat_name_font_id", "")
         val chatNameSizeSp = getString(id + "_chat_name_size_sp", "0").toIntOrNull() ?: 0
+        val chatNameFontStyle = getString(id + "_chat_name_font_style", "")
         return PersonaObject(
             label, prompt, promptVariants = variants, activationPromptId = activationPromptId,
             coreLoreBookId = coreLoreBookId, additionalLoreBookIds = additionalLoreBookIds,
             autoLoadLastLoreBooks = autoLoadLastLoreBooks, lastUsedLoreBookIds = lastUsedLoreBookIds,
-            avatarRef = avatarRef, id = id, chatNameFontId = chatNameFontId, chatNameSizeSp = chatNameSizeSp
+            avatarRef = avatarRef, id = id, chatNameFontId = chatNameFontId, chatNameSizeSp = chatNameSizeSp,
+            chatNameFontStyle = chatNameFontStyle
         )
     }
 
@@ -148,6 +150,7 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         putString(id + "_avatar_ref", persona.avatarRef)
         putString(id + "_chat_name_font_id", persona.chatNameFontId)
         putString(id + "_chat_name_size_sp", persona.chatNameSizeSp.toString())
+        putString(id + "_chat_name_font_style", persona.chatNameFontStyle)
     }
 
     /**
@@ -232,6 +235,7 @@ class PersonaPreferences private constructor(private var preferences: SharedPref
         preferences.edit { remove(id + "_avatar_ref") }
         preferences.edit { remove(id + "_chat_name_font_id") }
         preferences.edit { remove(id + "_chat_name_size_sp") }
+        preferences.edit { remove(id + "_chat_name_font_style") }
     }
 
     fun getPersonasList(): ArrayList<PersonaObject> {

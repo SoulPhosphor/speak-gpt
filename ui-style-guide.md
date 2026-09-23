@@ -713,6 +713,10 @@ them. Dropdown drawables and styles resolve only those roles; layouts and Kotlin
 must not supply local dropdown colors. This is what allows a palette to restyle
 every closed dropdown and open menu without editing individual screens.
 
+#### Font previews in a dropdown
+
+`AppDropdown.show(..., optionTypeface = ...)` renders each option in its own typeface, so a font picker previews every font. Omitting it keeps the shared option typography, so no other dropdown changes. The screen may also set the closed control's typeface to the chosen font. Current example: Name Style's Font dropdown.
+
 ### Summoning Circle placement
 
 `Widget.App.QuickTile.Label`
@@ -950,6 +954,10 @@ Use `layout/dialog_name_entry.xml` with `Widget.App.NameEntry.Layout` and
 outlined-field geometry, text appearance, padding, and inline error placement.
 The dialog host owns the title, current value, validation policy, and cancel-first
 actions. Add Folder and Rename Folder must use this one composition.
+
+## Name Style preview
+
+`Widget.App.NameStyle.Preview` is the centered live preview under the Name Style controls. The style owns its color, placement and spacing; the font, size and bold/italic come from `ChatNameStyle.apply`, the same call chat uses, so the preview always matches chat.
 
 ## Search status
 

@@ -414,23 +414,6 @@ A screen is Shared only when every repeated visual component covered by the curr
 
 Update `ui-style-adoption.md` in the same approved change that converts, partially converts, exempts, or retires a screen.
 
-## Pending owner reminder: Glamour Display Name (Sept 23 2026)
-
-The Edit Glamour screen is to get a **Display Name** field (subtext: "Changes
-your username displayed in chat. Your default username will show if this is
-left blank.") that sets the name beside the user's chat messages while that
-Glamour is active.
-
-The field's look is on the screen (`field_display_name` in
-`activity_edit_user_persona.xml`), but it is not wired: nothing reads or saves
-it. Storing it needs a Glamour database change
-and backup/restore support, and the owner wants no database edits until their
-old settings have been restored. Until then there is no Glamour name:
-`ChatActivity.putMessage` passes `glamourName = null` to
-`ChatSpeakerNames.activeUserName`, so the "Roleplay names replace glamour
-names" toggle has nothing to choose between yet. Remove this section when the
-field ships.
-
 ## 10. Current evidence, not troubleshooting archaeology
 
 Treat current code and current tests as the source of truth for current implementation.

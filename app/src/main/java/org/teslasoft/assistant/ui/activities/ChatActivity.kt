@@ -585,9 +585,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private val companionAvatarRefresh = AvatarRefreshCoordinator()
     private val userAvatarRefresh = AvatarRefreshCoordinator()
 
-    // The active Roleplay Character's name, resolved off-main so putMessage can
-    // stamp user messages without touching storage. Null when none is active.
+    // The active Roleplay Character and Glamour identities, resolved off-main
+    // so putMessage can stamp user messages without touching storage.
+    private var activeRoleplayUserId: String = ""
     private var activeRoleplayUserName: String? = null
+    private var activeGlamourId: String = ""
+    private var activeGlamourDisplayName: String? = null
+    private var userNameStyles: Map<String, ChatNameStyle.Override> = emptyMap()
 
     // The user's most recent outgoing message (captured in generateResponse, which
     // every input path flows through). Used by the lorebook to match triggers.
@@ -1541,7 +1545,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // (an editor, Profile Image settings). Re-resolve both sides, display-only.
         refreshCompanionAvatar()
         refreshUserAvatar()
-        refreshActiveRoleplayUserName()
+        refreshUserIdentity()
         drawerController?.refresh()
     }
 
@@ -1645,32 +1649,53 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         userAvatarRefresh.markTargetReady()
         refreshCompanionAvatar()
         refreshUserAvatar()
+        adapter?.setUserNameStyles(userNameStyles)
     }
 
-    /** Re-reads the active Roleplay Character's name for user-message name
-     *  stamping. Display-only and best-effort; never provisions the store. */
-    private fun refreshActiveRoleplayUserName() {
+    /** Re-reads the active Roleplay Character and Glamour names for
+     *  user-message stamping, and every Glamour / Roleplay Character name-style
+     *  override so each user message renders in its own identity's style.
+     *  Display-only and best-effort; never provisions the store. */
+    private fun refreshUserIdentity() {
         val rpCharId = preferences?.getChatRoleplayCharacterId().orEmpty()
-        if (rpCharId.isEmpty()) {
-            activeRoleplayUserName = null
-            return
-        }
+        val glamourId = preferences?.getChatUserPersonaId().orEmpty()
         CoroutineScope(Dispatchers.Main).launch {
-            val name = withContext(Dispatchers.IO) {
+            val loaded = withContext(Dispatchers.IO) {
                 try {
                     if (!MemoryStore.isProvisioned(this@ChatActivity)) {
                         null
                     } else {
-                        MemoryStore.getInstance(this@ChatActivity).getRoleplayCharacter(rpCharId)?.name
+                        val store = MemoryStore.getInstance(this@ChatActivity)
+                        val styles = HashMap<String, ChatNameStyle.Override>()
+                        store.getAllUserPersonas().forEach {
+                            styles[ChatSpeakerNames.GLAMOUR_SOURCE + it.personaId] =
+                                ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle)
+                        }
+                        store.getAllRoleplayCharacters().forEach {
+                            styles[ChatSpeakerNames.ROLEPLAY_SOURCE + it.roleplayCharacterId] =
+                                ChatNameStyle.Override(it.nameFontId, it.nameSizeSp, it.nameFontStyle)
+                        }
+                        Triple(
+                            rpCharId.takeIf { it.isNotEmpty() }?.let { store.getRoleplayCharacter(it)?.name },
+                            glamourId.takeIf { it.isNotEmpty() }?.let { store.getUserPersona(it)?.displayName },
+                            styles
+                        )
                     }
                 } catch (_: Exception) {
                     null
                 }
             }
             if (isFinishing || isDestroyed) return@launch
-            if (preferences?.getChatRoleplayCharacterId().orEmpty() == rpCharId) {
-                activeRoleplayUserName = name
-            }
+            // Drop a result whose identities changed while it was loading.
+            if (preferences?.getChatRoleplayCharacterId().orEmpty() != rpCharId ||
+                preferences?.getChatUserPersonaId().orEmpty() != glamourId
+            ) return@launch
+            activeRoleplayUserId = rpCharId
+            activeRoleplayUserName = loaded?.first
+            activeGlamourId = glamourId
+            activeGlamourDisplayName = loaded?.second
+            loaded?.third?.let { userNameStyles = it }
+            adapter?.setUserNameStyles(userNameStyles)
         }
     }
 
@@ -6593,7 +6618,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 override fun onUpdate() {
                     refreshCompanionAvatar()
                     refreshUserAvatar()
-                    refreshActiveRoleplayUserName()
+                    refreshUserIdentity()
                     // Quick Settings writes the chat's model, prefix and end
                     // separator straight to storage. This screen caches them,
                     // and requests are built from the cached copy — so without
@@ -9640,14 +9665,17 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (companion.isNotBlank()) map[ChatAdapter.KEY_COMPANION_NAME] = companion
         } else {
             // Same locking for the user's own label: the name that applies at
-            // send time. The Glamour Display Name is not stored yet (see
-            // CLAUDE.md), so no Glamour name is passed.
-            ChatSpeakerNames.activeUserName(
+            // send time, plus which identity supplied it so its style follows.
+            val identity = ChatSpeakerNames.activeUserIdentity(
+                roleplayId = activeRoleplayUserId,
                 roleplayName = activeRoleplayUserName,
-                glamourName = null,
+                glamourId = activeGlamourId,
+                glamourName = activeGlamourDisplayName,
                 defaultName = preferences?.getDefaultDisplayedUsername(),
                 roleplayWins = preferences?.getRoleplayNamesReplaceGlamour() ?: true
-            )?.let { map[ChatSpeakerNames.USER_NAME_KEY] = it }
+            )
+            identity.name?.let { map[ChatSpeakerNames.USER_NAME_KEY] = it }
+            identity.sourceKey?.let { map[ChatSpeakerNames.USER_NAME_SOURCE_KEY] = it }
         }
 
         messages.add(map)

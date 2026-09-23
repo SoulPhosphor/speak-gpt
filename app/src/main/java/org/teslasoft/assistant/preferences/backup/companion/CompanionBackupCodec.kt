@@ -100,6 +100,7 @@ object CompanionBackupCodec {
             o.put("avatar_ref", p.avatarRef)
             o.put("chat_name_font_id", p.chatNameFontId)
             o.put("chat_name_size_sp", p.chatNameSizeSp)
+            o.put("chat_name_font_style", p.chatNameFontStyle)
             profiles.put(o)
         }
         root.put(KEY_COMPANION_PROFILES, profiles)
@@ -236,7 +237,9 @@ object CompanionBackupCodec {
                     lastUsedLoreBookIds = stringList(o.getJSONArray("last_used_lorebook_ids")),
                     avatarRef = o.optString("avatar_ref", ""),
                     chatNameFontId = o.optString("chat_name_font_id", ""),
-                    chatNameSizeSp = o.optInt("chat_name_size_sp", 0)
+                    chatNameSizeSp = o.optInt("chat_name_size_sp", 0),
+                    // Absent in older backups -> "" (inherit the default).
+                    chatNameFontStyle = o.optString("chat_name_font_style", "")
                 )
             )
         }

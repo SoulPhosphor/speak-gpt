@@ -90,6 +90,7 @@ object CompanionRestorePlanner {
             personas[p.id + "_avatar_ref"] = p.avatarRef
             personas[p.id + "_chat_name_font_id"] = p.chatNameFontId
             personas[p.id + "_chat_name_size_sp"] = p.chatNameSizeSp.toString()
+            personas[p.id + "_chat_name_font_style"] = p.chatNameFontStyle
         }
 
         val activation = LinkedHashMap<String, Any?>()

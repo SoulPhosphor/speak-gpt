@@ -77,6 +77,9 @@ object MemorySeedCodec {
 
     private fun JSONObject.reqStr(key: String): String = getString(key)
 
+    private fun JSONObject.intOrNull(key: String): Int? =
+        if (!has(key) || isNull(key)) null else getInt(key)
+
     /** JSON column passthrough: array field -> compact JSON text (default "[]"). */
     private fun JSONObject.arrText(key: String): String =
         if (!has(key) || isNull(key)) "[]" else getJSONArray(key).toString()
@@ -267,7 +270,12 @@ object MemorySeedCodec {
                 // Optional (Profile Images): absent in pre-v15 backups → null.
                 imageRef = p.str("image_ref"),
                 // Optional (v16): absent in older backups → null.
-                shortDescription = p.str("short_description")
+                shortDescription = p.str("short_description"),
+                // Optional (v32): absent in older backups → null (inherit).
+                displayName = p.str("display_name"),
+                nameFontId = p.str("name_font_id"),
+                nameSizeSp = p.intOrNull("name_size_sp"),
+                nameFontStyle = p.str("name_font_style")
             )
         }
 
@@ -287,7 +295,11 @@ object MemorySeedCodec {
                 physicalDescription = r.str("physical_description"),
                 goalsDrives = r.str("goals_drives"),
                 // Optional (Profile Images): absent in pre-v15 backups → null.
-                imageRef = r.str("image_ref")
+                imageRef = r.str("image_ref"),
+                // Optional (v32): absent in older backups → null (inherit).
+                nameFontId = r.str("name_font_id"),
+                nameSizeSp = r.intOrNull("name_size_sp"),
+                nameFontStyle = r.str("name_font_style")
             )
         }
 
@@ -671,6 +683,10 @@ object MemorySeedCodec {
                     putIfNotNull("created_at", p.createdAt)
                     putIfNotNull("image_ref", p.imageRef)
                     putIfNotNull("short_description", p.shortDescription)
+                    putIfNotNull("display_name", p.displayName)
+                    putIfNotNull("name_font_id", p.nameFontId)
+                    p.nameSizeSp?.let { put("name_size_sp", it) }
+                    putIfNotNull("name_font_style", p.nameFontStyle)
                 })
             }
         })
@@ -692,6 +708,9 @@ object MemorySeedCodec {
                     putIfNotNull("physical_description", r.physicalDescription)
                     putIfNotNull("goals_drives", r.goalsDrives)
                     putIfNotNull("image_ref", r.imageRef)
+                    putIfNotNull("name_font_id", r.nameFontId)
+                    r.nameSizeSp?.let { put("name_size_sp", it) }
+                    putIfNotNull("name_font_style", r.nameFontStyle)
                 })
             }
         })

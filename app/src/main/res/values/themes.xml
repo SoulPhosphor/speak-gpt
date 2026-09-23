@@ -833,6 +833,17 @@
         <item name="android:textSize">13sp</item>
     </style>
 
+    <!-- Name Style screen: the live, centered preview of the chosen name.
+         Only color, placement and spacing live here; the font, size and
+         bold/italic come from ChatNameStyle.apply so the preview matches chat. -->
+    <style name="Widget.App.NameStyle.Preview" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">24dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+    </style>
+
     <!-- Live character count, right-aligned directly under a field's Box. -->
     <style name="Widget.App.Field.Counter" parent="">
         <item name="android:layout_width">match_parent</item>

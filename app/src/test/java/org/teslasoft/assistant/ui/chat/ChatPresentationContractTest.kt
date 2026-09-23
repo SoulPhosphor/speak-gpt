@@ -78,7 +78,7 @@ class ChatPresentationContractTest {
         assertTrue(adapter.contains("setCompanionPresentation("))
         assertTrue(preferences.contains("getGlobalBoolean(\"chat_bold_user_name\", false)"))
         assertTrue(preferences.contains("getGlobalBoolean(\"chat_bold_ai_name\", false)"))
-        assertTrue(nameStyle.contains("if (style.bold) Typeface.BOLD else Typeface.NORMAL"))
+        assertTrue(nameStyle.contains("bold && italic -> Typeface.BOLD_ITALIC"))
         assertTrue(appearance.contains("@+id/switch_bold_user_name"))
         assertTrue(appearance.contains("@+id/switch_bold_companion_name"))
         for (path in messageLayouts) {

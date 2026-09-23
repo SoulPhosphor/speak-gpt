@@ -12,7 +12,7 @@ import android.graphics.Typeface
 import android.util.TypedValue
 import android.widget.TextView
 import androidx.annotation.FontRes
-import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.annotation.StringRes
 import androidx.core.content.res.ResourcesCompat
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
@@ -21,17 +21,21 @@ import org.teslasoft.assistant.preferences.dto.PersonaObject
 /**
  * The single registry and resolver for chat speaker-name typography.
  *
- * Appearance owns the user and AI defaults. A companion may override either AI
- * value independently; an empty font id or zero size inherits the Appearance
- * value. Message layouts never select fonts or sizes directly.
+ * The Name Style screen owns every value. The Default user and companion
+ * styles live in app settings; a Companion, Glamour or Roleplay Character may
+ * override each of font, size and font style independently, and an empty /
+ * null override inherits the default. Message layouts never select fonts,
+ * sizes or styles directly.
  */
 object ChatNameStyle {
 
     const val DEFAULT_FONT_ID = "roboto"
     const val DEFAULT_SIZE_SP = 21
 
-    private const val USER_SIZE_KEY = "chat_user_name_size_sp"
-    private const val AI_SIZE_KEY = "chat_ai_name_size_sp"
+    const val STYLE_NORMAL = "normal"
+    const val STYLE_BOLD = "bold"
+    const val STYLE_ITALIC = "italic"
+    const val STYLE_BOLD_ITALIC = "bold_italic"
 
     data class FontOption(
         val id: String,
@@ -39,10 +43,22 @@ object ChatNameStyle {
         @FontRes val fontRes: Int
     )
 
+    data class FontStyleOption(val id: String, @StringRes val label: Int)
+
     data class Resolved(
         val fontId: String,
         val sizeSp: Int,
-        val bold: Boolean
+        val bold: Boolean,
+        val italic: Boolean = false
+    ) {
+        val fontStyleId: String get() = styleId(bold, italic)
+    }
+
+    /** One entity's stored overrides; null/empty fields inherit the default. */
+    data class Override(
+        val fontId: String? = null,
+        val sizeSp: Int? = null,
+        val fontStyle: String? = null
     )
 
     val fonts: List<FontOption> = listOf(
@@ -54,6 +70,16 @@ object ChatNameStyle {
         FontOption("special_elite", "Special Elite", R.font.special_elite),
         FontOption("solitreo", "Solitreo", R.font.solitreo),
         FontOption("sn_pro", "SN Pro", R.font.sn_pro)
+    )
+
+    /** [fonts] in alphabetical order, for pickers. */
+    val fontsAlphabetical: List<FontOption> get() = fonts.sortedBy { it.displayName.lowercase() }
+
+    val fontStyles: List<FontStyleOption> = listOf(
+        FontStyleOption(STYLE_NORMAL, R.string.name_style_font_style_normal),
+        FontStyleOption(STYLE_BOLD, R.string.name_style_font_style_bold),
+        FontStyleOption(STYLE_ITALIC, R.string.name_style_font_style_italic),
+        FontStyleOption(STYLE_BOLD_ITALIC, R.string.name_style_font_style_bold_italic)
     )
 
     // One-sp increments keep the tuned 21sp target selectable while preserving
@@ -72,58 +98,65 @@ object ChatNameStyle {
         return ResourcesCompat.getFont(context, option.fontRes) ?: Typeface.DEFAULT
     }
 
+    /** The complete styled typeface for [style]: font plus bold/italic. */
+    fun styledTypeface(context: Context, style: Resolved): Typeface =
+        Typeface.create(typeface(context, style.fontId), typefaceStyle(style.bold, style.italic))
+
+    fun styleId(bold: Boolean, italic: Boolean): String = when {
+        bold && italic -> STYLE_BOLD_ITALIC
+        bold -> STYLE_BOLD
+        italic -> STYLE_ITALIC
+        else -> STYLE_NORMAL
+    }
+
+    fun isKnownStyle(styleId: String?): Boolean = fontStyles.any { it.id == styleId }
+
+    fun isBold(styleId: String): Boolean = styleId == STYLE_BOLD || styleId == STYLE_BOLD_ITALIC
+
+    fun isItalic(styleId: String): Boolean = styleId == STYLE_ITALIC || styleId == STYLE_BOLD_ITALIC
+
+    private fun typefaceStyle(bold: Boolean, italic: Boolean): Int = when {
+        bold && italic -> Typeface.BOLD_ITALIC
+        bold -> Typeface.BOLD
+        italic -> Typeface.ITALIC
+        else -> Typeface.NORMAL
+    }
+
+    private fun clampSize(sizeSp: Int): Int = sizeSp.coerceIn(sizeOptionsSp.first(), sizeOptionsSp.last())
+
+    /** The Default user name style (no Glamour or Roleplay override). */
     fun user(preferences: Preferences): Resolved = Resolved(
         fontId = fontIdOrDefault(preferences.getUserChatNameFont()),
-        sizeSp = preferences.getUserChatNameSizeSp().coerceIn(12, 32),
-        bold = preferences.getBoldUserChatName()
+        sizeSp = clampSize(preferences.getUserChatNameSizeSp()),
+        bold = preferences.getBoldUserChatName(),
+        italic = preferences.getItalicUserChatName()
     )
 
-    fun ai(preferences: Preferences, companion: PersonaObject? = null): Resolved {
-        val inheritedFont = fontIdOrDefault(preferences.getAiChatNameFont())
-        val inheritedSize = preferences.getAiChatNameSizeSp().coerceIn(12, 32)
-        return Resolved(
-            fontId = if (companion?.chatNameFontId.isNullOrEmpty()) {
-                inheritedFont
-            } else {
-                fontIdOrDefault(companion?.chatNameFontId)
-            },
-            sizeSp = companion?.chatNameSizeSp?.takeIf { it > 0 }?.coerceIn(12, 32)
-                ?: inheritedSize,
-            bold = preferences.getBoldAiChatName()
+    /** The Default companion name style (no per-companion override). */
+    fun companionDefault(preferences: Preferences): Resolved = Resolved(
+        fontId = fontIdOrDefault(preferences.getAiChatNameFont()),
+        sizeSp = clampSize(preferences.getAiChatNameSizeSp()),
+        bold = preferences.getBoldAiChatName(),
+        italic = preferences.getItalicAiChatName()
+    )
+
+    fun ai(preferences: Preferences, companion: PersonaObject? = null): Resolved =
+        withOverride(
+            companionDefault(preferences),
+            companion?.let { Override(it.chatNameFontId, it.chatNameSizeSp, it.chatNameFontStyle) }
         )
+
+    /** [base] with each non-empty field of [override] applied on top. */
+    fun withOverride(base: Resolved, override: Override?): Resolved {
+        if (override == null) return base
+        val fontId = override.fontId?.takeIf { it.isNotEmpty() }?.let(::fontIdOrDefault) ?: base.fontId
+        val sizeSp = override.sizeSp?.takeIf { it > 0 }?.let(::clampSize) ?: base.sizeSp
+        val styleId = override.fontStyle?.takeIf(::isKnownStyle) ?: base.fontStyleId
+        return Resolved(fontId, sizeSp, isBold(styleId), isItalic(styleId))
     }
 
     fun apply(textView: TextView, context: Context, style: Resolved) {
-        textView.typeface = Typeface.create(
-            typeface(context, style.fontId),
-            if (style.bold) Typeface.BOLD else Typeface.NORMAL
-        )
-
-        // Preferences historically returned 18sp when the size key had never
-        // been written. Keep explicit user choices untouched, but render the
-        // new 21sp tuned default for an untouched Appearance setting. At this
-        // point the XML still carries the mirrored start/end constraint, so it
-        // identifies the side without adding another presentation flag.
-        val params = textView.layoutParams as? ConstraintLayout.LayoutParams
-        val sizeKey = when {
-            params != null &&
-                params.endToEnd != ConstraintLayout.LayoutParams.UNSET &&
-                params.startToStart == ConstraintLayout.LayoutParams.UNSET -> USER_SIZE_KEY
-            params != null &&
-                params.startToStart != ConstraintLayout.LayoutParams.UNSET -> AI_SIZE_KEY
-            else -> null
-        }
-        val global = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        val effectiveSize = if (
-            sizeKey != null &&
-            style.sizeSp == 18 &&
-            !global.contains(sizeKey)
-        ) {
-            DEFAULT_SIZE_SP
-        } else {
-            style.sizeSp
-        }
-
-        textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, effectiveSize.toFloat())
+        textView.typeface = styledTypeface(context, style)
+        textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, style.sizeSp.toFloat())
     }
 }

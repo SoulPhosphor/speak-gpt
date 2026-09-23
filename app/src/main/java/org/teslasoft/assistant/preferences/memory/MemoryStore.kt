@@ -74,7 +74,7 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 
     companion object {
         const val DATABASE_NAME = "companion_memory.db"
-        private const val DATABASE_VERSION = 31
+        private const val DATABASE_VERSION = 32
 
         // Freshness-cooldown source types (rules §10 / Stage 3.3): the
         // composite key (chat_id, source_type, entry_id) keeps ids from
@@ -355,7 +355,12 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "status TEXT NOT NULL CHECK (status IN ('active','archived')), " +
                 "created_at TEXT, " +
                 "image_ref TEXT, " +
-                "short_description TEXT)"
+                "short_description TEXT, " +
+                // v32: display name and chat-name style overrides; NULL inherits.
+                "display_name TEXT, " +
+                "name_font_id TEXT, " +
+                "name_size_sp INTEGER, " +
+                "name_font_style TEXT)"
         )
 
         // The five Zone 1 card columns (species..goals_drives) are the spec
@@ -377,7 +382,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 "physical_description TEXT, " +
                 "goals_drives TEXT, " +
                 // image_ref (v15): bare Profile Images hash, or NULL for none.
-                "image_ref TEXT)"
+                "image_ref TEXT, " +
+                // v32: chat-name style overrides; NULL inherits the default.
+                "name_font_id TEXT, " +
+                "name_size_sp INTEGER, " +
+                "name_font_style TEXT)"
         )
 
         // Campaign (roleplay continuity) layer — integration plan 📌 amendment.
@@ -2132,6 +2141,24 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                 arrayOf(META_DB_MIGRATION, "31")
             )
         }
+        if (oldVersion < 32) {
+            // v32: a Glamour's Display Name, plus per-Glamour and per-Roleplay
+            // Character chat-name style overrides (Name Style screen). Additive;
+            // existing rows and older backups leave every new column NULL,
+            // which means "inherit the default".
+            db.execSQL("ALTER TABLE user_personas ADD COLUMN display_name TEXT")
+            db.execSQL("ALTER TABLE user_personas ADD COLUMN name_font_id TEXT")
+            db.execSQL("ALTER TABLE user_personas ADD COLUMN name_size_sp INTEGER")
+            db.execSQL("ALTER TABLE user_personas ADD COLUMN name_font_style TEXT")
+            db.execSQL("ALTER TABLE roleplay_characters ADD COLUMN name_font_id TEXT")
+            db.execSQL("ALTER TABLE roleplay_characters ADD COLUMN name_size_sp INTEGER")
+            db.execSQL("ALTER TABLE roleplay_characters ADD COLUMN name_font_style TEXT")
+            db.execSQL(
+                "INSERT INTO meta (key, value) VALUES (?, ?) " +
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                arrayOf(META_DB_MIGRATION, "32")
+            )
+        }
     }
 
     /**
@@ -2626,6 +2653,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     put("presentation", p.presentation)
                     put("status", p.status)
                     put("created_at", p.createdAt)
+                    put("display_name", p.displayName)
+                    put("name_font_id", p.nameFontId)
+                    put("name_size_sp", p.nameSizeSp)
+                    put("name_font_style", p.nameFontStyle)
                 })
                 report.addAdded("user personas")
             }
@@ -2648,6 +2679,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                     put("core_personality", r.corePersonality)
                     put("physical_description", r.physicalDescription)
                     put("goals_drives", r.goalsDrives)
+                    put("name_font_id", r.nameFontId)
+                    put("name_size_sp", r.nameSizeSp)
+                    put("name_font_style", r.nameFontStyle)
                 })
                 report.addAdded("roleplay characters")
             }
@@ -3120,7 +3154,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         status = it.getString(it.getColumnIndexOrThrow("status")),
                         createdAt = it.getStringOrNull("created_at"),
                         imageRef = it.getStringOrNull("image_ref"),
-                        shortDescription = it.getStringOrNull("short_description")
+                        shortDescription = it.getStringOrNull("short_description"),
+                        displayName = it.getStringOrNull("display_name"),
+                        nameFontId = it.getStringOrNull("name_font_id"),
+                        nameSizeSp = it.getIntOrNull("name_size_sp"),
+                        nameFontStyle = it.getStringOrNull("name_font_style")
                     )
                 )
             }
@@ -3144,7 +3182,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         corePersonality = it.getStringOrNull("core_personality"),
                         physicalDescription = it.getStringOrNull("physical_description"),
                         goalsDrives = it.getStringOrNull("goals_drives"),
-                        imageRef = it.getStringOrNull("image_ref")
+                        imageRef = it.getStringOrNull("image_ref"),
+                        nameFontId = it.getStringOrNull("name_font_id"),
+                        nameSizeSp = it.getIntOrNull("name_size_sp"),
+                        nameFontStyle = it.getStringOrNull("name_font_style")
                     )
                 )
             }
@@ -4594,7 +4635,11 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         status = it.getString(it.getColumnIndexOrThrow("status")),
                         createdAt = it.getStringOrNull("created_at"),
                         imageRef = it.getStringOrNull("image_ref"),
-                        shortDescription = it.getStringOrNull("short_description")
+                        shortDescription = it.getStringOrNull("short_description"),
+                        displayName = it.getStringOrNull("display_name"),
+                        nameFontId = it.getStringOrNull("name_font_id"),
+                        nameSizeSp = it.getIntOrNull("name_size_sp"),
+                        nameFontStyle = it.getStringOrNull("name_font_style")
                     )
                 )
             }
@@ -4627,7 +4672,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
                         corePersonality = it.getStringOrNull("core_personality"),
                         physicalDescription = it.getStringOrNull("physical_description"),
                         goalsDrives = it.getStringOrNull("goals_drives"),
-                        imageRef = it.getStringOrNull("image_ref")
+                        imageRef = it.getStringOrNull("image_ref"),
+                        nameFontId = it.getStringOrNull("name_font_id"),
+                        nameSizeSp = it.getIntOrNull("name_size_sp"),
+                        nameFontStyle = it.getStringOrNull("name_font_style")
                     )
                 )
             }
@@ -5664,6 +5712,10 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             put("created_at", p.createdAt ?: nowIso())
             put("image_ref", p.imageRef)
             put("short_description", p.shortDescription)
+            put("display_name", p.displayName)
+            put("name_font_id", p.nameFontId)
+            put("name_size_sp", p.nameSizeSp)
+            put("name_font_style", p.nameFontStyle)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
@@ -5684,6 +5736,29 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             "user_personas", ContentValues().apply { put("image_ref", imageRef?.ifEmpty { null }) },
             "persona_id = ?", arrayOf(personaId)
         )
+    }
+
+    /** Commit ONLY this Glamour's chat-name style overrides (Name Style
+     *  screen); a null value inherits the default user name style. */
+    fun setUserPersonaNameStyle(personaId: String, fontId: String?, sizeSp: Int?, fontStyle: String?) {
+        writableDatabase.update(
+            "user_personas", nameStyleValues(fontId, sizeSp, fontStyle),
+            "persona_id = ?", arrayOf(personaId)
+        )
+    }
+
+    /** Commit ONLY this Roleplay Character's chat-name style overrides. */
+    fun setRoleplayCharacterNameStyle(id: String, fontId: String?, sizeSp: Int?, fontStyle: String?) {
+        writableDatabase.update(
+            "roleplay_characters", nameStyleValues(fontId, sizeSp, fontStyle),
+            "roleplay_character_id = ?", arrayOf(id)
+        )
+    }
+
+    private fun nameStyleValues(fontId: String?, sizeSp: Int?, fontStyle: String?) = ContentValues().apply {
+        if (fontId.isNullOrEmpty()) putNull("name_font_id") else put("name_font_id", fontId)
+        if (sizeSp == null) putNull("name_size_sp") else put("name_size_sp", sizeSp)
+        if (fontStyle.isNullOrEmpty()) putNull("name_font_style") else put("name_font_style", fontStyle)
     }
 
     fun deleteUserPersona(personaId: String) {
@@ -5711,6 +5786,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
             put("physical_description", r.physicalDescription)
             put("goals_drives", r.goalsDrives)
             put("image_ref", r.imageRef)
+            put("name_font_id", r.nameFontId)
+            put("name_size_sp", r.nameSizeSp)
+            put("name_font_style", r.nameFontStyle)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
@@ -7939,4 +8017,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
 private fun Cursor.getStringOrNull(column: String): String? {
     val idx = getColumnIndexOrThrow(column)
     return if (isNull(idx)) null else getString(idx)
+}
+
+private fun Cursor.getIntOrNull(column: String): Int? {
+    val idx = getColumnIndexOrThrow(column)
+    return if (isNull(idx)) null else getInt(idx)
 }

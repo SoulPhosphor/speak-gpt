@@ -75,7 +75,9 @@ data class CompanionProfileEntry(
     val avatarRef: String,
     /** Optional chat-name overrides; empty/zero inherit Appearance defaults. */
     val chatNameFontId: String = "",
-    val chatNameSizeSp: Int = 0
+    val chatNameSizeSp: Int = 0,
+    /** Optional chat-name font style override; "" inherits the default. */
+    val chatNameFontStyle: String = ""
 )
 
 data class ActivationPromptEntry(

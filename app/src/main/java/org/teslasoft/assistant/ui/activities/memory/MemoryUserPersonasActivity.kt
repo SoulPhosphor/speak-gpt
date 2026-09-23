@@ -136,6 +136,7 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
                 val name = data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_NAME) ?: ""
                 val presentation = data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_PRESENTATION) ?: ""
                 val shortDescription = data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_SHORT_DESCRIPTION) ?: ""
+                val displayName = data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_DISPLAY_NAME) ?: ""
                 val imageRef = data.getStringExtra(EditUserPersonaActivity.EXTRA_RESULT_IMAGE_REF) ?: ""
                 runOffThread {
                     val store = MemoryStore.getInstance(this)
@@ -150,7 +151,12 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
                         // handed the prior values and returns them unchanged
                         // unless the user edited them (blank = intentionally none).
                         imageRef = imageRef.ifEmpty { null },
-                        shortDescription = shortDescription.ifEmpty { null }
+                        shortDescription = shortDescription.ifEmpty { null },
+                        displayName = displayName.ifEmpty { null },
+                        // Name Style owns these; an editor save keeps them.
+                        nameFontId = prior?.nameFontId,
+                        nameSizeSp = prior?.nameSizeSp,
+                        nameFontStyle = prior?.nameFontStyle
                     )
                     store.upsertUserPersona(record)
                     // Pick mode: editing then saving from Quick Settings also
@@ -175,7 +181,7 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
 
     private fun openEditor(personaId: String?) {
         if (personaId == null) {
-            editUserPersonaLauncher.launch(EditUserPersonaActivity.createIntent(this, "", "", "", "", ""))
+            editUserPersonaLauncher.launch(EditUserPersonaActivity.createIntent(this, "", "", "", "", "", ""))
             return
         }
         runOffThread {
@@ -188,6 +194,7 @@ class MemoryUserPersonasActivity : MemoryScreenActivity() {
                         existing?.name ?: "",
                         existing?.presentation ?: "",
                         existing?.shortDescription ?: "",
+                        existing?.displayName ?: "",
                         existing?.imageRef ?: ""
                     )
                 )
