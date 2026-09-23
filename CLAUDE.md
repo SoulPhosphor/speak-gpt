@@ -491,6 +491,17 @@ Do not hand the owner a wall of unresolved decisions. Group only decisions that 
 
 A question should explain the user-visible consequence and include a recommendation when the evidence supports one.
 
+### Do not re-ask what the owner already decided
+
+When the owner has already specified something (a label, option list, order,
+default, behavior, or preview), build it as specified. Do not restate it as a
+recommendation or ask whether they really want it. That adds work for the
+owner and reads as not listening.
+
+Ask only about what is genuinely missing, ambiguous, or new information the
+owner could not have known, and say exactly which point that is. Filling a
+genuine gap with your own unapproved decision is still not allowed.
+
 ## 14. Relevant specifications
 
 Read only the documents relevant to the current task.
