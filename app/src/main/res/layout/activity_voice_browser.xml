@@ -114,6 +114,42 @@
             android:textAlignment="center"
             android:text="@string/voice_browser_long_press_hint" />
 
+        <!-- Shown only for an API source that could not supply a usable voice list. -->
+        <LinearLayout
+            android:id="@+id/manual_voice_entry"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="24dp"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView
+                style="@style/Widget.App.Field.Label"
+                android:labelFor="@id/manual_voice_id"
+                android:text="@string/voice_browser_voice_id" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/manual_voice_id"
+                    style="@style/Widget.App.Field.Box"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:imeOptions="actionDone"
+                    android:importantForAutofill="no"
+                    android:inputType="text|textNoSuggestions"
+                    android:maxLines="1" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/manual_voice_add"
+                    style="@style/AppButton.Primary.Inline"
+                    android:layout_marginStart="12dp"
+                    android:text="@string/btn_add" />
+            </LinearLayout>
+        </LinearLayout>
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

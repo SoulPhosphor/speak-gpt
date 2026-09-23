@@ -14,6 +14,7 @@ import android.widget.TextView
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
@@ -43,6 +44,7 @@ import org.teslasoft.assistant.tts.voices.VoiceLocation
 import org.teslasoft.assistant.tts.voices.BrowserVoice
 import org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceRegistry
 import org.teslasoft.assistant.tts.voices.LastKnownGoodVoiceSelection
+import org.teslasoft.assistant.tts.voices.ManualVoiceDialogs
 import org.teslasoft.assistant.tts.voices.VoiceIdentityRegistry
 import org.teslasoft.assistant.tts.voices.VoiceFilterStatePersistence
 import org.teslasoft.assistant.tts.voices.VoicePreviewText
@@ -71,6 +73,9 @@ class VoiceBrowserActivity : FragmentActivity() {
     private lateinit var stateMessage: TextView
     private lateinit var resetFilters: MaterialButton
     private lateinit var previewText: TextInputEditText
+    private lateinit var manualEntry: LinearLayout
+    private lateinit var manualVoiceId: TextInputEditText
+    private lateinit var manualVoices: ManualTtsVoicesPreferences
     private lateinit var identityRegistry: VoiceIdentityRegistry
     private lateinit var lastKnownGoodVoiceRegistry: LastKnownGoodVoiceRegistry
     private lateinit var selections: TtsSelectionService
@@ -78,6 +83,7 @@ class VoiceBrowserActivity : FragmentActivity() {
     private val recoveryGate = TtsRequestGate()
     private var notice: androidx.appcompat.app.AlertDialog? = null
     private var shownLoadFailure: Throwable? = null
+    private var shownSavedVoicesFailure: Throwable? = null
     private var activating = false
     private var suppressInitialPermanentNotice = false
 
@@ -110,6 +116,14 @@ class VoiceBrowserActivity : FragmentActivity() {
         stateMessage = findViewById(R.id.voice_state_message)
         resetFilters = findViewById(R.id.reset_filters)
         previewText = findViewById(R.id.voice_preview_text)
+        manualEntry = findViewById(R.id.manual_voice_entry)
+        manualVoiceId = findViewById(R.id.manual_voice_id)
+        manualVoices = ManualTtsVoicesPreferences.getPreferences(this)
+        val addButton = findViewById<MaterialButton>(R.id.manual_voice_add)
+        addButton.setOnClickListener { addManualVoice() }
+        // A blank or spaces-only Voice ID cannot be added.
+        addButton.isEnabled = false
+        manualVoiceId.doAfterTextChanged { addButton.isEnabled = !it.isNullOrBlank() }
         // The preview text is a scratch field, not a saved setting: start each
         // visit from the default sample and never persist edits, so leaving the
         // screen discards whatever was typed.
@@ -134,7 +148,8 @@ class VoiceBrowserActivity : FragmentActivity() {
                 adapter.setPreviewing(null, null)
                 controller.stopPreview()
             },
-            onDownload = { voice -> controller.download(voice, ::showActionError, ::renderOnMainThread) }
+            onDownload = { voice -> controller.download(voice, ::showActionError, ::renderOnMainThread) },
+            onRemove = ::confirmRemoveManualVoice
         )
         voicesList.layoutManager = LinearLayoutManager(this)
         voicesList.adapter = adapter
@@ -410,7 +425,17 @@ class VoiceBrowserActivity : FragmentActivity() {
         adapter.submit(visible, activeProviderId, activeVoiceId, controller.filterState)
         voiceCount.text = getString(R.string.voice_browser_count, visible.size)
 
-        when (val state = controller.loadState) {
+        val loadState = controller.loadState
+        manualEntry.visibility = if (loadState is VoiceLoadState.Ready && loadState.manualEntryAvailable &&
+            controller.browsedProviderId.startsWith("api-tts:")) View.VISIBLE else View.GONE
+        (loadState as? VoiceLoadState.Ready)?.savedVoicesFailure?.let { cause ->
+            if (shownSavedVoicesFailure !== cause) {
+                shownSavedVoicesFailure = cause
+                if (!isFinishing && !isDestroyed) ManualVoiceDialogs.showStorageFailure(
+                    this, ManualVoiceDialogs.StorageAction.READ, cause)
+            }
+        }
+        when (val state = loadState) {
             VoiceLoadState.Loading -> showState(message = null, showLoading = true, allowReset = false)
             is VoiceLoadState.Failed -> {
                 val failure = (state.cause as? TtsException)?.failure
@@ -427,6 +452,16 @@ class VoiceBrowserActivity : FragmentActivity() {
                 }
             }
             is VoiceLoadState.Ready -> when {
+                // Saved Voice IDs can keep the list usable, but why discovery fell short is still shown.
+                state.discoveryFailure != null && state.voices.isEmpty() -> {
+                    showState(getString(R.string.tts_voices_currently_unavailable), showLoading = false, allowReset = false)
+                    showDiscoveryFailure(state.discoveryFailure)
+                }
+                state.discoveryFailure != null && visible.isEmpty() -> {
+                    showState(getString(R.string.voice_browser_no_matches), showLoading = false, allowReset = true)
+                    showDiscoveryFailure(state.discoveryFailure)
+                }
+                state.discoveryFailure != null -> { hideState(); showDiscoveryFailure(state.discoveryFailure) }
                 state.voices.isEmpty() -> showState(
                     getString(R.string.voice_browser_provider_empty), showLoading = false, allowReset = false
                 )
@@ -434,6 +469,69 @@ class VoiceBrowserActivity : FragmentActivity() {
                     getString(R.string.voice_browser_no_matches), showLoading = false, allowReset = true
                 )
                 else -> hideState()
+            }
+        }
+    }
+
+    /** Shown once per discovery answer; re-listing saved Voice IDs reuses the same answer. */
+    private fun showDiscoveryFailure(cause: Throwable) {
+        val failure = (cause as? TtsException)?.failure ?: return
+        if (shownLoadFailure === cause) return
+        shownLoadFailure = cause
+        val sourceId = controller.browsedProviderId
+        showTtsFailure(failure) {
+            if (controller.browsedProviderId == sourceId) controller.load(::renderOnMainThread)
+        }
+    }
+
+    private fun savedSourceFor(providerId: String): SavedTtsSource? =
+        (controller.availableProviders.firstOrNull { it.id == providerId } as? SavedApiVoiceProvider)?.source
+
+    private fun addManualVoice() {
+        val source = savedSourceFor(controller.browsedProviderId) ?: return
+        val entered = manualVoiceId.text?.toString().orEmpty()
+        if (entered.isBlank()) return
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { manualVoices.add(source.id, entered) }
+            if (isFinishing || isDestroyed) return@launch
+            result.onSuccess {
+                manualVoiceId.text = null
+                if (controller.browsedProviderId == source.sourceId) controller.refreshSavedVoices(::renderOnMainThread)
+            }.onFailure { error ->
+                // The typed ID stays in the field in both cases.
+                if ((error as? TtsStorageException)?.reason == TtsStorageFailure.DUPLICATE)
+                    ManualVoiceDialogs.showAlreadySaved(this@VoiceBrowserActivity)
+                else ManualVoiceDialogs.showStorageFailure(this@VoiceBrowserActivity,
+                    ManualVoiceDialogs.StorageAction.SAVE, error)
+            }
+        }
+    }
+
+    private fun isActiveVoice(voice: BrowserVoice): Boolean {
+        val active = preferences.getSelectedTtsVoice() ?: return false
+        return active.sourceId == voice.providerId && active.voiceId == voice.providerVoiceId
+    }
+
+    private fun confirmRemoveManualVoice(voice: BrowserVoice) {
+        if (isFinishing || isDestroyed) return
+        // The selected voice must never disappear from its saved collection.
+        ManualVoiceDialogs.showRemoval(this, selected = isActiveVoice(voice)) { removeManualVoice(voice) }
+    }
+
+    private fun removeManualVoice(voice: BrowserVoice) {
+        val source = savedSourceFor(voice.providerId) ?: return
+        // Selection may have changed while the confirmation was open.
+        if (isActiveVoice(voice)) { confirmRemoveManualVoice(voice); return }
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) { manualVoices.remove(source.id, voice.providerVoiceId) }
+            if (isFinishing || isDestroyed) return@launch
+            val error = result.exceptionOrNull()
+            // Already absent from storage is the requested end state, so the list is simply refreshed.
+            if (error != null && (error as? TtsStorageException)?.reason != TtsStorageFailure.NOT_FOUND) {
+                ManualVoiceDialogs.showStorageFailure(this@VoiceBrowserActivity,
+                    ManualVoiceDialogs.StorageAction.REMOVE, error)
+            } else if (controller.browsedProviderId == voice.providerId) {
+                controller.refreshSavedVoices(::renderOnMainThread)
             }
         }
     }

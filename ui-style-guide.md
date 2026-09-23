@@ -739,6 +739,13 @@ The few controls unique to browsing voices use one documented family:
 - `Widget.App.VoiceBrowser.SelectedIcon` — the independent selected-state mark.
 - `Widget.App.VoiceBrowser.Action` — the independent 56dp Preview or Download
   action target. Selection never replaces or absorbs this control.
+- `Widget.App.VoiceBrowser.Remove` — the small X shown immediately before
+  Preview only on a manually saved Voice ID row. Every other row keeps it
+  `gone`, so ordinary rows are unchanged and Preview stays at the right edge.
+
+The manual Voice ID entry (shown only for an API source with no usable voice
+list) is the standard label-above-box field with an `AppButton.Primary.Inline`
+Add action beside the box, placed below the long-press hint and above Voices.
 
 These styles deliberately contain no screenshot-derived literal colors. New
 provider metadata may add canonical dropdown fields without adding another

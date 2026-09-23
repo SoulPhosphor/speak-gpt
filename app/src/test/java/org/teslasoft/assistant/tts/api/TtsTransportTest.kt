@@ -257,4 +257,15 @@ class TtsTransportTest {
         assertEquals(TtsFailureKind.OFFLINE, failure.kind)
         assertFalse(failure.evidence!!.providerResponded)
     }
+
+    @Test fun manuallySavedVoiceIdIsSentExactlyAsStored() {
+        val profile = ApiEndpointObject("Speech", "https://speech.example/api/v1/", "speech-key", id = "speech-endpoint")
+        val row = SavedTtsSource("saved", profile.id, "fish-audio/s2.1-pro-free:free")
+        val stored = org.teslasoft.assistant.preferences.tts.ManualTtsVoicesPreferences(
+            org.teslasoft.assistant.preferences.tts.MemoryTtsStorage())
+            .add(row.id, "  933563129e564b19A115bedd57b7406a  ").getOrThrow().voiceId
+        val resolver = TtsSourceResolver({ Result.success(listOf(row)) }, { listOf(profile) })
+        val request = TtsSpeechTransport().request(resolver.saved(row.sourceId, stored).getOrThrow(), "hello", TtsOperation.PREVIEW)
+        assertEquals("933563129e564b19A115bedd57b7406a", body(request).get("voice").asString)
+    }
 }

@@ -4,6 +4,7 @@ import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -22,7 +23,8 @@ class VoiceListAdapter(
     private val onLongPress: (BrowserVoice) -> Unit,
     private val onPreview: (BrowserVoice) -> Unit,
     private val onStopPreview: (BrowserVoice) -> Unit,
-    private val onDownload: (BrowserVoice) -> Unit
+    private val onDownload: (BrowserVoice) -> Unit,
+    private val onRemove: (BrowserVoice) -> Unit = {}
 ) : RecyclerView.Adapter<VoiceListAdapter.ViewHolder>() {
     private var voices: List<BrowserVoice> = emptyList()
     private var selectedProviderId: String? = null
@@ -104,6 +106,13 @@ class VoiceListAdapter(
         } else {
             holder.itemView.context.getString(R.string.voice_browser_voice_row, voice.displayName, metadata)
         }
+        // Only a Voice ID the user saved by hand can be removed from the app.
+        holder.remove.visibility = removeVisibility(voice)
+        if (voice.manuallySaved) {
+            holder.remove.contentDescription = holder.itemView.context.getString(
+                R.string.voice_browser_remove_desc, voice.displayName)
+            holder.remove.setOnClickListener { onRemove(voice) }
+        } else holder.remove.setOnClickListener(null)
         holder.row.setOnClickListener { onSelect(voice) }
         holder.row.setOnLongClickListener {
             onLongPress(voice)
@@ -182,11 +191,17 @@ class VoiceListAdapter(
         button.iconTint = ColorStateList.valueOf(color)
     }
 
+    companion object {
+        /** GONE, not INVISIBLE, so ordinary rows keep their existing width. */
+        fun removeVisibility(voice: BrowserVoice): Int = if (voice.manuallySaved) View.VISIBLE else View.GONE
+    }
+
     class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         val row: ConstraintLayout = view.findViewById(R.id.voice_row)
         val selected: ImageView = view.findViewById(R.id.voice_selected)
         val name: TextView = view.findViewById(R.id.voice_name)
         val metadata: TextView = view.findViewById(R.id.voice_metadata)
         val action: MaterialButton = view.findViewById(R.id.voice_action)
+        val remove: ImageButton = view.findViewById(R.id.voice_remove)
     }
 }

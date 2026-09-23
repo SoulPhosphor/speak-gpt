@@ -13,6 +13,8 @@ import org.json.JSONObject
 import org.teslasoft.assistant.preferences.LogitBiasConfigPreferences
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.tts.AppTtsVoicePreferences
+import org.teslasoft.assistant.preferences.tts.ManualTtsVoicesCodec
+import org.teslasoft.assistant.preferences.tts.ManualTtsVoicesPreferences
 import org.teslasoft.assistant.util.AtomicFileWriter
 
 /** Reads and replaces only the fields classified as portable configuration. */
@@ -32,6 +34,7 @@ object AppSettingsPortableStore {
                 )
             }
         val savedSources = File(app.filesDir, "tts/saved_sources.json")
+        val manualVoices = File(app.filesDir, ManualTtsVoicesPreferences.RELATIVE_PATH)
         AppSettingsPortableData(
             globalSettings = read(
                 app.getSharedPreferences("settings", Context.MODE_PRIVATE),
@@ -48,7 +51,9 @@ object AppSettingsPortableStore {
             savedTtsSourcesJson = if (savedSources.exists()) savedSources.readText(Charsets.UTF_8)
                 else JSONObject().put("version", 1).put("entries", JSONArray()).toString(),
             logitBiasCatalog = catalogValues,
-            logitBiasConfigs = configs
+            logitBiasConfigs = configs,
+            manualTtsVoicesJson = if (manualVoices.exists()) manualVoices.readText(Charsets.UTF_8)
+                else ManualTtsVoicesCodec.EMPTY
         ).also { AppSettingsPortableCodec.encode(it) }
     }
 
@@ -85,7 +90,9 @@ object AppSettingsPortableStore {
             val savedSources = File(app.filesDir, "tts/saved_sources.json")
             val parent = savedSources.parentFile ?: return false
             if (!parent.isDirectory && !parent.mkdirs()) return false
-            AtomicFileWriter.writeAndVerify(savedSources, normalized.savedTtsSourcesJson)
+            if (!AtomicFileWriter.writeAndVerify(savedSources, normalized.savedTtsSourcesJson)) return false
+            AtomicFileWriter.writeAndVerify(File(app.filesDir, ManualTtsVoicesPreferences.RELATIVE_PATH),
+                normalized.manualTtsVoicesJson)
         } catch (_: Exception) {
             false
         }

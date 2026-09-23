@@ -8,6 +8,7 @@ package org.teslasoft.assistant.preferences.backup.portable
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
+import org.teslasoft.assistant.preferences.tts.ManualTtsVoicesCodec
 
 /** Type-preserving value from an audited SharedPreferences store. */
 data class PortableSettingValue(val type: String, val value: Any)
@@ -18,12 +19,15 @@ data class AppSettingsPortableData(
     val storageOptions: Map<String, PortableSettingValue>,
     val savedTtsSourcesJson: String,
     val logitBiasCatalog: Map<String, PortableSettingValue>,
-    val logitBiasConfigs: Map<String, Map<String, PortableSettingValue>>
+    val logitBiasConfigs: Map<String, Map<String, PortableSettingValue>>,
+    /** Voice IDs entered by hand for saved TTS sources; empty in backups made before they existed. */
+    val manualTtsVoicesJson: String = ManualTtsVoicesCodec.EMPTY
 ) {
     val recordCount: Long
         get() = globalSettings.size.toLong() + defaultSettings.size + storageOptions.size +
             logitBiasCatalog.size + logitBiasConfigs.values.sumOf { it.size.toLong() } +
-            JSONObject(savedTtsSourcesJson).getJSONArray("entries").length()
+            JSONObject(savedTtsSourcesJson).getJSONArray("entries").length() +
+            JSONObject(manualTtsVoicesJson).getJSONArray("entries").length()
 }
 
 /**
@@ -103,6 +107,7 @@ object AppSettingsPortableCodec {
             .put("default_settings", encodeMap(data.defaultSettings))
             .put("storage_options", encodeMap(data.storageOptions))
             .put("saved_tts_sources", strictObject(data.savedTtsSourcesJson))
+            .put("manual_tts_voices", strictObject(data.manualTtsVoicesJson))
             .put("logit_bias", JSONObject()
                 .put("catalog", encodeMap(data.logitBiasCatalog))
                 .put("configs", JSONObject().apply {
@@ -115,10 +120,12 @@ object AppSettingsPortableCodec {
 
     fun parse(json: String): Result = try {
         val root = strictObject(json)
-        requireExactKeys(root, setOf(
+        val keys = setOf(
             "format", "schema_version", "global_settings", "default_settings",
             "storage_options", "saved_tts_sources", "logit_bias"
-        ))
+        )
+        // Backups made before manual Voice IDs existed simply have none.
+        require(root.keys().asSequence().toSet() in setOf(keys, keys + "manual_tts_voices"))
         require(root.get("format") == FORMAT && root.get("schema_version") == SCHEMA_VERSION)
         val logit = root.getJSONObject("logit_bias")
         requireExactKeys(logit, setOf("catalog", "configs"))
@@ -136,7 +143,10 @@ object AppSettingsPortableCodec {
             decodeMap(root.getJSONArray("storage_options"), AppSettingsPortabilityPolicy.Store.STORAGE_OPTIONS),
             validateSavedTtsSources(root.getJSONObject("saved_tts_sources")),
             decodeMap(logit.getJSONArray("catalog"), AppSettingsPortabilityPolicy.Store.LOGIT_CATALOG),
-            configs
+            configs,
+            if (root.has("manual_tts_voices")) ManualTtsVoicesCodec.encode(
+                ManualTtsVoicesCodec.decode(root.getJSONObject("manual_tts_voices").toString()))
+            else ManualTtsVoicesCodec.EMPTY
         )
         validateData(data)
         Result.Ok(data)
@@ -208,6 +218,7 @@ object AppSettingsPortableCodec {
             encodeMap(values)
         }
         validateSavedTtsSources(strictObject(data.savedTtsSourcesJson))
+        ManualTtsVoicesCodec.decode(data.manualTtsVoicesJson)
         val catalogIds = catalogIds(data.logitBiasCatalog)
         require(data.logitBiasConfigs.keys == catalogIds)
     }

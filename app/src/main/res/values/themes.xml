@@ -1267,6 +1267,17 @@
         <item name="android:layout_marginTop">20dp</item>
     </style>
 
+    <!-- Small X before Preview on a manually saved voice row. -->
+    <style name="Widget.App.VoiceBrowser.Remove" parent="">
+        <item name="android:layout_width">40dp</item>
+        <item name="android:layout_height">40dp</item>
+        <item name="android:padding">8dp</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:scaleType">centerInside</item>
+        <item name="android:src">@drawable/ic_close</item>
+        <item name="android:tint">?attr/colorPrimary</item>
+    </style>
+
     <style name="Widget.App.VoiceBrowser.Action" parent="Widget.Material3.Button.TextButton">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">56dp</item>

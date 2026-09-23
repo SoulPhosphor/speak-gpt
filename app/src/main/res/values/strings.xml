@@ -1113,6 +1113,32 @@
     <string name="voice_browser_load_failed">Voices could not be loaded.\n\n%1$s</string>
     <string name="voice_browser_reset_filters">Reset Filters</string>
     <string name="voice_browser_action_failed">Voice Action Failed</string>
+    <!-- Manual Voice ID entry and removal (owner ruling, Sep 23 2026). -->
+    <string name="voice_browser_voice_id">Voice ID</string>
+    <string name="voice_browser_remove_desc">Remove %1$s</string>
+    <string name="voice_browser_remove_title">Remove Saved Voice</string>
+    <string name="voice_browser_remove_message">Remove this saved voice from the app?\n\nThis does not delete the voice from the provider.</string>
+    <string name="voice_browser_remove">Remove</string>
+    <string name="voice_browser_remove_selected_title">Voice Is Currently Selected</string>
+    <string name="voice_browser_remove_selected_message">Select another voice before removing this saved voice.</string>
+    <string name="voice_browser_already_saved_title">Voice Already Saved</string>
+    <string name="voice_browser_already_saved_message">This Voice ID is already saved for this model.</string>
+    <string name="voice_browser_save_failed_title">Voice ID Could Not Be Saved</string>
+    <string name="voice_browser_save_failed_message">The Voice ID could not be saved. Your saved voices have not changed.</string>
+    <string name="voice_browser_remove_failed_title">Saved Voice Could Not Be Removed</string>
+    <string name="voice_browser_remove_failed_message">The saved voice could not be removed. It is still saved.</string>
+    <string name="voice_browser_read_failed_title">Saved Voices Could Not Be Read</string>
+    <string name="voice_browser_read_failed_message">The saved Voice IDs for this model could not be read. They have not been replaced or cleared.\n\nThe provider\'s discovered voices may still be shown if they can be loaded normally.</string>
+    <!-- Storage details beneath those explanations, in the provider-details layout. -->
+    <string name="storage_error_heading">Storage Error</string>
+    <string name="storage_failure_type_line">Failure Type: %1$s</string>
+    <string name="storage_function_save_voice_id">Save Voice ID</string>
+    <string name="storage_function_remove_voice_id">Remove Saved Voice</string>
+    <string name="storage_function_read_voice_ids">Read Saved Voices</string>
+    <string name="storage_failure_read">Could not read the file</string>
+    <string name="storage_failure_invalid">Damaged or invalid data</string>
+    <string name="storage_failure_write">Could not write the file</string>
+    <string name="storage_failure_other">Not classified</string>
     <string name="voice_identity_preview_desc">Preview this voice</string>
     <string name="voice_identity_gender">Gender</string>
     <string name="voice_identity_female">Female</string>

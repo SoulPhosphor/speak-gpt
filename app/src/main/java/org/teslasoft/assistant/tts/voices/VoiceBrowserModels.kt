@@ -24,7 +24,22 @@ data class BrowserVoice(
     val downloadable: Boolean = false,
     val downloadInProgress: Boolean = false,
     val downloadedRecently: Boolean = false,
-    val canPreview: Boolean = false
+    val canPreview: Boolean = false,
+    /** The user saved this provider Voice ID by hand, so it can be removed from the app. */
+    val manuallySaved: Boolean = false
+)
+
+/**
+ * A provider's voices plus why discovery fell short, when it did. [discoveryFailure] is still
+ * reported when saved Voice IDs keep the list usable; [manualEntryAvailable] is true only when
+ * the source could not supply a usable voice list at all.
+ */
+data class LoadedVoices(
+    val voices: List<BrowserVoice>,
+    val discoveryFailure: Throwable? = null,
+    val manualEntryAvailable: Boolean = false,
+    /** The saved Voice IDs could not be read; they are left untouched and reported, never shown as none. */
+    val savedVoicesFailure: Throwable? = null
 )
 
 data class LastKnownGoodVoiceSelection(
@@ -63,7 +78,8 @@ data class VoiceFilterState(
 
 sealed interface VoiceLoadState {
     data object Loading : VoiceLoadState
-    data class Ready(val voices: List<BrowserVoice>) : VoiceLoadState
+    data class Ready(val voices: List<BrowserVoice>, val discoveryFailure: Throwable? = null,
+        val manualEntryAvailable: Boolean = false, val savedVoicesFailure: Throwable? = null) : VoiceLoadState
     data class Failed(val message: String, val cause: Throwable? = null) : VoiceLoadState
 }
 

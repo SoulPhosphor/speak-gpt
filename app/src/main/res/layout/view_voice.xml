@@ -20,12 +20,21 @@
         android:layout_marginStart="24dp"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toStartOf="@id/voice_action"
+        app:layout_constraintEnd_toStartOf="@id/voice_remove"
         app:layout_constraintStart_toEndOf="@id/voice_selected"
         app:layout_constraintTop_toTopOf="parent">
         <TextView android:id="@+id/voice_name" style="@style/Widget.App.Row.Title" />
         <TextView android:id="@+id/voice_metadata" style="@style/Widget.App.Row.Subtitle" android:maxLines="2" />
     </LinearLayout>
+    <!-- Only manually saved Voice IDs show this. GONE on every other row, so those
+         rows keep their existing width and the Preview action stays at the edge. -->
+    <ImageButton
+        android:id="@+id/voice_remove"
+        style="@style/Widget.App.VoiceBrowser.Remove"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/voice_action"
+        app:layout_constraintTop_toTopOf="parent" />
     <com.google.android.material.button.MaterialButton
         android:id="@+id/voice_action"
         style="@style/Widget.App.VoiceBrowser.Action"

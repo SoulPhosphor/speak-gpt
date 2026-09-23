@@ -12,6 +12,7 @@ import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalog
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.profileimages.ProfileImageDb
+import org.teslasoft.assistant.preferences.tts.ManualTtsVoicesPreferences
 
 /**
  * Content generations for every authoritative source consumed by a portable
@@ -35,6 +36,9 @@ internal object PortableBackupMutationTokens {
             "generated_image_assets" to digestTree(app.getExternalFilesDir("images"), includeContents = true),
             "saved_tts_sources" to digestTree(
                 File(app.filesDir, "tts/saved_sources.json"), includeContents = true
+            ),
+            "manual_tts_voices" to digestTree(
+                File(app.filesDir, ManualTtsVoicesPreferences.RELATIVE_PATH), includeContents = true
             )
         )
     } catch (_: Exception) {

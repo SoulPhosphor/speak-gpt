@@ -6,6 +6,12 @@ interface VoiceBrowserProvider {
     val exposesLocationFilter: Boolean
 
     fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit)
+    /**
+     * [rediscover] false reuses the last discovery answer, so re-listing after a saved Voice ID
+     * changes does not contact the provider again or repeat its error.
+     */
+    fun loadCatalog(rediscover: Boolean = true, onResult: (Result<LoadedVoices>) -> Unit) =
+        loadVoices { result -> onResult(result.map { LoadedVoices(it) }) }
     fun activeVoiceId(): String?
     fun activate(voice: BrowserVoice)
     /**
@@ -58,22 +64,28 @@ class VoiceBrowserController(
         load(onChanged)
     }
 
-    fun load(onChanged: () -> Unit) {
+    fun load(onChanged: () -> Unit) = load(true, onChanged)
+
+    /** Re-lists the browsed provider after its saved Voice IDs change, without rediscovery. */
+    fun refreshSavedVoices(onChanged: () -> Unit) = load(false, onChanged)
+
+    private fun load(rediscover: Boolean, onChanged: () -> Unit) {
         val requestedProviderId = browsedProviderId
         val requestGeneration = ++loadGeneration
         loadState = VoiceLoadState.Loading
         onChanged()
-        providersById.getValue(requestedProviderId).loadVoices { result ->
+        providersById.getValue(requestedProviderId).loadCatalog(rediscover) { result ->
             if (requestGeneration != loadGeneration || requestedProviderId != browsedProviderId) {
-                return@loadVoices
+                return@loadCatalog
             }
             loadState = result.fold(
-                onSuccess = { loadedVoices ->
-                    val voices = loadedVoices.map(decorateVoice)
+                onSuccess = { loaded ->
+                    val voices = loaded.voices.map(decorateVoice)
                     loadedVoicesByProviderId[requestedProviderId] = voices
                     val definitions = VoiceBrowserFilters.definitions(voices)
                     VoiceBrowserFilters.sanitize(filterState, definitions)
-                    VoiceLoadState.Ready(voices)
+                    VoiceLoadState.Ready(voices, loaded.discoveryFailure, loaded.manualEntryAvailable,
+                        loaded.savedVoicesFailure)
                 },
                 onFailure = { VoiceLoadState.Failed(it.message ?: "Voices could not be loaded.", it) }
             )
@@ -121,7 +133,7 @@ class VoiceBrowserController(
 
     fun updateVoice(updated: BrowserVoice) {
         val state = loadState as? VoiceLoadState.Ready ?: return
-        loadState = VoiceLoadState.Ready(state.voices.map { voice ->
+        loadState = state.copy(voices = state.voices.map { voice ->
             if (voice.providerId == updated.providerId && voice.providerVoiceId == updated.providerVoiceId) updated else voice
         })
         loadedVoicesByProviderId[updated.providerId] = loadedVoicesByProviderId[updated.providerId].orEmpty().map { voice ->

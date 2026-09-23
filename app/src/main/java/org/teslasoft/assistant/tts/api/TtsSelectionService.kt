@@ -129,9 +129,11 @@ class TtsSelectionService internal constructor(
         if (selection.kind == TtsVoiceKind.API) return withContext(Dispatchers.IO) {
             try {
                 val source = resolver.saved(selection.sourceId, selection.voiceId).getOrThrow()
-                source.target.modelId == selection.modelId &&
+                source.target.modelId == selection.modelId && (ManualTtsVoicesPreferences.getPreferences(app)
+                    .voicesFor(selection.sourceId.removePrefix("api-tts:")).getOrNull()
+                    ?.contains(selection.voiceId) == true ||
                     (TtsDiscoveryClient().voices(source, token) as? TtsVoiceCatalog.Known)
-                        ?.voices?.any { it.id == selection.voiceId } == true
+                        ?.voices?.any { it.id == selection.voiceId } == true)
             } catch (cancel: java.util.concurrent.CancellationException) { throw cancel }
             catch (_: Exception) { false }
         }

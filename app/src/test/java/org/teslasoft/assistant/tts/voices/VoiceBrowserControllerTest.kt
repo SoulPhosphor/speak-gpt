@@ -265,6 +265,50 @@ class VoiceBrowserControllerTest {
         assertEquals("Custom", controller.loadedVoice(a.providerId, "same")?.displayName)
     }
 
+    @Test fun discoveryShortfallAndManualEntryReachTheReadyState() {
+        val cause = IllegalStateException("no voice list")
+        val provider = CatalogProvider(LoadedVoices(listOf(googleVoice.copy(providerId = "api", manuallySaved = true)),
+            cause, manualEntryAvailable = true))
+        val controller = VoiceBrowserController(listOf(provider), "api")
+        controller.load { }
+        val ready = controller.loadState as VoiceLoadState.Ready
+        assertTrue(ready.manualEntryAvailable)
+        assertEquals(cause, ready.discoveryFailure)
+        assertTrue(controller.visibleVoices().single().manuallySaved)
+        assertEquals(listOf(true), provider.rediscoveries)
+        controller.refreshSavedVoices { }
+        assertEquals(listOf(true, false), provider.rediscoveries)
+        // Renaming keeps the discovery answer and the entry field.
+        controller.updateVoice(controller.visibleVoices().single().copy(displayName = "Narrator"))
+        assertTrue((controller.loadState as VoiceLoadState.Ready).manualEntryAvailable)
+    }
+
+    @Test fun ordinaryProvidersNeverOfferManualEntry() {
+        val controller = VoiceBrowserController(listOf(FakeProvider("google", listOf(googleVoice))), "google")
+        controller.load { }
+        val ready = controller.loadState as VoiceLoadState.Ready
+        assertFalse(ready.manualEntryAvailable)
+        assertNull(ready.discoveryFailure)
+    }
+
+    private class CatalogProvider(private val loaded: LoadedVoices) : VoiceBrowserProvider {
+        override val id = "api"
+        override val displayName = id
+        override val exposesLocationFilter = false
+        val rediscoveries = mutableListOf<Boolean>()
+        override fun loadVoices(onResult: (Result<List<BrowserVoice>>) -> Unit) = error("unused")
+        override fun loadCatalog(rediscover: Boolean, onResult: (Result<LoadedVoices>) -> Unit) {
+            rediscoveries += rediscover
+            onResult(Result.success(loaded))
+        }
+        override fun activeVoiceId(): String? = null
+        override fun activate(voice: BrowserVoice) = Unit
+        override fun preview(voice: BrowserVoice, sampleText: String, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit, onPlaybackChanged: (String?) -> Unit) = Unit
+        override fun download(voice: BrowserVoice, onFailure: (String) -> Unit, onCatalogChanged: () -> Unit) = Unit
+        override fun stopPreview() = Unit
+        override fun shutdown() = Unit
+    }
+
     private class FakeProvider(
         override val id: String,
         private val voices: List<BrowserVoice>,
