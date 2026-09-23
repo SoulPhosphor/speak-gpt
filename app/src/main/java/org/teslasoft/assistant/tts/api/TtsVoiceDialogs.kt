@@ -18,7 +18,7 @@ object TtsVoiceDialogs {
             R.layout.dialog_two_actions_cancel_first else R.layout.dialog_single_action, null)
         val dialog = MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
             .setTitle(message.title)
-            .setMessage(listOfNotNull(message.explanation, TtsAndroidServices.providerDetails(activity, failure)).joinToString("\n\n"))
+            .setMessage(TtsAndroidServices.dialogMessage(activity, failure, message))
             .setView(actions).create()
         if (two) {
             actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {

@@ -4,6 +4,7 @@ import okhttp3.Request
 import org.junit.Assert.*
 import org.junit.Test
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
+import org.teslasoft.assistant.preferences.tts.TtsRoutingMode
 import org.teslasoft.assistant.preferences.tts.TtsRoutingSettings
 
 internal fun source(model: String = "vendor/talker:exact", routing: TtsRoutingSettings = TtsRoutingSettings(),
@@ -51,9 +52,12 @@ class TtsCatalogTest {
     }
 
     @Test fun malformedAndMissingIdentifiersStayDistinct() {
-        assertEquals(TtsVoiceCatalog.Invalid(TtsFailureKind.MALFORMED), TtsCatalogParser.voiceResponse("{"))
-        assertEquals(TtsVoiceCatalog.Invalid(TtsFailureKind.IDENTIFIERS_MISSING),
-            TtsCatalogParser.voiceResponse("""{"voices":[{"name":"Display Only"}]}"""))
+        val malformed = TtsCatalogParser.voiceResponse("{") as TtsVoiceCatalog.Invalid
+        assertEquals(TtsFailureKind.MALFORMED, malformed.kind)
+        assertFalse(malformed.parsingError.isNullOrBlank())
+        val missing = TtsCatalogParser.voiceResponse("""{"voices":[{"name":"Display Only"}]}""") as TtsVoiceCatalog.Invalid
+        assertEquals(TtsFailureKind.IDENTIFIERS_MISSING, missing.kind)
+        assertTrue(missing.parsingError!!.contains("Display Only"))
         assertEquals(TtsVoiceCatalog.Unavailable, TtsCatalogParser.voiceResponse("{}"))
     }
 
@@ -125,5 +129,45 @@ class TtsCatalogTest {
             assertEquals(TtsFailureKind.INVALID_ADDRESS, failure.kind)
             assertNull(failure.evidence)
         }
+    }
+
+    @Test fun openRouterModelWithoutVoicesKeepsTheSuccessfulResponse() {
+        val http = FakeHttp { response("""{"data":[{"id":"other/model"},{"id":"vendor/talker:exact","architecture":{"output_modalities":["speech"]}}]}""") }
+        val (catalog, evidence) = TtsDiscoveryClient(http).voiceDiscovery(source(openRouter = true), TtsRequestGate().begin())
+        assertEquals(TtsVoiceCatalog.Unavailable, catalog)
+        assertEquals(200, evidence!!.httpStatus)
+        assertTrue(evidence.rawResponse!!.contains("vendor/talker:exact"))
+        assertFalse(evidence.rawResponse!!.contains("other/model"))
+        val failure = TtsFailures.voiceDiscovery(source(openRouter = true), catalog, evidence)!!
+        assertEquals(TtsFailureKind.DISCOVERY_UNAVAILABLE, failure.kind)
+        assertEquals(evidence, failure.voiceEvidence)
+    }
+
+    @Test fun unreadableVoiceResponseKeepsParsingErrorAndRedactedBody() {
+        val http = FakeHttp { request -> if (request.url.encodedPath.endsWith("models"))
+            response("""{"data":[{"id":"vendor/talker:exact","task":"tts"}]}""")
+            else response("""{"voices":"private-test-key"}""") }
+        val failure = assertThrows(TtsException::class.java) {
+            TtsDiscoveryClient(http).voices(source(), TtsRequestGate().begin())
+        }.failure
+        assertEquals(TtsFailureKind.MALFORMED, failure.kind)
+        assertEquals(200, failure.voiceEvidence!!.httpStatus)
+        assertFalse(failure.voiceEvidence!!.parsingError.isNullOrBlank())
+        assertFalse(failure.voiceEvidence!!.rawResponse!!.contains("private-test-key"))
+    }
+
+    @Test fun providerListFailureIsNotHiddenBehindNoVoices() {
+        val http = FakeHttp { request -> when {
+            request.url.encodedPath.endsWith("/models") ->
+                response("""{"data":[{"id":"vendor/talker:exact","architecture":{"output_modalities":["speech"]}}]}""")
+            request.url.encodedPath.contains("/endpoints") -> response("""{"error":{"message":"Rate limit exceeded"}}""", 429)
+            else -> response("""{"error":{"message":"Not found"}}""", 404)
+        } }
+        val routed = source(routing = TtsRoutingSettings(TtsRoutingMode.ONLY, "provider/exact"), openRouter = true)
+        val failure = assertThrows(TtsException::class.java) {
+            TtsDiscoveryClient(http).voices(routed, TtsRequestGate().begin())
+        }.failure
+        assertEquals(TtsFailureKind.RATE_LIMIT, failure.kind)
+        assertEquals(TtsOperation.VOICES, failure.operation)
     }
 }

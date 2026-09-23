@@ -113,10 +113,9 @@ abstract class TtsPickerActivity : FragmentActivity() {
         val message = TtsFailures.message(failure)
         val actions = layoutInflater.inflate(if ("Retry" in message.actions)
             R.layout.dialog_two_actions_cancel_first else R.layout.dialog_single_action, null)
-        val detail = TtsAndroidServices.providerDetails(this, failure)
         val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle(message.title)
-            .setMessage(listOfNotNull(message.explanation, detail).joinToString("\n\n"))
+            .setMessage(TtsAndroidServices.dialogMessage(this, failure, message))
             .setView(actions).create()
         if ("Retry" in message.actions) {
             actions.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {

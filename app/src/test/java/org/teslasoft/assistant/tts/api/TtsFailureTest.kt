@@ -76,8 +76,34 @@ class TtsFailureTest {
             TtsFailureKind.DISCOVERY_UNAVAILABLE, TtsFailureKind.EMPTY, TtsFailureKind.MALFORMED,
             TtsFailureKind.IDENTIFIERS_MISSING)
         val messages = kinds.map { TtsFailures.message(TtsFailure(TtsOperation.VOICES, source().target, "Service", it)) }
-        assertEquals(kinds.size, messages.map { it.title }.distinct().size)
-        assertEquals("Voice List Unavailable", messages[3].title)
-        assertEquals("No Voices Returned", messages[4].title)
+        assertEquals(listOf("No Internet Connection", "Connection Timed Out", "Response Timed Out",
+            "No Voices Available", "No Voices Available", "Voice List Could Not Be Read",
+            "Voice List Could Not Be Read"), messages.map { it.title })
+        assertEquals(listOf(null, null, null, "Provider details", "Provider details", "Provider details",
+            "Provider details"), messages.map { it.detailsHeading })
+    }
+
+    @Test fun voiceRequestFailuresWithoutSpecificMessageShareOneTitle() {
+        for (kind in listOf(TtsFailureKind.SERVER, TtsFailureKind.REJECTED, TtsFailureKind.NOT_FOUND, TtsFailureKind.UNKNOWN)) {
+            val message = TtsFailures.message(TtsFailure(TtsOperation.VOICES, source().target, "Service", kind))
+            assertEquals("Voice Request Failed", message.title)
+            assertEquals("The client could not retrieve the available voices from the provider.", message.explanation)
+            assertEquals("Provider error", message.detailsHeading)
+        }
+        // Outside the voice list these keep their existing wording.
+        val speech = TtsFailures.message(TtsFailure(TtsOperation.SPEECH, source().target, "Service", TtsFailureKind.SERVER))
+        assertEquals("Service Error", speech.title)
+        assertNull(speech.detailsHeading)
+    }
+
+    @Test fun rateLimitUsesOneMessageForEveryTtsRequest() {
+        for (op in TtsOperation.entries) {
+            val message = TtsFailures.message(TtsFailure(op, source().target, "Service", TtsFailureKind.RATE_LIMIT))
+            assertEquals("Request Rate Limited", message.title)
+            assertTrue(message.explanation.startsWith("The provider is temporarily limiting requests.\n\n"))
+            assertTrue(message.explanation.endsWith("Try the request again later or choose another model."))
+            assertEquals("Provider error", message.detailsHeading)
+            assertEquals(listOf("Cancel", "Retry"), message.actions)
+        }
     }
 }

@@ -31,8 +31,8 @@ class SavedApiVoiceProvider(
             val result = try {
                 val voices = withContext(Dispatchers.IO) {
                     val resolved = TtsAndroidServices.resolver(app).saved(id, "").getOrThrow()
-                    val catalog = TtsDiscoveryClient().voices(resolved, token)
-                    TtsFailures.voiceDiscovery(resolved, catalog)?.let { throw TtsException(it) }
+                    val (catalog, evidence) = TtsDiscoveryClient().voiceDiscovery(resolved, token)
+                    TtsFailures.voiceDiscovery(resolved, catalog, evidence)?.let { throw TtsException(it) }
                     (catalog as TtsVoiceCatalog.Known).voices.map { voice ->
                         BrowserVoice(id, voice.id, voice.displayName, providerModelId = source.modelId,
                             language = voice.language, region = voice.region, gender = voice.gender,

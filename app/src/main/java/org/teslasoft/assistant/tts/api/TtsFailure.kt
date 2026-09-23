@@ -29,22 +29,34 @@ data class TtsFailure(
     /** Null for local validation, successful empty lists, and missing optional metadata. */
     val evidence: ProviderDiagnosticSnapshot? = null,
     val classification: GenErrorResult? = null,
-    val responseReceived: Boolean = evidence?.providerResponded == true
+    val responseReceived: Boolean = evidence?.providerResponded == true,
+    /** The response a voice list was read from, when it answered but gave no usable voices. */
+    val voiceEvidence: TtsVoiceEvidence? = null
 )
 
+/** [rawResponse] is already redacted and shortened for display. */
+data class TtsVoiceEvidence(val httpStatus: Int?, val rawResponse: String?, val parsingError: String? = null)
+
 class TtsException(val failure: TtsFailure) : Exception(failure.kind.name)
-data class TtsMessage(val title: String, val explanation: String, val actions: List<String>)
+/** [detailsHeading] introduces the diagnostic block; null keeps the older unheaded layout. */
+data class TtsMessage(val title: String, val explanation: String, val actions: List<String>,
+    val detailsHeading: String? = null)
+
+enum class TtsVoiceOutcome { NONE_USABLE, UNREADABLE, REQUEST_FAILED }
 
 object TtsFailures {
     /** Successful discovery states are not provider errors and carry no fabricated error block. */
-    fun voiceDiscovery(source: ResolvedTtsSource, result: TtsVoiceCatalog): TtsFailure? {
+    fun voiceDiscovery(source: ResolvedTtsSource, result: TtsVoiceCatalog,
+        evidence: TtsVoiceEvidence? = null): TtsFailure? {
         val kind = when(result) {
             is TtsVoiceCatalog.Known -> if (result.voices.isEmpty()) TtsFailureKind.EMPTY else return null
             is TtsVoiceCatalog.Invalid -> result.kind
             TtsVoiceCatalog.Unavailable -> TtsFailureKind.DISCOVERY_UNAVAILABLE
         }
+        val parsingError = (result as? TtsVoiceCatalog.Invalid)?.parsingError
         return TtsFailure(TtsOperation.VOICES, source.target, source.endpoint.label, kind,
-            responseReceived = result != TtsVoiceCatalog.Unavailable)
+            responseReceived = result != TtsVoiceCatalog.Unavailable,
+            voiceEvidence = evidence?.let { if (parsingError == null) it else it.copy(parsingError = parsingError) })
     }
 
     fun serverKind(evidence: ProviderDiagnosticSnapshot): Pair<TtsFailureKind, GenErrorResult> {
@@ -102,7 +114,10 @@ object TtsFailures {
             TtsFailureKind.CONNECTION -> Triple("Connection Interrupted", "The connection to $e was interrupted while $loading.", retry)
             TtsFailureKind.AUTH -> Triple("API Access Rejected", "$e did not accept the credentials for this request. Check the API key and authentication settings in its API profile.", okay)
             TtsFailureKind.DENIED -> Triple("Access Denied", "$e refused access to the requested $item. Its response is shown below.", okay)
-            TtsFailureKind.RATE_LIMIT -> Triple("Too Many Requests", "$e is limiting requests. Wait before trying again.", retry)
+            TtsFailureKind.RATE_LIMIT -> Triple("Request Rate Limited", "The provider is temporarily limiting requests.\n\n" +
+                "This can happen when too many requests are made in a short period of time, when the provider is busy, " +
+                "or when a model has stricter usage limits. Free models may reach these limits more often.\n\n" +
+                "Try the request again later or choose another model.", retry)
             TtsFailureKind.USAGE_LIMIT -> Triple("Usage Limit Reached", "The account's usage or spending limit at $e has been reached. Check the account's limits before trying again.", okay)
             TtsFailureKind.NO_CREDITS -> Triple("No API Credits Remaining", "$e reports that the account has no credits remaining. Add credits with the service before trying again.", okay)
             TtsFailureKind.SERVER -> Triple("Service Error", "$e reported a server error while $loading. Its response is shown below.", retry)
@@ -135,7 +150,32 @@ object TtsFailures {
             TtsFailureKind.REJECTED -> Triple("Request Rejected", "$e rejected the request to $action. Any explanation it supplied is shown below.", okay)
             TtsFailureKind.UNKNOWN -> Triple("$heading Could Not Be ${if(list) "Loaded" else "Generated"}", "The $item could not be ${if(list) "loaded" else "generated"}, and the cause could not be identified. No provider response was received.", retry)
         }
-        return TtsMessage(title, explanation, actions)
+        if (f.kind == TtsFailureKind.RATE_LIMIT) return TtsMessage(title, explanation, actions, "Provider error")
+        if (f.operation != TtsOperation.VOICES) return TtsMessage(title, explanation, actions)
+        // Voice-list outcomes keep each kind's actions; the provider details carry the specific cause.
+        return when (voiceOutcome(f.kind)) {
+            TtsVoiceOutcome.NONE_USABLE -> TtsMessage("No Voices Available",
+                "No compatible voices were returned for this text-to-speech model.\n\n" +
+                "The provider responded to the voice request, but the client could not find a voice list it can use. " +
+                "This may mean the provider does not supply a voice list for this model, or that its voice " +
+                "information is not currently supported by the client.", actions, "Provider details")
+            TtsVoiceOutcome.UNREADABLE -> TtsMessage("Voice List Could Not Be Read",
+                "The provider returned voice information, but the client could not read it.\n\n" +
+                "The voice information may use a format the client does not currently support.",
+                actions, "Provider details")
+            TtsVoiceOutcome.REQUEST_FAILED -> TtsMessage("Voice Request Failed",
+                "The client could not retrieve the available voices from the provider.", actions, "Provider error")
+            null -> TtsMessage(title, explanation, actions)
+        }
+    }
+
+    /** Voice-list failures that have no more specific existing message. */
+    fun voiceOutcome(kind: TtsFailureKind): TtsVoiceOutcome? = when (kind) {
+        TtsFailureKind.DISCOVERY_UNAVAILABLE, TtsFailureKind.EMPTY -> TtsVoiceOutcome.NONE_USABLE
+        TtsFailureKind.MALFORMED, TtsFailureKind.IDENTIFIERS_MISSING -> TtsVoiceOutcome.UNREADABLE
+        TtsFailureKind.SERVER, TtsFailureKind.REJECTED, TtsFailureKind.NOT_FOUND,
+        TtsFailureKind.UNKNOWN -> TtsVoiceOutcome.REQUEST_FAILED
+        else -> null
     }
 
 }

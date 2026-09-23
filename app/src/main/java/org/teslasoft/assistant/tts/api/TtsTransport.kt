@@ -188,7 +188,7 @@ internal fun TtsHttpResponse.requireSuccess(source: ResolvedTtsSource, operation
     throw TtsException(TtsFailure(operation, source.target, source.endpoint.label, kind, evidence, classification))
 }
 
-private fun String.replaceSecret(secret: String): String =
+internal fun String.replaceSecret(secret: String): String =
     if (secret.isBlank() || secret == "null") this else replace(secret, "[redacted]")
 
 /** A validated MP3 result, not a player. Phase 5 uses token.deliver around playback start. */

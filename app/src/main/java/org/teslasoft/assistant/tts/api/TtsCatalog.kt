@@ -11,13 +11,14 @@ import java.util.Locale
 sealed interface TtsVoiceCatalog {
     data class Known(val voices: List<ApiCatalogVoice>) : TtsVoiceCatalog
     data object Unavailable : TtsVoiceCatalog
-    data class Invalid(val kind: TtsFailureKind) : TtsVoiceCatalog
+    /** [parsingError] is the exact reason the returned voice data could not be read. */
+    data class Invalid(val kind: TtsFailureKind, val parsingError: String? = null) : TtsVoiceCatalog
 }
 
 data class TtsModel(val id: String, val name: String, val capabilityEvidence: Set<String>,
     val voices: TtsVoiceCatalog, val detailsLink: String?)
 data class TtsModelCatalog(val models: List<TtsModel>, val complete: Boolean)
-internal class TtsCatalogDataException(val kind: TtsFailureKind) : IllegalArgumentException()
+internal class TtsCatalogDataException(val kind: TtsFailureKind, message: String) : IllegalArgumentException(message)
 
 /** Explicit synthesis evidence only; neither model names nor generic audio capability are evidence. */
 object TtsCatalogParser {
@@ -34,7 +35,8 @@ object TtsCatalogParser {
             if (evidence.isEmpty()) return@mapNotNull null
             model(obj, id, evidence)
         }.distinctBy { it.id }
-        if (!readable && models.isEmpty()) throw TtsCatalogDataException(TtsFailureKind.IDENTIFIERS_MISSING)
+        if (!readable && models.isEmpty()) throw TtsCatalogDataException(TtsFailureKind.IDENTIFIERS_MISSING,
+            "Model entries are missing an id")
         return TtsModelCatalog(models, readable && complete(root) && models.isNotEmpty())
     }
 
@@ -74,26 +76,30 @@ object TtsCatalogParser {
     }
 
     fun voiceResponse(body: String): TtsVoiceCatalog {
-        val root = try { JsonParser.parseString(body) } catch (_: Exception) {
-            return TtsVoiceCatalog.Invalid(TtsFailureKind.MALFORMED)
+        val root = try { JsonParser.parseString(body) } catch (e: Exception) {
+            return TtsVoiceCatalog.Invalid(TtsFailureKind.MALFORMED, e.message ?: e.javaClass.simpleName)
         }
         if (root.isJsonArray) return voices(root)
-        val obj = root.objectOrNull() ?: return TtsVoiceCatalog.Invalid(TtsFailureKind.MALFORMED)
+        val obj = root.objectOrNull() ?: return TtsVoiceCatalog.Invalid(TtsFailureKind.MALFORMED,
+            "Expected a JSON object or array")
         return voices(obj.get("supported_voices") ?: obj.get("voices") ?: obj.get("data"))
     }
 
     fun voices(value: JsonElement?): TtsVoiceCatalog {
         if (value == null || value.isJsonNull) return TtsVoiceCatalog.Unavailable
-        if (!value.isJsonArray) return TtsVoiceCatalog.Invalid(TtsFailureKind.MALFORMED)
+        if (!value.isJsonArray) return TtsVoiceCatalog.Invalid(TtsFailureKind.MALFORMED,
+            "Expected the voice list to be a JSON array")
         val result = mutableListOf<ApiCatalogVoice>()
         for (item in value.asJsonArray) {
             if (item.isJsonPrimitive && item.asJsonPrimitive.isString && item.asString.isNotBlank()) {
                 result += ApiCatalogVoice(item.asString, item.asString)
             } else {
                 val voice = item.objectOrNull()
-                    ?: return TtsVoiceCatalog.Invalid(TtsFailureKind.IDENTIFIERS_MISSING)
+                    ?: return TtsVoiceCatalog.Invalid(TtsFailureKind.IDENTIFIERS_MISSING,
+                        "Voice entry is neither a non-empty string nor an object: $item")
                 val id = voice.text("id") ?: voice.text("voice_id") ?: voice.text("voice")
-                    ?: return TtsVoiceCatalog.Invalid(TtsFailureKind.IDENTIFIERS_MISSING)
+                    ?: return TtsVoiceCatalog.Invalid(TtsFailureKind.IDENTIFIERS_MISSING,
+                        "Voice entry has no id, voice_id, or voice field: $voice")
                 fun facet(key: String) = voice.text(key)?.let { VoiceFacetValue(it.lowercase(Locale.ROOT), it) }
                 result += ApiCatalogVoice(id, voice.text("display_name") ?: voice.text("name") ?: id,
                     facet("language"), facet("region"), facet("gender"), facet("accent"), facet("style"))

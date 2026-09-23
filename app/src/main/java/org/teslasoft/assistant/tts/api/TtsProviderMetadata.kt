@@ -42,7 +42,8 @@ object TtsProviderParser {
                     ?: obj.text("data_collection")?.let { when(it) { "allow" -> true; "deny" -> false; else -> null } },
                 TtsCatalogParser.voices(obj.get("supported_voices") ?: obj.get("voices")))
         }
-        if (!readable && providers.isEmpty()) throw TtsCatalogDataException(TtsFailureKind.IDENTIFIERS_MISSING)
+        if (!readable && providers.isEmpty()) throw TtsCatalogDataException(TtsFailureKind.IDENTIFIERS_MISSING,
+            "Provider entries are missing an id")
         return TtsProviderCatalog(providers, readable && providers.isNotEmpty() && complete(root))
     }
 
