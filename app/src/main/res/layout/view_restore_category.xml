@@ -47,6 +47,17 @@
             style="@style/Widget.App.Dropdown.CanonicalValue"
             android:layout_marginStart="12dp"
             android:text="@string/restore_mode_merge" />
+
+        <!-- Shown instead of the dropdown when the category has only one
+             mode (Settings and Preferences); plain description-text style. -->
+        <TextView
+            android:id="@+id/category_mode_fixed"
+            style="@style/Widget.App.Section.Hint"
+            android:layout_width="wrap_content"
+            android:layout_marginStart="12dp"
+            android:paddingTop="0dp"
+            android:text="@string/restore_mode_replace_only"
+            android:visibility="gone" />
     </LinearLayout>
 
     <TextView

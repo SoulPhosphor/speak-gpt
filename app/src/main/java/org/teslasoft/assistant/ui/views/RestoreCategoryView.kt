@@ -38,6 +38,7 @@ class RestoreCategoryView @JvmOverloads constructor(
     private val title: TextView
     private val description: TextView
     private val modeView: TextView
+    private val fixedModeView: TextView
     private lateinit var category: PortableRestoreCategory
     private var mode = PortableRestoreMode.MERGE
     private var mergeSupported = true
@@ -53,6 +54,7 @@ class RestoreCategoryView @JvmOverloads constructor(
         title = findViewById(R.id.category_title)
         description = findViewById(R.id.category_description)
         modeView = findViewById(R.id.category_mode)
+        fixedModeView = findViewById(R.id.category_mode_fixed)
         check.setOnCheckedChangeListener { _, selected ->
             modeView.isEnabled = selected && mergeSupported
             selectionChanged?.invoke(selected)
@@ -76,6 +78,7 @@ class RestoreCategoryView @JvmOverloads constructor(
         check.contentDescription = context.getString(titleRes)
         description.setText(explanation)
         modeView.visibility = if (mergeSupported) View.VISIBLE else View.GONE
+        fixedModeView.visibility = if (mergeSupported) View.GONE else View.VISIBLE
         modeView.isEnabled = check.isChecked && mergeSupported
         updateModeLabel()
         AppDropdown.sizeToOptions(modeView, modeLabels()) {

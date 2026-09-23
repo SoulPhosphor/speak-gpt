@@ -1237,6 +1237,7 @@
     <string name="restore_from_backup">Restore From Backup</string>
     <string name="restore_mode_merge">Merge</string>
     <string name="restore_mode_replace">Replace</string>
+    <string name="restore_mode_replace_only">Replace Only</string>
     <string name="restore_category_chats">Chats</string>
     <string name="restore_category_chats_desc">Chats, folders, and the generated images used in those chats.</string>
     <string name="restore_category_generated_images">Generated Images</string>

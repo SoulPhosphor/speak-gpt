@@ -52,7 +52,9 @@ button remain at the bottom of Restore Data, beneath **Restore From Backup**.
 
 Per-category mode label: none. Each row shows the category name in the
 canonical dropdown label style beside its checkbox, with the Merge/Replace
-dropdown right-aligned (owner ruling, Sept 23 2026). Rows are listed
+dropdown right-aligned (owner ruling, Sept 23 2026). Settings and
+Preferences has no dropdown; it shows **Replace Only** right-aligned in the
+description text style. Rows are listed
 alphabetically on screen.
 
 When Model & Endpoint Settings is selected: **Credentials are not restored or removed. Existing credentials stay on this device. Newly restored endpoints need credentials before use.**

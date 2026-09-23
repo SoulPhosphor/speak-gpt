@@ -59,6 +59,7 @@ class BackupRestoreScreenContractTest {
         assertTrue(row.contains("@+id/category_mode"))
         assertTrue(row.contains("@+id/category_title"))
         assertTrue(!row.contains("restore_mode_label"))
+        assertTrue(row.contains("@string/restore_mode_replace_only"))
         assertTrue(row.contains("Widget.App.Dropdown.CanonicalValue"))
         assertTrue(row.contains("Widget.App.Dropdown.CanonicalLabel"))
         assertTrue(layout.split("org.teslasoft.assistant.ui.views.RestoreCategoryView").size - 1 == 13)
