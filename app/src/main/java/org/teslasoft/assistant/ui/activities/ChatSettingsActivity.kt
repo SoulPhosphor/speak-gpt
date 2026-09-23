@@ -7,27 +7,26 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowInsets
 import android.widget.ImageButton
 import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.graphics.drawable.toDrawable
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
-import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.ScreenChrome
 
 /**
- * Chat Settings (owner ruling, Aug 2026): a container in Settings, directly
- * beneath Appearance, for optional chat controls. It currently holds the
- * Thinking Indicator and Show Thinking toggles; more controls will be added
- * here later.
+ * Chat Behavior (owner ruling, Sept 2026): opened from the Chat Behavior row
+ * in Appearance. Optional chat controls, plus the Identity section that sets
+ * how the user's own messages are labeled in chat.
  */
 class ChatSettingsActivity : FragmentActivity() {
 
@@ -49,16 +48,7 @@ class ChatSettingsActivity : FragmentActivity() {
     }
 
     private fun applyTheme() {
-        window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
-        if (Build.VERSION.SDK_INT <= 34) {
-            @Suppress("DEPRECATION")
-            window.navigationBarColor = SurfaceColors.SURFACE_0.getColor(this)
-            @Suppress("DEPRECATION")
-            window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
-        }
-        actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-        btnBack?.backgroundTintList =
-            ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+        ScreenChrome.apply(this, actionBar, btnBack)
     }
 
     private fun bindControls() {
@@ -86,6 +76,18 @@ class ChatSettingsActivity : FragmentActivity() {
             setOnCheckedChangeListener { _, value ->
                 preferences.setShowCompanionImagesInChatList(value)
             }
+        }
+
+        findViewById<TextInputEditText>(R.id.field_default_username)?.apply {
+            setText(preferences.getDefaultDisplayedUsername())
+            doAfterTextChanged {
+                preferences.setDefaultDisplayedUsername(it?.toString()?.trim().orEmpty())
+            }
+        }
+
+        findViewById<MaterialSwitch>(R.id.switch_roleplay_names_replace_glamour)?.apply {
+            isChecked = preferences.getRoleplayNamesReplaceGlamour()
+            setOnCheckedChangeListener { _, value -> preferences.setRoleplayNamesReplaceGlamour(value) }
         }
 
         findViewById<android.view.View>(R.id.rebuild_search_index)?.setOnClickListener { button ->

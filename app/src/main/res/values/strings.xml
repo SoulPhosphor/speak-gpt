@@ -3564,11 +3564,14 @@
     <!-- Chat redesign: Appearance destination and companion name-style override. -->
     <string name="appearance_title">Appearance</string>
     <string name="appearance_subtitle">Customize the look of your chat.</string>
-    <!-- Chat Settings destination (owner ruling, Aug 2026): a container in
-         Settings, directly beneath Appearance, holding optional chat controls.
-         More settings will be added here later. -->
-    <string name="chat_settings_tile_title">Chat Settings</string>
-    <string name="chat_settings_subtitle">Optional chat settings</string>
+    <!-- Chat Behavior destination (owner ruling, Sept 2026): opened from the
+         Chat Behavior row in Appearance, holding optional chat controls. -->
+    <string name="chat_settings_tile_title">Chat Behavior</string>
+    <string name="chat_behavior_section_identity">Identity</string>
+    <string name="chat_behavior_default_username">Default Displayed Username</string>
+    <string name="chat_behavior_default_username_hint">This is not sent to the model. It will only change what name is displayed next to your chat messages unless glamour or roleplay identities are used.</string>
+    <!-- Deliberately sentence case (owner ruling). -->
+    <string name="chat_behavior_roleplay_names_replace_glamour">Roleplay names replace glamour names when both are in use</string>
     <!-- Toggle: show or hide the per-message reasoning-effort glyph. No
          subtitle, by owner ruling. -->
     <string name="chat_settings_thinking_indicator">Thinking Indicator</string>

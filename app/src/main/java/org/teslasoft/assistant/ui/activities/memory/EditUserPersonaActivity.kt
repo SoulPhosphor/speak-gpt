@@ -36,7 +36,6 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
-import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.elevation.SurfaceColors
@@ -120,8 +119,9 @@ class EditUserPersonaActivity : FragmentActivity() {
     private var fieldName: TextInputEditText? = null
     private var textNameError: TextView? = null
     private var fieldShortDescription: TextInputEditText? = null
-    private var textShortDescriptionCounter: TextView? = null
+    private var textShortDescriptionWarning: TextView? = null
     private var fieldPresentation: TextInputEditText? = null
+    private var textPresentationCounter: TextView? = null
     private var textPresentationError: TextView? = null
 
     private var personaId: String = ""
@@ -192,8 +192,9 @@ class EditUserPersonaActivity : FragmentActivity() {
         fieldName = findViewById(R.id.field_persona_name)
         textNameError = findViewById(R.id.text_persona_name_error)
         fieldShortDescription = findViewById(R.id.field_short_description)
-        textShortDescriptionCounter = findViewById(R.id.text_short_description_counter)
+        textShortDescriptionWarning = findViewById(R.id.text_short_description_warning)
         fieldPresentation = findViewById(R.id.field_presentation)
+        textPresentationCounter = findViewById(R.id.text_presentation_counter)
         textPresentationError = findViewById(R.id.text_presentation_error)
 
         applyAmoledChrome()
@@ -221,8 +222,11 @@ class EditUserPersonaActivity : FragmentActivity() {
         // approved a11y scheme labels an assigned picture "<Name>'s picture").
         fieldName?.doAfterTextChanged { updateAvatarContentDescription() }
 
-        fieldShortDescription?.doAfterTextChanged { updateShortDescriptionCounter() }
-        fieldShortDescription?.post { updateShortDescriptionCounter() }
+        fieldShortDescription?.doAfterTextChanged { updateShortDescriptionWarning() }
+        fieldShortDescription?.post { updateShortDescriptionWarning() }
+
+        fieldPresentation?.doAfterTextChanged { updatePresentationCounter() }
+        updatePresentationCounter()
 
         onBackPressedDispatcher.addCallback(this) { attemptExit() }
 
@@ -289,16 +293,16 @@ class EditUserPersonaActivity : FragmentActivity() {
         pickPictureLauncher.launch(intent)
     }
 
-    /* --------------------------- short description counter --------------------------- */
+    /* --------------------------- short description limit --------------------------- */
 
     /** Reads the box's OWN real text layout to find where a 4th line would
      *  start, rather than guessing a fixed character count that would drift
-     *  from the actual rendered width/font. Never blocks typing - only
-     *  colors the counter and swaps its text for the removal instruction;
-     *  save() is what actually blocks. */
-    private fun updateShortDescriptionCounter() {
+     *  from the actual rendered width/font. Never blocks typing - only shows
+     *  the removal instruction while over; save() is what actually blocks.
+     *  There is deliberately no character count here (owner ruling). */
+    private fun updateShortDescriptionWarning() {
         val field = fieldShortDescription ?: return
-        val counter = textShortDescriptionCounter ?: return
+        val warning = textShortDescriptionWarning ?: return
         val text = field.text?.toString().orEmpty()
         val layout = field.layout
         val fourthLineStart = if (layout != null && layout.lineCount > SHORT_DESCRIPTION_MAX_LINES) {
@@ -309,13 +313,17 @@ class EditUserPersonaActivity : FragmentActivity() {
 
         if (fourthLineStart != null && text.length > fourthLineStart) {
             shortDescriptionOverLimit = true
-            counter.text = getString(R.string.mem_pers_short_desc_over, text.length - fourthLineStart)
-            counter.setTextColor(MaterialColors.getColor(counter, androidx.appcompat.R.attr.colorError))
+            warning.text = getString(R.string.mem_pers_short_desc_over, text.length - fourthLineStart)
+            warning.visibility = View.VISIBLE
         } else {
             shortDescriptionOverLimit = false
-            counter.text = text.length.toString()
-            counter.setTextColor(ResourcesCompat.getColor(resources, R.color.text_subtitle, theme))
+            warning.visibility = View.GONE
         }
+    }
+
+    /** Plain live character count under the Presentation box; no limit. */
+    private fun updatePresentationCounter() {
+        textPresentationCounter?.text = fieldPresentation?.text?.length?.toString() ?: "0"
     }
 
     /* --------------------------- save / delete --------------------------- */

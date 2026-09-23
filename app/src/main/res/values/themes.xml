@@ -821,6 +821,28 @@
         <item name="android:textSize">13sp</item>
     </style>
 
+    <!-- Inline validation / warning line directly under a field's Box. Color
+         and size come only from here so a theme or font change reaches every
+         field error at once. Instances set only text, visibility and any
+         placement constraints. -->
+    <style name="Widget.App.Field.Error" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:textColor">?attr/colorError</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <!-- Live character count, right-aligned directly under a field's Box. -->
+    <style name="Widget.App.Field.Counter" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:gravity">end</item>
+        <item name="android:textColor">?attr/appSubtleTextColor</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
     <!-- Screen-section heading + its explanatory text (owner ruling, July 22
          2026). Same "heading, then explanation, then the control it explains"
          order as Widget.App.Field.Label/.Hint above, one level up: a whole

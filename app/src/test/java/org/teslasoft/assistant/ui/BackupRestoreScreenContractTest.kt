@@ -9,10 +9,10 @@ class BackupRestoreScreenContractTest {
     @Test
     fun mainSettingsPlacesBackupRestoreImmediatelyBeforeAlerts() {
         val layout = source("activity_settings.xml")
-        val chat = layout.indexOf("@+id/tile_chat_settings")
+        val appearance = layout.indexOf("@+id/tile_appearance")
         val backup = layout.indexOf("@+id/tile_backup_restore")
         val alerts = layout.indexOf("@+id/tile_alert_debug_menu")
-        assertTrue(chat >= 0 && backup > chat && alerts > backup)
+        assertTrue(appearance >= 0 && backup > appearance && alerts > backup)
         assertTrue(
             layout.substringAfter("@+id/tile_alert_debug_menu")
                 .substringBefore("</LinearLayout>")

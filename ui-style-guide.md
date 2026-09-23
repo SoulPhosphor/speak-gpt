@@ -105,7 +105,7 @@ The zone attributes implemented so far, which every `ThemeOverlay.Phosphor.*` pa
 
 Every theme that defines one of these must define all of them, including the night themes and every palette overlay — a style resolving an attribute that no theme layer carries crashes at inflation. They are the pattern the remaining zones follow when theme work resumes.
 
-Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton)` (`org.teslasoft.assistant.ui.util`). It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance and Name Style; the other settings screens still carry their own copy until they are moved over.
+Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton)` (`org.teslasoft.assistant.ui.util`). It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, and Chat Behavior; the other settings screens still carry their own copy until they are moved over.
 
 A change to a shared style or shared layout may alter every screen using it. Treat that as an app-wide visual decision, not a local cleanup.
 
@@ -452,6 +452,14 @@ Keep field-specific behavior on the individual input, including:
 - gravity;
 - character limits;
 - spacing unique to that field.
+
+### Field error and counter lines
+
+`Widget.App.Field.Error`
+
+`Widget.App.Field.Counter`
+
+Use `Field.Error` for an inline validation or warning line directly under a field's box, and `Field.Counter` for a live character count right-aligned under the box. Both own their color (`colorError` / `appSubtleTextColor`), text size, and top spacing, so a theme or font change reaches every field at once. The instance sets only its text, visibility, width/margins, and constraints; Kotlin sets text and visibility only, never color. Current example: Edit Glamour (`activity_edit_user_persona.xml`).
 
 ### Bounded, internally-scrolling variant
 

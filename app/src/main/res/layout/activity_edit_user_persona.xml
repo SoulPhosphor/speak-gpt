@@ -130,13 +130,10 @@
                  input itself, never a toast) - shown by save() when empty. -->
             <TextView
                 android:id="@+id/text_persona_name_error"
+                style="@style/Widget.App.Field.Error"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="4dp"
                 android:layout_marginEnd="24dp"
-                android:textColor="?attr/colorError"
-                android:textSize="13sp"
                 android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
@@ -185,21 +182,18 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/hint_short_description" />
 
-            <!-- Live character counter, right-aligned under the box. Plain
-                 count normally; over the 3-line mark it turns colorError and
-                 its text becomes the removal instruction instead (owner
-                 ruling: never blocks typing, only blocks Save - see the
-                 snackbar in EditUserPersonaActivity.save()). -->
+            <!-- No character count here (owner ruling). Shown only past the
+                 3-line mark, in the spot the old counter used, with the
+                 removal instruction. Never blocks typing, only Save - see
+                 the snackbar in EditUserPersonaActivity.save(). -->
             <TextView
-                android:id="@+id/text_short_description_counter"
+                android:id="@+id/text_short_description_warning"
+                style="@style/Widget.App.Field.Error"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="4dp"
                 android:layout_marginEnd="24dp"
                 android:gravity="end"
-                android:textColor="@color/text_subtitle"
-                android:textSize="13sp"
+                android:visibility="gone"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/field_short_description" />
@@ -214,7 +208,7 @@
                 android:text="@string/mem_pers_field_presentation"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/text_short_description_counter" />
+                app:layout_constraintTop_toBottomOf="@+id/text_short_description_warning" />
 
             <TextView
                 android:id="@+id/hint_presentation"
@@ -244,25 +238,33 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/hint_presentation" />
 
-            <!-- The true last element carries the bottom-of-parent anchor
-                 (not field_presentation) so the 24dp trailing gap is correct
-                 whether or not this error is showing - matches the pattern
-                 checkbox_autoload_lorebooks uses in activity_edit_persona.xml. -->
+            <!-- Plain live character count, right-aligned under the box. -->
+            <TextView
+                android:id="@+id/text_presentation_counter"
+                style="@style/Widget.App.Field.Counter"
+                android:layout_width="0dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/field_presentation" />
+
+            <!-- The true last element carries the bottom-of-parent anchor so
+                 the 24dp trailing gap is correct whether or not this error is
+                 showing - matches the pattern checkbox_autoload_lorebooks uses
+                 in activity_edit_persona.xml. -->
             <TextView
                 android:id="@+id/text_presentation_error"
+                style="@style/Widget.App.Field.Error"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
                 android:layout_marginStart="24dp"
-                android:layout_marginTop="4dp"
                 android:layout_marginEnd="24dp"
                 android:layout_marginBottom="24dp"
-                android:textColor="?attr/colorError"
-                android:textSize="13sp"
                 android:visibility="gone"
                 app:layout_constraintBottom_toBottomOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toBottomOf="@+id/field_presentation" />
+                app:layout_constraintTop_toBottomOf="@+id/text_presentation_counter" />
         </androidx.constraintlayout.widget.ConstraintLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

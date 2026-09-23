@@ -533,6 +533,24 @@ class Preferences internal constructor(
         putGlobalBoolean("chat_list_companion_images", state, false)
     }
 
+    /** Chat Behavior > Identity: the name shown beside the user's own chat
+     *  messages when no Roleplay Character or Glamour name applies. Blank
+     *  means the built-in "User" label. Display-only, never sent to a model. */
+    fun getDefaultDisplayedUsername(): String = getGlobalString("chat_default_displayed_username", "")
+
+    fun setDefaultDisplayedUsername(name: String) {
+        putGlobalString("chat_default_displayed_username", name, "")
+    }
+
+    /** Chat Behavior > Identity: when both a Roleplay Character and a Glamour
+     *  name apply, the Roleplay Character's name wins. Default on. */
+    fun getRoleplayNamesReplaceGlamour(): Boolean =
+        getGlobalBoolean("chat_roleplay_names_replace_glamour", true)
+
+    fun setRoleplayNamesReplaceGlamour(state: Boolean) {
+        putGlobalBoolean("chat_roleplay_names_replace_glamour", state, true)
+    }
+
     fun getShowChatNames(): Boolean = getGlobalBoolean("chat_show_names", true)
 
     fun setShowChatNames(state: Boolean) {

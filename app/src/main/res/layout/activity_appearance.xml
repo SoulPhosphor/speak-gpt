@@ -73,6 +73,28 @@
                     android:contentDescription="@string/name_style_title" />
             </LinearLayout>
 
+            <LinearLayout
+                android:id="@+id/row_chat_behavior"
+                style="@style/Widget.App.Row.TitleOnly">
+
+                <ImageView
+                    style="@style/Widget.App.Row.Icon"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_forum"
+                    android:tint="?attr/colorPrimary" />
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/chat_settings_tile_title" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/chat_settings_tile_title" />
+            </LinearLayout>
+
             <TextView
                 style="@style/Widget.App.Section.Title"
                 android:text="@string/appearance_section_message_display" />

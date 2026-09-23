@@ -585,6 +585,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private val companionAvatarRefresh = AvatarRefreshCoordinator()
     private val userAvatarRefresh = AvatarRefreshCoordinator()
 
+    // The active Roleplay Character's name, resolved off-main so putMessage can
+    // stamp user messages without touching storage. Null when none is active.
+    private var activeRoleplayUserName: String? = null
+
     // The user's most recent outgoing message (captured in generateResponse, which
     // every input path flows through). Used by the lorebook to match triggers.
     private var lastUserMessageForLore = ""
@@ -1537,6 +1541,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         // (an editor, Profile Image settings). Re-resolve both sides, display-only.
         refreshCompanionAvatar()
         refreshUserAvatar()
+        refreshActiveRoleplayUserName()
         drawerController?.refresh()
     }
 
@@ -1640,6 +1645,33 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         userAvatarRefresh.markTargetReady()
         refreshCompanionAvatar()
         refreshUserAvatar()
+    }
+
+    /** Re-reads the active Roleplay Character's name for user-message name
+     *  stamping. Display-only and best-effort; never provisions the store. */
+    private fun refreshActiveRoleplayUserName() {
+        val rpCharId = preferences?.getChatRoleplayCharacterId().orEmpty()
+        if (rpCharId.isEmpty()) {
+            activeRoleplayUserName = null
+            return
+        }
+        CoroutineScope(Dispatchers.Main).launch {
+            val name = withContext(Dispatchers.IO) {
+                try {
+                    if (!MemoryStore.isProvisioned(this@ChatActivity)) {
+                        null
+                    } else {
+                        MemoryStore.getInstance(this@ChatActivity).getRoleplayCharacter(rpCharId)?.name
+                    }
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            if (isFinishing || isDestroyed) return@launch
+            if (preferences?.getChatRoleplayCharacterId().orEmpty() == rpCharId) {
+                activeRoleplayUserName = name
+            }
+        }
     }
 
     /** The active user identity's own image hash for [refreshUserAvatar]: the
@@ -6561,6 +6593,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 override fun onUpdate() {
                     refreshCompanionAvatar()
                     refreshUserAvatar()
+                    refreshActiveRoleplayUserName()
                     // Quick Settings writes the chat's model, prefix and end
                     // separator straight to storage. This screen caches them,
                     // and requests are built from the cached copy — so without
@@ -9605,6 +9638,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (isBot) {
             val companion = currentCompanionLabel()
             if (companion.isNotBlank()) map[ChatAdapter.KEY_COMPANION_NAME] = companion
+        } else {
+            // Same locking for the user's own label: the name that applies at
+            // send time. The Glamour Display Name is not stored yet (see
+            // CLAUDE.md), so no Glamour name is passed.
+            ChatSpeakerNames.activeUserName(
+                roleplayName = activeRoleplayUserName,
+                glamourName = null,
+                defaultName = preferences?.getDefaultDisplayedUsername(),
+                roleplayWins = preferences?.getRoleplayNamesReplaceGlamour() ?: true
+            )?.let { map[ChatSpeakerNames.USER_NAME_KEY] = it }
         }
 
         messages.add(map)

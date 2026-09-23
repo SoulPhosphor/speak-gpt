@@ -77,6 +77,9 @@ class AppearanceActivity : FragmentActivity() {
         findViewById<View>(R.id.row_name_style)?.setOnClickListener {
             startActivity(Intent(this, NameStyleActivity::class.java))
         }
+        findViewById<View>(R.id.row_chat_behavior)?.setOnClickListener {
+            startActivity(Intent(this, ChatSettingsActivity::class.java))
+        }
 
         bindSwitch(R.id.switch_staggered_responses, preferences.getStaggeredResponses()) {
             preferences.setStaggeredResponses(it)

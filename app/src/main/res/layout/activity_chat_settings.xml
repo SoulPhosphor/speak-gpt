@@ -105,6 +105,35 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:text="@string/search_rebuild" />
+
+            <TextView
+                style="@style/Widget.App.Section.Title"
+                android:text="@string/chat_behavior_section_identity" />
+
+            <TextView
+                style="@style/Widget.App.Field.Label"
+                android:text="@string/chat_behavior_default_username" />
+
+            <TextView
+                style="@style/Widget.App.Field.Hint"
+                android:text="@string/chat_behavior_default_username_hint" />
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/field_default_username"
+                style="@style/Widget.App.Field.Box"
+                android:inputType="textPersonName|textCapWords"
+                android:singleLine="true" />
+
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/chat_behavior_roleplay_names_replace_glamour" />
+                </LinearLayout>
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_roleplay_names_replace_glamour"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 </androidx.constraintlayout.widget.ConstraintLayout>

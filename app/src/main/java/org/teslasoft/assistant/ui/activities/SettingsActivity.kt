@@ -60,7 +60,6 @@ class SettingsActivity : FragmentActivity() {
     private var rowVoiceSettings: LinearLayout? = null
     private var rowImages: LinearLayout? = null
     private var rowAppearance: LinearLayout? = null
-    private var rowChatSettings: LinearLayout? = null
     private var rowBackupRestore: LinearLayout? = null
     private var rowAboutApp: LinearLayout? = null
     private var tileDocumentation: TileFragment? = null
@@ -264,7 +263,6 @@ class SettingsActivity : FragmentActivity() {
         rowVoiceSettings = findViewById(R.id.tile_voice_settings)
         rowImages = findViewById(R.id.tile_images)
         rowAppearance = findViewById(R.id.tile_appearance)
-        rowChatSettings = findViewById(R.id.tile_chat_settings)
         rowBackupRestore = findViewById(R.id.tile_backup_restore)
         rowAboutApp = findViewById(R.id.tile_about_app)
         rowAlertDebugMenu = findViewById(R.id.tile_alert_debug_menu)
@@ -303,10 +301,6 @@ class SettingsActivity : FragmentActivity() {
 
         rowAppearance?.setOnClickListener {
             startActivity(Intent(this, AppearanceActivity::class.java))
-        }
-
-        rowChatSettings?.setOnClickListener {
-            startActivity(Intent(this, ChatSettingsActivity::class.java))
         }
 
         rowBackupRestore?.setOnClickListener {
