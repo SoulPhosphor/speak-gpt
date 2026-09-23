@@ -393,6 +393,17 @@ Use when the header contains only a back button and centered title.
 
 The back button style expects the view id `btn_back`.
 
+### Title-only screen header
+
+Use:
+
+- `Widget.App.ActionBar`
+- `Widget.App.ActionBar.Title`
+
+Use when the header shows only its centered title, with no back button or
+action icons. The screen is left with the system back gesture. Current
+examples: Search and Name Style.
+
 ### Header with one trailing action icon
 
 Use:

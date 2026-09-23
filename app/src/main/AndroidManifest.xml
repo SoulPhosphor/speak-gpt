@@ -345,6 +345,11 @@
         </activity>
 
         <activity
+            android:name=".ui.activities.NameStyleActivity"
+            android:exported="false"
+            android:label="@string/name_style_title" />
+
+        <activity
             android:name=".ui.activities.ActiveMemoriesActivity"
             android:exported="false"
             android:label="@string/active_memories_title">
