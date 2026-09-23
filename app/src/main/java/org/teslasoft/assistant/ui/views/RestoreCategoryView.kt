@@ -35,6 +35,7 @@ class RestoreCategoryView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : LinearLayout(context, attrs) {
     private val check: MaterialCheckBox
+    private val title: TextView
     private val description: TextView
     private val modeView: TextView
     private lateinit var category: PortableRestoreCategory
@@ -49,18 +50,20 @@ class RestoreCategoryView @JvmOverloads constructor(
         orientation = VERTICAL
         LayoutInflater.from(context).inflate(R.layout.view_restore_category, this, true)
         check = findViewById(R.id.category_check)
+        title = findViewById(R.id.category_title)
         description = findViewById(R.id.category_description)
         modeView = findViewById(R.id.category_mode)
         check.setOnCheckedChangeListener { _, selected ->
             modeView.isEnabled = selected && mergeSupported
             selectionChanged?.invoke(selected)
         }
+        title.setOnClickListener { check.toggle() }
         modeView.setOnClickListener { showModeMenu() }
     }
 
     fun bind(
         restoreCategory: PortableRestoreCategory,
-        @StringRes title: Int,
+        @StringRes titleRes: Int,
         @StringRes explanation: Int,
         supportsMerge: Boolean,
         onSelectionChanged: ((Boolean) -> Unit)? = null
@@ -69,13 +72,14 @@ class RestoreCategoryView @JvmOverloads constructor(
         mergeSupported = supportsMerge
         selectionChanged = onSelectionChanged
         if (!mergeSupported) mode = PortableRestoreMode.REPLACE
-        check.setText(title)
+        title.setText(titleRes)
+        check.contentDescription = context.getString(titleRes)
         description.setText(explanation)
         modeView.visibility = if (mergeSupported) View.VISIBLE else View.GONE
         modeView.isEnabled = check.isChecked && mergeSupported
         updateModeLabel()
         AppDropdown.sizeToOptions(modeView, modeLabels()) {
-            (width - check.paddingStart).coerceAtLeast(modeView.minimumWidth)
+            (width - check.width).coerceAtLeast(modeView.minimumWidth)
         }
     }
 
@@ -103,7 +107,6 @@ class RestoreCategoryView @JvmOverloads constructor(
             else R.string.restore_mode_replace
         )
         modeView.text = label
-        modeView.contentDescription = context.getString(R.string.restore_mode_accessibility, label)
     }
 
 }

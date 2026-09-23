@@ -57,7 +57,8 @@ class BackupRestoreScreenContractTest {
         val row = source("view_restore_category.xml")
         assertTrue(row.contains("@+id/category_check"))
         assertTrue(row.contains("@+id/category_mode"))
-        assertTrue(row.contains("@string/restore_mode_label"))
+        assertTrue(row.contains("@+id/category_title"))
+        assertTrue(!row.contains("restore_mode_label"))
         assertTrue(row.contains("Widget.App.Dropdown.CanonicalValue"))
         assertTrue(row.contains("Widget.App.Dropdown.CanonicalLabel"))
         assertTrue(layout.split("org.teslasoft.assistant.ui.views.RestoreCategoryView").size - 1 == 13)
@@ -67,6 +68,29 @@ class BackupRestoreScreenContractTest {
             "app/src/main/java/org/teslasoft/assistant/ui/views/RestoreCategoryView.kt"
         ).readText()
         assertTrue(view.contains("modeView.visibility = if (mergeSupported) View.VISIBLE else View.GONE"))
+    }
+
+    @Test
+    fun restoreCategoriesAreListedAlphabetically() {
+        val layout = source("activity_memory_backup_restore.xml")
+        val ids = listOf(
+            "restore_category_activation_prompts",
+            "restore_category_profile_images",
+            "restore_category_chats",
+            "restore_category_companions",
+            "restore_category_generated_images",
+            "restore_category_glamours",
+            "restore_category_lorebooks",
+            "restore_category_memories",
+            "restore_category_model_settings",
+            "restore_model_credentials_note",
+            "restore_category_model_rules",
+            "restore_category_roleplay",
+            "restore_category_settings",
+            "restore_category_system_prompts"
+        ).map { layout.indexOf("@+id/$it\"") }
+        assertTrue(ids.all { it >= 0 })
+        assertTrue(ids == ids.sorted())
     }
 
     @Test

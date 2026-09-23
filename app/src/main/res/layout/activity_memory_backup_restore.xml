@@ -666,27 +666,7 @@
                 android:text="@string/restore_data_hint" />
 
             <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_chats"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_generated_images"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_companions"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_glamours"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_roleplay"
+                android:id="@+id/restore_category_activation_prompts"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 
@@ -696,12 +676,32 @@
                 android:layout_height="wrap_content" />
 
             <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_activation_prompts"
+                android:id="@+id/restore_category_chats"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 
             <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_system_prompts"
+                android:id="@+id/restore_category_companions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_generated_images"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_glamours"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_lorebooks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_memories"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 
@@ -718,22 +718,22 @@
                 android:text="@string/restore_model_credentials_note" />
 
             <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_settings"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content" />
-
-            <org.teslasoft.assistant.ui.views.RestoreCategoryView
                 android:id="@+id/restore_category_model_rules"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 
             <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_memories"
+                android:id="@+id/restore_category_roleplay"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 
             <org.teslasoft.assistant.ui.views.RestoreCategoryView
-                android:id="@+id/restore_category_lorebooks"
+                android:id="@+id/restore_category_settings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <org.teslasoft.assistant.ui.views.RestoreCategoryView
+                android:id="@+id/restore_category_system_prompts"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 
