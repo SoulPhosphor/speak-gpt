@@ -2742,6 +2742,10 @@
     <string name="mem_pers_field_name">Name</string>
     <string name="mem_pers_field_name_label">Glamour Name</string>
     <string name="mem_pers_error_name_empty">Please enter a Glamour name</string>
+    <!-- Display Name: layout only, not saved yet (see CLAUDE.md, "Glamour
+         Display Name"). -->
+    <string name="mem_pers_field_display_name">Display Name</string>
+    <string name="mem_pers_field_display_name_hint">Changes your username displayed in chat. Your default username will show if this is left blank.</string>
     <string name="mem_pers_field_short_description">Short Description</string>
     <string name="mem_pers_field_short_description_hint">Shown under the Glamour name to help you remember which Glamour is which. This is not sent to the model.</string>
     <string name="mem_pers_short_desc_over">The Glamour can\'t be saved until you remove %1$d characters from this box.</string>

@@ -421,7 +421,9 @@ your username displayed in chat. Your default username will show if this is
 left blank.") that sets the name beside the user's chat messages while that
 Glamour is active.
 
-It is intentionally not built yet. Storing it needs a Glamour database change
+The field's look is on the screen (`field_display_name` in
+`activity_edit_user_persona.xml`), but it is not wired: nothing reads or saves
+it. Storing it needs a Glamour database change
 and backup/restore support, and the owner wants no database edits until their
 old settings have been restored. Until then there is no Glamour name:
 `ChatActivity.putMessage` passes `glamourName = null` to
