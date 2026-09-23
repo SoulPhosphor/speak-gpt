@@ -43,7 +43,7 @@ object TtsProviderParser {
                 TtsCatalogParser.voices(obj.get("supported_voices") ?: obj.get("voices")))
         }
         if (!readable && providers.isEmpty()) throw TtsCatalogDataException(TtsFailureKind.IDENTIFIERS_MISSING,
-            "Provider entries are missing an id")
+            "Provider entries are missing an id.")
         return TtsProviderCatalog(providers, readable && providers.isNotEmpty() && complete(root))
     }
 

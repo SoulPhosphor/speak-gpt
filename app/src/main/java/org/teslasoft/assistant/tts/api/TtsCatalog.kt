@@ -36,7 +36,7 @@ object TtsCatalogParser {
             model(obj, id, evidence)
         }.distinctBy { it.id }
         if (!readable && models.isEmpty()) throw TtsCatalogDataException(TtsFailureKind.IDENTIFIERS_MISSING,
-            "Model entries are missing an id")
+            "Model entries are missing an id.")
         return TtsModelCatalog(models, readable && complete(root) && models.isNotEmpty())
     }
 
@@ -81,14 +81,14 @@ object TtsCatalogParser {
         }
         if (root.isJsonArray) return voices(root)
         val obj = root.objectOrNull() ?: return TtsVoiceCatalog.Invalid(TtsFailureKind.MALFORMED,
-            "Expected a JSON object or array")
+            "Expected a JSON object or array.")
         return voices(obj.get("supported_voices") ?: obj.get("voices") ?: obj.get("data"))
     }
 
     fun voices(value: JsonElement?): TtsVoiceCatalog {
         if (value == null || value.isJsonNull) return TtsVoiceCatalog.Unavailable
         if (!value.isJsonArray) return TtsVoiceCatalog.Invalid(TtsFailureKind.MALFORMED,
-            "Expected the voice list to be a JSON array")
+            "Expected the voice list to be a JSON array.")
         val result = mutableListOf<ApiCatalogVoice>()
         for (item in value.asJsonArray) {
             if (item.isJsonPrimitive && item.asJsonPrimitive.isString && item.asString.isNotBlank()) {
@@ -96,10 +96,10 @@ object TtsCatalogParser {
             } else {
                 val voice = item.objectOrNull()
                     ?: return TtsVoiceCatalog.Invalid(TtsFailureKind.IDENTIFIERS_MISSING,
-                        "Voice entry is neither a non-empty string nor an object: $item")
+                        "Voice entry is neither a non-empty string nor an object. Entry: $item")
                 val id = voice.text("id") ?: voice.text("voice_id") ?: voice.text("voice")
                     ?: return TtsVoiceCatalog.Invalid(TtsFailureKind.IDENTIFIERS_MISSING,
-                        "Voice entry has no id, voice_id, or voice field: $voice")
+                        "Voice entry has no id, voice_id, or voice field. Entry: $voice")
                 fun facet(key: String) = voice.text(key)?.let { VoiceFacetValue(it.lowercase(Locale.ROOT), it) }
                 result += ApiCatalogVoice(id, voice.text("display_name") ?: voice.text("name") ?: id,
                     facet("language"), facet("region"), facet("gender"), facet("accent"), facet("style"))

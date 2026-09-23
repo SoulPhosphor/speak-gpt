@@ -150,7 +150,7 @@ object TtsFailures {
             TtsFailureKind.REJECTED -> Triple("Request Rejected", "$e rejected the request to $action. Any explanation it supplied is shown below.", okay)
             TtsFailureKind.UNKNOWN -> Triple("$heading Could Not Be ${if(list) "Loaded" else "Generated"}", "The $item could not be ${if(list) "loaded" else "generated"}, and the cause could not be identified. No provider response was received.", retry)
         }
-        if (f.kind == TtsFailureKind.RATE_LIMIT) return TtsMessage(title, explanation, actions, "Provider error")
+        if (f.kind == TtsFailureKind.RATE_LIMIT) return TtsMessage(title, explanation, actions, "Provider Error")
         if (f.operation != TtsOperation.VOICES) return TtsMessage(title, explanation, actions)
         // Voice-list outcomes keep each kind's actions; the provider details carry the specific cause.
         return when (voiceOutcome(f.kind)) {
@@ -158,13 +158,13 @@ object TtsFailures {
                 "No compatible voices were returned for this text-to-speech model.\n\n" +
                 "The provider responded to the voice request, but the client could not find a voice list it can use. " +
                 "This may mean the provider does not supply a voice list for this model, or that its voice " +
-                "information is not currently supported by the client.", actions, "Provider details")
+                "information is not currently supported by the client.", actions, "Provider Details")
             TtsVoiceOutcome.UNREADABLE -> TtsMessage("Voice List Could Not Be Read",
                 "The provider returned voice information, but the client could not read it.\n\n" +
                 "The voice information may use a format the client does not currently support.",
-                actions, "Provider details")
+                actions, "Provider Details")
             TtsVoiceOutcome.REQUEST_FAILED -> TtsMessage("Voice Request Failed",
-                "The client could not retrieve the available voices from the provider.", actions, "Provider error")
+                "The client could not retrieve the available voices from the provider.", actions, "Provider Error")
             null -> TtsMessage(title, explanation, actions)
         }
     }

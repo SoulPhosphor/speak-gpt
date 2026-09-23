@@ -79,8 +79,8 @@ class TtsFailureTest {
         assertEquals(listOf("No Internet Connection", "Connection Timed Out", "Response Timed Out",
             "No Voices Available", "No Voices Available", "Voice List Could Not Be Read",
             "Voice List Could Not Be Read"), messages.map { it.title })
-        assertEquals(listOf(null, null, null, "Provider details", "Provider details", "Provider details",
-            "Provider details"), messages.map { it.detailsHeading })
+        assertEquals(listOf(null, null, null, "Provider Details", "Provider Details", "Provider Details",
+            "Provider Details"), messages.map { it.detailsHeading })
     }
 
     @Test fun voiceRequestFailuresWithoutSpecificMessageShareOneTitle() {
@@ -88,7 +88,7 @@ class TtsFailureTest {
             val message = TtsFailures.message(TtsFailure(TtsOperation.VOICES, source().target, "Service", kind))
             assertEquals("Voice Request Failed", message.title)
             assertEquals("The client could not retrieve the available voices from the provider.", message.explanation)
-            assertEquals("Provider error", message.detailsHeading)
+            assertEquals("Provider Error", message.detailsHeading)
         }
         // Outside the voice list these keep their existing wording.
         val speech = TtsFailures.message(TtsFailure(TtsOperation.SPEECH, source().target, "Service", TtsFailureKind.SERVER))
@@ -102,7 +102,7 @@ class TtsFailureTest {
             assertEquals("Request Rate Limited", message.title)
             assertTrue(message.explanation.startsWith("The provider is temporarily limiting requests.\n\n"))
             assertTrue(message.explanation.endsWith("Try the request again later or choose another model."))
-            assertEquals("Provider error", message.detailsHeading)
+            assertEquals("Provider Error", message.detailsHeading)
             assertEquals(listOf("Cancel", "Retry"), message.actions)
         }
     }
