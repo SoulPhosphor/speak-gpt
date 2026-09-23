@@ -1121,24 +1121,28 @@
     <string name="voice_browser_remove">Remove</string>
     <string name="voice_browser_remove_selected_title">Voice Is Currently Selected</string>
     <string name="voice_browser_remove_selected_message">Select another voice before removing this saved voice.</string>
-    <string name="voice_browser_already_saved_title">Voice Already Saved</string>
-    <string name="voice_browser_already_saved_message">This Voice ID is already saved for this model.</string>
-    <string name="voice_browser_save_failed_title">Voice ID Could Not Be Saved</string>
-    <string name="voice_browser_save_failed_message">The Voice ID could not be saved. Your saved voices have not changed.</string>
-    <string name="voice_browser_remove_failed_title">Saved Voice Could Not Be Removed</string>
-    <string name="voice_browser_remove_failed_message">The saved voice could not be removed. It is still saved.</string>
-    <string name="voice_browser_read_failed_title">Saved Voices Could Not Be Read</string>
-    <string name="voice_browser_read_failed_message">The saved Voice IDs for this model could not be read. They have not been replaced or cleared.\n\nThe provider\'s discovered voices may still be shown if they can be loaded normally.</string>
-    <!-- Storage details beneath those explanations, in the provider-details layout. -->
-    <string name="storage_error_heading">Storage Error</string>
-    <string name="storage_failure_type_line">Failure Type: %1$s</string>
-    <string name="storage_function_save_voice_id">Save Voice ID</string>
-    <string name="storage_function_remove_voice_id">Remove Saved Voice</string>
-    <string name="storage_function_read_voice_ids">Read Saved Voices</string>
-    <string name="storage_failure_read">Could not read the file</string>
-    <string name="storage_failure_invalid">Damaged or invalid data</string>
-    <string name="storage_failure_write">Could not write the file</string>
-    <string name="storage_failure_other">Not classified</string>
+    <string name="voice_browser_voice_id_required">Enter a Voice ID.</string>
+    <string name="voice_browser_already_saved_title">Voice ID Already Saved</string>
+    <string name="voice_browser_already_saved_message">This Voice ID is already saved for this text-to-speech source.</string>
+    <!-- Saved Voice ID storage failures (owner wording, Sep 23 2026). Each message is
+         followed by the Technical Details heading and the error the device reported. -->
+    <string name="voice_storage_technical_details">Technical Details</string>
+    <string name="voice_storage_no_space_title">Not Enough Storage Space</string>
+    <string name="voice_storage_no_space_message">There is not enough available storage space to save this change.\n\nFree some space on your device and try again.</string>
+    <string name="voice_storage_access_title">Storage Could Not Be Accessed</string>
+    <string name="voice_storage_access_message">The app could not access the storage needed for your saved voices.\n\nYour existing saved voices have not been changed.</string>
+    <string name="voice_storage_damaged_title">Saved Voice Data Is Damaged</string>
+    <string name="voice_storage_damaged_message">The saved Voice ID data could not be read because it is damaged or invalid.\n\nThe app has not replaced, cleared, or repaired the saved data.\n\nProvider voices may still be available if the provider can load them normally.</string>
+    <string name="voice_storage_read_failed_title">Saved Voices Could Not Be Read</string>
+    <string name="voice_storage_read_failed_message">The app could not read your saved Voice IDs.\n\nThe saved data has not been replaced or cleared.\n\nProvider voices may still be available if the provider can load them normally.</string>
+    <string name="voice_storage_save_failed_title">Voice ID Could Not Be Saved</string>
+    <string name="voice_storage_save_failed_message">The Voice ID could not be saved.\n\nYour previously saved voices have not changed.</string>
+    <string name="voice_storage_save_unverified_message">The Voice ID could not be saved because the app could not verify that the new data was written correctly.\n\nYour previously saved voices have not changed.</string>
+    <string name="voice_storage_remove_failed_title">Saved Voice Could Not Be Removed</string>
+    <string name="voice_storage_remove_failed_message">The saved voice could not be removed.\n\nIt is still saved.</string>
+    <string name="voice_storage_remove_unverified_message">The saved voice could not be removed because the app could not verify that the updated data was written correctly.\n\nIt is still saved.</string>
+    <string name="voice_storage_not_found_title">Saved Voice Was Not Found</string>
+    <string name="voice_storage_not_found_message">This saved voice is no longer in the saved Voice ID list.\n\nThe voice list will be refreshed.</string>
     <string name="voice_identity_preview_desc">Preview this voice</string>
     <string name="voice_identity_gender">Gender</string>
     <string name="voice_identity_female">Female</string>

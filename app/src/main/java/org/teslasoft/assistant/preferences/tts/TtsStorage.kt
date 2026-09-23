@@ -25,6 +25,9 @@ internal interface TtsStorage {
     fun write(content: String)
 }
 
+/** The new content was written but did not read back identically, so the old file was kept. */
+class TtsWriteVerificationException : IOException("Write verification failed")
+
 /** No SharedPreferences memory-first commit: a failed disk write must not appear saved. */
 internal class TtsFileStorage(private val file: File) : TtsStorage {
     override fun read(): String? = if (file.exists()) file.readText(Charsets.UTF_8) else null
@@ -39,7 +42,7 @@ internal class TtsFileStorage(private val file: File) : TtsStorage {
                 output.flush()
                 output.fd.sync()
             }
-            if (temporary.readText(Charsets.UTF_8) != content) throw IOException("Write verification failed")
+            if (temporary.readText(Charsets.UTF_8) != content) throw TtsWriteVerificationException()
             // Same filesystem, atomic replacement. Never delete the original as a fallback.
             Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE,
                 StandardCopyOption.REPLACE_EXISTING)

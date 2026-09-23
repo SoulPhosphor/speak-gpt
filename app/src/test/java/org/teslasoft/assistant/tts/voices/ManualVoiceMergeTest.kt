@@ -85,14 +85,6 @@ class ManualVoiceMergeTest {
         assertEquals(TtsFailureKind.RATE_LIMIT, (withoutCatalog.discoveryFailure as TtsException).failure.kind)
     }
 
-    @Test fun storageErrorDetailsKeepEveryReportedCause() {
-        val error = org.teslasoft.assistant.preferences.tts.TtsStorageException(
-            org.teslasoft.assistant.preferences.tts.TtsStorageFailure.WRITE_FAILED,
-            java.io.IOException("No space left on device"))
-        assertEquals(listOf("TtsStorageException: WRITE_FAILED", "IOException: No space left on device"),
-            ManualVoiceDialogs.errorLines(error))
-    }
-
     private fun merge(discovered: Result<List<BrowserVoice>>, saved: List<String>, savedFailure: Throwable) =
         SavedApiVoiceProvider.merge("api-tts:tts-1", "vendor/model:free", discovered, saved, savedFailure)
 }

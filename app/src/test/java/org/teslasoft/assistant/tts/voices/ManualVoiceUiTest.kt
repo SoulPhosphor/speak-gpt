@@ -65,29 +65,45 @@ class ManualVoiceUiTest {
         assertEquals("Remove", values["voice_browser_remove"])
         assertEquals("Voice Is Currently Selected", values["voice_browser_remove_selected_title"])
         assertEquals("Select another voice before removing this saved voice.", values["voice_browser_remove_selected_message"])
-        assertEquals("Voice Already Saved", values["voice_browser_already_saved_title"])
-        assertEquals("This Voice ID is already saved for this model.", values["voice_browser_already_saved_message"])
-        assertEquals("Voice ID Could Not Be Saved", values["voice_browser_save_failed_title"])
-        assertEquals("The Voice ID could not be saved. Your saved voices have not changed.", values["voice_browser_save_failed_message"])
-        assertEquals("Saved Voice Could Not Be Removed", values["voice_browser_remove_failed_title"])
-        assertEquals("The saved voice could not be removed. It is still saved.", values["voice_browser_remove_failed_message"])
-        assertEquals("Saved Voices Could Not Be Read", values["voice_browser_read_failed_title"])
-        assertEquals("The saved Voice IDs for this model could not be read. They have not been replaced or cleared.\\n\\n" +
-            "The provider\\'s discovered voices may still be shown if they can be loaded normally.", values["voice_browser_read_failed_message"])
-        assertEquals("Storage Error", values["storage_error_heading"])
+        val exact = mapOf(
+            "voice_browser_voice_id_required" to "Enter a Voice ID.",
+            "voice_browser_already_saved_title" to "Voice ID Already Saved",
+            "voice_browser_already_saved_message" to "This Voice ID is already saved for this text-to-speech source.",
+            "voice_storage_technical_details" to "Technical Details",
+            "voice_storage_no_space_title" to "Not Enough Storage Space",
+            "voice_storage_no_space_message" to "There is not enough available storage space to save this change.\\n\\nFree some space on your device and try again.",
+            "voice_storage_access_title" to "Storage Could Not Be Accessed",
+            "voice_storage_access_message" to "The app could not access the storage needed for your saved voices.\\n\\nYour existing saved voices have not been changed.",
+            "voice_storage_damaged_title" to "Saved Voice Data Is Damaged",
+            "voice_storage_damaged_message" to "The saved Voice ID data could not be read because it is damaged or invalid.\\n\\nThe app has not replaced, cleared, or repaired the saved data.\\n\\nProvider voices may still be available if the provider can load them normally.",
+            "voice_storage_read_failed_title" to "Saved Voices Could Not Be Read",
+            "voice_storage_read_failed_message" to "The app could not read your saved Voice IDs.\\n\\nThe saved data has not been replaced or cleared.\\n\\nProvider voices may still be available if the provider can load them normally.",
+            "voice_storage_save_failed_title" to "Voice ID Could Not Be Saved",
+            "voice_storage_save_failed_message" to "The Voice ID could not be saved.\\n\\nYour previously saved voices have not changed.",
+            "voice_storage_save_unverified_message" to "The Voice ID could not be saved because the app could not verify that the new data was written correctly.\\n\\nYour previously saved voices have not changed.",
+            "voice_storage_remove_failed_title" to "Saved Voice Could Not Be Removed",
+            "voice_storage_remove_failed_message" to "The saved voice could not be removed.\\n\\nIt is still saved.",
+            "voice_storage_remove_unverified_message" to "The saved voice could not be removed because the app could not verify that the updated data was written correctly.\\n\\nIt is still saved.",
+            "voice_storage_not_found_title" to "Saved Voice Was Not Found",
+            "voice_storage_not_found_message" to "This saved voice is no longer in the saved Voice ID list.\\n\\nThe voice list will be refreshed."
+        )
+        exact.forEach { (name, text) -> assertEquals(name, text, values[name]) }
     }
 
     @Test fun addKeepsTheTypedIdOnFailureAndIgnoresBlankInput() {
         val activity = file("java/org/teslasoft/assistant/ui/activities/VoiceBrowserActivity.kt").readText()
-        assertTrue(activity.contains("addButton.isEnabled = false"))
-        assertTrue(activity.contains("manualVoiceId.doAfterTextChanged { addButton.isEnabled = !it.isNullOrBlank() }"))
         val add = activity.substringAfter("private fun addManualVoice()").substringBefore("private fun isActiveVoice")
+        val blank = add.substringAfter("if (entered.isBlank()) {").substringBefore("}")
+        assertTrue(blank.contains("manualVoiceId.error = getString(R.string.voice_browser_voice_id_required)"))
+        assertTrue(blank.contains("return"))
+        assertTrue(add.indexOf("if (entered.isBlank())") < add.indexOf("manualVoices.add("))
         val failure = add.substringAfter(".onFailure")
         assertFalse(failure.contains("manualVoiceId.text = null"))
         assertTrue(failure.contains("ManualVoiceDialogs.showAlreadySaved"))
-        assertTrue(failure.contains("StorageAction.SAVE, error"))
+        assertTrue(failure.contains("Operation.SAVE, error"))
         val remove = activity.substringAfter("private fun removeManualVoice(").substringBefore("private fun showState")
-        assertTrue(remove.contains("StorageAction.REMOVE, error"))
+        assertTrue(remove.contains("Operation.REMOVE, error)"))
+        assertTrue(remove.contains("Operation.REMOVE, error, onDismiss = refresh)"))
     }
 
     @Test fun onlyTheConfirmedRemoveButtonRemoves() {
