@@ -196,9 +196,13 @@ class ChatDrawerController private constructor(
             val pending = withContext(Dispatchers.IO) {
                 NewConversationCoordinator(activity).createDefaultPendingConversation()
             }
+            // The new chat appears in place instead of sliding up from the bottom.
             activity.startActivity(
                 ChatActivity.rootIntent(activity, pending.id, pending.name, pendingConversation = true)
+                    .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
             )
+            @Suppress("DEPRECATION")
+            activity.overridePendingTransition(0, 0)
         }
     }
 
