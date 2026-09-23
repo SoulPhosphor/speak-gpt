@@ -1124,9 +1124,7 @@
     <string name="voice_browser_voice_id_required">Enter a Voice ID.</string>
     <string name="voice_browser_already_saved_title">Voice ID Already Saved</string>
     <string name="voice_browser_already_saved_message">This Voice ID is already saved for this text-to-speech source.</string>
-    <!-- Saved Voice ID storage failures (owner wording, Sep 23 2026). Each message is
-         followed by the Technical Details heading and the error the device reported. -->
-    <string name="voice_storage_technical_details">Technical Details</string>
+    <!-- Saved Voice ID storage failures (owner wording, Sep 23 2026). -->
     <string name="voice_storage_no_space_title">Not Enough Storage Space</string>
     <string name="voice_storage_no_space_message">There is not enough available storage space to save this change.\n\nFree some space on your device and try again.</string>
     <string name="voice_storage_access_title">Storage Could Not Be Accessed</string>

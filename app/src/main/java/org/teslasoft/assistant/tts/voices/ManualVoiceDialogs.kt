@@ -47,7 +47,7 @@ object ManualVoiceDialogs {
         showOkay(activity, R.string.voice_browser_already_saved_title,
             activity.getString(R.string.voice_browser_already_saved_message))
 
-    /** The plain explanation for the most specific known cause, then the error the device reported. */
+    /** The plain explanation for the most specific known cause. */
     fun showStorageFailure(activity: Activity, operation: ManualVoiceStorageErrors.Operation, error: Throwable,
         onDismiss: () -> Unit = {}): AlertDialog {
         val (title, message) = when (ManualVoiceStorageErrors.classify(operation, error)) {
@@ -61,9 +61,7 @@ object ManualVoiceDialogs {
             ManualVoiceStorageErrors.Kind.SAVE_FAILED -> R.string.voice_storage_save_failed_title to R.string.voice_storage_save_failed_message
             ManualVoiceStorageErrors.Kind.REMOVE_FAILED -> R.string.voice_storage_remove_failed_title to R.string.voice_storage_remove_failed_message
         }
-        return showOkay(activity, title, activity.getString(message) + "\n\n" +
-            activity.getString(R.string.voice_storage_technical_details) + "\n" +
-            ManualVoiceStorageErrors.technicalDetails(error), onDismiss)
+        return showOkay(activity, title, activity.getString(message), onDismiss)
     }
 
     private fun showOkay(activity: Activity, title: Int, message: String, onDismiss: () -> Unit = {}): AlertDialog {

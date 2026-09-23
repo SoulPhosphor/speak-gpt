@@ -47,12 +47,4 @@ class ManualVoiceStorageErrorsTest {
     @Test fun missingRecordIsItsOwnCase() {
         assertEquals(Kind.NOT_FOUND, ManualVoiceStorageErrors.classify(Operation.REMOVE, storage(TtsStorageFailure.NOT_FOUND)))
     }
-
-    @Test fun technicalDetailsShowWhatTheDeviceReported() {
-        assertEquals("IOException: write failed: ENOSPC (No space left on device)",
-            ManualVoiceStorageErrors.technicalDetails(storage(TtsStorageFailure.WRITE_FAILED, full)))
-        // With no underlying cause the storage category itself is the only diagnostic.
-        assertEquals("TtsStorageException: NOT_FOUND",
-            ManualVoiceStorageErrors.technicalDetails(storage(TtsStorageFailure.NOT_FOUND)))
-    }
 }

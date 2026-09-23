@@ -40,18 +40,6 @@ object ManualVoiceStorageErrors {
         }
     }
 
-    /**
-     * What the device reported, cause by cause. The app's own wrapper is left out when it only
-     * repeats a category, so the underlying message is what the user sees.
-     */
-    fun technicalDetails(error: Throwable): String {
-        val chain = chain(error)
-        val reported = chain.filterNot { it is TtsStorageException && it.cause != null }.ifEmpty { chain }
-        return reported.joinToString("\n") { e ->
-            e.javaClass.simpleName + (e.message?.takeIf(String::isNotBlank)?.let { ": $it" } ?: "")
-        }
-    }
-
     private fun chain(error: Throwable): List<Throwable> =
         generateSequence(error) { it.cause.takeIf { cause -> cause !== it } }.take(8).toList()
 }

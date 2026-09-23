@@ -69,7 +69,6 @@ class ManualVoiceUiTest {
             "voice_browser_voice_id_required" to "Enter a Voice ID.",
             "voice_browser_already_saved_title" to "Voice ID Already Saved",
             "voice_browser_already_saved_message" to "This Voice ID is already saved for this text-to-speech source.",
-            "voice_storage_technical_details" to "Technical Details",
             "voice_storage_no_space_title" to "Not Enough Storage Space",
             "voice_storage_no_space_message" to "There is not enough available storage space to save this change.\\n\\nFree some space on your device and try again.",
             "voice_storage_access_title" to "Storage Could Not Be Accessed",
