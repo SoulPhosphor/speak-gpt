@@ -152,11 +152,12 @@ class CompanionRestorePlannerTest {
         assertEquals("hash-p-1", personas["p-1_avatar_ref"])
         assertEquals("", personas["p-1_chat_name_font_id"])
         assertEquals("0", personas["p-1_chat_name_size_sp"])
+        assertEquals("", personas["p-1_chat_name_font_style"])
         assertEquals(
             PortablePromptVariantRules.legacySingleVariant("p-1", "prompt-p-1").map { it.toCompanionVariant() },
             CompanionPromptVariant.fromJson(personas["p-1_prompt_variants"] as String)
         )
-        assertEquals(11, personas.keys.count { it.startsWith("p-1_") })
+        assertEquals(12, personas.keys.count { it.startsWith("p-1_") })
     }
 
     @Test
