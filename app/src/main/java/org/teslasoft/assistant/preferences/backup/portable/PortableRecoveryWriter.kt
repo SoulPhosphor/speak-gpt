@@ -20,6 +20,7 @@ import android.content.Context
 import org.teslasoft.assistant.preferences.backup.BackupType
 import org.teslasoft.assistant.preferences.backup.DatabaseHealthState
 import org.teslasoft.assistant.preferences.backup.RecoveryBackupManager
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporter
 import org.teslasoft.assistant.preferences.lorebook.LoreBookEncryption
 import org.teslasoft.assistant.preferences.memory.DatabaseKeys
 import org.teslasoft.assistant.preferences.memory.MemoryLog
@@ -31,6 +32,16 @@ import java.time.Instant
  * Creates portable recovery packages (format v2) from the live stores —
  * the cleared implementation scope of the owner's July 22 2026 rulings.
  * Restoration into live data is NOT here (separate owner walkthrough).
+ *
+ * OLD-CLIENT → BETA HANDOFF: this writer also emits the additional Beta-
+ * recognized artifacts a side-by-side new client needs — the companion /
+ * glamour / roleplay / prompt archive ("companion_roleplay.zip"), the
+ * credential-free Model & Endpoint Settings ("model_endpoint_settings.json"),
+ * and the global Settings & Preferences ("app_settings.json"). Profile-image
+ * and generated-image FILES remain out of scope by owner decision; image
+ * catalogs and everything else already exported are unchanged. The package
+ * format, envelope and version-2 manifest are untouched — only the artifact
+ * list grew — so the Beta reader recognizes it without a new migration format.
  *
  * Artifact strategy (approved architecture):
  *  - Memory / lorebook DBs: the SQLCipher CIPHERTEXT snapshot (the same
@@ -212,6 +223,68 @@ object PortableRecoveryWriter {
                         // No databases exist and no chats exist: nothing real
                         // to package — neutral, not a failure (owner ruling).
                         return Result.Failed(Reason.NOTHING_TO_BACK_UP)
+                    }
+
+                    // ---- companions / glamours / roleplay / activation &
+                    //      system prompts (single archive; empty collections
+                    //      are valid). Uses the existing exporter, which is
+                    //      byte-format-identical to the Beta reader and carries
+                    //      a missing assigned image as a reference only rather
+                    //      than failing — profile images are out of scope. An
+                    //      unreadable companion Memory or Lorebook relationship
+                    //      still fails the backup visibly rather than shipping a
+                    //      falsely-complete archive. ----
+                    run {
+                        val staged = File(staging, "companion_roleplay.zip")
+                        when (CompanionBackupExporter.buildBackupZip(context, staged)) {
+                            is CompanionBackupExporter.BuildResult.Ok ->
+                                artifacts.add(
+                                    PortablePackage.Artifact(
+                                        entryName = "companion_roleplay.zip",
+                                        type = PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE,
+                                        file = staged,
+                                        databaseKeyHex = null, keySemantics = null, schemaVersion = null
+                                    )
+                                )
+                            else -> return Result.Failed(Reason.SNAPSHOT_FAILED)
+                        }
+                    }
+
+                    // ---- model & endpoint settings (credential-free JSON) ----
+                    run {
+                        val staged = File(staging, "model_endpoint_settings.json")
+                        when (ModelEndpointPortableBackup.write(context, staged)) {
+                            is ModelEndpointPortableBackup.Result.Ok ->
+                                artifacts.add(
+                                    PortablePackage.Artifact(
+                                        entryName = "model_endpoint_settings.json",
+                                        type = PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS,
+                                        file = staged,
+                                        databaseKeyHex = null, keySemantics = null, schemaVersion = null
+                                    )
+                                )
+                            is ModelEndpointPortableBackup.Result.Failed ->
+                                return Result.Failed(Reason.SNAPSHOT_FAILED)
+                        }
+                    }
+
+                    // ---- global Settings & Preferences (credential-free JSON,
+                    //      shared deny policy; describes an empty collection
+                    //      validly) ----
+                    run {
+                        val staged = File(staging, "app_settings.json")
+                        if (AppSettingsPortableStore.write(context, staged).isSuccess) {
+                            artifacts.add(
+                                PortablePackage.Artifact(
+                                    entryName = "app_settings.json",
+                                    type = PortablePackage.TYPE_APP_SETTINGS,
+                                    file = staged,
+                                    databaseKeyHex = null, keySemantics = null, schemaVersion = null
+                                )
+                            )
+                        } else {
+                            return Result.Failed(Reason.SNAPSHOT_FAILED)
+                        }
                     }
 
                     // ---- assemble + envelope + reopen-and-verify ----

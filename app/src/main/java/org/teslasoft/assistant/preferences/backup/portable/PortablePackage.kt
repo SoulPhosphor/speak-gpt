@@ -65,6 +65,21 @@ object PortablePackage {
     const val SQLCIPHER_VERSION = "4.16.0"
     const val CIPHER_COMPAT = 4
 
+    // Beta-recognized artifact type markers. The version-2 package format and
+    // manifest are unchanged; these constants only name the artifact `type`
+    // strings the Beta reader maps to restore categories. Kept byte-identical
+    // to the Beta so a package produced here is recognized without a new
+    // migration format.
+    const val TYPE_SQLCIPHER_DB = "sqlcipher-db"
+    const val TYPE_SQLITE_DB = "sqlite-db"
+    const val TYPE_CHATS_JSON = "chats-json"
+    const val TYPE_COMPANION_ROLEPLAY_ARCHIVE = "companion-roleplay-archive"
+    const val TYPE_MODEL_ENDPOINT_SETTINGS = "model-endpoint-settings"
+    const val TYPE_APP_SETTINGS = "app-settings"
+    const val TYPE_GENERATED_IMAGES_CATALOG = "generated-images-catalog"
+    const val TYPE_GENERATED_IMAGE_ASSET = "generated-image-asset"
+    const val TYPE_PROFILE_IMAGE_ASSET = "profile-image-asset"
+
     data class Artifact(
         val entryName: String,
         val type: String,           // "sqlcipher-db" | "sqlite-db" | "chats-json"

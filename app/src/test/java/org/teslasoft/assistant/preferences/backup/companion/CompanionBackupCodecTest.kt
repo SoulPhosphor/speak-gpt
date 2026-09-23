@@ -21,12 +21,22 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariant
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariantRules
+import java.util.UUID
 
 /**
  * Manifest round-trip, §2 field coverage, and the §6.1 structural rejection
  * causes (companion-roleplay-backup-plan.md Build step 1/2).
  */
 class CompanionBackupCodecTest {
+
+    /** Three ordered variants; the default is deliberately NOT first. */
+    private val ariaVariants = listOf(
+        PortablePromptVariant("variant-alt", "Alternate", "Line one\nLine two", false),
+        PortablePromptVariant("variant-main", "Main ✦ 主要", "You are Aria. 🌙", true),
+        PortablePromptVariant("variant-blank", "", "", false)
+    )
 
     private fun fullManifest(): CompanionBackupManifest = CompanionBackupManifest(
         formatVersion = CompanionBackupFormat.FORMAT_VERSION,
@@ -36,7 +46,8 @@ class CompanionBackupCodecTest {
             CompanionProfileEntry(
                 id = "p-1",
                 label = "Aria",
-                prompt = "You are Aria.",
+                prompt = "You are Aria. 🌙",
+                promptVariants = ariaVariants,
                 activationPromptId = "ap-1",
                 coreLoreBookId = "lb-core",
                 coreLoreBookName = "Core Book",
@@ -52,6 +63,7 @@ class CompanionBackupCodecTest {
                 id = "p-2",
                 label = "Nox",
                 prompt = "",
+                promptVariants = listOf(PortablePromptVariant("nox-only", "Prompt 1", "", true)),
                 activationPromptId = "",
                 coreLoreBookId = "",
                 coreLoreBookName = null,
@@ -300,5 +312,165 @@ class CompanionBackupCodecTest {
         val restored = parseOk(CompanionBackupCodec.toJson(empty))
         assertEquals(empty, restored)
         assertTrue(!restored.hasRoleplayRecords())
+    }
+
+    /* ------------------------- version 2: prompt variants ------------------------- */
+
+    private fun firstProfile(root: JSONObject): JSONObject =
+        root.getJSONArray("companion_profiles").getJSONObject(0)
+
+    private fun assertDamaged(root: JSONObject) {
+        assertEquals(
+            CompanionBackupCodec.ParseResult.Damaged,
+            CompanionBackupCodec.parse(root.toString())
+        )
+    }
+
+    @Test
+    fun writerIsVersionTwo() {
+        assertEquals(2, CompanionBackupFormat.FORMAT_VERSION)
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        assertEquals(2, root.getInt("format_version"))
+        val variants = firstProfile(root).getJSONArray("prompt_variants")
+        assertEquals(3, variants.length())
+        val main = variants.getJSONObject(1)
+        assertEquals(setOf("id", "name", "text", "isDefault"), main.keys().asSequence().toSet())
+        assertEquals("variant-main", main.getString("id"))
+        assertEquals(true, main.getBoolean("isDefault"))
+        // The legacy mirror stays and equals the default variant's text.
+        assertEquals("You are Aria. 🌙", firstProfile(root).getString("prompt"))
+    }
+
+    @Test
+    fun versionTwoRoundTripPreservesEveryVariantFieldInOrder() {
+        val restored = parseOk(CompanionBackupCodec.toJson(fullManifest()))
+        val aria = restored.companionProfiles.first { it.id == "p-1" }
+        assertEquals(ariaVariants, aria.promptVariants)
+        assertEquals(listOf("variant-alt", "variant-main", "variant-blank"), aria.promptVariants.map { it.id })
+        assertEquals("Line one\nLine two", aria.promptVariants[0].text)
+        assertEquals("Main ✦ 主要", aria.promptVariants[1].name)
+        assertEquals("", aria.promptVariants[2].name)
+        assertEquals("", aria.promptVariants[2].text)
+        assertEquals(listOf(false, true, false), aria.promptVariants.map { it.isDefault })
+        assertEquals("You are Aria. 🌙", aria.prompt)
+        // Re-encoding the parsed manifest is byte-identical: nothing is renamed,
+        // re-ordered, or re-minted on the way through.
+        assertEquals(CompanionBackupCodec.toJson(fullManifest()), CompanionBackupCodec.toJson(restored))
+    }
+
+    @Test
+    fun versionOneSinglePromptBecomesOneDeterministicDefaultVariant() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        root.put("format_version", 1)
+        val profiles = root.getJSONArray("companion_profiles")
+        for (i in 0 until profiles.length()) profiles.getJSONObject(i).remove("prompt_variants")
+        val v1Text = root.toString()
+
+        val restored = parseOk(v1Text)
+        assertEquals(1, restored.formatVersion)
+        val aria = restored.companionProfiles.first { it.id == "p-1" }
+        val expectedId = UUID.nameUUIDFromBytes("p-1_prompt_1".toByteArray()).toString()
+        assertEquals(
+            listOf(PortablePromptVariant(expectedId, "Prompt 1", "You are Aria. 🌙", true)),
+            aria.promptVariants
+        )
+        assertEquals("You are Aria. 🌙", aria.prompt)
+        val nox = restored.companionProfiles.first { it.id == "p-2" }
+        assertEquals(PortablePromptVariantRules.legacySingleVariant("p-2", ""), nox.promptVariants)
+        // Deterministic: reading the same file again yields the same identity.
+        assertEquals(aria.promptVariants, parseOk(v1Text).companionProfiles.first { it.id == "p-1" }.promptVariants)
+    }
+
+    @Test
+    fun versionTwoWithoutVariantArrayIsDamaged() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        firstProfile(root).remove("prompt_variants")
+        assertDamaged(root)
+    }
+
+    @Test
+    fun versionTwoWithEmptyVariantArrayIsDamaged() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        firstProfile(root).put("prompt_variants", org.json.JSONArray())
+        assertDamaged(root)
+    }
+
+    @Test
+    fun blankVariantIdIsDamaged() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        firstProfile(root).getJSONArray("prompt_variants").getJSONObject(0).put("id", "  ")
+        assertDamaged(root)
+    }
+
+    @Test
+    fun missingVariantIdIsDamagedAndNeverReMinted() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        firstProfile(root).getJSONArray("prompt_variants").getJSONObject(0).remove("id")
+        assertDamaged(root)
+    }
+
+    @Test
+    fun duplicateVariantIdIsDamaged() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        firstProfile(root).getJSONArray("prompt_variants").getJSONObject(2).put("id", "variant-alt")
+        assertDamaged(root)
+    }
+
+    @Test
+    fun noDefaultVariantIsDamaged() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        firstProfile(root).getJSONArray("prompt_variants").getJSONObject(1).put("isDefault", false)
+        assertDamaged(root)
+    }
+
+    @Test
+    fun multipleDefaultVariantsAreDamaged() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        firstProfile(root).getJSONArray("prompt_variants").getJSONObject(0).put("isDefault", true)
+        assertDamaged(root)
+    }
+
+    @Test
+    fun promptMirrorDifferentFromDefaultIsDamaged() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        firstProfile(root).put("prompt", "Line one\nLine two")
+        assertDamaged(root)
+    }
+
+    @Test
+    fun missingPromptMirrorInVersionTwoIsDamaged() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        firstProfile(root).remove("prompt")
+        assertDamaged(root)
+    }
+
+    @Test
+    fun wronglyTypedVariantFieldsAreDamaged() {
+        for ((field, value) in listOf<Pair<String, Any>>(
+            "isDefault" to "true", "id" to 7, "name" to JSONObject.NULL, "text" to 1.5
+        )) {
+            val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+            firstProfile(root).getJSONArray("prompt_variants").getJSONObject(1).put(field, value)
+            assertDamaged(root)
+        }
+    }
+
+    @Test
+    fun unknownVariantFieldIsDamaged() {
+        val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+        firstProfile(root).getJSONArray("prompt_variants").getJSONObject(1).put("color", "red")
+        assertDamaged(root)
+    }
+
+    @Test
+    fun versionsAboveTwoRemainNewerFormat() {
+        for (version in listOf(3, 99)) {
+            val root = JSONObject(CompanionBackupCodec.toJson(fullManifest()))
+            root.put("format_version", version)
+            assertEquals(
+                CompanionBackupCodec.ParseResult.NewerFormat,
+                CompanionBackupCodec.parse(root.toString())
+            )
+        }
     }
 }

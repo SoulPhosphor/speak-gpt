@@ -19,6 +19,8 @@ package org.teslasoft.assistant.preferences.backup.companion
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariant
+import org.teslasoft.assistant.preferences.backup.portable.PortablePromptVariantRules
 
 /**
  * Builds and parses the `backup.json` manifest
@@ -45,6 +47,8 @@ object CompanionBackupCodec {
     private const val KEY_SP_SELECTED = "selected_id"
     private const val KEY_ROLEPLAY = "roleplay"
     private const val KEY_IMAGES = "images"
+    private const val KEY_PROMPT_VARIANTS = "prompt_variants"
+    private val PROMPT_VARIANT_KEYS = setOf("id", "name", "text", "isDefault")
 
     private val IMAGE_HASH_REGEX = Regex("^[0-9a-f]{64}$")
 
@@ -76,6 +80,16 @@ object CompanionBackupCodec {
             o.put("id", p.id)
             o.put("label", p.label)
             o.put("prompt", p.prompt)
+            val variants = JSONArray()
+            for (v in p.promptVariants) {
+                val vo = JSONObject()
+                vo.put("id", v.id)
+                vo.put("name", v.name)
+                vo.put("text", v.text)
+                vo.put("isDefault", v.isDefault)
+                variants.put(vo)
+            }
+            o.put(KEY_PROMPT_VARIANTS, variants)
             o.put("activation_prompt_id", p.activationPromptId)
             o.put("core_lorebook_id", p.coreLoreBookId)
             o.put("core_lorebook_name", p.coreLoreBookName ?: JSONObject.NULL)
@@ -191,11 +205,28 @@ object CompanionBackupCodec {
             for (linkId in additionalIds) {
                 require(names.containsKey(linkId)) { "additional lorebook link without a name" }
             }
+            val prompt: String
+            val promptVariants: List<PortablePromptVariant>
+            if (versionInt >= CompanionBackupFormat.PROMPT_VARIANTS_VERSION) {
+                prompt = o.get("prompt") as? String
+                    ?: throw IllegalArgumentException("companion prompt mirror is not text")
+                promptVariants = parsePromptVariants(o.getJSONArray(KEY_PROMPT_VARIANTS))
+                require(mirrorMatchesDefault(prompt, promptVariants)) {
+                    "companion prompt mirror differs from its default variant"
+                }
+            } else {
+                // Version 1 carried one prompt per companion. It becomes one
+                // deterministic default variant in memory only; the file is
+                // never rewritten.
+                prompt = o.optString("prompt", "")
+                promptVariants = PortablePromptVariantRules.legacySingleVariant(id, prompt)
+            }
             profiles.add(
                 CompanionProfileEntry(
                     id = id,
                     label = o.getString("label"),
-                    prompt = o.optString("prompt", ""),
+                    prompt = prompt,
+                    promptVariants = promptVariants,
                     activationPromptId = o.optString("activation_prompt_id", ""),
                     coreLoreBookId = coreId,
                     coreLoreBookName = coreName,
@@ -285,6 +316,40 @@ object CompanionBackupCodec {
             images = images
         )
     }
+
+    /**
+     * Strict version-2 variant reader: order is kept, every field must be
+     * present with its exact type, and a collection that breaks
+     * [PortablePromptVariantRules] is damaged input. Ids are copied exactly —
+     * never generated, rewritten, or deduplicated here.
+     */
+    private fun parsePromptVariants(array: JSONArray): List<PortablePromptVariant> {
+        val out = ArrayList<PortablePromptVariant>(array.length())
+        for (i in 0 until array.length()) {
+            val o = array.getJSONObject(i)
+            require(o.keys().asSequence().toSet() == PROMPT_VARIANT_KEYS) {
+                "unexpected prompt variant fields"
+            }
+            out.add(
+                PortablePromptVariant(
+                    id = o.get("id") as? String
+                        ?: throw IllegalArgumentException("prompt variant id is not text"),
+                    name = o.get("name") as? String
+                        ?: throw IllegalArgumentException("prompt variant name is not text"),
+                    text = o.get("text") as? String
+                        ?: throw IllegalArgumentException("prompt variant text is not text"),
+                    isDefault = o.get("isDefault") as? Boolean
+                        ?: throw IllegalArgumentException("prompt variant default flag is not a boolean")
+                )
+            )
+        }
+        val violation = PortablePromptVariantRules.violation(out)
+        require(violation == null) { "unsound prompt variants: $violation" }
+        return out
+    }
+
+    private fun mirrorMatchesDefault(prompt: String, variants: List<PortablePromptVariant>): Boolean =
+        PortablePromptVariantRules.defaultVariant(variants).text == prompt
 
     private fun stringList(array: JSONArray): List<String> {
         val out = ArrayList<String>(array.length())
