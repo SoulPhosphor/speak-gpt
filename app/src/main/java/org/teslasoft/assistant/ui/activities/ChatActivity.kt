@@ -2525,6 +2525,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             this,
             findViewById(R.id.expandable_window_root)
         ) { chatId }
+        // A chat started from the drawer's New Chat is revealed as the drawer pulls back.
+        if (intent.getBooleanExtra(ChatDrawerController.EXTRA_REVEAL_FROM_DRAWER, false)) {
+            intent.removeExtra(ChatDrawerController.EXTRA_REVEAL_FROM_DRAWER)
+            drawerController?.revealChat()
+        }
 
         // Listen for the notification "Hang Up" action. Registered for the life of
         // the activity (not just the foreground window) so it still fires while the

@@ -85,7 +85,17 @@ class ChatDrawerController private constructor(
 
     fun isOpen(): Boolean = drawer.isDrawerOpen(GravityCompat.START)
 
-    fun refresh() {
+    /**
+     * Starts with the drawer already open, matching the screen New Chat was tapped on, then
+     * pulls it back once its list is filled in so the new chat is revealed underneath.
+     */
+    fun revealChat() {
+        drawer.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED, GravityCompat.START)
+        drawer.openDrawer(GravityCompat.START, false)
+        refresh { drawer.post { close() } }
+    }
+
+    fun refresh(onShown: () -> Unit = {}) {
         activity.lifecycleScope.launch {
             val projection = withContext(Dispatchers.IO) {
                 when (val result = repository.snapshot()) {
@@ -101,7 +111,8 @@ class ChatDrawerController private constructor(
             }
             if (projection == null) {
                 Toast.makeText(activity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
-            } else adapter.submitList(projection)
+                onShown()
+            } else adapter.submitList(projection) { onShown() }
         }
     }
 
@@ -196,10 +207,11 @@ class ChatDrawerController private constructor(
             val pending = withContext(Dispatchers.IO) {
                 NewConversationCoordinator(activity).createDefaultPendingConversation()
             }
-            // The new chat appears in place instead of sliding up from the bottom.
+            // No window animation: the new chat is revealed by its own drawer pulling back.
             activity.startActivity(
                 ChatActivity.rootIntent(activity, pending.id, pending.name, pendingConversation = true)
                     .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                    .putExtra(EXTRA_REVEAL_FROM_DRAWER, true)
             )
             @Suppress("DEPRECATION")
             activity.overridePendingTransition(0, 0)
@@ -207,6 +219,7 @@ class ChatDrawerController private constructor(
     }
 
     companion object {
+        const val EXTRA_REVEAL_FROM_DRAWER = "revealFromDrawer"
         private const val MENU_ADD_FOLDER = 1
         private const val MENU_FOLDER_PIN = 2
         private const val MENU_FOLDER_RENAME = 3
