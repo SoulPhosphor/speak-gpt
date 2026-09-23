@@ -150,6 +150,15 @@ class SettingsActivity : FragmentActivity() {
         window.sharedElementExitTransition = transition2
 
         super.onCreate(savedInstanceState)
+        // Settings slides in from the right and back out, at the chat drawer's speed,
+        // wherever it is opened from.
+        if (Build.VERSION.SDK_INT >= 34) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, R.anim.settings_slide_in, R.anim.settings_hold)
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, R.anim.settings_hold, R.anim.settings_slide_out)
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(R.anim.settings_slide_in, R.anim.settings_hold)
+        }
         ThemeManager.getThemeManager().applyPalette(this)
         setContentView(R.layout.activity_settings)
 
@@ -369,9 +378,13 @@ class SettingsActivity : FragmentActivity() {
         WindowInsetsUtil.adjustPaddings(this, R.id.scrollable, EnumSet.of(WindowInsetsUtil.Companion.Flags.NAVIGATION_BAR, WindowInsetsUtil.Companion.Flags.IGNORE_PADDINGS), customPaddingBottom = (48 * resources.displayMetrics.density).roundToInt())
     }
 
-    private fun finishActivity() {
-        val root: View = findViewById(R.id.root)
-        root.animate().alpha(0.0f).setDuration(200)
-        supportFinishAfterTransition()
+    private fun finishActivity() = finish()
+
+    override fun finish() {
+        super.finish()
+        if (Build.VERSION.SDK_INT < 34) {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(R.anim.settings_hold, R.anim.settings_slide_out)
+        }
     }
 }

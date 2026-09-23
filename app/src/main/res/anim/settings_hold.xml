@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keeps the screen underneath still for the whole Settings slide. -->
+<translate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="@integer/drawer_slide_duration"
+    android:fromXDelta="0"
+    android:toXDelta="0" />

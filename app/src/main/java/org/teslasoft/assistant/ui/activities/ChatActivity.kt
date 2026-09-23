@@ -92,7 +92,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.coordinatorlayout.widget.CoordinatorLayout
-import androidx.core.app.ActivityOptionsCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.res.ResourcesCompat
@@ -4569,13 +4568,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
 
         btnSettings?.setOnClickListener {
-            val options = ActivityOptionsCompat.makeSceneTransitionAnimation(
-                this,
-                Pair.create(btnSettings, ViewCompat.getTransitionName(btnSettings!!))
-            )
+            // Settings plays its own slide from the right, the same as from the drawer.
             settingsLauncher.launch(
-                Intent(this, SettingsActivity::class.java).setAction(Intent.ACTION_VIEW).putExtra("chatId", chatId),
-                options
+                Intent(this, SettingsActivity::class.java).setAction(Intent.ACTION_VIEW).putExtra("chatId", chatId)
             )
         }
 
