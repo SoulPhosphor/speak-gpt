@@ -7,7 +7,7 @@
 
 package org.teslasoft.assistant.ui.activities
 
-import android.content.res.ColorStateList
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -17,16 +17,15 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.graphics.drawable.toDrawable
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.FragmentActivity
-import com.google.android.material.elevation.SurfaceColors
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.preferences.Preferences
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
+import org.teslasoft.assistant.ui.util.ScreenChrome
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 
 /** Appearance controls consumed by the adaptable chat message shell. */
@@ -70,20 +69,14 @@ class AppearanceActivity : FragmentActivity() {
     }
 
     private fun applyTheme() {
-        window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
-        if (Build.VERSION.SDK_INT <= 34) {
-            @Suppress("DEPRECATION")
-            window.navigationBarColor = SurfaceColors.SURFACE_0.getColor(this)
-            @Suppress("DEPRECATION")
-            window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
-        }
-        actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
-        btnBack?.backgroundTintList =
-            ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(this))
+        ScreenChrome.apply(this, actionBar, btnBack)
     }
 
     private fun bindControls() {
         btnBack?.setOnClickListener { finish() }
+        findViewById<View>(R.id.row_name_style)?.setOnClickListener {
+            startActivity(Intent(this, NameStyleActivity::class.java))
+        }
 
         bindSwitch(R.id.switch_staggered_responses, preferences.getStaggeredResponses()) {
             preferences.setStaggeredResponses(it)

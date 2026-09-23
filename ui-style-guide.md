@@ -105,6 +105,8 @@ The zone attributes implemented so far, which every `ThemeOverlay.Phosphor.*` pa
 
 Every theme that defines one of these must define all of them, including the night themes and every palette overlay — a style resolving an attribute that no theme layer carries crashes at inflation. They are the pattern the remaining zones follow when theme work resumes.
 
+Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton)` (`org.teslasoft.assistant.ui.util`). It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance and Name Style; the other settings screens still carry their own copy until they are moved over.
+
 A change to a shared style or shared layout may alter every screen using it. Treat that as an app-wide visual decision, not a local cleanup.
 
 Legacy per-screen AMOLED recoloring is not part of the future theme system. Its current status is recorded in `ui-style-adoption.md`.
@@ -392,17 +394,6 @@ Use:
 Use when the header contains only a back button and centered title.
 
 The back button style expects the view id `btn_back`.
-
-### Title-only screen header
-
-Use:
-
-- `Widget.App.ActionBar`
-- `Widget.App.ActionBar.Title`
-
-Use when the header shows only its centered title, with no back button or
-action icons. The screen is left with the system back gesture. Current
-examples: Search and Name Style.
 
 ### Header with one trailing action icon
 

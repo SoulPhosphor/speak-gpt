@@ -10,13 +10,13 @@ package org.teslasoft.assistant.ui.activities
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowInsets
+import android.widget.ImageButton
 import android.widget.ScrollView
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.graphics.drawable.toDrawable
 import androidx.fragment.app.FragmentActivity
-import com.google.android.material.elevation.SurfaceColors
 import org.teslasoft.assistant.R
 import org.teslasoft.assistant.theme.ThemeManager
+import org.teslasoft.assistant.ui.util.ScreenChrome
 
 /** Name Style screen, opened from Appearance. */
 class NameStyleActivity : FragmentActivity() {
@@ -29,18 +29,9 @@ class NameStyleActivity : FragmentActivity() {
         setContentView(R.layout.activity_name_style)
 
         actionBar = findViewById(R.id.action_bar)
-        applyTheme()
-    }
-
-    private fun applyTheme() {
-        window.setBackgroundDrawable(SurfaceColors.SURFACE_0.getColor(this).toDrawable())
-        if (Build.VERSION.SDK_INT <= 34) {
-            @Suppress("DEPRECATION")
-            window.navigationBarColor = SurfaceColors.SURFACE_0.getColor(this)
-            @Suppress("DEPRECATION")
-            window.statusBarColor = SurfaceColors.SURFACE_4.getColor(this)
-        }
-        actionBar?.setBackgroundColor(SurfaceColors.SURFACE_4.getColor(this))
+        val btnBack = findViewById<ImageButton>(R.id.btn_back)
+        ScreenChrome.apply(this, actionBar, btnBack)
+        btnBack?.setOnClickListener { finish() }
     }
 
     override fun onAttachedToWindow() {
