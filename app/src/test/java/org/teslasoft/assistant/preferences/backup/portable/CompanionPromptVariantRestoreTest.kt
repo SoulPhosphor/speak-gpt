@@ -292,13 +292,14 @@ class CompanionPromptVariantRestoreTest {
         val planned = CompanionCategoryPlanner.plan(current, incoming, selections) as
             CompanionCategoryPlanner.Result.Ready
         val prepared = CompanionCategoryRestoreParticipant.PreparedPlan(
-            currentArchive,
-            current,
-            incoming,
-            planned.manifest,
-            planned.report,
-            CompanionRestorePlanner.plan(planned.manifest, emptySet()),
-            CompanionRestorePlanner.plan(current, emptySet())
+            currentArchive = currentArchive,
+            incomingArchive = artifact.stagedFile,
+            current = current,
+            incoming = incoming,
+            desired = planned.manifest,
+            report = planned.report,
+            restorePlan = CompanionRestorePlanner.plan(planned.manifest, emptySet()),
+            rollbackPlan = CompanionRestorePlanner.plan(current, emptySet())
         )
         val participant = CompanionCategoryRestoreParticipant(
             artifact.stagedFile, selections, File(tmp.root, "stage"), PrefsBackend(target), prepared
