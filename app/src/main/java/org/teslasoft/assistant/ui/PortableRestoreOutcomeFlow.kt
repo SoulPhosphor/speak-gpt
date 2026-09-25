@@ -12,6 +12,7 @@ import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
 import org.teslasoft.assistant.preferences.backup.portable.PortableChatRestorePlan
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreCategory
+import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreIssueText
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreOutcome
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreOutcomeStore
 import org.teslasoft.assistant.preferences.backup.portable.SelectedCategoryRestoreTransaction
@@ -51,6 +52,9 @@ object PortableRestoreOutcomeFlow {
                     PortableRestoreOutcome.NothingAvailable -> showFailure(
                         activity, activity.getString(R.string.portable_restore_nothing_available)
                     )
+                    is PortableRestoreOutcome.SelectedDataFailure -> showFailure(
+                        activity, outcome.lines.joinToString("\n")
+                    )
                     is PortableRestoreOutcome.TransactionFailure ->
                         showTransactionFailure(activity, outcome)
                     null -> onActivityDestroyed(activity)
@@ -70,11 +74,23 @@ object PortableRestoreOutcomeFlow {
         }
     }
 
+    /** Restoration Complete when everything selected was restored cleanly;
+     * Restoration Partly Successful, with the approved sentences, a blank line
+     * and one problem per line, when anything was not restored or a missing
+     * reference was found. The standard dialog scrolls a long list. */
     private fun showSuccess(activity: Activity, report: PortableRestoreOutcome.Report) {
         val token = beginDialog()
-        MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.portable_success_title)
-            .setMessage(R.string.portable_success_message)
+        val builder = MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
+        if (report.problemLines.isEmpty()) {
+            builder.setTitle(R.string.portable_success_title)
+        } else {
+            val intro = PortableRestoreIssueText.intro(
+                activity, report.missingReferences, report.notRestored
+            )
+            builder.setTitle(R.string.portable_partial_title)
+                .setMessage(intro.joinToString("\n") + "\n\n" + report.problemLines.joinToString("\n"))
+        }
+        builder
             .setCancelable(false)
             .setPositiveButton(R.string.btn_ok) { _, _ ->
                 when {
@@ -258,21 +274,7 @@ object PortableRestoreOutcomeFlow {
     }
 
     private fun categoryName(activity: Activity, category: PortableRestoreCategory): String =
-        activity.getString(when (category) {
-            PortableRestoreCategory.CHATS -> R.string.restore_category_chats
-            PortableRestoreCategory.GENERATED_IMAGES -> R.string.restore_category_generated_images
-            PortableRestoreCategory.COMPANIONS -> R.string.restore_category_companions
-            PortableRestoreCategory.GLAMOURS -> R.string.restore_category_glamours
-            PortableRestoreCategory.ROLEPLAY -> R.string.restore_category_roleplay
-            PortableRestoreCategory.PROFILE_IMAGES -> R.string.restore_category_profile_images
-            PortableRestoreCategory.ACTIVATION_PROMPTS -> R.string.restore_category_activation_prompts
-            PortableRestoreCategory.SYSTEM_PROMPTS -> R.string.restore_category_system_prompts
-            PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS -> R.string.restore_category_model_settings
-            PortableRestoreCategory.SETTINGS -> R.string.restore_category_settings
-            PortableRestoreCategory.MODEL_RULES -> R.string.restore_category_model_rules
-            PortableRestoreCategory.MEMORIES -> R.string.restore_category_memories
-            PortableRestoreCategory.LOREBOOKS -> R.string.restore_category_lorebooks
-        })
+        PortableRestoreIssueText.categoryName(activity, category)
 
     private fun portableErrorMessage(
         activity: Activity,
@@ -311,21 +313,5 @@ object PortableRestoreOutcomeFlow {
     private fun chatValidationMessage(
         activity: Activity,
         reason: PortableChatRestorePlan.Reason?
-    ): String = activity.getString(when (reason) {
-        PortableChatRestorePlan.Reason.NOT_A_CHATS_ARTIFACT -> R.string.portable_chat_invalid_file_type
-        PortableChatRestorePlan.Reason.UNSUPPORTED_FORMAT -> R.string.portable_chat_unsupported_format
-        PortableChatRestorePlan.Reason.INCOMPLETE_ARTIFACT -> R.string.portable_chat_incomplete
-        PortableChatRestorePlan.Reason.MALFORMED -> R.string.portable_chat_malformed
-        PortableChatRestorePlan.Reason.UNSAFE_CHAT_ID -> R.string.portable_chat_unsafe_id
-        PortableChatRestorePlan.Reason.IDENTITY_MISMATCH -> R.string.portable_chat_identity_mismatch
-        PortableChatRestorePlan.Reason.DUPLICATE_CHAT_ID -> R.string.portable_chat_duplicate_id
-        PortableChatRestorePlan.Reason.MALFORMED_MESSAGE_ID -> R.string.portable_chat_malformed_message_id
-        PortableChatRestorePlan.Reason.DUPLICATE_MESSAGE_ID -> R.string.portable_chat_duplicate_message_id
-        PortableChatRestorePlan.Reason.MALFORMED_FOLDERS -> R.string.portable_chat_malformed_folders
-        PortableChatRestorePlan.Reason.MISSING_FOLDER -> R.string.portable_chat_missing_folder
-        PortableChatRestorePlan.Reason.UNREFERENCED_FOLDER -> R.string.portable_chat_unreferenced_folder
-        PortableChatRestorePlan.Reason.UNSUPPORTED_SETTING_TYPE -> R.string.portable_chat_unsupported_setting
-        PortableChatRestorePlan.Reason.FORBIDDEN_CREDENTIAL -> R.string.portable_chat_forbidden_credential
-        null -> R.string.portable_restore_validation_failed
-    })
+    ): String = PortableRestoreIssueText.chatReasonMessage(activity, reason)
 }

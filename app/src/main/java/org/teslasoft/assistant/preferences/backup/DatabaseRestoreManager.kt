@@ -326,12 +326,13 @@ object DatabaseRestoreManager {
             )
         }
 
-        val semantic = PortableRecoverySemanticValidator.validate(
-            context.applicationContext,
+        // Whole-package integrity only: the one database being restored is
+        // checked on its own below, so other categories in the package cannot
+        // refuse it.
+        val semantic = PortableRecoverySemanticValidator.validatePackage(
             validated.artifacts,
             validated.declaredCategories,
-            validated.explicitlyEmptyCategories,
-            validated.categoryRecordCounts
+            validated.explicitlyEmptyCategories
         )
         if (semantic !is PortableRecoverySemanticValidator.Result.Valid) {
             PortableStaging.delete(root)

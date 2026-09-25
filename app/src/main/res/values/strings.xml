@@ -1334,9 +1334,10 @@
     <string name="portable_confirm_mixed">This restore will use the selected mode for each category. Unselected categories will not be changed. Review the category list before continuing.</string>
     <string name="portable_confirm_categories">Selected categories: %1$s.</string>
     <string name="portable_restore_progress">Restoring selected data. Please wait. Do not close the app.</string>
-    <string name="portable_success_title">Restore Complete</string>
-    <string name="portable_success_message">The selected data was restored.</string>
-    <string name="portable_failure_title">Restore Failed</string>
+    <!-- Restore result titles (owner-approved, September 2026). -->
+    <string name="portable_success_title">Restoration Complete</string>
+    <string name="portable_partial_title">Restoration Partly Successful</string>
+    <string name="portable_failure_title">Restoration Failed</string>
     <string name="portable_failure_message">Nothing was changed.</string>
     <string name="portable_restore_failure_reason">Reason: %1$s.</string>
     <string name="portable_restore_category_failure">%1$s could not be restored. Reason: %2$s</string>
@@ -1382,6 +1383,19 @@
         <item quantity="one">%d current image was kept because unselected data still uses it.</item>
         <item quantity="other">%d current images were kept because unselected data still uses them.</item>
     </plurals>
+    <!-- Restoration Partly Successful body (owner-approved, September 2026):
+         the applicable sentences, a blank line, then one problem per line.
+         The same lines are written to the Error Log; the log form of a
+         missing chat image also names the missing file. -->
+    <string name="portable_partial_missing_references">Some existing data has missing references. Details have been saved to the Error Log.</string>
+    <string name="portable_partial_not_restored">Some items could not be restored. Details have been saved to the Error Log.</string>
+    <string name="portable_missing_chat_image">Chat \"%1$s\" — image generated %2$s with %3$s: \"%4$s\" — file missing</string>
+    <string name="portable_missing_chat_image_log">Chat \"%1$s\" — image generated %2$s with %3$s: \"%4$s\" — file %5$s is missing</string>
+    <string name="portable_missing_identity_image">%1$s \"%2$s\" — profile picture missing</string>
+    <string name="portable_missing_unnamed_image">%1$s — profile picture missing</string>
+    <string name="portable_missing_kind_companion">Companion</string>
+    <string name="portable_missing_kind_glamour">Glamour</string>
+    <string name="portable_missing_kind_roleplay_character">Roleplay Character</string>
 
     <!-- Memory Assistant (Phase 6). Every user-visible sentence here is the
          owner's approved wording (memory_assistant_design.md §1–§2 + the

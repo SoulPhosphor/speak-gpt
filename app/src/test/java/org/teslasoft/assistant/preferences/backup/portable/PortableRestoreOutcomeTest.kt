@@ -35,6 +35,52 @@ class PortableRestoreOutcomeTest {
     }
 
     @Test
+    fun partlySuccessfulReportCarriesItsProblemLines() {
+        val expected = PortableRestoreOutcome.Success(
+            PortableRestoreOutcome.Report(
+                emptyList(),
+                emptyList(),
+                listOf("Chats could not be restored. Reason: x.", "Glamour \"Mira\" — profile picture missing"),
+                missingReferences = true,
+                notRestored = true
+            )
+        )
+
+        assertEquals(
+            expected,
+            PortableRestoreOutcomeStore.decode(PortableRestoreOutcomeStore.encode(expected))
+        )
+    }
+
+    @Test
+    fun reportWrittenBeforeProblemLinesExistedStillDecodes() {
+        val legacy = PortableRestoreOutcomeStore.encode(
+            PortableRestoreOutcome.Success(PortableRestoreOutcome.Report(emptyList(), emptyList()))
+        )
+        val report = legacy.getJSONObject("report")
+        report.remove("problem_lines")
+        report.remove("missing_references")
+        report.remove("not_restored")
+
+        assertEquals(
+            PortableRestoreOutcome.Success(PortableRestoreOutcome.Report(emptyList(), emptyList())),
+            PortableRestoreOutcomeStore.decode(legacy)
+        )
+    }
+
+    @Test
+    fun selectedDataFailureRoundTrips() {
+        val expected = PortableRestoreOutcome.SelectedDataFailure(
+            listOf("Chats could not be restored. Reason: x.")
+        )
+
+        assertEquals(
+            expected,
+            PortableRestoreOutcomeStore.decode(PortableRestoreOutcomeStore.encode(expected))
+        )
+    }
+
+    @Test
     fun transactionFailureRoundTripsWithoutRenderingStrings() {
         val expected = PortableRestoreOutcome.TransactionFailure(
             SelectedCategoryRestoreTransaction.Failure.VALIDATION_FAILED,

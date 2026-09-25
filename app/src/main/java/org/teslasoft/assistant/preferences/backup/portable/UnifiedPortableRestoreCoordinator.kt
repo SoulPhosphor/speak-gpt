@@ -11,6 +11,7 @@ import java.util.WeakHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
+import org.teslasoft.assistant.preferences.Logger
 import org.teslasoft.assistant.preferences.backup.RecoveryOperationGate
 
 /**
@@ -77,6 +78,7 @@ object UnifiedPortableRestoreCoordinator {
         var unlock: UnlockMaterial?,
         var artifacts: List<PortablePackage.ValidatedArtifact> = emptyList(),
         var explicitlyEmpty: Set<PortableRestoreCategory> = emptySet(),
+        var declaredRecordCounts: Map<PortableRestoreCategory, Long> = emptyMap(),
         var selected: List<PortableRestoreSelectionPlan.Selection> = emptyList(),
         val folderResolutions: MutableMap<String, ChatMergePlanner.FolderResolution> = LinkedHashMap(),
         var missingResult: PortableRestoreSelectionPlan.Result.Missing? = null,
@@ -300,12 +302,13 @@ object UnifiedPortableRestoreCoordinator {
                 current
             )
         }
-        val semantic = PortableRecoverySemanticValidator.validate(
-            context.applicationContext,
+        // Only whole-package integrity is checked before the selection is
+        // applied. Each selected category is read on its own during preflight,
+        // so an unselected category can never refuse the restore.
+        val semantic = PortableRecoverySemanticValidator.validatePackage(
             validated.artifacts,
             validated.declaredCategories,
-            validated.explicitlyEmptyCategories,
-            validated.categoryRecordCounts
+            validated.explicitlyEmptyCategories
         )
         if (semantic !is PortableRecoverySemanticValidator.Result.Valid) {
             return terminal(
@@ -323,6 +326,7 @@ object UnifiedPortableRestoreCoordinator {
             is PortableRestoreSelectionPlan.Result.Ready -> synchronized(lock) {
                 current.artifacts = validated.artifacts.toList()
                 current.explicitlyEmpty = inventory.explicitlyEmpty.toSet()
+                current.declaredRecordCounts = validated.categoryRecordCounts.toMap()
                 current.selected = selected.selections.toList()
                 current.next = Next.PREFLIGHT
                 publishLocked(State.Progress(nextVersionLocked(), ProgressPhase.PREFLIGHT))
@@ -330,6 +334,7 @@ object UnifiedPortableRestoreCoordinator {
             is PortableRestoreSelectionPlan.Result.Missing -> synchronized(lock) {
                 current.artifacts = validated.artifacts.toList()
                 current.explicitlyEmpty = inventory.explicitlyEmpty.toSet()
+                current.declaredRecordCounts = validated.categoryRecordCounts.toMap()
                 current.missingResult = selected
                 publishLocked(State.MissingCategories(
                     nextVersionLocked(), selected.missing.toList()
@@ -370,7 +375,8 @@ object UnifiedPortableRestoreCoordinator {
             UnifiedPortableRestore.Request(
                 current.selected,
                 current.folderResolutions.toMap(),
-                current.explicitlyEmpty
+                current.explicitlyEmpty,
+                current.declaredRecordCounts
             ),
             transactionRoot
         )
@@ -387,10 +393,19 @@ object UnifiedPortableRestoreCoordinator {
                     return terminal(context, PortableRestoreOutcome.BuildFailure(
                         built.reason, built.category
                     ), current)
+                is UnifiedPortableRestore.BuildResult.NothingRestorable ->
+                    return terminal(context, PortableRestoreOutcome.SelectedDataFailure(
+                        built.failures.map {
+                            PortableRestoreIssueText.categoryFailureLine(context, it)
+                        }
+                    ), current)
                 is UnifiedPortableRestore.BuildResult.Ready -> {
                     current.ready = built
+                    // Confirm only what will actually be restored; categories
+                    // set aside are reported in the result.
+                    val failed = built.categoryFailures.mapTo(HashSet()) { it.category }
                     publishLocked(State.Confirmation(
-                        nextVersionLocked(), current.selected.toList()
+                        nextVersionLocked(), current.selected.filter { it.category !in failed }
                     ))
                     return Step.WAIT
                 }
@@ -459,7 +474,8 @@ object UnifiedPortableRestoreCoordinator {
             )
         }
 
-        val success = PortableRestoreOutcome.Success(report(ready))
+        val issues = PortableRestoreIssueText.lines(context, ready.categoryFailures, ready.finalState)
+        val success = PortableRestoreOutcome.Success(report(ready, issues))
         val result = UnifiedPortableRestore.execute(
             UnifiedPortableRestore.journalRoot(context),
             ready,
@@ -474,6 +490,7 @@ object UnifiedPortableRestoreCoordinator {
             }
         )
         if (result is SelectedCategoryRestoreTransaction.Result.Success) {
+            logProblems(context, issues)
             synchronized(lock) {
                 publishLocked(State.Progress(nextVersionLocked(), ProgressPhase.RESTARTING))
                 session = null
@@ -517,8 +534,22 @@ object UnifiedPortableRestoreCoordinator {
         return Step.TERMINAL
     }
 
+    /** One Error Log entry per restore that left anything unrestored or
+     * found missing references (owner-approved, September 2026). */
+    private fun logProblems(context: Context, issues: PortableRestoreIssueText.Lines) {
+        if (issues.isEmpty) return
+        val text = (
+            PortableRestoreIssueText.intro(context, issues.missingReferences, issues.notRestored) +
+                "" + issues.log
+            ).joinToString("\n")
+        try {
+            Logger.log(context, "crash", "PortableRestore", "warning", text)
+        } catch (_: Exception) { /* logging is best-effort */ }
+    }
+
     private fun report(
-        ready: UnifiedPortableRestore.BuildResult.Ready
+        ready: UnifiedPortableRestore.BuildResult.Ready,
+        issues: PortableRestoreIssueText.Lines
     ): PortableRestoreOutcome.Report {
         val lines = ArrayList<PortableRestoreOutcome.Report.Line>()
         ready.chatParticipant?.mergeReport?.let { report ->
@@ -596,7 +627,13 @@ object UnifiedPortableRestoreCoordinator {
                 }
             }
         }
-        return PortableRestoreOutcome.Report(lines.toList(), removedLinks.toList())
+        return PortableRestoreOutcome.Report(
+            lines.toList(),
+            removedLinks.toList(),
+            issues.dialog,
+            issues.missingReferences,
+            issues.notRestored
+        )
     }
 
     private fun cleanup(current: Session, keepTransactionForRecovery: Boolean) {

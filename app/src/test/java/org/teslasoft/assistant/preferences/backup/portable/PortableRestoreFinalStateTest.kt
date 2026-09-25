@@ -149,12 +149,55 @@ class PortableRestoreFinalStateTest {
     }
 
     @Test
-    fun missingRequiredGeneratedAssetFailsClosed() {
+    fun missingRequiredGeneratedAssetIsReportedNotRefused() {
+        val result = PortableRestoreFinalState.create(
+            inputs(chats = chatPlan(chat(CHAT_A, imageMessage(IMAGE_ID), imageMessage(IMAGE_ID))))
+        ) as PortableRestoreDependencyRead.Available<PortableRestoreFinalState>
+
+        assertEquals(
+            listOf(PortableRestoreFinalState.MissingChatImage(
+                chatName = CHAT_A,
+                createdAt = 1L,
+                modelId = "model",
+                prompt = "prompt",
+                fileName = "image.png"
+            )),
+            result.snapshot.missingChatImages
+        )
+    }
+
+    @Test
+    fun presentGeneratedAssetIsNotReportedMissing() {
         val result = PortableRestoreFinalState.create(
             inputs(chats = chatPlan(chat(CHAT_A, imageMessage(IMAGE_ID))))
+                .copy(finalGeneratedImages = generated(imageRecord(IMAGE_ID, originChatId = CHAT_A)))
+        ) as PortableRestoreDependencyRead.Available<PortableRestoreFinalState>
+
+        assertTrue(result.snapshot.missingChatImages.isEmpty())
+    }
+
+    @Test
+    fun missingIdentityPictureKeepsTheIdentityAndIsReported() {
+        val manifest = identityManifest(
+            roleplayRows = listOf(mapOf(
+                "roleplay_character_id" to "rp-user",
+                "name" to "User hero",
+                "played_by" to "user",
+                "image_ref" to HASH_A
+            ))
         )
 
-        assertTrue(result is PortableRestoreDependencyRead.Unavailable)
+        val result = PortableRestoreFinalState.create(
+            inputs(identities = manifest)
+        ) as PortableRestoreDependencyRead.Available<PortableRestoreFinalState>
+
+        assertEquals(setOf("rp-user"), result.snapshot.finalIdentityIds.roleplayCharacters)
+        assertEquals(
+            listOf(PortableRestoreFinalState.IdentityProfileImageReference(
+                PortableRestoreCategory.ROLEPLAY, "rp-user", HASH_A, "User hero"
+            )),
+            result.snapshot.missingIdentityImages
+        )
     }
 
     @Test

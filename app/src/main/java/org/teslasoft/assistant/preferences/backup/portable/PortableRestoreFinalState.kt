@@ -8,6 +8,7 @@ package org.teslasoft.assistant.preferences.backup.portable
 import java.util.Collections
 import org.json.JSONArray
 import org.teslasoft.assistant.imagegen.GeneratedImageMetadata
+import org.teslasoft.assistant.imagegen.ImageFormat
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupManifest
 import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
 import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogSnapshot
@@ -40,7 +41,9 @@ class PortableRestoreFinalState private constructor(
     finalProfileImageAssetHashes: Set<String>,
     finalGeneratedImageAssetIds: Set<String>,
     sourceGenerations: Map<Source, String>,
-    plannedReferenceChanges: List<ReferenceChange>
+    plannedReferenceChanges: List<ReferenceChange>,
+    missingChatImages: List<MissingChatImage>,
+    missingIdentityImages: List<IdentityProfileImageReference>
 ) {
     val categoryModes = immutableMap(categoryModes)
     val finalChatIds = immutableSet(finalChatIds)
@@ -57,6 +60,12 @@ class PortableRestoreFinalState private constructor(
     val finalGeneratedImageAssetIds = immutableSet(finalGeneratedImageAssetIds)
     val sourceGenerations = immutableMap(sourceGenerations)
     val plannedReferenceChanges = immutableList(plannedReferenceChanges)
+    /** Chat images the final state still references but cannot show. They are
+     * reported, never a reason to refuse the restore (owner ruling, Sept 2026). */
+    val missingChatImages = immutableList(missingChatImages)
+    /** Identity pictures the final state references but cannot show; the
+     * identity itself is still restored and the missing picture reported. */
+    val missingIdentityImages = immutableList(missingIdentityImages)
 
     class IdentityIds private constructor(
         companions: Set<String>,
@@ -94,7 +103,17 @@ class PortableRestoreFinalState private constructor(
     data class IdentityProfileImageReference(
         val category: PortableRestoreCategory?,
         val identityId: String,
-        val imageHash: String
+        val imageHash: String,
+        val name: String? = null
+    )
+
+    /** One finished generated image a final chat shows whose file is absent. */
+    data class MissingChatImage(
+        val chatName: String?,
+        val createdAt: Long,
+        val modelId: String,
+        val prompt: String,
+        val fileName: String
     )
 
     data class IdentityLorebookReference(
@@ -161,10 +180,10 @@ class PortableRestoreFinalState private constructor(
             val generatedAssetIds = inputs.finalGeneratedImages?.active.orEmpty()
                 .mapTo(LinkedHashSet()) { it.imageId }
             val missingGeneratedAssets = chatReferences.requiredAssetIds - generatedAssetIds
-            if (missingGeneratedAssets.isNotEmpty()) {
-                return PortableRestoreDependencyRead.Unavailable(
-                    "a final chat references a generated image asset absent from the final gallery"
-                )
+            val missingChatImages = if (missingGeneratedAssets.isEmpty()) emptyList()
+            else when (val details = missingChatImageDetails(inputs.finalChats, missingGeneratedAssets)) {
+                is PortableRestoreDependencyRead.Available -> details.snapshot
+                is PortableRestoreDependencyRead.Unavailable -> return details
             }
 
             val identityIds = identityIds(
@@ -175,11 +194,7 @@ class PortableRestoreFinalState private constructor(
                 inputs.additionalIdentityImageReferences
             val finalProfileAssets = LinkedHashSet(inputs.finalProfileImageAssetHashes)
             inputs.finalIdentities?.images?.mapTo(finalProfileAssets) { it.hash }
-            if (identityImages.any { it.imageHash !in finalProfileAssets }) {
-                return PortableRestoreDependencyRead.Unavailable(
-                    "a final identity references a profile image asset absent from the final gallery"
-                )
-            }
+            val missingIdentityImages = identityImages.filter { it.imageHash !in finalProfileAssets }
 
             val finalLorebookIds = inputs.finalLorebooks?.books.orEmpty()
                 .mapTo(LinkedHashSet()) { it.id }
@@ -216,7 +231,9 @@ class PortableRestoreFinalState private constructor(
                     finalProfileImageAssetHashes = finalProfileAssets,
                     finalGeneratedImageAssetIds = generatedAssetIds,
                     sourceGenerations = inputs.sourceGenerations,
-                    plannedReferenceChanges = changes
+                    plannedReferenceChanges = changes,
+                    missingChatImages = missingChatImages,
+                    missingIdentityImages = missingIdentityImages
                 )
             )
         }
@@ -265,6 +282,53 @@ class PortableRestoreFinalState private constructor(
             }
         }
 
+        /** Where each missing required image appears, so the report can name
+         * the chat, when the image was generated, its model and its prompt. */
+        private fun missingChatImageDetails(
+            chats: PortableChatRestorePlan.Plan?,
+            missingIds: Set<String>
+        ): PortableRestoreDependencyRead<List<MissingChatImage>> {
+            if (chats == null) return PortableRestoreDependencyRead.Available(emptyList())
+            val result = ArrayList<MissingChatImage>()
+            return try {
+                for (chat in chats.chats) {
+                    val seen = HashSet<String>()
+                    val messages = JSONArray(chat.messagesJson)
+                    for (index in 0 until messages.length()) {
+                        val message = messages.optJSONObject(index) ?: continue
+                        if (!message.has(GeneratedImageMetadata.KEY) ||
+                            message.isNull(GeneratedImageMetadata.KEY)
+                        ) continue
+                        val metadata = GeneratedImageMetadata.fromJson(
+                            message.opt(GeneratedImageMetadata.KEY)?.toString().orEmpty()
+                        ) ?: continue
+                        if (metadata.imageId !in missingIds || !seen.add(metadata.imageId)) continue
+                        result.add(MissingChatImage(
+                            chatName = chat.listRow["name"],
+                            createdAt = metadata.createdAt,
+                            modelId = metadata.modelId,
+                            prompt = metadata.prompt,
+                            fileName = metadata.assetFileName?.takeIf(String::isNotBlank)
+                                ?: legacyFileName(metadata)
+                        ))
+                    }
+                }
+                PortableRestoreDependencyRead.Available(result)
+            } catch (_: Exception) {
+                PortableRestoreDependencyRead.Unavailable(
+                    "the final chat messages could not be scanned for generated images"
+                )
+            }
+        }
+
+        /** Legacy images are stored as `<content hash>.<extension>`. */
+        private fun legacyFileName(metadata: GeneratedImageMetadata): String {
+            val hash = metadata.fileHash.orEmpty()
+            val extension = ImageFormat.entries
+                .firstOrNull { it.mimeType == metadata.mimeType }?.fileExtension
+            return if (extension == null) hash else "$hash.$extension"
+        }
+
         private fun identityIds(
             manifest: CompanionBackupManifest?,
             additional: List<IdentityProfileImageReference>
@@ -303,7 +367,8 @@ class PortableRestoreFinalState private constructor(
             manifest.companionProfiles.forEach { profile ->
                 if (profile.avatarRef.isNotBlank()) result.add(
                     IdentityProfileImageReference(
-                        PortableRestoreCategory.COMPANIONS, profile.id, profile.avatarRef
+                        PortableRestoreCategory.COMPANIONS, profile.id, profile.avatarRef,
+                        profile.label
                     )
                 )
             }
@@ -315,7 +380,7 @@ class PortableRestoreFinalState private constructor(
                     val id = row[idColumn] as? String
                     val hash = row["image_ref"] as? String
                     if (!id.isNullOrBlank() && !hash.isNullOrBlank()) result.add(
-                        IdentityProfileImageReference(category, id, hash)
+                        IdentityProfileImageReference(category, id, hash, row["name"] as? String)
                     )
                 }
             }

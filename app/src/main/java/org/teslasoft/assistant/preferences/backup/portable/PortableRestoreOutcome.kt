@@ -26,6 +26,8 @@ sealed interface PortableRestoreOutcome {
         val category: PortableRestoreCategory?
     ) : PortableRestoreOutcome
     data object NothingAvailable : PortableRestoreOutcome
+    /** Every selected category failed on its own; nothing was changed. */
+    data class SelectedDataFailure(val lines: List<String>) : PortableRestoreOutcome
     data class TransactionFailure(
         val reason: SelectedCategoryRestoreTransaction.Failure,
         val categoryKey: String?,
@@ -35,7 +37,13 @@ sealed interface PortableRestoreOutcome {
 
     data class Report(
         val lines: List<Line>,
-        val removedLorebookLinks: List<RemovedLorebookLink>
+        val removedLorebookLinks: List<RemovedLorebookLink>,
+        /** Formatted problem lines: selected categories that were not
+         * restored, then missing references. Any line makes the result
+         * Restoration Partly Successful. */
+        val problemLines: List<String> = emptyList(),
+        val missingReferences: Boolean = false,
+        val notRestored: Boolean = false
     ) {
         sealed interface Line {
             data class ConflictCount(
@@ -98,6 +106,9 @@ object PortableRestoreOutcomeStore {
                 .put("reason", outcome.reason.name)
                 .put("category", outcome.category?.name)
             PortableRestoreOutcome.NothingAvailable -> root.put("kind", "nothing_available")
+            is PortableRestoreOutcome.SelectedDataFailure -> root
+                .put("kind", "selected_data_failure")
+                .put("lines", JSONArray(outcome.lines))
             is PortableRestoreOutcome.TransactionFailure -> root
                 .put("kind", "transaction_failure")
                 .put("reason", outcome.reason.name)
@@ -133,6 +144,9 @@ object PortableRestoreOutcomeStore {
                         ?.let(PortableRestoreCategory::valueOf)
                 )
                 "nothing_available" -> PortableRestoreOutcome.NothingAvailable
+                "selected_data_failure" -> PortableRestoreOutcome.SelectedDataFailure(
+                    strings(root.getJSONArray("lines"))
+                )
                 "transaction_failure" -> PortableRestoreOutcome.TransactionFailure(
                     SelectedCategoryRestoreTransaction.Failure.valueOf(root.getString("reason")),
                     root.optString("category_key").takeIf(String::isNotBlank),
@@ -178,6 +192,9 @@ object PortableRestoreOutcomeStore {
                     .put("lorebook_name", link.lorebookName))
             }
         })
+        .put("problem_lines", JSONArray(report.problemLines))
+        .put("missing_references", report.missingReferences)
+        .put("not_restored", report.notRestored)
 
     private fun decodeReport(root: JSONObject): PortableRestoreOutcome.Report? {
         return try {
@@ -220,15 +237,26 @@ object PortableRestoreOutcomeStore {
                     item.getString("companion_label"), item.getString("lorebook_name")
                 ))
             }
-            PortableRestoreOutcome.Report(lines, links)
+            PortableRestoreOutcome.Report(
+                lines,
+                links,
+                root.optJSONArray("problem_lines")?.let(::strings).orEmpty(),
+                root.optBoolean("missing_references", false),
+                root.optBoolean("not_restored", false)
+            )
         } catch (_: Exception) {
             null
         }
     }
 
+    private fun strings(array: JSONArray): List<String> =
+        List(array.length()) { array.getString(it) }
+
     private fun file(context: Context) = File(context.filesDir, FILE_NAME)
 
     private const val VERSION = 1
     private const val FILE_NAME = "portable_restore_terminal_outcome.json"
-    private const val MAX_BYTES = 512L * 1024L
+    // Problem lines name every missing reference, so a large history can
+    // produce a long report.
+    private const val MAX_BYTES = 4L * 1024L * 1024L
 }

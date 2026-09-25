@@ -11,10 +11,13 @@ import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupValid
 import org.teslasoft.assistant.preferences.memory.MemoryPortableGroup
 
 /**
- * The one read-only semantic gate shared by backup finalization and restore
- * preflight. It invokes the same category parsers and preparers used to build
- * restore participants, then proves cross-category reference closure and the
- * current manifest's declared record counts.
+ * Read-only package gates. [validate] is the complete semantic gate used when
+ * a backup is written: it invokes the same category parsers and preparers used
+ * to build restore participants, then proves cross-category reference closure
+ * and the current manifest's declared record counts. Restore uses only
+ * [validatePackage] before the user's category selection is applied; each
+ * selected category is then parsed on its own, so an unselected category can
+ * never refuse a restore (owner ruling, September 2026).
  */
 object PortableRecoverySemanticValidator {
     sealed interface Result {
@@ -44,13 +47,31 @@ object PortableRecoverySemanticValidator {
         Result.Invalid
     }
 
-    private fun validateInternal(
-        context: Context,
+    /**
+     * Whole-package checks only: every declared artifact was staged, has a
+     * known type, and fits its size limit, and the inventory agrees with the
+     * manifest. No category content is parsed here.
+     */
+    fun validatePackage(
         artifacts: List<PortablePackage.ValidatedArtifact>,
-        declaredCategories: Set<PortableRestoreCategory>?,
-        explicitlyEmptyCategories: Set<PortableRestoreCategory>,
-        declaredRecordCounts: Map<PortableRestoreCategory, Long>
-    ): Result {
+        declaredCategories: Set<PortableRestoreCategory>? = null,
+        explicitlyEmptyCategories: Set<PortableRestoreCategory> = emptySet()
+    ): Result = try {
+        when (val checked = checkArtifacts(artifacts)) {
+            null -> {
+                val inventory = PortableRestoreInventory.from(
+                    artifacts, declaredCategories, explicitlyEmptyCategories
+                )
+                if (inventory.explicitlyEmpty.any { it !in inventory.available }) Result.Invalid
+                else Result.Valid(inventory, emptyMap())
+            }
+            else -> checked
+        }
+    } catch (_: Exception) {
+        Result.Invalid
+    }
+
+    private fun checkArtifacts(artifacts: List<PortablePackage.ValidatedArtifact>): Result? {
         artifacts.forEach { artifact ->
             if (!artifact.stagedFile.isFile) return Result.Invalid
             if (PortableRecoveryLimits.maxDecodedBytes(artifact.entryName, artifact.type) == null) {
@@ -61,6 +82,17 @@ object PortableRecoverySemanticValidator {
                 )
             ) return Result.TooLarge
         }
+        return null
+    }
+
+    private fun validateInternal(
+        context: Context,
+        artifacts: List<PortablePackage.ValidatedArtifact>,
+        declaredCategories: Set<PortableRestoreCategory>?,
+        explicitlyEmptyCategories: Set<PortableRestoreCategory>,
+        declaredRecordCounts: Map<PortableRestoreCategory, Long>
+    ): Result {
+        checkArtifacts(artifacts)?.let { return it }
 
         val inventory = PortableRestoreInventory.from(
             artifacts, declaredCategories, explicitlyEmptyCategories
@@ -170,7 +202,30 @@ object PortableRecoverySemanticValidator {
             if (!bookIds.containsAll(identityLorebookIds(identities))) return Result.Invalid
         }
 
-        val counts = linkedMapOf(
+        val counts = recordCounts(
+            chats, generated, identities, profile, memories, modelRules, lorebooks, endpoints, settings
+        )
+        if (declaredRecordCounts.isNotEmpty() &&
+            declaredRecordCounts != counts.filterKeys(declaredRecordCounts.keys::contains)
+        ) {
+            return Result.Invalid
+        }
+        return Result.Valid(inventory, counts)
+    }
+
+    /** The declared-count projection for each category, shared by the full
+     * gate and by selected-category restore planning. */
+    internal fun recordCounts(
+        chats: PortableChatRestorePlan.Plan?,
+        generated: GeneratedImagePortableRestoreManager.Prepared?,
+        identities: CompanionBackupManifest?,
+        profile: ProfileImagePortableRestoreManager.Prepared?,
+        memories: org.teslasoft.assistant.preferences.memory.MemoryPortableRows?,
+        modelRules: org.teslasoft.assistant.preferences.memory.MemoryPortableRows?,
+        lorebooks: LorebookPortableData?,
+        endpoints: ModelEndpointPortableCodec.Data?,
+        settings: AppSettingsPortableData?
+    ): Map<PortableRestoreCategory, Long> = linkedMapOf(
             PortableRestoreCategory.CHATS to (chats?.chatCount?.toLong() ?: 0L),
             PortableRestoreCategory.GENERATED_IMAGES to
                 (generated?.snapshot?.let { it.active.size + it.tombstones.size }?.toLong() ?: 0L),
@@ -190,13 +245,6 @@ object PortableRecoverySemanticValidator {
             PortableRestoreCategory.LOREBOOKS to
                 (lorebooks?.let { it.books.size + it.entries.size + it.deletedEntries.size }?.toLong() ?: 0L)
         )
-        if (declaredRecordCounts.isNotEmpty() &&
-            declaredRecordCounts != counts.filterKeys(declaredRecordCounts.keys::contains)
-        ) {
-            return Result.Invalid
-        }
-        return Result.Valid(inventory, counts)
-    }
 
     fun declarations(
         artifacts: List<PortablePackage.ValidatedArtifact>,

@@ -39,14 +39,20 @@ object UnifiedPortableRestore {
     data class Request(
         val selections: List<PortableRestoreSelectionPlan.Selection>,
         val folderResolutions: Map<String, ChatMergePlanner.FolderResolution> = emptyMap(),
-        val explicitlyEmptyCategories: Set<PortableRestoreCategory> = emptySet()
+        val explicitlyEmptyCategories: Set<PortableRestoreCategory> = emptySet(),
+        /** Manifest record counts; each is checked only for a selected category. */
+        val declaredRecordCounts: Map<PortableRestoreCategory, Long> = emptyMap()
     )
 
     sealed class BuildResult {
         data class Ready(
             val participants: List<SelectedCategoryRestoreTransaction.Participant>,
             val chatParticipant: ChatRestoreParticipant?,
-            val finalState: PortableRestoreFinalState
+            val finalState: PortableRestoreFinalState,
+            /** Selected categories set aside because their own data, or the
+             * current data they must be planned against, could not be used.
+             * Every other selected category is still restored. */
+            val categoryFailures: List<CategoryFailure> = emptyList()
         ) : BuildResult()
         data class NeedsFolderDecisions(
             val collisions: List<ChatMergePlanner.FolderCollision>
@@ -55,6 +61,34 @@ object UnifiedPortableRestore {
             val reason: BuildFailure,
             val category: PortableRestoreCategory? = null
         ) : BuildResult()
+        /** Every selected category failed on its own; nothing can be restored. */
+        data class NothingRestorable(val failures: List<CategoryFailure>) : BuildResult()
+    }
+
+    /**
+     * Stage 1 isolates failures per selected CATEGORY. It does not yet recover
+     * individual records: a category whose reader rejects its data is reported
+     * as not restored, with the most specific reason the reader provides.
+     */
+    data class CategoryFailure(
+        val category: PortableRestoreCategory,
+        val reason: CategoryFailureReason,
+        val chatReason: PortableChatRestorePlan.Reason? = null
+    )
+
+    enum class CategoryFailureReason {
+        /** The category's data is not in the decoded backup. */
+        MISSING_DATA,
+        /** The category's reader rejected its data. */
+        INVALID_DATA,
+        /** The Chats reader rejected the chat data; [CategoryFailure.chatReason] says why. */
+        CHAT_DATA,
+        /** The category holds a different number of records than the manifest declares. */
+        COUNT_MISMATCH,
+        /** The data currently on this device could not be read to plan against. */
+        CURRENT_DATA_UNAVAILABLE,
+        /** The category could not be combined with the current data safely. */
+        PLANNING_FAILED
     }
 
     enum class BuildFailure {
@@ -81,10 +115,8 @@ object UnifiedPortableRestore {
                 PortableRestoreCategory.SETTINGS
             )
         }
-        val parsedBackup = parseBackup(app, artifacts, request, modes)
-            ?: return BuildResult.Failed(BuildFailure.MISSING_CATEGORY_ARTIFACT)
-        val identitySelections = request.selections.filter { it.category in IDENTITY_CATEGORIES }
-            .map { CompanionCategoryPlanner.Selection(it.category, it.mode) }
+        val failures = LinkedHashMap<PortableRestoreCategory, CategoryFailure>()
+        val parsedBackup = parseBackup(app, artifacts, request, modes, failures)
         val planningRoot = File(stagingRoot, "final_state_planning")
         if (planningRoot.exists() && !planningRoot.deleteRecursively()) {
             return BuildResult.Failed(BuildFailure.DEPENDENCY_VALIDATION_FAILED)
@@ -93,80 +125,107 @@ object UnifiedPortableRestore {
             return BuildResult.Failed(BuildFailure.DEPENDENCY_VALIDATION_FAILED)
         }
 
-        var folderCollisions: List<ChatMergePlanner.FolderCollision> = emptyList()
-        val stable = PortableRestoreStablePlanner.plan(
-            capture = { attempt, verification ->
-                captureLiveState(
-                    app,
-                    modes,
-                    identitySelections.isNotEmpty(),
-                    File(planningRoot, "attempt_${attempt}_${if (verification) "after" else "before"}")
-                )
-            },
-            planner = { live, generations ->
-                when (val planned = planFinalState(
-                    modes,
-                    request,
-                    parsedBackup,
-                    live,
-                    identitySelections,
-                    generations
-                )) {
-                    is PlanningResult.Ready -> PortableRestoreDependencyRead.Available(planned.plan)
-                    is PlanningResult.FolderDecisions -> {
-                        folderCollisions = planned.collisions
-                        PortableRestoreDependencyRead.Unavailable(FOLDER_DECISIONS_REQUIRED)
+        // A selected category that cannot be planned is set aside and the rest
+        // are planned again. Only a failure no category can be blamed for
+        // stops the whole restore.
+        var active: Map<PortableRestoreCategory, PortableRestoreMode> =
+            modes.filterKeys { it !in failures }
+        var pass = 0
+        while (true) {
+            if (active.isEmpty()) return BuildResult.NothingRestorable(failures.values.toList())
+            val passModes = active
+            val identitySelections = request.selections
+                .filter { it.category in IDENTITY_CATEGORIES && it.category in passModes }
+                .map { CompanionCategoryPlanner.Selection(it.category, it.mode) }
+            val passRoot = File(planningRoot, "pass_${pass++}")
+            val blame = LinkedHashMap<PortableRestoreCategory, CategoryFailureReason>()
+            var folderCollisions: List<ChatMergePlanner.FolderCollision> = emptyList()
+            val stable = PortableRestoreStablePlanner.plan(
+                capture = { attempt, verification ->
+                    captureLiveState(
+                        app,
+                        passModes,
+                        identitySelections.isNotEmpty(),
+                        File(passRoot, "attempt_${attempt}_${if (verification) "after" else "before"}"),
+                        blame
+                    )
+                },
+                planner = { live, generations ->
+                    when (val planned = planFinalState(
+                        passModes,
+                        request,
+                        parsedBackup,
+                        live,
+                        identitySelections,
+                        generations,
+                        blame
+                    )) {
+                        is PlanningResult.Ready -> PortableRestoreDependencyRead.Available(planned.plan)
+                        is PlanningResult.FolderDecisions -> {
+                            folderCollisions = planned.collisions
+                            PortableRestoreDependencyRead.Unavailable(FOLDER_DECISIONS_REQUIRED)
+                        }
+                        is PlanningResult.Unavailable -> PortableRestoreDependencyRead.Unavailable(planned.reason)
                     }
-                    is PlanningResult.Unavailable -> PortableRestoreDependencyRead.Unavailable(planned.reason)
                 }
-            }
-        )
-        val planned = when (stable) {
-            is PortableRestoreStablePlanner.Result.Ready -> stable.planned
-            is PortableRestoreStablePlanner.Result.Unavailable -> {
-                if (stable.reason == FOLDER_DECISIONS_REQUIRED && folderCollisions.isNotEmpty()) {
-                    return BuildResult.NeedsFolderDecisions(folderCollisions)
+            )
+            val planned = when (stable) {
+                is PortableRestoreStablePlanner.Result.Ready -> stable.planned
+                is PortableRestoreStablePlanner.Result.Unavailable -> {
+                    if (stable.reason == FOLDER_DECISIONS_REQUIRED && folderCollisions.isNotEmpty()) {
+                        return BuildResult.NeedsFolderDecisions(folderCollisions)
+                    }
+                    val culprits = blame.filterKeys { it in passModes }
+                    if (culprits.isEmpty()) {
+                        return BuildResult.Failed(BuildFailure.DEPENDENCY_VALIDATION_FAILED)
+                    }
+                    culprits.forEach { (category, reason) ->
+                        failures.putIfAbsent(category, CategoryFailure(category, reason))
+                    }
+                    active = passModes.filterKeys { it !in culprits }
+                    continue
                 }
-                return BuildResult.Failed(BuildFailure.DEPENDENCY_VALIDATION_FAILED)
+                PortableRestoreStablePlanner.Result.ChangedTwice ->
+                    return BuildResult.Failed(BuildFailure.DEPENDENCY_VALIDATION_FAILED)
             }
-            PortableRestoreStablePlanner.Result.ChangedTwice ->
-                return BuildResult.Failed(BuildFailure.DEPENDENCY_VALIDATION_FAILED)
-        }
 
-        val participants = ArrayList<SelectedCategoryRestoreTransaction.Participant>()
-        var chatParticipant: ChatRestoreParticipant? = null
-        planned.chat?.let {
-            chatParticipant = ChatRestoreParticipant(app, it.desired, it.current, File(stagingRoot, "chats"))
-            participants.add(chatParticipant!!)
+            val participants = ArrayList<SelectedCategoryRestoreTransaction.Participant>()
+            var chatParticipant: ChatRestoreParticipant? = null
+            planned.chat?.let {
+                chatParticipant = ChatRestoreParticipant(app, it.desired, it.current, File(stagingRoot, "chats"))
+                participants.add(chatParticipant!!)
+            }
+            planned.generated?.let {
+                participants.add(GeneratedImageRestoreParticipant(
+                    app, it.plan, File(stagingRoot, it.stagingDirectory), it.participantKey
+                ))
+            }
+            planned.identities?.let {
+                participants.add(CompanionCategoryRestoreParticipant(
+                    app, it, identitySelections, File(stagingRoot, "identity_bundle")
+                ))
+            }
+            planned.sharedMemory?.let {
+                participants.add(CompanionMemoryRestoreParticipant(
+                    app, it, File(stagingRoot, CompanionMemoryRestoreParticipant.CATEGORY_KEY)
+                ))
+            }
+            planned.profileImages?.let {
+                participants.add(ProfileImageRestoreParticipant(app, it, File(stagingRoot, "profile_images")))
+            }
+            planned.modelEndpoints?.let {
+                participants.add(ModelEndpointRestoreParticipant(app, it, File(stagingRoot, "model_endpoints")))
+            }
+            planned.lorebooks?.let {
+                participants.add(LorebookRestoreParticipant(app, it, File(stagingRoot, "lorebooks")))
+            }
+            planned.settings?.let {
+                participants.add(AppSettingsRestoreParticipant(app, File(stagingRoot, "app_settings"), it))
+            }
+            return BuildResult.Ready(
+                participants, chatParticipant, planned.finalState, failures.values.toList()
+            )
         }
-        planned.generated?.let {
-            participants.add(GeneratedImageRestoreParticipant(
-                app, it.plan, File(stagingRoot, it.stagingDirectory), it.participantKey
-            ))
-        }
-        planned.identities?.let {
-            participants.add(CompanionCategoryRestoreParticipant(
-                app, it, identitySelections, File(stagingRoot, "identity_bundle")
-            ))
-        }
-        planned.sharedMemory?.let {
-            participants.add(CompanionMemoryRestoreParticipant(
-                app, it, File(stagingRoot, CompanionMemoryRestoreParticipant.CATEGORY_KEY)
-            ))
-        }
-        planned.profileImages?.let {
-            participants.add(ProfileImageRestoreParticipant(app, it, File(stagingRoot, "profile_images")))
-        }
-        planned.modelEndpoints?.let {
-            participants.add(ModelEndpointRestoreParticipant(app, it, File(stagingRoot, "model_endpoints")))
-        }
-        planned.lorebooks?.let {
-            participants.add(LorebookRestoreParticipant(app, it, File(stagingRoot, "lorebooks")))
-        }
-        planned.settings?.let {
-            participants.add(AppSettingsRestoreParticipant(app, File(stagingRoot, "app_settings"), it))
-        }
-        return BuildResult.Ready(participants, chatParticipant, planned.finalState)
     }
 
     private data class ParsedBackup(
@@ -229,114 +288,242 @@ object UnifiedPortableRestore {
         data class Unavailable(val reason: String) : PlanningResult
     }
 
+    /**
+     * Reads each selected category on its own. A category whose data is
+     * missing, rejected by its reader, or inconsistent with the manifest count
+     * is recorded in [failures] and left out; it never prevents the other
+     * selected categories from being read.
+     */
     private fun parseBackup(
         context: Context,
         artifacts: List<PortablePackage.ValidatedArtifact>,
         request: Request,
-        modes: Map<PortableRestoreCategory, PortableRestoreMode>
-    ): ParsedBackup? {
-        return try {
-        val chats = if (PortableRestoreCategory.CHATS in modes) {
-            val source = artifact(artifacts, PortablePackage.TYPE_CHATS_JSON)?.stagedFile
-                ?: return null
-            (PortableChatRestorePlan.parse(source.readText(Charsets.UTF_8)) as?
-                PortableChatRestorePlan.Result.Ok)?.plan ?: return null
-        } else null
-
-        val needGenerated = PortableRestoreCategory.GENERATED_IMAGES in modes ||
-            PortableRestoreCategory.CHATS in modes
-        val generated = if (needGenerated) {
-            when (val prepared = GeneratedImagePortableRestoreManager.prepare(artifacts)) {
-                is GeneratedImagePortableRestoreManager.PrepareResult.Ready -> prepared.prepared
-                GeneratedImagePortableRestoreManager.PrepareResult.Absent ->
-                    GeneratedImagePortableRestoreManager.Prepared(emptyGeneratedSnapshot(), emptyMap())
-                is GeneratedImagePortableRestoreManager.PrepareResult.Invalid -> return null
-            }
-        } else null
-        if (PortableRestoreCategory.GENERATED_IMAGES in modes &&
-            generated?.snapshot?.active.isNullOrEmpty() &&
-            PortableRestoreCategory.GENERATED_IMAGES !in request.explicitlyEmptyCategories &&
-            artifacts.none { it.type == PortablePackage.TYPE_GENERATED_IMAGES_CATALOG }
-        ) return null
-
-        val identitySelections = modes.keys intersect IDENTITY_CATEGORIES
-        val identityArtifact = if (identitySelections.isNotEmpty()) {
-            artifact(artifacts, PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE) ?: return null
-        } else null
-        val identities = identityArtifact?.let {
-            (CompanionBackupValidator.validate(it.stagedFile) as?
-                CompanionBackupValidator.Verdict.Valid)?.manifest ?: return null
+        modes: Map<PortableRestoreCategory, PortableRestoreMode>,
+        failures: MutableMap<PortableRestoreCategory, CategoryFailure>
+    ): ParsedBackup {
+        fun fail(
+            category: PortableRestoreCategory,
+            reason: CategoryFailureReason,
+            chatReason: PortableChatRestorePlan.Reason? = null
+        ) {
+            failures.putIfAbsent(category, CategoryFailure(category, reason, chatReason))
         }
-
-        val profileImages = if (PortableRestoreCategory.PROFILE_IMAGES in modes) {
-            if (PortableRestoreCategory.PROFILE_IMAGES in request.explicitlyEmptyCategories &&
-                artifacts.none { it.type == PortablePackage.TYPE_SQLITE_DB && it.entryName == "user_images.db" }
-            ) ProfileImagePortableRestoreManager.Prepared(emptyList(), emptyMap())
-            else (ProfileImagePortableRestoreManager.prepare(artifacts) as?
-                ProfileImagePortableRestoreManager.Result.Ready)?.prepared ?: return null
-        } else null
-
-        val memories = if (PortableRestoreCategory.MEMORIES in modes) {
-            readIncomingMemory(
-                artifacts,
-                MemoryPortableGroup.MEMORIES,
-                PortableRestoreCategory.MEMORIES in request.explicitlyEmptyCategories
-            ) ?: return null
-        } else null
-        val rules = if (PortableRestoreCategory.MODEL_RULES in modes) {
-            readIncomingMemory(
-                artifacts,
-                MemoryPortableGroup.MODEL_RULES,
-                PortableRestoreCategory.MODEL_RULES in request.explicitlyEmptyCategories
-            ) ?: return null
-        } else null
-        val lorebooks = if (PortableRestoreCategory.LOREBOOKS in modes) {
-            readIncomingLorebooks(
-                context,
-                artifacts,
-                PortableRestoreCategory.LOREBOOKS in request.explicitlyEmptyCategories
-            ) ?: return null
-        } else null
-        val endpoints = if (PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS in modes) {
-            val source = artifact(artifacts, PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS)?.stagedFile
-                ?: return null
-            if (!source.isFile || source.length() > ModelEndpointPortableCodec.MAX_ARTIFACT_BYTES) {
-                return null
-            }
-            (ModelEndpointPortableCodec.parse(source.readText(Charsets.UTF_8)) as?
-                ModelEndpointPortableCodec.Result.Ok)?.data ?: return null
-        } else null
-        val settings = if (PortableRestoreCategory.SETTINGS in modes) {
-            val source = artifact(artifacts, PortablePackage.TYPE_APP_SETTINGS)?.stagedFile
-                ?: return null
-            if (!source.isFile || source.length() > PortableRecoveryLimits.APP_SETTINGS_BYTES) return null
-            (AppSettingsPortableCodec.parse(source.readText(Charsets.UTF_8)) as?
-                AppSettingsPortableCodec.Result.Ok)?.data ?: return null
-        } else null
-
-            ParsedBackup(
-                chats,
-                generated,
-                identities,
-                identityArtifact?.stagedFile,
-                profileImages,
-                memories,
-                rules,
-                lorebooks,
-                endpoints,
-                settings
-            )
+        fun <T> read(categories: Collection<PortableRestoreCategory>, block: () -> T?): T? = try {
+            block()
         } catch (_: Exception) {
+            categories.forEach { fail(it, CategoryFailureReason.INVALID_DATA) }
             null
         }
+
+        val chats = if (PortableRestoreCategory.CHATS in modes) {
+            read(listOf(PortableRestoreCategory.CHATS)) {
+                val source = artifact(artifacts, PortablePackage.TYPE_CHATS_JSON)?.stagedFile
+                if (source == null) {
+                    fail(PortableRestoreCategory.CHATS, CategoryFailureReason.MISSING_DATA)
+                    null
+                } else when (val parsed = PortableChatRestorePlan.parse(source.readText(Charsets.UTF_8))) {
+                    is PortableChatRestorePlan.Result.Ok -> parsed.plan
+                    is PortableChatRestorePlan.Result.Rejected -> {
+                        fail(
+                            PortableRestoreCategory.CHATS,
+                            CategoryFailureReason.CHAT_DATA,
+                            parsed.reason
+                        )
+                        null
+                    }
+                }
+            }
+        } else null
+
+        // Restored chats need the generated images they show. When the
+        // gallery data is unusable the chats are still restored and the images
+        // they cannot show are reported as missing references.
+        val generatedSelected = PortableRestoreCategory.GENERATED_IMAGES in modes
+        val needGenerated = generatedSelected || chats != null
+        val generated = if (needGenerated) {
+            val prepared = try {
+                GeneratedImagePortableRestoreManager.prepare(artifacts)
+            } catch (_: Exception) {
+                GeneratedImagePortableRestoreManager.PrepareResult.Invalid(
+                    GeneratedImagePortableRestoreManager.InvalidReason.INVALID_CATALOG
+                )
+            }
+            when (prepared) {
+                is GeneratedImagePortableRestoreManager.PrepareResult.Ready -> prepared.prepared
+                GeneratedImagePortableRestoreManager.PrepareResult.Absent -> {
+                    if (generatedSelected &&
+                        PortableRestoreCategory.GENERATED_IMAGES !in request.explicitlyEmptyCategories
+                    ) fail(PortableRestoreCategory.GENERATED_IMAGES, CategoryFailureReason.MISSING_DATA)
+                    GeneratedImagePortableRestoreManager.Prepared(emptyGeneratedSnapshot(), emptyMap())
+                }
+                is GeneratedImagePortableRestoreManager.PrepareResult.Invalid -> {
+                    if (generatedSelected) {
+                        fail(PortableRestoreCategory.GENERATED_IMAGES, CategoryFailureReason.INVALID_DATA)
+                    }
+                    GeneratedImagePortableRestoreManager.Prepared(emptyGeneratedSnapshot(), emptyMap())
+                }
+            }
+        } else null
+
+        val identitySelections = modes.keys intersect IDENTITY_CATEGORIES
+        var identityArtifact: PortablePackage.ValidatedArtifact? = null
+        val identities = if (identitySelections.isNotEmpty()) {
+            read(identitySelections) {
+                val found = artifact(artifacts, PortablePackage.TYPE_COMPANION_ROLEPLAY_ARCHIVE)
+                if (found == null) {
+                    identitySelections.forEach { fail(it, CategoryFailureReason.MISSING_DATA) }
+                    null
+                } else {
+                    val manifest = (CompanionBackupValidator.validate(found.stagedFile) as?
+                        CompanionBackupValidator.Verdict.Valid)?.manifest
+                    if (manifest == null) {
+                        identitySelections.forEach { fail(it, CategoryFailureReason.INVALID_DATA) }
+                    } else identityArtifact = found
+                    manifest
+                }
+            }
+        } else null
+
+        val profileCatalogPresent = artifacts.any {
+            it.type == PortablePackage.TYPE_SQLITE_DB && it.entryName == "user_images.db"
+        }
+        val profileImages = if (PortableRestoreCategory.PROFILE_IMAGES in modes) {
+            read(listOf(PortableRestoreCategory.PROFILE_IMAGES)) {
+                if (PortableRestoreCategory.PROFILE_IMAGES in request.explicitlyEmptyCategories &&
+                    !profileCatalogPresent
+                ) {
+                    ProfileImagePortableRestoreManager.Prepared(emptyList(), emptyMap())
+                } else {
+                    (ProfileImagePortableRestoreManager.prepare(artifacts) as?
+                        ProfileImagePortableRestoreManager.Result.Ready)?.prepared
+                        ?: run {
+                            fail(PortableRestoreCategory.PROFILE_IMAGES, invalidOrMissing(profileCatalogPresent))
+                            null
+                        }
+                }
+            }
+        } else null
+
+        val memoryPresent = artifacts.any {
+            it.type == PortablePackage.TYPE_SQLCIPHER_DB && it.entryName == "memory.db"
+        }
+        val memories = if (PortableRestoreCategory.MEMORIES in modes) {
+            read(listOf(PortableRestoreCategory.MEMORIES)) {
+                readIncomingMemory(
+                    artifacts,
+                    MemoryPortableGroup.MEMORIES,
+                    PortableRestoreCategory.MEMORIES in request.explicitlyEmptyCategories
+                ) ?: run { fail(PortableRestoreCategory.MEMORIES, invalidOrMissing(memoryPresent)); null }
+            }
+        } else null
+        val rules = if (PortableRestoreCategory.MODEL_RULES in modes) {
+            read(listOf(PortableRestoreCategory.MODEL_RULES)) {
+                readIncomingMemory(
+                    artifacts,
+                    MemoryPortableGroup.MODEL_RULES,
+                    PortableRestoreCategory.MODEL_RULES in request.explicitlyEmptyCategories
+                ) ?: run { fail(PortableRestoreCategory.MODEL_RULES, invalidOrMissing(memoryPresent)); null }
+            }
+        } else null
+        val lorebooks = if (PortableRestoreCategory.LOREBOOKS in modes) {
+            read(listOf(PortableRestoreCategory.LOREBOOKS)) {
+                readIncomingLorebooks(
+                    context,
+                    artifacts,
+                    PortableRestoreCategory.LOREBOOKS in request.explicitlyEmptyCategories
+                ) ?: run {
+                    fail(PortableRestoreCategory.LOREBOOKS, invalidOrMissing(artifacts.any {
+                        it.type == PortablePackage.TYPE_SQLCIPHER_DB && it.entryName == "lorebook.db"
+                    }))
+                    null
+                }
+            }
+        } else null
+        val endpoints = if (PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS in modes) {
+            read(listOf(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS)) {
+                val source = artifact(artifacts, PortablePackage.TYPE_MODEL_ENDPOINT_SETTINGS)?.stagedFile
+                if (source == null) {
+                    fail(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS, CategoryFailureReason.MISSING_DATA)
+                    null
+                } else if (!source.isFile || source.length() > ModelEndpointPortableCodec.MAX_ARTIFACT_BYTES) {
+                    fail(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS, CategoryFailureReason.INVALID_DATA)
+                    null
+                } else (ModelEndpointPortableCodec.parse(source.readText(Charsets.UTF_8)) as?
+                    ModelEndpointPortableCodec.Result.Ok)?.data
+                    ?: run {
+                        fail(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS, CategoryFailureReason.INVALID_DATA)
+                        null
+                    }
+            }
+        } else null
+        val settings = if (PortableRestoreCategory.SETTINGS in modes) {
+            read(listOf(PortableRestoreCategory.SETTINGS)) {
+                val source = artifact(artifacts, PortablePackage.TYPE_APP_SETTINGS)?.stagedFile
+                if (source == null) {
+                    fail(PortableRestoreCategory.SETTINGS, CategoryFailureReason.MISSING_DATA)
+                    null
+                } else if (!source.isFile || source.length() > PortableRecoveryLimits.APP_SETTINGS_BYTES) {
+                    fail(PortableRestoreCategory.SETTINGS, CategoryFailureReason.INVALID_DATA)
+                    null
+                } else (AppSettingsPortableCodec.parse(source.readText(Charsets.UTF_8)) as?
+                    AppSettingsPortableCodec.Result.Ok)?.data
+                    ?: run {
+                        fail(PortableRestoreCategory.SETTINGS, CategoryFailureReason.INVALID_DATA)
+                        null
+                    }
+            }
+        } else null
+
+        // The manifest's declared count is checked for each selected category
+        // that was read, never for an unselected one.
+        if (request.declaredRecordCounts.isNotEmpty()) {
+            val counts = PortableRecoverySemanticValidator.recordCounts(
+                chats, generated, identities, profileImages, memories, rules, lorebooks, endpoints, settings
+            )
+            modes.keys.filter { it !in failures }.forEach { category ->
+                val declared = request.declaredRecordCounts[category] ?: return@forEach
+                if (counts[category] != declared) fail(category, CategoryFailureReason.COUNT_MISMATCH)
+            }
+        }
+
+        return ParsedBackup(
+            chats.takeIf { PortableRestoreCategory.CHATS !in failures },
+            generated,
+            identities.takeIf { identitySelections.none(failures::containsKey) },
+            identityArtifact?.stagedFile,
+            profileImages.takeIf { PortableRestoreCategory.PROFILE_IMAGES !in failures },
+            memories.takeIf { PortableRestoreCategory.MEMORIES !in failures },
+            rules.takeIf { PortableRestoreCategory.MODEL_RULES !in failures },
+            lorebooks.takeIf { PortableRestoreCategory.LOREBOOKS !in failures },
+            endpoints.takeIf { PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS !in failures },
+            settings.takeIf { PortableRestoreCategory.SETTINGS !in failures }
+        )
     }
+
+    private fun invalidOrMissing(present: Boolean): CategoryFailureReason =
+        if (present) CategoryFailureReason.INVALID_DATA else CategoryFailureReason.MISSING_DATA
 
     private fun captureLiveState(
         context: Context,
         modes: Map<PortableRestoreCategory, PortableRestoreMode>,
         identitiesSelected: Boolean,
-        root: File
+        root: File,
+        blame: MutableMap<PortableRestoreCategory, CategoryFailureReason>? = null
     ): PortableRestoreDependencyRead<PortableRestoreStablePlanner.Capture<LiveState>> {
+        val identityModes = modes.keys intersect IDENTITY_CATEGORIES
+        fun unavailable(
+            reason: String,
+            categories: Collection<PortableRestoreCategory>
+        ): PortableRestoreDependencyRead.Unavailable {
+            blame?.let { target ->
+                categories.filter(modes::containsKey).forEach {
+                    target.putIfAbsent(it, CategoryFailureReason.CURRENT_DATA_UNAVAILABLE)
+                }
+            }
+            return PortableRestoreDependencyRead.Unavailable(reason)
+        }
+        fun firstSelected(vararg groups: Collection<PortableRestoreCategory>): List<PortableRestoreCategory> =
+            groups.map { group -> group.filter(modes::containsKey) }.firstOrNull { it.isNotEmpty() }.orEmpty()
         if (!root.mkdirs()) {
             return PortableRestoreDependencyRead.Unavailable("planning storage is unavailable")
         }
@@ -345,14 +532,26 @@ object UnifiedPortableRestore {
             PortableRestoreCategory.GENERATED_IMAGES in modes
         val chats = if (needChats) {
             val current = readCurrentChats(context)
-                ?: return PortableRestoreDependencyRead.Unavailable("current chats are unavailable")
+                ?: return unavailable(
+                    "current chats are unavailable",
+                    firstSelected(
+                        listOf(PortableRestoreCategory.CHATS),
+                        listOf(PortableRestoreCategory.GENERATED_IMAGES)
+                    )
+                )
             generations[PortableRestoreFinalState.Source.CHATS] = chatToken(current)
             current
         } else null
 
         val generated = if (needChats) {
             val current = readCurrentGeneratedImages(context)
-                ?: return PortableRestoreDependencyRead.Unavailable("generated images are unavailable")
+                ?: return unavailable(
+                    "generated images are unavailable",
+                    firstSelected(
+                        listOf(PortableRestoreCategory.GENERATED_IMAGES),
+                        listOf(PortableRestoreCategory.CHATS)
+                    )
+                )
             generations[PortableRestoreFinalState.Source.GENERATED_IMAGES] =
                 Hash.hash(GeneratedImagePortableCatalog.toJson(current))
             current
@@ -363,7 +562,7 @@ object UnifiedPortableRestore {
             when (val read = ProfileImageUsage.readForRestore(context)) {
                 is ProfileImageUsage.RestoreRead.Available -> read.references
                 is ProfileImageUsage.RestoreRead.Unavailable ->
-                    return PortableRestoreDependencyRead.Unavailable(read.reason)
+                    return unavailable(read.reason, listOf(PortableRestoreCategory.PROFILE_IMAGES))
             }
         } else emptyList()
 
@@ -373,7 +572,7 @@ object UnifiedPortableRestore {
             val archive = File(root, "current-identities.zip")
             val manifest = (CompanionBackupExporter.buildBackupZip(context, archive) as?
                 CompanionBackupExporter.BuildResult.Ok)?.manifest
-                ?: return PortableRestoreDependencyRead.Unavailable("current identities are unavailable")
+                ?: return unavailable("current identities are unavailable", identityModes)
             identities = manifest
             identityArchive = archive
         }
@@ -383,7 +582,14 @@ object UnifiedPortableRestore {
             PortableRestoreCategory.MODEL_RULES in modes
         val sharedMemory = if (sharedStoreSelected) {
             readCurrentSharedMemory(context)
-                ?: return PortableRestoreDependencyRead.Unavailable("current shared memory data is unavailable")
+                ?: return unavailable(
+                    "current shared memory data is unavailable",
+                    firstSelected(
+                        listOf(PortableRestoreCategory.MEMORIES),
+                        listOf(PortableRestoreCategory.MODEL_RULES),
+                        identityModes
+                    )
+                )
         } else null
         if (sharedMemory != null) {
             generations[PortableRestoreFinalState.Source.COMPANION_MEMORY_STORE] =
@@ -395,8 +601,9 @@ object UnifiedPortableRestore {
                 CompanionMemoryRestorePlanner.roleplayTables(sharedMemory)
             )
         ) {
-            return PortableRestoreDependencyRead.Unavailable(
-                "identity data changed while the shared database snapshot was captured"
+            return unavailable(
+                "identity data changed while the shared database snapshot was captured",
+                identityModes
             )
         }
 
@@ -404,7 +611,10 @@ object UnifiedPortableRestore {
         val identityReferences = if (needIdentityReferences) {
             sharedMemory?.let(CompanionMemoryRestorePlanner::roleplayTables)
                 ?.let(::memoryReferences)
-                ?: return PortableRestoreDependencyRead.Unavailable("identity relationships are unavailable")
+                ?: return unavailable(
+                    "identity relationships are unavailable",
+                    listOf(PortableRestoreCategory.MEMORIES)
+                )
         } else MemoryReferenceIds()
         if (identitiesSelected || needIdentityUsage || needIdentityReferences) {
             val tokenParts = ArrayList<String>()
@@ -417,21 +627,30 @@ object UnifiedPortableRestore {
         val needProfile = PortableRestoreCategory.PROFILE_IMAGES in modes || identitiesSelected
         val profile = if (needProfile) {
             val current = readCurrentProfileImages(context)
-                ?: return PortableRestoreDependencyRead.Unavailable("profile images are unavailable")
+                ?: return unavailable(
+                    "profile images are unavailable",
+                    firstSelected(listOf(PortableRestoreCategory.PROFILE_IMAGES), identityModes)
+                )
             generations[PortableRestoreFinalState.Source.PROFILE_IMAGES] = profileToken(current)
             current
         } else null
 
         val memories = if (PortableRestoreCategory.MEMORIES in modes || identitiesSelected) {
             val current = sharedMemory?.let(CompanionMemoryRestorePlanner::memoryRows)
-                ?: return PortableRestoreDependencyRead.Unavailable("current memories are unavailable")
+                ?: return unavailable(
+                    "current memories are unavailable",
+                    firstSelected(listOf(PortableRestoreCategory.MEMORIES), identityModes)
+                )
             generations[PortableRestoreFinalState.Source.MEMORY_ROWS] =
                 Hash.hash(MemoryPortableRowFormat.toJson(MemoryPortableGroup.MEMORIES, current))
             current
         } else null
         val rules = if (PortableRestoreCategory.MODEL_RULES in modes) {
             val current = sharedMemory?.let(CompanionMemoryRestorePlanner::modelRuleRows)
-                ?: return PortableRestoreDependencyRead.Unavailable("current model rules are unavailable")
+                ?: return unavailable(
+                    "current model rules are unavailable",
+                    listOf(PortableRestoreCategory.MODEL_RULES)
+                )
             generations[PortableRestoreFinalState.Source.MODEL_RULE_ROWS] =
                 Hash.hash(MemoryPortableRowFormat.toJson(MemoryPortableGroup.MODEL_RULES, current))
             current
@@ -440,7 +659,10 @@ object UnifiedPortableRestore {
         val needLorebooks = PortableRestoreCategory.LOREBOOKS in modes || identitiesSelected
         val lorebooks = if (needLorebooks) {
             val current = readCurrentLorebooks(context)
-                ?: return PortableRestoreDependencyRead.Unavailable("current lorebooks are unavailable")
+                ?: return unavailable(
+                    "current lorebooks are unavailable",
+                    firstSelected(listOf(PortableRestoreCategory.LOREBOOKS), identityModes)
+                )
             generations[PortableRestoreFinalState.Source.LOREBOOKS] =
                 Hash.hash(LorebookPortableCodec.toJson(current))
             current
@@ -449,11 +671,17 @@ object UnifiedPortableRestore {
         val endpoints = if (PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS in modes) {
             val file = File(root, "current-model-endpoints.json")
             if (ModelEndpointPortableBackup.write(context, file) is ModelEndpointPortableBackup.Result.Failed) {
-                return PortableRestoreDependencyRead.Unavailable("current model settings are unavailable")
+                return unavailable(
+                    "current model settings are unavailable",
+                    listOf(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS)
+                )
             }
             val current = (ModelEndpointPortableCodec.parse(file.readText(Charsets.UTF_8)) as?
                 ModelEndpointPortableCodec.Result.Ok)?.data
-                ?: return PortableRestoreDependencyRead.Unavailable("current model settings are unavailable")
+                ?: return unavailable(
+                    "current model settings are unavailable",
+                    listOf(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS)
+                )
             generations[PortableRestoreFinalState.Source.MODEL_ENDPOINT_SETTINGS] =
                 Hash.hash(ModelEndpointPortableCodec.encode(current))
             current
@@ -461,7 +689,10 @@ object UnifiedPortableRestore {
 
         val settings = if (PortableRestoreCategory.SETTINGS in modes) {
             val current = AppSettingsPortableStore.capture(context).getOrNull()
-                ?: return PortableRestoreDependencyRead.Unavailable("current app settings are unavailable")
+                ?: return unavailable(
+                    "current app settings are unavailable",
+                    listOf(PortableRestoreCategory.SETTINGS)
+                )
             generations[PortableRestoreFinalState.Source.APP_SETTINGS] =
                 Hash.hash(AppSettingsPortableCodec.encode(current))
             current
@@ -495,19 +726,52 @@ object UnifiedPortableRestore {
         backup: ParsedBackup,
         live: LiveState,
         identitySelections: List<CompanionCategoryPlanner.Selection>,
-        generations: Map<PortableRestoreFinalState.Source, String>
+        generations: Map<PortableRestoreFinalState.Source, String>,
+        blame: MutableMap<PortableRestoreCategory, CategoryFailureReason>
     ): PlanningResult {
+        val identityModes = modes.keys intersect IDENTITY_CATEGORIES
+        fun blamed(
+            reason: String,
+            failure: CategoryFailureReason,
+            categories: Collection<PortableRestoreCategory>
+        ): PlanningResult.Unavailable {
+            categories.filter(modes::containsKey).forEach { blame.putIfAbsent(it, failure) }
+            return PlanningResult.Unavailable(reason)
+        }
+        fun firstSelected(vararg groups: Collection<PortableRestoreCategory>): List<PortableRestoreCategory> =
+            groups.map { group -> group.filter(modes::containsKey) }.firstOrNull { it.isNotEmpty() }.orEmpty()
+        // The shared memory store carries Memories, Model Rules and identity
+        // rows together; set aside one selected group at a time, most specific first.
+        fun sharedMemoryCulprit(): List<PortableRestoreCategory> = firstSelected(
+            listOf(PortableRestoreCategory.MEMORIES),
+            listOf(PortableRestoreCategory.MODEL_RULES),
+            identityModes
+        )
+        val currentFailure = CategoryFailureReason.CURRENT_DATA_UNAVAILABLE
+        val planningFailure = CategoryFailureReason.PLANNING_FAILED
+        val chatsOrGallery = firstSelected(
+            listOf(PortableRestoreCategory.CHATS), listOf(PortableRestoreCategory.GENERATED_IMAGES)
+        )
         var plannedChat: PlannedChat? = null
         val finalChats = if (PortableRestoreCategory.CHATS in modes) {
-            val current = live.chats ?: return PlanningResult.Unavailable("current chats are unavailable")
-            val incoming = backup.chats ?: return PlanningResult.Unavailable("backup chats are unavailable")
+            val current = live.chats ?: return blamed(
+                "current chats are unavailable",
+                currentFailure,
+                listOf(PortableRestoreCategory.CHATS)
+            )
+            val incoming = backup.chats ?: return blamed(
+                "backup chats are unavailable",
+                planningFailure,
+                listOf(PortableRestoreCategory.CHATS)
+            )
             val prepared = if (modes.getValue(PortableRestoreCategory.CHATS) == PortableRestoreMode.REPLACE) {
                 PortableChatRestoreCoordinator.Prepared(incoming, PortableRestoreMode.REPLACE)
             } else {
                 when (val merged = ChatMergePlanner.plan(current, incoming, request.folderResolutions)) {
                     is ChatMergePlanner.Result.NeedsFolderDecisions ->
                         return PlanningResult.FolderDecisions(merged.collisions)
-                    is ChatMergePlanner.Result.Rejected -> return PlanningResult.Unavailable(merged.detail)
+                    is ChatMergePlanner.Result.Rejected ->
+                        return blamed(merged.detail, planningFailure, listOf(PortableRestoreCategory.CHATS))
                     is ChatMergePlanner.Result.Ready -> PortableChatRestoreCoordinator.Prepared(
                         merged.plan,
                         PortableRestoreMode.MERGE,
@@ -521,7 +785,8 @@ object UnifiedPortableRestore {
 
         val chatImages = when (val scanned = PortableRestoreFinalState.scanChatImageReferences(finalChats)) {
             is PortableRestoreDependencyRead.Available -> scanned.snapshot
-            is PortableRestoreDependencyRead.Unavailable -> return PlanningResult.Unavailable(scanned.reason)
+            is PortableRestoreDependencyRead.Unavailable ->
+                return blamed(scanned.reason, planningFailure, chatsOrGallery)
         }
         var generatedReport: GeneratedImageCategoryPlanner.Report? = null
         var plannedGenerated: PlannedGenerated? = null
@@ -537,7 +802,11 @@ object UnifiedPortableRestore {
                     modes.getValue(PortableRestoreCategory.GENERATED_IMAGES),
                     chatImages.requiredAssetIds
                 ) as? GeneratedImageCategoryPlanner.Result.Ready
-                    ?: return PlanningResult.Unavailable("generated images could not be planned")
+                    ?: return blamed(
+                        "generated images could not be planned",
+                        planningFailure,
+                        listOf(PortableRestoreCategory.GENERATED_IMAGES)
+                    )
                 generatedReport = planned.report
                 plannedGenerated = PlannedGenerated(
                     GeneratedImageRestoreParticipant.PreparedPlan(
@@ -551,9 +820,8 @@ object UnifiedPortableRestore {
                 val currentIds = current.active.mapTo(HashSet()) { it.imageId }
                 val neededFromBackup = chatImages.requiredAssetIds - currentIds
                 val incomingRecords = incoming.snapshot.active.filter { it.imageId in neededFromBackup }
-                if (incomingRecords.mapTo(HashSet()) { it.imageId } != neededFromBackup) {
-                    return PlanningResult.Unavailable("a selected chat image is unavailable")
-                }
+                // An image the backup does not carry stays a missing reference:
+                // the chat is still restored and the image is reported.
                 if (incomingRecords.isEmpty()) current else {
                     val names = incomingRecords.mapTo(HashSet()) { it.assetFileName }
                     val filtered = incoming.copy(
@@ -568,7 +836,11 @@ object UnifiedPortableRestore {
                     val merged = GeneratedImageCategoryPlanner.plan(
                         current, filtered.snapshot, PortableRestoreMode.MERGE
                     ) as? GeneratedImageCategoryPlanner.Result.Ready
-                        ?: return PlanningResult.Unavailable("chat image dependencies could not be planned")
+                        ?: return blamed(
+                            "chat image dependencies could not be planned",
+                            planningFailure,
+                            listOf(PortableRestoreCategory.CHATS)
+                        )
                     generatedReport = merged.report
                     plannedGenerated = PlannedGenerated(
                         GeneratedImageRestoreParticipant.PreparedPlan(
@@ -586,13 +858,25 @@ object UnifiedPortableRestore {
         var lorebookParticipant: LorebookRestoreParticipant.PreparedPlan? = null
         val finalLorebooks = if (PortableRestoreCategory.LOREBOOKS in modes) {
             val current = currentLorebooks
-                ?: return PlanningResult.Unavailable("current lorebooks are unavailable")
+                ?: return blamed(
+                    "current lorebooks are unavailable",
+                    currentFailure,
+                    listOf(PortableRestoreCategory.LOREBOOKS)
+                )
             val incoming = backup.lorebooks
-                ?: return PlanningResult.Unavailable("backup lorebooks are unavailable")
+                ?: return blamed(
+                    "backup lorebooks are unavailable",
+                    planningFailure,
+                    listOf(PortableRestoreCategory.LOREBOOKS)
+                )
             val planned = LorebookCategoryPlanner.plan(
                 current, incoming, modes.getValue(PortableRestoreCategory.LOREBOOKS)
             ) as? LorebookCategoryPlanner.Result.Ready
-                ?: return PlanningResult.Unavailable("lorebooks could not be planned")
+                ?: return blamed(
+                    "lorebooks could not be planned",
+                    planningFailure,
+                    listOf(PortableRestoreCategory.LOREBOOKS)
+                )
             lorebookParticipant = LorebookRestoreParticipant.PreparedPlan(
                 current, incoming, planned.data, planned.report
             )
@@ -604,12 +888,12 @@ object UnifiedPortableRestore {
         var removedLorebookLinks = emptyList<org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink>()
         if (identitySelections.isNotEmpty()) {
             val current = live.identities
-                ?: return PlanningResult.Unavailable("current identities are unavailable")
+                ?: return blamed("current identities are unavailable", currentFailure, identityModes)
             val incoming = backup.identities
-                ?: return PlanningResult.Unavailable("backup identities are unavailable")
+                ?: return blamed("backup identities are unavailable", planningFailure, identityModes)
             val planned = CompanionCategoryPlanner.plan(current, incoming, identitySelections) as?
                 CompanionCategoryPlanner.Result.Ready
-                ?: return PlanningResult.Unavailable("identities could not be planned")
+                ?: return blamed("identities could not be planned", planningFailure, identityModes)
             val finalLorebookIds = finalLorebooks?.books.orEmpty().mapTo(HashSet()) { it.id }
             val restorePlan = CompanionRestorePlanner.plan(planned.manifest, finalLorebookIds)
             val rollbackLorebooks = currentLorebooks?.books.orEmpty().mapTo(HashSet()) { it.id }
@@ -617,7 +901,7 @@ object UnifiedPortableRestore {
             removedLorebookLinks = restorePlan.removedLinks
             identityParticipant = CompanionCategoryRestoreParticipant.PreparedPlan(
                 live.identityArchive
-                    ?: return PlanningResult.Unavailable("current identity snapshot is unavailable"),
+                    ?: return blamed("current identity snapshot is unavailable", currentFailure, identityModes),
                 current,
                 incoming,
                 planned.manifest,
@@ -633,9 +917,17 @@ object UnifiedPortableRestore {
         var memoryReport: MemoryCategoryPlanner.Report? = null
         val plannedMemories = if (PortableRestoreCategory.MEMORIES in modes) {
             val current = live.memories
-                ?: return PlanningResult.Unavailable("current memories are unavailable")
+                ?: return blamed(
+                    "current memories are unavailable",
+                    currentFailure,
+                    listOf(PortableRestoreCategory.MEMORIES)
+                )
             val incoming = backup.memories
-                ?: return PlanningResult.Unavailable("backup memories are unavailable")
+                ?: return blamed(
+                    "backup memories are unavailable",
+                    planningFailure,
+                    listOf(PortableRestoreCategory.MEMORIES)
+                )
             val planned = MemoryCategoryPlanner.plan(
                 MemoryPortableGroup.MEMORIES,
                 current,
@@ -643,7 +935,11 @@ object UnifiedPortableRestore {
                 modes.getValue(PortableRestoreCategory.MEMORIES),
                 finalIdentityReferences
             ) as? MemoryCategoryPlanner.Result.Ready
-                ?: return PlanningResult.Unavailable("memories could not be planned")
+                ?: return blamed(
+                    "memories could not be planned",
+                    planningFailure,
+                    listOf(PortableRestoreCategory.MEMORIES)
+                )
             memoryReport = planned.report
             planned.rows
         } else live.memories
@@ -652,16 +948,28 @@ object UnifiedPortableRestore {
         var plannedModelRules: MemoryPortableRows? = null
         if (PortableRestoreCategory.MODEL_RULES in modes) {
             val current = live.modelRules
-                ?: return PlanningResult.Unavailable("current model rules are unavailable")
+                ?: return blamed(
+                    "current model rules are unavailable",
+                    currentFailure,
+                    listOf(PortableRestoreCategory.MODEL_RULES)
+                )
             val incoming = backup.modelRules
-                ?: return PlanningResult.Unavailable("backup model rules are unavailable")
+                ?: return blamed(
+                    "backup model rules are unavailable",
+                    planningFailure,
+                    listOf(PortableRestoreCategory.MODEL_RULES)
+                )
             val planned = MemoryCategoryPlanner.plan(
                 MemoryPortableGroup.MODEL_RULES,
                 current,
                 incoming,
                 modes.getValue(PortableRestoreCategory.MODEL_RULES)
             ) as? MemoryCategoryPlanner.Result.Ready
-                ?: return PlanningResult.Unavailable("model rules could not be planned")
+                ?: return blamed(
+                    "model rules could not be planned",
+                    planningFailure,
+                    listOf(PortableRestoreCategory.MODEL_RULES)
+                )
             modelRulesReport = planned.report
             plannedModelRules = planned.rows
         }
@@ -671,7 +979,7 @@ object UnifiedPortableRestore {
             PortableRestoreCategory.MODEL_RULES in modes
         val sharedParticipant = if (sharedStoreSelected) {
             val current = live.sharedMemory
-                ?: return PlanningResult.Unavailable("current shared memory data is unavailable")
+                ?: return blamed("current shared memory data is unavailable", currentFailure, sharedMemoryCulprit())
             val shared = CompanionMemoryRestorePlanner.plan(
                 CompanionMemoryRestorePlanner.Input(
                     current = current,
@@ -683,7 +991,7 @@ object UnifiedPortableRestore {
                     finalModelRules = plannedModelRules,
                     finalIdentityReferences = finalIdentityReferences
                 )
-            ) ?: return PlanningResult.Unavailable("shared memory data could not be planned")
+            ) ?: return blamed("shared memory data could not be planned", planningFailure, sharedMemoryCulprit())
             CompanionMemoryRestoreParticipant.PreparedPlan(
                 shared.current,
                 shared.desired,
@@ -707,7 +1015,7 @@ object UnifiedPortableRestore {
                 }
                 if (category == null || category !in modes) finalUsage.add(
                     PortableRestoreFinalState.IdentityProfileImageReference(
-                        category, reference.identityId, reference.imageHash
+                        category, reference.identityId, reference.imageHash, reference.name
                     )
                 )
             }
@@ -715,9 +1023,17 @@ object UnifiedPortableRestore {
         var profileParticipant: ProfileImageRestoreParticipant.PreparedPlan? = null
         val finalProfileRecords = if (PortableRestoreCategory.PROFILE_IMAGES in modes) {
             val current = live.profileImages
-                ?: return PlanningResult.Unavailable("current profile images are unavailable")
+                ?: return blamed(
+                    "current profile images are unavailable",
+                    currentFailure,
+                    listOf(PortableRestoreCategory.PROFILE_IMAGES)
+                )
             val incoming = backup.profileImages
-                ?: return PlanningResult.Unavailable("backup profile images are unavailable")
+                ?: return blamed(
+                    "backup profile images are unavailable",
+                    planningFailure,
+                    listOf(PortableRestoreCategory.PROFILE_IMAGES)
+                )
             val protected = LinkedHashSet<String>()
             finalUsage.mapTo(protected) { it.imageHash }
             finalIdentities?.let { manifest ->
@@ -734,7 +1050,11 @@ object UnifiedPortableRestore {
                 modes.getValue(PortableRestoreCategory.PROFILE_IMAGES),
                 protected
             ) as? ProfileImageCategoryPlanner.Result.Ready
-                ?: return PlanningResult.Unavailable("profile images could not be planned")
+                ?: return blamed(
+                    "profile images could not be planned",
+                    planningFailure,
+                    listOf(PortableRestoreCategory.PROFILE_IMAGES)
+                )
             profileParticipant = ProfileImageRestoreParticipant.PreparedPlan(
                 current, incoming, planned.records, planned.report
             )
@@ -744,9 +1064,17 @@ object UnifiedPortableRestore {
         var endpointParticipant: ModelEndpointRestoreParticipant.PreparedPlan? = null
         if (PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS in modes) {
             val current = live.modelEndpoints
-                ?: return PlanningResult.Unavailable("current model settings are unavailable")
+                ?: return blamed(
+                    "current model settings are unavailable",
+                    currentFailure,
+                    listOf(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS)
+                )
             val incoming = backup.modelEndpoints
-                ?: return PlanningResult.Unavailable("backup model settings are unavailable")
+                ?: return blamed(
+                    "backup model settings are unavailable",
+                    planningFailure,
+                    listOf(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS)
+                )
             val merged = if (modes.getValue(PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS) ==
                 PortableRestoreMode.REPLACE
             ) null else ModelEndpointMergePlanner.merge(current, incoming)
@@ -760,9 +1088,17 @@ object UnifiedPortableRestore {
 
         val settingsParticipant = if (PortableRestoreCategory.SETTINGS in modes) {
             val current = live.settings
-                ?: return PlanningResult.Unavailable("current app settings are unavailable")
+                ?: return blamed(
+                    "current app settings are unavailable",
+                    currentFailure,
+                    listOf(PortableRestoreCategory.SETTINGS)
+                )
             val incoming = backup.settings
-                ?: return PlanningResult.Unavailable("backup app settings are unavailable")
+                ?: return blamed(
+                    "backup app settings are unavailable",
+                    planningFailure,
+                    listOf(PortableRestoreCategory.SETTINGS)
+                )
             AppSettingsRestoreParticipant.PreparedPlan(current, incoming)
         } else null
 
@@ -789,7 +1125,8 @@ object UnifiedPortableRestore {
             )
         )) {
             is PortableRestoreDependencyRead.Available -> built.snapshot
-            is PortableRestoreDependencyRead.Unavailable -> return PlanningResult.Unavailable(built.reason)
+            is PortableRestoreDependencyRead.Unavailable ->
+                return blamed(built.reason, planningFailure, chatsOrGallery)
         }
         return PlanningResult.Ready(
             PlannedRestore(
