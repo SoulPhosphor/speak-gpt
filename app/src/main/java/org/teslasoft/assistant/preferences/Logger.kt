@@ -57,6 +57,39 @@ class Logger {
         }
 
         /**
+         * Synchronously append one Error Log entry and confirm it reached
+         * encrypted storage before returning. Use this only when the caller is
+         * about to restart/terminate the process and an apply()-deferred write
+         * could otherwise be lost.
+         */
+        fun logCrashDurable(
+            context: Context,
+            tag: String,
+            level: String,
+            message: String
+        ): Boolean {
+            val lvl = level.lowercase()
+            if (lvl != "info" && lvl != "error" && lvl != "warning" &&
+                lvl != "debug" && lvl != "verbose"
+            ) return false
+
+            return try {
+                val timestamp = LocalDateTime.now().format(LOG_TIME_FORMAT)
+                val logString = "[$timestamp] [$tag] [${lvl.uppercase()}] $message\n"
+                val log = trimByEntries(
+                    "${getCrashLog(context)}$logString",
+                    ERROR_LOG_MAX_ENTRIES,
+                    ERROR_LOG_MAX_AGE_DAYS
+                )
+                EncryptedPreferences.setEncryptedPreferenceCommit(
+                    context, "logs", "crash", log
+                )
+            } catch (_: Exception) {
+                false
+            }
+        }
+
+        /**
          * Clear crash log
          * */
         fun clearCrashLog(context: Context) {
