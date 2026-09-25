@@ -107,13 +107,15 @@ If Create New Folder needs a different name:
 ## Progress and Results
 
 - Progress: **Restoring selected data. Please wait. Do not close the app.**
-- Success title: **Restore Complete**
-- Success message: **The selected data was restored.**
-- Failure title: **Restore Failed**
+- Success title: **Restoration Complete** (no message; action **Okay**)
+- Partial-success title: **Restoration Partly Successful**
+- Failure title: **Restoration Failed**
 - Failure message: **Nothing was changed.**
+- Not-a-backup message (the chosen file is not a Recovery Backup package):
+  **This file is not a valid recovery backup. Please try again with a valid file.**
 - Failure reason with category: **%1$s could not be restored. Reason: %2$s**
 - Failure reason without category: **Reason: %1$s**
-- Completed-cleanup-pending title: **Restore Complete**
+- Completed-cleanup-pending title: **Restoration Complete**
 - Completed-cleanup-pending message: **The selected data was restored, but cleanup could not finish. Choose Okay to finish recovery before starting another restore.**
 - Rollback-failed title: **Restore Recovery Needed**
 - Rollback-failed message: **The app could not restore all previous data after the restore failed. Some selected data may have changed. Choose Okay to retry recovery before using Backup & Restore again.**
@@ -124,6 +126,70 @@ If Create New Folder needs a different name:
 Only a failure that fully preserved or restored the previous state may say
 **Nothing was changed.** A completed restore with pending cleanup and a failed
 rollback use their dedicated truthful messages above.
+
+## Partly Successful Results (owner-approved, September 2026)
+
+**Restoration Partly Successful** appears when at least one selected category
+was restored and anything was not restored or a missing reference was found.
+**Restoration Failed** is reserved for whole-package failures, fatal
+write/rollback failures, and restores where nothing selected could be restored.
+
+The dialog body is the applicable sentences, a blank line, then one problem per
+line. Long lists scroll. The same lines are written as one Error Log entry per
+restore.
+
+- Not-restored sentence: **Some items could not be restored. Details have been saved to the Error Log.**
+- Missing-reference sentence: **Some existing data has missing references. Details have been saved to the Error Log.**
+- Whole category not restored (Stage 1 punctuation, kept in Stage 2):
+  **%1$s could not be restored. Reason: %2$s**
+- Missing chat image (dialog):
+  **Chat "%1$s" — image generated %2$s with %3$s: "%4$s" — file missing**
+  (%4$s is the first 10 words of the image prompt.)
+- Missing chat image (Error Log): the same line ending
+  **— file %5$s is missing**, naming the stored file.
+- Missing identity picture: **%1$s "%2$s" — profile picture missing**, where
+  %1$s is **Companion**, **Glamour** or **Roleplay Character**.
+- Missing default picture: **Default User Image — profile picture missing**
+
+The reports may show the first 10 words of an image prompt or of a memory, and
+a generated image's stored file name, because the owner approved them to help
+identify the affected item (September 2026). They still never show full
+message or prompt text, credentials, database keys, or file paths.
+
+### Record-level lines (Stage 2, approved wording, not yet built)
+
+Formats:
+
+- Skipped record: **Chat "Evening Walk" was not restored: its ID is invalid**
+- Optional link dropped, target failed: **Campaign "Northreach" was restored without its world "Aldra", which could not be restored**
+- Optional link dropped, target not in the backup, name known: **Companion "Aria" was restored without its lorebook "Old Tales", which is not in the backup**
+- Optional link dropped, target not in the backup, name unknown: **Campaign "Northreach" was restored without its world, which is not in the backup**
+- Chat restored without its folder: **Chat "Evening Walk" was restored without its folder "Work", which is not in the backup** (unnamed form when the folder name is unknown)
+- Record without its own name, described by its parent: **A trigger phrase for lorebook entry "Tavern" was not restored: its entry could not be restored**
+- Memory: named by its first 10 words, for example **Memory "She prefers tea in the morning and…" was not restored: …**
+- Setting: named by its internal setting key, exactly as stored (no display names).
+- Coupled settings: **Setting group "TTS provider and voice" was not restored: its value is not valid**
+
+Reasons:
+
+| Situation | Reason |
+|---|---|
+| Invalid ID | its ID is invalid |
+| Chat ID does not match its saved data | its ID doesn't match its saved data |
+| Duplicate ID with different data | another item has the same ID with different content |
+| Invalid message ID inside a chat | one of its messages has an invalid ID |
+| Duplicate message ID | one of its messages has the same ID as another message |
+| Credential found | it contains a credential, which backups may not include |
+| Invalid setting value | its value is not valid |
+| Malformed field in a record | one of its details is missing or not valid |
+| Unsupported setting type | this version can't restore this kind of setting |
+| Unsupported format | it uses a format this version can't read |
+| Missing or bad image | its image file is missing or doesn't match |
+| Parent was in the backup but failed | its <parent> could not be restored |
+| Parent is not in the backup | its <parent> is not in the backup |
+| Unknown corruption (fallback only) | its data is damaged |
+
+An exact duplicate record (same ID, identical content) produces no message.
 
 ## Conflict Report
 
@@ -139,8 +205,9 @@ Reports identify items by category and user-visible name when available. They
 must never expose message text, prompt bodies, credentials, database keys, or
 internal file paths.
 
-The Restore Complete dialog appears first. If the restore has report details,
-its **Okay** action opens the separate Restore Report dialog.
+The Restoration Complete or Restoration Partly Successful dialog appears
+first. If the restore has conflict-report details, its **Okay** action opens the
+separate Restore Report dialog.
 
 ## Protected Backup Unlock
 
