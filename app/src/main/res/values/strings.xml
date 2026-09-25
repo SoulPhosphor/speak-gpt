@@ -2196,6 +2196,8 @@
     <string name="backup_err_mistyped_code">Invalid or mistyped Recovery Code.</string>
     <string name="backup_err_wrong_key_or_header">This Recovery Code belongs to a different Recovery Key, or the backup header is damaged.</string>
     <string name="backup_err_damaged">The backup is damaged or has been altered.</string>
+    <!-- The chosen file is not a Recovery Backup package at all (owner-approved, September 2026). -->
+    <string name="backup_err_not_recovery_backup">This file is not a valid recovery backup. Please try again with a valid file.</string>
     <string name="backup_err_unsupported_protection">Unsupported or invalid backup protection settings.</string>
     <!-- Restore From Backup (owner-approved wording, verbatim; do not reword
          without asking). Chats-only same-install restore of the Phase 9 engine:

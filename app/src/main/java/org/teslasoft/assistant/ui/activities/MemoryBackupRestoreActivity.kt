@@ -921,7 +921,13 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             runOnUiThread {
                 if (root == null || packageFile == null || inspected !is PortablePackage.InspectResult.Ok) {
                     PortableStaging.delete(root)
-                    showPortableFailure(getString(R.string.backup_err_damaged))
+                    // A known header problem names its own cause; only an
+                    // unreadable copy falls back to the damaged message.
+                    showPortableFailure(
+                        if (inspected is PortablePackage.InspectResult.Invalid) {
+                            portableErrorMessage(inspected.error)
+                        } else getString(R.string.backup_err_damaged)
+                    )
                     return@runOnUiThread
                 }
                 pendingPortableRestore = PendingPortableRestore(
@@ -1285,7 +1291,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         PortablePackageFormat.RestoreError.WRONG_KEY_OR_HEADER -> R.string.backup_err_wrong_key_or_header
         PortablePackageFormat.RestoreError.UNSUPPORTED_PROTECTION -> R.string.backup_err_unsupported_protection
         PortablePackageFormat.RestoreError.TOO_LARGE -> R.string.portable_restore_too_large
-        PortablePackageFormat.RestoreError.NOT_A_V2_PACKAGE,
+        PortablePackageFormat.RestoreError.NOT_A_V2_PACKAGE -> R.string.backup_err_not_recovery_backup
         PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED -> R.string.backup_err_damaged
     })
 
