@@ -66,7 +66,8 @@ class UnifiedPortableRestoreSelectionTest {
             listOf(UnifiedPortableRestore.CategoryFailure(
                 PortableRestoreCategory.CHATS,
                 UnifiedPortableRestore.CategoryFailureReason.CHAT_DATA,
-                PortableChatRestorePlan.Reason.MALFORMED
+                PortableChatRestorePlan.Reason.MALFORMED,
+                "chats reader rejected the data: MALFORMED"
             )),
             built.categoryFailures
         )
