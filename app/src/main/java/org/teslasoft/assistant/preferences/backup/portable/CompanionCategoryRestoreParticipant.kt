@@ -38,6 +38,7 @@ class CompanionCategoryRestoreParticipant internal constructor(
 
     data class PreparedPlan(
         val currentArchive: File,
+        val incomingArchive: File,
         val current: CompanionBackupManifest,
         val incoming: CompanionBackupManifest,
         val desired: CompanionBackupManifest,
@@ -81,7 +82,7 @@ class CompanionCategoryRestoreParticipant internal constructor(
         selections: List<CompanionCategoryPlanner.Selection>,
         stagingRoot: File
     ) : this(
-        plan.currentArchive,
+        plan.incomingArchive,
         selections,
         stagingRoot,
         AndroidBackend(context.applicationContext),
