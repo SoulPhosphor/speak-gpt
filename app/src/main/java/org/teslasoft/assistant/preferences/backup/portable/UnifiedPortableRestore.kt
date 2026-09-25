@@ -1070,6 +1070,8 @@ object UnifiedPortableRestore {
             identityParticipant = CompanionCategoryRestoreParticipant.PreparedPlan(
                 live.identityArchive
                     ?: return blamed("current identity snapshot is unavailable", currentFailure, identityModes),
+                backup.identityArchive
+                    ?: return blamed("backup identity archive is unavailable", planningFailure, identityModes),
                 current,
                 incoming,
                 planned.manifest,
