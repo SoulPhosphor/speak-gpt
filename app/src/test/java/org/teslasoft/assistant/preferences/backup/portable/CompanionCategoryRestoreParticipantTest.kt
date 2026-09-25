@@ -9,12 +9,14 @@ import org.junit.Test
 import org.teslasoft.assistant.preferences.backup.companion.ActivationPromptEntry
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupExporter
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupFormat
+import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupImage
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupManifest
 import org.teslasoft.assistant.preferences.backup.companion.CompanionBackupValidator
 import org.teslasoft.assistant.preferences.backup.companion.CompanionCategoryPlanner
 import org.teslasoft.assistant.preferences.backup.companion.CompanionProfileEntry
 import org.teslasoft.assistant.preferences.backup.companion.CompanionRestorePlanner
 import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
+import org.teslasoft.assistant.util.Hash
 
 class CompanionCategoryRestoreParticipantTest {
     @Test
@@ -56,6 +58,64 @@ class CompanionCategoryRestoreParticipantTest {
 
             assertTrue(participant.rollback())
             assertEquals(current, backend.live)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `precomputed staging reads incoming images from the backup archive`() {
+        val root = Files.createTempDirectory("identity-incoming-image").toFile()
+        try {
+            val imageBytes = "backup-only-image".toByteArray(Charsets.UTF_8)
+            val imageHash = Hash.hash(imageBytes)
+            val imageFile = File(root, "backup-only.jpg").apply { writeBytes(imageBytes) }
+
+            val current = manifest()
+            val incoming = manifestWith(
+                profile(
+                    core = "",
+                    coreName = ""
+                ).copy(avatarRef = imageHash)
+            ).copy(
+                images = listOf(
+                    CompanionBackupImage(
+                        imageHash,
+                        CompanionBackupFormat.imageEntryName(imageHash)
+                    )
+                )
+            )
+            val currentArchive = File(root, "current.zip")
+            val incomingArchive = File(root, "incoming.zip")
+            CompanionBackupExporter.writeZip(currentArchive, current, emptyMap())
+            CompanionBackupExporter.writeZip(
+                incomingArchive,
+                incoming,
+                mapOf(imageHash to imageFile)
+            )
+
+            val validatedCurrent = validated(currentArchive)
+            val validatedIncoming = validated(incomingArchive)
+            val plan = CompanionCategoryRestoreParticipant.PreparedPlan(
+                currentArchive = currentArchive,
+                incomingArchive = incomingArchive,
+                current = validatedCurrent,
+                incoming = validatedIncoming,
+                desired = validatedIncoming,
+                report = CompanionCategoryPlanner.Report(emptyList(), 0),
+                restorePlan = CompanionRestorePlanner.plan(validatedIncoming, emptySet()),
+                rollbackPlan = CompanionRestorePlanner.plan(validatedCurrent, emptySet())
+            )
+            val participant = CompanionCategoryRestoreParticipant(
+                plan.incomingArchive,
+                listOf(replaceCompanions()),
+                File(root, "stage"),
+                FakeBackend(validatedCurrent),
+                plan
+            )
+
+            assertTrue(participant.validate())
+            assertTrue(participant.stage())
         } finally {
             root.deleteRecursively()
         }
@@ -241,6 +301,7 @@ class CompanionCategoryRestoreParticipantTest {
         val desired = incoming
         val plan = CompanionCategoryRestoreParticipant.PreparedPlan(
             currentArchive = currentArchive,
+            incomingArchive = incomingArchive,
             current = current,
             incoming = incoming,
             desired = desired,
