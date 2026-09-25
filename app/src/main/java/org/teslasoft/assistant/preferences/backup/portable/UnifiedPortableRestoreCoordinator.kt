@@ -661,7 +661,7 @@ object UnifiedPortableRestoreCoordinator {
                 "" + issues.log + reasons
             ).joinToString("\n")
         try {
-            Logger.log(context, "crash", "PortableRestore", "warning", text)
+            Logger.logCrashDurable(context, "PortableRestore", "warning", text)
         } catch (_: Exception) { /* logging is best-effort */ }
     }
 
