@@ -11,7 +11,7 @@ approved. Owner decisions in the active conversation outrank this file.
 | Ref | Commit | Notes |
 |---|---|---|
 | `beta/new-client` | `cbcdd46` | Fast-forwarded from `dd66418`. Publishes the `beta-latest` Beta APK. |
-| `claude/backup-restore-failure-1oiysd` | `cbcdd46` | Same commits as `beta/new-client`. |
+| `claude/backup-restore-failure-1oiysd` | this handoff commit | `cbcdd46` plus this handoff file only. |
 | `claude/backup-restore-page-layout-efmyqq` | `dd66418` | Starting point of this work. Unchanged. |
 | `main` (old client) | `6a5348c` | Unchanged. |
 
