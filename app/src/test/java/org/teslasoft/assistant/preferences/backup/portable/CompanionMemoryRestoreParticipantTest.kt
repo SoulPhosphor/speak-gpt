@@ -127,6 +127,27 @@ class CompanionMemoryRestoreParticipantTest {
         assertFalse(File(root, "journal").exists())
     }
 
+    @Test
+    fun `staging names the table and column that changed since planning without their values`() {
+        val planned = state("before")
+        val backend = FakeBackend(state("edited meanwhile"))
+        val root = Files.createTempDirectory("shared-memory-changed").toFile()
+
+        val result = SelectedCategoryRestoreTransaction.execute(
+            File(root, "journal"),
+            listOf(participant(planned, state("after"), backend, File(root, "shared")))
+        ) as SelectedCategoryRestoreTransaction.Result.Failed
+
+        assertEquals(SelectedCategoryRestoreTransaction.Failure.STAGING_FAILED, result.reason)
+        assertEquals(CompanionMemoryRestoreParticipant.CATEGORY_KEY, result.categoryKey)
+        assertEquals(
+            "live_data_changed_since_planning: table memories column content: value differs (String)",
+            result.detail
+        )
+        assertFalse(result.detail!!.contains("before"))
+        assertFalse(result.detail!!.contains("edited"))
+    }
+
     private fun participant(
         current: MemorySharedRestoreRows,
         desired: MemorySharedRestoreRows,

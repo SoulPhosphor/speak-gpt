@@ -61,37 +61,44 @@ class ModelEndpointRestoreParticipant internal constructor(
 
     override val categoryKey: String = PortableRestoreCategory.MODEL_ENDPOINT_SETTINGS.key
 
+    private val note = PortableRestoreFailureNote()
+
+    override fun failureDetail(): String? = note.detail
+
     override fun validate(): Boolean {
+        note.reset()
         precomputed?.let {
             validatedIncoming = it.incoming
             mergeReport = it.report
             return true
         }
-        val source = incoming ?: return false
+        val source = incoming ?: return note.fail("no_backup_data")
         if (!source.isFile || source.length() > ModelEndpointPortableCodec.MAX_ARTIFACT_BYTES) {
-            return false
+            return note.fail("backup_data_missing_or_too_large")
         }
         val parsed = ModelEndpointPortableCodec.parse(source.readText(Charsets.UTF_8))
         validatedIncoming = (parsed as? ModelEndpointPortableCodec.Result.Ok)?.data
-        return validatedIncoming != null
+        return validatedIncoming != null || note.fail("backup_data_rejected_by_codec")
     }
 
     override fun stage(): Boolean {
-        val backup = validatedIncoming ?: return false
-        if (!stagingRoot.exists() && !stagingRoot.mkdirs()) return false
+        note.reset()
+        val backup = validatedIncoming ?: return note.fail("backup_data_not_validated")
+        if (!stagingRoot.exists() && !stagingRoot.mkdirs()) return note.fail("staging_directory_unavailable")
         val currentFile = File(stagingRoot, CURRENT_FILE)
         val current = precomputed?.current ?: run {
             if (ModelEndpointPortableBackup.write(appContext, currentFile) is
                 ModelEndpointPortableBackup.Result.Failed
-            ) return false
+            ) return note.fail("current_settings_export_failed")
             (ModelEndpointPortableCodec.parse(currentFile.readText(Charsets.UTF_8)) as?
-                ModelEndpointPortableCodec.Result.Ok)?.data ?: return false
+                ModelEndpointPortableCodec.Result.Ok)?.data
+                ?: return note.fail("current_settings_rejected_by_codec")
         }
         if (precomputed != null && !AtomicFileWriter.writeAndVerify(
                 currentFile,
                 ModelEndpointPortableCodec.encode(current)
             )
-        ) return false
+        ) return note.fail("staged_write_failed: $CURRENT_FILE")
         val desired = precomputed?.desired ?: if (mode == PortableRestoreMode.REPLACE) {
             backup
         } else {
@@ -102,35 +109,47 @@ class ModelEndpointRestoreParticipant internal constructor(
                 desiredFile,
                 ModelEndpointPortableCodec.encode(desired)
             )
-        ) return false
+        ) return note.fail("staged_write_failed: $DESIRED_FILE")
         if (ModelEndpointPortableCodec.parse(desiredFile.readText(Charsets.UTF_8)) !is
             ModelEndpointPortableCodec.Result.Ok
-        ) return false
+        ) return note.fail("staged_copy_rejected_by_codec: $DESIRED_FILE")
 
-        val originalGeneration = state.stage(current) ?: return false
+        val originalGeneration = state.stage(current)
+            ?: return note.fail("settings_generation_not_saved: current")
         // Refuse a stale precomputed rollback snapshot. The outer generation
         // fence normally catches this; this local check closes the remaining
         // gap before the transaction journal declares the participant staged.
-        if (state.activeGenerationId() != originalGeneration) return false
-        val desiredGeneration = state.stage(desired) ?: return false
-        return AtomicFileWriter.writeAndVerify(
+        if (state.activeGenerationId() != originalGeneration) {
+            return note.fail("live_settings_changed_since_planning")
+        }
+        val desiredGeneration = state.stage(desired)
+            ?: return note.fail("settings_generation_not_saved: desired")
+        return (AtomicFileWriter.writeAndVerify(
             File(stagingRoot, ORIGINAL_GENERATION_FILE), originalGeneration
         ) && AtomicFileWriter.writeAndVerify(
             File(stagingRoot, DESIRED_GENERATION_FILE), desiredGeneration
-        )
+        )) || note.fail("staged_write_failed: generation ids")
     }
 
-    override fun apply(): Boolean = activate(File(stagingRoot, DESIRED_GENERATION_FILE))
+    override fun apply(): Boolean {
+        note.reset()
+        return activate(File(stagingRoot, DESIRED_GENERATION_FILE))
+    }
 
-    override fun rollback(): Boolean = activate(File(stagingRoot, ORIGINAL_GENERATION_FILE))
+    override fun rollback(): Boolean {
+        note.reset()
+        return activate(File(stagingRoot, ORIGINAL_GENERATION_FILE))
+    }
 
     override fun cleanup() {
         stagingRoot.deleteRecursively()
     }
 
     private fun activate(file: File): Boolean {
-        if (!file.isFile || file.length() > MAX_GENERATION_ID_BYTES) return false
-        return state.activate(file.readText(Charsets.UTF_8))
+        if (!file.isFile || file.length() > MAX_GENERATION_ID_BYTES) {
+            return note.fail("staged_copy_unreadable: ${file.name}")
+        }
+        return state.activate(file.readText(Charsets.UTF_8)) || note.fail("settings_generation_activation_failed")
     }
 
     companion object {

@@ -45,6 +45,9 @@ class CompanionMemoryRestoreParticipant internal constructor(
             requireExisting: Boolean
         ): Boolean
         fun removeProvisionedStore(): Boolean
+
+        /** Non-content reason for the most recent failed call, if known. */
+        fun lastFailure(): String? = null
     }
 
     internal constructor(
@@ -59,81 +62,148 @@ class CompanionMemoryRestoreParticipant internal constructor(
 
     override val categoryKey: String = CATEGORY_KEY
 
+    private val note = PortableRestoreFailureNote()
+
+    override fun failureDetail(): String? = note.detail
+
     val memoryReport: MemoryCategoryPlanner.Report? get() = precomputed?.memoryReport
     val modelRulesReport: MemoryCategoryPlanner.Report? get() = precomputed?.modelRulesReport
 
-    override fun validate(): Boolean = precomputed?.let { plan ->
-        MemorySharedRestoreRowFormat.valid(plan.current) &&
-            MemorySharedRestoreRowFormat.valid(plan.desired) &&
-            plan.affectedTables.isNotEmpty() &&
-            plan.affectedTables.all { it in MemorySharedRestoreRowFormat.tableNames }
-    } == true
+    override fun validate(): Boolean {
+        note.reset()
+        val plan = precomputed ?: return note.fail("no_prepared_plan")
+        MemorySharedRestoreRowFormat.invalidReason(plan.current)?.let {
+            return note.fail("current_rows_invalid: $it")
+        }
+        MemorySharedRestoreRowFormat.invalidReason(plan.desired)?.let {
+            return note.fail("planned_rows_invalid: $it")
+        }
+        if (plan.affectedTables.isEmpty() ||
+            !plan.affectedTables.all { it in MemorySharedRestoreRowFormat.tableNames }
+        ) return note.fail("affected_tables_invalid")
+        return true
+    }
 
     override fun stage(): Boolean {
-        val plan = precomputed ?: return false
+        note.reset()
+        val plan = precomputed ?: return note.fail("no_prepared_plan")
         return try {
             if (stagingRoot.exists()) {
-                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) return false
-            } else if (!stagingRoot.mkdirs()) return false
+                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) {
+                    return note.fail("staging_directory_not_empty")
+                }
+            } else if (!stagingRoot.mkdirs()) return note.fail("staging_directory_unavailable")
 
             val provisionedBefore = backend.isProvisioned()
-            val exactCurrent = backend.snapshot() ?: return false
-            if (backend.isProvisioned() != provisionedBefore) return false
-            if (exactCurrent != plan.current) return false
-            if (!RestoreProvisioningState.write(stagingRoot, provisionedBefore)) return false
+            val exactCurrent = backend.snapshot() ?: return note.fail(
+                "live_snapshot_unavailable: ${backend.lastFailure() ?: "no_reason_given"}"
+            )
+            if (backend.isProvisioned() != provisionedBefore) {
+                return note.fail("database_provisioning_changed_during_snapshot")
+            }
+            if (exactCurrent != plan.current) {
+                return note.fail(
+                    "live_data_changed_since_planning: " +
+                        PortableRestoreDiagnostics.tableDifference(plan.current.tables, exactCurrent.tables)
+                )
+            }
+            if (!RestoreProvisioningState.write(stagingRoot, provisionedBefore)) {
+                return note.fail("staged_write_failed: provisioning state")
+            }
             if (!writeRows(CURRENT_JSON, exactCurrent) || !writeRows(DESIRED_JSON, plan.desired)) {
                 return false
             }
-            if (!writeAffected(plan.affectedTables)) return false
-            readRows(CURRENT_JSON) == exactCurrent &&
-                readRows(DESIRED_JSON) == plan.desired &&
-                readAffected() == plan.affectedTables
-        } catch (_: Exception) {
-            false
+            if (!writeAffected(plan.affectedTables)) return note.fail("staged_write_failed: $AFFECTED_JSON")
+            if (!stagedCopyMatches(CURRENT_JSON, exactCurrent)) return false
+            if (!stagedCopyMatches(DESIRED_JSON, plan.desired)) return false
+            if (readAffected() != plan.affectedTables) {
+                return note.fail("staged_copy_mismatch: $AFFECTED_JSON")
+            }
+            true
+        } catch (e: Exception) {
+            note.unexpected(e)
         }
     }
 
     override fun apply(): Boolean {
+        note.reset()
         val desired = readRows(DESIRED_JSON) ?: return false
-        val affected = readAffected() ?: return false
-        val wasProvisioned = RestoreProvisioningState.read(stagingRoot) ?: return false
+        val affected = readAffected() ?: return note.fail("staged_copy_unreadable: $AFFECTED_JSON")
+        val wasProvisioned = RestoreProvisioningState.read(stagingRoot)
+            ?: return note.fail("staged_copy_unreadable: provisioning state")
         if (!wasProvisioned && !backend.isProvisioned() && !requiresStore(desired, affected)) {
             return true
         }
-        return backend.replace(desired, affected, requireExisting = false)
+        if (!backend.replace(desired, affected, requireExisting = false)) {
+            return note.fail("database_write_failed: ${backend.lastFailure() ?: "no_reason_given"}")
+        }
+        return true
     }
 
     override fun rollback(): Boolean {
+        note.reset()
         val current = readRows(CURRENT_JSON) ?: return false
-        val affected = readAffected() ?: return false
-        val wasProvisioned = RestoreProvisioningState.read(stagingRoot) ?: return false
+        val affected = readAffected() ?: return note.fail("staged_copy_unreadable: $AFFECTED_JSON")
+        val wasProvisioned = RestoreProvisioningState.read(stagingRoot)
+            ?: return note.fail("staged_copy_unreadable: provisioning state")
 
         // A process may die after the outer journal marks this participant as
         // started but before the first database open. Recovery must not create
         // a new empty database merely to restore the absence of one.
         if (!backend.isProvisioned()) {
-            return if (wasProvisioned) false else backend.removeProvisionedStore()
+            if (wasProvisioned) return note.fail("database_missing_but_existed_before_restore")
+            return backend.removeProvisionedStore() || note.fail("database_removal_failed")
         }
-        if (!backend.replace(current, affected, requireExisting = true)) return false
-        return wasProvisioned || backend.removeProvisionedStore()
+        if (!backend.replace(current, affected, requireExisting = true)) {
+            return note.fail("database_write_failed: ${backend.lastFailure() ?: "no_reason_given"}")
+        }
+        return wasProvisioned || backend.removeProvisionedStore() || note.fail("database_removal_failed")
+    }
+
+    /** Reads a staged file back and requires it to equal what was written. */
+    private fun stagedCopyMatches(name: String, expected: MemorySharedRestoreRows): Boolean {
+        val staged = readRows(name) ?: return false
+        if (staged == expected) return true
+        return note.fail(
+            "staged_copy_mismatch: $name: " +
+                PortableRestoreDiagnostics.tableDifference(expected.tables, staged.tables)
+        )
     }
 
     override fun cleanup() {
         stagingRoot.deleteRecursively()
     }
 
-    private fun writeRows(name: String, rows: MemorySharedRestoreRows): Boolean =
-        AtomicFileWriter.writeAndVerify(
-            File(stagingRoot, name),
+    private fun writeRows(name: String, rows: MemorySharedRestoreRows): Boolean {
+        val json = try {
             MemorySharedRestoreRowFormat.toJson(rows)
-        )
+        } catch (e: Exception) {
+            val invalid = MemorySharedRestoreRowFormat.invalidReason(rows)
+            return note.fail(
+                "staged_encode_failed: $name: " + (invalid ?: PortableRestoreDiagnostics.unexpected(e))
+            )
+        }
+        return AtomicFileWriter.writeAndVerify(File(stagingRoot, name), json) ||
+            note.fail("staged_write_failed: $name")
+    }
 
+    /** Null when unreadable; the reason is recorded in [note]. */
     private fun readRows(name: String): MemorySharedRestoreRows? {
         val file = File(stagingRoot, name)
-        if (!file.isFile || file.length() > MAX_JSON_BYTES) return null
+        if (!file.isFile) {
+            note.fail("staged_copy_unreadable: $name: file is missing")
+            return null
+        }
+        if (file.length() > MAX_JSON_BYTES) {
+            note.fail("staged_copy_unreadable: $name: file is larger than the size limit")
+            return null
+        }
         return try {
-            MemorySharedRestoreRowFormat.parse(file.readText(Charsets.UTF_8))
-        } catch (_: Exception) {
+            MemorySharedRestoreRowFormat.parse(file.readText(Charsets.UTF_8)) {
+                note.fail("staged_copy_unreadable: $name: $it")
+            }
+        } catch (e: Exception) {
+            note.fail("staged_copy_unreadable: $name: ${PortableRestoreDiagnostics.unexpected(e)}")
             null
         }
     }
@@ -172,12 +242,21 @@ class CompanionMemoryRestoreParticipant internal constructor(
 
         override fun isProvisioned(): Boolean = MemoryStore.isProvisioned(app)
 
+        private var failure: String? = null
+
+        override fun lastFailure(): String? = failure
+
         override fun snapshot(): MemorySharedRestoreRows? {
+            failure = null
             if (!isProvisioned()) return MemorySharedRestoreRowFormat.empty()
-            if (DatabaseHealthState.isDegraded(app, BackupType.MEMORY)) return null
+            if (DatabaseHealthState.isDegraded(app, BackupType.MEMORY)) {
+                failure = "memory database is marked degraded"
+                return null
+            }
             return try {
                 MemoryStore.getInstance(app).exportSharedRestoreRows()
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                failure = PortableRestoreDiagnostics.unexpected(e)
                 null
             }
         }
@@ -187,11 +266,21 @@ class CompanionMemoryRestoreParticipant internal constructor(
             affectedTables: Set<String>,
             requireExisting: Boolean
         ): Boolean {
-            if (requireExisting && !isProvisioned()) return false
-            if (isProvisioned() && DatabaseHealthState.isDegraded(app, BackupType.MEMORY)) return false
+            failure = null
+            if (requireExisting && !isProvisioned()) {
+                failure = "memory database does not exist"
+                return false
+            }
+            if (isProvisioned() && DatabaseHealthState.isDegraded(app, BackupType.MEMORY)) {
+                failure = "memory database is marked degraded"
+                return false
+            }
             return try {
-                MemoryStore.getInstance(app).replaceSharedRestoreRows(rows, affectedTables)
-            } catch (_: Exception) {
+                MemoryStore.getInstance(app).replaceSharedRestoreRows(rows, affectedTables) {
+                    failure = it
+                }
+            } catch (e: Exception) {
+                failure = PortableRestoreDiagnostics.unexpected(e)
                 false
             }
         }

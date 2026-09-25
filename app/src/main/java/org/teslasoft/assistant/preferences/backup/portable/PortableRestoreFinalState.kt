@@ -470,13 +470,17 @@ internal object PortableRestoreStablePlanner {
     sealed interface Result<out T> {
         data class Ready<T>(val planned: T, val generations: Map<PortableRestoreFinalState.Source, String>) : Result<T>
         data class Unavailable(val reason: String) : Result<Nothing>
-        data object ChangedTwice : Result<Nothing>
+        /** [changedSources] names the data that changed on the last attempt. */
+        data class ChangedTwice(
+            val changedSources: Set<PortableRestoreFinalState.Source> = emptySet()
+        ) : Result<Nothing>
     }
 
     fun <S, T> plan(
         capture: (attempt: Int, verification: Boolean) -> PortableRestoreDependencyRead<Capture<S>>,
         planner: (S, Map<PortableRestoreFinalState.Source, String>) -> PortableRestoreDependencyRead<T>
     ): Result<T> {
+        var changed: Set<PortableRestoreFinalState.Source> = emptySet()
         repeat(2) { attempt ->
             val before = when (val result = capture(attempt, false)) {
                 is PortableRestoreDependencyRead.Available -> result.snapshot
@@ -493,7 +497,9 @@ internal object PortableRestoreStablePlanner {
             if (before.generations == after.generations) {
                 return Result.Ready(planned, before.generations)
             }
+            changed = (before.generations.keys + after.generations.keys)
+                .filterTo(LinkedHashSet()) { before.generations[it] != after.generations[it] }
         }
-        return Result.ChangedTwice
+        return Result.ChangedTwice(changed)
     }
 }

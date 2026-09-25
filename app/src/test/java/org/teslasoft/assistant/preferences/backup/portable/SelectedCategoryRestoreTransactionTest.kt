@@ -37,7 +37,8 @@ class SelectedCategoryRestoreTransactionTest {
         assertEquals(
             SelectedCategoryRestoreTransaction.Result.Failed(
                 SelectedCategoryRestoreTransaction.Failure.VALIDATION_FAILED,
-                "memories"
+                "memories",
+                detail = "no_reason_given"
             ),
             result
         )
@@ -73,7 +74,8 @@ class SelectedCategoryRestoreTransactionTest {
         assertEquals(
             SelectedCategoryRestoreTransaction.Result.Failed(
                 SelectedCategoryRestoreTransaction.Failure.STAGING_FAILED,
-                "memories"
+                "memories",
+                detail = "no_reason_given"
             ),
             result
         )
@@ -96,7 +98,8 @@ class SelectedCategoryRestoreTransactionTest {
         assertEquals(
             SelectedCategoryRestoreTransaction.Result.Failed(
                 SelectedCategoryRestoreTransaction.Failure.APPLY_FAILED,
-                "memories"
+                "memories",
+                detail = "no_reason_given"
             ),
             result
         )
@@ -297,6 +300,66 @@ class SelectedCategoryRestoreTransactionTest {
         assertTrue(SelectedCategoryRestoreTransaction.recover(root, mapOf("chats" to chats)))
         assertTrue(events.contains("cleanup:chats"))
         assertFalse(events.contains("rollback:chats"))
+    }
+
+    @Test
+    fun stagingFailureKeepsTheParticipantsOwnReason() {
+        val events = ArrayList<String>()
+        val failing = object : SelectedCategoryRestoreTransaction.Participant {
+            override val categoryKey = "identity_bundle"
+            override fun validate() = true
+            override fun stage() = false
+            override fun apply() = true
+            override fun rollback() = true
+            override fun cleanup() = Unit
+            override fun failureDetail() = "current_snapshot_mismatch_after_reread: format version"
+        }
+
+        val result = SelectedCategoryRestoreTransaction.execute(
+            tempRoot(), listOf(participant("chats", events), failing)
+        ) as SelectedCategoryRestoreTransaction.Result.Failed
+
+        assertEquals(SelectedCategoryRestoreTransaction.Failure.STAGING_FAILED, result.reason)
+        assertEquals("identity_bundle", result.categoryKey)
+        assertEquals("current_snapshot_mismatch_after_reread: format version", result.detail)
+    }
+
+    @Test
+    fun unexpectedErrorIsRecordedByTypeWithoutItsMessage() {
+        val throwing = object : SelectedCategoryRestoreTransaction.Participant {
+            override val categoryKey = "memories"
+            override fun validate() = true
+            override fun stage(): Boolean = throw IllegalStateException("private text")
+            override fun apply() = true
+            override fun rollback() = true
+            override fun cleanup() = Unit
+        }
+
+        val result = SelectedCategoryRestoreTransaction.execute(
+            tempRoot(), listOf(throwing)
+        ) as SelectedCategoryRestoreTransaction.Result.Failed
+
+        assertEquals(SelectedCategoryRestoreTransaction.Failure.STAGING_FAILED, result.reason)
+        assertEquals("unexpected_error: IllegalStateException", result.detail)
+    }
+
+    @Test
+    fun rollbackFailureReportsTheApplyReasonAndEachFailedRollback() {
+        val events = ArrayList<String>()
+        val result = SelectedCategoryRestoreTransaction.execute(
+            tempRoot(),
+            listOf(
+                participant("chats", events, rollsBack = false),
+                participant("memories", events, applies = false)
+            )
+        ) as SelectedCategoryRestoreTransaction.Result.Failed
+
+        assertEquals(SelectedCategoryRestoreTransaction.Failure.ROLLBACK_FAILED, result.reason)
+        assertEquals(SelectedCategoryRestoreTransaction.DataState.RECOVERY_REQUIRED, result.dataState)
+        assertEquals(
+            "after APPLY_FAILED: no_reason_given; rollback of chats failed: no_reason_given",
+            result.detail
+        )
     }
 
     private fun participant(

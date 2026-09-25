@@ -7888,8 +7888,9 @@ class MemoryStore private constructor(context: Context, password: ByteArray, dat
      */
     fun replaceSharedRestoreRows(
         rows: MemorySharedRestoreRows,
-        affectedTables: Set<String>
-    ): Boolean = MemorySharedRestoreRowFormat.replace(writableDatabase, rows, affectedTables)
+        affectedTables: Set<String>,
+        reject: ((String) -> Unit)? = null
+    ): Boolean = MemorySharedRestoreRowFormat.replace(writableDatabase, rows, affectedTables, reject)
 
     /**
      * The §6.3 step-2 replace: delete the existing §2.4 record sets, insert

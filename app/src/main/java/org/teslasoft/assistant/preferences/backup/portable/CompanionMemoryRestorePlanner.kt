@@ -31,19 +31,44 @@ object CompanionMemoryRestorePlanner {
         val affectedTables: Set<String>
     )
 
-    fun plan(input: Input): Plan? {
-        if (!MemorySharedRestoreRowFormat.valid(input.current)) return null
-        if (input.identitiesSelected != (input.finalRoleplayTables != null)) return null
-        if (input.memoriesSelected != (input.finalMemories != null)) return null
-        if (input.modelRulesSelected != (input.finalModelRules != null)) return null
+    /** [reject], when given, receives a non-content reason for a null result. */
+    fun plan(input: Input, reject: ((String) -> Unit)? = null): Plan? {
+        fun refuse(reason: String): Plan? {
+            reject?.invoke(reason)
+            return null
+        }
+        MemorySharedRestoreRowFormat.invalidReason(input.current)?.let {
+            return refuse("current rows are not valid: $it")
+        }
+        if (input.identitiesSelected != (input.finalRoleplayTables != null)) {
+            return refuse("identity selection does not match the planned roleplay rows")
+        }
+        if (input.memoriesSelected != (input.finalMemories != null)) {
+            return refuse("memory selection does not match the planned memory rows")
+        }
+        if (input.modelRulesSelected != (input.finalModelRules != null)) {
+            return refuse("model rule selection does not match the planned rule rows")
+        }
         input.finalMemories?.let {
-            if (!MemoryPortableRowFormat.valid(MemoryPortableGroup.MEMORIES, it)) return null
+            if (!MemoryPortableRowFormat.valid(MemoryPortableGroup.MEMORIES, it)) {
+                return refuse(
+                    "planned memory rows are not valid: " +
+                        portableInvalidReason(MemoryPortableGroup.MEMORIES, it)
+                )
+            }
         }
         input.finalModelRules?.let {
-            if (!MemoryPortableRowFormat.valid(MemoryPortableGroup.MODEL_RULES, it)) return null
+            if (!MemoryPortableRowFormat.valid(MemoryPortableGroup.MODEL_RULES, it)) {
+                return refuse(
+                    "planned model rule rows are not valid: " +
+                        portableInvalidReason(MemoryPortableGroup.MODEL_RULES, it)
+                )
+            }
         }
         input.finalRoleplayTables?.let {
-            if (it.keys != CompanionBackupFormat.ROLEPLAY_TABLES.toSet()) return null
+            if (it.keys != CompanionBackupFormat.ROLEPLAY_TABLES.toSet()) {
+                return refuse("planned roleplay rows have a different table set")
+            }
         }
 
         val tables = copyTables(input.current.tables)
@@ -64,7 +89,10 @@ object CompanionMemoryRestorePlanner {
         var memories = input.finalMemories ?: memoryRows(input.current)
         if (input.identitiesSelected) {
             memories = cleanIdentityReferences(memories, input.finalIdentityReferences)
-                ?: return null
+                ?: return refuse(
+                    "memory rows are not valid after identity links were cleaned: " +
+                        portableInvalidReason(MemoryPortableGroup.MEMORIES, memories)
+                )
         }
         if (input.memoriesSelected || input.identitiesSelected) {
             affected.addAll(MemorySharedRestoreRowFormat.memoryTables)
@@ -104,8 +132,31 @@ object CompanionMemoryRestorePlanner {
         }
 
         val desired = MemorySharedRestoreRows(tables)
-        if (affected.isEmpty() || !MemorySharedRestoreRowFormat.valid(desired)) return null
+        if (affected.isEmpty()) return refuse("no tables are affected")
+        MemorySharedRestoreRowFormat.invalidReason(desired)?.let {
+            return refuse("planned rows are not valid: $it")
+        }
         return Plan(input.current, desired, affected)
+    }
+
+    /** Which table breaks [MemoryPortableRowFormat.valid]; names only tables
+     * and key columns. Restore diagnostics only. */
+    private fun portableInvalidReason(group: MemoryPortableGroup, rows: MemoryPortableRows): String {
+        val specs = MemoryPortableRowFormat.specs(group)
+        if (rows.tables.keys != specs.mapTo(LinkedHashSet(), MemoryPortableRowFormat.Spec::table)) {
+            return "table set differs from this app's tables"
+        }
+        for (spec in specs) {
+            val seen = HashSet<String>()
+            for (row in rows.tables[spec.table].orEmpty()) {
+                val identity = MemoryPortableRowFormat.identity(spec, row)
+                    ?: return "table ${spec.table}: a row has a blank key (${spec.keys.joinToString(",")})"
+                if (!seen.add(identity)) {
+                    return "table ${spec.table}: two rows share one key (${spec.keys.joinToString(",")})"
+                }
+            }
+        }
+        return "no_reason_given"
     }
 
     fun roleplayTables(rows: MemorySharedRestoreRows): Map<String, List<Map<String, Any?>>> =

@@ -90,12 +90,17 @@ class ProfileImageRestoreParticipant internal constructor(
 
     override val categoryKey: String = PortableRestoreCategory.PROFILE_IMAGES.key
 
+    private val note = PortableRestoreFailureNote()
+
+    override fun failureDetail(): String? = note.detail
+
     var report: ProfileImageCategoryPlanner.Report? = null
         private set
 
     private var incoming: ProfileImagePortableRestoreManager.Prepared? = null
 
     override fun validate(): Boolean {
+        note.reset()
         precomputed?.let {
             incoming = it.incoming
             report = it.report
@@ -110,12 +115,14 @@ class ProfileImageRestoreParticipant internal constructor(
             (ProfileImagePortableRestoreManager.prepare(artifacts) as?
                 ProfileImagePortableRestoreManager.Result.Ready)?.prepared
         }
-        return incoming != null
+        return incoming != null || note.fail("backup_profile_images_rejected")
     }
 
     override fun stage(): Boolean {
-        val backup = incoming ?: return false
-        val current = precomputed?.current ?: backend.snapshot() ?: return false
+        note.reset()
+        val backup = incoming ?: return note.fail("backup_profile_images_not_validated")
+        val current = precomputed?.current ?: backend.snapshot()
+            ?: return note.fail("current_profile_images_unreadable")
         val planned = precomputed?.let {
             ProfileImageCategoryPlanner.Result.Ready(it.desiredRecords, it.report)
         } ?: (ProfileImageCategoryPlanner.plan(
@@ -123,39 +130,46 @@ class ProfileImageRestoreParticipant internal constructor(
             backup.records,
             mode,
             protectedCurrentHashes
-        ) as? ProfileImageCategoryPlanner.Result.Ready ?: return false)
+        ) as? ProfileImageCategoryPlanner.Result.Ready ?: return note.fail("planning_failed"))
         report = planned.report
         return try {
             if (stagingRoot.exists()) {
-                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) return false
-            } else if (!stagingRoot.mkdirs()) return false
-            if (!RestoreProvisioningState.write(stagingRoot, backend.wasProvisionedBeforeStage())) return false
+                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) {
+                    return note.fail("staging_directory_not_empty")
+                }
+            } else if (!stagingRoot.mkdirs()) return note.fail("staging_directory_unavailable")
+            if (!RestoreProvisioningState.write(stagingRoot, backend.wasProvisionedBeforeStage())) {
+                return note.fail("staged_write_failed: provisioning state")
+            }
             if (!stageSet(current.records, current.assets, CURRENT_DIR, CURRENT_JSON)) return false
             val desiredAssets = LinkedHashMap<String, File>()
             val currentAssets = current.assets
             for (record in planned.records) {
                 desiredAssets[record.hash] = backup.assets[record.hash]
                     ?: currentAssets[record.hash]
-                    ?: return false
+                    ?: return note.fail("planned_image_has_no_file_in_backup_or_on_device")
             }
             if (!stageSet(planned.records, desiredAssets, DESIRED_DIR, DESIRED_JSON)) return false
             loadSet(CURRENT_JSON, CURRENT_DIR) != null && loadSet(DESIRED_JSON, DESIRED_DIR) != null
-        } catch (_: Exception) {
-            false
+        } catch (e: Exception) {
+            note.unexpected(e)
         }
     }
 
     override fun apply(): Boolean {
+        note.reset()
         val set = loadSet(DESIRED_JSON, DESIRED_DIR) ?: return false
-        if (!backend.replace(set.records, set.assets)) return false
-        return backend.verifyClosure(set.records)
+        if (!backend.replace(set.records, set.assets)) return note.fail("profile_image_write_failed")
+        return backend.verifyClosure(set.records) || note.fail("written_catalog_does_not_match_plan")
     }
 
     override fun rollback(): Boolean {
+        note.reset()
         val set = loadSet(CURRENT_JSON, CURRENT_DIR) ?: return false
-        val wasProvisioned = RestoreProvisioningState.read(stagingRoot) ?: return false
-        if (!backend.restoreOriginal(set.records, set.assets)) return false
-        return wasProvisioned || backend.removeProvisionedStore()
+        val wasProvisioned = RestoreProvisioningState.read(stagingRoot)
+            ?: return note.fail("staged_copy_unreadable: provisioning state")
+        if (!backend.restoreOriginal(set.records, set.assets)) return note.fail("profile_image_write_failed")
+        return wasProvisioned || backend.removeProvisionedStore() || note.fail("database_removal_failed")
     }
 
     override fun cleanup() {
@@ -169,13 +183,17 @@ class ProfileImageRestoreParticipant internal constructor(
         jsonName: String
     ): Boolean {
         val directory = File(stagingRoot, directoryName)
-        if (!directory.mkdirs()) return false
+        if (!directory.mkdirs()) return note.fail("staging_directory_unavailable: $directoryName")
         for (record in records) {
-            val source = sources[record.hash] ?: return false
-            if (!ProfileImagePortableBackup.isValidAsset(source, record.hash)) return false
+            val source = sources[record.hash] ?: return note.fail("staged_image_source_missing: $directoryName")
+            if (!ProfileImagePortableBackup.isValidAsset(source, record.hash)) {
+                return note.fail("image_contents_do_not_match_hash: $directoryName source")
+            }
             val target = File(directory, ProfileImageFileNaming.permanentFileName(record.hash))
             source.copyTo(target, overwrite = false)
-            if (!ProfileImagePortableBackup.isValidAsset(target, record.hash)) return false
+            if (!ProfileImagePortableBackup.isValidAsset(target, record.hash)) {
+                return note.fail("image_contents_do_not_match_hash: $directoryName copy")
+            }
         }
         File(stagingRoot, jsonName).writeText(
             JSONObject().put("version", 1).put("images", JSONArray().apply {
@@ -186,7 +204,15 @@ class ProfileImageRestoreParticipant internal constructor(
         return true
     }
 
+    /** Null when unreadable; the reason is recorded in [note]. */
     private fun loadSet(jsonName: String, directoryName: String): Snapshot? {
+        note.fail("staged_copy_unreadable: $jsonName")
+        val loaded = loadSetUnchecked(jsonName, directoryName)
+        if (loaded != null) note.reset()
+        return loaded
+    }
+
+    private fun loadSetUnchecked(jsonName: String, directoryName: String): Snapshot? {
         return try {
             val file = File(stagingRoot, jsonName)
             if (!file.isFile || file.length() > MAX_JSON_BYTES) return null

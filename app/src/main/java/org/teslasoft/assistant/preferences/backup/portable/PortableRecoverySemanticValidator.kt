@@ -71,6 +71,36 @@ object PortableRecoverySemanticValidator {
         Result.Invalid
     }
 
+    /**
+     * Why [validatePackage] refused, for the restore Error Log only. Names
+     * only artifact types, categories and error types; never an entry name,
+     * which can contain an image hash.
+     */
+    fun packageProblem(
+        artifacts: List<PortablePackage.ValidatedArtifact>,
+        declaredCategories: Set<PortableRestoreCategory>? = null,
+        explicitlyEmptyCategories: Set<PortableRestoreCategory> = emptySet()
+    ): String = try {
+        artifacts.firstOrNull { !it.stagedFile.isFile }?.let {
+            return "a staged artifact of type ${it.type} is missing"
+        }
+        artifacts.firstOrNull { PortableRecoveryLimits.maxDecodedBytes(it.entryName, it.type) == null }?.let {
+            return "an artifact of type ${it.type} is not a known restore artifact"
+        }
+        artifacts.firstOrNull {
+            !PortableRecoveryLimits.accepts(it.entryName, it.type, it.stagedFile.length())
+        }?.let {
+            return "an artifact of type ${it.type} is larger than the size limit"
+        }
+        val inventory = PortableRestoreInventory.from(artifacts, declaredCategories, explicitlyEmptyCategories)
+        inventory.explicitlyEmpty.firstOrNull { it !in inventory.available }?.let {
+            return "category ${it.key} is declared empty but not available"
+        }
+        "no_reason_given"
+    } catch (e: Exception) {
+        PortableRestoreDiagnostics.unexpected(e)
+    }
+
     private fun checkArtifacts(artifacts: List<PortablePackage.ValidatedArtifact>): Result? {
         artifacts.forEach { artifact ->
             if (!artifact.stagedFile.isFile) return Result.Invalid

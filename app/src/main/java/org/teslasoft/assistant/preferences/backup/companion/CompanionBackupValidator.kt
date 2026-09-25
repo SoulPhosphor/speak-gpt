@@ -52,18 +52,26 @@ object CompanionBackupValidator {
         object Damaged : Verdict()
     }
 
-    fun validate(file: File): Verdict {
-        if (!file.isFile || file.length() > PortableRecoveryLimits.COMPANION_ROLEPLAY_ARCHIVE_BYTES) {
-            return Verdict.Damaged
+    fun validate(file: File): Verdict = validateWithDetail(file).first
+
+    /**
+     * [validate] plus, for any rejection, a restore-diagnostics reason naming
+     * the ladder step that failed. It never includes file content, a name, or
+     * an image hash.
+     */
+    internal fun validateWithDetail(file: File): Pair<Verdict, String?> {
+        if (!file.isFile) return Verdict.Damaged to "archive file is missing"
+        if (file.length() > PortableRecoveryLimits.COMPANION_ROLEPLAY_ARCHIVE_BYTES) {
+            return Verdict.Damaged to "archive is larger than the size limit"
         }
         val zip = try {
             ZipFile(file)
         } catch (_: Exception) {
-            return Verdict.WrongFile
+            return Verdict.WrongFile to "archive does not open as a ZIP"
         }
         zip.use {
             val manifestEntry = zip.getEntry(CompanionBackupFormat.MANIFEST_ENTRY)
-                ?: return Verdict.WrongFile
+                ?: return Verdict.WrongFile to "archive has no manifest entry"
             val manifestText = try {
                 zip.getInputStream(manifestEntry).use { input ->
                     val out = ByteArrayOutputStream()
@@ -74,26 +82,30 @@ object CompanionBackupValidator {
                         if (read < 0) break
                         count += read
                         if (count > PortableRecoveryLimits.COMPANION_ROLEPLAY_ARCHIVE_BYTES) {
-                            return Verdict.Damaged
+                            return Verdict.Damaged to "manifest is larger than the size limit"
                         }
                         out.write(buffer, 0, read)
                     }
                     out.toString(Charsets.UTF_8.name())
                 }
-            } catch (_: Exception) {
-                return Verdict.Damaged
+            } catch (e: Exception) {
+                return Verdict.Damaged to "manifest could not be read (${e.javaClass.simpleName})"
             }
 
-            val manifest = when (val parsed = CompanionBackupCodec.parse(manifestText)) {
+            val (parsed, parseDetail) = CompanionBackupCodec.parseWithDetail(manifestText)
+            val manifest = when (parsed) {
                 is CompanionBackupCodec.ParseResult.Ok -> parsed.manifest
-                CompanionBackupCodec.ParseResult.WrongFile -> return Verdict.WrongFile
-                CompanionBackupCodec.ParseResult.NewerFormat -> return Verdict.NewerFormat
-                CompanionBackupCodec.ParseResult.Damaged -> return Verdict.Damaged
+                CompanionBackupCodec.ParseResult.WrongFile -> return Verdict.WrongFile to parseDetail
+                CompanionBackupCodec.ParseResult.NewerFormat -> return Verdict.NewerFormat to parseDetail
+                CompanionBackupCodec.ParseResult.Damaged -> return Verdict.Damaged to parseDetail
             }
 
             for (image in manifest.images) {
-                val entry = zip.getEntry(image.file) ?: return Verdict.Damaged
-                if (entry.size > PortableRecoveryLimits.IMAGE_ASSET_BYTES) return Verdict.Damaged
+                val entry = zip.getEntry(image.file)
+                    ?: return Verdict.Damaged to "a listed profile image is missing from the archive"
+                if (entry.size > PortableRecoveryLimits.IMAGE_ASSET_BYTES) {
+                    return Verdict.Damaged to "a profile image is larger than the size limit"
+                }
                 val actualHash = try {
                     val digest = MessageDigest.getInstance("SHA-256")
                     var count = 0L
@@ -104,19 +116,21 @@ object CompanionBackupValidator {
                             if (read < 0) break
                             count += read
                             if (count > PortableRecoveryLimits.IMAGE_ASSET_BYTES) {
-                                return Verdict.Damaged
+                                return Verdict.Damaged to "a profile image is larger than the size limit"
                             }
                             digest.update(buffer, 0, read)
                         }
                     }
                     digest.digest().joinToString("") { "%02x".format(it) }
-                } catch (_: Exception) {
-                    return Verdict.Damaged
+                } catch (e: Exception) {
+                    return Verdict.Damaged to "a profile image could not be read (${e.javaClass.simpleName})"
                 }
-                if (actualHash != image.hash) return Verdict.Damaged
+                if (actualHash != image.hash) {
+                    return Verdict.Damaged to "a profile image's contents do not match its recorded hash"
+                }
             }
 
-            return Verdict.Valid(manifest)
+            return Verdict.Valid(manifest) to null
         }
     }
 

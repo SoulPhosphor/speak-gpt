@@ -285,12 +285,38 @@ Matching or de-duplicating chats (or any records) by **name or content** is
 **not approved**. It was proposed on 2026-09-25 to avoid duplicate chats from
 the converter; it has no approval. Identity is by ID only.
 
+## 7a. Recorded defect: Convert Legacy Chats changes chat IDs
+
+**Status:** confirmed defect, separate from the Stage 1 diagnostics work. Not
+fixed. It did not cause the failed Stage 1 test (Chats were unticked).
+
+- **Requirement:** Convert Legacy Chats must keep each chat's existing legacy
+  ID (the 64-character hash) instead of assigning a new UUID (§6).
+- **Where:** `ChatLogicalImportPlan.parse` gives every chat whose ID is not a
+  canonical UUID a new random UUID through `allocateUuid()`; it is called from
+  `LegacyChatConversion` (Convert Legacy Chats).
+- **Not a fix:** matching by name, content, first message, timestamp, or any
+  similarity (§7).
+- Rows sharing one legacy ID do not have independently addressable
+  history/settings storage on the old client. The backup cannot reconstruct
+  separate histories that the source storage no longer distinguishes.
+
 ---
 
 ## 8. Areas with insufficient error logging
 
 Adding or changing any log line requires owner approval first (CLAUDE.md §8).
-None of the following has been approved.
+
+**Update:** the owner approved restore failure diagnostics. On
+`claude/backup-restore-failure-1oiysd`, every Restoration Failed result now
+writes one Error Log entry (`crash` channel, tag `PortableRestore`, level
+`error`), and the Restoration Partly Successful entry lists the internal
+reason for each category not restored. Each line gives the restore step, the
+categories involved (all categories a shared participant covers), the
+internal reason code and non-content detail (table/column names, counts,
+value types, error types). Record IDs, names, prompts, messages, memory text
+and credentials are never logged. User-facing restore wording is unchanged.
+The table below is the pre-change state.
 
 | Area | What is lost today |
 |---|---|

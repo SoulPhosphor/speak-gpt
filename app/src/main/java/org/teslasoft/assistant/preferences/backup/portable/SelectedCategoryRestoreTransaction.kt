@@ -46,6 +46,11 @@ object SelectedCategoryRestoreTransaction {
 
         /** Remove category-owned staging after success or complete rollback. */
         fun cleanup()
+
+        /** The non-content reason for this participant's most recent false
+         * result: a reason code, optionally followed by table/column names,
+         * counts or value types. Never a value, name, or record ID. */
+        fun failureDetail(): String? = null
     }
 
     enum class Failure {
@@ -64,7 +69,9 @@ object SelectedCategoryRestoreTransaction {
         data class Failed(
             val reason: Failure,
             val categoryKey: String? = null,
-            val dataState: DataState = DataState.UNCHANGED
+            val dataState: DataState = DataState.UNCHANGED,
+            /** Diagnostic detail for the Error Log only; never shown in a dialog. */
+            val detail: String? = null
         ) : Result()
     }
 
@@ -108,25 +115,29 @@ object SelectedCategoryRestoreTransaction {
         if (journalRoot.exists()) return Result.Failed(Failure.PENDING_RECOVERY)
 
         for (participant in participants) {
-            if (!safeCall(participant::validate)) {
+            attempt(participant, participant::validate)?.let { detail ->
                 cleanup(participants)
-                return Result.Failed(Failure.VALIDATION_FAILED, participant.categoryKey)
+                return Result.Failed(
+                    Failure.VALIDATION_FAILED, participant.categoryKey, detail = detail
+                )
             }
         }
         for (participant in participants) {
-            if (!safeCall(participant::stage)) {
+            attempt(participant, participant::stage)?.let { detail ->
                 cleanup(participants)
-                return Result.Failed(Failure.STAGING_FAILED, participant.categoryKey)
+                return Result.Failed(
+                    Failure.STAGING_FAILED, participant.categoryKey, detail = detail
+                )
             }
         }
         if (!journalRoot.mkdirs()) {
             cleanup(participants)
-            return Result.Failed(Failure.JOURNAL_FAILED)
+            return Result.Failed(Failure.JOURNAL_FAILED, detail = "journal_directory_unavailable")
         }
         if (!writeState(journalRoot, Phase.PREPARED, emptyList(), emptyList())) {
             journalRoot.deleteRecursively()
             cleanup(participants)
-            return Result.Failed(Failure.JOURNAL_FAILED)
+            return Result.Failed(Failure.JOURNAL_FAILED, detail = "journal_write_failed: PREPARED")
         }
         if (interruptionPoint == InterruptionPoint.AFTER_PREPARED) {
             throw SimulatedInterruption()
@@ -147,7 +158,10 @@ object SelectedCategoryRestoreTransaction {
                     completed.map { it.categoryKey }
                 )
             ) {
-                return rollbackAfterFailure(journalRoot, started, Failure.JOURNAL_FAILED, participant.categoryKey)
+                return rollbackAfterFailure(
+                    journalRoot, started, Failure.JOURNAL_FAILED, participant.categoryKey,
+                    "journal_write_failed: APPLYING before apply"
+                )
             }
             if (index == 0 &&
                 interruptionPoint == InterruptionPoint.AFTER_FIRST_PARTICIPANT_STARTED
@@ -155,8 +169,10 @@ object SelectedCategoryRestoreTransaction {
                 throw SimulatedInterruption()
             }
             faultInjector.hit(Boundary.AFTER_PARTICIPANT_STARTED, participant.categoryKey)
-            if (!safeCall(participant::apply)) {
-                return rollbackAfterFailure(journalRoot, started, Failure.APPLY_FAILED, participant.categoryKey)
+            attempt(participant, participant::apply)?.let { detail ->
+                return rollbackAfterFailure(
+                    journalRoot, started, Failure.APPLY_FAILED, participant.categoryKey, detail
+                )
             }
             completed.add(participant)
             if (!writeState(
@@ -167,7 +183,8 @@ object SelectedCategoryRestoreTransaction {
                 )
             ) {
                 return rollbackAfterFailure(
-                    journalRoot, started, Failure.JOURNAL_FAILED, participant.categoryKey
+                    journalRoot, started, Failure.JOURNAL_FAILED, participant.categoryKey,
+                    "journal_write_failed: APPLYING after apply"
                 )
             }
             if (index == 0 && interruptionPoint == InterruptionPoint.AFTER_FIRST_APPLY) {
@@ -183,7 +200,9 @@ object SelectedCategoryRestoreTransaction {
                 completed.map { it.categoryKey }
             )
         ) {
-            return rollbackAfterFailure(journalRoot, started, Failure.JOURNAL_FAILED, null)
+            return rollbackAfterFailure(
+                journalRoot, started, Failure.JOURNAL_FAILED, null, "journal_write_failed: COMPLETE"
+            )
         }
         faultInjector.hit(Boundary.AFTER_TRANSACTION_COMPLETED, null)
         // COMPLETE remains durable until the service has written the terminal
@@ -191,12 +210,14 @@ object SelectedCategoryRestoreTransaction {
         // startup recovery may safely finish cleanup without replaying apply.
         if (!safeCall(beforeCleanup)) return Result.Failed(
             Failure.JOURNAL_FAILED,
-            dataState = DataState.RESTORED_CLEANUP_PENDING
+            dataState = DataState.RESTORED_CLEANUP_PENDING,
+            detail = "result_record_not_saved"
         )
         cleanup(participants)
         if (!deleteJournal(journalRoot)) return Result.Failed(
             Failure.JOURNAL_FAILED,
-            dataState = DataState.RESTORED_CLEANUP_PENDING
+            dataState = DataState.RESTORED_CLEANUP_PENDING,
+            detail = "journal_delete_failed"
         )
         return Result.Success
     }
@@ -226,22 +247,29 @@ object SelectedCategoryRestoreTransaction {
         journalRoot: File,
         started: List<Participant>,
         originalFailure: Failure,
-        categoryKey: String?
+        categoryKey: String?,
+        detail: String?
     ): Result {
-        var rolledBack = true
+        val rollbackFailures = ArrayList<String>()
         for (participant in started.asReversed()) {
-            if (!safeCall(participant::rollback)) rolledBack = false
+            attempt(participant, participant::rollback)?.let {
+                rollbackFailures.add("rollback of ${participant.categoryKey} failed: $it")
+            }
         }
-        if (!rolledBack) return Result.Failed(
+        val original = "${originalFailure.name}: ${detail ?: "no_reason_given"}"
+        if (rollbackFailures.isNotEmpty()) return Result.Failed(
             Failure.ROLLBACK_FAILED,
             categoryKey,
-            DataState.RECOVERY_REQUIRED
+            DataState.RECOVERY_REQUIRED,
+            (listOf("after $original") + rollbackFailures).joinToString("; ")
         )
         // Keep exact rollback snapshots until the durable journal is gone. If
         // deletion fails, a later recovery pass can safely repeat rollback.
-        if (!deleteJournal(journalRoot)) return Result.Failed(Failure.JOURNAL_FAILED, categoryKey)
+        if (!deleteJournal(journalRoot)) return Result.Failed(
+            Failure.JOURNAL_FAILED, categoryKey, detail = "journal_delete_failed after $original"
+        )
         cleanup(started)
-        return Result.Failed(originalFailure, categoryKey)
+        return Result.Failed(originalFailure, categoryKey, detail = detail)
     }
 
     private enum class Phase { PREPARED, APPLYING, COMPLETE }
@@ -294,6 +322,14 @@ object SelectedCategoryRestoreTransaction {
             if (!safeKey(key) || !keys.add(key)) return null
         }
         return keys
+    }
+
+    /** Null when [operation] succeeds; otherwise the participant's own reason,
+     * or the type of the unexpected error it threw. */
+    private fun attempt(participant: Participant, operation: () -> Boolean): String? = try {
+        if (operation()) null else participant.failureDetail() ?: "no_reason_given"
+    } catch (e: Exception) {
+        PortableRestoreDiagnostics.unexpected(e)
     }
 
     private fun safeCall(operation: () -> Boolean): Boolean = try {

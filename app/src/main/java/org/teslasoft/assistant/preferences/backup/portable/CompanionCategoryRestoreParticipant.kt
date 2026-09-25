@@ -57,6 +57,9 @@ class CompanionCategoryRestoreParticipant internal constructor(
             restorePlan: CompanionRestorePlanner.Plan
         ): Boolean = apply(manifest, archive)
         fun removeRestoredImage(hash: String, removeFile: Boolean, removeCatalog: Boolean): Boolean
+
+        /** Non-content reason for the most recent failed call, if known. */
+        fun lastFailure(): String? = null
     }
 
     constructor(
@@ -92,6 +95,10 @@ class CompanionCategoryRestoreParticipant internal constructor(
 
     override val categoryKey: String = "identity_bundle"
 
+    private val note = PortableRestoreFailureNote()
+
+    override fun failureDetail(): String? = note.detail
+
     var report: CompanionCategoryPlanner.Report? = null
         private set
 
@@ -112,40 +119,67 @@ class CompanionCategoryRestoreParticipant internal constructor(
     fun memoryReferenceIds(): MemoryReferenceIds? = desiredMemoryReferences
 
     override fun validate(): Boolean {
+        note.reset()
         precomputed?.let {
             incomingManifest = it.incoming
             desiredMemoryReferences = references(it.desired)
             report = it.report
             removedLorebookLinks = it.restorePlan.removedLinks
-            return selections.isNotEmpty()
+            return selections.isNotEmpty() || note.fail("no_categories_selected")
         }
-        incomingManifest = (CompanionBackupValidator.validate(incomingArchive) as?
-            CompanionBackupValidator.Verdict.Valid)?.manifest
-        return incomingManifest != null && selections.isNotEmpty()
+        val (verdict, detail) = CompanionBackupValidator.validateWithDetail(incomingArchive)
+        incomingManifest = (verdict as? CompanionBackupValidator.Verdict.Valid)?.manifest
+        if (incomingManifest == null) {
+            return note.fail("backup_archive_rejected: ${verdictName(verdict)}: ${detail ?: "no_reason_given"}")
+        }
+        return selections.isNotEmpty() || note.fail("no_categories_selected")
     }
 
     override fun stage(): Boolean {
-        val incoming = incomingManifest ?: return false
+        note.reset()
+        val incoming = incomingManifest ?: return note.fail("backup_archive_not_validated")
         return try {
             if (stagingRoot.exists()) {
-                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) return false
-            } else if (!stagingRoot.mkdirs()) return false
+                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) {
+                    return note.fail("staging_directory_not_empty")
+                }
+            } else if (!stagingRoot.mkdirs()) return note.fail("staging_directory_unavailable")
 
             val currentArchive = File(stagingRoot, CURRENT_ARCHIVE)
             val current = if (precomputed != null) {
-                precomputed.currentArchive.copyTo(currentArchive, overwrite = false)
+                try {
+                    precomputed.currentArchive.copyTo(currentArchive, overwrite = false)
+                } catch (e: Exception) {
+                    return note.fail(
+                        "current_snapshot_copy_failed: ${PortableRestoreDiagnostics.unexpected(e)}"
+                    )
+                }
                 precomputed.current
             } else {
-                backend.snapshot(currentArchive) ?: return false
+                backend.snapshot(currentArchive) ?: return note.fail(
+                    "current_snapshot_unavailable: ${backend.lastFailure() ?: "no_reason_given"}"
+                )
             }
-            val currentValidated = CompanionBackupValidator.validate(currentArchive) as?
-                CompanionBackupValidator.Verdict.Valid ?: return false
-            if (currentValidated.manifest != current) return false
+            val (currentVerdict, currentDetail) =
+                CompanionBackupValidator.validateWithDetail(currentArchive)
+            val currentValidated = currentVerdict as? CompanionBackupValidator.Verdict.Valid
+                ?: return note.fail(
+                    "current_snapshot_rejected: ${verdictName(currentVerdict)}: " +
+                        (currentDetail ?: "no_reason_given")
+                )
+            if (currentValidated.manifest != current) {
+                return note.fail(
+                    "current_snapshot_mismatch_after_reread: " +
+                        PortableRestoreDiagnostics.manifestDifference(current, currentValidated.manifest)
+                )
+            }
 
             val planned = precomputed?.let {
                 CompanionCategoryPlanner.Result.Ready(it.desired, it.report)
-            } ?: (CompanionCategoryPlanner.plan(current, incoming, selections) as?
-                CompanionCategoryPlanner.Result.Ready ?: return false)
+            } ?: when (val result = CompanionCategoryPlanner.plan(current, incoming, selections)) {
+                is CompanionCategoryPlanner.Result.Ready -> result
+                else -> return note.fail("planning_failed: ${planningReason(result)}")
+            }
             report = planned.report
             desiredMemoryReferences = references(planned.manifest)
 
@@ -158,7 +192,7 @@ class CompanionCategoryRestoreParticipant internal constructor(
                         CompanionArchiveAssembler.Source(incomingArchive, incoming)
                     )
                 )
-            ) return false
+            ) return note.fail("desired_archive_assembly_failed")
 
             val currentHashes = current.images.mapTo(HashSet(), CompanionBackupImageHash)
             val additions = planned.manifest.images.filter { it.hash !in currentHashes }.map { image ->
@@ -176,47 +210,55 @@ class CompanionCategoryRestoreParticipant internal constructor(
                     .toString(),
                 Charsets.UTF_8
             )
-            load(DESIRED_ARCHIVE) != null && readPresence() != null
-        } catch (_: Exception) {
-            false
+            if (load(DESIRED_ARCHIVE) == null) return false
+            readPresence() != null || note.fail("staged_copy_unreadable: $STATE_FILE")
+        } catch (e: Exception) {
+            note.unexpected(e)
         }
     }
 
     override fun apply(): Boolean {
-        if (!backend.recoverPending()) return false
+        note.reset()
+        if (!backend.recoverPending()) return note.fail("earlier_companion_restore_still_pending")
         val (archive, manifest) = load(DESIRED_ARCHIVE) ?: return false
         val planned = precomputed?.restorePlan
-        return if (planned == null) backend.apply(manifest, archive)
+        val applied = if (planned == null) backend.apply(manifest, archive)
         else backend.apply(manifest, archive, planned)
+        return applied || note.fail("write_failed: ${backend.lastFailure() ?: "no_reason_given"}")
     }
 
     override fun rollback(): Boolean {
-        if (!backend.recoverPending()) return false
+        note.reset()
+        if (!backend.recoverPending()) return note.fail("earlier_companion_restore_still_pending")
         val (archive, manifest) = load(CURRENT_ARCHIVE) ?: return false
         val rollbackPlan = precomputed?.rollbackPlan ?: readRollbackLorebookIds()?.let {
             CompanionRestorePlanner.plan(manifest, it)
         }
         val restored = if (rollbackPlan == null) backend.apply(manifest, archive)
         else backend.apply(manifest, archive, rollbackPlan)
-        if (!restored) return false
-        val presence = readPresence() ?: return false
+        if (!restored) return note.fail("write_failed: ${backend.lastFailure() ?: "no_reason_given"}")
+        val presence = readPresence() ?: return note.fail("staged_copy_unreadable: $STATE_FILE")
         return presence.all { (hash, before) ->
             backend.removeRestoredImage(
                 hash,
                 removeFile = !before.file,
                 removeCatalog = !before.catalog
             )
-        }
+        } || note.fail("restored_profile_image_removal_failed")
     }
 
     override fun cleanup() {
         stagingRoot.deleteRecursively()
     }
 
+    /** Null when unreadable; the reason is recorded in [note]. */
     private fun load(name: String): Pair<File, CompanionBackupManifest>? {
         val archive = File(stagingRoot, name)
-        val manifest = (CompanionBackupValidator.validate(archive) as?
-            CompanionBackupValidator.Verdict.Valid)?.manifest ?: return null
+        val (verdict, detail) = CompanionBackupValidator.validateWithDetail(archive)
+        val manifest = (verdict as? CompanionBackupValidator.Verdict.Valid)?.manifest ?: run {
+            note.fail("staged_archive_rejected: $name: ${verdictName(verdict)}: ${detail ?: "no_reason_given"}")
+            return null
+        }
         return archive to manifest
     }
 
@@ -263,9 +305,25 @@ class CompanionCategoryRestoreParticipant internal constructor(
         private val app = context.applicationContext
         private val imageStore: ProfileImageStore get() = ProfileImageStore.getInstance(app)
 
-        override fun snapshot(destination: File): CompanionBackupManifest? =
-            (CompanionBackupExporter.buildBackupZip(app, destination) as?
-                CompanionBackupExporter.BuildResult.Ok)?.manifest
+        private var failure: String? = null
+
+        override fun lastFailure(): String? = failure
+
+        override fun snapshot(destination: File): CompanionBackupManifest? {
+            failure = null
+            return try {
+                when (val built = CompanionBackupExporter.buildBackupZip(app, destination)) {
+                    is CompanionBackupExporter.BuildResult.Ok -> built.manifest
+                    else -> {
+                        failure = "export refused: ${built.javaClass.simpleName}"
+                        null
+                    }
+                }
+            } catch (e: Exception) {
+                failure = PortableRestoreDiagnostics.unexpected(e)
+                null
+            }
+        }
 
         override fun imagePresence(hash: String): ImagePresence = ImagePresence(
             file = imageStore.imageFile(hash)?.isFile == true,
@@ -278,21 +336,24 @@ class CompanionCategoryRestoreParticipant internal constructor(
         }
 
         override fun apply(manifest: CompanionBackupManifest, archive: File): Boolean =
-            CompanionRoleplayRestoreManager.restoreSettingsAndImages(
-                app,
-                manifest,
-                archive,
-                CompanionRestorePlanner.plan(manifest, lorebookIds(manifest))
-            ) is
-                CompanionRoleplayRestoreManager.RestoreResult.Success
+            apply(manifest, archive, CompanionRestorePlanner.plan(manifest, lorebookIds(manifest)))
 
         override fun apply(
             manifest: CompanionBackupManifest,
             archive: File,
             restorePlan: CompanionRestorePlanner.Plan
-        ): Boolean = CompanionRoleplayRestoreManager.restoreSettingsAndImages(
-            app, manifest, archive, restorePlan
-        ) is CompanionRoleplayRestoreManager.RestoreResult.Success
+        ): Boolean {
+            failure = null
+            return when (val result = CompanionRoleplayRestoreManager.restoreSettingsAndImages(
+                app, manifest, archive, restorePlan
+            )) {
+                is CompanionRoleplayRestoreManager.RestoreResult.Success -> true
+                is CompanionRoleplayRestoreManager.RestoreResult.Failed -> {
+                    failure = "companion restore refused: ${result.reason.name}"
+                    false
+                }
+            }
+        }
 
         override fun removeRestoredImage(
             hash: String,
@@ -307,6 +368,13 @@ class CompanionCategoryRestoreParticipant internal constructor(
     }
 
     private companion object {
+        fun verdictName(verdict: CompanionBackupValidator.Verdict): String =
+            verdict.javaClass.simpleName
+
+        fun planningReason(result: CompanionCategoryPlanner.Result): String =
+            (result as? CompanionCategoryPlanner.Result.Rejected)?.reason?.name
+                ?: result.javaClass.simpleName
+
         fun references(manifest: CompanionBackupManifest): MemoryReferenceIds {
             fun ids(table: String, column: String): Set<String> = manifest.roleplayTables[table]
                 .orEmpty().mapNotNullTo(LinkedHashSet()) { (it[column] as? String)?.takeIf(String::isNotBlank) }

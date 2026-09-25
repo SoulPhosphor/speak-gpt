@@ -31,6 +31,10 @@ class ChatRestoreParticipant internal constructor(
 
     override val categoryKey: String = PortableRestoreCategory.CHATS.key
 
+    private val note = PortableRestoreFailureNote()
+
+    override fun failureDetail(): String? = note.detail
+
     constructor(
         context: Context,
         incoming: File,
@@ -58,15 +62,18 @@ class ChatRestoreParticipant internal constructor(
     }
 
     override fun validate(): Boolean {
+        note.reset()
         validationFailure = null
         precomputed?.let {
             prepared = it
             mergeReport = it.mergeReport
             return true
         }
-        val source = incoming ?: return false
-        if (!source.isFile || source.length() > PortableRecoveryLimits.CHATS_JSON_BYTES) return false
-        val json = try { source.readText(Charsets.UTF_8) } catch (_: Exception) { return false }
+        val source = incoming ?: return note.fail("no_backup_data")
+        if (!source.isFile || source.length() > PortableRecoveryLimits.CHATS_JSON_BYTES) {
+            return note.fail("backup_data_missing_or_too_large")
+        }
+        val json = try { source.readText(Charsets.UTF_8) } catch (e: Exception) { return note.unexpected(e) }
         return when (val result = PortableChatRestoreCoordinator.prepare(
             app, json, mode, folderResolutions
         )) {
@@ -77,49 +84,71 @@ class ChatRestoreParticipant internal constructor(
             }
             is PortableChatRestoreCoordinator.PrepareResult.NeedsFolderDecisions -> {
                 folderCollisions = result.collisions
-                false
+                note.fail("folder_decisions_required")
             }
             is PortableChatRestoreCoordinator.PrepareResult.Rejected -> {
                 validationFailure = result.chatReason
-                false
+                note.fail("backup_chats_rejected: ${result.chatReason?.name ?: "no_reason_given"}")
             }
         }
     }
 
     override fun stage(): Boolean {
-        val desired = prepared ?: return false
+        note.reset()
+        val desired = prepared ?: return note.fail("backup_chats_not_validated")
         return try {
             if (stagingRoot.exists()) {
-                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) return false
-            } else if (!stagingRoot.mkdirs()) return false
+                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) {
+                    return note.fail("staging_directory_not_empty")
+                }
+            } else if (!stagingRoot.mkdirs()) return note.fail("staging_directory_unavailable")
             val current = precomputedCurrent ?: run {
-                val currentJson = (ChatLogicalSerializer.serializeV2(app) as?
-                    ChatLogicalSerializer.Result.Ok)?.json ?: return false
-                (PortableChatRestorePlan.parse(currentJson) as?
-                    PortableChatRestorePlan.Result.Ok)?.plan ?: return false
+                val serialized = ChatLogicalSerializer.serializeV2(app)
+                val currentJson = (serialized as? ChatLogicalSerializer.Result.Ok)?.json
+                    ?: return note.fail(
+                        "current_chats_unreadable: " +
+                            ((serialized as? ChatLogicalSerializer.Result.Unavailable)?.category?.name
+                                ?: serialized.javaClass.simpleName)
+                    )
+                when (val parsed = PortableChatRestorePlan.parse(currentJson)) {
+                    is PortableChatRestorePlan.Result.Ok -> parsed.plan
+                    is PortableChatRestorePlan.Result.Rejected ->
+                        return note.fail("current_chats_rejected: ${parsed.reason.name}")
+                }
             }
             val currentArchive = File(stagingRoot, CURRENT_ARCHIVE)
             val desiredArchive = File(stagingRoot, DESIRED_ARCHIVE)
-            ConvertedChatRecoveryArchive.write(app, current, currentArchive) &&
-                ConvertedChatRecoveryArchive.write(app, desired.plan, desiredArchive) &&
-                currentArchive.isFile && desiredArchive.isFile
-        } catch (_: Exception) {
-            false
+            if (!ConvertedChatRecoveryArchive.write(app, current, currentArchive) || !currentArchive.isFile) {
+                return note.fail("staged_write_failed: $CURRENT_ARCHIVE")
+            }
+            ConvertedChatRecoveryArchive.write(app, desired.plan, desiredArchive) &&
+                desiredArchive.isFile || note.fail("staged_write_failed: $DESIRED_ARCHIVE")
+        } catch (e: Exception) {
+            note.unexpected(e)
         }
     }
 
-    override fun apply(): Boolean = restore(File(stagingRoot, DESIRED_ARCHIVE))
+    override fun apply(): Boolean {
+        note.reset()
+        return restore(File(stagingRoot, DESIRED_ARCHIVE))
+    }
 
-    override fun rollback(): Boolean = restore(File(stagingRoot, CURRENT_ARCHIVE))
+    override fun rollback(): Boolean {
+        note.reset()
+        return restore(File(stagingRoot, CURRENT_ARCHIVE))
+    }
 
     override fun cleanup() {
         stagingRoot.deleteRecursively()
     }
 
     private fun restore(archive: File): Boolean {
-        if (!archive.isFile) return false
-        return try { ChatRestoreManager.restoreFromArchive(app, archive).ok }
-        catch (_: Exception) { false }
+        if (!archive.isFile) return note.fail("staged_copy_unreadable: ${archive.name}")
+        return try {
+            ChatRestoreManager.restoreFromArchive(app, archive).ok || note.fail("chat_write_failed")
+        } catch (e: Exception) {
+            note.unexpected(e)
+        }
     }
 
     private companion object {

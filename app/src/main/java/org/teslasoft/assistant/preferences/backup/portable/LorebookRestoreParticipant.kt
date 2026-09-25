@@ -63,48 +63,65 @@ class LorebookRestoreParticipant internal constructor(
 
     override val categoryKey: String = PortableRestoreCategory.LOREBOOKS.key
 
+    private val note = PortableRestoreFailureNote()
+
+    override fun failureDetail(): String? = note.detail
+
     var report: LorebookCategoryPlanner.Report? = null
         private set
 
     private var backup: LorebookPortableData? = null
 
     override fun validate(): Boolean {
+        note.reset()
         precomputed?.let {
             backup = it.incoming
             report = it.report
             return true
         }
         backup = backend.incoming()
-        return backup != null
+        return backup != null || note.fail("backup_lorebooks_unreadable")
     }
 
     override fun stage(): Boolean {
-        val incoming = backup ?: return false
-        val current = precomputed?.current ?: backend.snapshot() ?: return false
+        note.reset()
+        val incoming = backup ?: return note.fail("backup_lorebooks_not_validated")
+        val current = precomputed?.current ?: backend.snapshot()
+            ?: return note.fail("current_lorebooks_unreadable")
         val planned = precomputed?.let {
             LorebookCategoryPlanner.Result.Ready(it.desired, it.report)
         } ?: (LorebookCategoryPlanner.plan(current, incoming, mode) as?
-            LorebookCategoryPlanner.Result.Ready ?: return false)
+            LorebookCategoryPlanner.Result.Ready ?: return note.fail("planning_failed"))
         report = planned.report
         return try {
             if (stagingRoot.exists()) {
-                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) return false
-            } else if (!stagingRoot.mkdirs()) return false
-            if (!RestoreProvisioningState.write(stagingRoot, backend.wasProvisionedBeforeStage())) return false
+                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) {
+                    return note.fail("staging_directory_not_empty")
+                }
+            } else if (!stagingRoot.mkdirs()) return note.fail("staging_directory_unavailable")
+            if (!RestoreProvisioningState.write(stagingRoot, backend.wasProvisionedBeforeStage())) {
+                return note.fail("staged_write_failed: provisioning state")
+            }
             write(CURRENT_JSON, current) && write(DESIRED_JSON, planned.data) &&
                 read(CURRENT_JSON) != null && read(DESIRED_JSON) != null
-        } catch (_: Exception) {
-            false
+        } catch (e: Exception) {
+            note.unexpected(e)
         }
     }
 
-    override fun apply(): Boolean = read(DESIRED_JSON)?.let(backend::replace) == true
+    override fun apply(): Boolean {
+        note.reset()
+        val desired = read(DESIRED_JSON) ?: return false
+        return backend.replace(desired) || note.fail("lorebook_database_write_failed")
+    }
 
     override fun rollback(): Boolean {
+        note.reset()
         val current = read(CURRENT_JSON) ?: return false
-        val wasProvisioned = RestoreProvisioningState.read(stagingRoot) ?: return false
-        if (!backend.restoreOriginal(current)) return false
-        return wasProvisioned || backend.removeProvisionedStore()
+        val wasProvisioned = RestoreProvisioningState.read(stagingRoot)
+            ?: return note.fail("staged_copy_unreadable: provisioning state")
+        if (!backend.restoreOriginal(current)) return note.fail("lorebook_database_write_failed")
+        return wasProvisioned || backend.removeProvisionedStore() || note.fail("database_removal_failed")
     }
 
     override fun cleanup() {
@@ -114,15 +131,24 @@ class LorebookRestoreParticipant internal constructor(
     private fun write(name: String, data: LorebookPortableData): Boolean = try {
         File(stagingRoot, name).writeText(LorebookPortableCodec.toJson(data), Charsets.UTF_8)
         true
-    } catch (_: Exception) {
-        false
+    } catch (e: Exception) {
+        note.fail("staged_write_failed: $name: ${PortableRestoreDiagnostics.unexpected(e)}")
     }
 
+    /** Null when unreadable; the reason is recorded in [note]. */
     private fun read(name: String): LorebookPortableData? {
         val file = File(stagingRoot, name)
-        if (!file.isFile || file.length() > MAX_JSON_BYTES) return null
-        return try { LorebookPortableCodec.parse(file.readText(Charsets.UTF_8)) }
-        catch (_: Exception) { null }
+        if (!file.isFile || file.length() > MAX_JSON_BYTES) {
+            note.fail("staged_copy_unreadable: $name: file is missing or larger than the size limit")
+            return null
+        }
+        return try {
+            LorebookPortableCodec.parse(file.readText(Charsets.UTF_8))
+                ?: run { note.fail("staged_copy_unreadable: $name: lorebook codec rejected it"); null }
+        } catch (e: Exception) {
+            note.fail("staged_copy_unreadable: $name: ${PortableRestoreDiagnostics.unexpected(e)}")
+            null
+        }
     }
 
     private class AndroidBackend(

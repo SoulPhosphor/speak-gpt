@@ -280,7 +280,14 @@ object UnifiedPortableRestoreCoordinator {
                 }
                 return Step.WAIT
             }
-            return terminal(context, PortableRestoreOutcome.PackageFailure(error), current)
+            return terminal(
+                context, PortableRestoreOutcome.PackageFailure(error), current,
+                log = listOf(PortableRestoreFailureLog.Entry(
+                    PortableRestoreFailureLog.Step.PACKAGE_VALIDATION,
+                    requestedCategories(current),
+                    error.name, "package could not be decoded"
+                ))
+            )
         }
         val artifactRoot = File(current.decodeRoot, "artifacts")
         if (!artifactRoot.mkdirs()) {
@@ -289,17 +296,28 @@ object UnifiedPortableRestoreCoordinator {
                 PortableRestoreOutcome.PackageFailure(
                     PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED
                 ),
-                current
+                current,
+                log = listOf(PortableRestoreFailureLog.Entry(
+                    PortableRestoreFailureLog.Step.ARTIFACT_PARSING,
+                    requestedCategories(current),
+                    "STAGING_STORAGE_UNAVAILABLE",
+                    "the folder for the backup contents could not be created"
+                ))
             )
         }
         val validated = PortablePackage.validateAndExtract(decoded.innerZip, artifactRoot)
         if (validated !is PortablePackage.ValidateResult.Ok) {
+            val error = (validated as PortablePackage.ValidateResult.Failed).error
             return terminal(
                 context,
-                PortableRestoreOutcome.PackageFailure(
-                    (validated as PortablePackage.ValidateResult.Failed).error
-                ),
-                current
+                PortableRestoreOutcome.PackageFailure(error),
+                current,
+                log = listOf(PortableRestoreFailureLog.Entry(
+                    PortableRestoreFailureLog.Step.ARTIFACT_PARSING,
+                    requestedCategories(current),
+                    error.name,
+                    "package contents could not be extracted and checked"
+                ))
             )
         }
         // Only whole-package integrity is checked before the selection is
@@ -318,7 +336,17 @@ object UnifiedPortableRestoreCoordinator {
                         PortablePackageFormat.RestoreError.TOO_LARGE
                     } else PortablePackageFormat.RestoreError.DAMAGED_OR_ALTERED
                 ),
-                current
+                current,
+                log = listOf(PortableRestoreFailureLog.Entry(
+                    PortableRestoreFailureLog.Step.PACKAGE_VALIDATION,
+                    requestedCategories(current),
+                    semantic.javaClass.simpleName,
+                    PortableRecoverySemanticValidator.packageProblem(
+                        validated.artifacts,
+                        validated.declaredCategories,
+                        validated.explicitlyEmptyCategories
+                    )
+                ))
             )
         }
         val inventory = semantic.inventory
@@ -342,13 +370,27 @@ object UnifiedPortableRestoreCoordinator {
                 return Step.WAIT
             }
             PortableRestoreSelectionPlan.Result.NothingAvailable ->
-                return terminal(context, PortableRestoreOutcome.NothingAvailable, current)
+                return terminal(
+                    context, PortableRestoreOutcome.NothingAvailable, current,
+                    log = listOf(PortableRestoreFailureLog.Entry(
+                        PortableRestoreFailureLog.Step.CATEGORY_SELECTION,
+                        requestedCategories(current),
+                        "NOTHING_AVAILABLE",
+                        "none of the selected categories is in the backup"
+                    ))
+                )
             else -> return terminal(
                 context,
                 PortableRestoreOutcome.BuildFailure(
                     UnifiedPortableRestore.BuildFailure.EMPTY_SELECTION, null
                 ),
-                current
+                current,
+                log = listOf(PortableRestoreFailureLog.Entry(
+                    PortableRestoreFailureLog.Step.CATEGORY_SELECTION,
+                    requestedCategories(current),
+                    "EMPTY_SELECTION",
+                    "selection result ${selected.javaClass.simpleName}"
+                ))
             )
         }
         return Step.CONTINUE
@@ -367,19 +409,35 @@ object UnifiedPortableRestoreCoordinator {
                     null
                 ),
                 current,
-                keepTransactionForRecovery = UnifiedPortableRestore.journalRoot(context).exists()
+                keepTransactionForRecovery = UnifiedPortableRestore.journalRoot(context).exists(),
+                log = listOf(PortableRestoreFailureLog.Entry(
+                    PortableRestoreFailureLog.Step.JOURNAL,
+                    requestedCategories(current),
+                    "PENDING_RECOVERY",
+                    if (UnifiedPortableRestore.journalRoot(context).exists()) {
+                        "an earlier restore journal still exists"
+                    } else "restore staging storage could not be prepared"
+                ))
             )
-        val built = UnifiedPortableRestore.build(
-            context,
-            current.artifacts,
-            UnifiedPortableRestore.Request(
-                current.selected,
-                current.folderResolutions.toMap(),
-                current.explicitlyEmpty,
-                current.declaredRecordCounts
-            ),
-            transactionRoot
-        )
+        val built = try {
+            UnifiedPortableRestore.build(
+                context,
+                current.artifacts,
+                UnifiedPortableRestore.Request(
+                    current.selected,
+                    current.folderResolutions.toMap(),
+                    current.explicitlyEmpty,
+                    current.declaredRecordCounts
+                ),
+                transactionRoot
+            )
+        } catch (e: Exception) {
+            // Recorded instead of ending the app; nothing has been written.
+            UnifiedPortableRestore.BuildResult.Failed(
+                UnifiedPortableRestore.BuildFailure.DEPENDENCY_VALIDATION_FAILED,
+                detail = "planning: ${PortableRestoreDiagnostics.unexpected(e)}"
+            )
+        }
         synchronized(lock) {
             when (built) {
                 is UnifiedPortableRestore.BuildResult.NeedsFolderDecisions -> {
@@ -390,15 +448,28 @@ object UnifiedPortableRestoreCoordinator {
                     }
                 }
                 is UnifiedPortableRestore.BuildResult.Failed ->
-                    return terminal(context, PortableRestoreOutcome.BuildFailure(
-                        built.reason, built.category
-                    ), current)
+                    return terminal(
+                        context,
+                        PortableRestoreOutcome.BuildFailure(built.reason, built.category),
+                        current,
+                        log = listOf(PortableRestoreFailureLog.Entry(
+                            PortableRestoreFailureLog.Step.DEPENDENCY_VALIDATION,
+                            built.category?.let { listOf(it) } ?: requestedCategories(current),
+                            built.reason.name,
+                            built.detail
+                        ))
+                    )
                 is UnifiedPortableRestore.BuildResult.NothingRestorable ->
-                    return terminal(context, PortableRestoreOutcome.SelectedDataFailure(
-                        built.failures.map {
-                            PortableRestoreIssueText.categoryFailureLine(context, it)
-                        }
-                    ), current)
+                    return terminal(
+                        context,
+                        PortableRestoreOutcome.SelectedDataFailure(
+                            built.failures.map {
+                                PortableRestoreIssueText.categoryFailureLine(context, it)
+                            }
+                        ),
+                        current,
+                        log = built.failures.map(PortableRestoreFailureLog::categoryFailure)
+                    )
                 is UnifiedPortableRestore.BuildResult.Ready -> {
                     current.ready = built
                     // Confirm only what will actually be restored; categories
@@ -416,7 +487,13 @@ object UnifiedPortableRestoreCoordinator {
             PortableRestoreOutcome.BuildFailure(
                 UnifiedPortableRestore.BuildFailure.DEPENDENCY_VALIDATION_FAILED, null
             ),
-            current
+            current,
+            log = listOf(PortableRestoreFailureLog.Entry(
+                PortableRestoreFailureLog.Step.DEPENDENCY_VALIDATION,
+                requestedCategories(current),
+                "FOLDER_DECISION_UNAVAILABLE",
+                "folder decisions were required but no folder collision was reported"
+            ))
         )
     }
 
@@ -431,7 +508,13 @@ object UnifiedPortableRestoreCoordinator {
             PortableRestoreOutcome.BuildFailure(
                 UnifiedPortableRestore.BuildFailure.DEPENDENCY_VALIDATION_FAILED, null
             ),
-            current
+            current,
+            log = listOf(PortableRestoreFailureLog.Entry(
+                PortableRestoreFailureLog.Step.DEPENDENCY_VALIDATION,
+                requestedCategories(current),
+                "NO_PREPARED_PLAN",
+                "apply began without a prepared restore plan"
+            ))
         )
         val transactionRoot = current.transactionRoot ?: return terminal(
             context,
@@ -441,10 +524,17 @@ object UnifiedPortableRestoreCoordinator {
                 SelectedCategoryRestoreTransaction.DataState.UNCHANGED,
                 null
             ),
-            current
+            current,
+            log = listOf(PortableRestoreFailureLog.Entry(
+                PortableRestoreFailureLog.Step.STAGING,
+                requestedCategories(current),
+                "STAGING_STORAGE_UNAVAILABLE",
+                "apply began without restore staging storage"
+            ))
         )
 
-        if (!UnifiedPortableRestore.sourceGenerationsMatch(context, ready, transactionRoot)) {
+        var mismatch: String? = null
+        if (!UnifiedPortableRestore.sourceGenerationsMatch(context, ready, transactionRoot) { mismatch = it }) {
             if (current.stalePlanRetries++ == 0) {
                 synchronized(lock) {
                     current.ready = null
@@ -458,7 +548,13 @@ object UnifiedPortableRestoreCoordinator {
                 PortableRestoreOutcome.BuildFailure(
                     UnifiedPortableRestore.BuildFailure.DEPENDENCY_VALIDATION_FAILED, null
                 ),
-                current
+                current,
+                log = listOf(PortableRestoreFailureLog.Entry(
+                    PortableRestoreFailureLog.Step.DEPENDENCY_VALIDATION,
+                    requestedCategories(current),
+                    "CHANGED_BEFORE_APPLY_TWICE",
+                    mismatch
+                ))
             )
         }
         if (!PortableRestoreProcessGate.mark(context, PortableRestoreProcessGate.Phase.APPLYING)) {
@@ -470,7 +566,13 @@ object UnifiedPortableRestoreCoordinator {
                     SelectedCategoryRestoreTransaction.DataState.UNCHANGED,
                     null
                 ),
-                current
+                current,
+                log = listOf(PortableRestoreFailureLog.Entry(
+                    PortableRestoreFailureLog.Step.JOURNAL,
+                    requestedCategories(current),
+                    "JOURNAL_FAILED",
+                    "the restore-in-progress marker could not be saved"
+                ))
             )
         }
 
@@ -490,7 +592,7 @@ object UnifiedPortableRestoreCoordinator {
             }
         )
         if (result is SelectedCategoryRestoreTransaction.Result.Success) {
-            logProblems(context, issues)
+            logProblems(context, issues, ready.categoryFailures)
             synchronized(lock) {
                 publishLocked(State.Progress(nextVersionLocked(), ProgressPhase.RESTARTING))
                 session = null
@@ -509,11 +611,15 @@ object UnifiedPortableRestoreCoordinator {
         if (!UnifiedPortableRestore.journalRoot(context).exists()) {
             PortableRestoreProcessGate.clear(context)
         }
+        val covered = failed.categoryKey?.let { ready.participantCategories[it] }
+            ?: PortableRestoreCategory.entries.filter { it.key == failed.categoryKey }
         return terminal(
             context,
             outcome,
             current,
-            keepTransactionForRecovery = UnifiedPortableRestore.journalRoot(context).exists()
+            keepTransactionForRecovery = UnifiedPortableRestore.journalRoot(context).exists(),
+            log = listOf(PortableRestoreFailureLog.transactionFailure(failed, covered)) +
+                ready.categoryFailures.map(PortableRestoreFailureLog::categoryFailure)
         )
     }
 
@@ -521,8 +627,10 @@ object UnifiedPortableRestoreCoordinator {
         context: Context,
         outcome: PortableRestoreOutcome,
         current: Session,
-        keepTransactionForRecovery: Boolean = false
+        keepTransactionForRecovery: Boolean = false,
+        log: List<PortableRestoreFailureLog.Entry>
     ): Step {
+        logFailure(context, log)
         val persisted = PortableRestoreOutcomeStore.persist(context, outcome)
         synchronized(lock) {
             // If publication itself fails, retain the entire session. Cleanup
@@ -535,17 +643,41 @@ object UnifiedPortableRestoreCoordinator {
     }
 
     /** One Error Log entry per restore that left anything unrestored or
-     * found missing references (owner-approved, September 2026). */
-    private fun logProblems(context: Context, issues: PortableRestoreIssueText.Lines) {
+     * found missing references (owner-approved, September 2026), followed by
+     * the internal reason for each category that was not restored. */
+    private fun logProblems(
+        context: Context,
+        issues: PortableRestoreIssueText.Lines,
+        failures: List<UnifiedPortableRestore.CategoryFailure>
+    ) {
         if (issues.isEmpty) return
+        val reasons = if (failures.isEmpty()) emptyList() else {
+            listOf("", "Internal reasons:") + failures.map {
+                PortableRestoreFailureLog.line(context, PortableRestoreFailureLog.categoryFailure(it))
+            }
+        }
         val text = (
             PortableRestoreIssueText.intro(context, issues.missingReferences, issues.notRestored) +
-                "" + issues.log
+                "" + issues.log + reasons
             ).joinToString("\n")
         try {
             Logger.log(context, "crash", "PortableRestore", "warning", text)
         } catch (_: Exception) { /* logging is best-effort */ }
     }
+
+    /** One Error Log entry for every restore that ends without restoring
+     * (owner-approved, September 2026): the failing step, the categories
+     * involved, the internal reason code and non-content detail. */
+    private fun logFailure(context: Context, entries: List<PortableRestoreFailureLog.Entry>) {
+        val text = (listOf("Restore failed.") + entries.map { PortableRestoreFailureLog.line(context, it) })
+            .joinToString("\n")
+        try {
+            Logger.log(context, "crash", "PortableRestore", "error", text)
+        } catch (_: Exception) { /* logging is best-effort */ }
+    }
+
+    private fun requestedCategories(session: Session): List<PortableRestoreCategory> =
+        session.selected.map { it.category }.ifEmpty { session.requested.map { it.category } }
 
     private fun report(
         ready: UnifiedPortableRestore.BuildResult.Ready,

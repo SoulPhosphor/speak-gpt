@@ -240,7 +240,10 @@ class PortableRestoreFinalStateTest {
         )
         if (result is PortableRestoreStablePlanner.Result.Ready) applyCalls++
 
-        assertEquals(PortableRestoreStablePlanner.Result.ChangedTwice, result)
+        assertEquals(
+            PortableRestoreStablePlanner.Result.ChangedTwice(setOf(PortableRestoreFinalState.Source.CHATS)),
+            result
+        )
         assertEquals(0, applyCalls)
     }
 

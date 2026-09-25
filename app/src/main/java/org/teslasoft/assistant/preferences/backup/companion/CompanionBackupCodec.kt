@@ -157,29 +157,50 @@ object CompanionBackupCodec {
 
     /* ------------------------------- parse ------------------------------- */
 
-    fun parse(jsonText: String): ParseResult {
+    fun parse(jsonText: String): ParseResult = parseWithDetail(jsonText).first
+
+    /**
+     * [parse] plus, for anything but Ok, a restore-diagnostics reason that
+     * names only the rule or section that failed. A JSON library message is
+     * never included, because it can quote the file's own text.
+     */
+    internal fun parseWithDetail(jsonText: String): Pair<ParseResult, String?> {
         val root = try {
             JSONObject(jsonText)
         } catch (_: JSONException) {
-            return ParseResult.Damaged
+            return ParseResult.Damaged to "manifest is not readable JSON"
         }
 
         if (root.optString(KEY_FORMAT, "") != CompanionBackupFormat.FORMAT_MARKER) {
-            return ParseResult.WrongFile
+            return ParseResult.WrongFile to "format marker is missing or different"
         }
         val version = root.opt(KEY_FORMAT_VERSION)
-        if (version !is Int && version !is Long) return ParseResult.Damaged
+        if (version !is Int && version !is Long) {
+            return ParseResult.Damaged to "format version is not a number"
+        }
         val versionInt = (version as Number).toInt()
-        if (versionInt > CompanionBackupFormat.FORMAT_VERSION) return ParseResult.NewerFormat
-        if (versionInt < 1) return ParseResult.Damaged
+        if (versionInt > CompanionBackupFormat.FORMAT_VERSION) {
+            return ParseResult.NewerFormat to "format version $versionInt is newer than this app reads"
+        }
+        if (versionInt < 1) return ParseResult.Damaged to "format version is below 1"
 
         return try {
-            ParseResult.Ok(parseBody(root, versionInt))
+            ParseResult.Ok(parseBody(root, versionInt)) to null
         } catch (_: JSONException) {
-            ParseResult.Damaged
-        } catch (_: IllegalArgumentException) {
-            ParseResult.Damaged
+            ParseResult.Damaged to "a required section or field is missing or has the wrong JSON type"
+        } catch (e: UnsoundSection) {
+            ParseResult.Damaged to e.message
+        } catch (e: IllegalArgumentException) {
+            ParseResult.Damaged to "unexpected_error: ${e.javaClass.simpleName}"
         }
+    }
+
+    /** An unsound manifest section; its message is a fixed rule description
+     * or a table/column name, never file content. */
+    private class UnsoundSection(message: String) : IllegalArgumentException(message)
+
+    private inline fun sound(condition: Boolean, message: () -> String) {
+        if (!condition) throw UnsoundSection(message())
     }
 
     /** Throws JSONException/IllegalArgumentException on any unsound section. */
@@ -189,7 +210,7 @@ object CompanionBackupCodec {
         for (i in 0 until profilesJson.length()) {
             val o = profilesJson.getJSONObject(i)
             val id = o.getString("id")
-            require(id.isNotBlank()) { "blank companion profile id" }
+            sound(id.isNotBlank()) { "blank companion profile id" }
             val namesJson = o.optJSONObject("additional_lorebook_names") ?: JSONObject()
             val names = HashMap<String, String>()
             for (key in namesJson.keys()) names[key] = namesJson.getString(key)
@@ -201,18 +222,18 @@ object CompanionBackupCodec {
             val coreName =
                 if (o.isNull("core_lorebook_name")) null
                 else o.optString("core_lorebook_name", "")
-            require(coreId.isBlank() || coreName != null) { "core lorebook link without a name" }
+            sound(coreId.isBlank() || coreName != null) { "core lorebook link without a name" }
             val additionalIds = stringList(o.getJSONArray("additional_lorebook_ids"))
             for (linkId in additionalIds) {
-                require(names.containsKey(linkId)) { "additional lorebook link without a name" }
+                sound(names.containsKey(linkId)) { "additional lorebook link without a name" }
             }
             val prompt: String
             val promptVariants: List<PortablePromptVariant>
             if (versionInt >= CompanionBackupFormat.PROMPT_VARIANTS_VERSION) {
                 prompt = o.get("prompt") as? String
-                    ?: throw IllegalArgumentException("companion prompt mirror is not text")
+                    ?: throw UnsoundSection("companion prompt mirror is not text")
                 promptVariants = parsePromptVariants(o.getJSONArray(KEY_PROMPT_VARIANTS))
-                require(mirrorMatchesDefault(prompt, promptVariants)) {
+                sound(mirrorMatchesDefault(prompt, promptVariants)) {
                     "companion prompt mirror differs from its default variant"
                 }
             } else {
@@ -249,7 +270,7 @@ object CompanionBackupCodec {
         for (i in 0 until activationJson.length()) {
             val o = activationJson.getJSONObject(i)
             val id = o.getString("id")
-            require(id.isNotBlank()) { "blank activation prompt id" }
+            sound(id.isNotBlank()) { "blank activation prompt id" }
             activation.add(
                 ActivationPromptEntry(id, o.getString("label"), o.optString("prompt", ""))
             )
@@ -261,7 +282,7 @@ object CompanionBackupCodec {
         for (i in 0 until entriesJson.length()) {
             val o = entriesJson.getJSONObject(i)
             val id = o.getString("id")
-            require(id.isNotBlank()) { "blank system prompt id" }
+            sound(id.isNotBlank()) { "blank system prompt id" }
             systemPrompts.add(
                 SystemPromptEntry(id, o.optString("title", ""), o.optString("body", ""))
             )
@@ -286,7 +307,7 @@ object CompanionBackupCodec {
                         is String -> value
                         // Nested structures are never written by this format;
                         // finding one means the file is not sound.
-                        else -> throw IllegalArgumentException(
+                        else -> throw UnsoundSection(
                             "unsupported value type in $table.$key"
                         )
                     }
@@ -302,8 +323,8 @@ object CompanionBackupCodec {
             val o = imagesJson.getJSONObject(i)
             val hash = o.getString("hash")
             val file = o.getString("file")
-            require(IMAGE_HASH_REGEX.matches(hash)) { "invalid image hash" }
-            require(file.startsWith(CompanionBackupFormat.IMAGES_DIR)) { "invalid image path" }
+            sound(IMAGE_HASH_REGEX.matches(hash)) { "invalid image hash" }
+            sound(file.startsWith(CompanionBackupFormat.IMAGES_DIR)) { "invalid image path" }
             images.add(CompanionBackupImage(hash, file))
         }
 
@@ -330,24 +351,24 @@ object CompanionBackupCodec {
         val out = ArrayList<PortablePromptVariant>(array.length())
         for (i in 0 until array.length()) {
             val o = array.getJSONObject(i)
-            require(o.keys().asSequence().toSet() == PROMPT_VARIANT_KEYS) {
+            sound(o.keys().asSequence().toSet() == PROMPT_VARIANT_KEYS) {
                 "unexpected prompt variant fields"
             }
             out.add(
                 PortablePromptVariant(
                     id = o.get("id") as? String
-                        ?: throw IllegalArgumentException("prompt variant id is not text"),
+                        ?: throw UnsoundSection("prompt variant id is not text"),
                     name = o.get("name") as? String
-                        ?: throw IllegalArgumentException("prompt variant name is not text"),
+                        ?: throw UnsoundSection("prompt variant name is not text"),
                     text = o.get("text") as? String
-                        ?: throw IllegalArgumentException("prompt variant text is not text"),
+                        ?: throw UnsoundSection("prompt variant text is not text"),
                     isDefault = o.get("isDefault") as? Boolean
-                        ?: throw IllegalArgumentException("prompt variant default flag is not a boolean")
+                        ?: throw UnsoundSection("prompt variant default flag is not a boolean")
                 )
             )
         }
         val violation = PortablePromptVariantRules.violation(out)
-        require(violation == null) { "unsound prompt variants: $violation" }
+        sound(violation == null) { "unsound prompt variants: $violation" }
         return out
     }
 

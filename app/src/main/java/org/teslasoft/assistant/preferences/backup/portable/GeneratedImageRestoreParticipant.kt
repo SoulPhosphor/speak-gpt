@@ -119,12 +119,17 @@ class GeneratedImageRestoreParticipant internal constructor(
 
     override val categoryKey: String = participantKey
 
+    private val note = PortableRestoreFailureNote()
+
+    override fun failureDetail(): String? = note.detail
+
     var report: GeneratedImageCategoryPlanner.Report? = null
         private set
 
     private var incoming: GeneratedImagePortableRestoreManager.Prepared? = null
 
     override fun validate(): Boolean {
+        note.reset()
         precomputed?.let {
             incoming = it.incoming
             report = it.report
@@ -142,13 +147,17 @@ class GeneratedImageRestoreParticipant internal constructor(
             val names = filtered.active.mapTo(HashSet()) { it.assetFileName }
             prepared.copy(snapshot = filtered, assets = prepared.assets.filterKeys(names::contains))
         }
-        return incoming != null
+        return incoming != null || note.fail("backup_catalog_rejected")
     }
 
     override fun stage(): Boolean {
-        val backup = incoming ?: return false
-        val current = precomputed?.current ?: backend.snapshot() ?: return false
-        if (GeneratedImagePortableCatalog.validate(current) != null) return false
+        note.reset()
+        val backup = incoming ?: return note.fail("backup_catalog_not_validated")
+        val current = precomputed?.current ?: backend.snapshot()
+            ?: return note.fail("current_catalog_unreadable")
+        if (GeneratedImagePortableCatalog.validate(current) != null) {
+            return note.fail("current_catalog_invalid")
+        }
         val planned = precomputed?.let {
             GeneratedImageCategoryPlanner.Result.Ready(it.desired, it.report)
         } ?: (GeneratedImageCategoryPlanner.plan(
@@ -156,35 +165,45 @@ class GeneratedImageRestoreParticipant internal constructor(
             backup.snapshot,
             mode,
             protectedCurrentImageIds
-        ) as? GeneratedImageCategoryPlanner.Result.Ready ?: return false)
+        ) as? GeneratedImageCategoryPlanner.Result.Ready ?: return note.fail("planning_failed"))
         report = planned.report
 
         return try {
             if (stagingRoot.exists()) {
-                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) return false
+                if (!stagingRoot.isDirectory || !stagingRoot.listFiles().isNullOrEmpty()) {
+                    return note.fail("staging_directory_not_empty")
+                }
             } else if (!stagingRoot.mkdirs()) {
-                return false
+                return note.fail("staging_directory_unavailable")
             }
-            if (!RestoreProvisioningState.write(stagingRoot, backend.wasProvisionedBeforeStage())) return false
+            if (!RestoreProvisioningState.write(stagingRoot, backend.wasProvisionedBeforeStage())) {
+                return note.fail("staged_write_failed: provisioning state")
+            }
             if (!stageSet(current, emptyMap(), CURRENT_DIR, CURRENT_CATALOG)) return false
             if (!stageSet(planned.snapshot, backup.assets, DESIRED_DIR, DESIRED_CATALOG)) return false
-            loadSet(CURRENT_CATALOG, CURRENT_DIR) != null &&
-                loadSet(DESIRED_CATALOG, DESIRED_DIR) != null
-        } catch (_: Exception) {
-            false
+            (loadSet(CURRENT_CATALOG, CURRENT_DIR) != null ||
+                note.fail("staged_copy_unreadable: $CURRENT_CATALOG")) &&
+                (loadSet(DESIRED_CATALOG, DESIRED_DIR) != null ||
+                    note.fail("staged_copy_unreadable: $DESIRED_CATALOG"))
+        } catch (e: Exception) {
+            note.unexpected(e)
         }
     }
 
     override fun apply(): Boolean {
+        note.reset()
         if (!applySet(DESIRED_CATALOG, DESIRED_DIR)) return false
-        val desired = loadSet(DESIRED_CATALOG, DESIRED_DIR)?.first ?: return false
-        return backend.verifyClosure(desired)
+        val desired = loadSet(DESIRED_CATALOG, DESIRED_DIR)?.first
+            ?: return note.fail("staged_copy_unreadable: $DESIRED_CATALOG")
+        return backend.verifyClosure(desired) || note.fail("written_catalog_does_not_match_plan")
     }
 
     override fun rollback(): Boolean {
-        val wasProvisioned = RestoreProvisioningState.read(stagingRoot) ?: return false
+        note.reset()
+        val wasProvisioned = RestoreProvisioningState.read(stagingRoot)
+            ?: return note.fail("staged_copy_unreadable: provisioning state")
         if (!applySet(CURRENT_CATALOG, CURRENT_DIR, restoreOriginal = true)) return false
-        return wasProvisioned || backend.removeProvisionedStore()
+        return wasProvisioned || backend.removeProvisionedStore() || note.fail("database_removal_failed")
     }
 
     override fun cleanup() {
@@ -197,20 +216,25 @@ class GeneratedImageRestoreParticipant internal constructor(
         directoryName: String,
         catalogName: String
     ): Boolean {
-        val unique = uniqueRecords(snapshot) ?: return false
+        val unique = uniqueRecords(snapshot)
+            ?: return note.fail("catalog_has_conflicting_file_names: $directoryName")
         val directory = File(stagingRoot, directoryName)
-        if (!directory.mkdirs()) return false
+        if (!directory.mkdirs()) return note.fail("staging_directory_unavailable: $directoryName")
         for ((fileName, record) in unique) {
             val preferred = preferredSources[fileName]
             val source = if (preferred != null && GeneratedImagePortableBackup.isValidAsset(preferred, record)) {
                 preferred
             } else {
                 backend.assetFile(fileName)
-            } ?: return false
-            if (!GeneratedImagePortableBackup.isValidAsset(source, record)) return false
+            } ?: return note.fail("image_file_missing: $directoryName")
+            if (!GeneratedImagePortableBackup.isValidAsset(source, record)) {
+                return note.fail("image_contents_do_not_match_catalog: $directoryName source")
+            }
             val target = File(directory, fileName)
             source.copyTo(target, overwrite = false)
-            if (!GeneratedImagePortableBackup.isValidAsset(target, record)) return false
+            if (!GeneratedImagePortableBackup.isValidAsset(target, record)) {
+                return note.fail("image_contents_do_not_match_catalog: $directoryName copy")
+            }
         }
         File(stagingRoot, catalogName).writeText(
             GeneratedImagePortableCatalog.toJson(snapshot),
@@ -224,13 +248,15 @@ class GeneratedImageRestoreParticipant internal constructor(
         directoryName: String,
         restoreOriginal: Boolean = false
     ): Boolean {
-        if (!backend.recoverPending()) return false
-        val loaded = loadSet(catalogName, directoryName) ?: return false
-        return if (restoreOriginal) {
+        if (!backend.recoverPending()) return note.fail("earlier_image_restore_still_pending")
+        val loaded = loadSet(catalogName, directoryName)
+            ?: return note.fail("staged_copy_unreadable: $catalogName")
+        val written = if (restoreOriginal) {
             backend.restoreOriginal(loaded.first, loaded.second)
         } else {
             backend.replace(loaded.first, loaded.second)
         }
+        return written || note.fail("image_catalog_write_failed")
     }
 
     private fun loadSet(

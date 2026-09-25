@@ -126,22 +126,31 @@ object MemorySharedRestoreRowFormat {
         return MemorySharedRestoreRows(out)
     }
 
-    fun valid(data: MemorySharedRestoreRows): Boolean {
-        if (data.tables.keys != tableNames) return false
+    fun valid(data: MemorySharedRestoreRows): Boolean = invalidReason(data) == null
+
+    /** Why [data] is not a valid row set, naming only tables, key columns and
+     * value types; null when it is valid. Restore diagnostics only. */
+    fun invalidReason(data: MemorySharedRestoreRows): String? {
+        if (data.tables.keys != tableNames) return "table set differs from this app's tables"
         for (spec in specs) {
             val seen = HashSet<String>()
             for (row in data.tables[spec.table].orEmpty()) {
-                val identity = identity(spec, row) ?: return false
-                if (!seen.add(identity)) return false
-                if (row.values.any { value ->
-                        value !is String && value !is Long && value !is Int &&
-                            value !is Double && value !is Boolean &&
-                            value !is MemorySharedRestoreBlob && value != null
-                    }
-                ) return false
+                val identity = identity(spec, row)
+                    ?: return "table ${spec.table}: a row has a blank key (${spec.keys.joinToString(",")})"
+                if (!seen.add(identity)) {
+                    return "table ${spec.table}: two rows share one key (${spec.keys.joinToString(",")})"
+                }
+                row.entries.firstOrNull { (_, value) ->
+                    value !is String && value !is Long && value !is Int &&
+                        value !is Double && value !is Boolean &&
+                        value !is MemorySharedRestoreBlob && value != null
+                }?.let { (column, value) ->
+                    return "table ${spec.table} column $column: unsupported value type " +
+                        value!!.javaClass.simpleName
+                }
             }
         }
-        return true
+        return null
     }
 
     fun toJson(data: MemorySharedRestoreRows): String {
@@ -170,12 +179,19 @@ object MemorySharedRestoreRowFormat {
             .toString()
     }
 
-    fun parse(text: String): MemorySharedRestoreRows? {
+    /** [reject], when given, receives a non-content reason for a null result. */
+    fun parse(text: String, reject: ((String) -> Unit)? = null): MemorySharedRestoreRows? {
         return try {
             val root = JSONObject(text)
-            if (root.optInt("version", -1) != 1) return null
+            if (root.optInt("version", -1) != 1) {
+                reject?.invoke("staged rows have an unsupported version")
+                return null
+            }
             val tablesJson = root.getJSONObject("tables")
-            if (tablesJson.keys().asSequence().toSet() != tableNames) return null
+            if (tablesJson.keys().asSequence().toSet() != tableNames) {
+                reject?.invoke("staged rows have a different table set")
+                return null
+            }
             val tables = LinkedHashMap<String, List<Map<String, Any?>>>()
             for (spec in specs) {
                 val array = tablesJson.getJSONArray(spec.table)
@@ -191,24 +207,40 @@ object MemorySharedRestoreRowFormat {
                             is JSONObject -> {
                                 if (value.optString("value_type") != "blob" ||
                                     !value.has("base64") || value.length() != 2
-                                ) return null
+                                ) {
+                                    reject?.invoke("table ${spec.table} column $key: malformed blob value")
+                                    return null
+                                }
                                 val encoded = value.getString("base64")
                                 try {
                                     Base64.getDecoder().decode(encoded)
                                 } catch (_: IllegalArgumentException) {
+                                    reject?.invoke("table ${spec.table} column $key: malformed blob value")
                                     return null
                                 }
                                 MemorySharedRestoreBlob(encoded)
                             }
-                            else -> return null
+                            else -> {
+                                reject?.invoke(
+                                    "table ${spec.table} column $key: unsupported JSON value type " +
+                                        value.javaClass.simpleName
+                                )
+                                return null
+                            }
                         }
                     }
                     rows.add(row)
                 }
                 tables[spec.table] = rows
             }
-            MemorySharedRestoreRows(tables).takeIf(::valid)
-        } catch (_: Exception) {
+            val parsed = MemorySharedRestoreRows(tables)
+            invalidReason(parsed)?.let {
+                reject?.invoke(it)
+                return null
+            }
+            parsed
+        } catch (e: Exception) {
+            reject?.invoke("unexpected_error: ${e.javaClass.simpleName}")
             null
         }
     }
@@ -221,18 +253,29 @@ object MemorySharedRestoreRowFormat {
     fun replace(
         db: SQLiteDatabase,
         data: MemorySharedRestoreRows,
-        affectedTables: Set<String>
+        affectedTables: Set<String>,
+        reject: ((String) -> Unit)? = null
     ): Boolean {
-        if (!valid(data) || affectedTables.isEmpty() || affectedTables.any { it !in tableNames }) {
+        invalidReason(data)?.let {
+            reject?.invoke(it)
             return false
         }
+        if (affectedTables.isEmpty() || affectedTables.any { it !in tableNames }) {
+            reject?.invoke("affected table set is empty or unknown")
+            return false
+        }
+        // The table being written when a write fails, for diagnostics only.
+        var stage = "delete"
+        var currentTable = ""
         db.beginTransaction()
         val committed = try {
             db.execSQL("PRAGMA defer_foreign_keys = ON")
             for (spec in specs.asReversed()) {
                 if (spec.table !in affectedTables || spec.table == "deleted_ids") continue
+                currentTable = spec.table
                 db.delete(spec.table, null, null)
             }
+            currentTable = "deleted_ids"
             if ("deleted_ids" in affectedTables) {
                 db.delete(
                     "deleted_ids",
@@ -247,20 +290,37 @@ object MemorySharedRestoreRowFormat {
                         (it["record_type"] as? String) in MEMORY_TOMBSTONE_TYPES
                     }
                 } else data.tables.getValue(spec.table)
+                stage = "insert"
+                currentTable = spec.table
                 val liveColumns = columns(db, spec.table)
                 for (row in rows) insert(db, spec.table, liveColumns, row)
             }
+            stage = "foreign key check"
+            currentTable = ""
             db.rawQuery("PRAGMA foreign_key_check", emptyArray<String>()).use {
-                if (it.moveToFirst()) throw IllegalStateException("foreign key check failed")
+                if (it.moveToFirst()) {
+                    // Column 0 is the child table's name; row ids are not reported.
+                    currentTable = it.getString(0).orEmpty()
+                    throw IllegalStateException("foreign key check failed")
+                }
             }
             db.setTransactionSuccessful()
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            reject?.invoke(
+                if (stage == "foreign key check") "foreign key check failed in table $currentTable"
+                else "$stage failed in table $currentTable (${e.javaClass.simpleName})"
+            )
             false
         } finally {
             db.endTransaction()
         }
-        return committed && db.isDatabaseIntegrityOk
+        if (!committed) return false
+        if (!db.isDatabaseIntegrityOk) {
+            reject?.invoke("database integrity check failed after writing")
+            return false
+        }
+        return true
     }
 
     private fun identity(spec: Spec, row: Map<String, Any?>): String? {
