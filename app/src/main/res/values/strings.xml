@@ -1385,10 +1385,12 @@
     </plurals>
     <!-- Restoration Partly Successful body (owner-approved, September 2026):
          the applicable sentences, a blank line, then one problem per line.
-         The same lines are written to the Error Log; the log form of a
-         missing chat image also names the missing file. -->
+         The dialog tells the user details were saved to the Error Log; the
+         Error Log itself uses the corresponding non-self-referential strings. -->
     <string name="portable_partial_missing_references">Some existing data has missing references. Details have been saved to the Error Log.</string>
     <string name="portable_partial_not_restored">Some items could not be restored. Details have been saved to the Error Log.</string>
+    <string name="portable_partial_missing_references_log">Some existing data has missing references.</string>
+    <string name="portable_partial_not_restored_log">Some items could not be restored.</string>
     <string name="portable_missing_chat_image">Chat \"%1$s\" — image generated %2$s with %3$s: \"%4$s\" — file missing</string>
     <string name="portable_missing_chat_image_log">Chat \"%1$s\" — image generated %2$s with %3$s: \"%4$s\" — file %5$s is missing</string>
     <string name="portable_missing_identity_image">%1$s \"%2$s\" — profile picture missing</string>
