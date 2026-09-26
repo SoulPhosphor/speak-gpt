@@ -79,6 +79,18 @@ class ChatSearchStoreInstrumentedTest {
         assertTrue(failed)
     }
 
+    @Test fun chatSourceGenerationInvalidatesAnOtherwiseReadyIndex() {
+        val name = "chat_search_${System.nanoTime()}.db".also(names::add)
+        ChatSearchStore.openForTest(context, name, key).use { store ->
+            store.beginGeneration(1, Locale.US.toLanguageTag())
+            store.insertDocuments(1, listOf(document("Current corpus")))
+            store.activateGeneration(1, 0, sourceGeneration = 7L)
+
+            assertFalse(store.requiresRebuild(Locale.US.toLanguageTag(), 7L))
+            assertTrue(store.requiresRebuild(Locale.US.toLanguageTag(), 8L))
+        }
+    }
+
     private fun document(text: String) = SearchDocument(
         chatId = "chat", documentKey = "message:chat:one", kind = SearchDocumentKind.MESSAGE,
         rawText = text, indexText = SearchTextPolicy.indexText(text, Locale.US),

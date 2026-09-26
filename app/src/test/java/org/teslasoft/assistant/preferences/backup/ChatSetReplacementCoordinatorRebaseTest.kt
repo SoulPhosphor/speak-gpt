@@ -35,6 +35,7 @@ import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexJournal
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchStore
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRebaseQueue
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
@@ -62,6 +63,8 @@ class ChatSetReplacementCoordinatorRebaseTest {
         SecurePrefs.clearCacheForTest()
         ChatSearchIndexManager.resetForTest()
         ChatSearchStore.discard(context)
+        context.getSharedPreferences("storage_health", Context.MODE_PRIVATE)
+            .edit().clear().commit()
     }
 
     @Test
@@ -171,11 +174,11 @@ class ChatSetReplacementCoordinatorRebaseTest {
     }
 
     @Test
-    fun aFailedSearchDiscardReportsTheRebaseNotDurable() {
+    fun aFailedSearchDiscardDoesNotTrapTheAuthoritativeRestore() {
         // Force ChatSearchStore.discard to fail: the index path is a non-empty
         // directory, so File.delete() returns false and the derived index is NOT
-        // discarded. The rebase must report not-durable so the caller keeps the
-        // restore journal instead of leaving a stale Search index behind.
+        // discarded. The durable source generation still invalidates it, so the
+        // authoritative chat restore can finish and Search rebuilds later.
         val db = context.getDatabasePath("chat_search.db")
         db.parentFile?.mkdirs()
         db.mkdir()
@@ -183,13 +186,11 @@ class ChatSetReplacementCoordinatorRebaseTest {
 
         val result = ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(context, setOf("n1"))
 
-        assertFalse(
-            "a Search index that could not be discarded is not a durable rebase",
-            result.ok
-        )
-        assertFalse(result.searchOk)
+        assertTrue(result.ok)
+        assertTrue(result.searchOk)
         assertTrue(result.generatedImagesOk)
-        assertEquals("search index could not be rebased", result.detail())
+        assertEquals("rebase complete", result.detail())
+        assertTrue(db.exists())
     }
 
     @Test
@@ -200,6 +201,12 @@ class ChatSetReplacementCoordinatorRebaseTest {
         assertTrue(result.ok)
         assertTrue(result.searchOk)
         assertTrue(result.generatedImagesOk)
+    }
+
+    @Test
+    fun generatedImageRescanRequestIsDurableBeforeCatalogAccess() {
+        assertTrue(GeneratedImageCatalogRebaseQueue.enqueue(context, setOf("n1", "n2")))
+        assertEquals(setOf("n1", "n2"), GeneratedImageCatalogRebaseQueue.pending(context))
     }
 
     @Test

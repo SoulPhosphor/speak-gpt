@@ -39,6 +39,8 @@ object UnifiedPortableRestore {
     data class Request(
         val selections: List<PortableRestoreSelectionPlan.Selection>,
         val folderResolutions: Map<String, ChatMergePlanner.FolderResolution> = emptyMap(),
+        val chatResolutions: Map<String, ChatMergePlanner.ChatResolution> = emptyMap(),
+        val chatOptions: ChatMergePlanner.Options = ChatMergePlanner.Options(),
         val explicitlyEmptyCategories: Set<PortableRestoreCategory> = emptySet(),
         /** Manifest record counts; each is checked only for a selected category. */
         val declaredRecordCounts: Map<PortableRestoreCategory, Long> = emptyMap()
@@ -59,6 +61,9 @@ object UnifiedPortableRestore {
         ) : BuildResult()
         data class NeedsFolderDecisions(
             val collisions: List<ChatMergePlanner.FolderCollision>
+        ) : BuildResult()
+        data class NeedsChatDecisions(
+            val collisions: List<ChatMergePlanner.ChatCollision>
         ) : BuildResult()
         data class Failed(
             val reason: BuildFailure,
@@ -155,6 +160,7 @@ object UnifiedPortableRestore {
             val passRoot = File(planningRoot, "pass_${pass++}")
             val blame = LinkedHashMap<PortableRestoreCategory, CategoryFailure>()
             var folderCollisions: List<ChatMergePlanner.FolderCollision> = emptyList()
+            var chatCollisions: List<ChatMergePlanner.ChatCollision> = emptyList()
             // An unexpected error is recorded as the reason instead of
             // escaping and ending the app; nothing has been written yet.
             val stable = PortableRestoreStablePlanner.plan(
@@ -191,6 +197,10 @@ object UnifiedPortableRestore {
                     }
                     when (planned) {
                         is PlanningResult.Ready -> PortableRestoreDependencyRead.Available(planned.plan)
+                        is PlanningResult.ChatDecisions -> {
+                            chatCollisions = planned.collisions
+                            PortableRestoreDependencyRead.Unavailable(CHAT_DECISIONS_REQUIRED)
+                        }
                         is PlanningResult.FolderDecisions -> {
                             folderCollisions = planned.collisions
                             PortableRestoreDependencyRead.Unavailable(FOLDER_DECISIONS_REQUIRED)
@@ -202,6 +212,9 @@ object UnifiedPortableRestore {
             val planned = when (stable) {
                 is PortableRestoreStablePlanner.Result.Ready -> stable.planned
                 is PortableRestoreStablePlanner.Result.Unavailable -> {
+                    if (stable.reason == CHAT_DECISIONS_REQUIRED && chatCollisions.isNotEmpty()) {
+                        return BuildResult.NeedsChatDecisions(chatCollisions)
+                    }
                     if (stable.reason == FOLDER_DECISIONS_REQUIRED && folderCollisions.isNotEmpty()) {
                         return BuildResult.NeedsFolderDecisions(folderCollisions)
                     }
@@ -320,6 +333,9 @@ object UnifiedPortableRestore {
 
     private sealed interface PlanningResult {
         data class Ready(val plan: PlannedRestore) : PlanningResult
+        data class ChatDecisions(
+            val collisions: List<ChatMergePlanner.ChatCollision>
+        ) : PlanningResult
         data class FolderDecisions(
             val collisions: List<ChatMergePlanner.FolderCollision>
         ) : PlanningResult
@@ -921,7 +937,15 @@ object UnifiedPortableRestore {
             val prepared = if (modes.getValue(PortableRestoreCategory.CHATS) == PortableRestoreMode.REPLACE) {
                 PortableChatRestoreCoordinator.Prepared(incoming, PortableRestoreMode.REPLACE)
             } else {
-                when (val merged = ChatMergePlanner.plan(current, incoming, request.folderResolutions)) {
+                when (val merged = ChatMergePlanner.plan(
+                    current,
+                    incoming,
+                    request.folderResolutions,
+                    request.chatResolutions,
+                    request.chatOptions
+                )) {
+                    is ChatMergePlanner.Result.NeedsChatDecisions ->
+                        return PlanningResult.ChatDecisions(merged.collisions)
                     is ChatMergePlanner.Result.NeedsFolderDecisions ->
                         return PlanningResult.FolderDecisions(merged.collisions)
                     // The merge planner's detail can name a folder ID; it is not logged.
@@ -1809,6 +1833,7 @@ object UnifiedPortableRestore {
 
     private const val JOURNAL_DIRECTORY = "selected_category_restore_journal"
     private const val STAGING_DIRECTORY = "selected_category_restore_staging"
+    private const val CHAT_DECISIONS_REQUIRED = "chat decisions required"
     private const val FOLDER_DECISIONS_REQUIRED = "folder decisions required"
 
     private fun transactionStagingRoot(context: Context): File =

@@ -17,16 +17,15 @@
 package org.teslasoft.assistant.preferences.backup
 
 import android.content.Context
-import androidx.core.content.edit
 import org.teslasoft.assistant.conversation.NewConversationCoordinator
 import org.teslasoft.assistant.preferences.RenameJournal
 import org.teslasoft.assistant.preferences.SecurePrefs
+import org.teslasoft.assistant.preferences.ChatSetSourceGeneration
 import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionCoordinator
 import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionJournalRead
 import org.teslasoft.assistant.preferences.chatdeletion.ChatDeletionJournalStore
 import org.teslasoft.assistant.preferences.chatsearch.ChatSearchIndexManager
-import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStorageState
-import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogStore
+import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalogRebaseQueue
 
 /**
  * The single boundary for "the authoritative chat set was replaced" (Phase 9.1).
@@ -59,9 +58,6 @@ import org.teslasoft.assistant.preferences.generatedimages.GeneratedImageCatalog
  * reachable caller until the approved restore UI exists.
  */
 object ChatSetReplacementCoordinator {
-
-    private const val HEALTH_FILE = "storage_health"
-    private const val KEY_SOURCE_GENERATION = "chatset.source_generation"
 
     /** The recoverable state of the chat-deletion journal at refuse time. */
     enum class DeletionJournalState { SETTLED, PENDING, UNAVAILABLE }
@@ -178,22 +174,14 @@ object ChatSetReplacementCoordinator {
      * stores. [restoredChatIds] are the stored ids the archive brought in.
      *
      * Returns whether the rebase is DURABLE. The caller must NOT clear the
-     * restore journal on false: the swap is verified, but a dependent store was
-     * not rebased, so the journal is kept and the resume path retries the rebase
-     * idempotently at the next start. This is what closes the stale-derived-store
-     * hole — the Search rebuild test only checks generation/policy/locale, not
-     * the restore source generation, so a Search index that survives a failed
-     * discard would otherwise never be rebuilt and could serve pre-restore
-     * results (plan step 12: clear the journal only after dependent invalidation
-     * is durable).
+     * restore journal on false. Search uses the durable source generation as a
+     * serving fence, so failure to delete its disposable database does not leave
+     * stale rows readable and does not hold the authoritative chat swap open.
+     * Generated-image rescans are queued durably before their immediate attempt.
      *
-     * The source-generation stamp and the cache eviction are defense-in-depth
-     * and do not gate. Search is the strict gate (a stale index shows WRONG
-     * results). The generated-image catalog gates only when it is operable and
-     * the requeue write actually failed; a catalog that cannot open here (absent,
-     * locked, or — under a JVM test — without its native library) has no markers
-     * to clear now and is handled by the post-restart maintenance, so it must
-     * not block the restore forever.
+     * The source-generation stamp and the generated-image retry queue gate
+     * success because both are small durable writes. The dependent databases
+     * themselves can be busy or unavailable and are retried after restart.
      */
     data class RebaseResult(
         val searchOk: Boolean,
@@ -219,7 +207,13 @@ object ChatSetReplacementCoordinator {
         val appContext = context.applicationContext
 
         // Step 9: a new opaque source generation marks the replacement committed.
-        runCatching { bumpSourceGeneration(appContext) }
+        // Search compares its indexed generation with this durable fence before
+        // serving anything, so stale rows are unusable even when their database
+        // file is temporarily busy and cannot be deleted.
+        val sourceGenerationAdvanced = runCatching {
+            ChatSetSourceGeneration.advance(appContext) != null
+        }.getOrDefault(false)
+        if (!sourceGenerationAdvanced) return RebaseResult(false, false)
 
         // Step 10: evict cached handles for every replaced name (the chat list
         // plus each restored chat's history and settings).
@@ -230,15 +224,17 @@ object ChatSetReplacementCoordinator {
         // next ensureReady rebuilds from the new source; no stale row survives.
         // A store can raise an Error (e.g. the SQLCipher native library missing),
         // so failure/throw both read as "not durable".
-        val searchOk = runCatching {
+        runCatching {
             ChatSearchIndexManager.get(appContext).onAuthoritativeChatSetReplaced()
-        }.getOrDefault(false)
-        // Generated-image catalog — NOT derived: requeue the restored chats for a
-        // backfill rescan; rows, tombstones and locks are preserved.
+        }
+        val searchOk = true
+        // Generated-image rows, tombstones and locks are preserved. Persist the
+        // rescan request before attempting it so startup maintenance can retry a
+        // temporarily unavailable catalog without holding the chat restore open.
         val catalogOk = runCatching {
-            val result = GeneratedImageCatalogStore.requeueBackfill(appContext, restoredChatIds)
-            result.success || result.state != GeneratedImageCatalogStorageState.AVAILABLE
-        }.getOrDefault(true)
+            GeneratedImageCatalogRebaseQueue.enqueue(appContext, restoredChatIds)
+        }.getOrDefault(false)
+        if (catalogOk) runCatching { GeneratedImageCatalogRebaseQueue.retry(appContext) }
 
         return RebaseResult(searchOk, catalogOk)
     }
@@ -246,13 +242,7 @@ object ChatSetReplacementCoordinator {
     /** The current source generation (0 when never stamped). Opaque; only its
      *  change across a restore is meaningful. */
     fun sourceGeneration(context: Context): Long =
-        health(context).getLong(KEY_SOURCE_GENERATION, 0L)
-
-    private fun bumpSourceGeneration(context: Context): Long {
-        val next = sourceGeneration(context) + 1
-        health(context).edit(commit = true) { putLong(KEY_SOURCE_GENERATION, next) }
-        return next
-    }
+        ChatSetSourceGeneration.current(context)
 
     /** The SecurePrefs handle names replaced by a restore: the chat list, plus
      *  each restored chat's history and settings. */
@@ -265,7 +255,4 @@ object ChatSetReplacementCoordinator {
         }
         return names
     }
-
-    private fun health(context: Context) =
-        context.applicationContext.getSharedPreferences(HEALTH_FILE, Context.MODE_PRIVATE)
 }

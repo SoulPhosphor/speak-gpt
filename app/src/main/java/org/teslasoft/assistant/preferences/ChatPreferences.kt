@@ -87,6 +87,7 @@ class ChatPreferences private constructor() {
          * persistent channel — see LoggerTypeTest.
          */
         const val CORRUPT_DATA_LOG_TYPE = "crash"
+        const val CHAT_CONTENT_MODIFIED_AT_KEY = "content_modified_at"
 
         /**
          * The single monitor every chat-list read-modify-write holds — both
@@ -494,6 +495,7 @@ class ChatPreferences private constructor() {
             if (revision != null) editor
                 .putString(ChatSearchIndexManager.SEARCH_REVISION_KEY, revision)
                 .putString(ChatSearchIndexManager.SEARCH_PROJECTION_FINGERPRINT_KEY, fingerprint)
+                .putLong(CHAT_CONTENT_MODIFIED_AT_KEY, System.currentTimeMillis())
             val committed = if (synchronous || searchableChanged) editor.commit() else {
                 editor.apply()
                 true
@@ -760,10 +762,12 @@ class ChatPreferences private constructor() {
                 .commit()
             if (!settingsCommitted) return PendingConversationCommitResult.CommitFailed
 
+            val createdAt = System.currentTimeMillis().toString()
             val row = hashMapOf(
                 "name" to committedName,
                 "id" to chatId,
-                "timestamp" to System.currentTimeMillis().toString(),
+                "timestamp" to createdAt,
+                CHAT_CONTENT_MODIFIED_AT_KEY to createdAt,
                 "pinned" to "false",
                 "search_title_revision" to ChatSearchIndexManager.newRevision(),
                 ConversationMode.MODE_KEY to mode.storedValue,
@@ -846,6 +850,7 @@ class ChatPreferences private constructor() {
             titleSearchRevision = revision
             entry["name"] = chatName
             entry["search_title_revision"] = revision
+            entry[CHAT_CONTENT_MODIFIED_AT_KEY] = System.currentTimeMillis().toString()
             val newListJson: String = Gson().toJson(list)
 
             // Only the retained legacy ID-move path needs a recovery journal.

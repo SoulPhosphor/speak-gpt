@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.teslasoft.assistant.preferences.ChatPreferences
 import org.teslasoft.assistant.preferences.ChatStorageHealth
+import org.teslasoft.assistant.preferences.ChatSetSourceGeneration
 import org.teslasoft.assistant.preferences.SecurePrefs
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationItem
 import org.teslasoft.assistant.preferences.chatnavigation.ChatNavigationRepository
@@ -24,7 +25,10 @@ class ChatSearchIndexManager private constructor(context: Context) {
     fun ensureReady(onChanged: (() -> Unit)? = null) {
         executor.execute {
             val needs = try {
-                ChatSearchStore.get(app).requiresRebuild(Locale.getDefault().toLanguageTag())
+                ChatSearchStore.get(app).requiresRebuild(
+                    Locale.getDefault().toLanguageTag(),
+                    ChatSetSourceGeneration.current(app)
+                )
             } catch (_: Exception) { true }
             if (needs) rebuildBlocking() else reconcileDirtyBlocking()
             onChanged?.invoke()
@@ -60,12 +64,14 @@ class ChatSearchIndexManager private constructor(context: Context) {
      * return nothing until that active generation exists, so no stale row —
      * including a legacy null-revision row — can appear after a restore.
      *
-     * Returns true when both the journal clear and the discard succeeded.
+     * The durable chat source generation is the safety boundary. Clearing and
+     * deleting remain eager cleanup, but a temporarily busy derived database
+     * cannot make the authoritative chat replacement fail.
      */
     fun onAuthoritativeChatSetReplaced(): Boolean {
-        val journalCleared = try { journal.clearAll() } catch (_: Exception) { false }
-        val discarded = try { ChatSearchStore.discard(app) } catch (_: Exception) { false }
-        return journalCleared && discarded
+        try { journal.clearAll() } catch (_: Exception) { }
+        try { ChatSearchStore.discard(app) } catch (_: Exception) { }
+        return true
     }
 
     fun scheduleChatsDeleted(chatIds: Set<String>) {
@@ -88,8 +94,12 @@ class ChatSearchIndexManager private constructor(context: Context) {
         queryBlocking(query, options, candidateOffset, resultLimit)
     }
 
-    fun health(): SearchHealth = try { ChatSearchStore.get(app).health() }
-        catch (_: Exception) { SearchHealth(SearchCorpusState.UNAVAILABLE) }
+    fun health(): SearchHealth = try {
+        val store = ChatSearchStore.get(app)
+        if (store.indexedSourceGeneration() != ChatSetSourceGeneration.current(app)) {
+            SearchHealth(SearchCorpusState.UNAVAILABLE)
+        } else store.health()
+    } catch (_: Exception) { SearchHealth(SearchCorpusState.UNAVAILABLE) }
 
     private fun queryBlocking(
         query: String,
@@ -107,6 +117,9 @@ class ChatSearchIndexManager private constructor(context: Context) {
         }
         val byId = navigation.allChats.associateBy { it.id }
         val store = try { ChatSearchStore.get(app) } catch (_: Exception) {
+            return SearchPage(emptyList(), false, SearchHealth(SearchCorpusState.UNAVAILABLE), candidateOffset)
+        }
+        if (store.indexedSourceGeneration() != ChatSetSourceGeneration.current(app)) {
             return SearchPage(emptyList(), false, SearchHealth(SearchCorpusState.UNAVAILABLE), candidateOffset)
         }
         val generation = store.activeGeneration()
@@ -181,6 +194,7 @@ class ChatSearchIndexManager private constructor(context: Context) {
                 ChatSearchStore.get(app)
             }
             store = activeStore
+            val sourceGeneration = ChatSetSourceGeneration.current(app)
             val newGeneration = System.currentTimeMillis()
                 .coerceAtLeast((activeStore.activeGeneration() ?: 0L) + 1)
             generation = newGeneration
@@ -220,7 +234,10 @@ class ChatSearchIndexManager private constructor(context: Context) {
                     journal.clearExact(chatId, revision)
                 }
             }
-            activeStore.activateGeneration(newGeneration, skipped)
+            if (sourceGeneration != ChatSetSourceGeneration.current(app)) {
+                throw IllegalStateException("Chat source changed during Search rebuild")
+            }
+            activeStore.activateGeneration(newGeneration, skipped, sourceGeneration)
             // A mutation may have landed after the replay snapshot. Exact-token
             // clearing above preserves it, so reconcile once more against the
             // newly active generation before leaving the single-flight worker.
@@ -242,6 +259,10 @@ class ChatSearchIndexManager private constructor(context: Context) {
     private fun refreshTitleBlocking(chatId: String, expectedRevision: String) {
         try {
             val store = ChatSearchStore.get(app)
+            if (store.indexedSourceGeneration() != ChatSetSourceGeneration.current(app)) {
+                rebuildBlocking()
+                return
+            }
             val generation = store.activeGeneration() ?: run { rebuildBlocking(); return }
             val navigation = when (val result = ChatNavigationRepository.get(app).snapshot()) {
                 is ChatNavigationResult.Success -> result.value
@@ -263,6 +284,10 @@ class ChatSearchIndexManager private constructor(context: Context) {
     private fun refreshChatBlocking(chatId: String, expectedRevision: String?) {
         try {
             val store = ChatSearchStore.get(app)
+            if (store.indexedSourceGeneration() != ChatSetSourceGeneration.current(app)) {
+                rebuildBlocking()
+                return
+            }
             val generation = store.activeGeneration() ?: run { rebuildBlocking(); return }
             val navigation = when (val result = ChatNavigationRepository.get(app).snapshot()) {
                 is ChatNavigationResult.Success -> result.value

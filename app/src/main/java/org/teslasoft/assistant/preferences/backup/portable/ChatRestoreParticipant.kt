@@ -26,6 +26,8 @@ class ChatRestoreParticipant internal constructor(
         private set
     var folderCollisions: List<ChatMergePlanner.FolderCollision> = emptyList()
         private set
+    var chatCollisions: List<ChatMergePlanner.ChatCollision> = emptyList()
+        private set
     var validationFailure: PortableChatRestorePlan.Reason? = null
         private set
 
@@ -85,6 +87,10 @@ class ChatRestoreParticipant internal constructor(
             is PortableChatRestoreCoordinator.PrepareResult.NeedsFolderDecisions -> {
                 folderCollisions = result.collisions
                 note.fail("folder_decisions_required")
+            }
+            is PortableChatRestoreCoordinator.PrepareResult.NeedsChatDecisions -> {
+                chatCollisions = result.collisions
+                note.fail("chat_decisions_required")
             }
             is PortableChatRestoreCoordinator.PrepareResult.Rejected -> {
                 validationFailure = result.chatReason

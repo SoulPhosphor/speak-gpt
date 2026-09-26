@@ -91,11 +91,14 @@ class ChatSearchStore private constructor(
         return SearchHealth(state, meta(META_SKIPPED)?.toIntOrNull() ?: 0)
     }
 
-    fun requiresRebuild(localeTag: String): Boolean =
+    fun indexedSourceGeneration(): Long? = meta(META_SOURCE_GENERATION)?.toLongOrNull()
+
+    fun requiresRebuild(localeTag: String, sourceGeneration: Long): Boolean =
         activeGeneration() == null ||
             !meta(META_BUILD_GENERATION).isNullOrBlank() ||
             meta(META_POLICY_VERSION) != SearchTextPolicy.POLICY_VERSION.toString() ||
-            meta(META_LOCALE) != localeTag
+            meta(META_LOCALE) != localeTag ||
+            indexedSourceGeneration() != sourceGeneration
 
     fun beginGeneration(generation: Long, localeTag: String) {
         val db = writableDatabase
@@ -137,7 +140,7 @@ class ChatSearchStore private constructor(
         } finally { db.endTransaction() }
     }
 
-    fun activateGeneration(generation: Long, skippedChats: Int) {
+    fun activateGeneration(generation: Long, skippedChats: Int, sourceGeneration: Long = 0L) {
         val db = writableDatabase
         db.beginTransaction()
         try {
@@ -145,6 +148,7 @@ class ChatSearchStore private constructor(
             putMeta(db, META_BUILD_GENERATION, "")
             putMeta(db, META_SKIPPED, skippedChats.toString())
             putMeta(db, META_CORPUS_STATE, if (skippedChats == 0) "ready" else "incomplete")
+            putMeta(db, META_SOURCE_GENERATION, sourceGeneration.toString())
             db.delete("search_documents", "generation != ?", arrayOf(generation.toString()))
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
@@ -294,6 +298,7 @@ class ChatSearchStore private constructor(
         private const val META_BUILD_GENERATION = "build_generation"
         private const val META_CORPUS_STATE = "corpus_state"
         private const val META_SKIPPED = "skipped_chats"
+        private const val META_SOURCE_GENERATION = "chat_source_generation"
 
         @Volatile private var instance: ChatSearchStore? = null
         @Volatile private var libraryLoaded = false

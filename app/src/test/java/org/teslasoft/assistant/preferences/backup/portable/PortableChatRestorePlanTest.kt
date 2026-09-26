@@ -126,6 +126,20 @@ class PortableChatRestorePlanTest {
         assertTrue(plan.folders.isEmpty())
     }
 
+    @Test
+    fun newestDuplicateAliasMetadataIsRetained() {
+        val first = chat(chatId, "First alias").put("list_id", chatId)
+            .put("list_timestamp", "100")
+        val renamed = chat(chatId, "Renamed alias").put("list_id", chatId)
+            .put("list_timestamp", "200")
+
+        val plan = ok(artifact(ChatLogicalSerializer.FORMAT_V2, first, renamed))
+
+        assertEquals("Renamed alias", plan.chats.single().listRow["name"])
+        assertEquals("200", plan.chats.single().listRow["timestamp"])
+        assertEquals(1, plan.duplicateRowsConsolidated)
+    }
+
     private fun ok(json: String): PortableChatRestorePlan.Plan =
         (PortableChatRestorePlan.parse(json) as PortableChatRestorePlan.Result.Ok).plan
 

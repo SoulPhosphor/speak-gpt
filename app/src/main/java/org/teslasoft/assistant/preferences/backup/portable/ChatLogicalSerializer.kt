@@ -152,6 +152,17 @@ object ChatLogicalSerializer {
                 for ((key, value) in chat) {
                     if (key != "name" && key != "first_message") obj.put("list_$key", value)
                 }
+                val storedModifiedAt = try {
+                    SecurePrefs.get(context, "chat_$chatId").getLong(
+                        ChatPreferences.CHAT_CONTENT_MODIFIED_AT_KEY,
+                        0L
+                    )
+                } catch (_: Exception) { 0L }
+                val listedModifiedAt = chat[ChatPreferences.CHAT_CONTENT_MODIFIED_AT_KEY]
+                    ?.toLongOrNull() ?: 0L
+                maxOf(storedModifiedAt, listedModifiedAt).takeIf { it > 0L }?.let {
+                    obj.put("list_${ChatPreferences.CHAT_CONTENT_MODIFIED_AT_KEY}", it.toString())
+                }
                 if (format == FORMAT_V2) {
                     // v2 always makes the already-authoritative stable ID
                     // explicit. A legacy title hash remains the same ID; it is

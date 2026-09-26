@@ -22,6 +22,9 @@ object PortableChatRestoreCoordinator {
         data class NeedsFolderDecisions(
             val collisions: List<ChatMergePlanner.FolderCollision>
         ) : PrepareResult()
+        data class NeedsChatDecisions(
+            val collisions: List<ChatMergePlanner.ChatCollision>
+        ) : PrepareResult()
         data class Rejected(
             val detail: String,
             val chatReason: PortableChatRestorePlan.Reason? = null
@@ -60,6 +63,8 @@ object PortableChatRestoreCoordinator {
             }
         }
         return when (val merged = ChatMergePlanner.plan(current, backup, folderResolutions)) {
+            is ChatMergePlanner.Result.NeedsChatDecisions ->
+                PrepareResult.NeedsChatDecisions(merged.collisions)
             is ChatMergePlanner.Result.NeedsFolderDecisions ->
                 PrepareResult.NeedsFolderDecisions(merged.collisions)
             is ChatMergePlanner.Result.Rejected -> PrepareResult.Rejected(merged.detail)

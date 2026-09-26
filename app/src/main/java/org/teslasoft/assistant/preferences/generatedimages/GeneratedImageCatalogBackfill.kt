@@ -148,6 +148,7 @@ object GeneratedImageCatalogReconciler {
 /** One background maintenance entrypoint used at process start. */
 object GeneratedImageCatalogMaintenance {
     fun run(context: Context) {
+        GeneratedImageCatalogRebaseQueue.retry(context)
         GeneratedImageCatalogBackfill.run(context)
         GeneratedImageCatalogReconciler.run(context)
     }

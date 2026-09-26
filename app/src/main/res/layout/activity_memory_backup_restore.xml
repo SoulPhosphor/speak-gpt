@@ -665,6 +665,38 @@
                 style="@style/Widget.App.Section.Hint"
                 android:text="@string/restore_data_hint" />
 
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/restore_chat_always_newer" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:text="@string/restore_chat_always_newer_desc" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_restore_chat_always_newer"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
+            <LinearLayout style="@style/Widget.App.Row.Toggle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/restore_chat_keep_both" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_restore_chat_keep_both"
+                    style="@style/Widget.App.Row.Switch" />
+            </LinearLayout>
+
             <org.teslasoft.assistant.ui.views.RestoreCategoryView
                 android:id="@+id/restore_category_activation_prompts"
                 android:layout_width="match_parent"

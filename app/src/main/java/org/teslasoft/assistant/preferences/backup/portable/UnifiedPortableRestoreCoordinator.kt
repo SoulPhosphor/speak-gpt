@@ -45,6 +45,10 @@ object UnifiedPortableRestoreCoordinator {
             override val version: Long,
             val collision: ChatMergePlanner.FolderCollision
         ) : State
+        data class ChatDecision(
+            override val version: Long,
+            val collision: ChatMergePlanner.ChatCollision
+        ) : State
         data class Confirmation(
             override val version: Long,
             val selections: List<PortableRestoreSelectionPlan.Selection>
@@ -81,6 +85,8 @@ object UnifiedPortableRestoreCoordinator {
         var declaredRecordCounts: Map<PortableRestoreCategory, Long> = emptyMap(),
         var selected: List<PortableRestoreSelectionPlan.Selection> = emptyList(),
         val folderResolutions: MutableMap<String, ChatMergePlanner.FolderResolution> = LinkedHashMap(),
+        val chatResolutions: MutableMap<String, ChatMergePlanner.ChatResolution> = LinkedHashMap(),
+        val chatOptions: ChatMergePlanner.Options = ChatMergePlanner.Options(),
         var missingResult: PortableRestoreSelectionPlan.Result.Missing? = null,
         var transactionRoot: File? = null,
         var ready: UnifiedPortableRestore.BuildResult.Ready? = null,
@@ -103,7 +109,8 @@ object UnifiedPortableRestoreCoordinator {
         decodeRoot: File,
         requested: List<PortableRestoreSelectionPlan.Selection>,
         inspection: PortablePackage.Inspection,
-        unlock: UnlockMaterial
+        unlock: UnlockMaterial,
+        chatOptions: ChatMergePlanner.Options = ChatMergePlanner.Options()
     ): Boolean = synchronized(lock) {
         if (session != null || requested.isEmpty() || !packageFile.isFile || !decodeRoot.isDirectory) {
             wipe(unlock)
@@ -114,7 +121,8 @@ object UnifiedPortableRestoreCoordinator {
             decodeRoot,
             requested.toList(),
             copyInspection(inspection),
-            unlock
+            unlock,
+            chatOptions = chatOptions
         )
         publishLocked(State.Progress(nextVersionLocked(), ProgressPhase.DECODING))
         true
@@ -151,6 +159,19 @@ object UnifiedPortableRestoreCoordinator {
         val pending = state as? State.FolderDecision ?: return@synchronized false
         if (pending.collision.backupFolder.id != sourceFolderId) return@synchronized false
         current.folderResolutions[sourceFolderId] = resolution
+        current.next = Next.PREFLIGHT
+        publishLocked(State.Progress(nextVersionLocked(), ProgressPhase.PREFLIGHT))
+        true
+    }
+
+    fun resolveChat(
+        chatId: String,
+        resolution: ChatMergePlanner.ChatResolution
+    ): Boolean = synchronized(lock) {
+        val current = session ?: return@synchronized false
+        val pending = state as? State.ChatDecision ?: return@synchronized false
+        if (pending.collision.incoming.chatId != chatId) return@synchronized false
+        current.chatResolutions[chatId] = resolution
         current.next = Next.PREFLIGHT
         publishLocked(State.Progress(nextVersionLocked(), ProgressPhase.PREFLIGHT))
         true
@@ -457,10 +478,12 @@ object UnifiedPortableRestoreCoordinator {
                 context,
                 current.artifacts,
                 UnifiedPortableRestore.Request(
-                    current.selected,
-                    current.folderResolutions.toMap(),
-                    current.explicitlyEmpty,
-                    current.declaredRecordCounts
+                    selections = current.selected,
+                    folderResolutions = current.folderResolutions.toMap(),
+                    chatResolutions = current.chatResolutions.toMap(),
+                    chatOptions = current.chatOptions,
+                    explicitlyEmptyCategories = current.explicitlyEmpty,
+                    declaredRecordCounts = current.declaredRecordCounts
                 ),
                 transactionRoot
             )
@@ -473,6 +496,13 @@ object UnifiedPortableRestoreCoordinator {
         }
         synchronized(lock) {
             when (built) {
+                is UnifiedPortableRestore.BuildResult.NeedsChatDecisions -> {
+                    val collision = built.collisions.firstOrNull()
+                    if (collision != null) {
+                        publishLocked(State.ChatDecision(nextVersionLocked(), collision))
+                        return Step.WAIT
+                    }
+                }
                 is UnifiedPortableRestore.BuildResult.NeedsFolderDecisions -> {
                     val collision = built.collisions.firstOrNull()
                     if (collision != null) {

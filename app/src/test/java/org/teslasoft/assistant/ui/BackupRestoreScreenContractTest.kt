@@ -72,6 +72,20 @@ class BackupRestoreScreenContractTest {
     }
 
     @Test
+    fun chatRestoreTogglesKeepTheApprovedSentenceText() {
+        val strings = find(
+            "src/main/res/values/strings.xml",
+            "app/src/main/res/values/strings.xml"
+        ).readText()
+        val layout = source("activity_memory_backup_restore.xml")
+        assertTrue(strings.contains("Always replace old chats with newer ones."))
+        assertTrue(strings.contains("Automatically keep both old and new chats if older one has more messages."))
+        assertTrue(layout.contains("@+id/switch_restore_chat_always_newer"))
+        assertTrue(layout.contains("@+id/switch_restore_chat_keep_both"))
+        assertTrue(strings.contains("<string name=\"restore_data_section\">Restore Data</string>"))
+    }
+
+    @Test
     fun restoreCategoriesAreListedAlphabetically() {
         val layout = source("activity_memory_backup_restore.xml")
         val ids = listOf(

@@ -78,6 +78,7 @@ import org.teslasoft.assistant.preferences.backup.readable.ReadableBackupState
 import org.teslasoft.assistant.preferences.backup.readable.ReadableChatBackup
 import org.teslasoft.assistant.preferences.backup.readable.ReadableDataBackup
 import org.teslasoft.assistant.preferences.backup.portable.ChatMergePlanner
+import org.teslasoft.assistant.preferences.backup.portable.ChatRestorePreferences
 import org.teslasoft.assistant.preferences.backup.portable.PackageCrypto
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackage
 import org.teslasoft.assistant.preferences.backup.portable.PortablePackageFormat
@@ -101,7 +102,10 @@ import org.teslasoft.assistant.ui.views.RestoreCategoryView
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import org.json.JSONArray
 
 /**
  * "Backup & Restore" — the app-wide recovery screen. Phase 11 keeps Backup
@@ -124,6 +128,7 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         /** Intent extra: a BackupType key whose A1 repair dialog should open
          *  immediately (the A2 chat banner's Repair action lands here). */
         const val EXTRA_START_REPAIR_FOR = "startRepairFor"
+        private const val CHAT_PREVIEW_CHARACTER_LIMIT = 250_000
     }
 
     private var preferences: Preferences? = null
@@ -194,6 +199,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private var btnRestoreType: TextView? = null
     private var btnRestoreDatabase: MaterialButton? = null
     private var btnPortableRestore: MaterialButton? = null
+    private var switchRestoreChatAlwaysNewer: MaterialSwitch? = null
+    private var switchRestoreChatKeepBoth: MaterialSwitch? = null
     private val restoreCategoryViews = LinkedHashMap<PortableRestoreCategory, RestoreCategoryView>()
     private var modelCredentialsNote: TextView? = null
     private var restoreProgress: LinearLayout? = null
@@ -334,7 +341,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         val packageFile: File,
         val decodeRoot: File,
         val requested: List<PortableRestoreSelectionPlan.Selection>,
-        val inspection: PortablePackage.Inspection
+        val inspection: PortablePackage.Inspection,
+        val chatOptions: ChatMergePlanner.Options
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -429,6 +437,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
 
         btnCreateRecovery = findViewById(R.id.btn_create_recovery)
         btnPortableRestore = findViewById(R.id.btn_portable_restore)
+        switchRestoreChatAlwaysNewer = findViewById(R.id.switch_restore_chat_always_newer)
+        switchRestoreChatKeepBoth = findViewById(R.id.switch_restore_chat_keep_both)
         textManualLocation = findViewById(R.id.text_manual_location)
         btnChangeManualLocation = findViewById(R.id.btn_change_manual_location)
         btnCreateBackup = findViewById(R.id.btn_create_backup)
@@ -631,6 +641,15 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             )
         }
         btnPortableRestore?.setOnClickListener { beginPortableRestore() }
+        val chatRestoreOptions = ChatRestorePreferences.options(this)
+        switchRestoreChatAlwaysNewer?.isChecked = chatRestoreOptions.alwaysUseNewer
+        switchRestoreChatKeepBoth?.isChecked = chatRestoreOptions.keepBothWhenOlderHasMore
+        switchRestoreChatAlwaysNewer?.setOnCheckedChangeListener { _, enabled ->
+            ChatRestorePreferences.setAlwaysUseNewer(this, enabled)
+        }
+        switchRestoreChatKeepBoth?.setOnCheckedChangeListener { _, enabled ->
+            ChatRestorePreferences.setKeepBoth(this, enabled)
+        }
         updateRestoreTypeLabel()
         btnRestoreType?.setOnClickListener { pickRestoreType() }
         btnRestoreDatabase?.setOnClickListener {
@@ -790,6 +809,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
     private fun setRestoreFlowActive(active: Boolean) {
         restoreFlowActive = active
         btnPortableRestore?.isEnabled = !active
+        switchRestoreChatAlwaysNewer?.isEnabled = !active
+        switchRestoreChatKeepBoth?.isEnabled = !active
         btnRestoreDatabase?.isEnabled = !active
         btnRestoreType?.isEnabled = !active
         DatabaseHealthState.databaseTypes.forEach { applyInlineState(it) }
@@ -906,7 +927,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             packageFile = File(cacheDir, "pending"),
             decodeRoot = File(cacheDir, "pending"),
             requested = requested,
-            inspection = PortablePackage.Inspection("", "", "", "", "", null, false)
+            inspection = PortablePackage.Inspection("", "", "", "", "", null, false),
+            chatOptions = ChatRestorePreferences.options(this)
         )
         portableRestoreFilePicker.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
     }
@@ -931,7 +953,11 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                     return@runOnUiThread
                 }
                 pendingPortableRestore = PendingPortableRestore(
-                    packageFile, root, requested, inspected.inspection
+                    packageFile,
+                    root,
+                    requested,
+                    inspected.inspection,
+                    pendingPortableRestore?.chatOptions ?: ChatRestorePreferences.options(this)
                 )
                 if (inspected.inspection.protection == PortablePackageFormat.PROTECTION_NONE) {
                     decodePortableRestore(secret = ByteArray(0), password = null)
@@ -1058,7 +1084,8 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 pending.decodeRoot,
                 pending.requested,
                 pending.inspection,
-                unlock
+                unlock,
+                pending.chatOptions
             ).also { if (it) pendingPortableRestore = null }
         } else {
             UnifiedPortableRestoreCoordinator.retryUnlock(unlock)
@@ -1089,6 +1116,91 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
             }
             .setNeutralButton(R.string.btn_cancel) { _, _ -> cancelCoordinatorRestore() }
             .setOnCancelListener { cancelCoordinatorRestore() }
+            .show()
+    }
+
+    private fun showChatCollision(collision: ChatMergePlanner.ChatCollision) {
+        val content = layoutInflater.inflate(R.layout.dialog_chat_restore_conflict, null)
+        content.findViewById<TextView>(R.id.chat_restore_current_title).text =
+            displayChatRestoreTitle(collision.current)
+        content.findViewById<TextView>(R.id.chat_restore_incoming_title).text =
+            displayChatRestoreTitle(collision.incoming)
+        content.findViewById<TextView>(R.id.chat_restore_current_details).text =
+            chatRestoreDetails(collision.currentChangedAt, collision.current.messageCount)
+        content.findViewById<TextView>(R.id.chat_restore_incoming_details).text =
+            chatRestoreDetails(collision.incomingChangedAt, collision.incoming.messageCount)
+
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.portable_chat_collision_title)
+            .setView(content)
+            .setCancelable(false)
+            .create()
+        content.findViewById<MaterialButton>(R.id.chat_restore_preview_current).setOnClickListener {
+            showChatRestorePreview(
+                getString(R.string.portable_chat_current_version),
+                collision.current
+            )
+        }
+        content.findViewById<MaterialButton>(R.id.chat_restore_preview_incoming).setOnClickListener {
+            showChatRestorePreview(
+                getString(R.string.portable_chat_incoming_version),
+                collision.incoming
+            )
+        }
+        content.findViewById<MaterialButton>(R.id.chat_restore_keep_current).setOnClickListener {
+            dialog.dismiss()
+            continueAfterChatDecision(collision, ChatMergePlanner.ChatResolution.KeepCurrent)
+        }
+        content.findViewById<MaterialButton>(R.id.chat_restore_use_incoming).setOnClickListener {
+            dialog.dismiss()
+            continueAfterChatDecision(collision, ChatMergePlanner.ChatResolution.UseIncoming)
+        }
+        content.findViewById<MaterialButton>(R.id.chat_restore_keep_both_action).setOnClickListener {
+            dialog.dismiss()
+            continueAfterChatDecision(collision, ChatMergePlanner.ChatResolution.KeepBoth)
+        }
+        content.findViewById<MaterialButton>(R.id.chat_restore_cancel).setOnClickListener {
+            dialog.dismiss()
+            cancelCoordinatorRestore()
+        }
+        dialog.show()
+    }
+
+    private fun displayChatRestoreTitle(chat: org.teslasoft.assistant.preferences.backup.portable.ChatLogicalImportPlan.ChatPlan): String {
+        val title = chat.listRow["name"].orEmpty()
+        return if (title.contains("_autoname_")) getString(R.string.label_untitled_chat) else title
+    }
+
+    private fun chatRestoreDetails(changedAt: Long, messageCount: Int): String {
+        val time = if (changedAt > 0L) {
+            SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault()).format(Date(changedAt))
+        } else getString(R.string.portable_chat_change_time_unknown)
+        return getString(R.string.portable_chat_version_details, time, messageCount)
+    }
+
+    private fun showChatRestorePreview(
+        version: String,
+        chat: org.teslasoft.assistant.preferences.backup.portable.ChatLogicalImportPlan.ChatPlan
+    ) {
+        val messages = try { JSONArray(chat.messagesJson) } catch (_: Exception) { JSONArray() }
+        val preview = StringBuilder()
+        var shortened = false
+        for (index in 0 until messages.length()) {
+            val message = messages.optJSONObject(index) ?: continue
+            val speaker = if (message.optBoolean("isBot", false)) "Assistant" else "You"
+            val text = message.optString("message", "")
+            val addition = "$speaker\n$text\n\n"
+            if (preview.length + addition.length > CHAT_PREVIEW_CHARACTER_LIMIT) {
+                shortened = true
+                break
+            }
+            preview.append(addition)
+        }
+        if (shortened) preview.append(getString(R.string.portable_chat_preview_shortened))
+        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(getString(R.string.portable_chat_preview_title, version))
+            .setMessage(preview.toString())
+            .setPositiveButton(R.string.btn_ok, null)
             .show()
     }
 
@@ -1192,6 +1304,15 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
         else showPortableFailure(getString(R.string.portable_restore_validation_failed))
     }
 
+    private fun continueAfterChatDecision(
+        collision: ChatMergePlanner.ChatCollision,
+        resolution: ChatMergePlanner.ChatResolution
+    ) {
+        if (UnifiedPortableRestoreCoordinator.resolveChat(collision.incoming.chatId, resolution)) {
+            startUnifiedRestoreService()
+        } else showPortableFailure(getString(R.string.portable_restore_validation_failed))
+    }
+
     private fun startUnifiedRestoreService() {
         if (!RestoreForegroundService.startUnified(applicationContext)) {
             UnifiedPortableRestoreCoordinator.cancel()
@@ -1254,6 +1375,11 @@ class MemoryBackupRestoreActivity : FragmentActivity() {
                 setDatabaseMutationRunning(false)
                 setRestoreStatus(null, null, busy = false)
                 showFolderCollision(state.collision)
+            }
+            is UnifiedPortableRestoreCoordinator.State.ChatDecision -> {
+                setDatabaseMutationRunning(false)
+                setRestoreStatus(null, null, busy = false)
+                showChatCollision(state.collision)
             }
             is UnifiedPortableRestoreCoordinator.State.Confirmation -> {
                 setDatabaseMutationRunning(false)

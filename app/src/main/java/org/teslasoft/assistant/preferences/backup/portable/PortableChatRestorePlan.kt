@@ -99,6 +99,13 @@ object PortableChatRestorePlan {
                         "id ${planned.chatId} appears twice with different history or settings"
                     )
                 }
+                if (ChatMergePlanner.lastChangedAt(planned) >
+                    ChatMergePlanner.lastChangedAt(previous)
+                ) {
+                    val planIndex = plans.indexOfFirst { it.chatId == planned.chatId }
+                    if (planIndex >= 0) plans[planIndex] = planned
+                    byId[planned.chatId] = planned
+                }
                 duplicateRows++
                 continue
             }
