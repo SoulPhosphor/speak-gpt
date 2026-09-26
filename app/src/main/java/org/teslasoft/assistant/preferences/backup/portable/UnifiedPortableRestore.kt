@@ -1451,8 +1451,65 @@ object UnifiedPortableRestore {
                 context, File(root, "app_settings")
             )
         ).associateBy { it.categoryKey }
-        val recovered = SelectedCategoryRestoreTransaction.recover(journal, participants)
-        if (recovered) root.deleteRecursively()
+        val recovered = recoverPendingDetailed(context, journal, root, participants)
+        return recovered == SelectedCategoryRestoreTransaction.RecoveryResult.Success
+    }
+
+    fun recoverPendingDetailed(
+        context: Context
+    ): SelectedCategoryRestoreTransaction.RecoveryResult {
+        val journal = journalRoot(context)
+        val root = transactionStagingRoot(context)
+        if (!journal.exists()) {
+            if (root.exists()) root.deleteRecursively()
+            return SelectedCategoryRestoreTransaction.RecoveryResult.Success
+        }
+        val unused = File(root, "unused")
+        val participants = listOf<SelectedCategoryRestoreTransaction.Participant>(
+            ChatRestoreParticipant(context, unused, PortableRestoreMode.MERGE, emptyMap(), File(root, "chats")),
+            GeneratedImageRestoreParticipant(
+                context, emptyList(), PortableRestoreMode.MERGE, emptySet(), File(root, "generated_images")
+            ),
+            GeneratedImageRestoreParticipant(
+                context, emptyList(), emptySet(), File(root, "chat_images"), "chat_image_dependencies"
+            ),
+            CompanionCategoryRestoreParticipant(
+                context, unused,
+                listOf(CompanionCategoryPlanner.Selection(
+                    PortableRestoreCategory.COMPANIONS, PortableRestoreMode.MERGE
+                )),
+                File(root, "identity_bundle")
+            ),
+            CompanionMemoryRestoreParticipant(
+                context,
+                File(root, CompanionMemoryRestoreParticipant.CATEGORY_KEY)
+            ),
+            ProfileImageRestoreParticipant(
+                context, emptyList(), PortableRestoreMode.MERGE, emptySet(), File(root, "profile_images")
+            ),
+            ModelEndpointRestoreParticipant(
+                context, unused, PortableRestoreMode.MERGE, File(root, "model_endpoints")
+            ),
+            LorebookRestoreParticipant(
+                context, emptyList(), PortableRestoreMode.MERGE, File(root, "lorebooks")
+            ),
+            AppSettingsRestoreParticipant(
+                context, File(root, "app_settings")
+            )
+        ).associateBy { it.categoryKey }
+        return recoverPendingDetailed(context, journal, root, participants)
+    }
+
+    private fun recoverPendingDetailed(
+        context: Context,
+        journal: File,
+        root: File,
+        participants: Map<String, SelectedCategoryRestoreTransaction.Participant>
+    ): SelectedCategoryRestoreTransaction.RecoveryResult {
+        val recovered = SelectedCategoryRestoreTransaction.recoverDetailed(journal, participants)
+        if (recovered == SelectedCategoryRestoreTransaction.RecoveryResult.Success) {
+            root.deleteRecursively()
+        }
         return recovered
     }
 
