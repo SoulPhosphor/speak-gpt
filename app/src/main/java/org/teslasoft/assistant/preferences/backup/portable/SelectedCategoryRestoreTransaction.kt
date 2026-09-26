@@ -75,6 +75,22 @@ object SelectedCategoryRestoreTransaction {
         ) : Result()
     }
 
+    enum class RecoveryStep {
+        READ_JOURNAL,
+        MISSING_PARTICIPANT,
+        ROLLBACK,
+        DELETE_JOURNAL
+    }
+
+    sealed class RecoveryResult {
+        data object Success : RecoveryResult()
+        data class Failed(
+            val step: RecoveryStep,
+            val categoryKey: String? = null,
+            val detail: String? = null
+        ) : RecoveryResult()
+    }
+
     enum class DataState {
         /** Validation/staging failed, or every started write rolled back. */
         UNCHANGED,
@@ -226,21 +242,63 @@ object SelectedCategoryRestoreTransaction {
      * Resolve a journal left by process death. The caller supplies freshly
      * constructed category handlers keyed by the stable keys in the journal.
      */
-    fun recover(journalRoot: File, participants: Map<String, Participant>): Boolean {
-        if (!journalRoot.exists()) return true
-        val state = readState(journalRoot) ?: return false
+    fun recover(journalRoot: File, participants: Map<String, Participant>): Boolean =
+        recoverDetailed(journalRoot, participants) == RecoveryResult.Success
+
+    /**
+     * Same recovery behavior as [recover], but preserves the exact non-content
+     * reason when recovery cannot finish so the UI and Error Log do not collapse
+     * every failure into an unexplained retry loop.
+     */
+    fun recoverDetailed(
+        journalRoot: File,
+        participants: Map<String, Participant>
+    ): RecoveryResult {
+        if (!journalRoot.exists()) return RecoveryResult.Success
+        val state = readState(journalRoot) ?: return RecoveryResult.Failed(
+            RecoveryStep.READ_JOURNAL,
+            detail = "journal_state_unreadable"
+        )
         if (state.phase == Phase.COMPLETE) {
             state.started.mapNotNull(participants::get).let(::cleanup)
-            return deleteJournal(journalRoot)
+            return if (deleteJournal(journalRoot)) RecoveryResult.Success
+            else RecoveryResult.Failed(
+                RecoveryStep.DELETE_JOURNAL,
+                detail = "journal_delete_failed_after_complete"
+            )
         }
-        val started = state.started.map { participants[it] ?: return false }
-        var ok = true
+
+        val started = ArrayList<Participant>(state.started.size)
+        for (key in state.started) {
+            val participant = participants[key] ?: return RecoveryResult.Failed(
+                RecoveryStep.MISSING_PARTICIPANT,
+                categoryKey = key,
+                detail = "recovery_participant_unavailable"
+            )
+            started.add(participant)
+        }
+
+        val failures = ArrayList<Pair<String, String>>()
         for (participant in started.asReversed()) {
-            if (!safeCall(participant::rollback)) ok = false
+            attempt(participant, participant::rollback)?.let { detail ->
+                failures.add(participant.categoryKey to detail)
+            }
         }
-        if (!ok) return false
+        if (failures.isNotEmpty()) {
+            val first = failures.first()
+            return RecoveryResult.Failed(
+                RecoveryStep.ROLLBACK,
+                categoryKey = first.first,
+                detail = failures.joinToString("; ") { (key, detail) -> "$key: $detail" }
+            )
+        }
+
         cleanup(started)
-        return deleteJournal(journalRoot)
+        return if (deleteJournal(journalRoot)) RecoveryResult.Success
+        else RecoveryResult.Failed(
+            RecoveryStep.DELETE_JOURNAL,
+            detail = "journal_delete_failed_after_rollback"
+        )
     }
 
     private fun rollbackAfterFailure(
