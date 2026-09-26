@@ -160,6 +160,37 @@ class SelectedCategoryRestoreTransactionTest {
     }
 
     @Test
+    fun detailedRecoveryReportsTheParticipantAndReasonWithoutDroppingTheJournal() {
+        val root = tempRoot().apply { mkdirs() }
+        root.resolve("state.json").writeText(
+            JSONObject()
+                .put("version", 2)
+                .put("phase", "APPLYING")
+                .put("started", JSONArray().put("chats"))
+                .put("completed", JSONArray())
+                .toString()
+        )
+        val chats = object : SelectedCategoryRestoreTransaction.Participant {
+            override val categoryKey = "chats"
+            override fun validate() = true
+            override fun stage() = true
+            override fun apply() = true
+            override fun rollback() = false
+            override fun cleanup() = Unit
+            override fun failureDetail() = "rollback_snapshot_missing"
+        }
+
+        val result = SelectedCategoryRestoreTransaction.recoverDetailed(
+            root, mapOf("chats" to chats)
+        ) as SelectedCategoryRestoreTransaction.RecoveryResult.Failed
+
+        assertEquals(SelectedCategoryRestoreTransaction.RecoveryStep.ROLLBACK, result.step)
+        assertEquals("chats", result.categoryKey)
+        assertEquals("chats: rollback_snapshot_missing", result.detail)
+        assertTrue(root.resolve("state.json").isFile)
+    }
+
+    @Test
     fun everyParticipantStartAndCompleteBoundaryRecoversExactLogicalContent() {
         val categoryKeys = listOf(
             "chats",
