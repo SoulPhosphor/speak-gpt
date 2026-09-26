@@ -165,13 +165,13 @@ object ChatRestoreManager {
                 // so the SWAPPING journal and staging are kept and the resume path
                 // retries the rebase idempotently at the next start rather than
                 // reporting a success that left a stale derived store behind.
-                if (!ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
-                        appContext, verified.declaredChatIds
-                    )
-                ) {
+                val rebase = ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
+                    appContext, verified.declaredChatIds
+                )
+                if (!rebase.ok) {
                     return@synchronized Result(
                         false,
-                        "chat set replaced but a dependent store did not rebase; it will be retried at the next start"
+                        "chat set replaced but ${rebase.detail()}; it will be retried at the next start"
                     )
                 }
                 clearJournal(appContext)
@@ -220,14 +220,20 @@ object ChatRestoreManager {
                     // when the rebase is durable; a rebase that did not complete
                     // keeps the journal and staging so the next start retries it
                     // idempotently, rather than leaving a stale derived store.
-                    if (ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
-                            appContext, ChatRestorePlanner.restoredChatIds(names)
-                        )
-                    ) {
+                    val rebase = ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
+                        appContext, ChatRestorePlanner.restoredChatIds(names)
+                    )
+                    if (rebase.ok) {
                         clearJournal(appContext)
                         try { staging!!.deleteRecursively() } catch (_: Exception) { }
                         DatabaseHealthState.logHealth(appContext, "warning",
                             "An interrupted chat restore was finished from its verified staging at startup.")
+                    } else {
+                        DatabaseHealthState.logHealth(
+                            appContext,
+                            "error",
+                            "Interrupted chat restore is waiting because ${rebase.detail()}."
+                        )
                     }
                 }
                 ChatRestorePlanner.Recovery.DISCARD_STAGING -> {
