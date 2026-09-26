@@ -74,92 +74,78 @@ object PortableRestoreOutcomeFlow {
         }
     }
 
-    /** Restoration Complete when everything selected was restored cleanly;
-     * Restoration Partly Successful, with the approved sentences, a blank line
-     * and one problem per line, when anything was not restored or a missing
-     * reference was found. The standard dialog scrolls a long list. */
+    /** One final restore dialog. The outcome title carries the overall status;
+     * problem lines, restore-report details, and removed-link details are all
+     * rendered underneath it instead of opening follow-up dialogs. */
     private fun showSuccess(activity: Activity, report: PortableRestoreOutcome.Report) {
         val token = beginDialog()
         val builder = MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
-        if (report.problemLines.isEmpty()) {
-            builder.setTitle(R.string.portable_success_title)
-        } else {
-            val intro = PortableRestoreIssueText.intro(
-                activity, report.missingReferences, report.notRestored
+            .setTitle(
+                if (report.problemLines.isEmpty()) R.string.portable_success_title
+                else R.string.portable_partial_title
             )
-            builder.setTitle(R.string.portable_partial_title)
-                .setMessage(intro.joinToString("\n") + "\n\n" + report.problemLines.joinToString("\n"))
-        }
-        builder
-            .setCancelable(false)
-            .setPositiveButton(R.string.btn_ok) { _, _ ->
-                when {
-                    report.lines.isNotEmpty() -> showReport(activity, report)
-                    report.removedLorebookLinks.isNotEmpty() ->
-                        showRemovedLinks(activity, report.removedLorebookLinks)
-                    else -> finish(activity)
-                }
-            }
-            .setOnDismissListener { endDialog(token) }
-            .show()
-    }
-
-    private fun showReport(activity: Activity, report: PortableRestoreOutcome.Report) {
-        val token = beginDialog()
-        val lines = report.lines.map { line ->
-            when (line) {
-                is PortableRestoreOutcome.Report.Line.ConflictCount -> activity.getString(
-                    R.string.portable_report_conflict_count,
-                    categoryName(activity, line.category),
-                    line.count
-                )
-                is PortableRestoreOutcome.Report.Line.NamedConflicts -> activity.getString(
-                    R.string.portable_report_conflicts,
-                    categoryName(activity, line.category),
-                    if (line.names.isEmpty()) line.fallbackCount.toString()
-                    else line.names.joinToString(", ")
-                )
-                is PortableRestoreOutcome.Report.Line.LongerChats ->
-                    activity.resources.getQuantityString(
-                        R.plurals.portable_report_longer_chats, line.count, line.count
-                    )
-                is PortableRestoreOutcome.Report.Line.ProtectedImages ->
-                    activity.resources.getQuantityString(
-                        R.plurals.portable_report_protected_images, line.count, line.count
-                    )
-            }
-        }
-        MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.portable_report_title)
-            .setMessage(activity.getString(R.string.portable_report_intro) +
-                "\n\n" + lines.joinToString("\n"))
-            .setCancelable(false)
-            .setPositiveButton(R.string.btn_ok) { _, _ ->
-                if (report.removedLorebookLinks.isNotEmpty()) {
-                    showRemovedLinks(activity, report.removedLorebookLinks)
-                } else finish(activity)
-            }
-            .setOnDismissListener { endDialog(token) }
-            .show()
-    }
-
-    private fun showRemovedLinks(activity: Activity, links: List<RemovedLorebookLink>) {
-        val token = beginDialog()
-        val lines = links.joinToString("\n") {
-            activity.getString(
-                R.string.companion_backup_report_line, it.companionLabel, it.lorebookName
-            )
-        }
-        val body = activity.getString(R.string.companion_backup_report_intro) +
-            "\n\n" + lines + "\n\n" +
-            activity.getString(R.string.companion_backup_report_footer)
-        MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.companion_backup_report_title)
-            .setMessage(body)
             .setCancelable(false)
             .setPositiveButton(R.string.btn_ok) { _, _ -> finish(activity) }
             .setOnDismissListener { endDialog(token) }
-            .show()
+
+        val sections = ArrayList<String>()
+        if (report.problemLines.isNotEmpty()) {
+            val intro = PortableRestoreIssueText.intro(
+                activity, report.missingReferences, report.notRestored
+            )
+            sections.add((intro + report.problemLines).joinToString("\n"))
+        }
+
+        val reportLines = restoreReportLines(activity, report)
+        if (reportLines.isNotEmpty()) {
+            sections.add(
+                activity.getString(R.string.portable_report_intro) +
+                    "\n\n" + reportLines.joinToString("\n")
+            )
+        }
+
+        if (report.removedLorebookLinks.isNotEmpty()) {
+            val removed = report.removedLorebookLinks.joinToString("\n") {
+                activity.getString(
+                    R.string.companion_backup_report_line, it.companionLabel, it.lorebookName
+                )
+            }
+            sections.add(
+                activity.getString(R.string.companion_backup_report_intro) +
+                    "\n\n" + removed + "\n\n" +
+                    activity.getString(R.string.companion_backup_report_footer)
+            )
+        }
+
+        if (sections.isNotEmpty()) builder.setMessage(sections.joinToString("\n\n"))
+        builder.show()
+    }
+
+    private fun restoreReportLines(
+        activity: Activity,
+        report: PortableRestoreOutcome.Report
+    ): List<String> = report.lines.map { line ->
+        when (line) {
+            is PortableRestoreOutcome.Report.Line.ConflictCount -> activity.getString(
+                R.string.portable_report_conflict_count,
+                categoryName(activity, line.category),
+                line.count
+            )
+            is PortableRestoreOutcome.Report.Line.NamedConflicts -> activity.getString(
+                R.string.portable_report_conflicts,
+                categoryName(activity, line.category),
+                if (line.names.isEmpty()) line.fallbackCount.toString()
+                else line.names.joinToString(", ")
+            )
+            is PortableRestoreOutcome.Report.Line.LongerChats ->
+                activity.resources.getQuantityString(
+                    R.plurals.portable_report_longer_chats, line.count, line.count
+                )
+            is PortableRestoreOutcome.Report.Line.ProtectedImages ->
+                activity.resources.getQuantityString(
+                    R.plurals.portable_report_protected_images, line.count, line.count
+                )
+        }
     }
 
     private fun showBuildFailure(
