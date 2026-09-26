@@ -90,20 +90,40 @@ class PortableChatRestorePlanTest {
     }
 
     @Test
-    fun identicalDuplicateChatRowsAreSkippedButDivergentRowsAreRejected() {
-        val first = chat(chatId, "Same").put("list_id", chatId)
-        val same = chat(chatId, "Same").put("list_id", chatId)
-        val different = chat(chatId, "Same", """[{"message":"different"}]""")
+    fun duplicateAliasesWithSharedHistoryAreConsolidatedButDivergentHistoryIsRejected() {
+        val first = chat(chatId, "First alias").put("list_id", chatId)
+        val alias = chat(chatId, "Renamed alias").put("list_id", chatId)
+            .put("list_pinned", "true")
+        val differentHistory = chat(chatId, "First alias", """[{"message":"different"}]""")
             .put("list_id", chatId)
 
-        val plan = ok(artifact(ChatLogicalSerializer.FORMAT_V2, first, same))
+        val plan = ok(artifact(ChatLogicalSerializer.FORMAT_V2, first, alias))
         assertEquals(1, plan.chats.size)
+        assertEquals(chatId, plan.chats.single().chatId)
+        assertEquals(chatId, plan.chats.single().listRow["id"])
+        assertEquals("First alias", plan.chats.single().listRow["name"])
         assertEquals(1, plan.duplicateRowsConsolidated)
 
         val rejected = PortableChatRestorePlan.parse(
-            artifact(ChatLogicalSerializer.FORMAT_V2, first, different)
+            artifact(ChatLogicalSerializer.FORMAT_V2, first, differentHistory)
         ) as PortableChatRestorePlan.Result.Rejected
         assertEquals(PortableChatRestorePlan.Reason.DUPLICATE_CHAT_ID, rejected.reason)
+    }
+
+    @Test
+    fun folderUsedOnlyByDuplicateAliasDoesNotCreateAnEmptyFolder() {
+        val aliasFolderId = "8f2504e0-4f89-41d3-9a0c-0305e82c3301"
+        val first = chat(chatId, "First alias").put("list_id", chatId)
+        val alias = chat(chatId, "Foldered alias").put("list_id", chatId)
+            .put("list_folder_id", aliasFolderId)
+        val root = JSONObject(artifact(ChatLogicalSerializer.FORMAT_V2, first, alias))
+            .put("folders", JSONArray().put(folder(aliasFolderId, "Alias Folder")))
+
+        val plan = ok(root.toString())
+
+        assertEquals(1, plan.chats.size)
+        assertEquals(1, plan.duplicateRowsConsolidated)
+        assertTrue(plan.folders.isEmpty())
     }
 
     private fun ok(json: String): PortableChatRestorePlan.Plan =
