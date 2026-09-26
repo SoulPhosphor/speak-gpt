@@ -129,7 +129,7 @@ class ChatRestoreEngineTest {
     }
 
     @Test
-    fun aFailedDependentRebaseKeepsTheJournalForRetryAndReportsIncomplete() {
+    fun aFailedSearchDiscardDoesNotFailAVerifiedRestore() {
         seedLive("enc.chat_list.xml", "OLD-LIST")
         val archive = buildArchive(
             chatIds = listOf("n1"),
@@ -138,22 +138,23 @@ class ChatRestoreEngineTest {
                 "enc.chat_n1.xml" to "NEW".toByteArray()
             )
         )
-        // Force the Search rebase to fail: the index path is a non-empty
-        // directory, so discard cannot delete it.
+        // Make the Search database path impossible to discard. The durable
+        // source generation must still invalidate anything left at this path.
         val searchDb = context.getDatabasePath("chat_search.db")
         searchDb.parentFile?.mkdirs()
         searchDb.mkdir()
         File(searchDb, "child").writeBytes("x".toByteArray())
+        val generationBefore = ChatSetReplacementCoordinator.sourceGeneration(context)
 
         val result = ChatRestoreManager.restoreFromArchive(context, archive)
 
-        // The verified swap stands — the live set is the new one...
-        assertFalse("a failed dependent rebase must not report success", result.ok)
+        assertTrue("a verified restore must not be blocked by disposable Search cleanup", result.ok)
         assertArrayEquals("NEW-LIST".toByteArray(), File(sharedPrefsDir(), "enc.chat_list.xml").readBytes())
-        // ...but the journal stays SWAPPING so the resume path retries the rebase,
-        // rather than clearing it and leaving a stale Search index.
-        val p = context.getSharedPreferences("storage_health", Context.MODE_PRIVATE)
-        assertEquals("swapping", p.getString("chatrestore.phase", null))
+        assertEquals(
+            generationBefore + 1,
+            ChatSetReplacementCoordinator.sourceGeneration(context)
+        )
+        assertJournalCleared()
     }
 
     // ---- helpers ------------------------------------------------------------
