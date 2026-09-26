@@ -10,9 +10,9 @@ import java.util.Date
 import org.teslasoft.assistant.R
 
 /**
- * The owner-approved text for a restore's problem lines. The service formats
- * them once, before the mandatory restart, so the Restoration Partly
- * Successful dialog and the Error Log entry always show the same lines.
+ * The owner-approved text for a restore's problem lines. The dialog and Error
+ * Log share the same problem details, but their introductory text differs:
+ * only the dialog tells the user that details were saved to the Error Log.
  */
 object PortableRestoreIssueText {
     data class Lines(
@@ -43,11 +43,18 @@ object PortableRestoreIssueText {
         )
     }
 
-    /** The sentences shown above the problem lines, in the dialog and the log. */
+    /** The sentences shown above the problem lines in the user-facing dialog. */
     fun intro(context: Context, missingReferences: Boolean, notRestored: Boolean): List<String> =
         buildList {
             if (notRestored) add(context.getString(R.string.portable_partial_not_restored))
             if (missingReferences) add(context.getString(R.string.portable_partial_missing_references))
+        }
+
+    /** The Error Log intro must not claim that details were saved to itself. */
+    fun logIntro(context: Context, missingReferences: Boolean, notRestored: Boolean): List<String> =
+        buildList {
+            if (notRestored) add(context.getString(R.string.portable_partial_not_restored_log))
+            if (missingReferences) add(context.getString(R.string.portable_partial_missing_references_log))
         }
 
     fun categoryFailureLine(
