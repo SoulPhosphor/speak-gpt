@@ -657,7 +657,7 @@ object UnifiedPortableRestoreCoordinator {
             }
         }
         val text = (
-            PortableRestoreIssueText.intro(context, issues.missingReferences, issues.notRestored) +
+            PortableRestoreIssueText.logIntro(context, issues.missingReferences, issues.notRestored) +
                 "" + issues.log + reasons
             ).joinToString("\n")
         try {
