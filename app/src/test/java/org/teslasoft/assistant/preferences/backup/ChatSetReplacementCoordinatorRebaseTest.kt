@@ -181,14 +181,25 @@ class ChatSetReplacementCoordinatorRebaseTest {
         db.mkdir()
         File(db, "child").writeBytes("x".toByteArray())
 
-        val durable = ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(context, setOf("n1"))
+        val result = ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(context, setOf("n1"))
 
-        assertFalse("a Search index that could not be discarded is not a durable rebase", durable)
+        assertFalse(
+            "a Search index that could not be discarded is not a durable rebase",
+            result.ok
+        )
+        assertFalse(result.searchOk)
+        assertTrue(result.generatedImagesOk)
+        assertEquals("search index could not be rebased", result.detail())
     }
 
     @Test
     fun aCleanRebaseReportsDurable() {
-        assertTrue(ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(context, setOf("n1")))
+        val result = ChatSetReplacementCoordinator.onAuthoritativeChatSetReplaced(
+            context, setOf("n1")
+        )
+        assertTrue(result.ok)
+        assertTrue(result.searchOk)
+        assertTrue(result.generatedImagesOk)
     }
 
     @Test
