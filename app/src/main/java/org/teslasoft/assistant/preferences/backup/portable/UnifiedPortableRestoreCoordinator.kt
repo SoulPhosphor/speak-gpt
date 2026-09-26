@@ -193,16 +193,49 @@ object UnifiedPortableRestoreCoordinator {
     /** Startup/manual recovery enters through the same operation owner. */
     @Synchronized
     fun recoverPending(context: Context): Boolean =
-        RecoveryOperationGate.runExclusive {
-            UnifiedPortableRestore.recoverPending(context.applicationContext)
+        recoverPendingDetailed(context) == SelectedCategoryRestoreTransaction.RecoveryResult.Success
+
+    @Synchronized
+    fun recoverPendingDetailed(
+        context: Context
+    ): SelectedCategoryRestoreTransaction.RecoveryResult {
+        val app = context.applicationContext
+        val result = try {
+            RecoveryOperationGate.runExclusive {
+                UnifiedPortableRestore.recoverPendingDetailed(app)
+            }
+        } catch (e: Exception) {
+            SelectedCategoryRestoreTransaction.RecoveryResult.Failed(
+                SelectedCategoryRestoreTransaction.RecoveryStep.READ_JOURNAL,
+                detail = PortableRestoreDiagnostics.unexpected(e)
+            )
         }
+        if (result is SelectedCategoryRestoreTransaction.RecoveryResult.Failed) {
+            val text = buildString {
+                append("Restore recovery could not finish.")
+                append("\nStep: ").append(result.step.name)
+                result.categoryKey?.let { append(" | Participant: ").append(it) }
+                result.detail?.let { append(" | Detail: ").append(it) }
+            }
+            Logger.logCrashDurable(app, "PortableRestoreRecovery", "error", text)
+        }
+        return result
+    }
 
     /** Recovery execution remains process-owned even if its requesting Activity is destroyed. */
     fun recoverPendingAsync(context: Context, complete: (Boolean) -> Unit) {
+        recoverPendingAsyncDetailed(context) {
+            complete(it == SelectedCategoryRestoreTransaction.RecoveryResult.Success)
+        }
+    }
+
+    fun recoverPendingAsyncDetailed(
+        context: Context,
+        complete: (SelectedCategoryRestoreTransaction.RecoveryResult) -> Unit
+    ) {
         val app = context.applicationContext
         recoveryWorker.execute {
-            val recovered = try { recoverPending(app) } catch (_: Exception) { false }
-            complete(recovered)
+            complete(recoverPendingDetailed(app))
         }
     }
 
