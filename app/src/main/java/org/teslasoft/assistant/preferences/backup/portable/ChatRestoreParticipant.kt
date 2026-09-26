@@ -145,7 +145,11 @@ class ChatRestoreParticipant internal constructor(
     private fun restore(archive: File): Boolean {
         if (!archive.isFile) return note.fail("staged_copy_unreadable: ${archive.name}")
         return try {
-            ChatRestoreManager.restoreFromArchive(app, archive).ok || note.fail("chat_write_failed")
+            val result = ChatRestoreManager.restoreFromArchive(app, archive)
+            if (result.ok) true
+            else note.fail(
+                "chat_write_failed: " + (result.detail ?: "no_reason_given")
+            )
         } catch (e: Exception) {
             note.unexpected(e)
         }
