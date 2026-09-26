@@ -70,6 +70,7 @@ object PortableChatRestorePlan {
         val plans = ArrayList<ChatLogicalImportPlan.ChatPlan>(entries.length())
         val byId = LinkedHashMap<String, ChatLogicalImportPlan.ChatPlan>()
         val allMessageIds = HashSet<String>()
+        val sourceReferencedFolderIds = LinkedHashSet<String>()
         var duplicateRows = 0
         for (index in 0 until entries.length()) {
             val entry = entries.optJSONObject(index)
@@ -79,12 +80,23 @@ object PortableChatRestorePlan {
                 is ChatResult.Rejected -> return rejected(result.reason, result.detail)
             }
             val planned = validated.chat
+            planned.listRow[ChatNavigationRepository.FOLDER_ID_KEY]
+                ?.takeIf(String::isNotBlank)
+                ?.let(sourceReferencedFolderIds::add)
             val previous = byId[planned.chatId]
             if (previous != null) {
-                if (previous != planned) {
+                // Legacy chat-list rows can alias the same immutable chat ID.
+                // History and per-chat settings are stored by that ID, so list
+                // metadata can legitimately differ while both rows point at
+                // the same recoverable conversation. Consolidate only when the
+                // shared ID-backed data agrees; divergent history/settings is
+                // genuinely ambiguous and remains a hard rejection.
+                if (previous.messagesJson != planned.messagesJson ||
+                    previous.settings != planned.settings
+                ) {
                     return rejected(
                         Reason.DUPLICATE_CHAT_ID,
-                        "id ${planned.chatId} appears twice with different content"
+                        "id ${planned.chatId} appears twice with different history or settings"
                     )
                 }
                 duplicateRows++
@@ -102,7 +114,7 @@ object PortableChatRestorePlan {
             plans.add(planned)
         }
 
-        val referencedFolderIds = plans.mapNotNullTo(LinkedHashSet()) {
+        val retainedFolderIds = plans.mapNotNullTo(LinkedHashSet()) {
             it.listRow[ChatNavigationRepository.FOLDER_ID_KEY]?.takeIf(String::isNotBlank)
         }
         val folders = if (format == ChatLogicalSerializer.FORMAT_V1) {
@@ -113,18 +125,21 @@ object PortableChatRestorePlan {
             val decoded = ChatFolderPortableCodec.decodeArtifact(rawFolders)
                 ?: return rejected(Reason.MALFORMED_FOLDERS, "folder definitions failed validation")
             val folderIds = decoded.mapTo(LinkedHashSet()) { it.id }
-            val missing = referencedFolderIds - folderIds
+            val missing = sourceReferencedFolderIds - folderIds
             if (missing.isNotEmpty()) {
                 return rejected(Reason.MISSING_FOLDER, "folder ${missing.first()} has no definition")
             }
-            val unreferenced = folderIds - referencedFolderIds
+            val unreferenced = folderIds - sourceReferencedFolderIds
             if (unreferenced.isNotEmpty()) {
                 return rejected(
                     Reason.UNREFERENCED_FOLDER,
                     "folder ${unreferenced.first()} is not used by a backed-up chat"
                 )
             }
-            decoded.map { FolderPlan(it.id, it.name, it.pinned) }
+            // A folder referenced only by a consolidated duplicate alias is
+            // valid source metadata but should not become a new empty folder.
+            decoded.filter { it.id in retainedFolderIds }
+                .map { FolderPlan(it.id, it.name, it.pinned) }
         }
         return Result.Ok(Plan(plans, folders, format, duplicateRows))
     }
