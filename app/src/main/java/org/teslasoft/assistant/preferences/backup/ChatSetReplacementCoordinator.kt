@@ -195,7 +195,27 @@ object ChatSetReplacementCoordinator {
      * to clear now and is handled by the post-restart maintenance, so it must
      * not block the restore forever.
      */
-    fun onAuthoritativeChatSetReplaced(context: Context, restoredChatIds: Set<String>): Boolean {
+    data class RebaseResult(
+        val searchOk: Boolean,
+        val generatedImagesOk: Boolean
+    ) {
+        val ok: Boolean get() = searchOk && generatedImagesOk
+
+        fun detail(): String = when {
+            !searchOk && !generatedImagesOk ->
+                "search index and generated-image catalog could not be rebased"
+            !searchOk ->
+                "search index could not be rebased"
+            !generatedImagesOk ->
+                "generated-image catalog could not be rebased"
+            else -> "rebase complete"
+        }
+    }
+
+    fun onAuthoritativeChatSetReplaced(
+        context: Context,
+        restoredChatIds: Set<String>
+    ): RebaseResult {
         val appContext = context.applicationContext
 
         // Step 9: a new opaque source generation marks the replacement committed.
@@ -220,7 +240,7 @@ object ChatSetReplacementCoordinator {
             result.success || result.state != GeneratedImageCatalogStorageState.AVAILABLE
         }.getOrDefault(true)
 
-        return searchOk && catalogOk
+        return RebaseResult(searchOk, catalogOk)
     }
 
     /** The current source generation (0 when never stamped). Opaque; only its
