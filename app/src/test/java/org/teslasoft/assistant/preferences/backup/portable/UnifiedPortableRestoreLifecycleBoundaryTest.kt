@@ -70,6 +70,31 @@ class UnifiedPortableRestoreLifecycleBoundaryTest {
     }
 
     @Test
+    fun provisionalConversationIsRefusedBeforeTheTransactionJournalStarts() {
+        val coordinator = source("preferences/backup/portable/UnifiedPortableRestoreCoordinator.kt")
+        val apply = coordinator.substringAfter("private fun applyLocked(context: Context)")
+            .substringBefore("private fun terminal(")
+        val provisional = apply.indexOf("ChatSetReplacementCoordinator.settleOrRefuse(context)")
+        val processMarker = apply.indexOf("PortableRestoreProcessGate.mark(")
+        val execute = apply.indexOf("UnifiedPortableRestore.execute(")
+        assertTrue(provisional >= 0)
+        assertTrue(processMarker > provisional)
+        assertTrue(execute > processMarker)
+        assertTrue(apply.substring(provisional, processMarker).contains("DataState.UNCHANGED"))
+    }
+
+    @Test
+    fun startupRecoverySettlesStaleProvisionalSessionsBeforeRollback() {
+        val application = source("app/MainApplication.kt")
+        val journal = application.indexOf("if (UnifiedPortableRestore.journalRoot(this).exists())")
+        val settle = application.indexOf("settleProvisionalSessionsAfterProcessRestart")
+        val recover = application.indexOf("UnifiedPortableRestoreCoordinator.recoverPending(this)")
+        assertTrue(journal >= 0)
+        assertTrue(settle > journal)
+        assertTrue(recover > settle)
+    }
+
+    @Test
     fun activityRecreationKeepsCoordinatorStagingAndTerminalOutcome() {
         val activity = source("ui/activities/MemoryBackupRestoreActivity.kt")
         val coordinator = source("preferences/backup/portable/UnifiedPortableRestoreCoordinator.kt")

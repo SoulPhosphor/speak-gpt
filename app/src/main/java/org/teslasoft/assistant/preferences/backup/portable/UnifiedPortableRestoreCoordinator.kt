@@ -12,6 +12,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import org.teslasoft.assistant.preferences.backup.companion.RemovedLorebookLink
 import org.teslasoft.assistant.preferences.Logger
+import org.teslasoft.assistant.preferences.backup.ChatSetReplacementCoordinator
 import org.teslasoft.assistant.preferences.backup.RecoveryOperationGate
 
 /**
@@ -595,6 +596,39 @@ object UnifiedPortableRestoreCoordinator {
                 "apply began without restore staging storage"
             ))
         )
+
+        // Refuse a live unsaved conversation before the outer transaction
+        // records Chats as started. Previously the participant discovered this
+        // only after the journal was written; its mandatory rollback then used
+        // the same chat replacement engine, hit the same guard, and left the app
+        // in recovery forever even though no chat file had been mutated.
+        if (PortableRestoreCategory.CHATS in ready.finalState.categoryModes) {
+            val block = ChatSetReplacementCoordinator.settleOrRefuse(context)
+            if (block != null) {
+                val failed = SelectedCategoryRestoreTransaction.Result.Failed(
+                    SelectedCategoryRestoreTransaction.Failure.VALIDATION_FAILED,
+                    PortableRestoreCategory.CHATS.key,
+                    SelectedCategoryRestoreTransaction.DataState.UNCHANGED,
+                    "chat_write_failed: ${block.detail()}"
+                )
+                return terminal(
+                    context,
+                    PortableRestoreOutcome.TransactionFailure(
+                        failed.reason,
+                        failed.categoryKey,
+                        failed.dataState,
+                        null
+                    ),
+                    current,
+                    log = listOf(
+                        PortableRestoreFailureLog.transactionFailure(
+                            failed,
+                            listOf(PortableRestoreCategory.CHATS)
+                        )
+                    )
+                )
+            }
+        }
 
         var mismatch: String? = null
         if (!UnifiedPortableRestore.sourceGenerationsMatch(context, ready, transactionRoot) { mismatch = it }) {

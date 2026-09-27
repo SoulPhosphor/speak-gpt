@@ -221,6 +221,26 @@ class NewConversationCoordinator(private val context: Context) {
         abandonPendingConversation(id, name)
     }
 
+    /**
+     * Settle every provisional conversation before startup restore recovery.
+     *
+     * This is deliberately narrower than ordinary replacement preparation.
+     * It is called only in a new process while a durable portable restore
+     * journal already requires recovery. At that point no Activity can still
+     * own unsent editor text. Conversations with durable turns are committed,
+     * authoritatively empty conversations are discarded, and unreadable or
+     * otherwise unsettled conversations remain pending so recovery still
+     * refuses rather than replacing over unexamined data.
+     */
+    fun settleProvisionalSessionsAfterProcessRestart() {
+        recoverPendingCommits()
+        settleStartupPlaceholder()
+        adoptUnindexedPendingConversations()
+        pendingConversationIds().forEach { chatId ->
+            abandonPendingConversation(chatId, retainedName(chatId))
+        }
+    }
+
     /** Resume first commits that crossed the payload boundary before process death. */
     fun recoverPendingCommits() {
         val journal = SecurePrefs.get(app, "pending_conversation_journal")

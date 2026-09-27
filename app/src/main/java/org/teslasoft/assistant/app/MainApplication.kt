@@ -46,6 +46,7 @@ import org.teslasoft.assistant.preferences.backup.DirectProfileImageRestoreRecov
 import org.teslasoft.assistant.preferences.backup.StartupDatabaseCheck
 import org.teslasoft.assistant.preferences.backup.portable.GeneratedImagePortableRestoreManager
 import org.teslasoft.assistant.preferences.backup.portable.PortableRestoreProcessGate
+import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestore
 import org.teslasoft.assistant.preferences.backup.portable.UnifiedPortableRestoreCoordinator
 import org.teslasoft.assistant.preferences.memory.MemoryExporter
 import org.teslasoft.assistant.preferences.memory.MemoryLog
@@ -133,6 +134,19 @@ class MainApplication : Application() {
                 if (!DirectProfileImageRestoreRecovery.recoverPending(this)) {
                     PortableRestoreProcessGate.finishStartupRecovery(false)
                     return@Thread
+                }
+                // A failed portable restore can leave an outer rollback journal
+                // alongside the provisional conversation that was open in the
+                // previous process. Recovery must not deadlock on that stale
+                // session. Durable turns are committed and only authoritatively
+                // empty provisional stores are discarded before rollback. This
+                // is limited to process startup with an existing recovery journal,
+                // so an ordinary live draft still blocks a new replacement.
+                if (UnifiedPortableRestore.journalRoot(this).exists()) {
+                    try {
+                        NewConversationCoordinator(this)
+                            .settleProvisionalSessionsAfterProcessRestart()
+                    } catch (_: Exception) { }
                 }
                 // The outer selected-category restore may span several stores.
                 // Settle its exact rollback snapshots before any startup task

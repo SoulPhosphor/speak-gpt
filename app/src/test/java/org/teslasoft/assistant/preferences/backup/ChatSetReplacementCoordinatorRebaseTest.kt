@@ -153,6 +153,51 @@ class ChatSetReplacementCoordinatorRebaseTest {
     }
 
     @Test
+    fun startupRecoveryDiscardsAnEmptyUserCreatedProvisionalSession() {
+        val conversations = NewConversationCoordinator(context)
+        val pending = conversations.createPendingConversation(
+            NewConversationCoordinator.StartRequest("User-created draft")
+        )
+
+        assertEquals(
+            ChatSetReplacementCoordinator.ReplacementBlock.PROVISIONAL_SESSION,
+            ChatSetReplacementCoordinator.settleOrRefuse(context)
+        )
+
+        conversations.settleProvisionalSessionsAfterProcessRestart()
+
+        assertFalse(conversations.isPending(pending.id))
+        assertNull(ChatSetReplacementCoordinator.pendingBlockNow(context))
+    }
+
+    @Test
+    fun startupRecoveryCommitsAProvisionalSessionThatContainsTurns() {
+        val conversations = NewConversationCoordinator(context)
+        val pending = conversations.createPendingConversation(
+            NewConversationCoordinator.StartRequest("Recovered draft")
+        )
+        assertTrue(
+            SecurePrefs.get(context, "chat_${pending.id}").edit()
+                .putString("chat", """[{"message":"saved turn","isBot":false}]""")
+                .commit()
+        )
+
+        conversations.settleProvisionalSessionsAfterProcessRestart()
+
+        assertFalse(conversations.isPending(pending.id))
+        val listed = ChatPreferences.getChatPreferences()
+            .getChatListResult(context, includeFirstMessage = false)
+            .chats
+        assertTrue(listed.any { ChatPreferences.storedChatId(it) == pending.id })
+        assertTrue(
+            ChatPreferences.getChatPreferences()
+                .getChatByIdResult(context, pending.id)
+                .messages.isNotEmpty()
+        )
+        assertNull(ChatSetReplacementCoordinator.pendingBlockNow(context))
+    }
+
+    @Test
     fun rebaseClearsSearchDiscardsTheIndexAndBumpsTheGeneration() {
         // A stale Search dirty token and an index database exist before restore.
         val journal = ChatSearchIndexJournal.get(context)
