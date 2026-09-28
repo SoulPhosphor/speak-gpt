@@ -99,6 +99,8 @@ Result in plain terms: +3 currently behaves close to "always load, limited only 
 3. Calibrate `MIN_SIMILARITY` from measured on-device score distributions (Memory Lab) instead of the current guess; this also supplies real numbers for Strict/Balanced/Broad.
 4. Build the already-approved `Maximum Memories Per Response` / `Memory Match Strictness` controls so the "maximum" the +3 rule refers to is visible and user-set.
 
+**Owner ruling (2026-09-28):** Option A is the intended meaning of +3. Parameters remain open (see §5, Decision 1).
+
 **Recommendation:** Option A plus supporting fixes 1 and 2, with fix 3 done using the Memory Lab once it exists. Option A is the only one that matches the owner's described meaning of +3.
 
 **Wording impact:** The approved +3 subtext ("always included when relevant") would no longer describe Option A accurately. The subtext and the `+3 · Always include` label need a wording decision **after** the behavior is chosen. Do not draft replacements before then.
@@ -209,7 +211,7 @@ Record any borrowed code in a third-party notices file with upstream commit and 
 
 Asked one at a time in chat; recorded here for reference. Status for all: **No code has been changed.**
 
-1. **Meaning of +3.** Confirm Option A (bounded tie-break at the cutoff) vs Option B vs something else. Then: how many extra +3 memories per turn at most, and how close to the cutoff a +3 must be.
+1. **Meaning of +3.** **Answered 2026-09-28: Option A approved** (bounded tie-break at the cutoff: a +3 memory must pass the normal relevance rule, and may be added beyond the maximum only when it narrowly missed the cutoff, with a small cap on extras). Still open: the maximum number of extra +3 memories per turn, and how close to the cutoff a +3 must be. Approval of Option A does not approve new +3 wording; the label and subtext need a separate wording decision.
 2. **Importance weight.** Reduce importance from a large score bonus to a small tie-break so a +2/+3 rating cannot beat a clearly more relevant memory?
 3. **Keyword fallback.** Stop counting common words ("the", "and", "you") as matches?
 4. **Roadmap order.** Where the Memory Lab and +3 repair go relative to Feature 1 (e.g. before it, as a narrow defect fix plus diagnostic tool; or after it).
