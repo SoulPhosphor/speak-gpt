@@ -74,7 +74,7 @@ Several verified mechanisms combine:
 | # | Mechanism | Location | Effect |
 |---|---|---|---|
 | a | +3 bypasses the count limit with **no cap on extras** | `ImportanceRanking.includeMandatory`, `RetrievalBackfill.select` | The only remaining limit is the 6,000-character budget. |
-| b | Semantic relevance floor is cosine 0.30 | `Librarian.kt:57` | For sentence-embedding models, unrelated same-language sentences commonly score in the 0.2–0.5 range. Many +3 memories clear 0.30 against almost any conversation. *Not measured on this model; the Memory Lab (§3) should measure it.* |
+| b | Semantic relevance floor is cosine 0.30 | `Librarian.kt:57` | For sentence-embedding models, unrelated same-language sentences commonly score in the 0.2–0.5 range. Many +3 memories clear 0.30 against almost any conversation. *Not measured on this model; the Memory Previewer (§3) should measure it.* |
 | c | Lexical fallback accepts a single shared ≥3-letter token, with no stop-word filtering | `Librarian.kt:63`, `rankLexical` | While the vector index is incomplete or the model is absent, any +3 memory sharing "the"/"and"/"you" with the query is "relevant". |
 | d | +3 (and +2) receive the maximum importance bonus `0.3 × 1.0 = 0.30` against `0.6 × similarity` | `Librarian.rank`, `RetrievalPolicy` defaults | A +2/+3 memory with similarity 0.35 (score ≈ 0.51) outranks a neutral memory with similarity 0.80 (score ≈ 0.48). High ratings therefore crowd out more relevant memories even inside the normal 8. |
 | e | Query includes recent-turn context, not just the latest message | `Enforcer.kt:228` | A wider query raises baseline similarity and token overlap for everything. |
@@ -96,20 +96,20 @@ Result in plain terms: +3 currently behaves close to "always load, limited only 
 **Supporting fixes that apply to either option (each needs approval because each changes retrieval behavior):**
 1. Reduce the importance weight so it acts as a tie-break rather than a relevance override. The Archivist reconciliation path already does this (`RECONCILIATION_MAX_TIE_BREAK = 0.06`, `Librarian.kt:108`); live retrieval does not.
 2. Add a stop-word filter (or require ≥2 meaningful token hits / a minimum overlap ratio) in the lexical fallback.
-3. Calibrate `MIN_SIMILARITY` from measured on-device score distributions (Memory Lab) instead of the current guess; this also supplies real numbers for Strict/Balanced/Broad.
+3. ~~Calibrate `MIN_SIMILARITY` from measured on-device cosine distributions.~~ **Superseded:** research found cosine floors do not generalize across corpora (companion-emergence). See `memory-system-v2-design.md` §1.1 and §4.3–4.4 (reranker-based relevance and calibration).
 4. Build the already-approved `Maximum Memories Per Response` / `Memory Match Strictness` controls so the "maximum" the +3 rule refers to is visible and user-set.
 
 **Owner ruling (2026-09-28):** Option A is the intended meaning of +3. Parameters remain open (see §6, Decision 1).
 
-**Recommendation:** Option A plus supporting fixes 1 and 2, with fix 3 done using the Memory Lab once it exists. Option A is the only one that matches the owner's described meaning of +3.
+**Recommendation:** Option A plus supporting fixes 1 and 2, with relevance calibration handled by the reranker design in `memory-system-v2-design.md`. Option A is the only one that matches the owner's described meaning of +3.
 
 **Wording impact:** The approved +3 subtext ("always included when relevant") would no longer describe Option A accurately. The subtext and the `+3 · Always include` label need a wording decision **after** the behavior is chosen. Do not draft replacements before then.
 
 ---
 
-## 3. Proposal: Memory Lab (test memory without starting a chat)
+## 3. Proposal: Memory Previewer (test memory without starting a chat)
 
-The external report calls this the "Memory Observatory" (report §"The Memory Observatory", "Retrieval Trace mockup"). Name and labels are wording decisions; "Memory Lab" is a working name in this file only.
+**Approved 2026-09-28:** the feature is named **Memory Previewer**; it is its own screen reached by its own row under Memory Manager; beneath the test area it holds its own test copies of the retrieval-related settings, with a button that copies the regular settings into them. The full design is in `memory-system-v2-design.md` §6, which supersedes the rest of this section where they differ.
 
 ### 3.1 Purpose
 
@@ -121,7 +121,7 @@ Let the owner type a pretend message (optionally with pretend recent context and
    - performs no network request;
    - does **not** stamp or read-modify cooldown state (option to show "would be on cooldown in a real chat" vs "ignore cooldown");
    - writes nothing to the memory database.
-   This must reuse the production code path, not a copy, so the Lab cannot drift from real behavior.
+   This must reuse the production code path, not a copy, so the Previewer cannot drift from real behavior.
 2. **Result summary:** retrieval mode (semantic vs keyword fallback, and why), eligible count, candidates ranked, number sent, characters used of budget, counts removed by each filter.
 3. **Per-memory trace** for every candidate above a display cutoff:
    - full memory text, scope/target, Type, importance rating;
@@ -140,12 +140,12 @@ Let the owner type a pretend message (optionally with pretend recent context and
 ### 3.4 Privacy and logging
 
 - Local only; nothing leaves the device.
-- Showing results on screen is not logging. **Persisting** Lab runs, or adding any Logcat/Event/error log line, requires separate owner approval under `CLAUDE.md` §8.
+- Showing results on screen is not logging. **Persisting** Previewer runs, or adding any Logcat/Event/error log line, requires separate owner approval under `CLAUDE.md` §8.
 - If an export is ever added, the report's three export levels (statistics only / sanitized / full) are a reasonable starting model; that is a separate decision.
 
 ### 3.5 Roadmap impact
 
-`project-plan.md` allows one active feature (Feature 1, API Memory Assistant Repair). The Lab and the +3 repair are not on the roadmap. Adding them, and in what order relative to Feature 1, is an owner decision (Decision 4). Technically, the Lab also helps Feature 1: its §7 on-device proof requires "debug/test evidence that the local Librarian retrieved the green memory", which the Lab's trace format could supply.
+`project-plan.md` allows one active feature (Feature 1, API Memory Assistant Repair). The Previewer and the +3 repair are not on the roadmap. Adding them, and in what order relative to Feature 1, is an owner decision (Decision 4). Technically, the Previewer also helps Feature 1: its §7 on-device proof requires "debug/test evidence that the local Librarian retrieved the green memory", which the Previewer's trace format could supply.
 
 ---
 
@@ -224,8 +224,8 @@ Asked one at a time in chat; recorded here for reference. Status for all: **No c
    - **Answered 2026-09-28: both counts are user settings.** The normal maximum (the already-specified `Maximum Memories Per Response`) and the number of extra +3 memories allowed beyond it are each exposed to the user. **Defaults: normal maximum 8, extra +3 allowance 2.** Still open: the allowed range of each setting, the closeness-to-cutoff rule, and all wording for the new extra-allowance setting.
 2. **Importance weight.** Reduce importance from a large score bonus to a small tie-break so a +2/+3 rating cannot beat a clearly more relevant memory?
 3. **Keyword fallback.** Stop counting common words ("the", "and", "you") as matches?
-4. **Roadmap order.** Where the Memory Lab and +3 repair go relative to Feature 1 (e.g. before it, as a narrow defect fix plus diagnostic tool; or after it).
-5. **Memory Lab placement and scope** (replace the existing debug search, or a new screen), after which a component map and wording proposal follow.
+4. **Roadmap order.** Where the Memory Previewer and +3 repair go relative to Feature 1 (e.g. before it, as a narrow defect fix plus diagnostic tool; or after it).
+5. **Memory Previewer placement and scope.** *Answered 2026-09-28: own screen with its own row under Memory Manager; test-only copies of retrieval settings on that screen; a button copies regular settings into them.* Component map and wording proposal still to follow.
 6. **Build the already-approved Memory Retrieval controls** (Maximum Memories, Strictness, Priority) as part of the +3 repair, or separately? *Partly answered 2026-09-28: `Maximum Memories Per Response` must be user-visible as part of the +3 repair (see Decision 1). Strictness and Priority timing still open.*
 7. **Time awareness.** Whether to pursue fading-and-restoring retrieval strength; if yes, which categories fade and how fast.
 8. **"Current situation" delivery.** Rely on retrieval with fading, or use a user-written card section (fits the no-always-load rule), or both.
