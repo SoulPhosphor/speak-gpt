@@ -61,7 +61,7 @@ File references are to `app/src/main/java/org/teslasoft/assistant/preferences/me
 
 ## 2. Defect: the +3 rating floods the prompt
 
-### 2.1 Owner's stated intent (to be confirmed — see Decision 1)
+### 2.1 Owner's stated intent (confirmed 2026-09-28 — see Decision 1)
 
 +3 was meant as a **tie-break at the cutoff**: when several relevant memories compete for the limited slots, a +3 memory should be included even if that pushes the count past the maximum. It was not meant to make every +3 memory appear in most turns.
 
