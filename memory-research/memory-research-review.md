@@ -99,7 +99,7 @@ Result in plain terms: +3 currently behaves close to "always load, limited only 
 3. Calibrate `MIN_SIMILARITY` from measured on-device score distributions (Memory Lab) instead of the current guess; this also supplies real numbers for Strict/Balanced/Broad.
 4. Build the already-approved `Maximum Memories Per Response` / `Memory Match Strictness` controls so the "maximum" the +3 rule refers to is visible and user-set.
 
-**Owner ruling (2026-09-28):** Option A is the intended meaning of +3. Parameters remain open (see §5, Decision 1).
+**Owner ruling (2026-09-28):** Option A is the intended meaning of +3. Parameters remain open (see §6, Decision 1).
 
 **Recommendation:** Option A plus supporting fixes 1 and 2, with fix 3 done using the Memory Lab once it exists. Option A is the only one that matches the owner's described meaning of +3.
 
@@ -207,15 +207,25 @@ Record any borrowed code in a third-party notices file with upstream commit and 
 
 ---
 
-## 5. Decisions needed from the owner
+## 5. Owner design direction for this work (2026-09-28)
+
+**Expose tuning to the user where reasonable.** The owner wants advanced users to be able to adjust memory behavior themselves rather than needing a code change each time behavior is slightly off. When a retrieval value is a tuning choice (counts, limits, thresholds), prefer proposing it as a user setting with a sensible default over hard-coding it.
+
+Limits of this direction:
+- It is a preference to apply when proposing, not approval of any specific setting. Each new setting, its range, default, placement, and wording still needs owner approval before implementation.
+- It does not override `memory_retrieval_and_analysis_ui_copy.md` §4, which says not to add protected-capacity, percentage-balance, subtype-budget, dynamic-preset, or automatic-tuning controls without owner approval. Proposals in those categories must be put to the owner explicitly.
+- Internal safety rails against corrupt or imported data (for example `RetrievalPolicy` bounds) are not tuning and remain internal.
+
+## 6. Decisions needed from the owner
 
 Asked one at a time in chat; recorded here for reference. Status for all: **No code has been changed.**
 
 1. **Meaning of +3.** **Answered 2026-09-28: Option A approved** (bounded tie-break at the cutoff: a +3 memory must pass the normal relevance rule, and may be added beyond the maximum only when it narrowly missed the cutoff, with a small cap on extras). Still open: the maximum number of extra +3 memories per turn, and how close to the cutoff a +3 must be. Approval of Option A does not approve new +3 wording; the label and subtext need a separate wording decision.
+   - **Answered 2026-09-28: both counts are user settings.** The normal maximum (the already-specified `Maximum Memories Per Response`) and the number of extra +3 memories allowed beyond it are each exposed to the user. **Defaults: normal maximum 8, extra +3 allowance 2.** Still open: the allowed range of each setting, the closeness-to-cutoff rule, and all wording for the new extra-allowance setting.
 2. **Importance weight.** Reduce importance from a large score bonus to a small tie-break so a +2/+3 rating cannot beat a clearly more relevant memory?
 3. **Keyword fallback.** Stop counting common words ("the", "and", "you") as matches?
 4. **Roadmap order.** Where the Memory Lab and +3 repair go relative to Feature 1 (e.g. before it, as a narrow defect fix plus diagnostic tool; or after it).
 5. **Memory Lab placement and scope** (replace the existing debug search, or a new screen), after which a component map and wording proposal follow.
-6. **Build the already-approved Memory Retrieval controls** (Maximum Memories, Strictness, Priority) as part of the +3 repair, or separately?
+6. **Build the already-approved Memory Retrieval controls** (Maximum Memories, Strictness, Priority) as part of the +3 repair, or separately? *Partly answered 2026-09-28: `Maximum Memories Per Response` must be user-visible as part of the +3 repair (see Decision 1). Strictness and Priority timing still open.*
 7. **Time awareness.** Whether to pursue fading-and-restoring retrieval strength; if yes, which categories fade and how fast.
 8. **"Current situation" delivery.** Rely on retrieval with fading, or use a user-written card section (fits the no-always-load rule), or both.
