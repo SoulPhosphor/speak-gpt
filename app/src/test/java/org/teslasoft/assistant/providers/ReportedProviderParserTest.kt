@@ -129,6 +129,33 @@ class ReportedProviderParserTest {
         assertEquals(0.003, usage.totalCost!!, 0.000000001)
     }
 
+    @Test fun capturesCachedTokensAndCachedCostFromOpenAiUsageDetails() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20," +
+                "\"prompt_tokens_details\":{\"cached_tokens\":60}," +
+                "\"cost_details\":{\"cache_read_cost\":0.00003}}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(100, usage.promptTokens)
+        assertEquals(60, usage.cachedInputTokens)
+        assertEquals(0, usage.cacheWriteInputTokens)
+        assertEquals(0.00003, usage.cachedInputCost!!, 0.000000001)
+    }
+
+    @Test fun normalizesAnthropicCacheReadIntoTotalPromptTokens() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"input_tokens\":40,\"output_tokens\":20," +
+                "\"cache_read_input_tokens\":60,\"cache_creation_input_tokens\":10}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(110, usage.promptTokens)
+        assertEquals(20, usage.completionTokens)
+        assertEquals(60, usage.cachedInputTokens)
+        assertEquals(10, usage.cacheWriteInputTokens)
+    }
+
     @Test fun reportsOnlyFirstProviderPlusTerminalEnvelope() = runBlocking {
         val channel = ByteChannel(autoFlush = true)
         channel.writeStringUtf8("data: {\"provider\":\"First\",\"choices\":[]}\n")
@@ -207,5 +234,20 @@ class ReportedProviderParserTest {
         assertEquals("response.done", result.protocolTerminalMarker)
         assertTrue(result.usageReceived)
         assertEquals(12, result.totalTokens)
+    }
+
+    @Test fun responsesStyleNestedUsageIncludesCacheDetails() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "data: {\"type\":\"response.done\",\"response\":{" +
+                "\"model\":\"actual/model\",\"usage\":{\"input_tokens\":100," +
+                "\"output_tokens\":20,\"total_tokens\":120," +
+                "\"input_tokens_details\":{\"cached_tokens\":80}}}}"
+        )
+        val result = inspector.finishNormally()
+        assertEquals("actual/model", result.model)
+        assertEquals(100, result.promptTokens)
+        assertEquals(20, result.completionTokens)
+        assertEquals(80, result.cachedInputTokens)
     }
 }

@@ -27,8 +27,16 @@ data class TokenPricingCatalog(
                 it.slug.equals(provider, ignoreCase = true)
         }
         if (providerPrice != null) {
-            return TokenPricingSnapshot(providerPrice.promptPrice, providerPrice.completionPrice)
-                .takeIf { it.inputPricePerToken != null || it.outputPricePerToken != null }
+            return TokenPricingSnapshot(
+                providerPrice.promptPrice,
+                providerPrice.completionPrice,
+                providerPrice.cacheReadPrice,
+                providerPrice.cacheWritePrice
+            ).takeIf {
+                it.inputPricePerToken != null || it.outputPricePerToken != null ||
+                    it.cachedInputPricePerToken != null ||
+                    it.cacheWriteInputPricePerToken != null
+            }
         }
         return modelPricing
     }
@@ -36,7 +44,7 @@ data class TokenPricingCatalog(
 
 /** Reads pricing concurrently with generation so turn completion normally only
  * awaits an already-finished catalog request. The returned values are frozen
- * into the completed usage record; Quick Settings never fetches new prices for
+ * into the completed usage record; the Usage & Cost screen never fetches new prices for
  * records that already carry a snapshot. */
 object TokenPricingCatalogClient {
     private val client = OkHttpClient.Builder()
@@ -100,7 +108,12 @@ object TokenPricingCatalogClient {
         fun number(name: String): Double? = try {
             pricing.get(name)?.takeIf { it.isJsonPrimitive }?.asDouble
         } catch (_: Exception) { null }
-        val snapshot = TokenPricingSnapshot(number("prompt"), number("completion"))
+        val snapshot = TokenPricingSnapshot(
+            number("prompt"),
+            number("completion"),
+            number("input_cache_read") ?: number("cached_prompt"),
+            number("input_cache_write")
+        )
         return TokenPricingCatalog(model, modelPricing = snapshot)
     }
 

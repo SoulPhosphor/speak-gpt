@@ -75,38 +75,15 @@ import org.teslasoft.assistant.ui.activities.SystemPromptsListActivity
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.ui.widgets.SamplingParameterControl
 import org.teslasoft.assistant.ui.widgets.SamplingParameterSpec
-import org.teslasoft.assistant.ui.activities.TokenPricingDetailsActivity
-import org.teslasoft.assistant.usage.ConversationUsageSummary
-import org.teslasoft.assistant.usage.QuickSettingsUsagePresentation
-import org.teslasoft.assistant.usage.TokenUsageAccounting
-import org.teslasoft.assistant.usage.UsageGroup
-import org.teslasoft.assistant.usage.UsageCardMode
-import org.teslasoft.assistant.usage.UsageValueFormatter
 
 class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     companion object {
-        fun newInstance(chatId: String, usageSummaryJson: String): QuickSettingsBottomSheetDialogFragment {
+        fun newInstance(chatId: String): QuickSettingsBottomSheetDialogFragment {
             return QuickSettingsBottomSheetDialogFragment().apply {
                 arguments = Bundle().apply {
                     putString("chatId", chatId)
-                    putString("usageSummary", usageSummaryJson)
                 }
             }
-        }
-
-        /** Playground compatibility: it has no persisted conversation usage. */
-        fun newInstance(chatId: String, usageIn: Int, usageOut: Int, priceIn: Float, priceOut: Float): QuickSettingsBottomSheetDialogFragment {
-            val quickSettingsBottomSheetDialogFragment = QuickSettingsBottomSheetDialogFragment()
-
-            val args = Bundle()
-            args.putString("chatId", chatId)
-            args.putInt("usageIn", usageIn)
-            args.putInt("usageOut", usageOut)
-            args.putFloat("priceIn", priceIn)
-            args.putFloat("priceOut", priceOut)
-            quickSettingsBottomSheetDialogFragment.arguments = args
-
-            return quickSettingsBottomSheetDialogFragment
         }
     }
 
@@ -187,14 +164,10 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var fieldSummarizerWindow: TextInputEditText? = null
     private var suppressSummarizerWindowWatcher = false
 
-    private var textUsage: TextView? = null
-    private var textCost: TextView? = null
-    private var btnCostInfo: MaterialButton? = null
     private var textModel: TextView? = null
     private var textHost: TextView? = null
     private var textLogitBiasesConfig: TextView? = null
     private var favoriteModelsPreferences: FavoriteModelsPreferences? = null
-    private var usageCost: ConstraintLayout? = null
 
     private var preferences: Preferences? = null
     private var chatId: String = ""
@@ -202,9 +175,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var updateListener: OnUpdateListener? = null
     private var shouldForceUpdate: Boolean = false
 
-    private var usageIn = 0
-    private var usageOut = 0
-    private var usageSummary = ConversationUsageSummary(emptyList())
 
     private var isAttached = false
 
@@ -989,84 +959,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         dialog.show()
     }
 
-    private fun renderUsageCard(summary: ConversationUsageSummary) {
-        val presentation = QuickSettingsUsagePresentation.from(summary)
-        textUsage?.text = getString(R.string.cost_counter_usage).format(
-            UsageValueFormatter.tokens(
-                presentation.totalInputTokens, presentation.hasUnknownInputTokens
-            ),
-            UsageValueFormatter.tokens(
-                presentation.totalOutputTokens, presentation.hasUnknownOutputTokens
-            )
-        )
-        when (presentation.mode) {
-            UsageCardMode.EMPTY -> {
-                textCost?.text = buildString {
-                    val zero = UsageValueFormatter.cost(0.0, false)
-                    append(getString(R.string.cost_values_line, zero, zero))
-                    append('\n').append(getString(R.string.cost_total_value, zero))
-                    append('\n').append(getString(
-                        R.string.cost_price_values_line,
-                        UsageValueFormatter.NOT_REPORTED,
-                        UsageValueFormatter.NOT_REPORTED
-                    ))
-                }
-                btnCostInfo?.visibility = View.GONE
-            }
-            UsageCardMode.SINGLE_PRICING -> {
-                val group = presentation.singleGroup!!
-                textCost?.text = formatGroupCost(group)
-                btnCostInfo?.visibility = View.GONE
-            }
-            UsageCardMode.MULTI_PRICING -> {
-                textCost?.text = if (presentation.hasUnknownCost) {
-                    getString(R.string.cost_total_value, UsageValueFormatter.NOT_REPORTED)
-                } else {
-                    getString(
-                        R.string.cost_multi_total_value,
-                        UsageValueFormatter.cost(presentation.totalCost, false)
-                    )
-                }
-                btnCostInfo?.apply {
-                    visibility = View.VISIBLE
-                    text = getString(R.string.token_pricing_details_title)
-                    setOnClickListener {
-                        startActivity(
-                            Intent(requireContext(), TokenPricingDetailsActivity::class.java)
-                                .putExtra(
-                                    TokenPricingDetailsActivity.EXTRA_USAGE_SUMMARY,
-                                    TokenUsageAccounting.encodeSummary(summary)
-                                )
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    private fun formatGroupCost(group: UsageGroup): String = buildString {
-        append(getString(
-            R.string.cost_values_line,
-            UsageValueFormatter.cost(group.inputCost, group.hasUnknownInputCost),
-            UsageValueFormatter.cost(group.outputCost, group.hasUnknownOutputCost)
-        ))
-        append('\n').append(getString(
-            R.string.cost_total_value,
-            UsageValueFormatter.cost(group.totalCost, group.hasUnknownCost)
-        ))
-        append('\n').append(
-            if (group.hasVariablePricing) {
-                getString(R.string.cost_price_variable_line)
-            } else {
-                getString(
-                    R.string.cost_price_values_line,
-                    UsageValueFormatter.pricePerMillion(group.inputPricePerToken),
-                    UsageValueFormatter.pricePerMillion(group.outputPricePerToken)
-                )
-            }
-        )
-    }
-
     override fun onDismiss(dialog: DialogInterface) {
         super.onDismiss(dialog)
 
@@ -1180,11 +1072,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textModel = view.findViewById(R.id.text_model)
         textHost = view.findViewById(R.id.text_host)
         textLogitBiasesConfig = view.findViewById(R.id.text_logit_biases_config)
-        usageCost = view.findViewById(R.id.usage_cost)
-
-        textUsage = view.findViewById(R.id.text_usage)
-        textCost = view.findViewById(R.id.text_cost)
-        btnCostInfo = view.findViewById(R.id.btn_cost_info)
 
         textHost?.text = if (apiEndpoint?.label != "") apiEndpoint?.label ?: getString(R.string.label_tap_to_set) else getString(R.string.label_tap_to_set)
         updatePersonaLabel(preferences?.getPersonaId() ?: "")
@@ -1202,28 +1089,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             logitBiasConfigPreferences?.getConfigById(preferences?.getLogitBiasesConfigId()!!)?.get("label") ?: getString(R.string.label_tap_to_set)
         } else {
             getString(R.string.label_tap_to_set)
-        }
-
-        val summaryJson = requireArguments().getString("usageSummary")
-        if (summaryJson != null) {
-            usageSummary = TokenUsageAccounting.decodeSummary(summaryJson)
-            renderUsageCard(usageSummary)
-        } else {
-            usageIn = requireArguments().getInt("usageIn")
-            usageOut = requireArguments().getInt("usageOut")
-        }
-
-        if (summaryJson == null && usageIn < 0) {
-            textUsage?.text = "Usage: <Usage is not available in playground>"
-            textCost?.text = "Cost: <Cost is not available in playground>"
-            usageCost?.visibility = View.GONE
-        } else if (summaryJson == null) {
-            // Compatibility for non-chat callers. ChatActivity always supplies
-            // the durable whole-conversation summary above.
-            textUsage?.text = getString(R.string.cost_counter_usage)
-                .format(usageIn.toString(), usageOut.toString())
-            textCost?.text = getString(R.string.msg_cost_not_enough_data)
-            btnCostInfo?.visibility = View.GONE
         }
 
         temperatureSeekbar?.configure(

@@ -71,7 +71,7 @@ class TokenUsageAccountingTest {
         assertEquals(TokenCountSource.PROVIDER_REPORTED, decoded.countSource)
     }
 
-    @Test fun providerReportedTotalCostWinsWithoutInventingInputOutputSplit() {
+    @Test fun providerReportedTotalStaysAuthoritativeWhileFrozenPricesFillCategories() {
         val record = TokenUsageAccounting.createRecord(
             "glm-5", "DeepInfra", null, TokenCounts(1_000, 100, 1_100),
             TokenCountSource.PROVIDER_REPORTED,
@@ -79,8 +79,8 @@ class TokenUsageAccountingTest {
             ProviderReportedCost(totalCost = 0.25)
         )
         assertEquals(0.25, record.totalCost!!, 0.000000001)
-        assertNull(record.inputCost)
-        assertNull(record.outputCost)
+        assertEquals(1.0, record.inputCost!!, 0.000000001)
+        assertEquals(0.2, record.outputCost!!, 0.000000001)
         assertEquals(CostSource.PROVIDER_REPORTED, record.storedCostSource)
         val restored = TokenUsageAccounting.decodeRecords(
             TokenUsageAccounting.encodeRecords(listOf(record))
@@ -109,6 +109,38 @@ class TokenUsageAccountingTest {
         )
         assertEquals(0.0123, record.totalCost!!, 0.000000001)
         assertFalse(record.totalCost == 0.11)
+    }
+
+    @Test fun cachedUsageIsSeparatedFromUncachedInputWithItsOwnFrozenPrice() {
+        val record = TokenUsageAccounting.createRecord(
+            "cached-model", "Provider", null,
+            TokenCounts(
+                10_000, 500, 10_500,
+                cachedInputTokens = 8_000,
+                cacheWriteInputTokens = 0
+            ),
+            TokenCountSource.PROVIDER_REPORTED,
+            TokenPricingSnapshot(0.00001, 0.00002, 0.000001)
+        )
+        val group = TokenUsageAccounting.aggregate(listOf(record)).groups.single()
+        assertEquals(2_000, group.uncachedInputTokens)
+        assertEquals(8_000, group.cachedInputTokens)
+        assertEquals(0.02, group.uncachedInputCost, 0.000000001)
+        assertEquals(0.008, group.cachedInputCost, 0.000000001)
+        assertEquals("80.0%", UsageValueFormatter.percentage(
+            group.cachedInputTokens, group.inputTokens, false
+        ))
+    }
+
+    @Test fun missingCacheBreakdownNeverPretendsCachedUsageWasZero() {
+        val group = TokenUsageAccounting.aggregate(
+            listOf(record("glm-5", "DeepInfra", 10, 2))
+        ).groups.single()
+        assertTrue(group.hasUnknownCachedInputTokens)
+        assertTrue(group.hasUnknownUncachedInputTokens)
+        assertEquals(UsageValueFormatter.NOT_REPORTED, UsageValueFormatter.percentage(
+            group.cachedInputTokens, group.inputTokens, group.hasUnknownCachedInputTokens
+        ))
     }
 
     @Test fun repeatedSameModelAndProviderAccumulatesIntoOneGroup() {
@@ -157,28 +189,6 @@ class TokenUsageAccountingTest {
         assertEquals(60, summary.totalInputTokens)
         assertEquals(9, summary.totalOutputTokens)
         assertEquals(0.000078, summary.totalCost, 0.000000001)
-    }
-
-    @Test fun quickSettingsUsesDetailedSinglePricingPresentation() {
-        val presentation = QuickSettingsUsagePresentation.from(
-            TokenUsageAccounting.aggregate(listOf(record("glm-5", "DeepInfra", 10, 2)))
-        )
-        assertEquals(UsageCardMode.SINGLE_PRICING, presentation.mode)
-        assertFalse(presentation.showPricingDetails)
-        assertEquals("glm-5", presentation.singleGroup?.model)
-    }
-
-    @Test fun quickSettingsUsesWholeConversationMultiPricingPresentation() {
-        val presentation = QuickSettingsUsagePresentation.from(
-            TokenUsageAccounting.aggregate(listOf(
-                record("glm-5", "DeepInfra", 10, 2),
-                record("glm-5", "Novita", 20, 3)
-            ))
-        )
-        assertEquals(UsageCardMode.MULTI_PRICING, presentation.mode)
-        assertTrue(presentation.showPricingDetails)
-        assertEquals(30, presentation.totalInputTokens)
-        assertEquals(5, presentation.totalOutputTokens)
     }
 
     @Test fun mixedKnownAndUnknownTokenCountsRemainUnknownAtTheUiBoundary() {
@@ -233,18 +243,15 @@ class TokenUsageAccountingTest {
             "kimi-k2.5", "Novita", null, TokenCounts(null, 3, null),
             TokenCountSource.PROVIDER_REPORTED, TokenPricingSnapshot()
         )
-        val presentation = QuickSettingsUsagePresentation.from(
-            TokenUsageAccounting.aggregate(listOf(complete, incomplete))
-        )
-        assertEquals(UsageCardMode.MULTI_PRICING, presentation.mode)
-        assertTrue(presentation.hasUnknownInputTokens)
-        assertTrue(presentation.hasUnknownCost)
+        val summary = TokenUsageAccounting.aggregate(listOf(complete, incomplete))
+        assertTrue(summary.hasUnknownInputTokens)
+        assertTrue(summary.hasUnknownCost)
         assertEquals(UsageValueFormatter.NOT_REPORTED,
             UsageValueFormatter.tokens(
-                presentation.totalInputTokens, presentation.hasUnknownInputTokens
+                summary.totalInputTokens, summary.hasUnknownInputTokens
             ))
         assertEquals(UsageValueFormatter.NOT_REPORTED,
-            UsageValueFormatter.cost(presentation.totalCost, presentation.hasUnknownCost))
+            UsageValueFormatter.cost(summary.totalCost, summary.hasUnknownCost))
     }
 
     @Test fun completedToolCallUsageSurvivesFailedContinuation() {

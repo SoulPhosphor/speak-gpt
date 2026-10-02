@@ -171,8 +171,11 @@ internal class RawSseInspector {
     private var promptTokens: Int? = null
     private var completionTokens: Int? = null
     private var totalTokens: Int? = null
+    private var cachedInputTokens: Int? = null
+    private var cacheWriteInputTokens: Int? = null
     private var inputCost: Double? = null
     private var outputCost: Double? = null
+    private var cachedInputCost: Double? = null
     private var totalCost: Double? = null
     private var model: String? = null
     private var generationId: String? = null
@@ -234,16 +237,48 @@ internal class RawSseInspector {
         }
         if (model == null) {
             model = root.stringOrNull("model")
+                ?: root.get("response")?.takeIf { it.isJsonObject }?.asJsonObject
+                    ?.stringOrNull("model")
         }
 
-        root.get("usage")?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject?.let { usage ->
+        val usageObject = root.get("usage")
+            ?.takeUnless { it.isJsonNull }?.takeIf { it.isJsonObject }?.asJsonObject
+            ?: root.get("response")?.takeIf { it.isJsonObject }?.asJsonObject
+                ?.get("usage")?.takeUnless { it.isJsonNull }
+                ?.takeIf { it.isJsonObject }?.asJsonObject
+        usageObject?.let { usage ->
             usageReceived = true
-            usage.intOrNull("prompt_tokens")?.let { promptTokens = it }
-            usage.intOrNull("completion_tokens")?.let { completionTokens = it }
+            val directPrompt = usage.intOrNull("prompt_tokens")
+                ?: usage.intOrNull("input_tokens")
+            val directCompletion = usage.intOrNull("completion_tokens")
+                ?: usage.intOrNull("output_tokens")
+            val cacheRead = usage.get("prompt_tokens_details")
+                ?.takeIf { it.isJsonObject }?.asJsonObject
+                ?.intOrNull("cached_tokens")
+                ?: usage.get("input_tokens_details")
+                    ?.takeIf { it.isJsonObject }?.asJsonObject
+                    ?.intOrNull("cached_tokens")
+                ?: usage.intOrNull("cache_read_input_tokens")
+            val reportedCacheCreation = usage.intOrNull("cache_creation_input_tokens")
+            val cacheCreation = reportedCacheCreation ?: 0
+            val anthropicInput = usage.intOrNull("input_tokens")
+            promptTokens = when {
+                usage.get("prompt_tokens") != null -> directPrompt
+                usage.get("cache_read_input_tokens") != null && anthropicInput != null ->
+                    anthropicInput + (cacheRead ?: 0) + cacheCreation
+                else -> directPrompt
+            }
+            directCompletion?.let { completionTokens = it }
+            if (cacheRead != null || reportedCacheCreation != null) {
+                cachedInputTokens = cacheRead ?: 0
+                cacheWriteInputTokens = reportedCacheCreation ?: 0
+            }
             usage.intOrNull("total_tokens")?.let { totalTokens = it }
             usage.firstDoubleOrNull("cost", "total_cost")?.let { totalCost = it }
             usage.firstDoubleOrNull("input_cost", "prompt_cost")?.let { inputCost = it }
             usage.firstDoubleOrNull("output_cost", "completion_cost")?.let { outputCost = it }
+            usage.firstDoubleOrNull("cached_input_cost", "cache_read_cost", "cache_cost")
+                ?.let { cachedInputCost = it }
             usage.get("cost_details")?.takeUnless { it.isJsonNull }
                 ?.takeIf { it.isJsonObject }?.asJsonObject?.let { details ->
                     if (inputCost == null) {
@@ -251,6 +286,11 @@ internal class RawSseInspector {
                     }
                     if (outputCost == null) {
                         details.firstDoubleOrNull("output_cost", "completion_cost")?.let { outputCost = it }
+                    }
+                    if (cachedInputCost == null) {
+                        details.firstDoubleOrNull(
+                            "cached_input_cost", "cache_read_cost", "cache_cost"
+                        )?.let { cachedInputCost = it }
                     }
                 }
         }
@@ -330,8 +370,11 @@ internal class RawSseInspector {
             promptTokens = promptTokens,
             completionTokens = completionTokens,
             totalTokens = totalTokens,
+            cachedInputTokens = cachedInputTokens,
+            cacheWriteInputTokens = cacheWriteInputTokens,
             inputCost = inputCost,
             outputCost = outputCost,
+            cachedInputCost = cachedInputCost,
             totalCost = totalCost,
             model = model,
             generationId = generationId,
