@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.QuickSettings.LorebookRow"
+    android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/row_name"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textColor="?attr/appTextColor"
+        android:textSize="15sp" />
+
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/row_switch"
+        style="@style/Widget.App.QuickSettings.Switch" />
+
+    <ImageView
+        android:id="@+id/row_btn_edit"
+        style="@style/Widget.App.QuickSettings.Gear" />
+</LinearLayout>

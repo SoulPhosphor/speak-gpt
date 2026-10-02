@@ -13,12 +13,16 @@ class QuickSettingsEndpointModelSyncTest {
                 "QuickSettingsBottomSheetDialogFragment.kt"
         )
 
-        val resultHandler = source.substringAfter("apiEndpointActivityResultLauncher")
-            .substringBefore("chooseProviderLauncher")
-        assertTrue(resultHandler.contains("apiEndpoint?.model?.takeIf { it.isNotBlank() }"))
-        assertTrue(resultHandler.contains("preferences?.setModel(endpointModel)"))
-        assertTrue(resultHandler.contains("textModel?.text = endpointModel"))
-        assertTrue(resultHandler.contains("updateListener?.onUpdate()"))
+        val resultHandler = source.substringAfter("apiEndpointEditorLauncher")
+            .substringBefore("personaActivityResultLauncher")
+        assertTrue(resultHandler.contains("applyApiEndpoint"))
+
+        val endpointApplier = source.substringAfter("private fun applyApiEndpoint")
+            .substringBefore("private fun openSelectedApiEndpointEditor")
+        assertTrue(endpointApplier.contains("preferences?.setApiEndpointId(endpoint.id)"))
+        assertTrue(endpointApplier.contains("preferences?.setModel(endpointModel)"))
+        assertTrue(endpointApplier.contains("textModel?.text = endpointModel"))
+        assertTrue(endpointApplier.contains("updateListener?.onUpdate()"))
     }
 
     /** The chat screen's half of the same flow. Quick Settings writes the new

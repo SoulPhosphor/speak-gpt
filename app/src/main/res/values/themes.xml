@@ -1118,6 +1118,95 @@
         <item name="android:tint">?attr/colorPrimary</item>
     </style>
 
+    <!-- Quick Settings uses one connected-segment family for every block.
+         Layouts provide only ids and constraints; this family owns the shared
+         surface, outline, corners, spacing and action geometry. -->
+    <style name="Widget.App.QuickSettings.Segment" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">@dimen/quick_settings_horizontal_margin</item>
+        <item name="android:layout_marginEnd">@dimen/quick_settings_horizontal_margin</item>
+        <item name="android:paddingTop">@dimen/quick_settings_segment_padding_vertical</item>
+        <item name="android:paddingBottom">@dimen/quick_settings_segment_padding_vertical</item>
+        <item name="android:background">@drawable/bg_quick_settings_segment_middle</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.Segment.Top" parent="Widget.App.QuickSettings.Segment">
+        <item name="android:layout_marginTop">@dimen/quick_settings_section_gap</item>
+        <item name="android:background">@drawable/bg_quick_settings_segment_top</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.Segment.Middle" parent="Widget.App.QuickSettings.Segment">
+        <item name="android:layout_marginTop">@dimen/quick_settings_segment_gap</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.Segment.Bottom" parent="Widget.App.QuickSettings.Segment">
+        <item name="android:layout_marginTop">@dimen/quick_settings_segment_gap</item>
+        <item name="android:background">@drawable/bg_quick_settings_segment_bottom</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.Segment.Standalone" parent="Widget.App.QuickSettings.Segment">
+        <item name="android:layout_marginTop">@dimen/quick_settings_section_gap</item>
+        <item name="android:background">@drawable/bg_quick_settings_segment_standalone</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.Switch" parent="Widget.App.Row.Switch">
+        <item name="android:layout_marginEnd">10dp</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.Gear" parent="Widget.App.QuickTile.EditButton">
+        <item name="android:src">@drawable/ic_settings</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.ActionValue" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:layout_marginEnd">16dp</item>
+        <item name="android:gravity">end|center_vertical</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.LorebookHeading" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingStart">@dimen/quick_settings_segment_padding_horizontal</item>
+        <item name="android:paddingEnd">@dimen/quick_settings_segment_padding_horizontal</item>
+        <item name="android:paddingTop">8dp</item>
+        <item name="android:paddingBottom">4dp</item>
+        <item name="android:textColor">?attr/appTextColor</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.LorebookRow" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">@dimen/quick_settings_lorebook_row_min_height</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingStart">@dimen/quick_settings_segment_padding_horizontal</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.AddLorebook" parent="Widget.Material3.Button.TextButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/quick_settings_segment_gap</item>
+        <item name="android:layout_marginBottom">@dimen/quick_settings_segment_gap</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="iconTint">?attr/colorPrimary</item>
+    </style>
+
+    <style name="Widget.App.QuickSettings.SeedField" parent="Widget.App.Field.NumberBlank">
+        <item name="android:layout_width">@dimen/quick_settings_seed_width</item>
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:layout_marginEnd">16dp</item>
+        <item name="android:inputType">numberSigned</item>
+        <item name="android:maxLength">11</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
     <!-- Legacy dropdown styles remain visually unchanged while screens migrate
          one controlled batch at a time. Do not use these for new work. -->
     <style name="Widget.App.Dropdown.Label" parent="">
@@ -1461,22 +1550,22 @@
         <item name="android:padding">12dp</item>
     </style>
 
-    <!-- Reusable sampling parameter control: a centered, directly editable
-         current-value box above the slider. Layouts provide only the control
+    <!-- Reusable sampling parameter control: a directly editable current-value
+         box on the same line as the slider. Layouts provide only the control
          id and constraints; this family owns its appearance and spacing. -->
     <style name="Widget.App.SamplingSlider.Container" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">@dimen/sampling_slider_section_gap</item>
-        <item name="android:gravity">center_horizontal</item>
-        <item name="android:orientation">vertical</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
     </style>
 
     <style name="Widget.App.SamplingSlider.Value" parent="Widget.App.Field.Box">
         <item name="android:layout_width">@dimen/sampling_slider_value_width</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">0dp</item>
-        <item name="android:layout_marginBottom">@dimen/sampling_slider_value_gap</item>
+        <item name="android:layout_marginEnd">@dimen/sampling_slider_inline_gap</item>
         <item name="android:minHeight">@dimen/sampling_slider_value_min_height</item>
         <!-- Compact padding: the value never exceeds two decimals, so the box
              should be small and tidy rather than the full-field 12dp padding
@@ -1493,13 +1582,16 @@
     </style>
 
     <style name="Widget.App.SamplingSlider.Control" parent="Widget.Material3.Slider">
-        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_weight">1</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginStart">@dimen/sampling_slider_horizontal_margin</item>
         <item name="android:layout_marginEnd">@dimen/sampling_slider_horizontal_margin</item>
         <item name="labelBehavior">gone</item>
-        <!-- A cleaner, less "clunky" slider: a slim continuous track with no
-             tick marks and a right-sized thumb, themed through the palette. -->
+        <!-- Even guide lines are provided by the shared background vector;
+             Material's dense per-step dots remain hidden. -->
+        <item name="android:background">@drawable/bg_sampling_slider_ticks</item>
+        <item name="android:backgroundTint">?attr/colorOutlineVariant</item>
         <item name="tickVisible">false</item>
         <item name="trackHeight">@dimen/sampling_slider_track_height</item>
         <item name="thumbRadius">@dimen/sampling_slider_thumb_radius</item>
@@ -1508,6 +1600,7 @@
         <item name="trackColorInactive">?attr/colorSurfaceVariant</item>
         <item name="thumbColor">?attr/colorPrimary</item>
         <item name="haloColor">?attr/colorPrimary</item>
+        <item name="trackStopIndicatorSize">0dp</item>
     </style>
 
     <!-- One parameter's card on the Model Parameters screen: a fully rounded

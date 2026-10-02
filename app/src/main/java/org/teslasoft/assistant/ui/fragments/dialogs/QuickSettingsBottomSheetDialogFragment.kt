@@ -22,12 +22,10 @@ import android.app.Dialog
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,7 +35,7 @@ import androidx.core.widget.addTextChangedListener
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.elevation.SurfaceColors
+import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.textfield.TextInputEditText
 import org.teslasoft.assistant.R
@@ -53,6 +51,7 @@ import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.preferences.dto.FavoriteModelObject
 import org.teslasoft.assistant.preferences.dto.PersonaObject
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
+import org.teslasoft.assistant.preferences.lorebook.ChatLoreBookSelection
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.UserPersonaRecord
 import org.teslasoft.assistant.ui.activities.memory.MemoryUserPersonasActivity
@@ -64,11 +63,12 @@ import org.teslasoft.assistant.preferences.memory.ProjectRecord
 import org.teslasoft.assistant.preferences.memory.RoleplayCharacterRecord
 import org.teslasoft.assistant.preferences.memory.WorldRecord
 import org.teslasoft.assistant.ui.activities.ActivationPromptsListActivity
-import org.teslasoft.assistant.ui.activities.ApiEndpointsListActivity
+import org.teslasoft.assistant.ui.activities.ApiEndpointEditorActivity
 import org.teslasoft.assistant.ui.activities.ChooseProviderActivity
 import org.teslasoft.assistant.ui.activities.EditPersonaActivity
 import org.teslasoft.assistant.ui.activities.LogitBiasConfigListActivity
 import org.teslasoft.assistant.ui.activities.LoreBookEntriesActivity
+import org.teslasoft.assistant.ui.activities.LoreBooksListActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.teslasoft.assistant.ui.activities.PersonasListActivity
 import org.teslasoft.assistant.ui.activities.SystemPromptsListActivity
@@ -111,26 +111,17 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     }
 
     private var btnSelectModel: ConstraintLayout? = null
-    private var btnSelectProvider: ConstraintLayout? = null
-    private var textProvider: TextView? = null
     private var providerModeTile: ConstraintLayout? = null
     private var dropdownProviderMode: TextView? = null
+    private var btnEditProviderRouting: ImageView? = null
     private var btnSelectSystemPrompt: ConstraintLayout? = null
     private var textSystemPrompt: TextView? = null
     private var rowReasoning: View? = null
     private var textReasoningEffort: TextView? = null
     private var systemPromptsPreferences: SystemPromptsPreferences? = null
     private var btnSelectLogitBias: ConstraintLayout? = null
-    private var btnSelectApiEndpoint: ConstraintLayout? = null
-    private var btnSelectPersona: ConstraintLayout? = null
-    private var btnSelectActivation: ConstraintLayout? = null
-    private var btnSelectLoreBook: ConstraintLayout? = null
-    private var bgTemperature: ConstraintLayout? = null
-    private var bgTopP: ConstraintLayout? = null
-    private var bgFrequencyPenalty: ConstraintLayout? = null
-    private var bgPresencePenalty: ConstraintLayout? = null
-    private var rowStreaming: View? = null
-    private var checkStreaming: MaterialCheckBox? = null
+    private var btnEditApiEndpoint: ImageView? = null
+    private var switchStreaming: MaterialSwitch? = null
     private var apiEndpointPreferences: ApiEndpointPreferences? = null
     private var apiEndpoint: ApiEndpointObject? = null
 
@@ -143,7 +134,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     // an inline dropdown; the edit button opens that category's manager. Glamour
     // is the new square middle tile (the chat's user persona). cachedUserPersonas
     // backs the Glamour dropdown - loaded off-main since it comes from the store.
-    private var btnSelectGlamour: ConstraintLayout? = null
     private var textGlamour: TextView? = null
     private var btnEditPersona: ImageView? = null
     private var btnEditGlamour: ImageView? = null
@@ -154,8 +144,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var activationPromptPreferences: ActivationPromptPreferences? = null
     private var textActivation: TextView? = null
 
-    private var textLoreBook: TextView? = null
     private var lorebookCheckList: LinearLayout? = null
+    private var btnAddLoreBook: MaterialButton? = null
 
     private var temperatureSeekbar: SamplingParameterControl? = null
     private var topPSeekbar: SamplingParameterControl? = null
@@ -163,18 +153,17 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private var presencePenaltySeekbar: SamplingParameterControl? = null
     private var fieldSeed: TextInputEditText? = null
     private var btnSaveToProfile: MaterialButton? = null
-    private var switchChatMemory: com.google.android.material.materialswitch.MaterialSwitch? = null
-    private var switchChatExcluded: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var switchChatMemory: MaterialSwitch? = null
+    private var rowChatMemory: View? = null
+    private var switchChatExcluded: MaterialSwitch? = null
     // Per-chat lore books on/off, independent of the memory switch. QUICK
     // SETTINGS IS AUTHORITATIVE (owner ruling, July 10 2026): these two
     // switches decide what this chat injects; the global Memory engine picker
     // only supplies defaults for chats that never touched them.
-    private var switchChatLoreBooks: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var switchChatLoreBooks: MaterialSwitch? = null
 
-    // Memory system Phase 4: per-chat scene (world / roleplay character / user
-    // persona). Only shown once the chat's memory switch is on and the store
-    // exists — before that there is nothing meaningful to pick from.
-    private var containerMemoryScene: LinearLayout? = null
+    // Per-chat roleplay scene (world / campaign / played character / project).
+    // These choices are always exposed and do not depend on Saved Memories.
     private var textChatWorld: TextView? = null
     private var textChatCampaign: TextView? = null
     private var textChatRoleplayCharacter: TextView? = null
@@ -185,8 +174,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     // model rules are their own prompt layer and apply at any memory-engine
     // tier. Follows the global "Automatically Apply Model Rules" default (on);
     // flipping it overrides that for this chat only.
-    private var rowChatModelRules: LinearLayout? = null
-    private var switchChatModelRules: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var rowChatModelRules: View? = null
+    private var switchChatModelRules: MaterialSwitch? = null
 
     // Conversation summarizer (conversation-summary-plan.md decisions 3 + 8):
     // the whole card stays hidden until a summarizer endpoint/model exists, so
@@ -194,7 +183,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     // the pause control; the number box appears only while it is on.
     private var cardSummarizer: ConstraintLayout? = null
     private var rowSummarizerWindow: LinearLayout? = null
-    private var switchUseSummarizer: com.google.android.material.materialswitch.MaterialSwitch? = null
+    private var switchUseSummarizer: MaterialSwitch? = null
     private var fieldSummarizerWindow: TextInputEditText? = null
     private var suppressSummarizerWindowWatcher = false
 
@@ -261,31 +250,50 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
-    private var apiEndpointActivityResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+    /** The lorebook editor is opened directly from the chat's expanded
+     * Lorebooks segment. Finishing with either top Back or system Back returns
+     * to this same fragment on the same ChatActivity task; every Quick Settings
+     * control persists immediately, so no in-progress choice is discarded. */
+    private val lorebookEditorLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            if (isAdded) renderLoreBookList()
+        }
+
+    private val addLoreBooksLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (!isAdded || result.resultCode != Activity.RESULT_OK) {
+                if (isAdded) renderLoreBookList()
+                return@registerForActivityResult
+            }
+            val selected = result.data
+                ?.getStringArrayListExtra(LoreBooksListActivity.EXTRA_SELECTED_IDS)
+                .orEmpty()
+            preferences?.setChatExtraLoreBookIds(selected)
+            currentLoreBookSelection()?.let { state ->
+                // Reconciliation preserves retained off choices, enables newly
+                // added books, and removes specialty books unchecked in picker.
+                ChatLoreBookSelection.reconcile(
+                    preferences ?: return@let,
+                    state.first,
+                    state.second
+                )
+            }
+            renderLoreBookList()
+            shouldForceUpdate = true
+        }
+
+    private var apiEndpointEditorLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val data: Intent? = result.data
+            if (data?.getBooleanExtra("deleted", false) == true) {
+                val fallback = apiEndpointPreferences?.getApiEndpointsList(requireContext())?.firstOrNull()
+                if (fallback != null) applyApiEndpoint(fallback)
+                return@registerForActivityResult
+            }
             val apiEndpointId = data?.getStringExtra("apiEndpointId")
-
             if (apiEndpointId != null) {
-                preferences?.setApiEndpointId(apiEndpointId)
-                apiEndpoint = apiEndpointPreferences?.getApiEndpoint(requireContext(), apiEndpointId)
-                textHost?.text = if (apiEndpoint?.label != "") apiEndpoint?.label ?: getString(R.string.label_tap_to_set) else getString(R.string.label_tap_to_set)
-                // The endpoint editor's Model is the active model when that
-                // endpoint is saved/selected from this chat. Keep the chat's
-                // request state and the visible Quick Settings value together;
-                // otherwise both silently remain on the old (often gpt-4o)
-                // per-chat default after the endpoint has changed.
-                apiEndpoint?.model?.takeIf { it.isNotBlank() }?.let { endpointModel ->
-                    preferences?.setModel(endpointModel)
-                    textModel?.text = endpointModel
-                }
-                shouldForceUpdate = true
-                updateListener?.onUpdate()
-                // Provider Mode is OpenRouter-only and reflects the active
-                // model on this endpoint, so re-evaluate it when the endpoint
-                // changes.
-                refreshProviderModeTile()
-                setupReasoningTile()
+                apiEndpointPreferences?.getApiEndpoint(requireContext(), apiEndpointId)
+                    ?.let(::applyApiEndpoint)
             }
         }
     }
@@ -369,100 +377,90 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
     }
 
-    /**
-     * Rebuild the lorebook checklist for this chat. With a persona selected the
-     * list offers the persona's linked additional lorebooks (the core book is
-     * never listed — it is always active — but is named in the subtitle).
-     * Without a persona the whole collection is offered. Checking/unchecking
-     * persists immediately, so the selection can vary mid-conversation, and is
-     * also recorded on the persona as its "last used" set for auto-load.
-     */
-    private fun renderLoreBookList() {
-        val container = lorebookCheckList ?: return
-        container.removeAllViews()
-
-        // Build Phase 3 degraded gate: with the lorebook store refused
-        // (confirmed damage), the checklist degrades to a persistent inline
-        // line instead of crashing the whole sheet — the chat's other
-        // settings stay reachable; the A2 banner owns the repair route.
+    private fun currentLoreBookSelection(): Pair<PersonaObject, LoreBookStore>? {
+        val personaId = preferences?.getPersonaId().orEmpty()
+        if (personaId.isBlank()) return null
+        val persona = personaPreferences?.getPersona(personaId) ?: return null
         val store = try {
             LoreBookStore.getInstance(requireContext())
         } catch (_: Exception) {
-            textLoreBook?.text = getString(R.string.health_screen_blocked_lorebook)
-            return
+            return null
         }
-        val personaId = preferences?.getPersonaId() ?: ""
-        val persona = if (personaId != "") personaPreferences?.getPersona(personaId) else null
+        return persona to store
+    }
 
-        val coreBookName = persona?.coreLoreBookId?.takeIf { it.isNotEmpty() }?.let { store.getBook(it)?.name }
-        textLoreBook?.text = if (coreBookName != null) {
-            getString(R.string.lorebook_core_always_active, coreBookName)
-        } else {
-            getString(R.string.lorebook_subtitle)
+    /** Build the selected companion's books plus any temporary chat-level
+     * specialty books inside the Lorebooks segment. A single default/core book
+     * needs no redundant toggle list, but Add Lorebook remains available while
+     * the master switch is on. */
+    private fun renderLoreBookList() {
+        val container = lorebookCheckList ?: return
+        container.removeAllViews()
+        container.visibility = View.GONE
+        val enabled = switchChatLoreBooks?.isChecked == true
+        btnAddLoreBook?.visibility = if (enabled) View.VISIBLE else View.GONE
+        if (!enabled) return
+
+        val (persona, store) = currentLoreBookSelection() ?: return
+        val personaId = persona.id
+        val chatPreferences = preferences ?: return
+        val state = ChatLoreBookSelection.reconcile(chatPreferences, persona, store)
+        val hasAdditionalCompanionBook = state.companionBooks.any {
+            it.id != persona.coreLoreBookId
         }
+        if (!hasAdditionalCompanionBook && state.extraBooks.isEmpty()) return
 
-        val offeredBooks = if (persona != null) {
-            // The core book is always active, so it never appears as a checkbox —
-            // even if it was also linked as an additional book.
-            persona.additionalLoreBookIdList()
-                .filter { it != persona.coreLoreBookId }
-                .mapNotNull { store.getBook(it) }
-        } else {
-            store.getAllBooks()
-        }
+        val heading = TextView(requireContext(), null, 0, R.style.Widget_App_QuickSettings_LorebookHeading)
+        heading.setText(R.string.quick_lorebooks_used_title)
+        container.addView(heading)
 
-        // Prune checked ids that are no longer offered (book deleted/unlinked).
-        val offeredIds = offeredBooks.map { it.id }
-        val activeIds = LinkedHashSet((preferences?.getActiveLoreBookIds() ?: arrayListOf()).filter { offeredIds.contains(it) })
-
-        if (offeredBooks.isEmpty()) {
-            val empty = TextView(requireContext())
-            empty.text = getString(
-                if (persona != null) R.string.lorebook_none_linked else R.string.lorebook_none_yet
-            )
-            empty.setTextColor(resources.getColor(R.color.text_subtitle, requireContext().theme))
-            empty.textSize = 13f
-            empty.setPadding(24, 8, 24, 16)
-            container.addView(empty)
-            return
-        }
-
-        for (book in offeredBooks) {
-            val row = layoutInflater.inflate(R.layout.view_lorebook_check_row, container, false)
-
+        for (book in state.displayedBooks) {
+            val row = layoutInflater.inflate(R.layout.view_quick_settings_lorebook_toggle_row, container, false)
             row.findViewById<TextView>(R.id.row_name)?.text = book.name
-
-            val description = row.findViewById<TextView>(R.id.row_description)
-            if (book.description.isBlank()) {
-                description?.visibility = View.GONE
-            } else {
-                description?.visibility = View.VISIBLE
-                description?.text = book.description
+            val toggle = row.findViewById<MaterialSwitch>(R.id.row_switch)
+            toggle?.isChecked = state.activeIds.contains(book.id)
+            toggle?.setOnCheckedChangeListener { _, isChecked ->
+                if (isChecked) state.activeIds.add(book.id) else state.activeIds.remove(book.id)
+                chatPreferences.setActiveLoreBookIds(state.activeIds.toList())
+                personaPreferences?.setLastUsedLoreBookIds(
+                    personaId,
+                    PersonaObject.joinIds(
+                        state.companionBooks.map { it.id }
+                            .filter { it != persona.coreLoreBookId && it in state.activeIds }
+                    )
+                )
             }
-
-            val check = row.findViewById<MaterialCheckBox>(R.id.row_check)
-            check?.isChecked = activeIds.contains(book.id)
-            check?.setOnCheckedChangeListener { _, isChecked ->
-                if (isChecked) activeIds.add(book.id) else activeIds.remove(book.id)
-                preferences?.setActiveLoreBookIds(activeIds.toList())
-                if (persona != null) {
-                    // Remember for "auto-enable last-used lorebooks" on new chats.
-                    personaPreferences?.setLastUsedLoreBookIds(personaId, PersonaObject.joinIds(activeIds.toList()))
+            row.findViewById<ImageView>(R.id.row_btn_edit)?.apply {
+                contentDescription = getString(R.string.quick_edit_lorebook_desc, book.name)
+                setOnClickListener {
+                    lorebookEditorLauncher.launch(
+                        Intent(requireContext(), LoreBookEntriesActivity::class.java)
+                            .putExtra("lorebookId", book.id)
+                            .putExtra("lorebookName", book.name)
+                    )
                 }
             }
-            // Tapping anywhere on the row toggles, not just the small box.
-            row.setOnClickListener { check?.isChecked = check?.isChecked != true }
-
-            row.findViewById<ImageButton>(R.id.row_btn_edit)?.setOnClickListener {
-                // Checks persist as they are made, so nothing is lost by leaving.
-                val intent = Intent(requireContext(), LoreBookEntriesActivity::class.java)
-                intent.putExtra("lorebookId", book.id)
-                intent.putExtra("lorebookName", book.name)
-                startActivity(intent)
-            }
-
             container.addView(row)
         }
+        container.visibility = View.VISIBLE
+    }
+
+    private fun openAddLoreBooksPicker() {
+        val (persona, store) = currentLoreBookSelection() ?: return
+        val state = ChatLoreBookSelection.reconcile(preferences ?: return, persona, store)
+        addLoreBooksLauncher.launch(
+            Intent(requireContext(), LoreBooksListActivity::class.java)
+                .putExtra(LoreBooksListActivity.EXTRA_PICK_MODE, true)
+                .putExtra(LoreBooksListActivity.EXTRA_SELECTION_ONLY, true)
+                .putStringArrayListExtra(
+                    LoreBooksListActivity.EXTRA_SELECTED_IDS,
+                    ArrayList(state.extraBooks.map { it.id })
+                )
+                .putStringArrayListExtra(
+                    LoreBooksListActivity.EXTRA_EXCLUDED_IDS,
+                    ArrayList(state.companionBooks.map { it.id })
+                )
+        )
     }
 
     // Returning from the system prompt library (pick mode): the chosen prompt is
@@ -875,7 +873,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val endpoint = if (endpointId.isBlank()) null
             else apiEndpointPreferences?.getApiEndpoint(requireContext(), endpointId)
         val isOpenRouter = endpoint != null && endpoint.isOpenRouterRouting()
-        btnSelectProvider?.visibility = if (isOpenRouter) View.VISIBLE else View.GONE
         providerModeTile?.visibility = if (isOpenRouter) View.VISIBLE else View.GONE
         if (isOpenRouter) {
             refreshProviderModeDisplay()
@@ -890,20 +887,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val mode = favoriteModelsPreferences?.getRoutingType(model, endpointId)
             ?: FavoriteModelObject.ROUTING_AUTOMATIC
         dropdownProviderMode?.text = providerModeLabel(mode)
-        refreshProviderDisplay()
-    }
-
-    /** Show the active model's saved provider identity. The favorite store
-     * keeps provider slugs, so this row uses that exact persisted identity and
-     * does not invent a display name or make a second provider-discovery call. */
-    private fun refreshProviderDisplay() {
-        val endpointId = preferences?.getApiEndpointId() ?: return
-        val model = preferences?.getModel() ?: return
-        val favorite = favoriteModelsPreferences?.getFavorite(model, endpointId)
-        textProvider?.text = QuickSettingsProviderDisplay.label(
-            favorite,
-            getString(R.string.choose_provider_routing_automatic)
-        )
     }
 
     private fun onProviderModePicked(mode: String) {
@@ -917,6 +900,49 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             else -> false
         }
         if (needsSetup) showProviderModeSetupDialog(mode) else applyProviderMode(mode)
+    }
+
+    private fun setupApiEndpointDropdown() {
+        val dropdown = textHost ?: return
+        dropdown.setOnClickListener {
+            val endpoints = apiEndpointPreferences?.getApiEndpointsList(requireContext()).orEmpty()
+            if (endpoints.isEmpty()) return@setOnClickListener
+            val labels = endpoints.map { endpoint ->
+                endpoint.label.takeIf(String::isNotBlank) ?: endpoint.host
+            }
+            val activeId = preferences?.getApiEndpointId().orEmpty()
+            val current = endpoints.indexOfFirst { it.id == activeId }.coerceAtLeast(0)
+            AppDropdown.show(dropdown, labels, current) { position ->
+                applyApiEndpoint(endpoints[position])
+            }
+        }
+    }
+
+    private fun applyApiEndpoint(endpoint: ApiEndpointObject) {
+        preferences?.setApiEndpointId(endpoint.id)
+        apiEndpoint = endpoint
+        textHost?.text = endpoint.label.takeIf(String::isNotBlank)
+            ?: getString(R.string.label_tap_to_set)
+        endpoint.model.takeIf(String::isNotBlank)?.let { endpointModel ->
+            preferences?.setModel(endpointModel)
+            textModel?.text = endpointModel
+        }
+        shouldForceUpdate = true
+        updateListener?.onUpdate()
+        refreshProviderModeTile()
+        setupReasoningTile()
+    }
+
+    private fun openSelectedApiEndpointEditor() {
+        val endpointId = preferences?.getApiEndpointId().orEmpty()
+        val endpoints = apiEndpointPreferences?.getApiEndpointsList(requireContext()).orEmpty()
+        val position = endpoints.indexOfFirst { it.id == endpointId }
+        if (position < 0) return
+        apiEndpointEditorLauncher.launch(
+            Intent(requireContext(), ApiEndpointEditorActivity::class.java)
+                .putExtra("position", position)
+                .putExtra("id", endpointId)
+        )
     }
 
     /** Apply a mode that needs no new setup: Automatic always, or Preferred/Only
@@ -1079,35 +1105,25 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         systemPromptsPreferences = SystemPromptsPreferences.getSystemPromptsPreferences(requireContext())
 
         btnSelectModel = view.findViewById(R.id.btn_select_model)
-        btnSelectProvider = view.findViewById(R.id.btn_select_provider)
-        textProvider = view.findViewById(R.id.text_provider)
         providerModeTile = view.findViewById(R.id.provider_mode_tile)
         dropdownProviderMode = view.findViewById(R.id.dropdown_provider_mode)
+        btnEditProviderRouting = view.findViewById(R.id.btn_edit_provider_routing)
         btnSelectSystemPrompt = view.findViewById(R.id.btn_select_system_prompt)
         textSystemPrompt = view.findViewById(R.id.text_system_prompt)
         rowReasoning = view.findViewById(R.id.row_reasoning)
         textReasoningEffort = view.findViewById(R.id.text_reasoning_effort)
         btnSelectLogitBias = view.findViewById(R.id.btn_set_logit_biases)
-        btnSelectApiEndpoint = view.findViewById(R.id.btn_select_api_endpoint)
-        btnSelectPersona = view.findViewById(R.id.btn_select_persona)
+        btnEditApiEndpoint = view.findViewById(R.id.btn_edit_api_endpoint)
         textPersona = view.findViewById(R.id.text_persona)
-        btnSelectGlamour = view.findViewById(R.id.btn_select_glamour)
         textGlamour = view.findViewById(R.id.text_glamour)
-        btnSelectActivation = view.findViewById(R.id.btn_select_activation)
         textActivation = view.findViewById(R.id.text_activation)
         btnEditPersona = view.findViewById(R.id.btn_edit_persona)
         btnEditGlamour = view.findViewById(R.id.btn_edit_glamour)
         btnEditActivation = view.findViewById(R.id.btn_edit_activation)
         btnEditSystemPrompt = view.findViewById(R.id.btn_edit_system_prompt)
-        btnSelectLoreBook = view.findViewById(R.id.btn_select_lorebook)
-        textLoreBook = view.findViewById(R.id.text_lorebook)
         lorebookCheckList = view.findViewById(R.id.lorebook_check_list)
-        bgTemperature = view.findViewById(R.id.bg_temperature)
-        bgTopP = view.findViewById(R.id.bg_top_p)
-        bgFrequencyPenalty = view.findViewById(R.id.bg_frequency_penalty)
-        bgPresencePenalty = view.findViewById(R.id.bg_presence_penalty)
-        rowStreaming = view.findViewById(R.id.row_streaming)
-        checkStreaming = view.findViewById(R.id.check_streaming)
+        btnAddLoreBook = view.findViewById(R.id.btn_add_lorebook)
+        switchStreaming = view.findViewById(R.id.switch_streaming)
 
         temperatureSeekbar = view.findViewById(R.id.temperature_slider)
         frequencyPenaltySeekbar = view.findViewById(R.id.frequency_penalty_slider)
@@ -1119,8 +1135,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         // Archive pause. The durable bookmark hides a paused chat without
         // consuming its already-queued or subsequently captured turns.
         switchChatMemory = view.findViewById(R.id.switch_chat_memory)
+        rowChatMemory = view.findViewById(R.id.row_chat_memory)
         switchChatExcluded = view.findViewById(R.id.switch_chat_excluded)
-        containerMemoryScene = view.findViewById(R.id.container_memory_scene)
         textChatWorld = view.findViewById(R.id.text_chat_world)
         textChatCampaign = view.findViewById(R.id.text_chat_campaign)
         textChatRoleplayCharacter = view.findViewById(R.id.text_chat_roleplay_character)
@@ -1139,15 +1155,14 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         switchChatExcluded?.isChecked = !(preferences?.isChatExcludedFromMemory() ?: false)
         switchChatMemory?.setOnCheckedChangeListener { _, checked ->
             preferences?.setChatMemoryEnabled(checked)
-            // The scene rows follow this switch (not the global engine), so
-            // they appear/disappear the moment it's flipped.
-            setupMemorySceneRows()
         }
         switchChatLoreBooks = view.findViewById(R.id.switch_chat_lorebooks)
         switchChatLoreBooks?.isChecked = preferences?.getChatLoreBooksEnabled() ?: true
         switchChatLoreBooks?.setOnCheckedChangeListener { _, checked ->
             preferences?.setChatLoreBooksEnabled(checked)
+            renderLoreBookList()
         }
+        btnAddLoreBook?.setOnClickListener { openAddLoreBooksPicker() }
         switchChatExcluded?.setOnCheckedChangeListener { _, archive ->
             val excluded = !archive
             preferences?.setChatArchiveEnabled(archive)
@@ -1166,23 +1181,6 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textHost = view.findViewById(R.id.text_host)
         textLogitBiasesConfig = view.findViewById(R.id.text_logit_biases_config)
         usageCost = view.findViewById(R.id.usage_cost)
-
-        usageCost?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        btnSelectModel?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        btnSelectProvider?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        providerModeTile?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        btnSelectLogitBias?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        btnSelectApiEndpoint?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        btnSelectPersona?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        btnSelectGlamour?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        btnSelectActivation?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        btnSelectSystemPrompt?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        btnSelectLoreBook?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        bgTemperature?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        bgTopP?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        bgFrequencyPenalty?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-        bgPresencePenalty?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_4.getColor(activity ?: return))
-
 
         textUsage = view.findViewById(R.id.text_usage)
         textCost = view.findViewById(R.id.text_cost)
@@ -1245,11 +1243,8 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             preferences?.getPresencePenalty() ?: ApiEndpointObject.DEFAULT_PRESENCE_PENALTY
         ) { preferences?.setPresencePenalty(it) }
         fieldSeed?.setText(preferences?.getSeed())
-        checkStreaming?.isChecked = preferences?.getStreaming() ?: true
-
-        rowStreaming?.setOnClickListener {
-            val checked = checkStreaming?.isChecked != true
-            checkStreaming?.isChecked = checked
+        switchStreaming?.isChecked = preferences?.getStreaming() ?: true
+        switchStreaming?.setOnCheckedChangeListener { _, checked ->
             preferences?.setStreaming(checked)
         }
 
@@ -1263,12 +1258,15 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             // One full-screen selector: it opens on this endpoint's favorites and
             // offers "View all". Favorites are scoped to the chat's active
             // endpoint, so a picked favorite always belongs to it.
-            val dialog = AdvancedModelSelectorDialogFragment.newInstance(model!!, chatId)
+            val dialog = AdvancedModelSelectorDialogFragment.newInstance(
+                preferences?.getModel().orEmpty(),
+                chatId
+            )
             dialog.setModelSelectedListener(modelSelectedListener)
             dialog.show(parentFragmentManager, "AdvancedModelSelectorDialogFragment")
         }
 
-        btnSelectProvider?.setOnClickListener {
+        btnEditProviderRouting?.setOnClickListener {
             val endpointId = preferences?.getApiEndpointId() ?: return@setOnClickListener
             val selectedModel = preferences?.getModel() ?: return@setOnClickListener
             if (selectedModel.isBlank()) return@setOnClickListener
@@ -1298,16 +1296,18 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         }
 
         fieldSeed?.addTextChangedListener { text ->
-            preferences?.setSeed(text.toString())
+            val value = text?.toString().orEmpty().trim()
+            if (value.isEmpty() || value.toIntOrNull() != null) {
+                preferences?.setSeed(value)
+            }
         }
 
         btnSelectLogitBias?.setOnClickListener {
             logitBiasesActivityResultLauncher.launch(Intent(requireContext(), LogitBiasConfigListActivity::class.java))
         }
 
-        btnSelectApiEndpoint?.setOnClickListener {
-            apiEndpointActivityResultLauncher.launch(Intent(requireContext(), ApiEndpointsListActivity::class.java))
-        }
+        setupApiEndpointDropdown()
+        btnEditApiEndpoint?.setOnClickListener { openSelectedApiEndpointEditor() }
 
         // Companion / Glamour / Activation tiles (owner ruling, July 21 2026):
         // the value is an inline dropdown; the edit button opens that category's
@@ -1343,24 +1343,9 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
 
     /* ------------------------------ memory scene (Phase 4) ------------------------------ */
 
-    /**
-     * The world / roleplay-character / user-persona rows only make sense once
-     * the full memory engine is selected and the store has actually been
-     * created — otherwise there is nothing to pick from. Values are read
-     * per-turn by the enforcer, so persisting them here needs no
-     * shouldForceUpdate/restart.
-     */
+    /** Roleplay context is independent of Use Saved Memories. The rows remain
+     * available at all times; a provisioned store supplies their current lists. */
     private fun setupMemorySceneRows() {
-        // Follows the per-chat "Use memory" switch, not the global engine tier
-        // (Quick Settings is God — owner ruling, July 10 2026): a chat with
-        // memory switched on gets its scene selectors regardless of the
-        // global default.
-        val memoryOn = preferences?.getChatMemoryEnabled() == true
-        val provisioned = MemoryStore.isProvisioned(requireContext())
-        val visible = memoryOn && provisioned
-        containerMemoryScene?.visibility = if (visible) View.VISIBLE else View.GONE
-        if (!visible) return
-
         updateChatWorldLabel()
         updateChatCampaignLabel()
         updateChatRoleplayCharacterLabel()
@@ -1371,7 +1356,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         textChatRoleplayCharacter?.setOnClickListener { showRoleplayCharacterPicker() }
         textChatProject?.setOnClickListener { showProjectPicker() }
 
-        loadMemorySceneLists()
+        if (MemoryStore.isProvisioned(requireContext())) loadMemorySceneLists()
     }
 
     private fun loadMemorySceneLists() {
@@ -1516,6 +1501,17 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
             false
         }
         cardSummarizer?.visibility = if (configured) View.VISIBLE else View.GONE
+        rowChatMemory?.setBackgroundResource(
+            if (configured) R.drawable.bg_quick_settings_segment_middle
+            else R.drawable.bg_quick_settings_segment_top
+        )
+        (rowChatMemory?.layoutParams as? LinearLayout.LayoutParams)?.let { params ->
+            params.topMargin = resources.getDimensionPixelSize(
+                if (configured) R.dimen.quick_settings_segment_gap
+                else R.dimen.quick_settings_section_gap
+            )
+            rowChatMemory?.layoutParams = params
+        }
         if (!configured) return
 
         val on = preferences?.getChatUseSummarizer() == true
@@ -1728,7 +1724,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         refreshSamplingControlsFromPreferences()
     }
 
-    /** Re-seed the streaming checkbox and the four sampling controls from the
+    /** Re-seed the streaming toggle and the four sampling controls from the
      *  chat's stored values. Used after a model selection applied a favorite's
      *  saved parameters, so the open sheet shows the new values instead of a
      *  stale slider position that a later drag would write back. */
@@ -1746,7 +1742,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         presencePenaltySeekbar?.configure(
             SamplingParameterSpec.PRESENCE_PENALTY, prefs.getPresencePenalty()
         ) { prefs.setPresencePenalty(it) }
-        checkStreaming?.isChecked = prefs.getStreaming()
+        switchStreaming?.isChecked = prefs.getStreaming()
     }
 
     private fun saveCurrentSettingsToProfile() {

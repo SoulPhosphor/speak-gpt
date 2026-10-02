@@ -68,7 +68,7 @@ class PlaygroundRunner(
                 else preferences.getFrequencyPenalty().toDouble(),
             presencePenalty = if (preferences.getPresencePenalty().toDouble() == 0.0) null
                 else preferences.getPresencePenalty().toDouble(),
-            seed = preferences.getSeed().takeIf { it.isNotEmpty() }?.toInt(),
+            seed = preferences.getSeed().takeIf { it.isNotEmpty() }?.toIntOrNull(),
             logitBias = if (!noLogitConfig || model.contains("gpt-5") ||
                 model.contains("o1") || model.contains("o3")
             ) null else logitBiasPreferences.getLogitBiasesMap(),

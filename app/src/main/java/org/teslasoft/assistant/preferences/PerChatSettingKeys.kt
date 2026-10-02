@@ -81,6 +81,9 @@ object PerChatSettingKeys {
         "active_lorebook_ids",
         "lorebook_id", // legacy single-book key, still read as a fallback
         "lorebooks_seeded",
+        "lorebook_selection_persona_id",
+        "lorebook_selection_known_ids",
+        "chat_extra_lorebook_ids",
 
         // Memory system (tri-states and scene selectors)
         "memory_enabled",

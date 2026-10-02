@@ -1681,9 +1681,9 @@ class Preferences internal constructor(
     }
 
     /**
-     * The additional lorebooks currently checked for this chat. Memories from
-     * these books (plus the persona's always-on core book) are matched against
-     * messages and injected into the prompt. Stored comma-separated.
+     * The lorebooks currently enabled for this chat. This includes the
+     * companion's default and linked books plus any temporary chat-level books
+     * selected from Quick Settings. Stored comma-separated.
      *
      * Falls back to the legacy single-book "lorebook_id" key from the beta so
      * a chat that had one active book before the multi-select keeps it.
@@ -1700,9 +1700,10 @@ class Preferences internal constructor(
     }
 
     /**
-     * Set the additional lorebooks checked for this chat.
+     * Set the lorebooks enabled for this chat.
      *
-     * @param ids Lorebook IDs; an empty list means no additional lorebooks
+     * @param ids Lorebook IDs; an empty list means none of the displayed books
+     * are enabled
      * */
     fun setActiveLoreBookIds(ids: List<String>) {
         putString("active_lorebook_ids", ids.map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(","))
@@ -1711,17 +1712,49 @@ class Preferences internal constructor(
         putString("lorebook_id", "")
     }
 
-    /**
-     * One-shot guard (per chat) so a new chat seeds its checked lorebooks from
-     * the persona's last-used set exactly once (when the persona opts in via
-     * autoLoadLastLoreBooks). After that the chat's own selection always wins.
-     * */
+    /** One-shot guard for initializing a new chat's lorebook selection. After
+     * initialization the chat's own Quick Settings selection always wins. */
     fun isLoreBooksSeeded() : Boolean {
         return getBoolean("lorebooks_seeded", false)
     }
 
     fun setLoreBooksSeeded(seeded: Boolean) {
         putBoolean("lorebooks_seeded", seeded)
+    }
+
+    /** Companion whose linked-book selection was last reconciled. An empty
+     * value means the new all-linked-books-on default has not been initialized. */
+    fun getLoreBookSelectionPersonaId(): String =
+        getString("lorebook_selection_persona_id", "")
+
+    fun setLoreBookSelectionPersonaId(personaId: String) {
+        putString("lorebook_selection_persona_id", personaId)
+    }
+
+    /** Displayed ids known at the last reconciliation. Newly linked or added
+     * books can default on without re-enabling one deliberately turned off. */
+    fun getLoreBookSelectionKnownIds(): ArrayList<String> =
+        ArrayList(getString("lorebook_selection_known_ids", "")
+            .split(",").map { it.trim() }.filter { it.isNotEmpty() })
+
+    fun setLoreBookSelectionKnownIds(ids: List<String>) {
+        putString(
+            "lorebook_selection_known_ids",
+            ids.map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(",")
+        )
+    }
+
+    /** Optional specialty lorebooks added only to this chat. They do not alter
+     * the selected companion or its permanently linked lorebooks. */
+    fun getChatExtraLoreBookIds(): ArrayList<String> =
+        ArrayList(getString("chat_extra_lorebook_ids", "")
+            .split(",").map { it.trim() }.filter { it.isNotEmpty() })
+
+    fun setChatExtraLoreBookIds(ids: List<String>) {
+        putString(
+            "chat_extra_lorebook_ids",
+            ids.map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(",")
+        )
     }
 
     /**

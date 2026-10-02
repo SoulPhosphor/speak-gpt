@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/btn_select_persona"
+        style="@style/Widget.App.QuickSettings.Segment.Top">
+
+        <TextView
+            android:id="@+id/textView_persona_title"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/label_persona"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_persona"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            android:text="@string/label_persona_none"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_persona"
+            app:layout_constraintStart_toEndOf="@+id/textView_persona_title"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/btn_edit_persona"
+            style="@style/Widget.App.QuickTile.EditButton"
+            android:contentDescription="@string/qs_edit_companions_desc"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/btn_select_glamour"
+        style="@style/Widget.App.QuickSettings.Segment.Middle">
+
+        <TextView
+            android:id="@+id/textView_glamour_title"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/label_glamour"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_glamour"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            android:text="@string/label_user_persona_none"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_glamour"
+            app:layout_constraintStart_toEndOf="@+id/textView_glamour_title"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/btn_edit_glamour"
+            style="@style/Widget.App.QuickTile.EditButton"
+            android:contentDescription="@string/qs_edit_glamours_desc"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/btn_select_activation"
+        style="@style/Widget.App.QuickSettings.Segment.Middle">
+
+        <TextView
+            android:id="@+id/textView_activation_title"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/label_activation"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_activation"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            android:text="@string/label_activation_none"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_activation"
+            app:layout_constraintStart_toEndOf="@+id/textView_activation_title"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/btn_edit_activation"
+            style="@style/Widget.App.QuickTile.EditButton"
+            android:contentDescription="@string/qs_edit_activation_desc"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/btn_select_system_prompt"
+        style="@style/Widget.App.QuickSettings.Segment.Bottom">
+
+        <TextView
+            android:id="@+id/textView_system_prompt_title"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/label_system_prompt"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_system_prompt"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            android:text="@string/system_prompt_none"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_system_prompt"
+            app:layout_constraintStart_toEndOf="@+id/textView_system_prompt_title"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <ImageView
+            android:id="@+id/btn_edit_system_prompt"
+            style="@style/Widget.App.QuickTile.EditButton"
+            android:contentDescription="@string/qs_edit_system_prompts_desc"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</merge>
+

@@ -229,6 +229,7 @@ import org.teslasoft.assistant.preferences.memory.ActiveMemoryReference
 import org.teslasoft.assistant.preferences.memory.MemoryStore
 import org.teslasoft.assistant.preferences.memory.TranscriptRecorder
 import org.teslasoft.assistant.preferences.lorebook.LoreBookBudget
+import org.teslasoft.assistant.preferences.lorebook.ChatLoreBookSelection
 import org.teslasoft.assistant.preferences.lorebook.LoreBookInjectionLog
 import org.teslasoft.assistant.preferences.lorebook.LoreBookMatch
 import org.teslasoft.assistant.preferences.lorebook.LoreBookStore
@@ -7431,14 +7432,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .show()
     }
 
-    /**
-     * Seed a brand-new chat's checked additional lorebooks from the persona's
-     * last-used set — but only when the persona has opted in via its
-     * "auto-enable last-used lorebooks" toggle. One-shot per chat (same pattern
-     * as [seedPersonaAndActivationDefaults]); afterwards the chat's own Quick
-     * Settings selection always wins. Books that have since been deleted or
-     * unlinked from the persona are skipped.
-     */
+    /** Initialize a brand-new chat's lorebook selection once. The companion's
+     * default and linked books begin on; later Quick Settings choices are
+     * preserved by [ChatLoreBookSelection]. */
     private fun seedLoreBooksForNewChat() {
         if (preferences?.isLoreBooksSeeded() == true) return
         preferences?.setLoreBooksSeeded(true)
@@ -7446,16 +7442,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val personaId = preferences?.getPersonaId().orEmpty()
         if (personaId.isEmpty()) return
 
-        val persona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
-        if (!persona.autoLoadLastLoreBooks) return
-
         try {
-            val linked = persona.additionalLoreBookIdList()
             val store = LoreBookStore.getInstance(this)
-            val ids = persona.lastUsedLoreBookIdList().filter { linked.contains(it) && store.getBook(it) != null }
-            if (ids.isNotEmpty()) {
-                preferences?.setActiveLoreBookIds(ids)
-            }
+            val persona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
+            preferences?.let { ChatLoreBookSelection.reconcile(it, persona, store) }
         } catch (e: Exception) {
             // Store unavailable (SQLCipher key problem): skip seeding, keep the chat usable.
             org.teslasoft.assistant.preferences.memory.MemoryLog.log(this, "LoreBook", "error", "Lorebook seeding skipped: ${e.message}")
@@ -11339,17 +11329,16 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             try {
                 val loreStore = LoreBookStore.getInstance(this)
                 val activeBookIds = LinkedHashSet<String>()
-                val checkedIds = preferences?.getActiveLoreBookIds() ?: arrayListOf()
                 if (personaId != "") {
                     val loreBookPersona =
                         PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
-                    if (loreBookPersona.coreLoreBookId != "") {
-                        activeBookIds.add(loreBookPersona.coreLoreBookId)
-                    }
-                    val linked = loreBookPersona.additionalLoreBookIdList()
-                    activeBookIds.addAll(checkedIds.filter { linked.contains(it) })
+                    activeBookIds.addAll(
+                        ChatLoreBookSelection.reconcile(
+                            preferences!!, loreBookPersona, loreStore
+                        ).activeIds
+                    )
                 } else {
-                    activeBookIds.addAll(checkedIds)
+                    activeBookIds.addAll(preferences?.getActiveLoreBookIds() ?: arrayListOf())
                 }
                 // One batched call across every active book (counterplan Step
                 // 1.6) rather than one query per book.
@@ -11481,7 +11470,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             preferences!!.getFrequencyPenalty().toDouble().takeUnless { it == 0.0 }
         val presencePenalty =
             preferences!!.getPresencePenalty().toDouble().takeUnless { it == 0.0 }
-        val seed = preferences!!.getSeed().takeIf { it.isNotEmpty() }?.toInt()
+        val seed = preferences!!.getSeed().takeIf { it.isNotEmpty() }?.toIntOrNull()
         val hasNoBiasConfig = preferences?.getLogitBiasesConfigId().isNullOrEmpty() ||
             preferences?.getLogitBiasesConfigId() == "null"
         val logitBias = if (hasNoBiasConfig && !usesRestrictedSampling) {
@@ -11693,8 +11682,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         val loreBooksEnabled = preferences?.getChatLoreBooksEnabled() == true
 
         // Lorebook (memory system): match the user's latest message against the
-        // persona's core lorebook (always active when the persona is used) plus
-        // whichever additional lorebooks are checked for this chat, and inject the
+        // companion-linked and chat-added lorebooks enabled for this chat, and inject the
         // matched memories as their own System message, placed after the base
         // prompt so prefix caching of the stable prompt holds.
         val allLoreMatches = ArrayList<LoreBookMatch>()
@@ -11717,17 +11705,15 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             try {
                 val loreStore = LoreBookStore.getInstance(this)
                 val activeBookIds = LinkedHashSet<String>()
-                val checkedIds = preferences?.getActiveLoreBookIds() ?: arrayListOf()
                 if (personaId != "") {
                     val loreBookPersona = PersonaPreferences.getPersonaPreferences(this).getPersona(personaId)
-                    // Core book first: when the injection budget truncates, core memories win.
-                    if (loreBookPersona.coreLoreBookId != "") activeBookIds.add(loreBookPersona.coreLoreBookId)
-                    // Only books still linked to the persona count; a stale checked id
-                    // left over from before an unlink must not keep injecting.
-                    val linked = loreBookPersona.additionalLoreBookIdList()
-                    activeBookIds.addAll(checkedIds.filter { linked.contains(it) })
+                    activeBookIds.addAll(
+                        ChatLoreBookSelection.reconcile(
+                            preferences!!, loreBookPersona, loreStore
+                        ).activeIds
+                    )
                 } else {
-                    activeBookIds.addAll(checkedIds)
+                    activeBookIds.addAll(preferences?.getActiveLoreBookIds() ?: arrayListOf())
                 }
 
                 // One batched call across every active book (counterplan Step
@@ -11878,7 +11864,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                 frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
                 presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
-                seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
+                seed = preferences!!.getSeed().takeIf { it.isNotEmpty() }?.toIntOrNull(),
                 logitBias = if (model.contains("gpt-5") || model.contains("o1") || model.contains("o3")) null else logitBiasPreferences?.getLogitBiasesMap(),
                 messages = msgs,
                 tools = legacyPathImageTools,
@@ -11894,7 +11880,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 topP = if (preferences!!.getTopP().toDouble() == 1.0) null else preferences!!.getTopP().toDouble(),
                 frequencyPenalty = if (preferences!!.getFrequencyPenalty().toDouble() == 0.0) null else preferences!!.getFrequencyPenalty().toDouble(),
                 presencePenalty = if (preferences!!.getPresencePenalty().toDouble() == 0.0) null else preferences!!.getPresencePenalty().toDouble(),
-                seed = if (preferences!!.getSeed() != "") preferences!!.getSeed().toInt() else null,
+                seed = preferences!!.getSeed().takeIf { it.isNotEmpty() }?.toIntOrNull(),
                 messages = msgs,
                 tools = legacyPathImageTools,
                 // Ask supported providers to include token usage in the stream

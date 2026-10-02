@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/section_streaming"
+        style="@style/Widget.App.QuickSettings.Segment.Top">
+
+        <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+            android:id="@+id/header_streaming"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            app:parameterInfo="@string/streaming_description"
+            app:parameterTitle="@string/streaming_title"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/switch_streaming"
+            style="@style/Widget.App.QuickSettings.Switch"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/bg_temperature"
+        style="@style/Widget.App.QuickSettings.Segment.Middle">
+
+        <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+            android:id="@+id/header_temperature"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="8dp"
+            app:parameterInfo="@string/sampling_hint_temperature"
+            app:parameterTitle="@string/sampling_label_temperature"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+            android:id="@+id/temperature_slider"
+            style="@style/Widget.App.SamplingSlider.Container"
+            android:layout_width="0dp"
+            android:contentDescription="@string/set_temperature"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/header_temperature" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/bg_top_p"
+        style="@style/Widget.App.QuickSettings.Segment.Middle">
+
+        <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+            android:id="@+id/header_top_p"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="8dp"
+            app:parameterInfo="@string/sampling_hint_top_p"
+            app:parameterTitle="@string/sampling_label_top_p"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+            android:id="@+id/top_p_slider"
+            style="@style/Widget.App.SamplingSlider.Container"
+            android:layout_width="0dp"
+            android:contentDescription="@string/set_top_p"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/header_top_p" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/bg_frequency_penalty"
+        style="@style/Widget.App.QuickSettings.Segment.Middle">
+
+        <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+            android:id="@+id/header_frequency_penalty"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="8dp"
+            app:parameterInfo="@string/sampling_hint_frequency_penalty"
+            app:parameterTitle="@string/sampling_label_frequency_penalty"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+            android:id="@+id/frequency_penalty_slider"
+            style="@style/Widget.App.SamplingSlider.Container"
+            android:layout_width="0dp"
+            android:contentDescription="@string/set_frequency_penalty"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/header_frequency_penalty" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/bg_presence_penalty"
+        style="@style/Widget.App.QuickSettings.Segment.Bottom">
+
+        <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+            android:id="@+id/header_presence_penalty"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="8dp"
+            app:parameterInfo="@string/sampling_hint_presence_penalty"
+            app:parameterTitle="@string/sampling_label_presence_penalty"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <org.teslasoft.assistant.ui.widgets.SamplingParameterControl
+            android:id="@+id/presence_penalty_slider"
+            style="@style/Widget.App.SamplingSlider.Container"
+            android:layout_width="0dp"
+            android:contentDescription="@string/set_presence_penalty"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/header_presence_penalty" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</merge>
+

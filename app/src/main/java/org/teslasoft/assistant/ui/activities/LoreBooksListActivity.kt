@@ -63,13 +63,17 @@ import org.teslasoft.assistant.ui.adapters.LoreSuggestionAdapter
  *
  * Pick mode (launched for result with "pickMode"): rows show checkboxes instead,
  * for linking books to a persona. Both the back arrow and the "Save and close"
- * button return the checked ids, so picks are never lost.
+ * button return the checked ids, so picks are never lost. Quick Settings adds
+ * selection-only mode, which also hides book creation, editing, and excluded
+ * Companion-linked books so the screen has one unambiguous purpose.
  */
 class LoreBooksListActivity : FragmentActivity() {
 
     companion object {
         const val EXTRA_PICK_MODE = "pickMode"
         const val EXTRA_SELECTED_IDS = "selectedLoreBookIds"
+        const val EXTRA_SELECTION_ONLY = "selectionOnly"
+        const val EXTRA_EXCLUDED_IDS = "excludedLoreBookIds"
         /** Open straight into the Pending review of Lorebook Memory suggestions
          *  (Step 1.7) — used by the Memory Assistant's lorebook result View
          *  link. Ignored in pick mode. */
@@ -98,7 +102,9 @@ class LoreBooksListActivity : FragmentActivity() {
     private var tagFilter: String = ""
 
     private var pickMode: Boolean = false
+    private var selectionOnly: Boolean = false
     private var selectedIds: HashSet<String> = hashSetOf()
+    private var excludedIds: HashSet<String> = hashSetOf()
 
     private var store: LoreBookStore? = null
 
@@ -321,19 +327,27 @@ class LoreBooksListActivity : FragmentActivity() {
         btnModePending = findViewById(R.id.btn_mode_pending)
 
         pickMode = intent.getBooleanExtra(EXTRA_PICK_MODE, false)
+        selectionOnly = intent.getBooleanExtra(EXTRA_SELECTION_ONLY, false)
         if (pickMode) {
             selectedIds = HashSet(intent.getStringArrayListExtra(EXTRA_SELECTED_IDS) ?: arrayListOf())
+            excludedIds = HashSet(intent.getStringArrayListExtra(EXTRA_EXCLUDED_IDS) ?: arrayListOf())
             // The system back gesture also saves: leaving the picker by any
             // route returns the current selection.
             onBackPressedDispatcher.addCallback(this) { finishWithSelection() }
             activityTitle?.text = getString(R.string.title_add_lorebooks)
             btnAdd?.text = getString(R.string.btn_save_and_close)
             btnAdd?.setIconResource(R.drawable.ic_done)
-            // The debug button doubles as "new book" in pick mode so books can
-            // still be created mid-pick.
-            btnDebug?.setImageResource(R.drawable.ic_add)
-            btnDebug?.contentDescription = getString(R.string.btn_new_lorebook)
-            btnDebug?.tooltipText = getString(R.string.btn_new_lorebook)
+            if (selectionOnly) {
+                // Quick Settings is a pure chooser. Creation and editing stay
+                // in Lorebook management so tapping a row has one meaning here.
+                btnDebug?.visibility = View.GONE
+            } else {
+                // The debug button doubles as "new book" in ordinary persona
+                // pick mode so books can still be created mid-pick.
+                btnDebug?.setImageResource(R.drawable.ic_add)
+                btnDebug?.contentDescription = getString(R.string.btn_new_lorebook)
+                btnDebug?.tooltipText = getString(R.string.btn_new_lorebook)
+            }
         }
 
         val preferences = Preferences.getPreferences(this, "")
@@ -448,10 +462,10 @@ class LoreBooksListActivity : FragmentActivity() {
     }
 
     private fun applyFilters() {
-        list = ArrayList(allBooks.filter { matchesFilters(it) })
+        list = ArrayList(allBooks.filter { it.id !in excludedIds && matchesFilters(it) })
 
         runOnUiThread {
-            adapter = LoreBookAdapter(list, counts, this, pickMode, selectedIds)
+            adapter = LoreBookAdapter(list, counts, this, pickMode, selectedIds, selectionOnly)
             adapter!!.setOnSelectListener(onSelectListener)
             listView!!.adapter = adapter
             adapter!!.notifyDataSetChanged()
@@ -509,7 +523,7 @@ class LoreBooksListActivity : FragmentActivity() {
 
         btnDebug!!.setOnClickListener {
             if (pickMode) {
-                openEditDialog(-1)
+                if (!selectionOnly) openEditDialog(-1)
             } else {
                 startActivity(Intent(this, LoreBookDebugActivity::class.java))
             }

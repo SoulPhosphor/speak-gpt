@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/btn_set_logit_biases"
+        style="@style/Widget.App.QuickSettings.Segment.Top"
+        android:clickable="true"
+        android:focusable="true">
+
+        <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+            android:id="@+id/header_logit_bias"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            app:parameterInfo="@string/quick_logit_bias_hint"
+            app:parameterTitle="@string/label_logit_bias"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_logit_biases_config"
+            style="@style/Widget.App.QuickSettings.ActionValue"
+            android:text="@string/label_tap_to_set"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/header_logit_bias"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/row_seed"
+        style="@style/Widget.App.QuickSettings.Segment.Bottom">
+
+        <org.teslasoft.assistant.ui.widgets.ParameterSectionHeader
+            android:id="@+id/header_seed"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            app:parameterInfo="@string/quick_seed_hint"
+            app:parameterTitle="@string/label_seed"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/field_seed"
+            style="@style/Widget.App.QuickSettings.SeedField"
+            android:imeOptions="actionDone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</merge>
+

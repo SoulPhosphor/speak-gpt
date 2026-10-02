@@ -231,7 +231,7 @@
     <string name="lorebook_search_hint">Search lorebooks</string>
     <string name="lorebook_filter_all_types">All types</string>
     <string name="lorebook_filter_by_type">Filter by type</string>
-    <string name="title_add_lorebooks">Add lorebooks</string>
+    <string name="title_add_lorebooks">Add Lorebooks</string>
     <string name="btn_save_and_close">Save and close</string>
     <string name="btn_add_lorebooks">Add Lorebooks</string>
     <string name="btn_unlink_lorebook">Unlink from this Companion</string>
@@ -480,15 +480,15 @@
     <string name="provider_move_up_desc">Move %1$s up</string>
     <string name="provider_move_down_desc">Move %1$s down</string>
     <string name="sampling_label_temperature">Temperature</string>
-    <string name="sampling_hint_temperature">Temperature controls model creativity. Low settings will create more conservative, predictable responses. High temperatures may be more creative. If settings are too high responses may become less coherent.</string>
+    <string name="sampling_hint_temperature">Temperature controls model creativity. Low settings create more conservative, predictable responses. Higher settings allow more variety, but settings that are too high can make replies less coherent.\n\nGeneral Recommended Default: 0.7</string>
     <string name="streaming_title">Streaming</string>
-    <string name="streaming_description">Show replies as they’re generated. When off, display the full reply only after it finishes.</string>
+    <string name="streaming_description">Show replies as they’re generated. When off, display the full reply only after it finishes.\n\nGeneral Recommended Default: On</string>
     <string name="sampling_label_top_p">Top P</string>
-    <string name="sampling_hint_top_p">Top-p controls how wide a pool of likely next words the model may choose from. A low value makes it stick to the safest, most predictable wording, which can become repetitive or dull; a high value admits more unusual choices, which can make writing lively but also more rambling, inconsistent, or strange.</string>
+    <string name="sampling_hint_top_p">Top P controls how wide a pool of likely next words the model may choose from. A low value makes it stick to safer, more predictable wording. A higher value allows more variety, but can also make writing more rambling or inconsistent.\n\nGeneral Recommended Default: 1</string>
     <string name="sampling_label_frequency_penalty">Frequency Penalty</string>
-    <string name="sampling_hint_frequency_penalty">Frequency penalty discourages the model from repeating words or phrases it has already used. A low value allows natural repetition but can become redundant; a high value pushes it toward fresher wording, but if set too high it may avoid necessary terms, sound unnatural, or wander just to keep finding different words.</string>
+    <string name="sampling_hint_frequency_penalty">Frequency Penalty discourages the model from repeating words or phrases it has already used. Positive values reduce repetition. Negative values allow more repetition. Values that are too strong can make replies sound unnatural or avoid necessary terms.\n\nGeneral Recommended Default: 0</string>
     <string name="sampling_label_presence_penalty">Presence Penalty</string>
-    <string name="sampling_hint_presence_penalty">Presence penalty discourages the model from returning to topics or ideas it has already mentioned. A low value lets it stay focused and develop the same ideas; a high value pushes it toward new territory, but if set too high it can become scattered, change subjects too quickly, or introduce unnecessary ideas.</string>
+    <string name="sampling_hint_presence_penalty">Presence Penalty discourages the model from returning to topics or ideas it has already mentioned. Positive values encourage new topics. Negative values encourage it to stay with existing topics. Values that are too strong can make replies scattered or repetitive.\n\nGeneral Recommended Default: 0</string>
     <string name="api_endpoint_provider">Provider</string>
     <string name="api_endpoint_connection_timeout">Connection Timeout (In Seconds)</string>
     <string name="api_endpoint_response_time">Response Time (In Seconds)</string>
@@ -526,11 +526,13 @@
     <string name="btn_learn_more">Learn more</string>
     <string name="label_seed">Seed</string>
     <string name="note_qs_autosave">Changes are saved automatically. Usually you don\'t need to alter temperature, top_p, frequency penalty, presence penalty and seed params. But if you need to do so you can. Please note that it\'s not recommended to change both temperature and top_p params as you may receive unexpected results. The default temperature is 0.7, default top_p is 1.0 and default values for penalties are 0.0.</string>
-    <string name="label_logit_bias">Logit bias</string>
+    <string name="label_logit_bias">Logit Bias</string>
+    <string name="quick_logit_bias_hint">Logit Bias changes how likely the model is to use specific words or tokens. Positive values make the selected token more likely. Negative values make it less likely. Strong values can make replies repetitive, unnatural, or difficult to generate, so this is mainly useful when you need to encourage or discourage something very specific. Tap to Set to choose a saved configuration.\n\nGeneral Recommended Default: Not Set</string>
+    <string name="quick_seed_hint">A Seed gives the provider a repeatable starting number for its random choices. With the same model and settings, repeating a seed may produce a similar reply, but results are not guaranteed to match across providers, model updates, or other setting changes. Leave this blank when you want normal variation.\n\nGeneral Recommended Default: Blank</string>
     <string name="label_ai_model">AI model</string>
     <string name="label_system_message">System message</string>
     <string name="label_tap_to_edit">Tap to edit</string>
-    <string name="label_tap_to_set">Tap to set</string>
+    <string name="label_tap_to_set">Tap to Set</string>
     <string name="label_select_resolution">Select resolution</string>
     <string name="label_search_models">Search models</string>
     <string name="btn_get_api_key">Get API key</string>
@@ -870,7 +872,7 @@
     <string name="favorite_remove_title">Remove favorite model?</string>
     <string name="favorite_remove_message">This will delete any associated provider routing preferences.</string>
     <string name="favorite_routing_settings_desc">Provider routing preferences for %1$s</string>
-    <string name="quick_provider_mode_title">Provider Mode:</string>
+    <string name="quick_provider_mode_title">Provider Mode</string>
     <string name="quick_provider_mode_subtext">Models having provider routing preferences will be created as model favorites.</string>
     <string name="provider_mode_setup_title">Set up provider routing?</string>
     <string name="provider_mode_setup_message">Preferred and Only modes need you to choose providers for this model first.</string>
@@ -1762,8 +1764,8 @@
 
     <!-- Memory system Phase 2: transcript capture, review markers, kill switch -->
     <string name="label_memory">Memory</string>
-    <string name="label_chat_memory_enabled">Use memory in this chat</string>
-    <string name="label_chat_lorebooks_enabled">Use Lorebooks in this chat</string>
+    <string name="label_chat_memory_enabled">Use Saved Memories</string>
+    <string name="label_chat_lorebooks_enabled">Use Lorebooks in This Chat</string>
     <string name="label_chat_memory_excluded">Archive This Chat</string>
     <string name="memory_marker_pending">Memory: waiting for review</string>
     <string name="memory_marker_partial">Memory: partially archived</string>
@@ -1825,7 +1827,7 @@
     <!-- Memory system Phase 4: per-chat scene selection in Quick Settings -->
     <string name="label_memory_scene">Scene</string>
     <string name="label_chat_world">World</string>
-    <string name="label_chat_playing_as">Playing as</string>
+    <string name="label_chat_playing_as">Playing As</string>
     <string name="label_chat_appear_as">Appear as</string>
     <string name="label_world_none">None</string>
     <string name="label_roleplay_character_none">None</string>
@@ -1842,7 +1844,13 @@
 
     <!-- Model rules (owner_approved_rules §11 Revision 6): the
          per-chat "Apply Model Rules" toggle label (owner-approved title case). -->
-    <string name="label_chat_model_rules">Apply Model Rules</string>
+    <string name="label_chat_model_rules">Use Model Rules</string>
+    <string name="quick_lorebooks_used_title">Lorebooks Used in This Chat</string>
+    <string name="quick_add_lorebook">Add Lorebook</string>
+    <string name="quick_edit_lorebook_desc">Edit %1$s</string>
+    <string name="quick_edit_provider_routing_desc">Edit Provider Routing</string>
+    <string name="quick_edit_api_endpoint_desc">Edit Selected API Endpoint</string>
+    <string name="quick_api_endpoint_title">API Endpoint</string>
     <!-- Prompt text: the header line of the model-rules prompt block. Part of
          the byte-stable block 2 of the prompt-layer contract — changing it
          invalidates every chat's cached prefix, so don't reword casually. -->
@@ -3511,6 +3519,7 @@
 
     <!-- Quick Settings (decision 3): toggle and number box, no hints. -->
     <string name="summarizer_use_toggle">Use Summarizer</string>
+    <string name="quick_summarizer_hint">The Summarizer periodically condenses older completed messages into a shorter context summary. This helps a long chat retain important history without sending the entire transcript to the model on every turn. It does not delete messages from the visible conversation. Complete Messages controls how many finished messages are kept before another summary is created.\n\nGeneral Recommended Default: On, when a Summarizer model is configured.</string>
 
     <!-- Summary view (decision 11; wording owner-approved July 29 2026). -->
     <string name="summarizer_summary_title">Summary</string>

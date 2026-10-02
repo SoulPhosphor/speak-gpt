@@ -329,6 +329,19 @@ A toggle row has no chevron. The row container is not the tap target; the switch
 
 A toggle may exist on only one screen. Its use of shared row and switch styling does not require adding the toggle to other screens.
 
+### Title information icons
+
+When an information icon explains a title, label, or setting name, it appears
+immediately after that text. The title and icon are one left-aligned unit; the
+icon must not be pushed to the opposite side of the row or separated from the
+words it defines unless an approved design explicitly requires another
+placement.
+
+Use `ParameterSectionHeader` for the standard title-and-information pairing.
+Its icon opens the shared information dialog. The host supplies only the title
+and explanation strings; it must not reproduce the icon, spacing, dialog, or
+placement locally.
+
 ## Selector rows and pick-list rows
 
 ### Selector row
@@ -476,8 +489,9 @@ Set `android:ems` and `android:maxLength` on the individual field according to t
 ### Editable sampling slider
 
 Use `SamplingParameterControl` for model sampling values that need both direct
-numeric entry and slider adjustment. It renders a centered value box above the
-slider; typing a valid number moves the slider, and sliding updates the box.
+numeric entry and slider adjustment. It renders the slider and editable value
+box on the same line; typing a valid number moves the slider, and sliding
+updates the box.
 Direct input is normalized on Done or focus loss and cannot leave the control
 outside its parameter's supported range.
 
@@ -492,7 +506,8 @@ spacing, and text-size tokens live together under `sampling_slider_*` in
 `values/dimens.xml`. The value box inherits the canonical `Field.Box` outline,
 uses `appTextColor`, and the Material slider continues to resolve its colors
 from the active theme. Screens must not restate those dimensions, colors,
-padding, slider label behavior, or field typography.
+padding, slider label behavior, even guide-line treatment, end-stop treatment,
+or field typography.
 
 Parameter ranges and numeric precision are behavior, not appearance. They live
 in `SamplingParameterSpec` / `SamplingParameterValuePolicy`: Temperature
@@ -725,6 +740,14 @@ every closed dropdown and open menu without editing individual screens.
 
 `Widget.App.QuickTile.EditButton`
 
+`Widget.App.QuickSettings.Segment.Top`
+
+`Widget.App.QuickSettings.Segment.Middle`
+
+`Widget.App.QuickSettings.Segment.Bottom`
+
+`Widget.App.QuickSettings.Segment.Standalone`
+
 The Summoning Circle has an approved separate edit button that opens the manager
 for that category. Its label, dropdown, and edit button therefore need local
 layout constraints, but this is not a separate dropdown design.
@@ -735,6 +758,37 @@ only placement differences required by the edit-button column. Never duplicate
 or override dropdown colors, border, background, height, internal padding,
 chevron, sizing rules, open-state behavior, disabled treatment, or touch
 feedback in the QuickTile family.
+
+Every Quick Settings group follows the connected structure established by the
+Companion / Glamour / Activation / System Prompt block. The first visible row
+uses `Segment.Top`, internal rows use `Segment.Middle`, and the last row uses
+`Segment.Bottom`. A separate outlined card uses `Segment.Standalone`. These
+styles and their shared drawables own the surface, outline, corner geometry,
+horizontal margins, vertical padding, and gaps. Do not put a local background,
+background tint, border color, corner size, or copied segment spacing into a
+Quick Settings layout or its Kotlin controller.
+
+The current vertical order is intentional: identity and character choices;
+model/provider/endpoint routing; memory controls; independent roleplay context;
+generation parameters; Logit Bias and Seed; usage/cost; Save to Profile. Keep
+that order unless the owner explicitly changes it.
+
+The Lorebooks segment may expand internally. While lorebooks are enabled, its
+centered **Add Lorebook** action is always available. That action opens a pure
+selection list: rows select books and do not expose edit/open actions. Books
+added there are temporary chat-level specialty books; they never change the
+selected companion's permanent links. Do not impose an arbitrary book-count
+maximum.
+
+When the selected companion has multiple available books—or the chat has added
+a specialty book—the segment contains one regular-sized heading and one
+switch-and-gear row for the companion's default book, that companion's linked
+books, and the chat's added books only. Every row starts on when first added;
+the switch controls use in this chat and the gear opens that exact book. Those
+rows remain inside the Lorebooks segment and never receive separate segment
+backgrounds. With only the companion's default/core book, no redundant toggle
+list is shown, but Add Lorebook remains visible. Turning the master Lorebooks
+switch off hides both the list and Add Lorebook.
 
 ## Voice Browser
 

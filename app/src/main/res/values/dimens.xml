@@ -96,4 +96,19 @@
     <dimen name="sampling_slider_horizontal_margin">12dp</dimen>
     <dimen name="sampling_slider_track_height">6dp</dimen>
     <dimen name="sampling_slider_thumb_radius">9dp</dimen>
+    <dimen name="sampling_slider_inline_gap">8dp</dimen>
+    <dimen name="sampling_slider_tick_height">10dp</dimen>
+
+    <!-- Quick Settings connected blocks. Every block uses these same tokens so
+         spacing and corner geometry can be changed in one place. -->
+    <dimen name="quick_settings_horizontal_margin">24dp</dimen>
+    <dimen name="quick_settings_section_gap">16dp</dimen>
+    <dimen name="quick_settings_segment_gap">2dp</dimen>
+    <dimen name="quick_settings_segment_padding_vertical">8dp</dimen>
+    <dimen name="quick_settings_segment_padding_horizontal">16dp</dimen>
+    <dimen name="quick_settings_segment_outer_radius">24dp</dimen>
+    <dimen name="quick_settings_segment_inner_radius">4dp</dimen>
+    <dimen name="quick_settings_segment_stroke_width">1dp</dimen>
+    <dimen name="quick_settings_seed_width">132dp</dimen>
+    <dimen name="quick_settings_lorebook_row_min_height">48dp</dimen>
 </resources>

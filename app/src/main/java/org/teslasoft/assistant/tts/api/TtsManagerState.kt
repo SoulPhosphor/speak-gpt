@@ -142,7 +142,7 @@ class TtsManagerState(private val store: SavedTtsSourcesPreferences) {
 
 fun SavedTtsSource.target() = TtsTarget(endpointId, modelId, routing, sourceId)
 
-/** Same identity selection as QuickSettingsProviderDisplay, without chat-favorite storage. */
+/** Provider identity selection for TTS, without chat-favorite storage. */
 object TtsManagerProviderDisplay {
     fun label(routing: TtsRoutingSettings, empty: String): String = when (routing.mode) {
         TtsRoutingMode.ONLY -> routing.selectedProvider

@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<merge xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/row_chat_world"
+        style="@style/Widget.App.QuickSettings.Segment.Top">
+
+        <TextView
+            android:id="@+id/label_chat_world"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/label_chat_world"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_chat_world"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            android:text="@string/label_world_none"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/label_chat_world"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/row_chat_campaign"
+        style="@style/Widget.App.QuickSettings.Segment.Middle">
+
+        <TextView
+            android:id="@+id/label_chat_campaign"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/label_chat_campaign"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_chat_campaign"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            android:text="@string/label_campaign_none"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/label_chat_campaign"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/row_chat_roleplay_character"
+        style="@style/Widget.App.QuickSettings.Segment.Middle">
+
+        <TextView
+            android:id="@+id/label_chat_playing_as"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/label_chat_playing_as"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_chat_roleplay_character"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            android:text="@string/label_roleplay_character_none"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/label_chat_playing_as"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/row_chat_project"
+        style="@style/Widget.App.QuickSettings.Segment.Bottom">
+
+        <TextView
+            android:id="@+id/label_chat_project"
+            style="@style/Widget.App.QuickTile.Label"
+            android:text="@string/label_chat_project"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/text_chat_project"
+            style="@style/Widget.App.QuickTile.Value"
+            android:layout_width="0dp"
+            android:text="@string/label_project_none"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@+id/label_chat_project"
+            app:layout_constraintTop_toTopOf="parent" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</merge>
+

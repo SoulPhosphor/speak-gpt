@@ -41,7 +41,8 @@ class LoreBookAdapter(
     private val counts: HashMap<String, Int>,
     private var mContext: Context,
     private val pickMode: Boolean = false,
-    private val selectedIds: HashSet<String> = hashSetOf()
+    private val selectedIds: HashSet<String> = hashSetOf(),
+    private val selectionOnly: Boolean = false
 ) : BaseAdapter() {
     override fun getCount(): Int {
         return dataArray.size
@@ -101,6 +102,7 @@ class LoreBookAdapter(
         } else {
             checkPick?.visibility = View.GONE
         }
+        btnEdit?.visibility = if (selectionOnly) View.GONE else View.VISIBLE
 
         ui?.backgroundTintList = ColorStateList.valueOf(SurfaceColors.SURFACE_2.getColor(mContext))
 
@@ -114,14 +116,14 @@ class LoreBookAdapter(
             }
         }
 
-        ui?.setOnLongClickListener {
+        ui?.setOnLongClickListener(if (selectionOnly) null else View.OnLongClickListener {
             listener?.onSettingsClick(position)
-            return@setOnLongClickListener true
-        }
+            true
+        })
 
-        btnEdit?.setOnClickListener {
+        btnEdit?.setOnClickListener(if (selectionOnly) null else View.OnClickListener {
             listener?.onSettingsClick(position)
-        }
+        })
 
         return mView!!
     }
