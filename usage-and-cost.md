@@ -299,7 +299,9 @@ partial sum is never shown as if it were complete.
   stored on the latest AI reply, or the latest user message if there is no
   reply. If that reply has several versions, the record is also written into
   the version the conversation continues from, so it is counted and kept
-  when another version is shown.
+  when another version is shown. If a tools-not-supported retry removes an
+  empty reply, its frozen records are first moved to the initiating user
+  message, without recalculating any count, price, or cost.
 - **Regenerated replies:** every version's requests are counted, not just the
   version on screen.
 

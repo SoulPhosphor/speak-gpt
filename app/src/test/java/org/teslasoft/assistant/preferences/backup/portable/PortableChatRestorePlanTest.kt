@@ -13,6 +13,7 @@ import org.teslasoft.assistant.usage.TokenCountSource
 import org.teslasoft.assistant.usage.TokenCounts
 import org.teslasoft.assistant.usage.TokenPricingSnapshot
 import org.teslasoft.assistant.usage.TokenUsageAccounting
+import org.teslasoft.assistant.usage.TurnUsageRecord
 import org.teslasoft.assistant.util.Hash
 
 class PortableChatRestorePlanTest {
@@ -196,6 +197,40 @@ class PortableChatRestorePlanTest {
         }
         assertEquals(1, olderSummary.groups.single().recordCount)
         assertTrue(olderSummary.groups.single().containsEstimatedTokens)
+    }
+
+    @Test
+    fun failedToolsAttemptUsageSurvivesPlaceholderRemovalAndBackupRestore() {
+        val reported = TurnUsageRecord(
+            model = "model", provider = "Provider", inputTokens = 100,
+            outputTokens = 2, totalTokens = 102, cachedInputTokens = 40,
+            source = "provider_reported", inputPricePerToken = 0.000001,
+            totalCost = 0.125, costSource = "provider_reported"
+        )
+        val messages = mutableListOf(
+            hashMapOf<String, Any>("message" to "request", "isBot" to false),
+            hashMapOf<String, Any>("message" to "", "isBot" to true,
+                TokenUsageAccounting.KEY_USAGE_RECORDS to
+                    TokenUsageAccounting.encodeRecords(listOf(reported)))
+        )
+        assertTrue(TokenUsageAccounting.removeEmptyAssistantForToolRetry(messages))
+        val exported = Gson().toJson(messages)
+        val restored = ok(artifact(ChatLogicalSerializer.FORMAT_V2,
+            chat(chatId, "Retry usage", exported).put("list_id", chatId))).chats.single()
+        val restoredMessages: List<Map<String, Any>> = Gson().fromJson(
+            restored.messagesJson, object : TypeToken<ArrayList<HashMap<String, Any>>>() {}.type
+        )
+
+        assertEquals(listOf(reported), TokenUsageAccounting.decodeRecords(
+            restoredMessages.single()[TokenUsageAccounting.KEY_USAGE_RECORDS]?.toString()))
+        val summary = TokenUsageAccounting.summarizeMessages(restoredMessages) {
+            throw AssertionError("reported usage must not be estimated after restore")
+        }
+        assertEquals(1, summary.groups.single().recordCount)
+        assertEquals(100, summary.totalInputTokens)
+        assertEquals(2, summary.totalOutputTokens)
+        assertEquals(40, summary.totalCachedInputTokens)
+        assertEquals(0.125, summary.totalCost, 0.000000001)
     }
 
     private fun ok(json: String): PortableChatRestorePlan.Plan =

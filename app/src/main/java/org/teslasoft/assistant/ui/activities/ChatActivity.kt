@@ -8193,10 +8193,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         recordChatToolCapability(model, ToolCapability.UNSUPPORTED)
         runOnUiThread {
-            if (messages.isNotEmpty() && messages.last()["isBot"] == true &&
-                messages.last()["message"].toString().isEmpty()
-            ) {
-                messages.removeAt(messages.size - 1)
+            if (TokenUsageAccounting.removeEmptyAssistantForToolRetry(messages)) {
                 adapter?.notifyItemRemoved(messages.size)
                 updateMessagesSelectionProjection()
             }

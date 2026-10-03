@@ -247,6 +247,33 @@ object TokenUsageAccounting {
         }
     }
 
+    /** The no-tools retry removes an empty assistant placeholder. Preserve its
+     * already-frozen usage on the initiating user message before removing it,
+     * including variant records without their duplicated top-level mirror.
+     * No counts, prices, or costs are recalculated here. */
+    fun removeEmptyAssistantForToolRetry(
+        messages: MutableList<HashMap<String, Any>>
+    ): Boolean {
+        val placeholder = messages.lastOrNull() ?: return false
+        if (placeholder["isBot"] != true || placeholder["message"].toString().isNotEmpty()) {
+            return false
+        }
+        val variants = decodeVariantRecords(placeholder[KEY_VARIANTS]?.toString())
+        val records = variants.ifEmpty {
+            decodeRecords(placeholder[KEY_USAGE_RECORDS]?.toString())
+        }
+        if (records.isNotEmpty()) {
+            // Retain the placeholder if no durable carrier exists, rather than
+            // discarding reported usage. Normal retries have a user message.
+            val carrier = messages.dropLast(1).lastOrNull { it["isBot"] != true }
+                ?: return false
+            val existing = decodeRecords(carrier[KEY_USAGE_RECORDS]?.toString())
+            carrier[KEY_USAGE_RECORDS] = encodeRecords(existing + records)
+        }
+        messages.removeAt(messages.lastIndex)
+        return true
+    }
+
     /** Regenerated replies retain every completed response as a variant while
      * the top-level message mirrors only the canonical one. The variant list is
      * therefore the accounting authority whenever it contains durable records;
