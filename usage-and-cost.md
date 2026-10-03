@@ -39,7 +39,8 @@ Every request records its own token counts from what the AI service reports.
   (OpenAI and OpenRouter style), `input_tokens_details.cached_tokens`, or
   `cache_read_input_tokens` (Claude style).
 - **Cache writes** are read from `cache_creation_input_tokens` (Claude
-  style) or `prompt_tokens_details.cache_write_tokens` (OpenRouter style).
+  style), `prompt_tokens_details.cache_write_tokens` (OpenRouter style) or
+  `prompt_tokens_details.cache_creation_input_tokens` (Venice style).
   When a service reports cached input but no cache-write figure, cache writes
   are recorded as zero.
 - **Claude-style totals are rebuilt.** Claude's `input_tokens` excludes cached
@@ -163,9 +164,15 @@ Rules that apply to every list:
   prices are corrected by that factor before being saved. Smaller differences
   (discounts, fees) are never corrected this way. This applies only to
   services' own lists, never to OpenRouter's or xAI's prices.
-- **Not verified live:** Venice's cache-price field names were not confirmed.
-  If Venice uses other names, its cached costs show "Not Reported" when
-  cached tokens exist.
+- **Not verified live:** Venice's cache-price field names (`cache_input`,
+  `cache_write`) come from secondary sources, not Venice's own page. If Venice
+  uses other names, its cached costs show "Not Reported" when cached tokens
+  exist.
+- **Venice long-prompt rates:** Venice charges a higher rate for a whole
+  request once its input passes a threshold on some models. The layout of
+  those extended rates in the list was not confirmed, so the app uses the
+  base rate. For very long prompts on those models, Venice costs will read
+  low unless Venice reports its real charge.
 
 ### Timing limits
 
@@ -269,8 +276,10 @@ These are known and not yet decided or fixed.
    them. The screen does not mark estimated counts as estimated.
 4. **Backups:** not checked whether backup and restore carry the usage
    records.
-5. **Subscription services** (such as OpenCode Go): what the screen should
-   show for a flat monthly plan is not decided.
+5. **Subscription services** (such as OpenCode Go, or models included in a
+   NanoGPT subscription): what the screen should show for a flat monthly plan
+   is not decided. A NanoGPT receipt for an included model may report $0,
+   while the rows still show list prices.
 6. **Unrecognized layouts:** a service whose price list uses none of the
    layouts above, and reports no charge, shows "Not Reported" costs. Its
    token counts still work.

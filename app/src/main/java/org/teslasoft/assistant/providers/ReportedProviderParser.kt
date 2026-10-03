@@ -260,10 +260,13 @@ internal class RawSseInspector {
                     ?.takeIf { it.isJsonObject }?.asJsonObject
                     ?.intOrNull("cached_tokens")
                 ?: usage.intOrNull("cache_read_input_tokens")
+            val promptDetails = usage.get("prompt_tokens_details")
+                ?.takeIf { it.isJsonObject }?.asJsonObject
+            // Claude style at the top level; OpenRouter (cache_write_tokens) and
+            // Venice (cache_creation_input_tokens) inside prompt_tokens_details.
             val reportedCacheCreation = usage.intOrNull("cache_creation_input_tokens")
-                ?: usage.get("prompt_tokens_details")
-                    ?.takeIf { it.isJsonObject }?.asJsonObject
-                    ?.intOrNull("cache_write_tokens")
+                ?: promptDetails?.intOrNull("cache_write_tokens")
+                ?: promptDetails?.intOrNull("cache_creation_input_tokens")
             val cacheCreation = reportedCacheCreation ?: 0
             val anthropicInput = usage.intOrNull("input_tokens")
             // A later usage block without an input count never erases an

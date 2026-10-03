@@ -177,6 +177,19 @@ class ReportedProviderParserTest {
         assertEquals(0.01075, usage.totalCost!!, 0.000000001)
     }
 
+    @Test fun readsVeniceCacheWritesInsidePromptDetails() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20," +
+                "\"prompt_tokens_details\":{\"cached_tokens\":50," +
+                "\"cache_creation_input_tokens\":25}}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(100, usage.promptTokens)
+        assertEquals(50, usage.cachedInputTokens)
+        assertEquals(25, usage.cacheWriteInputTokens)
+    }
+
     @Test fun laterUsageWithoutInputNeverErasesReportedInput() {
         val inspector = RawSseInspector()
         inspector.acceptLine("{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":1}}")
