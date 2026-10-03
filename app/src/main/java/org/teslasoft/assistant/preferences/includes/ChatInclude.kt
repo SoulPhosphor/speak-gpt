@@ -215,6 +215,7 @@ data class ChatInclude(
  *  format label ("TXT", "JPEG", …) appears in transcript rows. */
 enum class IncludeKind(val key: String) {
     TXT("txt"),
+    JSON("json"),
     MARKDOWN("md"),
     CSV("csv"),
     DOCX("docx"),
@@ -236,6 +237,7 @@ enum class IncludeKind(val key: String) {
         fun fromFileName(fileName: String): IncludeKind? =
             when (fileName.substringAfterLast('.', "").lowercase()) {
                 "txt" -> TXT
+                "json" -> JSON
                 "md", "markdown" -> MARKDOWN
                 "csv" -> CSV
                 "docx" -> DOCX

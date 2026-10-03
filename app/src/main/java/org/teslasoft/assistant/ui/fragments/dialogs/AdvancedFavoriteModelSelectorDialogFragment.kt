@@ -229,7 +229,7 @@ class AdvancedFavoriteModelSelectorDialogFragment : DialogFragment() {
         if (query == "") {
             availableModelsProjection.addAll(availableModels)
         } else {
-            availableModelsProjection = availableModels.filter { item -> item["modelId"].toString() == query || item["modelId"].toString().contains(query) || query.contains(item["modelId"].toString())} as ArrayList<Map<String, String>>
+            availableModelsProjection = availableModels.filter { item -> item["modelId"].toString().contains(query, ignoreCase = true) || query.contains(item["modelId"].toString(), ignoreCase = true)} as ArrayList<Map<String, String>>
         }
 
         modelListAdapter = FavoriteModelListAdapter(

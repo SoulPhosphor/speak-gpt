@@ -71,14 +71,9 @@ class EditMessageDialogFragment : DialogFragment() {
         builder!!.setView(view)
             .setCancelable(false)
             .setPositiveButton(R.string.btn_save) { _, _ -> listener!!.onEdit(promptInput?.text.toString(), requireArguments().getInt("position")) }
-            .setNeutralButton(R.string.btn_delete) { _, _ -> run {
-                MaterialAlertDialogBuilder(this.requireContext(), R.style.App_MaterialAlertDialog)
-                    .setTitle(R.string.label_delete_message)
-                    .setMessage(R.string.msg_delete_message)
-                    .setPositiveButton(R.string.yes) { _, _ -> listener!!.onDelete(requireArguments().getInt("position")) }
-                    .setNegativeButton(R.string.no) { _, _ ->  }
-                    .show()
-            }}
+            .setNeutralButton(R.string.btn_delete) { _, _ ->
+                listener?.onDelete(requireArguments().getInt("position"))
+            }
             .setNegativeButton(R.string.btn_cancel) { _, _ ->  }
 
         return builder!!.create()

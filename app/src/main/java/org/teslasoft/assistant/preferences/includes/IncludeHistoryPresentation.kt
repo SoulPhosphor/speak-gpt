@@ -52,6 +52,10 @@ object IncludeHistoryPresentation {
         artifactBookmarks = includes.filter { it.form == IncludeForm.ARTIFACT }
     )
 
+    /** Original-message proof remains visible even after an attachment is removed. */
+    fun historyRows(includes: List<ChatInclude>): List<ChatInclude> =
+        includes.filter { it.form != IncludeForm.CONDENSED }
+
     fun shouldCollapse(fullRecordCount: Int): Boolean =
         fullRecordCount >= COLLAPSE_AT
 }

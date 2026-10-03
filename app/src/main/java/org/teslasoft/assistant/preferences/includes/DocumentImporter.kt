@@ -124,6 +124,8 @@ object DocumentImporter {
      */
     val PICKER_MIME_TYPES = arrayOf(
         "text/plain",
+        "application/json",
+        "text/json",
         "text/markdown",
         "text/csv",
         "text/comma-separated-values",
@@ -257,7 +259,7 @@ object DocumentImporter {
                             return Result.ArchiveExpansionLimit(fileName)
                     }
                 }
-                IncludeKind.TXT, IncludeKind.MARKDOWN, IncludeKind.CSV -> {
+                IncludeKind.TXT, IncludeKind.JSON, IncludeKind.MARKDOWN, IncludeKind.CSV -> {
                     try {
                         decodeCompleteText(source.file, budget)
                             ?: return Result.ContentMismatch(fileName)
@@ -594,6 +596,7 @@ object DocumentImporter {
 
     private fun kindFromMime(mime: String?): IncludeKind? = when {
         mime == null -> null
+        mime.equals("application/json", true) || mime.equals("text/json", true) -> IncludeKind.JSON
         mime.equals("text/markdown", true) -> IncludeKind.MARKDOWN
         mime.contains("csv", true) -> IncludeKind.CSV
         mime.contains("wordprocessingml", true) -> IncludeKind.DOCX

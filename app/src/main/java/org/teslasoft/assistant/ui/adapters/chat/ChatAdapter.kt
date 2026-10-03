@@ -217,6 +217,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val MENU_INCLUDE_EDIT = 103
         private const val MENU_MESSAGE_EDIT = 104
         private const val MENU_MESSAGE_SHARE = 105
+        private const val MENU_MESSAGE_DELETE = 106
 
         // Transient inline image-confirmation card row
         // (image-generation-rebuild-plan.md §5). These rows live only in
@@ -996,8 +997,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                             listener?.onIncludeEdit(includeId)
                         }
 
-                        override fun onIncludeRemove(includeId: String) {
-                            listener?.onIncludeRemove(includeId)
+                        override fun onIncludeRemove(includeId: String, onRemoved: () -> Unit) {
+                            listener?.onIncludeRemove(includeId, onRemoved)
                         }
 
                         override fun onIncludeCondense(includeId: String) {
@@ -1535,23 +1536,23 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
             val groups = IncludeHistoryPresentation.group(includes)
             updateIncludeBookmarks(groups)
-            val fullIncludes = groups.fullRecords
-            if (fullIncludes.isEmpty()) {
+            val historyIncludes = IncludeHistoryPresentation.historyRows(includes)
+            if (historyIncludes.isEmpty()) {
                 summary.visibility = View.GONE
                 includeSummaryList?.removeAllViews()
                 return false
             }
 
             summary.visibility = View.VISIBLE
-            val collapsible = IncludeHistoryPresentation.shouldCollapse(fullIncludes.size)
-            val composition = IncludeHistoryPresentation.compositionOf(fullIncludes)
-            val summaryKey = fullIncludes.joinToString(separator = "\u001F") { it.id }
+            val collapsible = IncludeHistoryPresentation.shouldCollapse(historyIncludes.size)
+            val composition = IncludeHistoryPresentation.compositionOf(historyIncludes)
+            val summaryKey = historyIncludes.joinToString(separator = "\u001F") { it.id }
             val expanded = !collapsible || expandedIncludeRows.contains(summaryKey)
 
             includeSummaryHeader?.visibility = if (collapsible) View.VISIBLE else View.GONE
             includeSummaryList?.visibility = if (expanded) View.VISIBLE else View.GONE
             includeSummaryLabel?.text = if (collapsible) {
-                context.getString(collapsedCountRes(composition), fullIncludes.size)
+                context.getString(collapsedCountRes(composition), historyIncludes.size)
             } else {
                 context.getString(R.string.include_label)
             }
@@ -1560,7 +1561,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 context.getString(toggleDescRes(composition, expanded))
 
             if (expanded) {
-                buildIncludeSummaryRows(fullIncludes)
+                buildIncludeSummaryRows(historyIncludes)
             } else {
                 includeSummaryList?.removeAllViews()
             }
@@ -1688,7 +1689,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 val row = inflater.inflate(R.layout.view_include_summary_item, list, false)
                 row.findViewById<ImageView>(R.id.summary_item_icon)
                     ?.setImageResource(includeIcon(include.kind))
-                row.findViewById<TextView>(R.id.summary_item_name)?.text = include.fileName
+                val removed = include.form == IncludeForm.ARTIFACT
+                row.findViewById<TextView>(R.id.summary_item_name)?.text = if (removed) {
+                    context.getString(R.string.include_removed_name, include.fileName)
+                } else include.fileName
                 row.findViewById<TextView>(R.id.summary_item_format)?.text =
                     include.kind.key.uppercase(Locale.ROOT)
                 row.findViewById<TextView>(R.id.summary_item_weight)?.text = context.getString(
@@ -1698,8 +1702,18 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 row.findViewById<ImageButton>(R.id.summary_item_action)?.let { action ->
                     action.contentDescription =
                         context.getString(R.string.include_menu_desc, include.fileName)
+                    action.visibility = if (removed) View.GONE else View.VISIBLE
                     action.setOnClickListener { showIncludeRowMenu(it, include) }
                 }
+                row.findViewById<ImageButton>(R.id.summary_item_remove)?.let { remove ->
+                    remove.visibility = if (removed) View.GONE else View.VISIBLE
+                    remove.contentDescription =
+                        context.getString(R.string.include_remove_desc, include.fileName)
+                    remove.setOnClickListener {
+                        if (!bulkActionMode) listener?.onIncludeRemove(include.id)
+                    }
+                }
+                tintIncludeSummaryRow(row, message.currentTextColor)
                 list.addView(row)
             }
         }
@@ -1990,7 +2004,23 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /** The compact metadata line follows the bubble's text color so it
          *  contrasts on any theme, held at reduced opacity so it reads as
          *  subordinate to the reply without a hardcoded muted color. */
+        private fun tintIncludeSummaryRow(row: View, foreground: Int) {
+            for (id in intArrayOf(R.id.summary_item_name, R.id.summary_item_format, R.id.summary_item_weight)) {
+                row.findViewById<TextView>(id)?.setTextColor(foreground)
+            }
+            for (id in intArrayOf(R.id.summary_item_icon, R.id.summary_item_action, R.id.summary_item_remove)) {
+                row.findViewById<ImageView>(id)?.imageTintList = android.content.res.ColorStateList.valueOf(foreground)
+            }
+        }
+
         private fun applyMetaForeground(foreground: Int) {
+            includeSummaryLabel?.setTextColor(foreground)
+            includeSummaryChevron?.imageTintList = android.content.res.ColorStateList.valueOf(foreground)
+            includeSummaryList?.let { list ->
+                for (index in 0 until list.childCount) {
+                    tintIncludeSummaryRow(list.getChildAt(index), foreground)
+                }
+            }
             messageMeta?.setTextColor(foreground)
             messageMeta?.alpha = 0.7f
         }
@@ -2286,6 +2316,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 popup.menu.add(0, MENU_MESSAGE_EDIT, 0, R.string.btn_msg_edit)
             }
             popup.menu.add(0, MENU_MESSAGE_SHARE, 1, R.string.message_share_action)
+            popup.menu.add(0, MENU_MESSAGE_DELETE, 2, R.string.btn_delete)
             popup.setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     MENU_MESSAGE_EDIT -> {
@@ -2294,6 +2325,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     }
                     MENU_MESSAGE_SHARE -> {
                         btnShare.callOnClick()
+                        true
+                    }
+                    MENU_MESSAGE_DELETE -> {
+                        val currentPosition = dataArray.indexOfFirst { it === chatMessage }
+                        if (currentPosition >= 0) onDelete(currentPosition)
                         true
                     }
                     else -> false
@@ -3179,6 +3215,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     }
 
     override fun onDelete(position: Int) {
+        if (position !in dataArray.indices) return
+        listener?.onMessageDeleteRequested(position)
+    }
+
+    /** Internal retry cleanup; user deletion goes through the host confirmation. */
+    fun removeMessageForRetry(position: Int) {
         if (position < 0 || position >= dataArray.size) return
         // §12 cleanup: note the generated-image file this message references
         // BEFORE removing it; once the deletion is persisted, the file goes
@@ -3215,8 +3257,10 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
         fun onMessageEdited()
         fun onMessageDeleted()
+
+        fun onMessageDeleteRequested(position: Int)
         fun onIncludeEdit(includeId: String)
-        fun onIncludeRemove(includeId: String)
+        fun onIncludeRemove(includeId: String, onRemoved: (() -> Unit)? = null)
         fun onIncludeCondense(includeId: String)
         fun onBulkSelectionChanged(position: Int, selected: Boolean)
         fun onChangeBulkActionMode(mode: Boolean)

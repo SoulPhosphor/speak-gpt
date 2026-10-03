@@ -197,8 +197,15 @@ import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.CanonicalConversationMessage
 import org.teslasoft.assistant.preferences.includes.DocumentImporter
 import org.teslasoft.assistant.preferences.includes.ImageCapability
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityBlocker
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityDecision
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityMetadataClient
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityResolver
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityScope
 import org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityWarningStore
 import org.teslasoft.assistant.preferences.includes.ImageImporter
+import org.teslasoft.assistant.preferences.includes.ImageRoutingConfig
 import org.teslasoft.assistant.preferences.includes.IncludeAuxiliaryRequestPolicy
 import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeKind
@@ -3064,8 +3071,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         findIncludeById(includeId)?.let(::editInclude)
                     }
 
-                    override fun onIncludeRemove(includeId: String) {
-                        findIncludeById(includeId)?.let(::removeInclude)
+                    override fun onIncludeRemove(includeId: String, onRemoved: () -> Unit) {
+                        requestIncludeRemoval(includeId, onRemoved)
                     }
 
                     override fun onIncludeCondense(includeId: String) {
@@ -3314,14 +3321,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
 
                 if (swipeDir == ItemTouchHelper.LEFT && !bulkSelectionMode) {
-                    MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)
-                        .setTitle(R.string.label_confirm_deletion)
-                        .setMessage(R.string.msg_confirm_deletion_chat)
-                        .setPositiveButton(R.string.btn_delete) { _, _ -> run {
-                            adapter?.onDelete(position)
-                        }}
-                        .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-                        .show()
+                    adapter?.onDelete(position)
                 }
             }
         }
@@ -3896,6 +3896,36 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * way.
      */
     private fun removeInclude(include: ChatInclude) {
+        requestIncludeRemoval(include.id)
+    }
+
+    private fun requestIncludeRemoval(includeId: String, onRemoved: (() -> Unit)? = null) {
+        val include = findIncludeById(includeId) ?: return
+        if (include.form == IncludeForm.ARTIFACT) return
+        val actions = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(getString(R.string.include_remove_title, include.fileName))
+            .setMessage(if (include.kind.isImage()) R.string.include_remove_image_body else R.string.include_remove_document_body)
+            .setView(actions)
+            .create()
+        actions.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+        actions.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.btn_ok)
+            setOnClickListener {
+                dialog.dismiss()
+                val current = findIncludeById(includeId) ?: return@setOnClickListener
+                if (current.form == IncludeForm.ARTIFACT) return@setOnClickListener
+                removeConfirmedInclude(current)
+                onRemoved?.invoke()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun removeConfirmedInclude(include: ChatInclude) {
         val pendingIndex = pendingIncludes.indexOfFirst { it.id == include.id }
         if (pendingIndex >= 0) {
             // It was never sent, so detaching it must leave no model-facing
@@ -9349,65 +9379,228 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         hasFullImages: Boolean
     ) {
         if (!hasFullImages) {
+            activeImageCapabilityScope = null
             commitPreparedTurn(prepared)
             return
         }
-        val capJson = apiEndpointObject?.imageCapabilityByModel.orEmpty()
-        when (ImageCapabilityStore.get(capJson, prepared.selectedModel)) {
-            ImageCapability.SUPPORTED -> commitPreparedTurn(prepared)
-            ImageCapability.UNSUPPORTED -> showRequestHardBlock(
-                R.string.image_model_unsupported_title,
-                getString(R.string.image_model_unsupported_body)
-            )
-            ImageCapability.UNKNOWN -> {
-                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                    .setTitle(R.string.image_model_unknown_title)
-                    .setMessage(R.string.image_model_unknown_body)
-                    .setPositiveButton(R.string.send_anyway) { _, _ ->
-                        commitPreparedTurn(prepared)
-                    }
-                    .setNegativeButton(R.string.btn_cancel, null)
-                    .show()
+        lifecycleScope.launch {
+            val check = resolveImageCapability(prepared.selectedModel)
+            when (check.decision.capability) {
+                ImageCapability.SUPPORTED -> {
+                    rememberImageCapabilityScope(check)
+                    commitPreparedTurn(prepared)
+                }
+                ImageCapability.UNSUPPORTED -> {
+                    requestPreparationInProgress = false
+                    restoreUIState()
+                    showImageCapabilityBlock(check.decision)
+                }
+                ImageCapability.UNKNOWN -> {
+                    requestPreparationInProgress = false
+                    restoreUIState()
+                    showUnknownImageCapabilityWarning(
+                        check,
+                        onSend = {
+                            rememberImageCapabilityScope(check)
+                            commitPreparedTurn(prepared)
+                        }
+                    )
+                }
             }
         }
     }
 
     private suspend fun awaitVisionCapabilityCheck(): Boolean {
-        if (!conversationHasFullImages(chatMessageIncludes)) return true
-        val capJson = apiEndpointObject?.imageCapabilityByModel.orEmpty()
-        return when (ImageCapabilityStore.get(capJson, model)) {
-            ImageCapability.SUPPORTED -> true
+        if (!conversationHasFullImages(chatMessageIncludes)) {
+            activeImageCapabilityScope = null
+            return true
+        }
+        val check = resolveImageCapability(model)
+        return when (check.decision.capability) {
+            ImageCapability.SUPPORTED -> {
+                rememberImageCapabilityScope(check)
+                true
+            }
             ImageCapability.UNSUPPORTED -> {
                 withContext(Dispatchers.Main) {
-                    showRequestHardBlock(
-                        R.string.image_model_unsupported_title,
-                        getString(R.string.image_model_unsupported_body)
-                    )
+                    showImageCapabilityBlock(check.decision)
                 }
                 false
             }
-            ImageCapability.UNKNOWN -> suspendCancellableCoroutine { cont ->
-                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                    .setTitle(R.string.image_model_unknown_title)
-                    .setMessage(R.string.image_model_unknown_body)
-                    .setPositiveButton(R.string.send_anyway) { _, _ -> cont.resume(true) }
-                    .setNegativeButton(R.string.btn_cancel) { _, _ -> cont.resume(false) }
-                    .setOnCancelListener { cont.resume(false) }
-                    .show()
+            ImageCapability.UNKNOWN -> {
+                if (isImageWarningSuppressed(check)) {
+                    rememberImageCapabilityScope(check)
+                    true
+                }
+                else suspendCancellableCoroutine { cont ->
+                    showUnknownImageCapabilityWarning(
+                        check,
+                        onSend = {
+                            rememberImageCapabilityScope(check)
+                            if (cont.isActive) cont.resume(true)
+                        },
+                        onCancel = { if (cont.isActive) cont.resume(false) }
+                    )
+                }
             }
         }
     }
 
-    private fun recordVisionCapability(capability: ImageCapability) {
+    private data class ResolvedImageCapabilityCheck(
+        val endpoint: ApiEndpointObject,
+        val modelId: String,
+        val routing: ImageRoutingConfig,
+        val decision: ImageCapabilityDecision
+    )
+
+    @Volatile
+    private var activeImageCapabilityScope: String? = null
+
+    private fun rememberImageCapabilityScope(check: ResolvedImageCapabilityCheck) {
+        activeImageCapabilityScope = ImageCapabilityScope.key(
+            check.endpoint,
+            check.modelId,
+            check.routing
+        )
+    }
+
+    /** Provider adapters gather evidence; this is the single shared lookup used
+     * by typed sends, regeneration, and every other full-image request path. */
+    private suspend fun resolveImageCapability(modelId: String): ResolvedImageCapabilityCheck {
+        val endpoint = apiEndpointObject
+            ?: ApiEndpointObject("", "", "")
+        val routing = ImageRoutingConfig.from(endpoint, favoriteForActiveEndpoint(modelId))
+        var decision = ImageCapabilityResolver.resolve(endpoint, modelId, routing)
+        val definitiveStoredModelMetadata =
+            ImageCapabilityStore.getMetadata(endpoint.imageCapabilityByModel, modelId) !=
+                ImageCapability.UNKNOWN ||
+                ImageCapabilityStore.get(endpoint.imageCapabilityByModel, modelId) !=
+                ImageCapability.UNKNOWN
+        if (decision.capability == ImageCapability.UNKNOWN ||
+            (decision.capability == ImageCapability.UNSUPPORTED && !definitiveStoredModelMetadata)
+        ) {
+            val live = ImageCapabilityMetadataClient.resolve(endpoint, modelId, routing)
+            if (live.refreshedModelCapability != ImageCapability.UNKNOWN) {
+                val updated = ImageCapabilityStore.setMetadata(
+                    endpoint.imageCapabilityByModel,
+                    modelId,
+                    live.refreshedModelCapability
+                )
+                if (updated != endpoint.imageCapabilityByModel && endpoint.id.isNotBlank()) {
+                    endpoint.imageCapabilityByModel = updated
+                    ApiEndpointPreferences.getApiEndpointPreferences(this)
+                        .setApiEndpoint(this, endpoint)
+                    apiEndpointObject?.imageCapabilityByModel = updated
+                }
+            }
+            decision = ImageCapabilityResolver.resolve(
+                endpoint = endpoint,
+                modelId = modelId,
+                routing = routing,
+                liveModelCapability = live.model,
+                livePinnedProviderCapability = live.pinnedProvider
+            )
+        }
+        return ResolvedImageCapabilityCheck(endpoint, modelId, routing, decision)
+    }
+
+    private fun showImageCapabilityBlock(decision: ImageCapabilityDecision) {
+        val providerBlocked = decision.blocker == ImageCapabilityBlocker.PROVIDER
+        showRequestHardBlock(
+            if (providerBlocked) R.string.image_provider_unsupported_title
+            else R.string.image_model_unsupported_title,
+            getString(
+                if (providerBlocked) R.string.image_provider_unsupported_body
+                else R.string.image_model_unsupported_body
+            )
+        )
+    }
+
+    private fun isImageWarningSuppressed(check: ResolvedImageCapabilityCheck): Boolean =
+        check.endpoint.id.isNotBlank() && ImageCapabilityWarningStore.isSuppressed(
+            this,
+            check.endpoint,
+            check.modelId,
+            check.routing
+        )
+
+    private fun showUnknownImageCapabilityWarning(
+        check: ResolvedImageCapabilityCheck,
+        onSend: () -> Unit,
+        onCancel: () -> Unit = {}
+    ) {
+        if (isImageWarningSuppressed(check)) {
+            onSend()
+            return
+        }
+        val suppress = MaterialCheckBox(this).apply {
+            setText(R.string.image_model_unknown_dont_show_again)
+            setPadding(dpToPx(20), 0, dpToPx(20), 0)
+        }
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.image_model_unknown_title)
+            .setMessage(R.string.image_model_unknown_body)
+            .setView(suppress)
+            .setPositiveButton(R.string.send_anyway) { _, _ ->
+                if (suppress.isChecked && check.endpoint.id.isNotBlank()) {
+                    ImageCapabilityWarningStore.suppress(
+                        this,
+                        check.endpoint,
+                        check.modelId,
+                        check.routing
+                    )
+                }
+                onSend()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> onCancel() }
+            .create()
+        dialog.setOnCancelListener { onCancel() }
+        dialog.show()
+    }
+
+    private fun recordVisionCapability(
+        capability: ImageCapability,
+        actualServingProvider: String? = null
+    ) {
         val endpoint = apiEndpointObject ?: return
         val currentModel = model.ifBlank { preferences?.getModel() ?: "" }
         if (currentModel.isBlank()) return
-        val updated = ImageCapabilityStore.set(
-            endpoint.imageCapabilityByModel, currentModel, capability
+        val routing = ImageRoutingConfig.from(endpoint, favoriteForActiveEndpoint(currentModel))
+        val learnedRouting = if (
+            capability == ImageCapability.UNSUPPORTED &&
+            routing.provider.isAggregator &&
+            !routing.pinned
+        ) {
+            val exactProvider = actualServingProvider?.trim()?.ifBlank { null }
+                ?: run {
+                    // An automatic/fallback aggregator rejection with no
+                    // response-derived downstream identity is not exact enough
+                    // to poison the model's routable path.
+                    activeImageCapabilityScope = null
+                    return
+                }
+            routing.copy(
+                routingType = FavoriteModelObject.ROUTING_ONLY,
+                pinnedProvider = exactProvider,
+                allowFallbacks = false
+            )
+        } else {
+            routing
+        }
+        val updated = ImageCapabilityStore.setLearned(
+            endpoint.imageCapabilityByModel,
+            if (learnedRouting == routing) {
+                activeImageCapabilityScope
+                    ?: ImageCapabilityScope.key(endpoint, currentModel, learnedRouting)
+            } else {
+                ImageCapabilityScope.key(endpoint, currentModel, learnedRouting)
+            },
+            capability
         )
         endpoint.imageCapabilityByModel = updated
         val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
         prefs.setApiEndpoint(this, endpoint)
+        activeImageCapabilityScope = null
     }
 
     /**
@@ -10562,7 +10755,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             logGenerationError(genError, e, "message", failureDiagnostics, providerEvidence)
 
             if (genError.isVisionRejection && conversationHasFullImages(chatMessageIncludes)) {
-                recordVisionCapability(ImageCapability.UNSUPPORTED)
+                recordVisionCapability(
+                    ImageCapability.UNSUPPORTED,
+                    providerEvidence?.actualServingProvider
+                )
             }
 
             // Owner ruling (July 31 2026): beneath the app's own explanation,
@@ -12591,7 +12787,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun removeLastAssistantMessageIfAvailable() {
         if (messages.isNotEmpty() && messages.size - 1 > 0 && messages[messages.size - 1]["isBot"] == true) {
             // messages.removeAt(messages.size - 1)
-            adapter?.onDelete(messages.size - 1)
+            adapter?.removeMessageForRetry(messages.size - 1)
         }
 
         if (chatMessages.isNotEmpty() && chatMessages.size - 1 > 0 && chatMessages[chatMessages.size - 1].role == Role.Assistant) {
@@ -12796,6 +12992,55 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         syncChatProjection()
     }
 
+    override fun onMessageDeleteRequested(position: Int) {
+        val target = messages.getOrNull(position) ?: return
+        val actions = layoutInflater.inflate(R.layout.dialog_message_delete_actions, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.message_tail_delete_title)
+            .setMessage(R.string.message_tail_delete_body)
+            .setView(actions)
+            .create()
+        actions.findViewById<View>(R.id.message_delete_cancel).setOnClickListener { dialog.dismiss() }
+        actions.findViewById<View>(R.id.message_delete_keep).setOnClickListener {
+            dialog.dismiss()
+            deleteMessageRange(target, deleteFollowing = false)
+        }
+        actions.findViewById<View>(R.id.message_delete_all).setOnClickListener {
+            dialog.dismiss()
+            deleteMessageRange(target, deleteFollowing = true)
+        }
+        dialog.show()
+    }
+
+    private fun deleteMessageRange(target: HashMap<String, Any>, deleteFollowing: Boolean) {
+        lifecycleScope.launch {
+            val imageJob = ImageGenerationJobRegistry.activeJob(chatId)
+            val generationJobs = listOfNotNull(
+                parseMessageScope?.coroutineContext?.get(kotlinx.coroutines.Job),
+                onSpeechResultsScope?.coroutineContext?.get(kotlinx.coroutines.Job)
+            )
+            generationJobs.forEach { it.cancel() }
+            stopReadback()
+            if (chatId.isNotBlank()) ImageGenerationJobRegistry.cancel(chatId)
+            generationJobs.forEach { it.join() }
+            // The registry completes only after its terminal callback has saved
+            // the final row. Include that row in the deletion, not after it.
+            imageJob?.await()
+            val currentPosition = messages.indexOfFirst { it === target }
+            if (currentPosition < 0 || chatStorageUnavailable || deletingChat) return@launch
+            val end = if (deleteFollowing) messages.size else currentPosition + 1
+            val removed = ArrayList(messages.subList(currentPosition, end))
+            messages.subList(currentPosition, end).clear()
+            // Gallery records and generated image files have independent lifetimes.
+            if (saveSettings(synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
+                messages.addAll(currentPosition, removed)
+                Toast.makeText(this@ChatActivity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+            }
+            syncChatProjection()
+            deselectAll()
+        }
+    }
+
     override fun onMessageDeleted() {
         syncChatProjection()
     }
@@ -12804,8 +13049,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         findIncludeById(includeId)?.let(::editInclude)
     }
 
-    override fun onIncludeRemove(includeId: String) {
-        findIncludeById(includeId)?.let(::removeInclude)
+    override fun onIncludeRemove(includeId: String, onRemoved: (() -> Unit)?) {
+        requestIncludeRemoval(includeId, onRemoved)
     }
 
     override fun onIncludeCondense(includeId: String) {
@@ -12975,6 +13220,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     @SuppressLint("NotifyDataSetChanged")
     private fun deleteSelectedMessages() {
+        val selected = messagesSelectionProjection.indices.filter {
+            messagesSelectionProjection[it]["selected"] == true
+        }
+        if (selected.size == 1) {
+            onMessageDeleteRequested(selected.first())
+            return
+        }
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle("Delete selected messages")
             .setMessage("Are you sure you want to delete selected messages?")

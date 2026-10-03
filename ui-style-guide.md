@@ -932,7 +932,12 @@ Use these pieces in order for each attachment shown above the chat message box:
 The composer strip contains unsent attachments only. Its action is a direct X
 whose only action is Remove. Sent attachments move to
 `view_include_summary_item.xml`, where the three-dots menu exposes post-send
-actions. Do not offer Condense, Reduce to Text Only, or Edit in the composer.
+actions and a direct X removes that individual image or document. Sent-row
+text and actions follow the message foreground so they remain readable inside
+the bubble. Removed items retain their original row with `(removed)` after the
+filename; their removal controls are hidden. Removal confirmation uses
+`App.MaterialAlertDialog` with a title, explanatory message, and
+`dialog_two_actions_cancel_first.xml` labeled Cancel and Okay. Do not offer Condense, Reduce to Text Only, or Edit in the composer.
 
 When at least one pending item is a document, the strip shows the persistent
 document-cost helper above the rows. It uses `Widget.App.Include.Notice` with

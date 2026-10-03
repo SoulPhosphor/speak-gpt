@@ -1003,7 +1003,7 @@ class ApiEndpointEditorActivity : FragmentActivity() {
             gravity = android.view.Gravity.CENTER_VERTICAL
         }
         val label = TextView(this, null, 0, R.style.Widget_App_Dropdown_Label).apply {
-            text = modelId
+            text = imageCapabilityDisplayLabel(modelId)
         }
         val value = TextView(this, null, 0, R.style.Widget_App_Dropdown_Value).apply {
             layoutParams = LinearLayout.LayoutParams(
@@ -1016,6 +1016,25 @@ class ApiEndpointEditorActivity : FragmentActivity() {
         row.addView(label)
         row.addView(value)
         imageCapabilityRows?.addView(row)
+    }
+
+    /** Internal metadata/route keys stay editable without leaking their storage
+     * syntax into the endpoint screen. Legacy plain model keys remain unchanged. */
+    private fun imageCapabilityDisplayLabel(storageKey: String): String {
+        if (storageKey.startsWith("@metadata:")) {
+            return storageKey.removePrefix("@metadata:")
+        }
+        if (storageKey.startsWith("@learned:")) {
+            val parts = storageKey.removePrefix("@learned:").split('|')
+            if (parts.size >= 7) {
+                val model = parts[4]
+                val route = parts[5]
+                    .removePrefix("only:")
+                    .takeUnless { it == "direct" || it == "routed" }
+                return if (route.isNullOrBlank()) model else "$model — $route"
+            }
+        }
+        return storageKey
     }
 
     private fun capabilityLabel(capability: ImageCapability): String = when (capability) {

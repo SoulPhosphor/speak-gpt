@@ -233,6 +233,12 @@ object GenerationErrorClassifier {
         if (allEvidenceText.contains("does not exist")) {
             return result(GenErrorCode.M2)
         }
+        // A provider can attach an HTTP 400 or even 404 to a precise modality
+        // rejection. The provider's explicit image diagnosis outranks the
+        // generic status mapping; an ambiguous 400/404 never reaches this gate.
+        if (isDefinitiveImageRejection(allEvidenceText)) {
+            return result(GenErrorCode.M4, vision = true)
+        }
         // 5. Bare HTTP 404 with no model-specific body. Text is fallback evidence
         // only when the client did not expose a concrete status.
         if (status == 404 || (status == null && lower.contains("not found"))) {
@@ -257,7 +263,7 @@ object GenerationErrorClassifier {
             return result(GenErrorCode.S2)
         }
         if (allEvidenceText.contains("your request was rejected")) {
-            return result(GenErrorCode.S3, vision = looksLikeVisionRejection(allEvidenceText),
+            return result(GenErrorCode.S3, vision = isDefinitiveImageRejection(allEvidenceText),
                 filterSide = ContentFilterSide.INPUT)
         }
         if (providerEvidence?.malformedPayloadCount?.let { it > 0 } == true &&
@@ -297,11 +303,15 @@ object GenerationErrorClassifier {
             (embeddedStatus != null && embeddedStatus in 400..499)
         ) return result(GenErrorCode.M5)
         // 7. Unknown catch-all.
-        return result(GenErrorCode.U0, vision = looksLikeVisionRejection(allEvidenceText))
+        return result(GenErrorCode.U0, vision = isDefinitiveImageRejection(allEvidenceText))
     }
 
-    private fun looksLikeVisionRejection(lower: String): Boolean =
-        containsAny(lower,
+    /** True only when the provider explicitly ties its rejection to image or
+     * vision input. Status alone, "unsupported content type", auth, routing,
+     * timeouts, and unrelated invalid parameters are deliberately insufficient. */
+    fun isDefinitiveImageRejection(evidence: String): Boolean {
+        val lower = evidence.lowercase()
+        return containsAny(lower,
             "does not support image",
             "does not support vision",
             "image_not_supported",
@@ -309,10 +319,16 @@ object GenerationErrorClassifier {
             "not support multimodal",
             "does not accept image",
             "image input is not supported",
+            "image inputs are not supported",
+            "image input not supported",
             "does not support multi-modal",
             "image_input_not_supported",
-            "content type is not supported"
+            "unsupported image content",
+            "only text content is supported",
+            "model is not multimodal",
+            "model is not multi-modal"
         )
+    }
 
     private fun containsAny(text: String, vararg values: String): Boolean =
         values.any(text::contains)

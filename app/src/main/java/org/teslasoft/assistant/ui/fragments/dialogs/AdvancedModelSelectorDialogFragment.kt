@@ -401,8 +401,21 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                     val ids = refresh.models.mapNotNull { model ->
                         if (imageMode && !catalogAllowsImageOutput(model.entry)) null else model.id
                     }
-                    if (refresh.capabilityJson != endpoint.reasoningCapabilityByModel) {
+                    val imageCapabilities =
+                        org.teslasoft.assistant.preferences.includes.ImageCapabilityMetadata
+                            .capabilitiesFromResponse(
+                                message,
+                                org.teslasoft.assistant.preferences.includes.ImageCapabilityProvider.OPENROUTER
+                            )
+                    val refreshedImageJson = imageCapabilities?.let {
+                        org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
+                            .refreshMetadata(endpoint.imageCapabilityByModel, it)
+                    } ?: endpoint.imageCapabilityByModel
+                    if (refresh.capabilityJson != endpoint.reasoningCapabilityByModel ||
+                        refreshedImageJson != endpoint.imageCapabilityByModel
+                    ) {
                         endpoint.reasoningCapabilityByModel = refresh.capabilityJson
+                        endpoint.imageCapabilityByModel = refreshedImageJson
                         apiEndpointPreferences?.setApiEndpoint(requireContext(), endpoint)
                     }
                     refreshReasoningCapabilityIndex(
@@ -449,6 +462,23 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
                 if (ids.isEmpty()) {
                     showProviderError(message)
                     return
+                }
+
+                val provider = endpoint?.let {
+                    org.teslasoft.assistant.preferences.includes.ImageCapabilityProvider
+                        .forEndpoint(it)
+                } ?: org.teslasoft.assistant.preferences.includes.ImageCapabilityProvider.GENERIC
+                val imageCapabilities =
+                    org.teslasoft.assistant.preferences.includes.ImageCapabilityMetadata
+                        .capabilitiesFromResponse(message, provider)
+                if (endpoint != null && imageCapabilities != null) {
+                    val updated =
+                        org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
+                            .refreshMetadata(endpoint.imageCapabilityByModel, imageCapabilities)
+                    if (updated != endpoint.imageCapabilityByModel) {
+                        endpoint.imageCapabilityByModel = updated
+                        apiEndpointPreferences?.setApiEndpoint(requireContext(), endpoint)
+                    }
                 }
 
                 availableModels.clear()
@@ -688,8 +718,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             val filtered = if (query.isEmpty()) {
                 ArrayList(availableModels)
             } else {
-                // Preserve the existing match rule (owner: keep search as it is).
-                ArrayList(availableModels.filter { item -> item == query || item.contains(query) || query.contains(item) })
+                // Preserve the existing bidirectional substring match, ignoring capitalization.
+                ArrayList(availableModels.filter { item -> item.contains(query, ignoreCase = true) || query.contains(item, ignoreCase = true) })
             }
             val adapter = ModelListAdapter(
                 requireContext(),
@@ -796,8 +826,21 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             else -> authHeaders["Authorization"] = "Bearer $apiKey"
         }
         requestNetwork?.setHeaders(authHeaders)
-        val base = (apiEndpointObject?.host ?: "").let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
-        requestNetwork?.startRequestNetwork("GET", base + "models", "A", requestListener)
+        val endpoint = apiEndpointObject
+        val base = (endpoint?.host ?: "").let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
+        when (endpoint?.let {
+            org.teslasoft.assistant.preferences.includes.ImageCapabilityProvider.forEndpoint(it)
+        }) {
+            org.teslasoft.assistant.preferences.includes.ImageCapabilityProvider.NANOGPT ->
+                requestNetwork?.startRequestNetwork(
+                    "GET", base + "models?detailed=true", "A", requestListener
+                )
+            org.teslasoft.assistant.preferences.includes.ImageCapabilityProvider.VENICE ->
+                requestNetwork?.startRequestNetwork(
+                    "GET", base + "models?type=text", "A", requestListener
+                )
+            else -> requestNetwork?.startRequestNetwork("GET", base + "models", "A", requestListener)
+        }
     }
 
     private fun logReasoningCatalogRefresh(success: Boolean) {
