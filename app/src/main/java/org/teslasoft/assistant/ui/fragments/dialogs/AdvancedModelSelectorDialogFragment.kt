@@ -688,8 +688,8 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
             val filtered = if (query.isEmpty()) {
                 ArrayList(availableModels)
             } else {
-                // Preserve the existing match rule (owner: keep search as it is).
-                ArrayList(availableModels.filter { item -> item == query || item.contains(query) || query.contains(item) })
+                // Preserve the existing bidirectional substring match, ignoring capitalization.
+                ArrayList(availableModels.filter { item -> item.contains(query, ignoreCase = true) || query.contains(item, ignoreCase = true) })
             }
             val adapter = ModelListAdapter(
                 requireContext(),
