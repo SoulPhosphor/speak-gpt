@@ -4923,6 +4923,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun renderSummarizerOperation(
         state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
     ) {
+        applySummaryViewLock(state)
         val preserveProjectionNotice = projectionStatusVisible &&
             (state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Idle ||
                 state is org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Cancelled)
@@ -5371,6 +5372,33 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Summary view (decision 11): the editable summary and Update Now.
      *  Edits save automatically when the view closes; Update Now saves them
      *  first, then folds everything up to the current window edge. */
+    // The open summary view's text field and read-only note, so a summarizer
+    // or compactor run can lock it and then load the newest text.
+    private var summaryViewField: com.google.android.material.textfield.TextInputEditText? = null
+    private var summaryViewNote: TextView? = null
+    private var summaryViewLocked = false
+
+    private fun applySummaryViewLock(
+        state: org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState
+    ) {
+        val field = summaryViewField ?: return
+        val running = state as? org.teslasoft.assistant.util.summarizer.SummarizerController.OperationState.Running
+        val wasLocked = summaryViewLocked
+        summaryViewLocked = running != null
+        if (running != null) {
+            summaryViewNote?.setText(
+                org.teslasoft.assistant.util.summarizer.SummarizerOperationMessages.readOnlyRes(running.kind)
+            )
+        }
+        summaryViewNote?.visibility = if (running != null) View.VISIBLE else View.GONE
+        field.isFocusable = running == null
+        field.isFocusableInTouchMode = running == null
+        if (running != null) field.clearFocus()
+        if (wasLocked && running == null) {
+            field.setText(preferences?.getSummarizerSummary().orEmpty())
+        }
+    }
+
     private fun showSummaryView() {
         val view = layoutInflater.inflate(R.layout.dialog_summary_view, null)
         val field = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.field_summary_text)
@@ -5394,12 +5422,23 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .create()
 
         fun saveEditsIfChanged() {
+            // A locked view shows text the running operation is replacing.
+            if (summaryViewLocked) return
             val edited = field?.text?.toString().orEmpty()
             if (edited != preferences?.getSummarizerSummary().orEmpty()) {
                 preferences?.commitSummarizerSummaryEdit(edited)
             }
         }
-        dialog.setOnDismissListener { saveEditsIfChanged() }
+        summaryViewField = field
+        summaryViewNote = view.findViewById(R.id.text_summary_read_only)
+        summaryViewLocked = false
+        summarizerController?.currentOperationState()?.let { applySummaryViewLock(it) }
+        dialog.setOnDismissListener {
+            saveEditsIfChanged()
+            summaryViewField = null
+            summaryViewNote = null
+            summaryViewLocked = false
+        }
         update?.setOnClickListener {
             saveEditsIfChanged()
             dialog.dismiss()

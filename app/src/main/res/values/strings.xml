@@ -3550,6 +3550,9 @@
     <string name="compaction_summary_in_progress">Compacting in Progress…</string>
     <string name="compaction_summary_read_only">Compacted text is read only while the compactor is in progress.</string>
     <string name="compaction_summary_success">Compaction Successful!</string>
+    <string name="compaction_summary_summarizing">Summarizing in Progress…</string>
+    <string name="compaction_summary_read_only_summarizing">Summary text is read only while the summarizer is in progress.</string>
+    <string name="compaction_summary_summarized">Summary Successful!</string>
     <string name="compaction_uncompact_desc">Uncompact Conversation</string>
     <string name="compaction_recompact_desc">Recompact Conversation</string>
     <string name="compaction_uncompact_title">Uncompact Conversation?</string>

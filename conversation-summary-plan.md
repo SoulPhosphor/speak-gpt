@@ -344,6 +344,13 @@ reduction, more the longer the chat runs.
     There is no pause switch here — turning off the Quick Settings
     "Use Summarizer" toggle is the pause (see decision 3).
 
+    **Read-only while running (owner ruling, Oct 3 2026):** while the
+    summarizer or compactor runs for a chat, its summary / compacted text is
+    read only in the summary view and on Compaction Summary, with a note
+    saying so. When the run ends the newest saved text is loaded and becomes
+    editable again, so an edit can never be overwritten by a run that started
+    from older text.
+
 12. **Scope (owner, July 29 2026).** Regular chat requests only. The
     Playground, image-generation commands, and the function-calling /
     fine-tuned-model paths are excluded — they keep today's full-history

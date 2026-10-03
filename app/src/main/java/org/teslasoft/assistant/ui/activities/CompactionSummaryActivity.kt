@@ -41,14 +41,15 @@ import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.ui.util.ScreenChrome
 import org.teslasoft.assistant.util.summarizer.SummarizerController
 import org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
+import org.teslasoft.assistant.util.summarizer.SummarizerOperationMessages
 
 /**
  * Compaction Summary (owner ruling, Oct 3 2026), opened from the chat's top
  * bar once the chat has been compacted at least once. Shows the compacted
  * text the AI receives in place of the compacted messages, lets the user
  * edit and save it, and switches the chat between its compacted and full
- * (uncompacted) form without deleting the compacted text. While a compaction
- * of this chat runs, the text is read only.
+ * (uncompacted) form without deleting the compacted text. While the
+ * summarizer or compactor runs for this chat, the text is read only.
  */
 class CompactionSummaryActivity : FragmentActivity() {
 
@@ -68,7 +69,9 @@ class CompactionSummaryActivity : FragmentActivity() {
 
     /** The text as last saved — the Revert target and unsaved-changes baseline. */
     private var savedText = ""
-    private var compacting = false
+    /** True while the summarizer or compactor runs for this chat. */
+    private var locked = false
+    private var lastRunKind = SummarizerController.OperationKind.COMPACTING
 
     private val operationListener = SummarizerControllerRegistry.AppListener { changedChatId, state ->
         if (changedChatId != chatId) return@AppListener
@@ -131,47 +134,56 @@ class CompactionSummaryActivity : FragmentActivity() {
 
     /* ------------------------------ compaction status ------------------------------ */
 
+    /** While the summarizer or compactor runs for this chat the text is read
+     *  only; when the run ends the newest saved text is loaded for editing. */
     private fun renderOperation(state: SummarizerController.OperationState) {
-        val compactingNow = state is SummarizerController.OperationState.Running &&
-            state.kind == SummarizerController.OperationKind.COMPACTING
-        val succeeded = state is SummarizerController.OperationState.Succeeded &&
-            state.kind == SummarizerController.OperationKind.COMPACTING
-        val wasCompacting = compacting
-        compacting = compactingNow
+        val running = state as? SummarizerController.OperationState.Running
+        val wasLocked = locked
+        locked = running != null
 
         when {
-            compactingNow -> {
+            running != null -> {
+                lastRunKind = running.kind
                 rowStatus?.visibility = View.VISIBLE
                 spinner?.visibility = View.VISIBLE
-                textStatus?.setText(R.string.compaction_summary_in_progress)
+                textStatus?.setText(SummarizerOperationMessages.inProgressRes(running.kind))
+                textReadOnly?.setText(SummarizerOperationMessages.readOnlyRes(running.kind))
                 textReadOnly?.visibility = View.VISIBLE
             }
-            succeeded || (wasCompacting && state !is SummarizerController.OperationState.Failed &&
-                state !is SummarizerController.OperationState.Cancelled) -> {
+            state is SummarizerController.OperationState.Succeeded -> {
                 rowStatus?.visibility = View.VISIBLE
                 spinner?.visibility = View.GONE
-                textStatus?.setText(R.string.compaction_summary_success)
+                textStatus?.setText(SummarizerOperationMessages.successRes(state.kind))
+                textReadOnly?.visibility = View.GONE
+            }
+            state is SummarizerController.OperationState.Idle && wasLocked -> {
+                rowStatus?.visibility = View.VISIBLE
+                spinner?.visibility = View.GONE
+                textStatus?.setText(SummarizerOperationMessages.successRes(lastRunKind))
+                textReadOnly?.visibility = View.GONE
+            }
+            state is SummarizerController.OperationState.Idle -> {
+                // Keep a success line already showing; nothing else to say.
+                if (spinner?.visibility == View.VISIBLE) rowStatus?.visibility = View.GONE
                 textReadOnly?.visibility = View.GONE
             }
             else -> {
-                // Keep a success line that is already showing; otherwise no
-                // status line when nothing is running.
-                if (spinner?.visibility == View.VISIBLE) rowStatus?.visibility = View.GONE
+                // Failed or cancelled: the error belongs to Summarizer Errors.
+                rowStatus?.visibility = View.GONE
                 textReadOnly?.visibility = View.GONE
             }
         }
 
-        // The compacted text is solid again: show what the compactor saved.
-        if (wasCompacting && !compactingNow) {
+        if (wasLocked && !locked) {
             savedText = preferences?.getSummarizerSummary().orEmpty()
             field?.setText(savedText)
         }
 
-        field?.isFocusable = !compactingNow
-        field?.isFocusableInTouchMode = !compactingNow
-        if (compactingNow) field?.clearFocus()
-        btnSave?.isEnabled = !compactingNow
-        btnSave?.alpha = if (compactingNow) 0.38f else 1f
+        field?.isFocusable = !locked
+        field?.isFocusableInTouchMode = !locked
+        if (locked) field?.clearFocus()
+        btnSave?.isEnabled = !locked
+        btnSave?.alpha = if (locked) 0.38f else 1f
         refreshRevert()
     }
 
@@ -180,11 +192,11 @@ class CompactionSummaryActivity : FragmentActivity() {
     private fun isDirty(): Boolean = (field?.text?.toString() ?: savedText) != savedText
 
     private fun refreshRevert() {
-        btnRevert?.visibility = if (isDirty() && !compacting) View.VISIBLE else View.GONE
+        btnRevert?.visibility = if (isDirty() && !locked) View.VISIBLE else View.GONE
     }
 
     private fun save() {
-        if (compacting) return
+        if (locked) return
         val text = field?.text?.toString().orEmpty()
         if (preferences?.commitSummarizerSummaryEdit(text) != true) {
             Toast.makeText(this, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
@@ -197,7 +209,7 @@ class CompactionSummaryActivity : FragmentActivity() {
     }
 
     private fun attemptLeave() {
-        if (isDirty() && !compacting) {
+        if (isDirty() && !locked) {
             DiscardChangesDialog.show(this) { finish() }
         } else {
             finish()

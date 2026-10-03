@@ -11,6 +11,14 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
+    <!-- Shown while the summarizer or compactor runs: the text below is read
+         only until the run saves its result (owner ruling, Oct 3 2026). -->
+    <TextView
+        android:id="@+id/text_summary_read_only"
+        style="@style/Widget.App.Section.Hint"
+        android:layout_marginHorizontal="24dp"
+        android:visibility="gone" />
+
     <com.google.android.material.textfield.TextInputEditText
         android:id="@+id/field_summary_text"
         style="@style/Widget.App.Field.Box"
