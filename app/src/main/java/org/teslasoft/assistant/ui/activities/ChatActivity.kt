@@ -320,6 +320,7 @@ import org.teslasoft.assistant.util.providerDetailBlock
 import org.teslasoft.assistant.util.providerLimitMessage
 import org.teslasoft.assistant.util.reachedServer
 import org.teslasoft.assistant.util.summarizer.CondensedRegenerationLock
+import org.teslasoft.assistant.util.summarizer.CondensedBoundaryRealignment
 import io.ktor.client.plugins.observer.ResponseObserver
 import io.ktor.client.plugins.api.Send
 import io.ktor.client.plugins.api.createClientPlugin
@@ -13035,10 +13036,38 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             if (saveSettings(synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
                 messages.addAll(currentPosition, removed)
                 Toast.makeText(this@ChatActivity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+            } else {
+                realignCondensedBoundaries(currentPosition, end)
             }
             syncChatProjection()
             deselectAll()
         }
+    }
+
+    /** Shrinks the summary bookmark, manual compaction marker, and both
+     *  regeneration locks by the removed stored messages [start, end) each
+     *  one covered, so the first message after a boundary is not skipped. */
+    private fun realignCondensedBoundaries(start: Int, end: Int) {
+        val prefs = preferences ?: return
+        fun realigned(boundary: Int): Int =
+            CondensedBoundaryRealignment.afterRangeRemoval(boundary, start, end)
+
+        val folded = prefs.getSummarizerFoldedCount()
+        if (realigned(folded) != folded) prefs.setSummarizerFoldedCount(realigned(folded))
+        val manualBoundary = prefs.getManualCompactionBoundary()
+        if (realigned(manualBoundary) != manualBoundary) {
+            prefs.setManualCompactionBoundary(realigned(manualBoundary))
+        }
+        val summaryLock = prefs.getSummaryRegenerationLockBoundary()
+        if (realigned(summaryLock) != summaryLock) {
+            prefs.setSummaryRegenerationLockBoundary(realigned(summaryLock))
+        }
+        val compactionLock = prefs.getCompactionRegenerationLockBoundary()
+        if (realigned(compactionLock) != compactionLock) {
+            prefs.setCompactionRegenerationLockBoundary(realigned(compactionLock))
+        }
+        refreshManualCompactionMarker()
+        refreshSummarizerIcons()
     }
 
     override fun onMessageDeleted() {
