@@ -153,6 +153,16 @@ class ReportedProviderParserTest {
         assertEquals(0.0037756, usage.totalCost!!, 0.000000001)
     }
 
+    @Test fun capturesReportedReasoningTokens() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20," +
+                "\"total_tokens\":150," +
+                "\"completion_tokens_details\":{\"reasoning_tokens\":30}}}"
+        )
+        assertEquals(30, inspector.finishNormally().reasoningOutputTokens)
+    }
+
     @Test fun normalizesAnthropicCacheReadIntoTotalPromptTokens() {
         val inspector = RawSseInspector()
         inspector.acceptLine(

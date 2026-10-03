@@ -28,6 +28,7 @@ class ProviderUsageAttempt(
     @Volatile private var totalTokens: Int? = null
     @Volatile private var cachedInputTokens: Int? = null
     @Volatile private var cacheWriteInputTokens: Int? = null
+    @Volatile private var reasoningOutputTokens: Int? = null
     @Volatile private var inputCost: Double? = null
     @Volatile private var outputCost: Double? = null
     @Volatile private var cachedInputCost: Double? = null
@@ -96,6 +97,7 @@ class ProviderUsageAttempt(
         if (totalTokens == null) totalTokens = value.totalTokens
         if (cachedInputTokens == null) cachedInputTokens = value.cachedInputTokens
         if (cacheWriteInputTokens == null) cacheWriteInputTokens = value.cacheWriteInputTokens
+        if (reasoningOutputTokens == null) reasoningOutputTokens = value.reasoningOutputTokens
         if (inputCost == null) inputCost = value.inputCost
         if (outputCost == null) outputCost = value.outputCost
         if (cachedInputCost == null) cachedInputCost = value.cachedInputCost
@@ -125,8 +127,11 @@ class ProviderUsageAttempt(
                 provider = responseProvider ?: fallbackProvider,
                 apiEndpoint = apiEndpoint,
                 counts = TokenCounts(
-                    promptTokens, completionTokens, totalTokens, cachedInputTokens,
-                    cacheWriteInputTokens
+                    promptTokens,
+                    outputIncludingReasoning(
+                        promptTokens, completionTokens, totalTokens, reasoningOutputTokens
+                    ),
+                    totalTokens, cachedInputTokens, cacheWriteInputTokens
                 ),
                 providerCost = ProviderReportedCost(
                     inputCost, outputCost, totalCost, cachedInputCost
@@ -174,3 +179,18 @@ data class ProviderUsageSnapshot(
     val counts: TokenCounts,
     val providerCost: ProviderReportedCost
 )
+
+/** Reasoning is billed output. Most APIs already include it in completion
+ * tokens; some (xAI) report it only separately. The API's own total is the
+ * evidence: when input + completion + reasoning equals the total, reasoning
+ * was left out of completion and is added back. Otherwise completion stands. */
+internal fun outputIncludingReasoning(
+    input: Int?,
+    output: Int?,
+    total: Int?,
+    reasoning: Int?
+): Int? {
+    if (input == null || output == null || total == null || reasoning == null) return output
+    if (reasoning <= 0 || input + output + reasoning != total) return output
+    return output + reasoning
+}

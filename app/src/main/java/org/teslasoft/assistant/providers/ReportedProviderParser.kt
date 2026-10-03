@@ -173,6 +173,7 @@ internal class RawSseInspector {
     private var totalTokens: Int? = null
     private var cachedInputTokens: Int? = null
     private var cacheWriteInputTokens: Int? = null
+    private var reasoningOutputTokens: Int? = null
     private var inputCost: Double? = null
     private var outputCost: Double? = null
     private var cachedInputCost: Double? = null
@@ -274,6 +275,11 @@ internal class RawSseInspector {
                 cacheWriteInputTokens = reportedCacheCreation ?: 0
             }
             usage.intOrNull("total_tokens")?.let { totalTokens = it }
+            (usage.get("completion_tokens_details") ?: usage.get("output_tokens_details"))
+                ?.takeIf { it.isJsonObject }?.asJsonObject
+                ?.intOrNull("reasoning_tokens")
+                ?.let { reasoningOutputTokens = it }
+                ?: usage.intOrNull("reasoning_tokens")?.let { reasoningOutputTokens = it }
             usage.firstDoubleOrNull("cost", "total_cost")?.let { totalCost = it }
             // xAI reports the charged amount in ticks: 10^10 ticks per dollar.
             if (totalCost == null) {
@@ -376,6 +382,7 @@ internal class RawSseInspector {
             totalTokens = totalTokens,
             cachedInputTokens = cachedInputTokens,
             cacheWriteInputTokens = cacheWriteInputTokens,
+            reasoningOutputTokens = reasoningOutputTokens,
             inputCost = inputCost,
             outputCost = outputCost,
             cachedInputCost = cachedInputCost,

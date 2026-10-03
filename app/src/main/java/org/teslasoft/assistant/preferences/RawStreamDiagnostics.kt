@@ -44,6 +44,9 @@ data class RawStreamObservation(
     val cachedInputTokens: Int? = null,
     /** Cache-write tokens contained within [promptTokens], when reported. */
     val cacheWriteInputTokens: Int? = null,
+    /** Reported reasoning tokens. Some APIs include them in [completionTokens],
+     * others report them only here; accounting decides which from the total. */
+    val reasoningOutputTokens: Int? = null,
     /** Exact API-reported charged cost. Kept out of the legacy diagnostics
      * envelope and delivered directly to durable accounting. */
     val inputCost: Double? = null,

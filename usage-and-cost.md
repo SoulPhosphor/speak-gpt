@@ -45,6 +45,14 @@ Every request records its own token counts from what the AI service reports.
   and cache-write text, so the app adds all three together to get total input.
   OpenAI-style `prompt_tokens` already includes cached text, so it is used as
   is.
+- **Reasoning counts as output** (owner decision, October 2026), because the
+  user pays for it as output. Most services already include reasoning in
+  their output count. Some, such as xAI, report it only separately
+  (`completion_tokens_details.reasoning_tokens`). The app adds it to output
+  only when the service's own total shows it was left out, meaning input +
+  output + reasoning equals the reported total. Otherwise the output count is
+  used as reported, so reasoning is never counted twice. If the service sends
+  no total, nothing is added.
 - **Missing counts stay missing.** If the service reports no usage at all,
   the request has no counts and the screen shows "Not Reported" for it. New
   replies are never estimated.
@@ -211,11 +219,9 @@ These are known and not yet decided or fixed.
 2. **Cache-write counts:** these are read only from Claude-style replies. If
    OpenRouter reports cache writes in another field, the app ignores it, and
    those tokens are priced as normal input.
-3. **Grok reasoning tokens:** xAI reports reasoning tokens separately
-   (`completion_tokens_details.reasoning_tokens`). Its `completion_tokens`
-   excludes them, unlike OpenAI's. The Output row for Grok reasoning models
-   therefore shows too few tokens and too low a cost. The Total is still
-   correct, because it is xAI's real charge.
+3. **Reasoning without a reported total:** if a service reports reasoning
+   separately but sends no total, the app cannot tell whether reasoning is
+   already in the output count, so it adds nothing.
 4. **Stopped request on a regenerated reply:** a stopped or failed request's
    record is attached to the reply's main record list. If that reply has
    multiple versions, the totals read only the per-version lists, so this
@@ -230,6 +236,7 @@ These are known and not yet decided or fixed.
 
 | Part | File |
 | --- | --- |
+| Reasoning counted as output | `app/src/main/java/org/teslasoft/assistant/usage/ProviderUsageAttempt.kt` (`outputIncludingReasoning`) |
 | Reading usage from the reply stream | `app/src/main/java/org/teslasoft/assistant/providers/ReportedProviderParser.kt` (`RawSseInspector`) |
 | Per-request capture | `app/src/main/java/org/teslasoft/assistant/usage/ProviderUsageAttempt.kt` |
 | Price fetching and name matching | `app/src/main/java/org/teslasoft/assistant/usage/TokenPricingCatalog.kt` (`TokenPricingCatalogClient`, `FirstPartyPricing`, including `matchXai`) |
