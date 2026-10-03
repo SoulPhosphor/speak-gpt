@@ -12,13 +12,36 @@ class ProviderUsageAttemptTest {
         attempt.noteProvider("DeepInfra")
         attempt.noteRawObservation(
             RawStreamObservation(model = "actual-model", promptTokens = 10,
-                completionTokens = 20, totalTokens = 30, totalCost = 0.0042)
+                completionTokens = 20, totalTokens = 30,
+                cachedInputTokens = 6, cacheWriteInputTokens = 0,
+                totalCost = 0.0042)
         )
         val result = attempt.snapshot()
         assertEquals("actual-model", result.model)
         assertEquals("DeepInfra", result.provider)
         assertEquals("https://endpoint", result.apiEndpoint)
-        assertEquals(TokenCounts(10, 20, 30), result.counts)
+        assertEquals(TokenCounts(10, 20, 30, 6, 0), result.counts)
         assertEquals(0.0042, result.providerCost.totalCost!!, 0.000000001)
+    }
+
+    @Test fun reasoningReportedOutsideCompletionIsCountedAsOutput() = runBlocking {
+        val attempt = ProviderUsageAttempt("grok-4", "xAI", "https://api.x.ai/v1/")
+        attempt.noteTypedUsage(100, 20, 150)
+        attempt.noteRawObservation(
+            RawStreamObservation(promptTokens = 100, completionTokens = 20,
+                totalTokens = 150, reasoningOutputTokens = 30)
+        )
+        assertEquals(50, attempt.snapshot().counts.outputTokens)
+    }
+
+    @Test fun reasoningIsAddedOnlyWhereTheProviderDocumentsItAsSeparate() {
+        assertEquals(80, outputIncludingReasoning("https://api.x.ai/v1/", 50, 30))
+        assertEquals(80, outputIncludingReasoning("https://us.api.x.ai/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://us.api.x.ai.example.test/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://api.openai.com/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://nano-gpt.com/api/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://api.venice.ai/api/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://openrouter.ai/api/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://api.x.ai/v1/", 50, null))
     }
 }

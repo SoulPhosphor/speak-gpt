@@ -16,13 +16,13 @@ class QuickSettingsStructureTest {
         val roleplay = xml.indexOf("view_quick_settings_roleplay_block")
         val modelSettings = xml.indexOf("view_quick_settings_model_settings_block")
         val logitSeed = xml.indexOf("view_quick_settings_logit_seed_block")
-        val usage = xml.indexOf("@+id/usage_cost")
         val save = xml.indexOf("@+id/btn_save_to_profile")
 
         assertTrue(
-            listOf(character, provider, memory, roleplay, modelSettings, logitSeed, usage, save)
+            listOf(character, provider, memory, roleplay, modelSettings, logitSeed, save)
                 .zipWithNext().all { (a, b) -> a >= 0 && a < b }
         )
+        assertFalse(xml.contains("@+id/usage_cost"))
     }
 
     @Test

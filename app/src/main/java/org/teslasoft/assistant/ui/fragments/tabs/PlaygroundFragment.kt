@@ -204,13 +204,7 @@ class PlaygroundFragment : Fragment() {
 
         btnSettings?.setOnClickListener {
             val quickSettingsBottomSheetDialogFragment = QuickSettingsBottomSheetDialogFragment
-                .newInstance(
-                    chatId,
-                    -1,
-                    -1,
-                    0.0f,
-                    0.0f
-                )
+                .newInstance(chatId)
             quickSettingsBottomSheetDialogFragment.setOnUpdateListener(object : QuickSettingsBottomSheetDialogFragment.OnUpdateListener {
                 override fun onUpdate() {
                     /* for future */

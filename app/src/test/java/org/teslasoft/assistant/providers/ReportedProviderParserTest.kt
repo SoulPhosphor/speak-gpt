@@ -129,6 +129,118 @@ class ReportedProviderParserTest {
         assertEquals(0.003, usage.totalCost!!, 0.000000001)
     }
 
+    @Test fun capturesCachedTokensAndCachedCostFromOpenAiUsageDetails() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20," +
+                "\"prompt_tokens_details\":{\"cached_tokens\":60}," +
+                "\"cost_details\":{\"cache_read_cost\":0.00003}}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(100, usage.promptTokens)
+        assertEquals(60, usage.cachedInputTokens)
+        assertEquals(0, usage.cacheWriteInputTokens)
+        assertEquals(0.00003, usage.cachedInputCost!!, 0.000000001)
+    }
+
+    @Test fun convertsXaiCostTicksIntoChargedDollars() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"prompt_tokens\":199,\"completion_tokens\":1," +
+                "\"total_tokens\":200,\"cost_in_usd_ticks\":37756000}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(0.0037756, usage.totalCost!!, 0.000000001)
+    }
+
+    @Test fun capturesReportedReasoningTokens() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20," +
+                "\"total_tokens\":150," +
+                "\"completion_tokens_details\":{\"reasoning_tokens\":30}}}"
+        )
+        assertEquals(30, inspector.finishNormally().reasoningOutputTokens)
+    }
+
+    @Test fun readsNanoGptReceiptAndOpenRouterCacheWrites() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20," +
+                "\"prompt_tokens_details\":{\"cached_tokens\":40," +
+                "\"cache_write_tokens\":30}}," +
+                "\"x_nanogpt_pricing\":{\"cost\":0.01075,\"currency\":\"USD\"}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(40, usage.cachedInputTokens)
+        assertEquals(30, usage.cacheWriteInputTokens)
+        assertEquals(0.01075, usage.totalCost!!, 0.000000001)
+    }
+
+    @Test fun readsVeniceCacheWritesInsidePromptDetails() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20," +
+                "\"prompt_tokens_details\":{\"cached_tokens\":50," +
+                "\"cache_creation_input_tokens\":25}}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(100, usage.promptTokens)
+        assertEquals(50, usage.cachedInputTokens)
+        assertEquals(25, usage.cacheWriteInputTokens)
+    }
+
+    @Test fun nanoGptReceiptIsUsedOnlyWhenStatedInUsd() {
+        fun chargeFor(receipt: String): Double? {
+            val inspector = RawSseInspector()
+            inspector.acceptLine(
+                "{\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":5}," +
+                    "\"x_nanogpt_pricing\":$receipt}"
+            )
+            return inspector.finishNormally().totalCost
+        }
+        assertEquals(0.000021, chargeFor("{\"amount\":0.000021,\"currency\":\"USD\"}")!!, 1e-12)
+        assertEquals(0.000169, chargeFor("{\"cost\":0.000169,\"paymentSource\":\"USD\"}")!!, 1e-12)
+        assertNull(chargeFor("{\"cost\":0.5,\"paymentSource\":\"XNO\"}"))
+        assertNull(chargeFor("{\"cost\":0.5}"))
+    }
+
+    @Test fun veniceChargeIsUsedOnlyWhenNothingWasBilledInDiem() {
+        fun chargeFor(cost: String): Double? {
+            val inspector = RawSseInspector()
+            inspector.acceptLine(
+                "{\"usage\":{\"prompt_tokens\":612,\"completion_tokens\":146," +
+                    "\"total_tokens\":758},\"cost\":$cost}"
+            )
+            return inspector.finishNormally().totalCost
+        }
+        assertEquals(0.00042, chargeFor("{\"diem\":0,\"usd\":0.00042}")!!, 1e-12)
+        assertNull(chargeFor("{\"diem\":0.003,\"usd\":0}"))
+        assertNull(chargeFor("{\"usd\":0.00042}"))
+    }
+
+    @Test fun laterUsageWithoutInputNeverErasesReportedInput() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine("{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":1}}")
+        inspector.acceptLine("{\"usage\":{\"output_tokens\":20}}")
+        val usage = inspector.finishNormally()
+        assertEquals(100, usage.promptTokens)
+        assertEquals(20, usage.completionTokens)
+    }
+
+    @Test fun normalizesAnthropicCacheReadIntoTotalPromptTokens() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"input_tokens\":40,\"output_tokens\":20," +
+                "\"cache_read_input_tokens\":60,\"cache_creation_input_tokens\":10}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(110, usage.promptTokens)
+        assertEquals(20, usage.completionTokens)
+        assertEquals(60, usage.cachedInputTokens)
+        assertEquals(10, usage.cacheWriteInputTokens)
+    }
+
     @Test fun reportsOnlyFirstProviderPlusTerminalEnvelope() = runBlocking {
         val channel = ByteChannel(autoFlush = true)
         channel.writeStringUtf8("data: {\"provider\":\"First\",\"choices\":[]}\n")
@@ -207,5 +319,20 @@ class ReportedProviderParserTest {
         assertEquals("response.done", result.protocolTerminalMarker)
         assertTrue(result.usageReceived)
         assertEquals(12, result.totalTokens)
+    }
+
+    @Test fun responsesStyleNestedUsageIncludesCacheDetails() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "data: {\"type\":\"response.done\",\"response\":{" +
+                "\"model\":\"actual/model\",\"usage\":{\"input_tokens\":100," +
+                "\"output_tokens\":20,\"total_tokens\":120," +
+                "\"input_tokens_details\":{\"cached_tokens\":80}}}}"
+        )
+        val result = inspector.finishNormally()
+        assertEquals("actual/model", result.model)
+        assertEquals(100, result.promptTokens)
+        assertEquals(20, result.completionTokens)
+        assertEquals(80, result.cachedInputTokens)
     }
 }

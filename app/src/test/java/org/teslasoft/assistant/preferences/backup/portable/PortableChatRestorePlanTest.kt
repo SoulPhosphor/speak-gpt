@@ -1,11 +1,19 @@
 package org.teslasoft.assistant.preferences.backup.portable
 
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.teslasoft.assistant.usage.ProviderReportedCost
+import org.teslasoft.assistant.usage.TokenCountSource
+import org.teslasoft.assistant.usage.TokenCounts
+import org.teslasoft.assistant.usage.TokenPricingSnapshot
+import org.teslasoft.assistant.usage.TokenUsageAccounting
+import org.teslasoft.assistant.usage.TurnUsageRecord
 import org.teslasoft.assistant.util.Hash
 
 class PortableChatRestorePlanTest {
@@ -138,6 +146,91 @@ class PortableChatRestorePlanTest {
         assertEquals("Renamed alias", plan.chats.single().listRow["name"])
         assertEquals("200", plan.chats.single().listRow["timestamp"])
         assertEquals(1, plan.duplicateRowsConsolidated)
+    }
+
+    @Test
+    fun usageRecordsSurviveExportAndRestoreAndOlderBackupsStillRead() {
+        val record = TokenUsageAccounting.createRecord(
+            "model", "Provider", null,
+            TokenCounts(100, 20, 120, cachedInputTokens = 40, cacheWriteInputTokens = 0),
+            TokenCountSource.PROVIDER_REPORTED,
+            TokenPricingSnapshot(0.000001, 0.000002, 0.0000001),
+            ProviderReportedCost(totalCost = 0.5)
+        )
+        val records = TokenUsageAccounting.encodeRecords(listOf(record))
+        val variants = Gson().toJson(listOf(
+            mapOf("message" to "first", TokenUsageAccounting.KEY_USAGE_RECORDS to records),
+            mapOf("message" to "second", TokenUsageAccounting.KEY_USAGE_RECORDS to records)
+        ))
+        // Exported exactly as the serializer writes a stored history.
+        val exported = Gson().toJson(listOf(
+            mapOf("message" to "hi", "isBot" to false),
+            mapOf("message" to "reply", "isBot" to true,
+                TokenUsageAccounting.KEY_USAGE_RECORDS to records),
+            mapOf("message" to "second", "isBot" to true,
+                TokenUsageAccounting.KEY_USAGE_RECORDS to records, "variants" to variants)
+        ))
+
+        val restored = ok(artifact(ChatLogicalSerializer.FORMAT_V2,
+            chat(chatId, "Usage", exported).put("list_id", chatId))).chats.single()
+        val messages: List<Map<String, Any>> = Gson().fromJson(
+            restored.messagesJson, object : TypeToken<ArrayList<HashMap<String, Any>>>() {}.type
+        )
+        val summary = TokenUsageAccounting.summarizeMessages(messages) {
+            TokenCounts(null, null, null)
+        }
+
+        assertEquals(3, summary.groups.single().recordCount)
+        assertEquals(1.5, summary.totalCost, 0.000000001)
+        assertEquals(120, summary.totalCachedInputTokens)
+
+        // A backup made before usage records existed restores unchanged and
+        // falls back to the old estimate path instead of failing.
+        val older = ok(artifact(ChatLogicalSerializer.FORMAT_V2,
+            chat(chatId, "Older", """[{"message":"hi","isBot":false},
+                {"message":"reply","isBot":true}]""").put("list_id", chatId))).chats.single()
+        val olderMessages: List<Map<String, Any>> = Gson().fromJson(
+            older.messagesJson, object : TypeToken<ArrayList<HashMap<String, Any>>>() {}.type
+        )
+        val olderSummary = TokenUsageAccounting.summarizeMessages(olderMessages) {
+            TokenCounts(7, 3, 10)
+        }
+        assertEquals(1, olderSummary.groups.single().recordCount)
+        assertTrue(olderSummary.groups.single().containsEstimatedTokens)
+    }
+
+    @Test
+    fun failedToolsAttemptUsageSurvivesPlaceholderRemovalAndBackupRestore() {
+        val reported = TurnUsageRecord(
+            model = "model", provider = "Provider", inputTokens = 100,
+            outputTokens = 2, totalTokens = 102, cachedInputTokens = 40,
+            source = "provider_reported", inputPricePerToken = 0.000001,
+            totalCost = 0.125, costSource = "provider_reported"
+        )
+        val messages = mutableListOf(
+            hashMapOf<String, Any>("message" to "request", "isBot" to false),
+            hashMapOf<String, Any>("message" to "", "isBot" to true,
+                TokenUsageAccounting.KEY_USAGE_RECORDS to
+                    TokenUsageAccounting.encodeRecords(listOf(reported)))
+        )
+        assertTrue(TokenUsageAccounting.removeEmptyAssistantForToolRetry(messages))
+        val exported = Gson().toJson(messages)
+        val restored = ok(artifact(ChatLogicalSerializer.FORMAT_V2,
+            chat(chatId, "Retry usage", exported).put("list_id", chatId))).chats.single()
+        val restoredMessages: List<Map<String, Any>> = Gson().fromJson(
+            restored.messagesJson, object : TypeToken<ArrayList<HashMap<String, Any>>>() {}.type
+        )
+
+        assertEquals(listOf(reported), TokenUsageAccounting.decodeRecords(
+            restoredMessages.single()[TokenUsageAccounting.KEY_USAGE_RECORDS]?.toString()))
+        val summary = TokenUsageAccounting.summarizeMessages(restoredMessages) {
+            throw AssertionError("reported usage must not be estimated after restore")
+        }
+        assertEquals(1, summary.groups.single().recordCount)
+        assertEquals(100, summary.totalInputTokens)
+        assertEquals(2, summary.totalOutputTokens)
+        assertEquals(40, summary.totalCachedInputTokens)
+        assertEquals(0.125, summary.totalCost, 0.000000001)
     }
 
     private fun ok(json: String): PortableChatRestorePlan.Plan =

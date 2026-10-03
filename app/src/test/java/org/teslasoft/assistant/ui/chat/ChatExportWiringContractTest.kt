@@ -59,14 +59,16 @@ class ChatExportWiringContractTest {
         assertTrue(activity.contains("PopupMenu(this@ChatActivity, anchor)"))
         assertTrue(activity.contains("R.string.chat_menu_unpin else R.string.chat_menu_pin"))
         assertTrue(activity.contains("R.string.chat_menu_export"))
+        assertTrue(activity.contains("R.string.usage_cost_title"))
         assertTrue(activity.contains("R.string.alert_debug_section_logs"))
         assertTrue(activity.contains("R.string.btn_delete"))
         assertOrdered(
             activity,
             "R.string.chat_menu_unpin else R.string.chat_menu_pin",
             "menu.add(Menu.NONE, 1, 1, R.string.chat_menu_export)",
-            "menu.add(Menu.NONE, 2, 2, R.string.alert_debug_section_logs)",
-            "menu.add(Menu.NONE, 3, 3, R.string.btn_delete)"
+            "menu.add(Menu.NONE, 5, 2, R.string.usage_cost_title)",
+            "menu.add(Menu.NONE, 2, 3, R.string.alert_debug_section_logs)",
+            "menu.add(Menu.NONE, 3, 4, R.string.btn_delete)"
         )
         assertTrue(activity.contains("Intent(this@ChatActivity, LogCabinActivity::class.java)"))
         assertFalse(activity.contains("updateDebugLogButtonVisibility"))

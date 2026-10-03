@@ -26,8 +26,12 @@ class ProviderUsageAttempt(
     @Volatile private var promptTokens: Int? = null
     @Volatile private var completionTokens: Int? = null
     @Volatile private var totalTokens: Int? = null
+    @Volatile private var cachedInputTokens: Int? = null
+    @Volatile private var cacheWriteInputTokens: Int? = null
+    @Volatile private var reasoningOutputTokens: Int? = null
     @Volatile private var inputCost: Double? = null
     @Volatile private var outputCost: Double? = null
+    @Volatile private var cachedInputCost: Double? = null
     @Volatile private var totalCost: Double? = null
     @Volatile private var outerHttpStatus: Int? = null
     @Volatile private var finishReason: String? = null
@@ -91,8 +95,12 @@ class ProviderUsageAttempt(
         if (promptTokens == null) promptTokens = value.promptTokens
         if (completionTokens == null) completionTokens = value.completionTokens
         if (totalTokens == null) totalTokens = value.totalTokens
+        if (cachedInputTokens == null) cachedInputTokens = value.cachedInputTokens
+        if (cacheWriteInputTokens == null) cacheWriteInputTokens = value.cacheWriteInputTokens
+        if (reasoningOutputTokens == null) reasoningOutputTokens = value.reasoningOutputTokens
         if (inputCost == null) inputCost = value.inputCost
         if (outputCost == null) outputCost = value.outputCost
+        if (cachedInputCost == null) cachedInputCost = value.cachedInputCost
         if (totalCost == null) totalCost = value.totalCost
         value.finishReason?.trim()?.ifBlank { null }?.let { finishReason = it }
         if (generationId == null) {
@@ -118,8 +126,14 @@ class ProviderUsageAttempt(
                 model = responseModel ?: requestedModel,
                 provider = responseProvider ?: fallbackProvider,
                 apiEndpoint = apiEndpoint,
-                counts = TokenCounts(promptTokens, completionTokens, totalTokens),
-                providerCost = ProviderReportedCost(inputCost, outputCost, totalCost)
+                counts = TokenCounts(
+                    promptTokens,
+                    outputIncludingReasoning(apiEndpoint, completionTokens, reasoningOutputTokens),
+                    totalTokens, cachedInputTokens, cacheWriteInputTokens
+                ),
+                providerCost = ProviderReportedCost(
+                    inputCost, outputCost, totalCost, cachedInputCost
+                )
             )
         }
     }
@@ -163,3 +177,17 @@ data class ProviderUsageSnapshot(
     val counts: TokenCounts,
     val providerCost: ProviderReportedCost
 )
+
+/** Reasoning is billed output. Whether a provider's completion count already
+ * includes it is a documented, provider-specific fact: xAI reports reasoning
+ * only in `completion_tokens_details.reasoning_tokens`, outside
+ * `completion_tokens`, so it is added for xAI. Every other provider's
+ * completion count is used as reported, so reasoning is never counted twice. */
+internal fun outputIncludingReasoning(
+    apiEndpoint: String?,
+    output: Int?,
+    reasoning: Int?
+): Int? {
+    if (output == null || reasoning == null || reasoning <= 0) return output
+    return if (PricingSource.forUrl(apiEndpoint) == PricingSource.XAI) output + reasoning else output
+}

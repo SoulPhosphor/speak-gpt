@@ -37,7 +37,11 @@ enum class CostSource(val storedValue: String) {
 data class TokenCounts(
     val inputTokens: Int?,
     val outputTokens: Int?,
-    val totalTokens: Int?
+    val totalTokens: Int?,
+    /** Provider-reported cache-read tokens contained within [inputTokens]. */
+    val cachedInputTokens: Int? = null,
+    /** Provider-reported cache-write tokens contained within [inputTokens]. */
+    val cacheWriteInputTokens: Int? = null
 ) {
     /** Fill only values that can be derived exactly from the reported values. */
     fun withDerivedTotal(): TokenCounts {
@@ -51,25 +55,75 @@ data class TokenCounts(
         if (output == null && total != null && input != null && total >= input) {
             output = total - input
         }
-        return TokenCounts(input, output, total)
+        return TokenCounts(input, output, total, cachedInputTokens, cacheWriteInputTokens)
     }
 
-    fun hasAnyValue(): Boolean = inputTokens != null || outputTokens != null || totalTokens != null
+    fun hasAnyValue(): Boolean = inputTokens != null || outputTokens != null ||
+        totalTokens != null || cachedInputTokens != null || cacheWriteInputTokens != null
 }
 
 data class TokenPricingSnapshot(
     val inputPricePerToken: Double? = null,
-    val outputPricePerToken: Double? = null
-)
+    val outputPricePerToken: Double? = null,
+    val cachedInputPricePerToken: Double? = null,
+    val cacheWriteInputPricePerToken: Double? = null,
+    /** A provider's long-context rates, when it publishes them (Venice). */
+    val extended: ExtendedPricingTier? = null,
+    /** False only when the provider documents that this model offers no
+     * prompt caching, so its cached and cache-write usage is zero. Null when
+     * that is not known. */
+    val cachingOffered: Boolean? = null,
+    /** Featherless alone: true only for the documented request-pricing plan
+     * returned by its ordinary /v1/plan API. Unknown/flat-rate plans do not
+     * acquire calculated per-request charges. Frozen prices remain available. */
+    val featherlessRequestPricingConfirmed: Boolean? = null
+) {
+    fun scaled(factor: Double): TokenPricingSnapshot = copy(
+        inputPricePerToken = inputPricePerToken?.times(factor),
+        outputPricePerToken = outputPricePerToken?.times(factor),
+        cachedInputPricePerToken = cachedInputPricePerToken?.times(factor),
+        cacheWriteInputPricePerToken = cacheWriteInputPricePerToken?.times(factor),
+        extended = extended?.let { it.copy(pricing = it.pricing.scaled(factor)) }
+    )
+
+    /** The rates that apply to a request with [inputTokens] total input. When
+     * the input exceeds the provider's threshold, its extended rates apply to
+     * the whole request. If a tier exists but the input count is unknown, the
+     * applicable rates are unknown. */
+    fun forInputTokens(inputTokens: Int?): TokenPricingSnapshot {
+        val tier = extended ?: return this
+        return when {
+            inputTokens == null -> TokenPricingSnapshot()
+            tier.applies(inputTokens) ->
+                tier.pricing.copy(extended = null, cachingOffered = cachingOffered)
+            else -> copy(extended = null)
+        }
+    }
+}
+
+/** Rates a provider applies to an entire request once its input tokens pass
+ * [inputTokenThreshold]: above it (Venice), or at or above it when
+ * [appliesAtThreshold] is true (xAI). */
+data class ExtendedPricingTier(
+    val inputTokenThreshold: Long,
+    val pricing: TokenPricingSnapshot,
+    val appliesAtThreshold: Boolean = false
+) {
+    fun applies(inputTokens: Int): Boolean =
+        if (appliesAtThreshold) inputTokens >= inputTokenThreshold
+        else inputTokens > inputTokenThreshold
+}
 
 /** Exact monetary values returned by the serving API. A reported total does
  * not imply that the provider supplied an input/output split. */
 data class ProviderReportedCost(
     val inputCost: Double? = null,
     val outputCost: Double? = null,
-    val totalCost: Double? = null
+    val totalCost: Double? = null,
+    val cachedInputCost: Double? = null
 ) {
-    fun hasAnyValue(): Boolean = inputCost != null || outputCost != null || totalCost != null
+    fun hasAnyValue(): Boolean = inputCost != null || outputCost != null ||
+        totalCost != null || cachedInputCost != null
 
     fun withDerivedTotal(): ProviderReportedCost = if (
         totalCost == null && inputCost != null && outputCost != null
@@ -89,11 +143,17 @@ data class TurnUsageRecord(
     val inputTokens: Int? = null,
     val outputTokens: Int? = null,
     val totalTokens: Int? = null,
+    val cachedInputTokens: Int? = null,
+    val cacheWriteInputTokens: Int? = null,
     val source: String = TokenCountSource.ESTIMATED_CL100K.storedValue,
     val inputPricePerToken: Double? = null,
     val outputPricePerToken: Double? = null,
+    val cachedInputPricePerToken: Double? = null,
+    val cacheWriteInputPricePerToken: Double? = null,
     val inputCost: Double? = null,
     val outputCost: Double? = null,
+    val uncachedInputCost: Double? = null,
+    val cachedInputCost: Double? = null,
     val totalCost: Double? = null,
     val costSource: String? = null
 ) {
@@ -117,16 +177,28 @@ data class UsageGroup(
     val provider: String,
     val inputTokens: Int,
     val outputTokens: Int,
+    val uncachedInputTokens: Int,
+    val cachedInputTokens: Int,
     val inputCost: Double,
     val outputCost: Double,
+    val uncachedInputCost: Double,
+    val cachedInputCost: Double,
     val totalCost: Double,
     val inputPricePerToken: Double?,
     val outputPricePerToken: Double?,
+    val cachedInputPricePerToken: Double?,
     val hasUnknownInputTokens: Boolean,
     val hasUnknownOutputTokens: Boolean,
+    val hasUnknownUncachedInputTokens: Boolean,
+    val hasUnknownCachedInputTokens: Boolean,
     val hasUnknownInputCost: Boolean,
     val hasUnknownOutputCost: Boolean,
+    val hasUnknownUncachedInputCost: Boolean,
+    val hasUnknownCachedInputCost: Boolean,
     val hasUnknownCost: Boolean,
+    val hasVariableInputPricing: Boolean,
+    val hasVariableOutputPricing: Boolean,
+    val hasVariableCachedInputPricing: Boolean,
     val hasVariablePricing: Boolean,
     val containsEstimatedTokens: Boolean,
     val recordCount: Int
@@ -137,12 +209,18 @@ data class ConversationUsageSummary(
 ) {
     val totalInputTokens: Int get() = groups.sumOf { it.inputTokens }
     val totalOutputTokens: Int get() = groups.sumOf { it.outputTokens }
+    val totalUncachedInputTokens: Int get() = groups.sumOf { it.uncachedInputTokens }
+    val totalCachedInputTokens: Int get() = groups.sumOf { it.cachedInputTokens }
     val totalCost: Double get() = groups.sumOf { it.totalCost }
     val isMultiPricing: Boolean get() = groups.size > 1
     val hasUnknownInputTokens: Boolean get() = groups.any { it.hasUnknownInputTokens }
     val hasUnknownOutputTokens: Boolean get() = groups.any { it.hasUnknownOutputTokens }
+    val hasUnknownUncachedInputTokens: Boolean get() = groups.any { it.hasUnknownUncachedInputTokens }
+    val hasUnknownCachedInputTokens: Boolean get() = groups.any { it.hasUnknownCachedInputTokens }
     val hasUnknownInputCost: Boolean get() = groups.any { it.hasUnknownInputCost }
     val hasUnknownOutputCost: Boolean get() = groups.any { it.hasUnknownOutputCost }
+    val hasUnknownUncachedInputCost: Boolean get() = groups.any { it.hasUnknownUncachedInputCost }
+    val hasUnknownCachedInputCost: Boolean get() = groups.any { it.hasUnknownCachedInputCost }
     val hasUnknownCost: Boolean get() = groups.any { it.hasUnknownCost }
 }
 
@@ -167,6 +245,33 @@ object TokenUsageAccounting {
         } catch (_: Exception) {
             emptyList()
         }
+    }
+
+    /** The no-tools retry removes an empty assistant placeholder. Preserve its
+     * already-frozen usage on the initiating user message before removing it,
+     * including variant records without their duplicated top-level mirror.
+     * No counts, prices, or costs are recalculated here. */
+    fun removeEmptyAssistantForToolRetry(
+        messages: MutableList<HashMap<String, Any>>
+    ): Boolean {
+        val placeholder = messages.lastOrNull() ?: return false
+        if (placeholder["isBot"] != true || placeholder["message"].toString().isNotEmpty()) {
+            return false
+        }
+        val variants = decodeVariantRecords(placeholder[KEY_VARIANTS]?.toString())
+        val records = variants.ifEmpty {
+            decodeRecords(placeholder[KEY_USAGE_RECORDS]?.toString())
+        }
+        if (records.isNotEmpty()) {
+            // Retain the placeholder if no durable carrier exists, rather than
+            // discarding reported usage. Normal retries have a user message.
+            val carrier = messages.dropLast(1).lastOrNull { it["isBot"] != true }
+                ?: return false
+            val existing = decodeRecords(carrier[KEY_USAGE_RECORDS]?.toString())
+            carrier[KEY_USAGE_RECORDS] = encodeRecords(existing + records)
+        }
+        messages.removeAt(messages.lastIndex)
+        return true
     }
 
     /** Regenerated replies retain every completed response as a variant while
@@ -218,7 +323,7 @@ object TokenUsageAccounting {
     fun encodeSummary(summary: ConversationUsageSummary): String = gson.toJson(summary)
 
     /**
-     * Decode the transport copy handed to Quick Settings / Pricing Details.
+     * Decode the transport copy handed to the Usage & Cost screen.
      * Do not ask Gson to discover List<UsageGroup> from the backing field's
      * generic signature: R8 can erase that signature in a minified APK, which
      * makes Gson populate the list with LinkedTreeMap and crashes the first
@@ -265,27 +370,83 @@ object TokenUsageAccounting {
         source: TokenCountSource,
         pricing: TokenPricingSnapshot,
         providerCost: ProviderReportedCost? = null
+    ): TurnUsageRecord = createRecordFromReported(
+        model, provider, apiEndpoint, counts, source, pricing, providerCost
+    )
+
+    private fun createRecordFromReported(
+        model: String,
+        provider: String,
+        apiEndpoint: String?,
+        reportedCounts: TokenCounts,
+        source: TokenCountSource,
+        pricing: TokenPricingSnapshot,
+        providerCost: ProviderReportedCost?
     ): TurnUsageRecord {
-        val exactCost = providerCost?.takeIf { it.hasAnyValue() }?.withDerivedTotal()
-        val calculatedInputCost = counts.inputTokens?.let { count ->
-            pricing.inputPricePerToken?.let { count * it }
+        val costsApplicable = PricingSource.forUrl(apiEndpoint) != PricingSource.FEATHERLESS ||
+            pricing.featherlessRequestPricingConfirmed == true
+        // Featherless does not document receipt fields in ordinary completions.
+        // Do not mistake generic-looking fields for a billed charge, especially
+        // when the plan is flat-rate or its billing applicability is unknown.
+        val exactCost = providerCost?.takeIf { costsApplicable && it.hasAnyValue() }
+            ?.withDerivedTotal()
+        val applied = pricing.forInputTokens(reportedCounts.inputTokens)
+        // A model the provider documents as having no caching has zero cached
+        // usage. Otherwise an unreported cache split stays unknown; it is never
+        // assumed to be zero in order to price the input.
+        val counts = if (applied.cachingOffered == false && reportedCounts.cachedInputTokens == null) {
+            reportedCounts.copy(
+                cachedInputTokens = 0,
+                cacheWriteInputTokens = reportedCounts.cacheWriteInputTokens ?: 0
+            )
+        } else reportedCounts
+        val uncachedInputTokens = if (
+            counts.inputTokens != null && counts.cachedInputTokens != null &&
+            counts.inputTokens >= counts.cachedInputTokens
+        ) counts.inputTokens - counts.cachedInputTokens else null
+        val calculatedUncachedInputCost = uncachedInputTokens?.takeIf { costsApplicable }?.let { count ->
+            val writeTokens = counts.cacheWriteInputTokens
+            when {
+                writeTokens == null || writeTokens > count -> null
+                writeTokens == 0 -> applied.inputPricePerToken?.let { count * it }
+                else -> {
+                    val regularCost = applied.inputPricePerToken
+                        ?.let { (count - writeTokens) * it }
+                    val writeCost = applied.cacheWriteInputPricePerToken
+                        ?.let { writeTokens * it }
+                    if (regularCost != null && writeCost != null) regularCost + writeCost else null
+                }
+            }
         }
-        val calculatedOutputCost = counts.outputTokens?.let { count ->
-            pricing.outputPricePerToken?.let { count * it }
+        val calculatedCachedInputCost = counts.cachedInputTokens?.takeIf { costsApplicable }?.let { count ->
+            if (count == 0) 0.0 else applied.cachedInputPricePerToken?.let { count * it }
+        }
+        val calculatedSplitInputCost = if (
+            calculatedUncachedInputCost != null && calculatedCachedInputCost != null
+        ) calculatedUncachedInputCost + calculatedCachedInputCost else null
+        val calculatedOutputCost = counts.outputTokens?.takeIf { costsApplicable }?.let { count ->
+            applied.outputPricePerToken?.let { count * it }
         }
         val inputCost: Double?
         val outputCost: Double?
+        val uncachedInputCost: Double?
+        val cachedInputCost: Double?
         val totalCost: Double?
         val costSource: CostSource
         if (exactCost != null) {
-            // Provider cost is authoritative as a unit. Never fill an absent
-            // provider split with nominal-price calculations.
-            inputCost = exactCost.inputCost
-            outputCost = exactCost.outputCost
+            // The provider total remains authoritative. Category costs use
+            // explicit provider components when present, otherwise the frozen
+            // per-request prices and token breakdown captured with this record.
+            cachedInputCost = exactCost.cachedInputCost ?: calculatedCachedInputCost
+            uncachedInputCost = calculatedUncachedInputCost
+            inputCost = exactCost.inputCost ?: calculatedSplitInputCost
+            outputCost = exactCost.outputCost ?: calculatedOutputCost
             totalCost = exactCost.totalCost
             costSource = CostSource.PROVIDER_REPORTED
         } else {
-            inputCost = calculatedInputCost
+            uncachedInputCost = calculatedUncachedInputCost
+            cachedInputCost = calculatedCachedInputCost
+            inputCost = calculatedSplitInputCost
             outputCost = calculatedOutputCost
             totalCost = if (inputCost != null && outputCost != null) inputCost + outputCost else null
             costSource = if (inputCost != null || outputCost != null || totalCost != null) {
@@ -301,11 +462,17 @@ object TokenUsageAccounting {
             inputTokens = counts.inputTokens,
             outputTokens = counts.outputTokens,
             totalTokens = counts.totalTokens,
+            cachedInputTokens = counts.cachedInputTokens,
+            cacheWriteInputTokens = counts.cacheWriteInputTokens,
             source = source.storedValue,
-            inputPricePerToken = pricing.inputPricePerToken,
-            outputPricePerToken = pricing.outputPricePerToken,
+            inputPricePerToken = applied.inputPricePerToken,
+            outputPricePerToken = applied.outputPricePerToken,
+            cachedInputPricePerToken = applied.cachedInputPricePerToken,
+            cacheWriteInputPricePerToken = applied.cacheWriteInputPricePerToken,
             inputCost = inputCost,
             outputCost = outputCost,
+            uncachedInputCost = uncachedInputCost,
+            cachedInputCost = cachedInputCost,
             totalCost = totalCost,
             costSource = costSource.storedValue
         )
@@ -317,6 +484,15 @@ object TokenUsageAccounting {
         return ConversationUsageSummary(grouped.map { (_, rows) ->
             val inputPrices = rows.mapNotNull { it.inputPricePerToken }.distinctPriceValues()
             val outputPrices = rows.mapNotNull { it.outputPricePerToken }.distinctPriceValues()
+            val cachedInputPrices = rows.mapNotNull { it.cachedInputPricePerToken }.distinctPriceValues()
+            val cacheWriteInputPrices = rows.mapNotNull { it.cacheWriteInputPricePerToken }
+                .distinctPriceValues()
+            val hasCacheWritePricing = rows.any { (it.cacheWriteInputTokens ?: 0) > 0 } &&
+                (cacheWriteInputPrices.size > 1 || rows.any {
+                    (it.cacheWriteInputTokens ?: 0) > 0 &&
+                        (it.cacheWriteInputPricePerToken == null ||
+                            it.cacheWriteInputPricePerToken != it.inputPricePerToken)
+                })
             val displayModel = rows.first().model.trim().ifBlank { MODEL_NOT_REPORTED }
             val displayProvider = rows.first().provider.trim().ifBlank { PROVIDER_NOT_REPORTED }
             UsageGroup(
@@ -324,19 +500,40 @@ object TokenUsageAccounting {
                 provider = displayProvider,
                 inputTokens = rows.sumOf { it.inputTokens ?: 0 },
                 outputTokens = rows.sumOf { it.outputTokens ?: 0 },
+                uncachedInputTokens = rows.sumOf { row ->
+                    if (row.inputTokens != null && row.cachedInputTokens != null &&
+                        row.inputTokens >= row.cachedInputTokens
+                    ) row.inputTokens - row.cachedInputTokens else 0
+                },
+                cachedInputTokens = rows.sumOf { it.cachedInputTokens ?: 0 },
                 inputCost = rows.sumOf { it.inputCost ?: 0.0 },
                 outputCost = rows.sumOf { it.outputCost ?: 0.0 },
+                uncachedInputCost = rows.sumOf { it.uncachedInputCost ?: 0.0 },
+                cachedInputCost = rows.sumOf { it.cachedInputCost ?: 0.0 },
                 totalCost = rows.sumOf { it.totalCost ?: 0.0 },
                 inputPricePerToken = inputPrices.singleOrNull()
                     ?.takeIf { rows.all { it.inputPricePerToken != null } },
                 outputPricePerToken = outputPrices.singleOrNull()
                     ?.takeIf { rows.all { it.outputPricePerToken != null } },
+                cachedInputPricePerToken = cachedInputPrices.singleOrNull()
+                    ?.takeIf { rows.all { it.cachedInputPricePerToken != null } },
                 hasUnknownInputTokens = rows.any { it.inputTokens == null },
                 hasUnknownOutputTokens = rows.any { it.outputTokens == null },
+                hasUnknownUncachedInputTokens = rows.any {
+                    it.inputTokens == null || it.cachedInputTokens == null ||
+                        it.cachedInputTokens > it.inputTokens
+                },
+                hasUnknownCachedInputTokens = rows.any { it.cachedInputTokens == null },
                 hasUnknownInputCost = rows.any { it.inputCost == null },
                 hasUnknownOutputCost = rows.any { it.outputCost == null },
+                hasUnknownUncachedInputCost = rows.any { it.uncachedInputCost == null },
+                hasUnknownCachedInputCost = rows.any { it.cachedInputCost == null },
                 hasUnknownCost = rows.any { it.totalCost == null },
-                hasVariablePricing = inputPrices.size > 1 || outputPrices.size > 1,
+                hasVariableInputPricing = inputPrices.size > 1 || hasCacheWritePricing,
+                hasVariableOutputPricing = outputPrices.size > 1,
+                hasVariableCachedInputPricing = cachedInputPrices.size > 1,
+                hasVariablePricing = inputPrices.size > 1 || outputPrices.size > 1 ||
+                    cachedInputPrices.size > 1 || hasCacheWritePricing,
                 containsEstimatedTokens = rows.any { it.countSource == TokenCountSource.ESTIMATED_CL100K },
                 recordCount = rows.size
             )
@@ -400,7 +597,7 @@ object UsageValueFormatter {
     const val NOT_REPORTED = "Not Reported"
 
     fun tokens(knownSum: Int, hasUnknownPart: Boolean): String =
-        if (hasUnknownPart) NOT_REPORTED else knownSum.toString()
+        if (hasUnknownPart) NOT_REPORTED else String.format(Locale.US, "%,d", knownSum)
 
     fun cost(knownSum: Double, hasUnknownPart: Boolean): String = when {
         hasUnknownPart -> NOT_REPORTED
@@ -412,45 +609,9 @@ object UsageValueFormatter {
         "\$" + String.format(Locale.US, "%.2f", it * 1_000_000)
     } ?: NOT_REPORTED
 
+    fun percentage(numerator: Int, denominator: Int, hasUnknownPart: Boolean): String =
+        if (hasUnknownPart || denominator <= 0) NOT_REPORTED
+        else String.format(Locale.US, "%.1f%%", numerator.toDouble() * 100.0 / denominator)
+
     private const val MIN_DISPLAYED_COST = 0.00001
-}
-
-enum class UsageCardMode { EMPTY, SINGLE_PRICING, MULTI_PRICING }
-
-data class QuickSettingsUsagePresentation(
-    val mode: UsageCardMode,
-    val totalInputTokens: Int,
-    val totalOutputTokens: Int,
-    val totalCost: Double,
-    val singleGroup: UsageGroup? = null,
-    val hasUnknownInputTokens: Boolean = false,
-    val hasUnknownOutputTokens: Boolean = false,
-    val hasUnknownCost: Boolean = false
-) {
-    val showPricingDetails: Boolean get() = mode == UsageCardMode.MULTI_PRICING
-
-    companion object {
-        fun from(summary: ConversationUsageSummary): QuickSettingsUsagePresentation = when {
-            summary.groups.isEmpty() -> QuickSettingsUsagePresentation(UsageCardMode.EMPTY, 0, 0, 0.0)
-            summary.groups.size == 1 -> QuickSettingsUsagePresentation(
-                UsageCardMode.SINGLE_PRICING,
-                summary.totalInputTokens,
-                summary.totalOutputTokens,
-                summary.totalCost,
-                summary.groups.single(),
-                summary.hasUnknownInputTokens,
-                summary.hasUnknownOutputTokens,
-                summary.hasUnknownCost
-            )
-            else -> QuickSettingsUsagePresentation(
-                UsageCardMode.MULTI_PRICING,
-                summary.totalInputTokens,
-                summary.totalOutputTokens,
-                summary.totalCost,
-                hasUnknownInputTokens = summary.hasUnknownInputTokens,
-                hasUnknownOutputTokens = summary.hasUnknownOutputTokens,
-                hasUnknownCost = summary.hasUnknownCost
-            )
-        }
-    }
 }

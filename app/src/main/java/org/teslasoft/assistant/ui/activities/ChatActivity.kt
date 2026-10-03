@@ -1112,7 +1112,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
     }
 
-    /** Build the card from frozen per-request records. CL100K runs only for
+    /** Build the usage summary from frozen per-request records. CL100K runs only for
      * legacy assistant messages that have no durable record; a new
      * provider-reported turn never reaches the tokenizer. */
     private fun calculateCost() {
@@ -4680,9 +4680,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 if (savedChat != null) {
                     menu.add(Menu.NONE, 1, 1, R.string.chat_menu_export)
                 }
-                menu.add(Menu.NONE, 2, 2, R.string.alert_debug_section_logs)
+                menu.add(Menu.NONE, 5, 2, R.string.usage_cost_title)
+                menu.add(Menu.NONE, 2, 3, R.string.alert_debug_section_logs)
                 if (savedChat != null) {
-                    menu.add(Menu.NONE, 3, 3, R.string.btn_delete)
+                    menu.add(Menu.NONE, 3, 4, R.string.btn_delete)
                 }
                 setOnMenuItemClickListener { item ->
                     when (item.itemId) {
@@ -4706,6 +4707,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                             )
                             true
                         }
+                        5 -> {
+                            openUsageAndCost()
+                            true
+                        }
                         3 -> {
                             showChatDeleteDialog()
                             true
@@ -4721,6 +4726,20 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun showChatExportDialog() {
         ChatExportDialog.show(this) { options ->
             exportChat(options)
+        }
+    }
+
+    private fun openUsageAndCost() {
+        lifecycleScope.launch {
+            val summary = refreshConversationUsageSummary()
+            if (isFinishing || isDestroyed) return@launch
+            startActivity(
+                Intent(this@ChatActivity, TokenPricingDetailsActivity::class.java)
+                    .putExtra(
+                        TokenPricingDetailsActivity.EXTRA_USAGE_SUMMARY,
+                        TokenUsageAccounting.encodeSummary(summary)
+                    )
+            )
         }
     }
 
@@ -6609,12 +6628,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun openSummoningCircle() {
         if (isFinishing || isDestroyed) return
         lifecycleScope.launch {
-            val summary = refreshConversationUsageSummary()
-            if (isFinishing || isDestroyed) return@launch
-            val sheet = QuickSettingsBottomSheetDialogFragment.newInstance(
-                chatId,
-                TokenUsageAccounting.encodeSummary(summary)
-            )
+            val sheet = QuickSettingsBottomSheetDialogFragment.newInstance(chatId)
             sheet.setOnUpdateListener(object : QuickSettingsBottomSheetDialogFragment.OnUpdateListener {
                 override fun onUpdate() {
                     refreshCompanionAvatar()
@@ -8179,10 +8193,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         recordChatToolCapability(model, ToolCapability.UNSUPPORTED)
         runOnUiThread {
-            if (messages.isNotEmpty() && messages.last()["isBot"] == true &&
-                messages.last()["message"].toString().isEmpty()
-            ) {
-                messages.removeAt(messages.size - 1)
+            if (TokenUsageAccounting.removeEmptyAssistantForToolRetry(messages)) {
                 adapter?.notifyItemRemoved(messages.size)
                 updateMessagesSelectionProjection()
             }
@@ -8789,15 +8800,68 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         outcome: ResponseLifecycle.Outcome, finishReasonDisplay: String,
         streamClosed: Boolean, termination: ResponseLifecycle.Termination, errorText: String?
     ) {
+        val terminalAttempt = currentProviderUsageAttempt
+        val terminalPricing = currentPricingCatalog
+        val terminalRecord = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            completeTerminalUsageRecord(terminalAttempt, terminalPricing)
+        }
         currentProviderUsageAttempt = null
         currentPricingCatalog?.cancel()
         currentPricingCatalog = null
         pendingProviderUsageSnapshot = null
         pendingCompletedPricingCatalog?.cancel()
         pendingCompletedPricingCatalog = null
+        terminalRecord?.let { record ->
+            val carrier = messages.lastOrNull { it["isBot"] == true }
+                ?: messages.lastOrNull { it["isBot"] != true }
+            carrier?.let {
+                attachUsageRecords(it, listOf(record), it["isBot"] == true)
+                mirrorUsageRecordsToCanonicalVariant(it)
+            }
+        }
         val r = currentLifecycle ?: return
         if (r.finalized) return
         writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
+    }
+
+    /** A reply with versions is totalled from its version list, and its
+     * top-level fields mirror the canonical version. A record added to the
+     * top level must therefore also be written into that version, or it would
+     * be left out of the totals and lost when another version is shown. */
+    private fun mirrorUsageRecordsToCanonicalVariant(message: HashMap<String, Any>) {
+        val variants = ChatAdapter.parseVariants(message[ChatAdapter.KEY_VARIANTS]?.toString())
+        if (variants.isEmpty()) return
+        val canonical = (message[ChatAdapter.KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull()
+            ?: variants.lastIndex).coerceIn(0, variants.lastIndex)
+        val records = message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS]?.toString() ?: return
+        variants[canonical][ChatAdapter.KEY_TOKEN_USAGE_RECORDS] = records
+        message[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(variants)
+    }
+
+    /** A stopped or failed request counts only when the serving API actually
+     * returned usage or charged-cost evidence. Never estimate an interrupted
+     * request, but never discard a charge merely because no final reply is
+     * visible in chat. */
+    private suspend fun completeTerminalUsageRecord(
+        attempt: ProviderUsageAttempt?,
+        pricingDeferred: Deferred<TokenPricingCatalog>?
+    ): TurnUsageRecord? {
+        val snapshot = attempt?.snapshot() ?: return null
+        if (!snapshot.counts.hasAnyValue() && !snapshot.providerCost.hasAnyValue()) return null
+        val catalog = kotlinx.coroutines.withTimeoutOrNull(500L) { pricingDeferred?.await() }
+        val pricing = catalog
+            ?.takeIf { it.model.equals(snapshot.model, ignoreCase = true) }
+            ?.pricingFor(snapshot.provider)
+            ?: TokenPricingSnapshot()
+        return TokenUsageAccounting.createRecord(
+            model = snapshot.model,
+            provider = snapshot.provider,
+            apiEndpoint = snapshot.apiEndpoint,
+            counts = snapshot.counts.withDerivedTotal(),
+            source = org.teslasoft.assistant.usage.TokenCountSource.PROVIDER_REPORTED,
+            pricing = pricing,
+            providerCost = snapshot.providerCost
+        )
     }
 
     /** Surface non-fatal provider warnings without contaminating model text. */
