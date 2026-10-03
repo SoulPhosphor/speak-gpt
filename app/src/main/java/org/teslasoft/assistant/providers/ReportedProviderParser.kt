@@ -275,6 +275,10 @@ internal class RawSseInspector {
             }
             usage.intOrNull("total_tokens")?.let { totalTokens = it }
             usage.firstDoubleOrNull("cost", "total_cost")?.let { totalCost = it }
+            // xAI reports the charged amount in ticks: 10^10 ticks per dollar.
+            if (totalCost == null) {
+                usage.firstDoubleOrNull("cost_in_usd_ticks")?.let { totalCost = it / 1e10 }
+            }
             usage.firstDoubleOrNull("input_cost", "prompt_cost")?.let { inputCost = it }
             usage.firstDoubleOrNull("output_cost", "completion_cost")?.let { outputCost = it }
             usage.firstDoubleOrNull("cached_input_cost", "cache_read_cost", "cache_cost")

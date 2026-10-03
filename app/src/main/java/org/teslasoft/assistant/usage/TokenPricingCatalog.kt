@@ -68,8 +68,12 @@ object TokenPricingCatalogClient {
                     loadOpenRouter(endpoint, model)
                 } else {
                     val author = FirstPartyPricing.openRouterAuthorFor(endpoint)
-                    if (author != null) loadFirstParty(author, model)
-                    else loadGeneric(endpoint, model)
+                    when {
+                        author == null -> loadGeneric(endpoint, model)
+                        author == FirstPartyPricing.XAI ->
+                            loadXai(endpoint, model) ?: loadFirstParty(author, model)
+                        else -> loadFirstParty(author, model)
+                    }
                 }
             } catch (_: Exception) {
                 null
@@ -98,6 +102,18 @@ object TokenPricingCatalogClient {
             fetched
         }
         val pricing = FirstPartyPricing.match(body, author, model) ?: return null
+        return TokenPricingCatalog(model, modelPricing = pricing)
+    }
+
+    /** xAI publishes its own prices with the user's key, which is more accurate
+     * than OpenRouter's copy. OpenRouter's public list remains the fallback. */
+    private fun loadXai(endpoint: ApiEndpointObject, model: String): TokenPricingCatalog? {
+        val base = endpoint.host.toHttpUrlOrNull() ?: return null
+        val body = fetch(
+            endpoint,
+            base.newBuilder().addPathSegment("language-models").build().toString()
+        ) ?: return null
+        val pricing = FirstPartyPricing.matchXai(body, model) ?: return null
         return TokenPricingCatalog(model, modelPricing = pricing)
     }
 
@@ -158,10 +174,12 @@ object TokenPricingCatalogClient {
  * the API's model name (often a dated snapshot) to that author's catalog entry.
  * An unmatched model has no price rather than a guessed one. */
 internal object FirstPartyPricing {
+    const val XAI = "x-ai"
+
     private val authorsByHost = mapOf(
         "api.openai.com" to "openai",
         "api.anthropic.com" to "anthropic",
-        "api.x.ai" to "x-ai"
+        "api.x.ai" to XAI
     )
     private val snapshotDate = Regex("-(\\d{8}|\\d{4}-\\d{2}-\\d{2}|(0[1-9]|1[0-2])\\d{2})$")
     private val reasoningMode = Regex("-(non-)?reasoning$")
@@ -211,8 +229,43 @@ internal object FirstPartyPricing {
         val withoutAlias = requested.removeSuffix("-latest")
         val withoutDate = withoutAlias.replace(snapshotDate, "")
         val candidates = mutableListOf(requested, withoutAlias, withoutDate)
-        if (author == "x-ai") candidates += withoutDate.replace(reasoningMode, "")
+        if (author == XAI) candidates += withoutDate.replace(reasoningMode, "")
         return candidates.distinct().firstNotNullOfOrNull { lookup(it) }
+    }
+
+    /** xAI's own list (`/language-models`). Prices are in USD cents per 100
+     * million tokens, so dividing by 10^10 gives dollars per token. A model is
+     * matched by its id or one of its aliases. */
+    fun matchXai(catalogJson: String, model: String): TokenPricingSnapshot? {
+        val root = try {
+            JsonParser.parseString(catalogJson).takeIf { it.isJsonObject }?.asJsonObject
+        } catch (_: Exception) { null } ?: return null
+        val models = (root.get("models") ?: root.get("data"))
+            ?.takeIf { it.isJsonArray }?.asJsonArray ?: return null
+        val requested = normalize(model.trim().lowercase().removePrefix("$XAI/"))
+        models.forEach { element ->
+            val item = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
+            val aliases = item.get("aliases")?.takeIf { it.isJsonArray }?.asJsonArray
+                ?.mapNotNull { alias ->
+                    alias.takeIf { it.isJsonPrimitive }?.asString
+                }.orEmpty()
+            val names = (listOfNotNull(item.stringOrNull("id")) + aliases)
+                .map { normalize(it.trim().lowercase()) }
+            if (requested !in names) return@forEach
+            fun price(name: String): Double? = try {
+                item.get(name)?.takeIf { it.isJsonPrimitive }?.asDouble
+                    ?.takeIf { it >= 0.0 }?.div(1e10)
+            } catch (_: Exception) { null }
+            val snapshot = TokenPricingSnapshot(
+                price("prompt_text_token_price"),
+                price("completion_text_token_price"),
+                price("cached_prompt_text_token_price")
+            )
+            return snapshot.takeIf {
+                it.inputPricePerToken != null && it.outputPricePerToken != null
+            }
+        }
+        return null
     }
 
     private fun normalize(name: String): String = name.replace('.', '-')

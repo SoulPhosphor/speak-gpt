@@ -143,6 +143,16 @@ class ReportedProviderParserTest {
         assertEquals(0.00003, usage.cachedInputCost!!, 0.000000001)
     }
 
+    @Test fun convertsXaiCostTicksIntoChargedDollars() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"prompt_tokens\":199,\"completion_tokens\":1," +
+                "\"total_tokens\":200,\"cost_in_usd_ticks\":37756000}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(0.0037756, usage.totalCost!!, 0.000000001)
+    }
+
     @Test fun normalizesAnthropicCacheReadIntoTotalPromptTokens() {
         val inspector = RawSseInspector()
         inspector.acceptLine(

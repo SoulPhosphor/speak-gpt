@@ -23,7 +23,7 @@ a detail; the file list at the end shows where each part lives.
 | Number on screen | Where it comes from |
 | --- | --- |
 | Token counts | Reported by the AI service in each reply. Never guessed for new replies. |
-| Total cost | The actual charge, when the service reports one (OpenRouter). Otherwise tokens × the price saved with that request. |
+| Total cost | The actual charge, when the service reports one (OpenRouter, xAI). Otherwise tokens × the price saved with that request. |
 | Input / Output / Cached cost | Always tokens × the price saved with that request. |
 | Prices | Fetched when the request starts and saved with the request. Never re-fetched later. |
 | Cache Hit Rate | Cached input ÷ all input (cached + uncached). |
@@ -56,6 +56,14 @@ have no prices and no cache information.
 
 ## 2. Prices
 
+**Rule (owner decision, October 2026): always use the most accurate source
+available.** In order:
+
+1. the actual charge the service reports for the request;
+2. the service's own published price list;
+3. OpenRouter's price for that service's model;
+4. nothing. The value shows "Not Reported"; a price is never guessed.
+
 Prices are fetched in the background when a request starts. When the request
 finishes, they are frozen into that request's record. A price change later
 never changes an old record.
@@ -67,14 +75,27 @@ Where prices come from depends on the connection:
 | OpenRouter | OpenRouter's provider list for that model (the endpoint list for `{model}`). The app uses the price of the provider that actually served the reply: input, output, cached and cache-write prices. |
 | OpenAI direct (`api.openai.com`) | OpenRouter's **public** model list, `https://openrouter.ai/api/v1/models`, entries starting `openai/`. |
 | Anthropic direct (`api.anthropic.com`) | Same public list, entries starting `anthropic/`. |
-| xAI / Grok direct (`api.x.ai`) | Same public list, entries starting `x-ai/`. |
+| xAI / Grok direct (`api.x.ai`) | xAI's own price list (`/language-models`, fetched with the user's xAI key). If that fails or has no match, the public OpenRouter list, entries starting `x-ai/`. |
 | Any other service | That service's own `/models` list, if it includes an OpenRouter-style `pricing` section. Otherwise no prices. |
 
-### Why OpenAI, Anthropic and xAI use OpenRouter's list
+### Why OpenAI and Anthropic use OpenRouter's list
 
-The model lists from OpenAI, Anthropic and xAI give model names and
-capabilities but no prices. OpenRouter publishes current prices for their
-models in a list anyone can download. Owner decision, October 2026.
+The model lists from OpenAI and Anthropic give model names and capabilities
+but no prices. OpenRouter publishes current prices for their models in a list
+anyone can download. Owner decision, October 2026.
+
+### xAI's own price list
+
+xAI publishes prices in `/language-models`. The fields used are
+`prompt_text_token_price`, `cached_prompt_text_token_price` and
+`completion_text_token_price`. xAI states these in US cents per 100 million
+tokens, so the app divides by 10,000,000,000 to get dollars per token. A model
+is matched by its `id` or any of its `aliases`. This list is fetched on every
+request and not kept.
+
+xAI also charges a higher rate for very long prompts on some models; the
+price list gives only the base rate. The real charge (section 3) covers this
+for the Total.
 
 The built-in OpenAI price table that existed before has been removed. Its
 values were ten times too high.
@@ -112,7 +133,11 @@ values were ten times too high.
 
 ### When the service reports the actual charge
 
-This currently applies to OpenRouter, through `usage.cost` / `total_cost`.
+This currently applies to:
+
+- **OpenRouter**, through `usage.cost` / `total_cost`, in dollars.
+- **xAI**, through `usage.cost_in_usd_ticks`. There are 10,000,000,000 ticks
+  per dollar.
 
 - **Total** is the reported charge, exactly.
 - **Cached and Output costs** use the service's own breakdown when it sends
@@ -186,9 +211,11 @@ These are known and not yet decided or fixed.
 2. **Cache-write counts:** these are read only from Claude-style replies. If
    OpenRouter reports cache writes in another field, the app ignores it, and
    those tokens are priced as normal input.
-3. **Grok's actual charge:** xAI reports the real charge on every reply
-   (`usage.cost_in_usd_ticks`, 10,000,000,000 ticks per dollar). The app does
-   not read it yet, so Grok Totals are calculated from list prices.
+3. **Grok reasoning tokens:** xAI reports reasoning tokens separately
+   (`completion_tokens_details.reasoning_tokens`). Its `completion_tokens`
+   excludes them, unlike OpenAI's. The Output row for Grok reasoning models
+   therefore shows too few tokens and too low a cost. The Total is still
+   correct, because it is xAI's real charge.
 4. **Stopped request on a regenerated reply:** a stopped or failed request's
    record is attached to the reply's main record list. If that reply has
    multiple versions, the totals read only the per-version lists, so this
@@ -205,7 +232,7 @@ These are known and not yet decided or fixed.
 | --- | --- |
 | Reading usage from the reply stream | `app/src/main/java/org/teslasoft/assistant/providers/ReportedProviderParser.kt` (`RawSseInspector`) |
 | Per-request capture | `app/src/main/java/org/teslasoft/assistant/usage/ProviderUsageAttempt.kt` |
-| Price fetching and name matching | `app/src/main/java/org/teslasoft/assistant/usage/TokenPricingCatalog.kt` (`TokenPricingCatalogClient`, `FirstPartyPricing`) |
+| Price fetching and name matching | `app/src/main/java/org/teslasoft/assistant/usage/TokenPricingCatalog.kt` (`TokenPricingCatalogClient`, `FirstPartyPricing`, including `matchXai`) |
 | Cost math, grouping, "Not Reported" formatting | `app/src/main/java/org/teslasoft/assistant/usage/TokenUsageAccounting.kt` |
 | When records are created and attached | `app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt` (`completePendingUsageRecord`, `completeTerminalUsageRecord`, `attachUsageRecords`, `openUsageAndCost`) |
 | The screen | `app/src/main/java/org/teslasoft/assistant/ui/activities/TokenPricingDetailsActivity.kt` |

@@ -48,6 +48,24 @@ class TokenPricingCatalogTest {
         assertNotNull(FirstPartyPricing.match(CATALOG, "x-ai", "grok-4-0709"))
     }
 
+    @Test fun xaiOwnPriceListMatchesAliasesAndConvertsUnits() {
+        val catalog = """
+            {"models": [
+              {"id": "grok-4-0709", "aliases": ["grok-4", "grok-4-latest"],
+               "prompt_text_token_price": 30000,
+               "cached_prompt_text_token_price": 7500,
+               "completion_text_token_price": 150000}
+            ]}
+        """.trimIndent()
+        val pricing = FirstPartyPricing.matchXai(catalog, "grok-4")!!
+        assertEquals(0.000003, pricing.inputPricePerToken!!, 1e-15)
+        assertEquals(0.00000075, pricing.cachedInputPricePerToken!!, 1e-15)
+        assertEquals(0.000015, pricing.outputPricePerToken!!, 1e-15)
+        assertNotNull(FirstPartyPricing.matchXai(catalog, "grok-4-0709"))
+        assertNull(FirstPartyPricing.matchXai(catalog, "grok-3"))
+        assertNull(FirstPartyPricing.matchXai("not json", "grok-4"))
+    }
+
     @Test fun unmatchedOrForeignModelsHaveNoPrice() {
         assertNull(FirstPartyPricing.match(CATALOG, "openai", "gpt-unknown"))
         assertNull(FirstPartyPricing.match(CATALOG, "anthropic", "gpt-4o"))
