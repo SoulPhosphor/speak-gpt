@@ -1700,6 +1700,14 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                         context.getString(R.string.include_menu_desc, include.fileName)
                     action.setOnClickListener { showIncludeRowMenu(it, include) }
                 }
+                row.findViewById<ImageButton>(R.id.summary_item_remove)?.let { remove ->
+                    remove.contentDescription =
+                        context.getString(R.string.include_remove_desc, include.fileName)
+                    remove.setOnClickListener {
+                        if (!bulkActionMode) listener?.onIncludeRemove(include.id)
+                    }
+                }
+                tintIncludeSummaryRow(row, message.currentTextColor)
                 list.addView(row)
             }
         }
@@ -1990,7 +1998,23 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         /** The compact metadata line follows the bubble's text color so it
          *  contrasts on any theme, held at reduced opacity so it reads as
          *  subordinate to the reply without a hardcoded muted color. */
+        private fun tintIncludeSummaryRow(row: View, foreground: Int) {
+            for (id in intArrayOf(R.id.summary_item_name, R.id.summary_item_format, R.id.summary_item_weight)) {
+                row.findViewById<TextView>(id)?.setTextColor(foreground)
+            }
+            for (id in intArrayOf(R.id.summary_item_icon, R.id.summary_item_action, R.id.summary_item_remove)) {
+                row.findViewById<ImageView>(id)?.imageTintList = android.content.res.ColorStateList.valueOf(foreground)
+            }
+        }
+
         private fun applyMetaForeground(foreground: Int) {
+            includeSummaryLabel?.setTextColor(foreground)
+            includeSummaryChevron?.imageTintList = android.content.res.ColorStateList.valueOf(foreground)
+            includeSummaryList?.let { list ->
+                for (index in 0 until list.childCount) {
+                    tintIncludeSummaryRow(list.getChildAt(index), foreground)
+                }
+            }
             messageMeta?.setTextColor(foreground)
             messageMeta?.alpha = 0.7f
         }

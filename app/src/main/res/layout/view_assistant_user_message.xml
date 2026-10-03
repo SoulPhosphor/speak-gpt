@@ -310,8 +310,9 @@
                  @id/include_summary that ChatAdapter looks up. -->
             <include
                 layout="@layout/view_include_summary"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/message_actions_row" />
 
