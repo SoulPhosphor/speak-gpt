@@ -74,8 +74,10 @@ object TokenPricingCatalogClient {
                     when (PricingSource.forEndpoint(endpoint)) {
                         PricingSource.OPENAI -> loadFirstParty("openai", model)
                         PricingSource.ANTHROPIC -> loadFirstParty("anthropic", model)
-                        PricingSource.XAI ->
+                        PricingSource.XAI -> XaiRegionalPricing.applyToCatalog(
+                            endpoint.host,
                             loadXai(endpoint, model) ?: loadFirstParty("x-ai", model)
+                        )
                         PricingSource.NANOGPT -> loadNanoGpt(endpoint, model)
                         PricingSource.VENICE -> loadVenice(endpoint, model)
                         PricingSource.FEATHERLESS -> loadFeatherless(endpoint, model)
@@ -115,11 +117,8 @@ object TokenPricingCatalogClient {
     /** xAI publishes its own prices with the user's key, which is more accurate
      * than OpenRouter's copy. OpenRouter's public list remains the fallback. */
     private fun loadXai(endpoint: ApiEndpointObject, model: String): TokenPricingCatalog? {
-        val base = endpoint.host.toHttpUrlOrNull() ?: return null
-        val body = fetch(
-            endpoint,
-            base.newBuilder().addPathSegment("language-models").build().toString()
-        ) ?: return null
+        val url = XaiRegionalPricing.catalogUrl(endpoint.host) ?: return null
+        val body = fetch(endpoint, url) ?: return null
         val pricing = FirstPartyPricing.matchXai(body, model) ?: return null
         return TokenPricingCatalog(model, modelPricing = pricing)
     }
@@ -206,7 +205,7 @@ object TokenPricingCatalogClient {
 internal enum class PricingSource(val hosts: Set<String>) {
     OPENAI(setOf("api.openai.com")),
     ANTHROPIC(setOf("api.anthropic.com")),
-    XAI(setOf("api.x.ai")),
+    XAI(setOf("api.x.ai", "us.api.x.ai")),
     NANOGPT(setOf("nano-gpt.com", "api.nano-gpt.com")),
     VENICE(setOf("api.venice.ai")),
     FEATHERLESS(setOf("api.featherless.ai"));
@@ -218,6 +217,30 @@ internal enum class PricingSource(val hosts: Set<String>) {
             val host = url?.toHttpUrlOrNull()?.host?.lowercase() ?: return null
             return entries.firstOrNull { host in it.hosts }
         }
+    }
+}
+
+/** xAI documents US inference at 1.1x global token rates, including cached
+ * and long-context rates. Read global metadata so the premium is applied once,
+ * rather than assuming whether regional metadata already includes it. Existing
+ * keys work on both official endpoints; only model metadata is fetched here.
+ * https://docs.x.ai/developers/pricing#us-regional-endpoint-pricing
+ * https://docs.x.ai/developers/advanced-api-usage/regions
+ * The source order remains xAI first, public OpenRouter fallback, then unknown.
+ * Provider-reported charges are never scaled. */
+internal object XaiRegionalPricing {
+    private const val US_HOST = "us.api.x.ai"
+
+    fun catalogUrl(baseUrl: String): String? {
+        val base = baseUrl.toHttpUrlOrNull() ?: return null
+        return base.newBuilder().apply {
+            if (base.host == US_HOST) host("api.x.ai")
+        }.addPathSegment("language-models").build().toString()
+    }
+
+    fun applyToCatalog(baseUrl: String, catalog: TokenPricingCatalog?): TokenPricingCatalog? {
+        if (baseUrl.toHttpUrlOrNull()?.host != US_HOST) return catalog
+        return catalog?.copy(modelPricing = catalog.modelPricing?.scaled(1.1))
     }
 }
 

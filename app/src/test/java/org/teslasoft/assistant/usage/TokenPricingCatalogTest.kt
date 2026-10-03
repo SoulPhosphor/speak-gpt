@@ -17,6 +17,8 @@ class TokenPricingCatalogTest {
             PricingSource.forEndpoint(endpoint("https://api.anthropic.com/v1/", "Anthropic")))
         assertEquals(PricingSource.XAI,
             PricingSource.forEndpoint(endpoint("https://api.x.ai/v1/", "xAI")))
+        assertEquals(PricingSource.XAI,
+            PricingSource.forEndpoint(endpoint("https://us.api.x.ai/v1/", "xAI US")))
         assertEquals(PricingSource.NANOGPT,
             PricingSource.forEndpoint(endpoint("https://nano-gpt.com/api/v1/", "NanoGPT")))
         assertEquals(PricingSource.NANOGPT,
@@ -103,6 +105,50 @@ class TokenPricingCatalogTest {
         // A long-context price of 0 means the standard price applies.
         assertEquals(0.00000075, tier.pricing.cachedInputPricePerToken!!, 1e-15)
         assertNull(FirstPartyPricing.matchXai(catalog, "grok-3")!!.extended)
+    }
+
+    @Test fun xaiUsRegionalCatalogUsesGlobalMetadataWithoutMovingInference() {
+        assertEquals("https://api.x.ai/v1/language-models",
+            XaiRegionalPricing.catalogUrl("https://us.api.x.ai/v1/"))
+        assertEquals("https://api.x.ai/v1/language-models",
+            XaiRegionalPricing.catalogUrl("https://api.x.ai/v1"))
+        assertNull(PricingSource.forUrl("https://us.api.x.ai.example.test/v1"))
+    }
+
+    @Test fun xaiUsPremiumAppliesToAllTokenRatesAndLongContextOnce() {
+        val prices = TokenPricingSnapshot(2e-6, 6e-6, 0.5e-6,
+            extended = ExtendedPricingTier(200_000,
+                TokenPricingSnapshot(4e-6, 12e-6, 1e-6), appliesAtThreshold = true))
+        val original = TokenPricingCatalog("grok-4.7", modelPricing = prices)
+        val regional = XaiRegionalPricing.applyToCatalog("https://us.api.x.ai/v1", original)!!
+        val standard = regional.modelPricing!!
+        assertEquals(2.2e-6, standard.inputPricePerToken!!, 1e-15)
+        assertEquals(6.6e-6, standard.outputPricePerToken!!, 1e-15)
+        assertEquals(0.55e-6, standard.cachedInputPricePerToken!!, 1e-15)
+        val long = standard.forInputTokens(200_000)
+        assertEquals(4.4e-6, long.inputPricePerToken!!, 1e-15)
+        assertEquals(13.2e-6, long.outputPricePerToken!!, 1e-15)
+        assertEquals(1.1e-6, long.cachedInputPricePerToken!!, 1e-15)
+        assertEquals(prices, XaiRegionalPricing.applyToCatalog(
+            "https://api.x.ai/v1", original)!!.modelPricing)
+        assertEquals(original, XaiRegionalPricing.applyToCatalog(
+            "https://us.api.x.ai.example.test/v1", original))
+    }
+
+    @Test fun xaiUsFallbackKeepsMissingAndZeroRatesAndReportedCharge() {
+        // The same adjustment is applied after either source has been selected.
+        val fallback = TokenPricingCatalog("grok-4.7",
+            modelPricing = TokenPricingSnapshot(0.0, 6e-6))
+        val pricing = XaiRegionalPricing.applyToCatalog(
+            "https://us.api.x.ai/v1", fallback)!!.modelPricing!!
+        assertEquals(0.0, pricing.inputPricePerToken!!, 0.0)
+        assertNull(pricing.cachedInputPricePerToken)
+        assertNull(XaiRegionalPricing.applyToCatalog("https://us.api.x.ai/v1", null))
+        val record = TokenUsageAccounting.createRecord("grok-4.7", "xAI",
+            "https://us.api.x.ai/v1", TokenCounts(1000, 20, 1020, 0, 0),
+            TokenCountSource.PROVIDER_REPORTED, pricing, ProviderReportedCost(totalCost = 0.5))
+        assertEquals(6.6e-6 * 20, record.outputCost!!, 1e-15)
+        assertEquals(0.5, record.totalCost!!, 0.0)
     }
 
     @Test fun nanoGptDetailedPricesUseTheirDocumentedUnits() {

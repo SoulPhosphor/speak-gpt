@@ -110,7 +110,7 @@ never changes an old record.
 | OpenRouter | OpenRouter's provider list for that model (the endpoint list for `{model}`). The app uses the price of the provider that actually served the reply: input, output, cached and cache-write prices. |
 | OpenAI direct (`api.openai.com`) | OpenRouter's **public** model list, `https://openrouter.ai/api/v1/models`, entry `openai/<model>`. |
 | Anthropic direct (`api.anthropic.com`) | Same public list, entry `anthropic/<model>`. |
-| xAI direct (`api.x.ai`) | xAI's own price list (`/language-models`, with the user's xAI key). If that fails or has no match, the public OpenRouter list, entry `x-ai/<model>`. |
+| xAI direct (`api.x.ai`, `us.api.x.ai`) | xAI's own price list (`/language-models`, with the user's xAI key). If that fails or has no match, the public OpenRouter list, entry `x-ai/<model>`. |
 | NanoGPT (`nano-gpt.com`, `api.nano-gpt.com`) | NanoGPT's detailed model list (`/models?detailed=true`, with the user's key). |
 | Venice (`api.venice.ai`) | Venice's text model list (`/models?type=text`), with Venice's compatibility mapping for aliases. |
 | Featherless (`api.featherless.ai`) | Exact model detail (`/v1/models/{model-id}`); decimal USD per-token `pricing.prompt` and `pricing.completion`. |
@@ -166,6 +166,27 @@ price for `x-ai/<model>` is used, and if that is also unavailable the costs
 show "Not Reported" (owner decision, October 2026). OpenRouter's list has no
 long-context rates, so on that fallback a very long prompt is priced at the
 standard rate; the Total is still xAI's reported charge when xAI sends one.
+
+### xAI US regional endpoint
+
+`https://us.api.x.ai/v1` is also an official xAI endpoint, so separately
+reported reasoning is included in output there too. xAI documents US token
+rates as 1.1 times the global rates, including cached input and long context.
+For a US connection, pricing metadata is read from xAI's global
+`https://api.x.ai/v1/language-models` using the same xAI key (officially valid
+on both hosts), then every token rate is multiplied by 1.1 exactly once.
+Generation remains on the configured US endpoint; no prompts are sent to the
+global pricing endpoint.
+
+The settled source order is unchanged: xAI's list first, public OpenRouter
+fallback second, then Not Reported. The same regional multiplier is applied
+to either global price source. Missing prices stay missing, zero stays zero,
+and a provider-reported billed charge is preserved exactly, never multiplied.
+No supported model list or production model price is hard-coded.
+
+Sources verified October 3, 2026:
+- https://docs.x.ai/developers/pricing#us-regional-endpoint-pricing
+- https://docs.x.ai/developers/advanced-api-usage/regions
 
 ### NanoGPT
 

@@ -36,6 +36,8 @@ class ProviderUsageAttemptTest {
 
     @Test fun reasoningIsAddedOnlyWhereTheProviderDocumentsItAsSeparate() {
         assertEquals(80, outputIncludingReasoning("https://api.x.ai/v1/", 50, 30))
+        assertEquals(80, outputIncludingReasoning("https://us.api.x.ai/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://us.api.x.ai.example.test/v1/", 50, 30))
         assertEquals(50, outputIncludingReasoning("https://api.openai.com/v1/", 50, 30))
         assertEquals(50, outputIncludingReasoning("https://nano-gpt.com/api/v1/", 50, 30))
         assertEquals(50, outputIncludingReasoning("https://api.venice.ai/api/v1/", 50, 30))
