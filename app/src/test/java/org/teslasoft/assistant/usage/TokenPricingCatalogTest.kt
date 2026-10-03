@@ -120,11 +120,12 @@ class TokenPricingCatalogTest {
         assertEquals(0.0000006, pricing.outputPricePerToken!!, 1e-15)
     }
 
-    @Test fun unstatedUnitAboveAnyRealPerTokenPriceIsReadPerMillion() {
-        val pricing = GenericPricing.match(
-            """{"data":[{"id":"m","pricing":{"prompt":3,"completion":15}}]}""", "m"
-        )!!
-        assertEquals(0.000003, pricing.inputPricePerToken!!, 1e-15)
+    @Test fun sizeOfANumberNeverChoosesTheUnit() {
+        assertNull(GenericPricing.match(
+            """{"data":[{"id":"m","pricing":{"prompt":3,"completion":15}}]}""", "m"))
+        assertNull(GenericPricing.match(
+            """{"data":[{"id":"m","pricing":{"prompt":0.000001,"completion":0.000002,
+                "unit":"per_request"}}]}""", "m"))
     }
 
     @Test fun veniceModelSpecPricesAreReadPerMillionUsd() {

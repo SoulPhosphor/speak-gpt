@@ -273,10 +273,10 @@ internal object FirstPartyPricing {
  *   whose `unit` field says per million tokens);
  * - `model_spec.pricing` with `input.usd` / `output.usd` per million tokens
  *   (Venice style).
- * A stated unit is honored. Without one, a price above $0.001 per token is
- * impossible for text, so the list must be per million tokens. Any price
- * still above $0.001 per token after conversion, or in another currency, is
- * rejected rather than shown. */
+ * A stated unit is honored and an unrecognized one is rejected. Without a
+ * stated unit, each layout's own convention applies. Any price above $0.001
+ * per token after conversion, or in another currency, is rejected rather than
+ * shown. */
 internal object GenericPricing {
     private const val MAX_PRICE_PER_TOKEN = 0.001
 
@@ -306,8 +306,11 @@ internal object GenericPricing {
         val output = pricing.amount("completion", "output") ?: return null
         val cached = pricing.amount("input_cache_read", "cached_prompt", "cache_read")
         val write = pricing.amount("input_cache_write", "cache_write")
-        val stated = unitFactor(pricing.text("unit") ?: item.text("pricing_unit"))
-        val factor = stated ?: if (maxOf(input, output) > MAX_PRICE_PER_TOKEN) 1e-6 else 1.0
+        // A stated unit wins; an unrecognized one means the unit is unknown.
+        // With no unit, this layout follows OpenRouter's convention of dollars
+        // per token. The size of a number is never used to pick a unit.
+        val unit = pricing.text("unit") ?: item.text("pricing_unit")
+        val factor = if (unit == null) 1.0 else unitFactor(unit) ?: return null
         return checked(TokenPricingSnapshot(input, output, cached, write).scaled(factor))
     }
 
@@ -329,7 +332,7 @@ internal object GenericPricing {
         return pricing.takeIf { prices.all { it >= 0.0 && it <= MAX_PRICE_PER_TOKEN } }
     }
 
-    /** Dollars-per-token factor for a stated unit, or null when none is stated. */
+    /** Dollars-per-token factor for a stated unit, or null when it is not recognized. */
     private fun unitFactor(unit: String?): Double? {
         val text = unit?.lowercase()?.replace(" ", "_") ?: return null
         return when {

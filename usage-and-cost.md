@@ -142,7 +142,7 @@ understands these layouts:
 
 | Layout | Used by | Fields | Unit |
 | --- | --- | --- | --- |
-| `pricing` | OpenRouter-compatible services, NanoGPT | `prompt` / `input`, `completion` / `output`, `input_cache_read` / `cached_prompt` / `cache_read`, `input_cache_write` / `cache_write` | The list's `unit` field when present (`per_million_tokens`, per thousand, per token). Without one, see below. |
+| `pricing` | OpenRouter-compatible services, NanoGPT | `prompt` / `input`, `completion` / `output`, `input_cache_read` / `cached_prompt` / `cache_read`, `input_cache_write` / `cache_write` | The list's `unit` field when present (`per_million_tokens`, per thousand, per token). Without one, dollars per token (OpenRouter's convention). |
 | `model_spec.pricing` | Venice | `input.usd`, `output.usd`; cache prices from `cache_input` / `cache_read` / `cache_write` if present | Dollars per million tokens |
 
 Rules that apply to every list:
@@ -151,9 +151,14 @@ Rules that apply to every list:
   no exact match, the name after the last `/` is compared, so
   `gpt-4o-mini` finds `openai/gpt-4o-mini`. This is used only if exactly one
   entry matches.
-- **Missing unit:** a price above $0.001 per token ($1,000 per million) is
-  impossible for text, so such a list is read as dollars per million tokens.
-  Otherwise it is read as dollars per token.
+- **Units** (owner decision, October 2026):
+  - a unit stated in the list is used;
+  - a stated unit the app does not recognize makes the price unknown;
+  - with no stated unit, the layout's known convention applies: dollars per
+    token for the `pricing` layout (OpenRouter's convention) and dollars per
+    million tokens for Venice's `model_spec.pricing`;
+  - the size of a number is never used to decide its unit, and the reported
+    bill is never used to infer or correct a unit.
 - **Safety check:** after conversion, any price above $0.001 per token, any
   negative price, or a currency other than US dollars rejects the whole
   entry. The cost then shows "Not Reported" rather than a wrong number.
