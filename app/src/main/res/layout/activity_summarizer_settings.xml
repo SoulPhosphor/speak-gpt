@@ -295,6 +295,29 @@
                     android:text="@string/choose_provider_routing_automatic" />
             </LinearLayout>
 
+            <!-- ============ Customize Prompt Summaries ============
+                 Opens Summarizer Prompts (owner ruling, Oct 3 2026). -->
+            <LinearLayout
+                android:id="@+id/row_summarizer_prompts"
+                style="@style/Widget.App.Row.WithSubtitle">
+
+                <LinearLayout style="@style/Widget.App.Row.TextColumn">
+
+                    <TextView
+                        style="@style/Widget.App.Row.Title"
+                        android:text="@string/summarizer_prompts_row_title" />
+
+                    <TextView
+                        style="@style/Widget.App.Row.Subtitle"
+                        android:maxLines="3"
+                        android:text="@string/summarizer_prompts_row_subtitle" />
+                </LinearLayout>
+
+                <ImageView
+                    style="@style/Widget.App.Row.Chevron"
+                    android:contentDescription="@string/summarizer_prompts_row_title" />
+            </LinearLayout>
+
             <!-- ============ Summary Prompt (five renameable slots) ============ -->
             <TextView
                 style="@style/Widget.App.Section.Title"

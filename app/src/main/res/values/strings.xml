@@ -316,12 +316,14 @@
     <string name="prompt_menu_duplicate">Duplicate</string>
     <string name="prompt_menu_copy">Copy</string>
     <string name="prompt_menu_clear">Clear</string>
+    <string name="prompt_menu_revert">Revert</string>
     <string name="prompt_menu_delete">Delete</string>
     <string name="prompt_delete_title">Delete Prompt?</string>
     <string name="prompt_delete_btn_ok">Okay</string>
     <string name="prompt_last_prompt_title">Companion must have at least one prompt</string>
     <string name="prompt_clear_title">Remove all prompt text?</string>
     <string name="prompt_clear_btn_ok">Okay</string>
+    <string name="prompt_revert_title">Return this prompt to its last saved text?</string>
     <string name="prompt_copy_replace_title">Copying this prompt will replace all existing text.</string>
     <string name="prompt_copy_replace_btn_ok">Okay</string>
     <string name="prompt_copy_from_header">Copy text from:</string>
@@ -3535,6 +3537,20 @@
     <string name="summarizer_empty_prompt_guard">Model summary prompts can\'t be empty. Last good prompt has been selected.</string>
     <string name="summarizer_section_image_prompt">Image Summary Prompt</string>
     <string name="summarizer_section_image_prompt_hint">This single prompt tells the Summarizer Model how to shorten an image prompt. The short version is what the AI receives each turn as a reminder of the image, instead of the full prompt.</string>
+    <!-- Summarizer Prompts screen (owner ruling, Oct 3 2026). -->
+    <string name="summarizer_prompts_row_title">Customize Prompt Summaries</string>
+    <string name="summarizer_prompts_row_subtitle">Edit prompt summaries used for the model that summarizes text and images.</string>
+    <string name="title_summarizer_prompts">Summarizer Prompts</string>
+    <string name="summarizer_prompts_edit_label">Edit Prompt:</string>
+    <string name="summarizer_prompts_go">Go</string>
+    <string name="summarizer_prompt_kind_summary">Summary Prompt</string>
+    <string name="summarizer_prompt_kind_compaction">Compaction Prompt</string>
+    <string name="summarizer_prompt_kind_image">Image Prompt</string>
+    <string name="summarizer_prompts_summary_intro">This prompt gives instructions to the Summarizer Model so it properly helps your AI what\'s important in your conversation.</string>
+    <string name="summarizer_prompts_compaction_intro">This prompt gives instructions to the Summarizer Model when you compact a conversation. Compacting condenses everything up to that point into one summary, which your AI then receives instead of those earlier messages.</string>
+    <string name="summarizer_prompts_image_intro">This single prompt tells the Summarizer Model how to shorten an image prompt. The short version is what the AI receives each turn as a reminder of the image, instead of the full prompt.</string>
+    <string name="summarizer_prompts_how_it_works">Only one prompt can be active at a time. The first two prompts are suggested styles.\n\nPresets one and two can always be reverted back to the original preset. Presets 3 through 5 will revert to the last saved prompt text.</string>
+    <string name="summarizer_prompts_field_hint">Write your prompt here…</string>
 
     <!-- Quick Settings (decision 3): toggle and number box, no hints. -->
     <string name="summarizer_use_toggle">Use Summarizer</string>

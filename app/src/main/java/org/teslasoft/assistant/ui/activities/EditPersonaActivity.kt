@@ -25,11 +25,9 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
-import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -58,7 +56,8 @@ import org.teslasoft.assistant.preferences.profileimages.ProfileImageStore
 import org.teslasoft.assistant.theme.ThemeManager
 import org.teslasoft.assistant.ui.chat.ChatNameStyle
 import org.teslasoft.assistant.ui.util.DiscardChangesDialog
-import org.teslasoft.assistant.ui.util.PromptTabBackground
+import org.teslasoft.assistant.ui.util.PromptVariantEditor
+import org.teslasoft.assistant.ui.util.SaveIconFlash
 import org.teslasoft.assistant.ui.widgets.AppDropdown
 import org.teslasoft.assistant.util.ProfileImageBinder
 
@@ -102,6 +101,7 @@ class EditPersonaActivity : FragmentActivity() {
         private const val STATE_AVATAR_REF = "state_avatar_ref"
         private const val STATE_PROMPT_VARIANTS = "state_prompt_variants"
         private const val STATE_ACTIVE_TAB = "state_active_tab"
+        private const val STATE_SAVED_PROMPT_VARIANTS = "state_saved_prompt_variants"
 
         fun createIntent(context: Context, persona: PersonaObject, position: Int): Intent {
             return Intent(context, EditPersonaActivity::class.java)
@@ -152,7 +152,6 @@ class EditPersonaActivity : FragmentActivity() {
     private var activityTitle: TextView? = null
     private var fieldLabelError: TextView? = null
     private var fieldLabel: TextInputEditText? = null
-    private var fieldPrompt: TextInputEditText? = null
     private var fieldActivationPrompt: TextView? = null
     private var fieldCoreLoreBook: TextView? = null
     private var fieldChatNameFont: TextView? = null
@@ -163,14 +162,7 @@ class EditPersonaActivity : FragmentActivity() {
     private var imgPersonaAvatar: ImageView? = null
     private var btnSave: ImageButton? = null
     private var btnDelete: ImageButton? = null
-    // The Save icon flashes green to confirm a save, then returns to its normal
-    // tint; these hold the pending revert and the captured normal tint.
-    private var saveButtonRevert: Runnable? = null
-    private var saveButtonRegularTint: ColorStateList? = null
-    private var promptTabRow: LinearLayout? = null
-    private var promptTabName: TextView? = null
-    private var btnAddPrompt: ImageButton? = null
-    private var btnPromptMenu: ImageButton? = null
+    private var promptEditor: PromptVariantEditor? = null
 
     private var position: Int = -1
     private var personaId: String = ""
@@ -189,15 +181,6 @@ class EditPersonaActivity : FragmentActivity() {
     // Set only on the Name Style screen; carried through so a save keeps it.
     private var chatNameFontStyle: String = ""
 
-    private var promptVariants: ArrayList<CompanionPromptVariant> = arrayListOf()
-    private var activeTabIndex: Int = 0
-
-    // Manual pan-tracking state for the unfocused prompt field (see the touch
-    // listener below): whether the current gesture has crossed touch slop and
-    // become a drag, and the finger position it's tracked from.
-    private var promptFieldDragging = false
-    private var promptFieldTouchStartY = 0f
-    private var promptFieldLastY = 0f
 
     // Registered as an activity field so a pending gallery result survives
     // recreation (owner-approved lifecycle safety carried over from Phase 7).
@@ -250,7 +233,6 @@ class EditPersonaActivity : FragmentActivity() {
         activityTitle = findViewById(R.id.activity_title)
         fieldLabelError = findViewById(R.id.text_field_label_error)
         fieldLabel = findViewById(R.id.field_label)
-        fieldPrompt = findViewById(R.id.field_prompt)
         fieldActivationPrompt = findViewById(R.id.field_activation_prompt)
         fieldCoreLoreBook = findViewById(R.id.field_core_lorebook)
         fieldChatNameFont = findViewById(R.id.field_chat_name_font)
@@ -261,10 +243,12 @@ class EditPersonaActivity : FragmentActivity() {
         imgPersonaAvatar = findViewById(R.id.img_persona_avatar)
         btnSave = findViewById(R.id.btn_save)
         btnDelete = findViewById(R.id.btn_delete)
-        promptTabRow = findViewById(R.id.prompt_tab_row)
-        promptTabName = findViewById(R.id.prompt_tab_name)
-        btnAddPrompt = findViewById(R.id.btn_add_prompt)
-        btnPromptMenu = findViewById(R.id.btn_prompt_menu)
+        promptEditor = PromptVariantEditor(
+            this,
+            findViewById(R.id.prompt_variant_editor),
+            R.string.hint_prompt_write,
+            R.string.prompt_last_prompt_title
+        )
 
         applyAmoledChrome()
 
@@ -277,94 +261,27 @@ class EditPersonaActivity : FragmentActivity() {
 
         fieldLabel?.setText(originalLabel)
 
-        val restoredVariants = savedInstanceState?.getString(STATE_PROMPT_VARIANTS)
-        val restoredTab = savedInstanceState?.getInt(STATE_ACTIVE_TAB, 0) ?: 0
-        if (restoredVariants != null) {
-            promptVariants = ArrayList(CompanionPromptVariant.fromJson(restoredVariants))
-            activeTabIndex = restoredTab
+        val variantsJson = intent.getStringExtra(EXTRA_PROMPT_VARIANTS) ?: ""
+        val loadedVariants = if (variantsJson.isNotBlank()) {
+            CompanionPromptVariant.fromJson(variantsJson)
         } else {
-            val variantsJson = intent.getStringExtra(EXTRA_PROMPT_VARIANTS) ?: ""
-            promptVariants = if (variantsJson.isNotBlank()) {
-                ArrayList(CompanionPromptVariant.fromJson(variantsJson))
-            } else {
-                val legacyPrompt = intent.getStringExtra(EXTRA_PROMPT) ?: ""
-                ArrayList(CompanionPromptVariant.migrateFromSinglePrompt(legacyPrompt, personaId))
-            }
-            activeTabIndex = promptVariants.indexOfFirst { it.isDefault }.coerceAtLeast(0)
+            val legacyPrompt = intent.getStringExtra(EXTRA_PROMPT) ?: ""
+            CompanionPromptVariant.migrateFromSinglePrompt(legacyPrompt, personaId)
         }
-        renderPromptTabs()
-        loadActivePrompt()
-
-        // Lets the prompt field be panned by dragging while it is NOT focused,
-        // without opening the keyboard, while a plain tap still focuses it and
-        // opens the keyboard as normal (owner request, Aug 16 2026). Claims the
-        // gesture from the parent scroll container up front (matching how a
-        // nested scrollable child normally has to win the touch stream), then
-        // either consumes it as a manual, 1:1 finger-tracked scroll of the
-        // field's own text, or - once the field has no more room to pan, or the
-        // gesture turns out to be a tap rather than a drag, or the field is
-        // already focused (normal editing in progress) - releases the parent so
-        // it scrolls, or lets the field's own click/focus handling proceed.
-        val promptFieldTouchSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop
-        fieldPrompt?.setOnTouchListener { v, event ->
-            val tv = v as? android.widget.TextView ?: return@setOnTouchListener false
-            when (event.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> {
-                    promptFieldDragging = false
-                    promptFieldTouchStartY = event.y
-                    promptFieldLastY = event.y
-                    v.parent.requestDisallowInterceptTouchEvent(true)
-                    false
-                }
-                android.view.MotionEvent.ACTION_MOVE -> {
-                    if (tv.hasFocus()) {
-                        // Normal editing in progress - unchanged from before:
-                        // keep the parent from stealing the gesture, but let the
-                        // field's own cursor/selection touch handling run it.
-                        false
-                    } else {
-                        if (!promptFieldDragging &&
-                            kotlin.math.abs(event.y - promptFieldTouchStartY) > promptFieldTouchSlop
-                        ) {
-                            promptFieldDragging = true
-                        }
-                        if (promptFieldDragging) {
-                            val visibleHeight = tv.height - tv.paddingTop - tv.paddingBottom
-                            val contentHeight = tv.layout?.height ?: 0
-                            val maxScroll = (contentHeight - visibleHeight).coerceAtLeast(0)
-                            if (maxScroll > 0) {
-                                val delta = promptFieldLastY - event.y
-                                val newScroll = (tv.scrollY + delta).coerceIn(0f, maxScroll.toFloat())
-                                tv.scrollTo(0, newScroll.toInt())
-                                promptFieldLastY = event.y
-                                true
-                            } else {
-                                // Nothing left to pan inside the field - hand the
-                                // gesture to the outer screen so it keeps scrolling.
-                                v.parent.requestDisallowInterceptTouchEvent(false)
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    }
-                }
-                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
-                    v.parent.requestDisallowInterceptTouchEvent(false)
-                    val consumed = !tv.hasFocus() && promptFieldDragging
-                    promptFieldDragging = false
-                    // A genuine tap (never crossed slop) falls through unconsumed
-                    // so the field's normal click handling focuses it and opens
-                    // the keyboard; a completed drag is consumed so it doesn't
-                    // also register as a click.
-                    consumed
-                }
-                else -> false
-            }
+        val restoredVariants = savedInstanceState?.getString(STATE_PROMPT_VARIANTS)
+        if (restoredVariants != null) {
+            val restoredSaved = savedInstanceState.getString(STATE_SAVED_PROMPT_VARIANTS)
+            promptEditor?.load(
+                CompanionPromptVariant.fromJson(restoredVariants),
+                savedInstanceState.getInt(STATE_ACTIVE_TAB, 0),
+                restoredSaved?.let { CompanionPromptVariant.fromJson(it) } ?: loadedVariants
+            )
+        } else {
+            promptEditor?.load(
+                loadedVariants,
+                loadedVariants.indexOfFirst { it.isDefault }.coerceAtLeast(0)
+            )
         }
-
-        btnAddPrompt?.setOnClickListener { addPromptTab() }
-        btnPromptMenu?.setOnClickListener { showPromptMenu(it) }
 
         selectedActivationPromptId = intent.getStringExtra(EXTRA_ACTIVATION_ID) ?: ""
         fieldActivationPrompt?.setText(activationPromptLabel(selectedActivationPromptId))
@@ -429,9 +346,11 @@ class EditPersonaActivity : FragmentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(STATE_AVATAR_REF, selectedAvatarRef)
-        saveActivePromptToVariants()
-        outState.putString(STATE_PROMPT_VARIANTS, CompanionPromptVariant.toJson(promptVariants))
-        outState.putInt(STATE_ACTIVE_TAB, activeTabIndex)
+        promptEditor?.let {
+            outState.putString(STATE_PROMPT_VARIANTS, it.toJson())
+            outState.putString(STATE_SAVED_PROMPT_VARIANTS, it.savedStateJson())
+            outState.putInt(STATE_ACTIVE_TAB, it.activeIndex())
+        }
     }
 
     /* --------------------------- picture --------------------------- */
@@ -660,370 +579,10 @@ class EditPersonaActivity : FragmentActivity() {
         }
     }
 
-    /* ========================= prompt tabs ========================= */
-
-    private fun saveActivePromptToVariants() {
-        if (activeTabIndex in promptVariants.indices) {
-            promptVariants[activeTabIndex].text = fieldPrompt?.text?.toString() ?: ""
-        }
-    }
-
-    private fun loadActivePrompt() {
-        if (activeTabIndex in promptVariants.indices) {
-            val variant = promptVariants[activeTabIndex]
-            fieldPrompt?.setText(variant.text)
-            if (variant.isDefault) {
-                val dot = android.text.SpannableString("●  ${variant.name}")
-                dot.setSpan(
-                    android.text.style.ForegroundColorSpan(
-                        ResourcesCompat.getColor(resources, R.color.light_green, theme)
-                    ),
-                    0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-                promptTabName?.text = dot
-            } else {
-                promptTabName?.text = variant.name
-            }
-        }
-    }
-
-    private fun switchToTab(index: Int) {
-        if (index == activeTabIndex) return
-        saveActivePromptToVariants()
-        activeTabIndex = index.coerceIn(promptVariants.indices)
-        loadActivePrompt()
-        renderPromptTabs()
-    }
-
-    private fun renderPromptTabs() {
-        val container = promptTabRow ?: return
-        container.removeAllViews()
-
-        val slantWidthPx = resources.getDimension(R.dimen.prompt_tab_slant_width)
-        val strokeWidthPx = resources.getDimension(R.dimen.prompt_tab_stroke_width)
-        val outlineColor = com.google.android.material.color.MaterialColors.getColor(
-            container, com.google.android.material.R.attr.colorOutline
-        )
-        val activeFillColor = com.google.android.material.color.MaterialColors.getColor(
-            container, com.google.android.material.R.attr.colorSurfaceContainerHigh
-        )
-        val greenColor = ResourcesCompat.getColor(resources, R.color.light_green, theme)
-
-        val tabs = mutableListOf<TextView>()
-        for (i in promptVariants.indices) {
-            val variant = promptVariants[i]
-            val isActive = i == activeTabIndex
-            val styleRes = if (isActive) R.style.Widget_App_PromptTab_Active else R.style.Widget_App_PromptTab
-            val tab = TextView(this, null, 0, styleRes)
-
-            if (variant.isDefault) {
-                val dot = android.text.SpannableString("●  ${variant.name}")
-                dot.setSpan(
-                    android.text.style.ForegroundColorSpan(greenColor),
-                    0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-                tab.text = dot
-            } else {
-                tab.text = variant.name
-            }
-
-            tab.setOnClickListener { switchToTab(i) }
-            tabs.add(tab)
-        }
-
-        val unspec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
-        for (tab in tabs) { tab.measure(unspec, unspec) }
-
-        val availWidth = if (container.width > 0) container.width
-        else resources.displayMetrics.widthPixels -
-                2 * (24 * resources.displayMetrics.density).toInt()
-
-        // Pack tabs into rows (zero spacing — adjacent tabs butt up).
-        data class TabRow(val indices: List<Int>)
-        val rows = mutableListOf<TabRow>()
-        var rowIndices = mutableListOf<Int>()
-        var rowWidth = 0
-        for (i in tabs.indices) {
-            val tw = tabs[i].measuredWidth
-            if (rowIndices.isNotEmpty() && rowWidth + tw > availWidth) {
-                rows.add(TabRow(rowIndices.toList()))
-                rowIndices = mutableListOf()
-                rowWidth = 0
-            }
-            rowIndices.add(i)
-            rowWidth += tw
-        }
-        if (rowIndices.isNotEmpty()) rows.add(TabRow(rowIndices.toList()))
-
-        // Move the row containing the active tab to the end so it sits
-        // flush against the prompt frame.
-        var activeRowIdx = rows.indexOfFirst { activeTabIndex in it.indices }
-        if (activeRowIdx < 0) activeRowIdx = rows.size - 1
-        val reordered = rows.toMutableList()
-        if (activeRowIdx < reordered.size) {
-            val active = reordered.removeAt(activeRowIdx)
-            reordered.add(active)
-        }
-
-        for ((rowPos, row) in reordered.withIndex()) {
-            val isBottomRow = rowPos == reordered.size - 1
-            val rowLayout = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-            }
-            val lastPosInRow = row.indices.size - 1
-            for ((posInRow, tabIdx) in row.indices.withIndex()) {
-                val tab = tabs[tabIdx]
-                val isActive = tabIdx == activeTabIndex
-                tab.background = PromptTabBackground(
-                    fillColor = if (isActive) activeFillColor else android.graphics.Color.TRANSPARENT,
-                    strokeColor = outlineColor,
-                    strokeWidthPx = strokeWidthPx,
-                    slantWidthPx = slantWidthPx,
-                    isFirstInRow = posInRow == 0,
-                    isLastInRow = posInRow == lastPosInRow,
-                    drawBottomEdge = !(isActive && isBottomRow)
-                )
-                tab.layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                rowLayout.addView(tab)
-            }
-            container.addView(rowLayout)
-        }
-    }
-
-    private fun addPromptTab() {
-        saveActivePromptToVariants()
-        val name = CompanionPromptVariant.nextPromptName(promptVariants)
-        promptVariants.add(CompanionPromptVariant(name = name, text = "", isDefault = false))
-        activeTabIndex = promptVariants.size - 1
-        loadActivePrompt()
-        renderPromptTabs()
-    }
-
-    private fun showPromptMenu(anchor: View) {
-        val menu = PopupMenu(this, anchor)
-        menu.menu.add(0, 1, 0, getString(R.string.prompt_menu_make_default))
-        menu.menu.add(0, 2, 0, getString(R.string.prompt_menu_rename))
-        menu.menu.add(0, 3, 0, getString(R.string.prompt_menu_copy_from))
-        menu.menu.add(0, 4, 0, getString(R.string.prompt_menu_duplicate))
-        menu.menu.add(0, 7, 0, getString(R.string.prompt_menu_copy))
-        menu.menu.add(0, 5, 0, getString(R.string.prompt_menu_clear))
-        menu.menu.add(0, 6, 0, getString(R.string.prompt_menu_delete))
-        menu.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                1 -> makeCurrentDefault()
-                2 -> renameCurrentPrompt()
-                3 -> showCopyFromDialog()
-                4 -> duplicateCurrentPrompt()
-                5 -> clearCurrentPrompt()
-                6 -> deleteCurrentPrompt()
-                7 -> copyCurrentPromptToClipboard()
-            }
-            true
-        }
-        menu.show()
-    }
-
-    private fun copyCurrentPromptToClipboard() {
-        val text = fieldPrompt?.text?.toString() ?: return
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("prompt", text))
-    }
-
-    private fun makeCurrentDefault() {
-        for (i in promptVariants.indices) {
-            promptVariants[i].isDefault = (i == activeTabIndex)
-        }
-        renderPromptTabs()
-        loadActivePrompt()
-    }
-
-    private fun renameCurrentPrompt() {
-        if (activeTabIndex !in promptVariants.indices) return
-        val current = promptVariants[activeTabIndex]
-
-        val input = EditText(this)
-        input.setText(current.name)
-        input.setSelection(current.name.length)
-        input.setPadding(dpToPx(24), dpToPx(16), dpToPx(24), dpToPx(8))
-
-        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
-        val wrapper = LinearLayout(this)
-        wrapper.orientation = LinearLayout.VERTICAL
-        wrapper.addView(input)
-        wrapper.addView(actionsView)
-
-        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.prompt_rename_title)
-            .setView(wrapper)
-            .create()
-
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
-            setText(R.string.btn_ok)
-            setOnClickListener {
-                val newName = input.text.toString().trim()
-                if (newName.isNotEmpty()) {
-                    current.name = newName
-                    renderPromptTabs()
-                    loadActivePrompt()
-                }
-                dialog.dismiss()
-            }
-        }
-
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
-            setText(R.string.btn_cancel)
-            setOnClickListener { dialog.dismiss() }
-        }
-
-        dialog.show()
-    }
-
-    private fun showCopyFromDialog() {
-        if (activeTabIndex !in promptVariants.indices) return
-        saveActivePromptToVariants()
-
-        val otherVariants = promptVariants.filterIndexed { i, _ -> i != activeTabIndex }
-        if (otherVariants.isEmpty()) return
-
-        val names = otherVariants.map { v ->
-            val prefix = if (v.isDefault) "● " else ""
-            val preview = if (v.text.isBlank()) getString(R.string.prompt_empty_marker) else {
-                v.text.take(60).replace('\n', ' ')
-                    .let { if (v.text.length > 60) "$it…" else it }
-            }
-            "$prefix${v.name}\n$preview"
-        }.toTypedArray()
-
-        val currentHasText = fieldPrompt?.text?.toString()?.isNotBlank() == true
-
-        val performCopy = { sourceIndex: Int ->
-            val source = otherVariants[sourceIndex]
-            fieldPrompt?.setText(source.text)
-            saveActivePromptToVariants()
-        }
-
-        MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.prompt_copy_from_header)
-            .setItems(names) { _, which ->
-                if (currentHasText) {
-                    val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
-                    val confirmDialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                        .setTitle(R.string.prompt_copy_replace_title)
-                        .setView(actionsView)
-                        .create()
-
-                    actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
-                        setText(R.string.prompt_copy_replace_btn_ok)
-                        setOnClickListener {
-                            performCopy(which)
-                            confirmDialog.dismiss()
-                        }
-                    }
-                    actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
-                        setText(R.string.btn_cancel)
-                        setOnClickListener { confirmDialog.dismiss() }
-                    }
-                    confirmDialog.show()
-                } else {
-                    performCopy(which)
-                }
-            }
-            .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-            .show()
-    }
-
-    private fun duplicateCurrentPrompt() {
-        if (activeTabIndex !in promptVariants.indices) return
-        saveActivePromptToVariants()
-        val current = promptVariants[activeTabIndex]
-        val newName = CompanionPromptVariant.nextPromptName(promptVariants)
-        promptVariants.add(CompanionPromptVariant(name = newName, text = current.text, isDefault = false))
-        activeTabIndex = promptVariants.size - 1
-        loadActivePrompt()
-        renderPromptTabs()
-    }
-
-    private fun clearCurrentPrompt() {
-        if (activeTabIndex !in promptVariants.indices) return
-        val currentText = fieldPrompt?.text?.toString() ?: ""
-        if (currentText.isBlank()) return
-
-        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
-        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.prompt_clear_title)
-            .setView(actionsView)
-            .create()
-
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
-            setText(R.string.prompt_clear_btn_ok)
-            setOnClickListener {
-                fieldPrompt?.setText("")
-                saveActivePromptToVariants()
-                dialog.dismiss()
-            }
-        }
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
-            setText(R.string.btn_cancel)
-            setOnClickListener { dialog.dismiss() }
-        }
-        dialog.show()
-    }
-
-    private fun deleteCurrentPrompt() {
-        if (activeTabIndex !in promptVariants.indices) return
-        if (promptVariants.size <= 1) {
-            val actionsView = layoutInflater.inflate(R.layout.dialog_single_action, null)
-            val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                .setTitle(R.string.prompt_last_prompt_title)
-                .setView(actionsView)
-                .create()
-
-            actionsView.findViewById<MaterialButton>(R.id.btn_dialog_action).apply {
-                setText(R.string.btn_ok)
-                setOnClickListener { dialog.dismiss() }
-            }
-            dialog.show()
-            return
-        }
-
-        val actionsView = layoutInflater.inflate(R.layout.dialog_two_actions, null)
-        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-            .setTitle(R.string.prompt_delete_title)
-            .setView(actionsView)
-            .create()
-
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
-            setText(R.string.prompt_delete_btn_ok)
-            setOnClickListener {
-                val wasDefault = promptVariants[activeTabIndex].isDefault
-                promptVariants.removeAt(activeTabIndex)
-                if (wasDefault && promptVariants.isNotEmpty()) {
-                    promptVariants[0].isDefault = true
-                }
-                activeTabIndex = activeTabIndex.coerceAtMost(promptVariants.size - 1)
-                loadActivePrompt()
-                renderPromptTabs()
-                dialog.dismiss()
-            }
-        }
-        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
-            setText(R.string.btn_cancel)
-            setOnClickListener { dialog.dismiss() }
-        }
-        dialog.show()
-    }
-
     /* --------------------------- save / delete --------------------------- */
 
     private fun buildPersonaObject(): PersonaObject {
-        saveActivePromptToVariants()
+        val promptVariants = promptEditor?.variants().orEmpty()
         val lastUsed = PersonaObject.splitIds(lastUsedLoreBookIds)
             .filter { additionalLoreBookIds.contains(it) }
         return PersonaObject(
@@ -1060,8 +619,9 @@ class EditPersonaActivity : FragmentActivity() {
             personaId = persona.id
             originalLabel = persona.label
             lastUsedLoreBookIds = persona.lastUsedLoreBookIds
+            promptEditor?.markSaved()
             initialSnapshot = snapshot()
-            markSaveButtonGreen()
+            btnSave?.let { SaveIconFlash.flash(it) }
             Toast.makeText(this, R.string.companion_editor_saved_toast, Toast.LENGTH_SHORT).show()
             return
         }
@@ -1082,31 +642,8 @@ class EditPersonaActivity : FragmentActivity() {
             .putExtra(EXTRA_CHAT_NAME_FONT_ID, persona.chatNameFontId)
             .putExtra(EXTRA_CHAT_NAME_SIZE_SP, persona.chatNameSizeSp)
         setResult(RESULT_OK, result)
-        markSaveButtonGreen()
+        btnSave?.let { SaveIconFlash.flash(it) }
         finish()
-    }
-
-    /** Flashes the disk icon green to confirm a save, then returns it to its
-     *  normal tint after a couple of seconds — the green is a brief confirmation,
-     *  not a persistent state (owner ruling, Aug 31 2026). On creation the editor
-     *  closes right after, so the revert simply never runs. */
-    private fun markSaveButtonGreen() {
-        val button = btnSave ?: return
-        if (saveButtonRevert == null) {
-            // Capture the normal tint the first time, before it goes green, so
-            // the revert restores whatever the current theme uses.
-            saveButtonRegularTint = button.backgroundTintList
-        } else {
-            button.removeCallbacks(saveButtonRevert)
-        }
-        button.backgroundTintList =
-            ColorStateList.valueOf(ResourcesCompat.getColor(resources, R.color.light_green, theme))
-        val revert = Runnable {
-            saveButtonRegularTint?.let { button.backgroundTintList = it }
-            saveButtonRevert = null
-        }
-        saveButtonRevert = revert
-        button.postDelayed(revert, 2500L)
     }
 
     /** Serialised form of the editable fields, used only for change detection
@@ -1116,10 +653,9 @@ class EditPersonaActivity : FragmentActivity() {
      *  a new companion the pick is a draft written on creation, and an
      *  image-only pick alone must not trigger the discard prompt. */
     private fun snapshot(): String {
-        saveActivePromptToVariants()
         return listOf(
             fieldLabel?.text?.toString().orEmpty(),
-            CompanionPromptVariant.toJson(promptVariants),
+            promptEditor?.toJson().orEmpty(),
             selectedActivationPromptId,
             selectedCoreLoreBookId,
             PersonaObject.joinIds(additionalLoreBookIds),

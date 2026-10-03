@@ -185,28 +185,6 @@ class SummarizerController(
         } catch (_: Exception) {
             false
         }
-
-        /**
-         * The prompt text actually used for fold-ins: the selected slot,
-         * falling back per decision 7 (most recently used slot with text,
-         * else slot one's shipped prompt) so a fold-in can never run on
-         * empty instructions even if the settings-screen guard was bypassed.
-         */
-        fun effectivePrompt(prefs: Preferences): String {
-            fun slotText(slot: Int): String =
-                prefs.getSummarizerSlotPrompt(slot).ifBlank { SummarizerPrompts.shippedPrompt(slot) }
-
-            val selected = slotText(prefs.getSummarizerSelectedSlot())
-            if (selected.isNotBlank()) return selected
-
-            val recency = prefs.getSummarizerSlotRecency()
-                .split(",").mapNotNull { it.trim().toIntOrNull() }
-            for (slot in recency) {
-                val text = slotText(slot)
-                if (text.isNotBlank()) return text
-            }
-            return SummarizerPrompts.STORYTELLER
-        }
     }
 
     fun isRunning(): Boolean = job?.isActive == true
@@ -403,7 +381,7 @@ class SummarizerController(
         )
         if (routingResolution.block != RoutingBlock.NONE) return null
 
-        val instruction = prefs.getImageSummaryPrompt().ifBlank { SummarizerPrompts.IMAGE_SUMMARY }
+        val instruction = SummarizerPromptSets.activeText(prefs, SummarizerPromptSets.Kind.IMAGE)
         val body = SummarizerPrompts.imageSummaryRequestBody(instruction, imagePrompt)
         return try {
             withContext(Dispatchers.IO) {
@@ -469,7 +447,8 @@ class SummarizerController(
 
         try {
             if (folded < target) {
-                val runtime = resolveFoldRuntime(prefs) ?: return false
+                val runtime = resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.COMPACTION)
+                    ?: return false
                 while (folded < target) {
                     when (val result = foldBatch(
                         runtime = runtime,
@@ -599,7 +578,7 @@ class SummarizerController(
             )
         }
 
-        val runtime = resolveFoldRuntime(prefs) ?: return false
+        val runtime = resolveFoldRuntime(prefs, SummarizerPromptSets.Kind.SUMMARY) ?: return false
         val result = foldBatch(
             runtime = runtime,
             entries = entries,
@@ -649,8 +628,12 @@ class SummarizerController(
         return true
     }
 
-    /** Resolve the configured Summary Model and routing once per cycle. */
-    private fun resolveFoldRuntime(prefs: Preferences): FoldRuntime? {
+    /** Resolve the configured Summary Model, routing, and the [promptKind]
+     *  prompt once per cycle. */
+    private fun resolveFoldRuntime(
+        prefs: Preferences,
+        promptKind: SummarizerPromptSets.Kind
+    ): FoldRuntime? {
         val lengthWords = prefs.getSummarizerLength()
         val endpointId = prefs.getSummarizerEndpointId()
         val endpoint = if (endpointId.isBlank()) null else try {
@@ -710,7 +693,10 @@ class SummarizerController(
             endpoint = endpoint,
             model = model,
             providerJson = routingResolution.providerJson,
-            prompt = SummarizerPrompts.render(effectivePrompt(prefs), lengthWords),
+            prompt = SummarizerPrompts.render(
+                SummarizerPromptSets.activeText(prefs, promptKind),
+                lengthWords
+            ),
             lengthWords = lengthWords
         )
     }

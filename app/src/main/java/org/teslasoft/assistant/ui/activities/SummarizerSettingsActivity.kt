@@ -197,6 +197,9 @@ class SummarizerSettingsActivity : FragmentActivity() {
         textModelValue?.setOnClickListener { showModelDropdown() }
         btnViewAllModels?.setOnClickListener { openAllModels() }
         textRoutingValue?.setOnClickListener { showRoutingDropdown() }
+        findViewById<View>(R.id.row_summarizer_prompts)?.setOnClickListener {
+            startActivity(Intent(this, SummarizerPromptsActivity::class.java))
+        }
 
         suppressWatchers = true
         fieldCompleteMessages?.setText(preferences?.getSummarizerDefaultWindow()?.toString() ?: "20")

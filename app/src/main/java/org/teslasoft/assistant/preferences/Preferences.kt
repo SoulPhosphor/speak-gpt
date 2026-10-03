@@ -2742,6 +2742,16 @@ class Preferences internal constructor(
         putGlobalString("image_summary_prompt", prompt)
     }
 
+    /** One saved Summarizer Prompts collection (JSON prompt variants), keyed
+     *  by SummarizerPromptSets.Kind.storageKey. "" = never saved; the older
+     *  slot and image prompt settings are then carried over on read. */
+    fun getSummarizerPromptSet(kind: String): String =
+        getGlobalString("summarizer_prompt_set_$kind", "")
+
+    fun setSummarizerPromptSet(kind: String, json: String) {
+        putGlobalString("summarizer_prompt_set_$kind", json)
+    }
+
     /** Manual compaction cancellation policy. False is the conservative,
      * atomic default: cancelling discards every result from that operation. */
     fun getSavePartialCompactionOnCancel(): Boolean =
