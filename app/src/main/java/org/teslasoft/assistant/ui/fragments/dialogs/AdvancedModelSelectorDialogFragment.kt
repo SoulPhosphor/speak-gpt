@@ -828,16 +828,19 @@ class AdvancedModelSelectorDialogFragment : DialogFragment() {
         requestNetwork?.setHeaders(authHeaders)
         val endpoint = apiEndpointObject
         val base = (endpoint?.host ?: "").let { if (it.isBlank() || it.endsWith("/")) it else "$it/" }
-        val path = when (endpoint?.let {
+        when (endpoint?.let {
             org.teslasoft.assistant.preferences.includes.ImageCapabilityProvider.forEndpoint(it)
         }) {
             org.teslasoft.assistant.preferences.includes.ImageCapabilityProvider.NANOGPT ->
-                "models?detailed=true"
+                requestNetwork?.startRequestNetwork(
+                    "GET", base + "models?detailed=true", "A", requestListener
+                )
             org.teslasoft.assistant.preferences.includes.ImageCapabilityProvider.VENICE ->
-                "models?type=text"
-            else -> "models"
+                requestNetwork?.startRequestNetwork(
+                    "GET", base + "models?type=text", "A", requestListener
+                )
+            else -> requestNetwork?.startRequestNetwork("GET", base + "models", "A", requestListener)
         }
-        requestNetwork?.startRequestNetwork("GET", base + path, "A", requestListener)
     }
 
     private fun logReasoningCatalogRefresh(success: Boolean) {
