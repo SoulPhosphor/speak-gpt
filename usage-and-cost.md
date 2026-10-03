@@ -140,15 +140,25 @@ publishes current prices for their models in a list anyone can download.
 
 ### xAI's own price list
 
-xAI publishes prices in `/language-models`: `prompt_text_token_price`,
-`cached_prompt_text_token_price` and `completion_text_token_price`, in US
-cents per 100 million tokens. The app divides by 10,000,000,000 to get
-dollars per token. A model is matched by its exact `id` or one of the
-`aliases` xAI lists for it. Fetched on every request and not kept.
+xAI publishes prices in `/language-models`, in US cents per 100 million
+tokens; the app divides by 10,000,000,000 to get dollars per token. A model is
+matched by its exact `id` or one of the `aliases` xAI lists for it. Fetched on
+every request and not kept.
 
-xAI also charges a higher rate for very long prompts on some models; the
-price list gives only the base rate. The real charge (section 3) covers this
-for the Total.
+| Field | Used for |
+| --- | --- |
+| `prompt_text_token_price` | Input |
+| `cached_prompt_text_token_price` | Cached input |
+| `completion_text_token_price` | Output |
+| `long_context_threshold` | Prompt size at or above which the long-context rates apply to every token in the request. 0 means the model has no long-context tier. |
+| `prompt_text_token_price_long_context` | Input, long context. 0 means the standard price applies. |
+| `cached_prompt_text_token_price_long_context` | Cached input, long context. 0 means the standard price applies. |
+| `completion_text_token_price_long_context` | Output, long context. 0 means the standard price applies. |
+
+An absent field is read as 0, the default value of xAI's numeric fields. The
+prompt size compared with the threshold is the request's total input tokens.
+If the input count is unknown and the model has a long-context tier, the
+applicable rates are unknown.
 
 ### NanoGPT
 
@@ -275,23 +285,27 @@ Chat backups copy each chat's stored messages unchanged, so usage records
 them. A backup made before usage records existed restores normally; its
 replies fall back to the old-reply estimate described in section 1.
 
-## 6. Open items (October 2026)
+## 6. Settled behavior and open items (October 2026)
 
-1. **Screen wording on hold:** labels for calculated costs, estimates, and
-   the OpenRouter price source.
-2. **Input row when the cache split is unreported:** the Input row is defined
-   as input minus cached, so it shows "Not Reported" when the split is
-   unknown, even though the total input count is stored. Display decision
-   pending.
-3. **NanoGPT subscription coverage:** NanoGPT's documentation does not say
-   how a reply marks subscription-covered usage. A $0 USD receipt is shown as
-   a $0 charge; the calculated parts still show list prices. Distinct
-   handling is pending a documented signal or an owner decision.
-4. **Dated first-party names:** see section 2. OpenAI and Anthropic dated
-   model names usually have no exact OpenRouter entry, so they show
-   "Not Reported" costs.
-5. **Old and estimated records:** wording and display on hold with item 1.
-6. **Subscription services in general** (such as OpenCode Go): not decided.
+Settled by the owner:
+
+- A legitimate "Not Reported" is correct. It is never replaced by a guessed
+  mapping or assumption. This includes OpenAI and Anthropic dated model names
+  with no exact OpenRouter entry, and NanoGPT replies whose model name does
+  not exactly match a price-list entry.
+- The Input row is non-cached input. When a provider reports total input but
+  not the cached portion, it shows "Not Reported". When a provider reports
+  non-cached input itself (Claude-style `input_tokens`), that is used.
+- Testing against the real services is a testing limitation, not a defect.
+
+On hold until the owner reviews the finished screen:
+
+1. Labels for calculated costs, estimates, and the OpenRouter price source.
+2. NanoGPT subscription-covered display. NanoGPT's documentation does not say
+   how a reply marks subscription coverage; a $0 USD receipt is shown as a
+   $0 charge.
+3. Display of old and estimated records.
+4. Subscription services in general (such as OpenCode Go).
 
 ## Where the code lives
 

@@ -533,4 +533,21 @@ class TokenUsageAccountingTest {
         )
         assertNull(unknownInput.outputCost)
     }
+
+    @Test fun xaiLongContextRatesStartAtTheThresholdItself() {
+        val pricing = TokenPricingSnapshot(
+            0.000001, 0.000002,
+            extended = ExtendedPricingTier(
+                1_000, TokenPricingSnapshot(0.000003, 0.000004), appliesAtThreshold = true
+            )
+        )
+        fun recordFor(input: Int) = TokenUsageAccounting.createRecord(
+            "grok-4", "xAI", null,
+            TokenCounts(input, 100, input + 100, cachedInputTokens = 0, cacheWriteInputTokens = 0),
+            TokenCountSource.PROVIDER_REPORTED, pricing
+        )
+        assertEquals(0.000001, recordFor(999).inputPricePerToken!!, 1e-15)
+        assertEquals(0.000003, recordFor(1_000).inputPricePerToken!!, 1e-15)
+        assertEquals(0.000004, recordFor(1_000).outputPricePerToken!!, 1e-15)
+    }
 }

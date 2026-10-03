@@ -80,6 +80,31 @@ class TokenPricingCatalogTest {
         assertNull(FirstPartyPricing.matchXai("not json", "grok-4"))
     }
 
+    @Test fun xaiLongContextRatesComeFromXaisOwnFields() {
+        val catalog = """
+            {"models": [
+              {"id": "grok-4-0709", "aliases": ["grok-4"],
+               "prompt_text_token_price": 30000,
+               "cached_prompt_text_token_price": 7500,
+               "completion_text_token_price": 150000,
+               "long_context_threshold": 128000,
+               "prompt_text_token_price_long_context": 60000,
+               "cached_prompt_text_token_price_long_context": 0,
+               "completion_text_token_price_long_context": 300000},
+              {"id": "grok-3", "prompt_text_token_price": 30000,
+               "completion_text_token_price": 150000, "long_context_threshold": 0}
+            ]}
+        """.trimIndent()
+        val tier = FirstPartyPricing.matchXai(catalog, "grok-4")!!.extended!!
+        assertEquals(128_000L, tier.inputTokenThreshold)
+        assertTrue(tier.appliesAtThreshold)
+        assertEquals(0.000006, tier.pricing.inputPricePerToken!!, 1e-15)
+        assertEquals(0.00003, tier.pricing.outputPricePerToken!!, 1e-15)
+        // A long-context price of 0 means the standard price applies.
+        assertEquals(0.00000075, tier.pricing.cachedInputPricePerToken!!, 1e-15)
+        assertNull(FirstPartyPricing.matchXai(catalog, "grok-3")!!.extended)
+    }
+
     @Test fun nanoGptDetailedPricesUseTheirDocumentedUnits() {
         val pricing = NanoGptPricing.match(NANOGPT, "anthropic/claude-opus-5.5")!!
         assertEquals(0.000004, pricing.inputPricePerToken!!, 1e-15)

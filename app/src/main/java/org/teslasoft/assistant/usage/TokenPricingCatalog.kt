@@ -263,7 +263,13 @@ internal object FirstPartyPricing {
 
     /** xAI's own list (`/language-models`). Prices are in USD cents per 100
      * million tokens, so dividing by 10^10 gives dollars per token. A model is
-     * matched by its exact id or one of xAI's listed aliases. */
+     * matched by its exact id or one of xAI's listed aliases.
+     *
+     * Long context: once a request's prompt reaches `long_context_threshold`,
+     * xAI bills every token at the `*_long_context` rates. Per xAI, a
+     * threshold of 0 means no long-context tier, and a long-context price of 0
+     * means the standard price applies. An absent field is read as 0, the
+     * default value of xAI's numeric fields. */
     fun matchXai(catalogJson: String, model: String): TokenPricingSnapshot? {
         val root = parseObject(catalogJson) ?: return null
         val models = (root.get("models") ?: root.get("data"))
@@ -276,14 +282,35 @@ internal object FirstPartyPricing {
                 .orEmpty()
             if (wanted != item.textOrNull("id") && wanted !in aliases) return@forEach
             fun price(name: String): Double? = item.get(name).priceOrNull()?.div(1e10)
-            val snapshot = TokenPricingSnapshot(
+            val base = TokenPricingSnapshot(
                 price("prompt_text_token_price"),
                 price("completion_text_token_price"),
                 price("cached_prompt_text_token_price")
             )
-            return snapshot.takeIf {
-                it.inputPricePerToken != null && it.outputPricePerToken != null
+            if (base.inputPricePerToken == null || base.outputPricePerToken == null) return null
+            val thresholdField = item.get("long_context_threshold")
+            val threshold = if (thresholdField == null) 0L
+                else thresholdField.priceOrNull()?.toLong() ?: return null
+            if (threshold == 0L) return base
+            fun longRate(name: String, standard: Double?): Double? {
+                val field = item.get(name) ?: return standard
+                val value = field.priceOrNull() ?: return null
+                return if (value == 0.0) standard else value / 1e10
             }
+            return base.copy(
+                extended = ExtendedPricingTier(
+                    threshold,
+                    TokenPricingSnapshot(
+                        longRate("prompt_text_token_price_long_context", base.inputPricePerToken),
+                        longRate("completion_text_token_price_long_context", base.outputPricePerToken),
+                        longRate(
+                            "cached_prompt_text_token_price_long_context",
+                            base.cachedInputPricePerToken
+                        )
+                    ),
+                    appliesAtThreshold = true
+                )
+            )
         }
         return null
     }

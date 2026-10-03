@@ -90,19 +90,25 @@ data class TokenPricingSnapshot(
         val tier = extended ?: return this
         return when {
             inputTokens == null -> TokenPricingSnapshot()
-            inputTokens > tier.inputTokenThreshold ->
+            tier.applies(inputTokens) ->
                 tier.pricing.copy(extended = null, cachingOffered = cachingOffered)
             else -> copy(extended = null)
         }
     }
 }
 
-/** Rates a provider applies to an entire request once its input tokens exceed
- * [inputTokenThreshold]. */
+/** Rates a provider applies to an entire request once its input tokens pass
+ * [inputTokenThreshold]: above it (Venice), or at or above it when
+ * [appliesAtThreshold] is true (xAI). */
 data class ExtendedPricingTier(
     val inputTokenThreshold: Long,
-    val pricing: TokenPricingSnapshot
-)
+    val pricing: TokenPricingSnapshot,
+    val appliesAtThreshold: Boolean = false
+) {
+    fun applies(inputTokens: Int): Boolean =
+        if (appliesAtThreshold) inputTokens >= inputTokenThreshold
+        else inputTokens > inputTokenThreshold
+}
 
 /** Exact monetary values returned by the serving API. A reported total does
  * not imply that the provider supplied an input/output split. */
