@@ -13142,6 +13142,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             // The registry completes only after its terminal callback has saved
             // the final row. Include that row in the deletion, not after it.
             imageJob?.await()
+            // Deleting stops a running summary update before the bookmark is
+            // realigned; its unfinished batch is discarded.
+            summarizerController?.cancelSummarizingAndWait()
             val currentPosition = messages.indexOfFirst { it === target }
             if (currentPosition < 0 || chatStorageUnavailable || deletingChat) return@launch
             val end = if (deleteFollowing) messages.size else currentPosition + 1
@@ -13156,6 +13159,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
             syncChatProjection()
             deselectAll()
+            // Resume summarizing from the corrected bookmark.
+            summarizerCycle()
         }
     }
 
@@ -13375,75 +13380,86 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             .setTitle("Delete selected messages")
             .setMessage("Are you sure you want to delete selected messages?")
             .setPositiveButton("Delete") { _, _ ->
-                val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
-                val manualBoundaryBefore =
-                    preferences?.getManualCompactionBoundary() ?: 0
-                val summaryLockBefore =
-                    preferences?.getSummaryRegenerationLockBoundary() ?: 0
-                val compactionLockBefore =
-                    preferences?.getCompactionRegenerationLockBoundary() ?: 0
-                // §12 cleanup: note the generated-image files the selected
-                // messages reference before they are removed.
-                val deletedImageHashes = GeneratedImageFiles.referencedHashes(
-                    messages.filterIndexed { index, _ ->
-                        index < messagesSelectionProjection.size &&
-                            messagesSelectionProjection[index]["selected"].toString() == "true"
-                    }
-                )
-                var removedBeforeBookmark = 0
-                var removedBeforeManualBoundary = 0
-                var removedBeforeSummaryLock = 0
-                var removedBeforeCompactionLock = 0
-                var pos = 0
-                var p = 0
-                while (pos < messagesSelectionProjection.size) {
-                    if (messagesSelectionProjection[pos]["selected"].toString() == "true") {
-                        // Bulk delete bypasses ChatPreferences.deleteMessage,
-                        // so the fold-in bookmark is realigned here the same
-                        // way: one step per removed already-folded message.
-                        if (pos < foldedBefore) removedBeforeBookmark++
-                        if (pos < manualBoundaryBefore) {
-                            removedBeforeManualBoundary++
-                        }
-                        if (pos < summaryLockBefore) removedBeforeSummaryLock++
-                        if (pos < compactionLockBefore) removedBeforeCompactionLock++
-                        messages.removeAt(pos - p)
-                        p++
-                    }
-
-                    pos++
+                lifecycleScope.launch {
+                    // Deleting stops a running summary update first (see
+                    // deleteMessageRange), then removes and realigns.
+                    summarizerController?.cancelSummarizingAndWait()
+                    deleteBulkSelection()
+                    summarizerCycle()
                 }
-                if (removedBeforeBookmark > 0) {
-                    preferences?.setSummarizerFoldedCount(foldedBefore - removedBeforeBookmark)
-                }
-                if (removedBeforeManualBoundary > 0) {
-                    preferences?.setManualCompactionBoundary(
-                        manualBoundaryBefore - removedBeforeManualBoundary
-                    )
-                }
-                if (removedBeforeSummaryLock > 0) {
-                    preferences?.setSummaryRegenerationLockBoundary(
-                        summaryLockBefore - removedBeforeSummaryLock
-                    )
-                }
-                if (removedBeforeCompactionLock > 0) {
-                    preferences?.setCompactionRegenerationLockBoundary(
-                        compactionLockBefore - removedBeforeCompactionLock
-                    )
-                }
-
-                syncChatProjection()
-                saveSettings()
-                if (deletedImageHashes.isNotEmpty()) {
-                    GeneratedImageFiles.deleteIfUnreferenced(this, deletedImageHashes)
-                }
-                adapter?.notifyDataSetChanged()
-                updateMessagesSelectionProjection()
-                deselectAll()
-                calculateCost()
             }
             .setNegativeButton("Cancel") { _, _ -> }
             .show()
+    }
+
+    @SuppressLint("NotifyDataSetChanged")
+    private fun deleteBulkSelection() {
+        val foldedBefore = preferences?.getSummarizerFoldedCount() ?: 0
+        val manualBoundaryBefore =
+            preferences?.getManualCompactionBoundary() ?: 0
+        val summaryLockBefore =
+            preferences?.getSummaryRegenerationLockBoundary() ?: 0
+        val compactionLockBefore =
+            preferences?.getCompactionRegenerationLockBoundary() ?: 0
+        // §12 cleanup: note the generated-image files the selected
+        // messages reference before they are removed.
+        val deletedImageHashes = GeneratedImageFiles.referencedHashes(
+            messages.filterIndexed { index, _ ->
+                index < messagesSelectionProjection.size &&
+                    messagesSelectionProjection[index]["selected"].toString() == "true"
+            }
+        )
+        var removedBeforeBookmark = 0
+        var removedBeforeManualBoundary = 0
+        var removedBeforeSummaryLock = 0
+        var removedBeforeCompactionLock = 0
+        var pos = 0
+        var p = 0
+        while (pos < messagesSelectionProjection.size) {
+            if (messagesSelectionProjection[pos]["selected"].toString() == "true") {
+                // Bulk delete bypasses ChatPreferences.deleteMessage,
+                // so the fold-in bookmark is realigned here the same
+                // way: one step per removed already-folded message.
+                if (pos < foldedBefore) removedBeforeBookmark++
+                if (pos < manualBoundaryBefore) {
+                    removedBeforeManualBoundary++
+                }
+                if (pos < summaryLockBefore) removedBeforeSummaryLock++
+                if (pos < compactionLockBefore) removedBeforeCompactionLock++
+                messages.removeAt(pos - p)
+                p++
+            }
+
+            pos++
+        }
+        if (removedBeforeBookmark > 0) {
+            preferences?.setSummarizerFoldedCount(foldedBefore - removedBeforeBookmark)
+        }
+        if (removedBeforeManualBoundary > 0) {
+            preferences?.setManualCompactionBoundary(
+                manualBoundaryBefore - removedBeforeManualBoundary
+            )
+        }
+        if (removedBeforeSummaryLock > 0) {
+            preferences?.setSummaryRegenerationLockBoundary(
+                summaryLockBefore - removedBeforeSummaryLock
+            )
+        }
+        if (removedBeforeCompactionLock > 0) {
+            preferences?.setCompactionRegenerationLockBoundary(
+                compactionLockBefore - removedBeforeCompactionLock
+            )
+        }
+
+        syncChatProjection()
+        saveSettings()
+        if (deletedImageHashes.isNotEmpty()) {
+            GeneratedImageFiles.deleteIfUnreferenced(this, deletedImageHashes)
+        }
+        adapter?.notifyDataSetChanged()
+        updateMessagesSelectionProjection()
+        deselectAll()
+        calculateCost()
     }
 
     private fun copySelectedMessages() {

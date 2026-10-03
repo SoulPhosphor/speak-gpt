@@ -34,6 +34,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -201,6 +202,21 @@ class SummarizerController(
     fun cancel() {
         job?.cancel()
         job = null
+    }
+
+    /**
+     * Stops an automatic summary update and waits until its cancellation
+     * cleanup has finished, so the caller can change the stored messages
+     * and bookmark afterwards (owner ruling, Oct 3 2026: deleting messages
+     * stops summarizing). The unfinished batch is discarded. A user-started
+     * compaction is left alone: it already discards its result if the
+     * messages it froze were changed.
+     */
+    suspend fun cancelSummarizingAndWait() {
+        if (manualCompactionRunning) return
+        val running = job ?: return
+        running.cancelAndJoin()
+        if (job === running) job = null
     }
 
     /**
