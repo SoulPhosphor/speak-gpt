@@ -9398,10 +9398,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 ImageCapability.UNKNOWN -> {
                     requestPreparationInProgress = false
                     restoreUIState()
-                    showUnknownImageCapabilityWarning(check) {
-                        rememberImageCapabilityScope(check)
-                        commitPreparedTurn(prepared)
-                    }
+                    showUnknownImageCapabilityWarning(
+                        check,
+                        onSend = {
+                            rememberImageCapabilityScope(check)
+                            commitPreparedTurn(prepared)
+                        }
+                    )
                 }
             }
         }

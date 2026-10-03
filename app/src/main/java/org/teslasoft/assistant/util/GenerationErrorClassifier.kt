@@ -311,8 +311,7 @@ object GenerationErrorClassifier {
      * timeouts, and unrelated invalid parameters are deliberately insufficient. */
     fun isDefinitiveImageRejection(evidence: String): Boolean {
         val lower = evidence.lowercase()
-        return
-        containsAny(lower,
+        return containsAny(lower,
             "does not support image",
             "does not support vision",
             "image_not_supported",
