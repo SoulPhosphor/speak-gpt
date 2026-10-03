@@ -12841,6 +12841,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     private fun deleteMessageRange(target: HashMap<String, Any>, deleteFollowing: Boolean) {
         lifecycleScope.launch {
+            val imageJob = ImageGenerationJobRegistry.activeJob(chatId)
             val generationJobs = listOfNotNull(
                 parseMessageScope?.coroutineContext?.get(kotlinx.coroutines.Job),
                 onSpeechResultsScope?.coroutineContext?.get(kotlinx.coroutines.Job)
@@ -12849,6 +12850,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             stopReadback()
             if (chatId.isNotBlank()) ImageGenerationJobRegistry.cancel(chatId)
             generationJobs.forEach { it.join() }
+            // The registry completes only after its terminal callback has saved
+            // the final row. Include that row in the deletion, not after it.
+            imageJob?.await()
             val currentPosition = messages.indexOfFirst { it === target }
             if (currentPosition < 0 || chatStorageUnavailable || deletingChat) return@launch
             val end = if (deleteFollowing) messages.size else currentPosition + 1
