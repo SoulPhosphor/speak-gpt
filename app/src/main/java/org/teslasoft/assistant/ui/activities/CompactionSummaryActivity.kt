@@ -42,6 +42,7 @@ import org.teslasoft.assistant.ui.util.ScreenChrome
 import org.teslasoft.assistant.util.summarizer.SummarizerController
 import org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry
 import org.teslasoft.assistant.util.summarizer.SummarizerOperationMessages
+import org.teslasoft.assistant.util.summarizer.SummarizerReviewGate
 
 /**
  * Compaction Summary (owner ruling, Oct 3 2026), opened from the chat's top
@@ -89,6 +90,9 @@ class CompactionSummaryActivity : FragmentActivity() {
             return
         }
         preferences = Preferences.getPreferences(this, chatId)
+        // No summary update starts while this screen is open; the chat runs
+        // any held-back update when it resumes.
+        SummarizerReviewGate.open(chatId, SummarizerReviewGate.COMPACTION_SUMMARY)
 
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
@@ -122,7 +126,15 @@ class CompactionSummaryActivity : FragmentActivity() {
         SummarizerControllerRegistry.addAppListener(operationListener)
     }
 
+    /** Closing here, not only in onDestroy, lets the chat screen's onResume
+     *  (which runs before this screen is destroyed) see the gate closed. */
+    override fun onPause() {
+        super.onPause()
+        if (isFinishing) SummarizerReviewGate.close(chatId, SummarizerReviewGate.COMPACTION_SUMMARY)
+    }
+
     override fun onDestroy() {
+        if (isFinishing) SummarizerReviewGate.close(chatId, SummarizerReviewGate.COMPACTION_SUMMARY)
         SummarizerControllerRegistry.removeAppListener(operationListener)
         super.onDestroy()
     }

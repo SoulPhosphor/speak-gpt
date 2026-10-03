@@ -1497,6 +1497,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         if (chatStartupComplete && chatId != "") {
             refreshSummarizerIcons()
             refreshComposerTools()
+            // Compaction Summary may have just closed: run any held update.
+            releaseHeldSummarizerCycle()
             // Appearance may have changed while Settings covered this screen.
             // Rebind existing rows so Staggered Responses takes effect at once.
             adapter?.notifyDataSetChanged()
@@ -4911,7 +4913,12 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         }
         btnSummary?.setOnClickListener { showSummaryView() }
         btnCompaction?.setOnClickListener {
-            if (chatId.isNotBlank()) startActivity(CompactionSummaryActivity.createIntent(this, chatId))
+            if (chatId.isBlank()) return@setOnClickListener
+            runSummaryDueBeforeReview()
+            org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.open(
+                chatId, org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.COMPACTION_SUMMARY
+            )
+            startActivity(CompactionSummaryActivity.createIntent(this, chatId))
         }
         btnSummarizerErrors?.setOnClickListener { showSummarizerErrorsDialog() }
         refreshSummarizerIcons()
@@ -5326,7 +5333,39 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     /** Runs a fold-in cycle when the summarizer is on for this chat. [force]
      *  (Update Now) also folds the final partial batch; automatic cycles
      *  wait for a full batch so provider prompt caching keeps applying. */
+    /** Set when an update was held back because the summary or compacted
+     *  text was open for review; it runs when the review screen closes. */
+    private var summarizerCycleHeld = false
+
+    /** Runs the held-back update once no review screen is open. */
+    private fun releaseHeldSummarizerCycle() {
+        if (!summarizerCycleHeld || org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.isOpen(chatId)) return
+        summarizerCycleHeld = false
+        summarizerCycle(force = preferences?.getSummarizerCatchUpPending() == true)
+    }
+
+    /** Before a review screen opens: an update that would run by the next
+     *  exchange runs now, so the screen shows current text (locked until it
+     *  finishes). Nothing else starts while the screen is open. */
+    private fun runSummaryDueBeforeReview() {
+        if (preferences?.getChatUseSummarizer() != true) return
+        if (preferences?.getUseSummarizedConversationProjection() == false) return
+        val snapshot = summarizerSnapshot() ?: return
+        if (org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.runsBeforeReview(
+                snapshot.entries.size,
+                snapshot.window,
+                preferences?.getSummarizerFoldedCount() ?: 0
+            )
+        ) {
+            summarizerCycle(force = true)
+        }
+    }
+
     private fun summarizerCycle(force: Boolean = false, allowLarge: Boolean = false) {
+        if (org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.isOpen(chatId)) {
+            summarizerCycleHeld = true
+            return
+        }
         if (preferences?.getChatUseSummarizer() != true) return
         if (preferences?.getUseSummarizedConversationProjection() == false) return
         val frozen = summarizerSnapshot() ?: return
@@ -5400,6 +5439,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     }
 
     private fun showSummaryView() {
+        runSummaryDueBeforeReview()
+        org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.open(
+            chatId, org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.SUMMARY_VIEW
+        )
         val view = layoutInflater.inflate(R.layout.dialog_summary_view, null)
         val field = view.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.field_summary_text)
         val update = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_primary_action)
@@ -5438,9 +5481,11 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             summaryViewField = null
             summaryViewNote = null
             summaryViewLocked = false
+            closeSummaryViewGate()
         }
         update?.setOnClickListener {
             saveEditsIfChanged()
+            closeSummaryViewGate()
             dialog.dismiss()
             summarizerCycle(force = true)
         }
@@ -5463,6 +5508,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
             }
             showProjectionStatus(enableCondensed)
+            closeSummaryViewGate()
             dialog.dismiss()
             if (enableCondensed) {
                 if (preferences?.getCondensedConversationKind() !=
@@ -5473,6 +5519,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             }
         }
         dialog.show()
+    }
+
+    private fun closeSummaryViewGate() {
+        org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.close(
+            chatId, org.teslasoft.assistant.util.summarizer.SummarizerReviewGate.SUMMARY_VIEW
+        )
+        releaseHeldSummarizerCycle()
     }
 
     private fun showProjectionStatus(enableCondensed: Boolean) {
