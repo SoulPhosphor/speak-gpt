@@ -274,8 +274,7 @@ internal object FirstPartyPricing {
  * - `model_spec.pricing` with `input.usd` / `output.usd` per million tokens
  *   (Venice style).
  * A stated unit is honored. Without one, a price above $0.001 per token is
- * impossible for text, so the list must be per million tokens. Prices are
- * marked as inferred so a reported charge can correct a wrong unit. Any price
+ * impossible for text, so the list must be per million tokens. Any price
  * still above $0.001 per token after conversion, or in another currency, is
  * rejected rather than shown. */
 internal object GenericPricing {
@@ -309,9 +308,7 @@ internal object GenericPricing {
         val write = pricing.amount("input_cache_write", "cache_write")
         val stated = unitFactor(pricing.text("unit") ?: item.text("pricing_unit"))
         val factor = stated ?: if (maxOf(input, output) > MAX_PRICE_PER_TOKEN) 1e-6 else 1.0
-        return checked(
-            TokenPricingSnapshot(input, output, cached, write, unitInferred = true).scaled(factor)
-        )
+        return checked(TokenPricingSnapshot(input, output, cached, write).scaled(factor))
     }
 
     private fun fromVeniceStyle(item: JsonObject): TokenPricingSnapshot? {
@@ -321,9 +318,7 @@ internal object GenericPricing {
         val output = pricing.amount("output") ?: return null
         val cached = pricing.amount("cache_input", "cache_read")
         val write = pricing.amount("cache_write")
-        return checked(
-            TokenPricingSnapshot(input, output, cached, write, unitInferred = true).scaled(1e-6)
-        )
+        return checked(TokenPricingSnapshot(input, output, cached, write).scaled(1e-6))
     }
 
     private fun checked(pricing: TokenPricingSnapshot): TokenPricingSnapshot? {

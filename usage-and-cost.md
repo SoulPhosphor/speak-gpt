@@ -157,13 +157,6 @@ Rules that apply to every list:
 - **Safety check:** after conversion, any price above $0.001 per token, any
   negative price, or a currency other than US dollars rejects the whole
   entry. The cost then shows "Not Reported" rather than a wrong number.
-- **Unit correction from the real charge:** a list's unit can still be wrong
-  or mislabelled. When the service also reports its real charge, the app
-  compares it with the cost calculated from the list. If the two differ by a
-  factor of about 1,000 or 1,000,000, the list was in the wrong unit, and the
-  prices are corrected by that factor before being saved. Smaller differences
-  (discounts, fees) are never corrected this way. This applies only to
-  services' own lists, never to OpenRouter's or xAI's prices.
 - **Not verified live:** Venice's cache-price field names (`cache_input`,
   `cache_write`) come from secondary sources, not Venice's own page. If Venice
   uses other names, its cached costs show "Not Reported" when cached tokens
@@ -199,9 +192,14 @@ This currently applies to:
 - **Cached and Output costs** use the service's own breakdown when it sends
   one. Otherwise they are calculated from tokens × the saved prices.
 - **Input cost** is always calculated from tokens × the saved prices.
-- **The rows may not add up to the Total.** The Total is the real bill, while
-  the rows come from the price list. Discounts, cache-write charges, extra
-  fees and provider differences can make them differ.
+- **The rows may not add up to the Total, and that is allowed** (owner
+  decision, October 2026). The Total is the provider-reported charge and stays
+  authoritative. The rows are the app's own calculation from the reported
+  token counts and published prices; they are not provider-reported values.
+  The app never changes the rows or the prices to force them to match the
+  Total, and never uses the Total to guess at price units. Discounts, fees,
+  subscription coverage and long-prompt rates can all cause a difference, and
+  the service does not say which.
 
 ### When the service does not report a charge
 
@@ -266,8 +264,8 @@ Usage records are saved inside the chat's messages, in the
 
 These are known and not yet decided or fixed.
 
-1. **Rows vs. Total:** with a reported charge, Input + Cached + Output may not
-   equal the Total (see section 3).
+1. **Labeling calculated rows:** the screen does not yet mark the row costs
+   as calculated rather than provider-reported. Wording to be approved.
 2. **Reasoning without a reported total:** if a service reports reasoning
    separately but sends no total, the app cannot tell whether reasoning is
    already in the output count, so it adds nothing.

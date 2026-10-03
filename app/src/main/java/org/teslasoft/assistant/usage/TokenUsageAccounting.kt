@@ -66,10 +66,7 @@ data class TokenPricingSnapshot(
     val inputPricePerToken: Double? = null,
     val outputPricePerToken: Double? = null,
     val cachedInputPricePerToken: Double? = null,
-    val cacheWriteInputPricePerToken: Double? = null,
-    /** True when these prices came from a service's own list whose unit is
-     * not certain. Such prices are checked against a reported charge. */
-    val unitInferred: Boolean = false
+    val cacheWriteInputPricePerToken: Double? = null
 ) {
     fun scaled(factor: Double): TokenPricingSnapshot = copy(
         inputPricePerToken = inputPricePerToken?.times(factor),
@@ -310,19 +307,6 @@ object TokenUsageAccounting {
         providerCost: ProviderReportedCost? = null
     ): TurnUsageRecord {
         val exactCost = providerCost?.takeIf { it.hasAnyValue() }?.withDerivedTotal()
-        if (pricing.unitInferred) {
-            // A price list in the wrong unit is off by a factor of a thousand or
-            // a million. When the service reported its real charge, use it to
-            // detect and correct that; any smaller difference is left alone.
-            val trusted = pricing.copy(unitInferred = false)
-            val listedTotal = exactCost?.totalCost?.let {
-                createRecord(model, provider, apiEndpoint, counts, source, trusted).totalCost
-            }
-            val factor = unitCorrection(exactCost?.totalCost, listedTotal)
-            return createRecord(
-                model, provider, apiEndpoint, counts, source, trusted.scaled(factor), providerCost
-            )
-        }
         val calculatedInputCost = counts.inputTokens
             ?.takeIf { counts.cachedInputTokens == null || counts.cachedInputTokens == 0 }
             ?.let { count -> pricing.inputPricePerToken?.let { count * it } }
@@ -511,15 +495,6 @@ object TokenUsageAccounting {
             )
         }
         return aggregate(records)
-    }
-
-    /** Factor that turns a listed total into the reported charge when the two
-     * differ by a whole unit step (1,000 or 1,000,000); otherwise 1. */
-    internal fun unitCorrection(reportedTotal: Double?, listedTotal: Double?): Double {
-        if (reportedTotal == null || listedTotal == null) return 1.0
-        if (reportedTotal <= 0.0 || listedTotal <= 0.0) return 1.0
-        val ratio = reportedTotal / listedTotal
-        return listOf(1.0, 1e-3, 1e-6, 1e3, 1e6).firstOrNull { ratio / it in 0.25..4.0 } ?: 1.0
     }
 
     private fun List<Double>.distinctPriceValues(): List<Double> =

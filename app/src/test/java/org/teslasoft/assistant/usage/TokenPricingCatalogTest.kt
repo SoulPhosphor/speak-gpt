@@ -3,7 +3,6 @@ package org.teslasoft.assistant.usage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.providers.ProviderEndpointInfo
@@ -109,7 +108,6 @@ class TokenPricingCatalogTest {
         )!!
         assertEquals(0.000002, pricing.inputPricePerToken!!, 1e-15)
         assertEquals(0.0000005, pricing.cachedInputPricePerToken!!, 1e-15)
-        assertTrue(pricing.unitInferred)
     }
 
     @Test fun nanoGptStatedPerMillionUnitIsConverted() {
