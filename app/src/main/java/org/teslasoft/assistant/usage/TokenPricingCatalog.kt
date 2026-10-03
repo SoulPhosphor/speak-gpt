@@ -53,34 +53,52 @@ object TokenPricingCatalogClient {
         .callTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    private const val OPENROUTER_PUBLIC_MODELS_URL = "https://openrouter.ai/api/v1/models"
+    private const val PUBLIC_CATALOG_TTL_MS = 6L * 60 * 60 * 1000
+
+    @Volatile private var publicCatalogCache: Pair<Long, String>? = null
+
     suspend fun load(endpoint: ApiEndpointObject?, model: String): TokenPricingCatalog =
         withContext(Dispatchers.IO) {
             if (endpoint == null || model.isBlank()) {
-                return@withContext TokenPricingCatalog(
-                    model, modelPricing = legacyPricingFor(endpoint, model)
-                )
+                return@withContext TokenPricingCatalog(model)
             }
             val remote = try {
-                if (endpoint.isOpenRouterRouting()) loadOpenRouter(endpoint, model)
-                else loadGeneric(endpoint, model)
+                if (endpoint.isOpenRouterRouting()) {
+                    loadOpenRouter(endpoint, model)
+                } else {
+                    val author = FirstPartyPricing.openRouterAuthorFor(endpoint)
+                    if (author != null) loadFirstParty(author, model)
+                    else loadGeneric(endpoint, model)
+                }
             } catch (_: Exception) {
                 null
             }
-            remote ?: TokenPricingCatalog(
-                model, modelPricing = legacyPricingFor(endpoint, model)
-            )
+            remote ?: TokenPricingCatalog(model)
         }
 
-    /** Static compatibility prices are authoritative only for the official
-     * OpenAI API host. A matching model name on OpenRouter, a proxy, or another
-     * serving provider is not evidence that OpenAI's price applies. */
-    internal fun legacyPricingFor(
-        endpoint: ApiEndpointObject?,
-        model: String
-    ): TokenPricingSnapshot? {
-        val host = endpoint?.host?.toHttpUrlOrNull()?.host ?: return null
-        if (!host.equals("api.openai.com", ignoreCase = true)) return null
-        return LegacyTokenPricing.forModel(model)
+    /** OpenAI, Anthropic and xAI publish no prices through their model lists.
+     * Their models are priced from OpenRouter's public catalog, fetched without
+     * credentials so the user's first-party API key never leaves its own host. */
+    private fun loadFirstParty(author: String, model: String): TokenPricingCatalog? {
+        val now = System.currentTimeMillis()
+        val cached = publicCatalogCache
+        val body = if (cached != null && now - cached.first < PUBLIC_CATALOG_TTL_MS) {
+            cached.second
+        } else {
+            val request = Request.Builder()
+                .url(OPENROUTER_PUBLIC_MODELS_URL)
+                .header("Accept", "application/json")
+                .get()
+                .build()
+            val fetched = client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) null else response.body?.string()
+            }?.takeIf { FirstPartyPricing.isCatalog(it) } ?: return null
+            publicCatalogCache = now to fetched
+            fetched
+        }
+        val pricing = FirstPartyPricing.match(body, author, model) ?: return null
+        return TokenPricingCatalog(model, modelPricing = pricing)
     }
 
     private fun loadOpenRouter(endpoint: ApiEndpointObject, model: String): TokenPricingCatalog? {
@@ -136,23 +154,70 @@ object TokenPricingCatalogClient {
     }
 }
 
-/** Compatibility fallback used only for the official OpenAI API when it does
- * not publish pricing. Values are per token, matching the old Quick Settings
- * calculation. */
-object LegacyTokenPricing {
-    fun forModel(model: String): TokenPricingSnapshot? {
-        val normalized = model.lowercase()
-        val pair = when {
-            "gpt-4o-mini-audio-preview" in normalized -> 0.0000015 to 0.000006
-            "gpt-4o-mini-realtime-preview" in normalized -> 0.000006 to 0.000024
-            "gpt-4o-audio-preview" in normalized -> 0.000025 to 0.0001
-            "gpt-4o-realtime-preview" in normalized -> 0.00005 to 0.0002
-            "gpt-4o-mini" in normalized -> 0.0000015 to 0.000006
-            "gpt-4o" in normalized -> 0.000025 to 0.0001
-            "o1-mini" in normalized || "o3-mini" in normalized -> 0.000011 to 0.000044
-            normalized == "o1" || normalized.startsWith("o1-") -> 0.00015 to 0.0006
-            else -> return null
-        }
-        return TokenPricingSnapshot(pair.first, pair.second)
+/** Maps first-party API hosts to their OpenRouter catalog author and matches
+ * the API's model name (often a dated snapshot) to that author's catalog entry.
+ * An unmatched model has no price rather than a guessed one. */
+internal object FirstPartyPricing {
+    private val authorsByHost = mapOf(
+        "api.openai.com" to "openai",
+        "api.anthropic.com" to "anthropic",
+        "api.x.ai" to "x-ai"
+    )
+    private val snapshotDate = Regex("-(\\d{8}|\\d{4}-\\d{2}-\\d{2}|(0[1-9]|1[0-2])\\d{2})$")
+    private val reasoningMode = Regex("-(non-)?reasoning$")
+
+    fun openRouterAuthorFor(endpoint: ApiEndpointObject): String? {
+        val host = endpoint.host.toHttpUrlOrNull()?.host?.lowercase() ?: return null
+        return authorsByHost[host]
     }
+
+    fun isCatalog(catalogJson: String): Boolean = catalogData(catalogJson) != null
+
+    private fun catalogData(catalogJson: String): com.google.gson.JsonArray? = try {
+        JsonParser.parseString(catalogJson).takeIf { it.isJsonObject }?.asJsonObject
+            ?.get("data")?.takeIf { it.isJsonArray }?.asJsonArray
+    } catch (_: Exception) { null }
+
+    fun match(catalogJson: String, author: String, model: String): TokenPricingSnapshot? {
+        val data = catalogData(catalogJson) ?: return null
+        val prefix = "$author/"
+        val byName = LinkedHashMap<String, TokenPricingSnapshot>()
+        val bySlug = LinkedHashMap<String, TokenPricingSnapshot>()
+        data.forEach { element ->
+            val item = element.takeIf { it.isJsonObject }?.asJsonObject ?: return@forEach
+            val pricing = item.get("pricing")?.takeIf { it.isJsonObject }?.asJsonObject
+                ?: return@forEach
+            fun price(name: String): Double? = try {
+                pricing.get(name)?.takeIf { it.isJsonPrimitive }?.asDouble?.takeIf { it >= 0.0 }
+            } catch (_: Exception) { null }
+            val snapshot = TokenPricingSnapshot(
+                price("prompt"),
+                price("completion"),
+                price("input_cache_read"),
+                price("input_cache_write")
+            )
+            if (snapshot.inputPricePerToken == null && snapshot.outputPricePerToken == null) {
+                return@forEach
+            }
+            fun key(value: String?): String? = value?.trim()?.lowercase()
+                ?.takeIf { it.startsWith(prefix) && ':' !in it }
+                ?.removePrefix(prefix)?.let(::normalize)
+            key(item.stringOrNull("id"))?.let { byName.putIfAbsent(it, snapshot) }
+            key(item.stringOrNull("canonical_slug"))?.let { bySlug.putIfAbsent(it, snapshot) }
+        }
+        fun lookup(name: String): TokenPricingSnapshot? = byName[name] ?: bySlug[name]
+
+        val requested = normalize(model.trim().lowercase().removePrefix(prefix))
+        val withoutAlias = requested.removeSuffix("-latest")
+        val withoutDate = withoutAlias.replace(snapshotDate, "")
+        val candidates = mutableListOf(requested, withoutAlias, withoutDate)
+        if (author == "x-ai") candidates += withoutDate.replace(reasoningMode, "")
+        return candidates.distinct().firstNotNullOfOrNull { lookup(it) }
+    }
+
+    private fun normalize(name: String): String = name.replace('.', '-')
+
+    private fun com.google.gson.JsonObject.stringOrNull(name: String): String? = try {
+        get(name)?.takeIf { it.isJsonPrimitive }?.asString
+    } catch (_: Exception) { null }
 }
