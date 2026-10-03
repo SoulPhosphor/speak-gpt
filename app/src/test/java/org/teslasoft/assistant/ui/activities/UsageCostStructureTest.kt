@@ -27,11 +27,12 @@ class UsageCostStructureTest {
         val output = provider.indexOf("@+id/price_output")
         val cached = provider.indexOf("@+id/price_cached")
         val caption = provider.indexOf("@string/usage_price_per_million")
+        val centered = provider.lastIndexOf("android:gravity=\"center\"", caption)
 
         assertTrue(input in 0 until output)
         assertTrue(output < cached)
         assertTrue(cached < caption)
-        assertTrue(provider.substring(caption).contains("android:gravity=\"center\""))
+        assertTrue(centered in (cached + 1) until caption)
     }
 
     @Test
