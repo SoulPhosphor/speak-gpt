@@ -105,7 +105,7 @@ The zone attributes implemented so far, which every `ThemeOverlay.Phosphor.*` pa
 
 Every theme that defines one of these must define all of them, including the night themes and every palette overlay — a style resolving an attribute that no theme layer carries crashes at inflation. They are the pattern the remaining zones follow when theme work resumes.
 
-Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton)` (`org.teslasoft.assistant.ui.util`). It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, and Chat Behavior; the other settings screens still carry their own copy until they are moved over.
+Full-screen settings activities color their window and `Widget.App.ActionBar` header by calling `ScreenChrome.apply(activity, actionBar, backButton, ...headerButtons)` (`org.teslasoft.assistant.ui.util`); trailing header icons such as Save are passed after the back button. It is the one place those colors are set, so moving them onto theme attributes later is a change to that file alone. Do not copy `SurfaceColors` window/header code into a screen. Current users: Appearance, Name Style, Chat Behavior, and Summarizer Prompts; the other settings screens still carry their own copy until they are moved over.
 
 A change to a shared style or shared layout may alter every screen using it. Treat that as an app-wide visual decision, not a local cleanup.
 
@@ -248,6 +248,10 @@ Use `setTitle` for the dialog heading or its single short question.
 Use `setMessage` only for separate explanatory text beneath the title.
 
 A dialog containing only a short question should place that question in the title and omit the message.
+
+### Save confirmation on a header Save icon
+
+Use `SaveIconFlash.flash(button)` (`org.teslasoft.assistant.ui.util`) after a successful save from a header Save icon, together with the save toast. The icon itself turns green, then returns to its normal tint; the button background is never recolored (owner ruling, Oct 3 2026). Current users: Edit Companion and Summarizer Prompts.
 
 ### Standard discard-changes dialog
 
@@ -566,10 +570,12 @@ A `ChipGroup` with `singleLine="false"` and `chipSpacingHorizontal/Vertical="10d
 
 ### Prompt editor frame
 
-A `ConstraintLayout` containing:
+The tab row and editor frame are one shared layout, `layout/view_prompt_variant_editor.xml`, driven by one shared controller, `PromptVariantEditor` (`org.teslasoft.assistant.ui.util`). Edit Companion and Summarizer Prompts include the layout; do not copy its XML or menu code into a screen.
+
+The frame is a `ConstraintLayout` containing:
 
 1. **Tab name** — a `TextView` showing the active variant's name, left-aligned. The default prompt's name is prefixed with a green dot (`light_green`).
-2. **Three-dot menu** — an `ImageButton` (36x36dp, `ic_more_vert`) anchored to the trailing edge, opening a `PopupMenu` with: Make Default, Rename, Copy From…, Duplicate, Clear, Delete.
+2. **Three-dot menu** — an `ImageButton` (36x36dp, `ic_more_vert`) anchored to the trailing edge, opening a `PopupMenu` with: Make Default, Rename, Copy From…, Duplicate, Copy, Clear, Revert, Delete. Revert returns only the open prompt's text to its text at the last save (owner ruling, Oct 3 2026). A screen may mark prompts that cannot be deleted; Delete is disabled while one of them is open.
 3. **Text field** — the `field_prompt` `TextInputEditText`, `minLines="8"` and `maxLines="8"` with `scrollbars="vertical"`, transparent background, bordered by `bg_prompt_editor`: a `colorSurfaceContainerHigh` fill (matching the active tab) with a 1dp `colorOutline` stroke and 4dp corners. The bounded height makes the field scroll internally when content overflows.
 
 ## Screen sections

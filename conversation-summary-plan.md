@@ -281,6 +281,17 @@ reduction, more the longer the chat runs.
    the empty slots have no revert. Different styles are prompt text
    only — the wiring is identical for every slot.
 
+   **Superseded (owner ruling, Oct 3 2026):** prompts are now edited on a
+   separate Summarizer Prompts screen opened from Summarizer Settings. It
+   holds three collections — Summary Prompt, Compaction Prompt, and Image
+   Prompt — each edited with the same multiple-prompt editor as Edit
+   Companion (any number of named prompts, Make Default marks the one in
+   use, Revert returns the open prompt to its last save, built-in prompts
+   cannot be deleted). Compaction uses its own in-use prompt. Changes are
+   kept only through Save; leaving or switching collections with unsaved
+   changes asks first. A blank in-use prompt falls back to the collection's
+   first built-in prompt, replacing the decision 7 exit guard.
+
 7. **Empty-prompt guard on leaving the screen.** If the user leaves
    Summarizer Settings (header back control or system back gesture)
    while the selected slot's prompt is empty, a standard dialog blocks
