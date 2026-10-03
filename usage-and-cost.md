@@ -160,6 +160,12 @@ prompt size compared with the threshold is the request's total input tokens.
 If the input count is unknown and the model has a long-context tier, the
 applicable rates are unknown.
 
+If xAI's own list cannot be reached or has no match, OpenRouter's public
+price for `x-ai/<model>` is used, and if that is also unavailable the costs
+show "Not Reported" (owner decision, October 2026). OpenRouter's list has no
+long-context rates, so on that fallback a very long prompt is priced at the
+standard rate; the Total is still xAI's reported charge when xAI sends one.
+
 ### NanoGPT
 
 From NanoGPT's documentation (`/models?detailed=true`):
@@ -306,6 +312,38 @@ On hold until the owner reviews the finished screen:
    $0 charge.
 3. Display of old and estimated records.
 4. Subscription services in general (such as OpenCode Go).
+
+## 7. Featherless: not yet implemented
+
+Requested by the owner (October 2026). Not implemented because Featherless's
+documentation could not be read from the environment this work was done in.
+Featherless connections currently get token counts through the standard
+fields and show "Not Reported" costs; nothing is guessed.
+
+Requirements, all from Featherless's official documentation:
+
+- Recognize `https://api.featherless.ai/v1` (add a `PricingSource` entry).
+- Match models by exact Featherless model ID only.
+- Read current prices from the official model or model-detail API, in the
+  documented fields and units. No hard-coded prices.
+- Keep reported prompt/input, completion/output and total token counts.
+  Featherless documents cached input as part of input: Input is the uncached
+  portion and Cached the cached portion, when reported.
+- Use Featherless's actual billed cost when available as the Total.
+- Respect billing modes: a flat-rate request whose cost is documented as not
+  applicable must not receive a calculated charge.
+- Investigate `/usage/activity/requests` (applied input/output/cache rates,
+  component costs, total cost, billing mode, cost status). Use it only if the
+  user's API key is permitted to read it and a record can be tied reliably to
+  the exact request. No fragile matching by time or token counts.
+- Add tests using Featherless's documented response shapes and sample prices.
+- No screen or wording changes.
+
+Integration points: `PricingSource` and a `FeatherlessPricing` reader in
+`TokenPricingCatalog.kt`, loaded from `TokenPricingCatalogClient.load`; reply
+fields in `RawSseInspector` (`ReportedProviderParser.kt`); cost rules in
+`TokenUsageAccounting.createRecord`. Follow the owner rules at the top of this
+file.
 
 ## Where the code lives
 
