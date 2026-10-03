@@ -476,6 +476,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     // fold-ins; it is cancelled deliberately (never an error) when this
     // screen goes away.
     private var btnSummary: ImageButton? = null
+    private var btnCompaction: ImageButton? = null
     private var btnSummarizerErrors: ImageButton? = null
     private var summarizerErrorBadge: TextView? = null
     private var summarizerController: org.teslasoft.assistant.util.summarizer.SummarizerController? = null
@@ -2990,6 +2991,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         actionBar = findViewById(R.id.action_bar)
         btnBack = findViewById(R.id.btn_back)
         btnSummary = findViewById(R.id.btn_summary)
+        btnCompaction = findViewById(R.id.btn_compaction)
         btnSummarizerErrors = findViewById(R.id.btn_summarizer_errors)
         summarizerErrorBadge = findViewById(R.id.summarizer_error_badge)
         summarizerOperationChip = findViewById(R.id.summarizer_operation_chip)
@@ -4908,6 +4910,9 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             org.teslasoft.assistant.util.summarizer.SummarizerControllerRegistry.cancel(chatId)
         }
         btnSummary?.setOnClickListener { showSummaryView() }
+        btnCompaction?.setOnClickListener {
+            if (chatId.isNotBlank()) startActivity(CompactionSummaryActivity.createIntent(this, chatId))
+        }
         btnSummarizerErrors?.setOnClickListener { showSummarizerErrorsDialog() }
         refreshSummarizerIcons()
         // The next eligible cycle (errors doc §3): opening the chat retries
@@ -4988,6 +4993,14 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 preferences?.getSummarizerSummary().orEmpty().isNotBlank()
         btnSummary?.visibility =
             if (summarizerOn || hasCondensedConversation) View.VISIBLE else View.GONE
+        // Compaction Summary: only once a compaction has completed. The icon
+        // shows whether the compacted form is currently in use.
+        val compacted = (preferences?.getManualCompactionBoundary() ?: 0) > 0
+        btnCompaction?.visibility = if (compacted) View.VISIBLE else View.GONE
+        btnCompaction?.setImageResource(
+            if (preferences?.getUseSummarizedConversationProjection() != false) R.drawable.ic_topic
+            else R.drawable.ic_docs_add_on
+        )
 
         val errors = org.teslasoft.assistant.util.summarizer.SummarizerErrorLog
             .fromJson(preferences?.getSummarizerErrors())

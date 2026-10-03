@@ -393,6 +393,23 @@
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_more_vert" />
 
+            <!-- Compaction Summary (owner ruling, Oct 3 2026): visible once the
+                 chat has been compacted. Topic while the compacted form is in
+                 use; Docs Add On while the full conversation is sent. -->
+            <ImageButton
+                android:id="@+id/btn_compaction"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/btn_accent_tonal_v4"
+                android:contentDescription="@string/compaction_icon_desc"
+                android:tooltipText="@string/compaction_icon_desc"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/btn_chat_menu"
+                app:layout_constraintTop_toTopOf="parent"
+                app:srcCompat="@drawable/ic_topic" />
+
             <ImageButton
                 android:id="@+id/btn_settings"
                 android:layout_width="48dp"
@@ -403,7 +420,7 @@
                 android:tooltipText="@string/btn_settings"
                 android:transitionName="settings"
                 app:layout_constraintBottom_toBottomOf="parent"
-                app:layout_constraintEnd_toStartOf="@+id/btn_chat_menu"
+                app:layout_constraintEnd_toStartOf="@+id/btn_compaction"
                 app:layout_constraintTop_toTopOf="parent"
                 app:srcCompat="@drawable/ic_settings" />
 
@@ -479,7 +496,7 @@
                 android:layout_height="wrap_content"
                 app:barrierAllowsGoneWidgets="false"
                 app:barrierDirection="start"
-                app:constraint_referenced_ids="btn_summarizer_errors,btn_summary,btn_quick_settings,btn_settings,btn_chat_menu" />
+                app:constraint_referenced_ids="btn_summarizer_errors,btn_summary,btn_quick_settings,btn_settings,btn_compaction,btn_chat_menu" />
 
             <ImageButton
                 android:id="@+id/btn_back"

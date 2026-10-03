@@ -253,6 +253,10 @@ A dialog containing only a short question should place that question in the titl
 
 Use `SaveIconFlash.flash(button)` (`org.teslasoft.assistant.ui.util`) after a successful save from a header Save icon, together with the save toast. The icon itself turns green, then returns to its normal tint; the button background is never recolored (owner ruling, Oct 3 2026). Current users: Edit Companion and Summarizer Prompts.
 
+### Confirmation with a "hide this hint" switch
+
+Use `HintConfirmDialog.show(...)` (`org.teslasoft.assistant.ui.util`) for an explanatory, non-destructive confirmation that the user may choose to stop seeing. Title and message use the standard dialog, the actions use `dialog_two_actions_cancel_first.xml` (Cancel left, Okay right), and the shared `layout/view_dialog_hint_toggle.xml` puts the hide switch on its own line beneath the buttons in ordinary body text (`Widget.App.CheckOption.Label`), on by default (owner ruling, Oct 3 2026). Current users: Compaction Summary's Uncompact and Recompact.
+
 ### Standard discard-changes dialog
 
 Use `DiscardChangesDialog.show(context) { onDiscard }` for a full-screen editor with unsaved changes.

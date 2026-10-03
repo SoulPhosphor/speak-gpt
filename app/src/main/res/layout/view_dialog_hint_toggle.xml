@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared "hide this hint" switch line placed beneath a dialog's action
+     buttons (ui.util.HintConfirmDialog). The label uses ordinary body text,
+     not title text, and wraps onto a second line when needed. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.App.CheckOption.Row"
+    android:paddingHorizontal="24dp"
+   >
+
+    <TextView
+        android:id="@+id/text_hint_toggle"
+        style="@style/Widget.App.CheckOption.Label"
+        android:layout_width="0dp"
+        android:layout_marginStart="0dp"
+        android:layout_weight="1" />
+
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/switch_hint_toggle"
+        style="@style/Widget.App.Row.Switch"
+        android:checked="true" />
+</LinearLayout>

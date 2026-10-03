@@ -3543,6 +3543,22 @@
     <string name="summarizer_prompts_field_hint">Write your prompt here…</string>
     <string name="summarizer_prompts_edit_desc">Edit Summarizer Prompts</string>
 
+    <!-- Compaction Summary screen (owner ruling, Oct 3 2026). -->
+    <string name="title_compaction_summary">Compaction Summary</string>
+    <string name="compaction_icon_desc">Compaction Summary</string>
+    <string name="compaction_summary_intro">This is the compacted text from your conversation that is sent instead of the full messages to save on token use.</string>
+    <string name="compaction_summary_in_progress">Compacting in Progress…</string>
+    <string name="compaction_summary_read_only">Compacted text is read only while the compactor is in progress.</string>
+    <string name="compaction_summary_success">Compaction Successful!</string>
+    <string name="compaction_uncompact_desc">Uncompact Conversation</string>
+    <string name="compaction_recompact_desc">Recompact Conversation</string>
+    <string name="compaction_uncompact_title">Uncompact Conversation?</string>
+    <string name="compaction_uncompact_body">This will not delete the compaction summary and you can return to the screen at any time to recompact using the previous summary.</string>
+    <string name="compaction_uncompact_hide">Hide this hint for the rest of the chat</string>
+    <string name="compaction_recompact_title">Recompact this Conversation?</string>
+    <string name="compaction_recompact_body">The AI will no longer receive the compacted messages in full and instead will receive the compacted text below.</string>
+    <string name="compaction_recompact_hide">Hide this message in this chat</string>
+
     <!-- Quick Settings (decision 3): toggle and number box, no hints. -->
     <string name="summarizer_use_toggle">Use Summarizer</string>
     <string name="quick_summarizer_hint">The Summarizer periodically condenses older completed messages into a shorter context summary. This helps a long chat retain important history without sending the entire transcript to the model on every turn. It does not delete messages from the visible conversation. Complete Messages controls how many finished messages are kept before another summary is created.\n\nGeneral Recommended Default: On, when a Summarizer model is configured.</string>
