@@ -37,7 +37,8 @@ import org.teslasoft.assistant.preferences.dto.CompanionPromptVariant
 /**
  * The shared multiple-prompt editor (layout/view_prompt_variant_editor.xml):
  * wrapping prompt tabs, the add button, and the three-dot menu with Make
- * Default, Rename, Copy From…, Duplicate, Copy, Clear, Revert and Delete.
+ * Default, Rename, Copy From…, Duplicate, Copy, Clear, Revert, Original
+ * Prompt (built-in prompts only) and Delete.
  * Used by Edit Companion and Summarizer Prompts. Edits stay in memory until
  * the host screen saves; Revert returns the open prompt's text to its text at
  * the last save ([markSaved]), or to empty for a prompt added since then.
@@ -49,8 +50,10 @@ class PromptVariantEditor(
     /** Dialog title shown when Delete is used on the only remaining prompt;
      *  null when protected prompts make that impossible. */
     private val lastPromptTitleRes: Int?,
-    /** Prompts that cannot be deleted (Delete is disabled while open). */
-    private val isProtected: (CompanionPromptVariant) -> Boolean = { false }
+    /** A built-in prompt's shipped text, or null for the user's own prompts.
+     *  Built-in prompts cannot be renamed or deleted, and their menu offers
+     *  Original Prompt to restore the shipped text. */
+    private val builtInOriginal: (CompanionPromptVariant) -> String? = { null }
 ) {
     private val tabRow: LinearLayout = root.findViewById(R.id.prompt_tab_row)
     private val tabName: TextView = root.findViewById(R.id.prompt_tab_name)
@@ -248,15 +251,19 @@ class PromptVariantEditor(
 
     private fun showMenu(anchor: View) {
         val menu = PopupMenu(activity, anchor)
+        val builtIn = variants.getOrNull(activeIndex)?.let { builtInOriginal(it) } != null
         menu.menu.add(0, MENU_MAKE_DEFAULT, 0, activity.getString(R.string.prompt_menu_make_default))
-        menu.menu.add(0, MENU_RENAME, 0, activity.getString(R.string.prompt_menu_rename))
+        if (!builtIn) menu.menu.add(0, MENU_RENAME, 0, activity.getString(R.string.prompt_menu_rename))
         menu.menu.add(0, MENU_COPY_FROM, 0, activity.getString(R.string.prompt_menu_copy_from))
         menu.menu.add(0, MENU_DUPLICATE, 0, activity.getString(R.string.prompt_menu_duplicate))
         menu.menu.add(0, MENU_COPY, 0, activity.getString(R.string.prompt_menu_copy))
         menu.menu.add(0, MENU_CLEAR, 0, activity.getString(R.string.prompt_menu_clear))
         menu.menu.add(0, MENU_REVERT, 0, activity.getString(R.string.prompt_menu_revert))
+        if (builtIn) {
+            menu.menu.add(0, MENU_ORIGINAL, 0, activity.getString(R.string.prompt_menu_original))
+        }
         val delete = menu.menu.add(0, MENU_DELETE, 0, activity.getString(R.string.prompt_menu_delete))
-        delete.isEnabled = variants.getOrNull(activeIndex)?.let { !isProtected(it) } ?: false
+        delete.isEnabled = activeIndex in variants.indices && !builtIn
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 MENU_MAKE_DEFAULT -> makeCurrentDefault()
@@ -266,6 +273,7 @@ class PromptVariantEditor(
                 MENU_COPY -> copyCurrentToClipboard()
                 MENU_CLEAR -> clearCurrent()
                 MENU_REVERT -> revertCurrent()
+                MENU_ORIGINAL -> restoreOriginalCurrent()
                 MENU_DELETE -> deleteCurrent()
             }
             true
@@ -448,9 +456,36 @@ class PromptVariantEditor(
         dialog.show()
     }
 
+    /** Returns a built-in prompt's box to its shipped text (kept on Save). */
+    private fun restoreOriginalCurrent() {
+        if (activeIndex !in variants.indices) return
+        val original = builtInOriginal(variants[activeIndex]) ?: return
+        if ((field.text?.toString() ?: "") == original) return
+
+        val actionsView = activity.layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
+        val dialog = MaterialAlertDialogBuilder(activity, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.prompt_original_title)
+            .setView(actionsView)
+            .create()
+
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.btn_ok)
+            setOnClickListener {
+                field.setText(original)
+                flushActivePrompt()
+                dialog.dismiss()
+            }
+        }
+        actionsView.findViewById<MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+        dialog.show()
+    }
+
     private fun deleteCurrent() {
         if (activeIndex !in variants.indices) return
-        if (isProtected(variants[activeIndex])) return
+        if (builtInOriginal(variants[activeIndex]) != null) return
         if (variants.size <= 1) {
             if (lastPromptTitleRes == null) return
             val actionsView = activity.layoutInflater.inflate(R.layout.dialog_single_action, null)
@@ -567,5 +602,6 @@ class PromptVariantEditor(
         const val MENU_DELETE = 6
         const val MENU_COPY = 7
         const val MENU_REVERT = 8
+        const val MENU_ORIGINAL = 9
     }
 }

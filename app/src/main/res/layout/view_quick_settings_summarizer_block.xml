@@ -2,8 +2,8 @@
 <!-- Summarizer block (owner ruling, Oct 3 2026): Use Summarizer with its
      Complete Messages box, then the Summary, Compaction, and Image prompts
      used by this chat screen. Each prompt is an inline dropdown when its
-     collection holds more than one prompt, otherwise a value that opens the
-     prompt editor; the gear always opens the prompt editor at that prompt.
+     collection holds more than one prompt, otherwise plain text that opens
+     the prompt editor; the gear always opens the prompt editor at that prompt.
      The whole block is hidden until a summarizer model is configured. -->
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
@@ -89,6 +89,20 @@
             app:layout_constraintStart_toEndOf="@+id/label_summary_prompt"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- Shown instead of the dropdown when the collection holds only one
+             prompt: plain text, like the AI Model value, that opens the
+             prompt editor. -->
+        <TextView
+            android:id="@+id/plain_summary_prompt"
+            style="@style/Widget.App.QuickSettings.ActionValue"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_summary_prompt"
+            app:layout_constraintStart_toEndOf="@+id/label_summary_prompt"
+            app:layout_constraintTop_toTopOf="parent" />
+
         <ImageView
             android:id="@+id/btn_edit_summary_prompt"
             style="@style/Widget.App.QuickSettings.Gear"
@@ -120,6 +134,20 @@
             app:layout_constraintStart_toEndOf="@+id/label_compaction_prompt"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- Shown instead of the dropdown when the collection holds only one
+             prompt: plain text, like the AI Model value, that opens the
+             prompt editor. -->
+        <TextView
+            android:id="@+id/plain_compaction_prompt"
+            style="@style/Widget.App.QuickSettings.ActionValue"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_compaction_prompt"
+            app:layout_constraintStart_toEndOf="@+id/label_compaction_prompt"
+            app:layout_constraintTop_toTopOf="parent" />
+
         <ImageView
             android:id="@+id/btn_edit_compaction_prompt"
             style="@style/Widget.App.QuickSettings.Gear"
@@ -146,6 +174,20 @@
             android:id="@+id/text_image_prompt"
             style="@style/Widget.App.QuickTile.Value"
             android:layout_width="0dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_image_prompt"
+            app:layout_constraintStart_toEndOf="@+id/label_image_prompt"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Shown instead of the dropdown when the collection holds only one
+             prompt: plain text, like the AI Model value, that opens the
+             prompt editor. -->
+        <TextView
+            android:id="@+id/plain_image_prompt"
+            style="@style/Widget.App.QuickSettings.ActionValue"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/btn_edit_image_prompt"
             app:layout_constraintStart_toEndOf="@+id/label_image_prompt"

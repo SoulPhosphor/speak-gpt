@@ -174,6 +174,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
         val kind: SummarizerPromptSets.Kind,
         val row: View,
         val value: TextView,
+        val plainValue: TextView,
         val gear: View
     )
     private var summarizerPromptRows: List<SummarizerPromptRow> = emptyList()
@@ -1064,18 +1065,21 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
                 SummarizerPromptSets.Kind.SUMMARY,
                 view.findViewById(R.id.row_summary_prompt),
                 view.findViewById(R.id.text_summary_prompt),
+                view.findViewById(R.id.plain_summary_prompt),
                 view.findViewById(R.id.btn_edit_summary_prompt)
             ),
             SummarizerPromptRow(
                 SummarizerPromptSets.Kind.COMPACTION,
                 view.findViewById(R.id.row_compaction_prompt),
                 view.findViewById(R.id.text_compaction_prompt),
+                view.findViewById(R.id.plain_compaction_prompt),
                 view.findViewById(R.id.btn_edit_compaction_prompt)
             ),
             SummarizerPromptRow(
                 SummarizerPromptSets.Kind.IMAGE,
                 view.findViewById(R.id.row_image_prompt),
                 view.findViewById(R.id.text_image_prompt),
+                view.findViewById(R.id.plain_image_prompt),
                 view.findViewById(R.id.btn_edit_image_prompt)
             )
         )
@@ -1445,6 +1449,7 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private fun setupSummarizerPromptRows() {
         for (promptRow in summarizerPromptRows) {
             promptRow.value.setOnClickListener { onSummarizerPromptTapped(promptRow) }
+            promptRow.plainValue.setOnClickListener { openSummarizerPrompts(promptRow.kind) }
             promptRow.gear.setOnClickListener { openSummarizerPrompts(promptRow.kind) }
         }
         refreshSummarizerPromptRows()
@@ -1466,13 +1471,18 @@ class QuickSettingsBottomSheetDialogFragment : BottomSheetDialogFragment() {
     private fun refreshSummarizerPromptRows() {
         for (promptRow in summarizerPromptRows) {
             val (variants, index) = summarizerPromptChoices(promptRow.kind)
-            promptRow.value.text = variants.getOrNull(index)?.name.orEmpty()
+            val name = variants.getOrNull(index)?.name.orEmpty()
+            val single = variants.size <= 1
+            promptRow.value.text = name
+            promptRow.plainValue.text = name
+            promptRow.value.visibility = if (single) View.GONE else View.VISIBLE
+            promptRow.plainValue.visibility = if (single) View.VISIBLE else View.GONE
         }
     }
 
     /** More than one prompt: an inline dropdown that changes only this chat
-     *  screen's choice. A single prompt is not a choice, so the value opens
-     *  the prompt editor instead. */
+     *  screen's choice. A single prompt shows as plain text that opens the
+     *  prompt editor instead. */
     private fun onSummarizerPromptTapped(promptRow: SummarizerPromptRow) {
         val (variants, index) = summarizerPromptChoices(promptRow.kind)
         if (variants.size <= 1) {

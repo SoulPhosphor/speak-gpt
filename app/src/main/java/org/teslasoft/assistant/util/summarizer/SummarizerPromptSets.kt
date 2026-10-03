@@ -72,6 +72,9 @@ object SummarizerPromptSets {
 
     fun isBuiltIn(kind: Kind, id: String): Boolean = builtIns(kind).any { it.id == id }
 
+    /** A built-in prompt's shipped text, or null for the user's own prompts. */
+    fun originalText(kind: Kind, id: String): String? = builtIns(kind).firstOrNull { it.id == id }?.text
+
     /** The collection as last saved, or as carried over from older settings. */
     fun load(prefs: Preferences, kind: Kind): List<CompanionPromptVariant> {
         val stored = CompanionPromptVariant.fromJson(prefs.getSummarizerPromptSet(kind.storageKey))
@@ -125,12 +128,16 @@ object SummarizerPromptSets {
         slotPrompt = prefs::getSummarizerSlotPrompt
     )
 
-    /** Built-ins are restored if missing, and exactly one prompt is default. */
+    /** Built-ins are restored if missing and keep their shipped names (they
+     *  cannot be renamed), and exactly one prompt is default. */
     internal fun normalize(kind: Kind, variants: List<CompanionPromptVariant>): List<CompanionPromptVariant> {
         val result = ArrayList(variants.map { it.copy() })
         for ((index, builtIn) in builtIns(kind).withIndex()) {
-            if (result.none { it.id == builtIn.id }) {
+            val existing = result.firstOrNull { it.id == builtIn.id }
+            if (existing == null) {
                 result.add(index.coerceAtMost(result.size), builtIn.copy(isDefault = false))
+            } else {
+                existing.name = builtIn.name
             }
         }
         val defaultIndex = result.indexOfFirst { it.isDefault }.takeIf { it >= 0 } ?: 0

@@ -94,6 +94,17 @@ class SummarizerPromptSetsTest {
     }
 
     @Test
+    fun builtInsKeepTheirShippedNamesAndOriginalText() {
+        val renamed = SummarizerPromptSets.builtIns(Kind.SUMMARY).map { it.copy(name = "Renamed", text = "Edited.") }
+        val normalized = SummarizerPromptSets.normalize(Kind.SUMMARY, renamed)
+        assertEquals(listOf(SummarizerPrompts.STORYTELLER_NAME, SummarizerPrompts.REPORTER_NAME), normalized.map { it.name })
+        assertEquals(listOf("Edited.", "Edited."), normalized.map { it.text })
+        assertEquals(SummarizerPrompts.STORYTELLER, SummarizerPromptSets.originalText(Kind.COMPACTION, SummarizerPromptSets.STORYTELLER_ID))
+        assertEquals(SummarizerPrompts.IMAGE_SUMMARY, SummarizerPromptSets.originalText(Kind.IMAGE, SummarizerPromptSets.IMAGE_SUMMARY_ID))
+        assertEquals(null, SummarizerPromptSets.originalText(Kind.SUMMARY, "legacy_slot_2"))
+    }
+
+    @Test
     fun builtInsAreRecognizedPerCollection() {
         assertTrue(SummarizerPromptSets.isBuiltIn(Kind.SUMMARY, SummarizerPromptSets.STORYTELLER_ID))
         assertTrue(SummarizerPromptSets.isBuiltIn(Kind.COMPACTION, SummarizerPromptSets.REPORTER_ID))

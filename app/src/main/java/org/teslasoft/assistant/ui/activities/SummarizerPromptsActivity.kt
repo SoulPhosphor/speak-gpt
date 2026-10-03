@@ -84,13 +84,14 @@ class SummarizerPromptsActivity : FragmentActivity() {
         textKindHint = findViewById(R.id.text_prompt_kind_hint)
         ScreenChrome.apply(this, actionBar, btnBack, btnSave)
 
-        // Built-in prompts of whichever collection is open cannot be deleted.
+        // Built-in prompts of whichever collection is open keep their names,
+        // cannot be deleted, and can always return to their shipped text.
         editor = PromptVariantEditor(
             this,
             findViewById(R.id.prompt_variant_editor),
             R.string.summarizer_prompts_field_hint,
             null
-        ) { SummarizerPromptSets.isBuiltIn(openKind, it.id) }
+        ) { SummarizerPromptSets.originalText(openKind, it.id) }
 
         val restoredOpen = savedInstanceState?.getString(STATE_OPEN_KIND)
             ?.let { name -> SummarizerPromptSets.Kind.entries.firstOrNull { it.name == name } }
