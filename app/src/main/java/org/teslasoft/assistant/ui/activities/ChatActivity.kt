@@ -3314,14 +3314,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                 }
 
                 if (swipeDir == ItemTouchHelper.LEFT && !bulkSelectionMode) {
-                    MaterialAlertDialogBuilder(this@ChatActivity, R.style.App_MaterialAlertDialog)
-                        .setTitle(R.string.label_confirm_deletion)
-                        .setMessage(R.string.msg_confirm_deletion_chat)
-                        .setPositiveButton(R.string.btn_delete) { _, _ -> run {
-                            adapter?.onDelete(position)
-                        }}
-                        .setNegativeButton(R.string.btn_cancel) { _, _ -> }
-                        .show()
+                    adapter?.onDelete(position)
                 }
             }
         }
@@ -12591,7 +12584,7 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
     private fun removeLastAssistantMessageIfAvailable() {
         if (messages.isNotEmpty() && messages.size - 1 > 0 && messages[messages.size - 1]["isBot"] == true) {
             // messages.removeAt(messages.size - 1)
-            adapter?.onDelete(messages.size - 1)
+            adapter?.removeMessageForRetry(messages.size - 1)
         }
 
         if (chatMessages.isNotEmpty() && chatMessages.size - 1 > 0 && chatMessages[chatMessages.size - 1].role == Role.Assistant) {
@@ -12796,6 +12789,51 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         syncChatProjection()
     }
 
+    override fun onMessageDeleteRequested(position: Int) {
+        val target = messages.getOrNull(position) ?: return
+        val actions = layoutInflater.inflate(R.layout.dialog_message_delete_actions, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.message_tail_delete_title)
+            .setMessage(R.string.message_tail_delete_body)
+            .setView(actions)
+            .create()
+        actions.findViewById<View>(R.id.message_delete_cancel).setOnClickListener { dialog.dismiss() }
+        actions.findViewById<View>(R.id.message_delete_keep).setOnClickListener {
+            dialog.dismiss()
+            deleteMessageRange(target, deleteFollowing = false)
+        }
+        actions.findViewById<View>(R.id.message_delete_all).setOnClickListener {
+            dialog.dismiss()
+            deleteMessageRange(target, deleteFollowing = true)
+        }
+        dialog.show()
+    }
+
+    private fun deleteMessageRange(target: HashMap<String, Any>, deleteFollowing: Boolean) {
+        lifecycleScope.launch {
+            val generationJobs = listOfNotNull(
+                parseMessageScope?.coroutineContext?.get(kotlinx.coroutines.Job),
+                onSpeechResultsScope?.coroutineContext?.get(kotlinx.coroutines.Job)
+            )
+            generationJobs.forEach { it.cancel() }
+            stopReadback()
+            if (chatId.isNotBlank()) ImageGenerationJobRegistry.cancel(chatId)
+            generationJobs.forEach { it.join() }
+            val currentPosition = messages.indexOfFirst { it === target }
+            if (currentPosition < 0 || chatStorageUnavailable || deletingChat) return@launch
+            val end = if (deleteFollowing) messages.size else currentPosition + 1
+            val removed = ArrayList(messages.subList(currentPosition, end))
+            messages.subList(currentPosition, end).clear()
+            // Gallery records and generated image files have independent lifetimes.
+            if (saveSettings(synchronous = true) != ChatStorageHealth.WriteOutcome.OK) {
+                messages.addAll(currentPosition, removed)
+                Toast.makeText(this@ChatActivity, R.string.label_sorry_action_failed, Toast.LENGTH_LONG).show()
+            }
+            syncChatProjection()
+            deselectAll()
+        }
+    }
+
     override fun onMessageDeleted() {
         syncChatProjection()
     }
@@ -12975,6 +13013,13 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
 
     @SuppressLint("NotifyDataSetChanged")
     private fun deleteSelectedMessages() {
+        val selected = messagesSelectionProjection.indices.filter {
+            messagesSelectionProjection[it]["selected"] == true
+        }
+        if (selected.size == 1) {
+            onMessageDeleteRequested(selected.first())
+            return
+        }
         MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
             .setTitle("Delete selected messages")
             .setMessage("Are you sure you want to delete selected messages?")

@@ -3856,4 +3856,8 @@
     <string name="drawer_open">Open Drawer</string>
     <string name="drawer_close">Close Drawer</string>
     <string name="drawer_brand">Soul Phosphor</string>
+    <string name="message_tail_delete_title">Delete this message and all messages after it?</string>
+    <string name="message_tail_delete_body">This will also remove all attached documents and uploaded images in this message or sent later in the conversation. Generated images will no longer be present in the chat but will remain in the image gallery.</string>
+    <string name="message_tail_keep">Keep Messages</string>
+    <string name="message_tail_delete">Yes, Delete Them</string>
 </resources>

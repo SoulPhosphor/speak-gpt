@@ -3203,6 +3203,12 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
     }
 
     override fun onDelete(position: Int) {
+        if (position !in dataArray.indices) return
+        listener?.onMessageDeleteRequested(position)
+    }
+
+    /** Internal retry cleanup; user deletion goes through the host confirmation. */
+    fun removeMessageForRetry(position: Int) {
         if (position < 0 || position >= dataArray.size) return
         // §12 cleanup: note the generated-image file this message references
         // BEFORE removing it; once the deletion is persisted, the file goes
@@ -3239,6 +3245,8 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
 
         fun onMessageEdited()
         fun onMessageDeleted()
+
+        fun onMessageDeleteRequested(position: Int)
         fun onIncludeEdit(includeId: String)
         fun onIncludeRemove(includeId: String)
         fun onIncludeCondense(includeId: String)
