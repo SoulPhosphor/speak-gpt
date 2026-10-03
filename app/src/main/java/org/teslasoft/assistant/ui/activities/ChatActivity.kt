@@ -3064,8 +3064,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
                         findIncludeById(includeId)?.let(::editInclude)
                     }
 
-                    override fun onIncludeRemove(includeId: String) {
-                        findIncludeById(includeId)?.let(::removeInclude)
+                    override fun onIncludeRemove(includeId: String, onRemoved: () -> Unit) {
+                        requestIncludeRemoval(includeId, onRemoved)
                     }
 
                     override fun onIncludeCondense(includeId: String) {
@@ -3889,6 +3889,36 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
      * way.
      */
     private fun removeInclude(include: ChatInclude) {
+        requestIncludeRemoval(include.id)
+    }
+
+    private fun requestIncludeRemoval(includeId: String, onRemoved: (() -> Unit)? = null) {
+        val include = findIncludeById(includeId) ?: return
+        if (include.form == IncludeForm.ARTIFACT) return
+        val actions = layoutInflater.inflate(R.layout.dialog_two_actions_cancel_first, null)
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(getString(R.string.include_remove_title, include.fileName))
+            .setMessage(if (include.kind.isImage()) R.string.include_remove_image_body else R.string.include_remove_document_body)
+            .setView(actions)
+            .create()
+        actions.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_destructive_action).apply {
+            setText(R.string.btn_cancel)
+            setOnClickListener { dialog.dismiss() }
+        }
+        actions.findViewById<com.google.android.material.button.MaterialButton>(R.id.btn_dialog_primary_action).apply {
+            setText(R.string.btn_ok)
+            setOnClickListener {
+                dialog.dismiss()
+                val current = findIncludeById(includeId) ?: return@setOnClickListener
+                if (current.form == IncludeForm.ARTIFACT) return@setOnClickListener
+                removeConfirmedInclude(current)
+                onRemoved?.invoke()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun removeConfirmedInclude(include: ChatInclude) {
         val pendingIndex = pendingIncludes.indexOfFirst { it.id == include.id }
         if (pendingIndex >= 0) {
             // It was never sent, so detaching it must leave no model-facing
@@ -12842,8 +12872,8 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         findIncludeById(includeId)?.let(::editInclude)
     }
 
-    override fun onIncludeRemove(includeId: String) {
-        findIncludeById(includeId)?.let(::removeInclude)
+    override fun onIncludeRemove(includeId: String, onRemoved: (() -> Unit)?) {
+        requestIncludeRemoval(includeId, onRemoved)
     }
 
     override fun onIncludeCondense(includeId: String) {

@@ -3860,4 +3860,8 @@
     <string name="message_tail_delete_body">This will also remove all attached documents and uploaded images in this message or sent later in the conversation. Generated images will no longer be present in the chat but will remain in the image gallery.</string>
     <string name="message_tail_keep">Keep Messages</string>
     <string name="message_tail_delete">Yes, Delete Them</string>
+    <string name="include_remove_title">Remove %1$s?</string>
+    <string name="include_remove_image_body">The AI model will not be able to recall any of the information from the image you are removing.</string>
+    <string name="include_remove_document_body">The AI model will not be able to recall any of the information from the document you are removing.</string>
+    <string name="include_removed_name">%1$s (removed)</string>
 </resources>

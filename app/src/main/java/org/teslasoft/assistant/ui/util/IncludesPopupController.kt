@@ -46,7 +46,7 @@ object IncludesPopupController {
 
     interface Callbacks {
         fun onIncludeEdit(includeId: String)
-        fun onIncludeRemove(includeId: String)
+        fun onIncludeRemove(includeId: String, onRemoved: () -> Unit)
         fun onIncludeCondense(includeId: String)
     }
 
@@ -76,33 +76,44 @@ object IncludesPopupController {
         val inflater = LayoutInflater.from(anchor.context)
         lateinit var popup: PopupWindow
 
-        for (include in current) {
-            val row = inflater.inflate(R.layout.view_includes_popup_item, list, false)
-            bindRow(row, include)
-            val action = row.findViewById<ImageButton>(R.id.includes_popup_item_action)
-            if (include.form == IncludeForm.ARTIFACT) {
-                // The attachment itself is gone, so there is nothing left to
-                // condense or remove. The row's control opens the sentence or
-                // two that stands in for it instead of a menu.
-                action?.setImageResource(R.drawable.ic_edit_square)
-                action?.contentDescription = row.context.getString(R.string.include_action_edit)
-                action?.setOnClickListener {
-                    popup.dismiss()
-                    callbacks.onIncludeEdit(include.id)
+        fun renderRows() {
+            list.removeAllViews()
+            val latestById = resolveCurrent(wantedIds.toSet()).associateBy { it.id }
+            for (include in wantedIds.mapNotNull { latestById[it] }) {
+                val row = inflater.inflate(R.layout.view_includes_popup_item, list, false)
+                bindRow(row, include)
+                val action = row.findViewById<ImageButton>(R.id.includes_popup_item_action)
+                if (include.form == IncludeForm.ARTIFACT) {
+                    // The attachment itself is gone, so there is nothing left to
+                    // condense or remove. The row's control opens the sentence or
+                    // two that stands in for it instead of a menu.
+                    action?.setImageResource(R.drawable.ic_edit_square)
+                    action?.contentDescription = row.context.getString(R.string.include_action_edit)
+                    action?.setOnClickListener {
+                        popup.dismiss()
+                        callbacks.onIncludeEdit(include.id)
+                    }
+                } else {
+                    action?.setImageResource(R.drawable.ic_more_vert)
+                    action?.setOnClickListener {
+                        showItemMenu(
+                            it,
+                            include,
+                            onAction = { popup.dismiss() },
+                            onRemoved = {
+                                if (popup.isShowing) {
+                                    renderRows()
+                                    popup.update()
+                                }
+                            },
+                            callbacks = callbacks
+                        )
+                    }
                 }
-            } else {
-                action?.setImageResource(R.drawable.ic_more_vert)
-                action?.setOnClickListener {
-                    showItemMenu(
-                        it,
-                        include,
-                        onAction = { popup.dismiss() },
-                        callbacks = callbacks
-                    )
-                }
+                list.addView(row)
             }
-            list.addView(row)
         }
+        renderRows()
 
         // The popup is given a definite width instead of wrapping its content.
         // A wrapped row measures the file name at its full natural length, so a
@@ -144,7 +155,9 @@ object IncludesPopupController {
     private fun bindRow(row: View, include: ChatInclude) {
         row.findViewById<ImageView>(R.id.includes_popup_item_icon)
             ?.setImageResource(iconFor(include.kind))
-        row.findViewById<TextView>(R.id.includes_popup_item_name)?.text = include.fileName
+        row.findViewById<TextView>(R.id.includes_popup_item_name)?.text = if (include.form == IncludeForm.ARTIFACT) {
+            row.context.getString(R.string.include_removed_name, include.fileName)
+        } else include.fileName
         // currentTokens() reads the form the item is in right now, so a
         // condensed document or a reduced image shows its new, smaller
         // estimate here rather than what it weighed when it was sent.
@@ -171,6 +184,7 @@ object IncludesPopupController {
         anchor: View,
         include: ChatInclude,
         onAction: () -> Unit,
+        onRemoved: () -> Unit,
         callbacks: Callbacks
     ) {
         val popup = PopupMenu(anchor.context, anchor)
@@ -206,8 +220,7 @@ object IncludesPopupController {
                     callbacks.onIncludeEdit(include.id)
                 }
                 MENU_REMOVE -> {
-                    onAction()
-                    callbacks.onIncludeRemove(include.id)
+                    callbacks.onIncludeRemove(include.id, onRemoved)
                 }
                 MENU_CONDENSE -> {
                     onAction()
