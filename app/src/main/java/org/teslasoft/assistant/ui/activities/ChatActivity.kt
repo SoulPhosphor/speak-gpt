@@ -8817,11 +8817,28 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         terminalRecord?.let { record ->
             val carrier = messages.lastOrNull { it["isBot"] == true }
                 ?: messages.lastOrNull { it["isBot"] != true }
-            carrier?.let { attachUsageRecords(it, listOf(record), it["isBot"] == true) }
+            carrier?.let {
+                attachUsageRecords(it, listOf(record), it["isBot"] == true)
+                mirrorUsageRecordsToCanonicalVariant(it)
+            }
         }
         val r = currentLifecycle ?: return
         if (r.finalized) return
         writeLifecycle(r, outcome, finishReasonDisplay, streamClosed, termination, errorText)
+    }
+
+    /** A reply with versions is totalled from its version list, and its
+     * top-level fields mirror the canonical version. A record added to the
+     * top level must therefore also be written into that version, or it would
+     * be left out of the totals and lost when another version is shown. */
+    private fun mirrorUsageRecordsToCanonicalVariant(message: HashMap<String, Any>) {
+        val variants = ChatAdapter.parseVariants(message[ChatAdapter.KEY_VARIANTS]?.toString())
+        if (variants.isEmpty()) return
+        val canonical = (message[ChatAdapter.KEY_CANONICAL_VARIANT]?.toString()?.toIntOrNull()
+            ?: variants.lastIndex).coerceIn(0, variants.lastIndex)
+        val records = message[ChatAdapter.KEY_TOKEN_USAGE_RECORDS]?.toString() ?: return
+        variants[canonical][ChatAdapter.KEY_TOKEN_USAGE_RECORDS] = records
+        message[ChatAdapter.KEY_VARIANTS] = ChatAdapter.variantsToJson(variants)
     }
 
     /** A stopped or failed request counts only when the serving API actually

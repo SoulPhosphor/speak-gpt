@@ -5,6 +5,7 @@
 
 package org.teslasoft.assistant.usage
 
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -128,27 +129,18 @@ object TokenPricingCatalogClient {
         return TokenPricingCatalog(model, providerPrices = parsed.endpoints)
     }
 
+    /** Any other service: its own model list, read in whichever common price
+     * layout it uses. Some services (NanoGPT) include prices only in a detailed
+     * listing, which is requested when the plain one carries none. */
     private fun loadGeneric(endpoint: ApiEndpointObject, model: String): TokenPricingCatalog? {
         val base = endpoint.host.toHttpUrlOrNull() ?: return null
-        val body = fetch(endpoint, base.newBuilder().addPathSegment("models").build().toString())
+        val models = base.newBuilder().addPathSegment("models")
+        val plain = fetch(endpoint, models.build().toString())
+        val pricing = plain?.let { GenericPricing.match(it, model) }
+            ?: fetch(endpoint, models.addQueryParameter("detailed", "true").build().toString())
+                ?.let { GenericPricing.match(it, model) }
             ?: return null
-        val root = JsonParser.parseString(body).takeIf { it.isJsonObject }?.asJsonObject ?: return null
-        val data = root.get("data")?.takeIf { it.isJsonArray }?.asJsonArray ?: return null
-        val item = data.firstOrNull { element ->
-            element.isJsonObject && element.asJsonObject.get("id")
-                ?.takeIf { it.isJsonPrimitive }?.asString == model
-        }?.asJsonObject ?: return null
-        val pricing = item.get("pricing")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
-        fun number(name: String): Double? = try {
-            pricing.get(name)?.takeIf { it.isJsonPrimitive }?.asDouble
-        } catch (_: Exception) { null }
-        val snapshot = TokenPricingSnapshot(
-            number("prompt"),
-            number("completion"),
-            number("input_cache_read") ?: number("cached_prompt"),
-            number("input_cache_write")
-        )
-        return TokenPricingCatalog(model, modelPricing = snapshot)
+        return TokenPricingCatalog(model, modelPricing = pricing)
     }
 
     private fun fetch(endpoint: ApiEndpointObject, url: String): String? {
@@ -272,5 +264,105 @@ internal object FirstPartyPricing {
 
     private fun com.google.gson.JsonObject.stringOrNull(name: String): String? = try {
         get(name)?.takeIf { it.isJsonPrimitive }?.asString
+    } catch (_: Exception) { null }
+}
+
+/** Reads a service's own model list in the price layouts services commonly
+ * use, converting each to dollars per token:
+ * - `pricing` with `prompt` / `completion` (OpenRouter style, and NanoGPT,
+ *   whose `unit` field says per million tokens);
+ * - `model_spec.pricing` with `input.usd` / `output.usd` per million tokens
+ *   (Venice style).
+ * A stated unit is honored. Without one, a price above $0.001 per token is
+ * impossible for text, so the list must be per million tokens. Prices are
+ * marked as inferred so a reported charge can correct a wrong unit. Any price
+ * still above $0.001 per token after conversion, or in another currency, is
+ * rejected rather than shown. */
+internal object GenericPricing {
+    private const val MAX_PRICE_PER_TOKEN = 0.001
+
+    fun match(catalogJson: String, model: String): TokenPricingSnapshot? {
+        val root = try {
+            JsonParser.parseString(catalogJson).takeIf { it.isJsonObject }?.asJsonObject
+        } catch (_: Exception) { null } ?: return null
+        val items = (root.get("data") ?: root.get("models"))
+            ?.takeIf { it.isJsonArray }?.asJsonArray
+            ?.mapNotNull { it.takeIf { e -> e.isJsonObject }?.asJsonObject }
+            ?: return null
+        fun id(item: JsonObject): String? = try {
+            item.get("id")?.takeIf { it.isJsonPrimitive }?.asString?.trim()?.lowercase()
+        } catch (_: Exception) { null }
+        val wanted = model.trim().lowercase()
+        val item = items.firstOrNull { id(it) == wanted }
+            ?: items.filter { id(it)?.substringAfterLast('/') == wanted.substringAfterLast('/') }
+                .singleOrNull()
+            ?: return null
+        return fromOpenRouterStyle(item) ?: fromVeniceStyle(item)
+    }
+
+    private fun fromOpenRouterStyle(item: JsonObject): TokenPricingSnapshot? {
+        val pricing = item.get("pricing")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+        if (!isUsd(pricing.text("currency"))) return null
+        val input = pricing.amount("prompt", "input") ?: return null
+        val output = pricing.amount("completion", "output") ?: return null
+        val cached = pricing.amount("input_cache_read", "cached_prompt", "cache_read")
+        val write = pricing.amount("input_cache_write", "cache_write")
+        val stated = unitFactor(pricing.text("unit") ?: item.text("pricing_unit"))
+        val factor = stated ?: if (maxOf(input, output) > MAX_PRICE_PER_TOKEN) 1e-6 else 1.0
+        return checked(
+            TokenPricingSnapshot(input, output, cached, write, unitInferred = true).scaled(factor)
+        )
+    }
+
+    private fun fromVeniceStyle(item: JsonObject): TokenPricingSnapshot? {
+        val pricing = item.get("model_spec")?.takeIf { it.isJsonObject }?.asJsonObject
+            ?.get("pricing")?.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+        val input = pricing.amount("input") ?: return null
+        val output = pricing.amount("output") ?: return null
+        val cached = pricing.amount("cache_input", "cache_read")
+        val write = pricing.amount("cache_write")
+        return checked(
+            TokenPricingSnapshot(input, output, cached, write, unitInferred = true).scaled(1e-6)
+        )
+    }
+
+    private fun checked(pricing: TokenPricingSnapshot): TokenPricingSnapshot? {
+        val prices = listOfNotNull(
+            pricing.inputPricePerToken, pricing.outputPricePerToken,
+            pricing.cachedInputPricePerToken, pricing.cacheWriteInputPricePerToken
+        )
+        return pricing.takeIf { prices.all { it >= 0.0 && it <= MAX_PRICE_PER_TOKEN } }
+    }
+
+    /** Dollars-per-token factor for a stated unit, or null when none is stated. */
+    private fun unitFactor(unit: String?): Double? {
+        val text = unit?.lowercase()?.replace(" ", "_") ?: return null
+        return when {
+            "million" in text || "1m" in text -> 1e-6
+            "thousand" in text || "1k" in text -> 1e-3
+            "token" in text -> 1.0
+            else -> null
+        }
+    }
+
+    private fun isUsd(currency: String?): Boolean =
+        currency == null || currency.equals("USD", ignoreCase = true)
+
+    /** A price written as a number, a numeric string, or `{"usd": n}`. */
+    private fun JsonObject.amount(vararg names: String): Double? =
+        names.firstNotNullOfOrNull { name ->
+            val value = get(name) ?: return@firstNotNullOfOrNull null
+            try {
+                when {
+                    value.isJsonPrimitive -> value.asDouble
+                    value.isJsonObject -> value.asJsonObject.get("usd")
+                        ?.takeIf { it.isJsonPrimitive }?.asDouble
+                    else -> null
+                }
+            } catch (_: Exception) { null }
+        }?.takeIf { it >= 0.0 }
+
+    private fun JsonObject.text(name: String): String? = try {
+        get(name)?.takeIf { it.isJsonPrimitive }?.asString?.trim()?.ifBlank { null }
     } catch (_: Exception) { null }
 }

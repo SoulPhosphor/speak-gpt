@@ -3,6 +3,7 @@ package org.teslasoft.assistant.usage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.teslasoft.assistant.preferences.dto.ApiEndpointObject
 import org.teslasoft.assistant.providers.ProviderEndpointInfo
@@ -98,6 +99,56 @@ class TokenPricingCatalogTest {
         val pricing = catalog.pricingFor("deepinfra")!!
         assertNotNull(pricing.cachedInputPricePerToken)
         assertNotNull(pricing.cacheWriteInputPricePerToken)
+    }
+
+    @Test fun genericListInOpenRouterStyleIsReadPerToken() {
+        val pricing = GenericPricing.match(
+            """{"data":[{"id":"some/model","pricing":{"prompt":"0.000002",
+                "completion":"0.000008","input_cache_read":"0.0000005"}}]}""",
+            "some/model"
+        )!!
+        assertEquals(0.000002, pricing.inputPricePerToken!!, 1e-15)
+        assertEquals(0.0000005, pricing.cachedInputPricePerToken!!, 1e-15)
+        assertTrue(pricing.unitInferred)
+    }
+
+    @Test fun nanoGptStatedPerMillionUnitIsConverted() {
+        val pricing = GenericPricing.match(
+            """{"data":[{"id":"openai/gpt-4o-mini","pricing":{"prompt":0.15,
+                "completion":0.6,"currency":"USD","unit":"per_million_tokens"}}]}""",
+            "gpt-4o-mini"
+        )!!
+        assertEquals(0.00000015, pricing.inputPricePerToken!!, 1e-15)
+        assertEquals(0.0000006, pricing.outputPricePerToken!!, 1e-15)
+    }
+
+    @Test fun unstatedUnitAboveAnyRealPerTokenPriceIsReadPerMillion() {
+        val pricing = GenericPricing.match(
+            """{"data":[{"id":"m","pricing":{"prompt":3,"completion":15}}]}""", "m"
+        )!!
+        assertEquals(0.000003, pricing.inputPricePerToken!!, 1e-15)
+    }
+
+    @Test fun veniceModelSpecPricesAreReadPerMillionUsd() {
+        val pricing = GenericPricing.match(
+            """{"data":[{"id":"venice-uncensored","model_spec":{"pricing":{
+                "input":{"usd":0.2,"diem":0.2},"output":{"usd":0.9,"diem":0.9}}}}]}""",
+            "venice-uncensored"
+        )!!
+        assertEquals(0.0000002, pricing.inputPricePerToken!!, 1e-15)
+        assertEquals(0.0000009, pricing.outputPricePerToken!!, 1e-15)
+    }
+
+    @Test fun impossibleForeignOrMissingPricesAreRejected() {
+        assertNull(GenericPricing.match(
+            """{"data":[{"id":"m","pricing":{"prompt":5000,"completion":5000,
+                "unit":"per_token"}}]}""", "m"))
+        assertNull(GenericPricing.match(
+            """{"data":[{"id":"m","pricing":{"prompt":1,"completion":2,
+                "currency":"EUR","unit":"per_million_tokens"}}]}""", "m"))
+        assertNull(GenericPricing.match("""{"data":[{"id":"m"}]}""", "m"))
+        assertNull(GenericPricing.match("""{"data":[{"id":"other","pricing":{
+            "prompt":"0.000001","completion":"0.000002"}}]}""", "m"))
     }
 
     private companion object {

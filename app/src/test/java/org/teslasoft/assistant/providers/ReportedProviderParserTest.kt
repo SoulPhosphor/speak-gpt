@@ -163,6 +163,29 @@ class ReportedProviderParserTest {
         assertEquals(30, inspector.finishNormally().reasoningOutputTokens)
     }
 
+    @Test fun readsNanoGptReceiptAndOpenRouterCacheWrites() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine(
+            "{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":20," +
+                "\"prompt_tokens_details\":{\"cached_tokens\":40," +
+                "\"cache_write_tokens\":30}}," +
+                "\"x_nanogpt_pricing\":{\"cost\":0.01075,\"currency\":\"USD\"}}"
+        )
+        val usage = inspector.finishNormally()
+        assertEquals(40, usage.cachedInputTokens)
+        assertEquals(30, usage.cacheWriteInputTokens)
+        assertEquals(0.01075, usage.totalCost!!, 0.000000001)
+    }
+
+    @Test fun laterUsageWithoutInputNeverErasesReportedInput() {
+        val inspector = RawSseInspector()
+        inspector.acceptLine("{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":1}}")
+        inspector.acceptLine("{\"usage\":{\"output_tokens\":20}}")
+        val usage = inspector.finishNormally()
+        assertEquals(100, usage.promptTokens)
+        assertEquals(20, usage.completionTokens)
+    }
+
     @Test fun normalizesAnthropicCacheReadIntoTotalPromptTokens() {
         val inspector = RawSseInspector()
         inspector.acceptLine(

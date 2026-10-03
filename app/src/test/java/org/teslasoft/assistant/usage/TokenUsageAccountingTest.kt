@@ -458,4 +458,36 @@ class TokenUsageAccountingTest {
         TokenUsageAccounting.KEY_USAGE_RECORDS to
             TokenUsageAccounting.encodeRecords(listOf(canonical))
     )
+
+    @Test fun zeroCachedTokensCostNothingEvenWithoutACachedPrice() {
+        val record = TokenUsageAccounting.createRecord(
+            "m", "Provider", null,
+            TokenCounts(1_000, 100, 1_100, cachedInputTokens = 0, cacheWriteInputTokens = 0),
+            TokenCountSource.PROVIDER_REPORTED,
+            TokenPricingSnapshot(0.000001, 0.000002)
+        )
+        assertEquals(0.0, record.cachedInputCost!!, 0.0)
+        assertEquals(0.0012, record.totalCost!!, 1e-12)
+    }
+
+    @Test fun listedPricesInTheWrongUnitAreCorrectedByTheReportedCharge() {
+        val record = TokenUsageAccounting.createRecord(
+            "m", "NanoGPT", null,
+            TokenCounts(1_000, 100, 1_100, cachedInputTokens = 0, cacheWriteInputTokens = 0),
+            TokenCountSource.PROVIDER_REPORTED,
+            TokenPricingSnapshot(0.000000001, 0.000000002, unitInferred = true),
+            ProviderReportedCost(totalCost = 0.0012)
+        )
+        assertEquals(0.000001, record.inputPricePerToken!!, 1e-15)
+        assertEquals(0.001, record.inputCost!!, 1e-12)
+        assertEquals(0.0002, record.outputCost!!, 1e-12)
+        assertEquals(0.0012, record.totalCost!!, 1e-12)
+    }
+
+    @Test fun ordinaryPriceDifferencesAreNeverRescaled() {
+        assertEquals(1.0, TokenUsageAccounting.unitCorrection(0.0015, 0.001), 0.0)
+        assertEquals(1e3, TokenUsageAccounting.unitCorrection(1.2, 0.0012), 0.0)
+        assertEquals(1.0, TokenUsageAccounting.unitCorrection(0.05, 0.001), 0.0)
+        assertEquals(1.0, TokenUsageAccounting.unitCorrection(null, 0.001), 0.0)
+    }
 }

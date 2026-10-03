@@ -261,14 +261,19 @@ internal class RawSseInspector {
                     ?.intOrNull("cached_tokens")
                 ?: usage.intOrNull("cache_read_input_tokens")
             val reportedCacheCreation = usage.intOrNull("cache_creation_input_tokens")
+                ?: usage.get("prompt_tokens_details")
+                    ?.takeIf { it.isJsonObject }?.asJsonObject
+                    ?.intOrNull("cache_write_tokens")
             val cacheCreation = reportedCacheCreation ?: 0
             val anthropicInput = usage.intOrNull("input_tokens")
-            promptTokens = when {
+            // A later usage block without an input count never erases an
+            // earlier reported one.
+            when {
                 usage.get("prompt_tokens") != null -> directPrompt
                 usage.get("cache_read_input_tokens") != null && anthropicInput != null ->
                     anthropicInput + (cacheRead ?: 0) + cacheCreation
                 else -> directPrompt
-            }
+            }?.let { promptTokens = it }
             directCompletion?.let { completionTokens = it }
             if (cacheRead != null || reportedCacheCreation != null) {
                 cachedInputTokens = cacheRead ?: 0
@@ -280,7 +285,7 @@ internal class RawSseInspector {
                 ?.intOrNull("reasoning_tokens")
                 ?.let { reasoningOutputTokens = it }
                 ?: usage.intOrNull("reasoning_tokens")?.let { reasoningOutputTokens = it }
-            usage.firstDoubleOrNull("cost", "total_cost")?.let { totalCost = it }
+            usage.firstDoubleOrNull("cost", "total_cost", "cost_usd")?.let { totalCost = it }
             // xAI reports the charged amount in ticks: 10^10 ticks per dollar.
             if (totalCost == null) {
                 usage.firstDoubleOrNull("cost_in_usd_ticks")?.let { totalCost = it / 1e10 }
@@ -304,6 +309,14 @@ internal class RawSseInspector {
                     }
                 }
         }
+
+        // NanoGPT puts its charged-cost receipt beside usage, not inside it.
+        root.get("x_nanogpt_pricing")?.takeIf { it.isJsonObject }?.asJsonObject
+            ?.takeIf { receipt ->
+                receipt.stringOrNull("currency")?.equals("USD", ignoreCase = true) != false
+            }
+            ?.doubleOrNull("cost")
+            ?.let { if (totalCost == null) totalCost = it }
 
         root.stringOrNull("type")?.let { type ->
             if (type.equals("response.done", ignoreCase = true)) {
