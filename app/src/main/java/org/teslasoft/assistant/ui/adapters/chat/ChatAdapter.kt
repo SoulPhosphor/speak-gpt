@@ -217,6 +217,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
         private const val MENU_INCLUDE_EDIT = 103
         private const val MENU_MESSAGE_EDIT = 104
         private const val MENU_MESSAGE_SHARE = 105
+        private const val MENU_MESSAGE_DELETE = 106
 
         // Transient inline image-confirmation card row
         // (image-generation-rebuild-plan.md §5). These rows live only in
@@ -2310,6 +2311,7 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                 popup.menu.add(0, MENU_MESSAGE_EDIT, 0, R.string.btn_msg_edit)
             }
             popup.menu.add(0, MENU_MESSAGE_SHARE, 1, R.string.message_share_action)
+            popup.menu.add(0, MENU_MESSAGE_DELETE, 2, R.string.btn_delete)
             popup.setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     MENU_MESSAGE_EDIT -> {
@@ -2318,6 +2320,11 @@ class ChatAdapter(private val dataArray: ArrayList<HashMap<String, Any>>, privat
                     }
                     MENU_MESSAGE_SHARE -> {
                         btnShare.callOnClick()
+                        true
+                    }
+                    MENU_MESSAGE_DELETE -> {
+                        val currentPosition = dataArray.indexOfFirst { it === chatMessage }
+                        if (currentPosition >= 0) onDelete(currentPosition)
                         true
                     }
                     else -> false
