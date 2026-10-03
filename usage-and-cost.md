@@ -23,10 +23,37 @@ a detail; the file list at the end shows where each part lives.
 | Number on screen | Where it comes from |
 | --- | --- |
 | Token counts | Reported by the AI service in each reply. Never guessed for new replies. |
-| Total cost | The actual charge, when the service reports one (OpenRouter, xAI). Otherwise tokens × the price saved with that request. |
-| Input / Output / Cached cost | Always tokens × the price saved with that request. |
+| Total cost | The actual charge, when the service reports one in US dollars. Otherwise the sum of the calculated parts. |
+| Input / Output / Cached cost | Calculated: reported tokens × the published price saved with that request. Never provider-reported values unless the service itemizes them. |
 | Prices | Fetched when the request starts and saved with the request. Never re-fetched later. |
 | Cache Hit Rate | Cached input ÷ all input (cached + uncached). |
+
+## Owner rules (October 2026)
+
+1. Always use the most accurate source available: the service's reported
+   charge, then the service's own documented price list, then OpenRouter's
+   price for that service's model, then nothing ("Not Reported").
+2. Services with their own documented formats (NanoGPT, Venice, xAI) are
+   handled by their documentation, not by generic guessing.
+3. A model's price is used only for that exact model ID, or for an alias or
+   equivalent ID the provider itself publishes. No date stripping, no
+   reasoning-name stripping, no partial or fuzzy name matching.
+4. Units: a stated unit is used; a documented provider or format convention
+   is applied; a truly unknown unit is not guessed. The size of a number never
+   decides its unit.
+5. The reported bill is never used to infer or correct prices or units, and
+   the calculated parts are never adjusted to add up to it. A difference
+   between them is allowed.
+6. Prices must be finite and not negative. There is no upper limit. A
+   reported zero is a real $0. Costs in a currency other than US dollars are
+   treated as unavailable; there is no currency conversion.
+7. An unreported cache split stays unknown. It is assumed to be zero only
+   when the provider documents that the model offers no caching.
+8. Reasoning tokens are added to output only where the provider documents
+   that its output count leaves them out.
+9. Wording on the screen (labels for calculated costs, estimates, or the
+   OpenRouter price source) is on hold until the owner reviews the finished
+   screen.
 
 ## 1. Token counts
 
@@ -36,31 +63,36 @@ Every request records its own token counts from what the AI service reports.
   OpenAI-style names (`prompt_tokens`, `completion_tokens`) and the
   Claude-style names (`input_tokens`, `output_tokens`) are understood.
 - **Cached input** is read from `prompt_tokens_details.cached_tokens`
-  (OpenAI and OpenRouter style), `input_tokens_details.cached_tokens`, or
-  `cache_read_input_tokens` (Claude style).
-- **Cache writes** are read from `cache_creation_input_tokens` (Claude
-  style), `prompt_tokens_details.cache_write_tokens` (OpenRouter style) or
-  `prompt_tokens_details.cache_creation_input_tokens` (Venice style).
-  When a service reports cached input but no cache-write figure, cache writes
-  are recorded as zero.
+  (OpenAI, OpenRouter, NanoGPT, Venice), `input_tokens_details.cached_tokens`,
+  or `cache_read_input_tokens` (Claude style).
+- **Cache writes** are read from `cache_creation_input_tokens` (Claude style,
+  also sent by NanoGPT), `prompt_tokens_details.cache_write_tokens`
+  (OpenRouter) or `prompt_tokens_details.cache_creation_input_tokens`
+  (Venice). When a service reports cached input but no cache-write figure,
+  cache writes are recorded as zero.
 - **Claude-style totals are rebuilt.** Claude's `input_tokens` excludes cached
   and cache-write text, so the app adds all three together to get total input.
   OpenAI-style `prompt_tokens` already includes cached text, so it is used as
   is.
-- **Reasoning counts as output** (owner decision, October 2026), because the
-  user pays for it as output. Most services already include reasoning in
-  their output count. Some, such as xAI, report it only separately
-  (`completion_tokens_details.reasoning_tokens`). The app adds it to output
-  only when the service's own total shows it was left out, meaning input +
-  output + reasoning equals the reported total. Otherwise the output count is
-  used as reported, so reasoning is never counted twice. If the service sends
-  no total, nothing is added.
+- **Cache split not reported:** the input count is kept as reported and the
+  cached amount stays unknown. It becomes zero only for a model the provider
+  documents as having no caching (Venice: a model with no `cache_input` price).
+- **Reasoning:** counted as output, because the user pays for it as output.
+  Per provider documentation:
+  - **xAI direct** reports reasoning only in
+    `completion_tokens_details.reasoning_tokens`, outside `completion_tokens`,
+    so it is added to output.
+  - **Venice** documents reasoning tokens as part of its completion tokens,
+    and **NanoGPT** documents that reasoning must not be added to output
+    again, so their output counts are used as reported.
+  - **Every other service** (including OpenAI, Anthropic and OpenRouter):
+    the output count is used as reported. Nothing is added without a
+    provider document saying it is left out.
 - **A later usage report never erases an earlier count.** If a service sends
   usage in several pieces and a later piece leaves out a number, the earlier
   number is kept.
 - **Missing counts stay missing.** If the service reports no usage at all,
-  the request has no counts and the screen shows "Not Reported" for it. New
-  replies are never estimated.
+  the request has no counts. New replies are never estimated.
 
 **Old replies only:** replies saved before durable usage records existed have
 no stored counts. For those, the app estimates input and output with a
@@ -69,114 +101,101 @@ have no prices and no cache information.
 
 ## 2. Prices
 
-**Rule (owner decision, October 2026): always use the most accurate source
-available.** In order:
-
-1. the actual charge the service reports for the request;
-2. the service's own published price list;
-3. OpenRouter's price for that service's model;
-4. nothing. The value shows "Not Reported"; a price is never guessed.
-
 Prices are fetched in the background when a request starts. When the request
 finishes, they are frozen into that request's record. A price change later
 never changes an old record.
 
-Where prices come from depends on the connection:
-
 | Connection | Price source |
 | --- | --- |
 | OpenRouter | OpenRouter's provider list for that model (the endpoint list for `{model}`). The app uses the price of the provider that actually served the reply: input, output, cached and cache-write prices. |
-| OpenAI direct (`api.openai.com`) | OpenRouter's **public** model list, `https://openrouter.ai/api/v1/models`, entries starting `openai/`. |
-| Anthropic direct (`api.anthropic.com`) | Same public list, entries starting `anthropic/`. |
-| xAI / Grok direct (`api.x.ai`) | xAI's own price list (`/language-models`, fetched with the user's xAI key). If that fails or has no match, the public OpenRouter list, entries starting `x-ai/`. |
-| Any other service (for example Venice, NanoGPT) | That service's own model list, read in any of the common price layouts (see "Other services' own price lists" below). Otherwise no prices. |
+| OpenAI direct (`api.openai.com`) | OpenRouter's **public** model list, `https://openrouter.ai/api/v1/models`, entry `openai/<model>`. |
+| Anthropic direct (`api.anthropic.com`) | Same public list, entry `anthropic/<model>`. |
+| xAI direct (`api.x.ai`) | xAI's own price list (`/language-models`, with the user's xAI key). If that fails or has no match, the public OpenRouter list, entry `x-ai/<model>`. |
+| NanoGPT (`nano-gpt.com`, `api.nano-gpt.com`) | NanoGPT's detailed model list (`/models?detailed=true`, with the user's key). |
+| Venice (`api.venice.ai`) | Venice's text model list (`/models?type=text`), with Venice's compatibility mapping for aliases. |
+| Any other service | That service's own `/models` list, if it uses OpenRouter's `pricing` layout. Otherwise no prices. |
 
-### Why OpenAI and Anthropic use OpenRouter's list
+The built-in OpenAI price table that existed before has been removed. Its
+values were ten times too high.
 
-The model lists from OpenAI and Anthropic give model names and capabilities
-but no prices. OpenRouter publishes current prices for their models in a list
-anyone can download. Owner decision, October 2026.
+### OpenRouter's public list (OpenAI, Anthropic, xAI fallback)
+
+OpenAI and Anthropic give no prices through their model lists. OpenRouter
+publishes current prices for their models in a list anyone can download.
+
+- **No key is sent.** The user's OpenAI, Anthropic or xAI key never goes to
+  OpenRouter.
+- **Saved for six hours** in memory, then downloaded again. Not saved to disk.
+- **Matching:** the entry whose `id` is exactly `<author>/<model>`, or whose
+  `canonical_slug` (OpenRouter's own permanent ID for that entry) is exactly
+  that. Nothing else.
+- **Consequence:** OpenAI and Anthropic often report dated model names (for
+  example `claude-sonnet-4-5-20250929` or `gpt-5-2025-08-07`). OpenRouter
+  usually lists those models under a different name (`claude-sonnet-4.5`,
+  `gpt-5`) and does not publish the provider's dated name. Those requests
+  have no price and show "Not Reported" costs.
+- **Zero and negative prices:** a listed `0` is a real $0, including `:free`
+  entries when that exact ID is used. Negative prices (OpenRouter's marker
+  for variable pricing) are not used.
 
 ### xAI's own price list
 
-xAI publishes prices in `/language-models`. The fields used are
-`prompt_text_token_price`, `cached_prompt_text_token_price` and
-`completion_text_token_price`. xAI states these in US cents per 100 million
-tokens, so the app divides by 10,000,000,000 to get dollars per token. A model
-is matched by its `id` or any of its `aliases`. This list is fetched on every
-request and not kept.
+xAI publishes prices in `/language-models`: `prompt_text_token_price`,
+`cached_prompt_text_token_price` and `completion_text_token_price`, in US
+cents per 100 million tokens. The app divides by 10,000,000,000 to get
+dollars per token. A model is matched by its exact `id` or one of the
+`aliases` xAI lists for it. Fetched on every request and not kept.
 
 xAI also charges a higher rate for very long prompts on some models; the
 price list gives only the base rate. The real charge (section 3) covers this
 for the Total.
 
-The built-in OpenAI price table that existed before has been removed. Its
-values were ten times too high.
+### NanoGPT
 
-### How the public list is used
+From NanoGPT's documentation (`/models?detailed=true`):
 
-- **No key is sent.** The public list is downloaded without credentials. The
-  user's OpenAI, Anthropic or xAI key never goes to OpenRouter.
-- **Saved for six hours.** The downloaded list is kept in memory for six hours,
-  then downloaded again. It is not saved to disk.
-- **Matching model names.** The services report names like
-  `claude-sonnet-4-5-20250929` or `gpt-4o-2024-08-06`, while OpenRouter uses
-  names like `claude-sonnet-4.5`. The app tries, in order:
-  1. the exact name (dots and dashes treated as the same);
-  2. the name without `-latest`;
-  3. the name without a date ending (`-20250929`, `-2024-08-06`, or a
-     month-day ending such as `-0709`);
-  4. for xAI only, the name without `-reasoning` or `-non-reasoning`.
+- `pricing.prompt` and `pricing.completion`: US dollars per million tokens,
+  with `currency: "USD"` and `unit: "per_million_tokens"`. A list with any
+  other currency or unit is not used.
+- `cacheReadInputPer1kTokens` and `cacheWriteInputPer1kTokens`: US dollars
+  per thousand tokens, as their names state.
+- Matched by exact model `id`.
 
-  An exact dated entry on OpenRouter always wins over the undated one.
-- **No match means no price.** If no entry matches, the request has no price
-  and its costs show "Not Reported". The app never guesses a price.
-- **Entries ignored:** variants with a colon in their name (such as `:free`),
-  and negative prices (OpenRouter's marker for variable pricing).
+### Venice
 
-### Other services' own price lists
+From Venice's API specification (`/models?type=text`, `model_spec.pricing`):
 
-The app does not need code for each service. It reads `/models` (and, if
-that has no prices, `/models?detailed=true`, which NanoGPT requires) and
-understands these layouts:
+- `input.usd`, `output.usd`: US dollars per million tokens.
+- `cache_input.usd` (cache reads) and `cache_write.usd` (cache writes): US
+  dollars per million tokens. `cache_input` is present only for models that
+  support context caching; a model without it has zero cached usage.
+- `extended`: long-context rates. When a request's input tokens exceed
+  `extended.context_token_threshold`, the extended `input`, `output`,
+  `cache_input` and `cache_write` rates apply to the entire request. If the
+  input count is unknown, the applicable rates are unknown.
+- DIEM prices are not used.
+- Matched by exact model `id`. If there is none, Venice's
+  `/models/compatibility_mapping?type=text` (Venice's published alias table)
+  is checked, and the model it maps to is looked up by exact `id`.
 
-| Layout | Used by | Fields | Unit |
-| --- | --- | --- | --- |
-| `pricing` | OpenRouter-compatible services, NanoGPT | `prompt` / `input`, `completion` / `output`, `input_cache_read` / `cached_prompt` / `cache_read`, `input_cache_write` / `cache_write` | The list's `unit` field when present (`per_million_tokens`, per thousand, per token). Without one, dollars per token (OpenRouter's convention). |
-| `model_spec.pricing` | Venice | `input.usd`, `output.usd`; cache prices from `cache_input` / `cache_read` / `cache_write` if present | Dollars per million tokens |
+### Other services
 
-Rules that apply to every list:
+A service's own `/models` list is used only when it has OpenRouter's
+`pricing` layout (`prompt`, `completion`, `input_cache_read` or
+`cached_prompt`, `input_cache_write`) and the model's exact `id`:
 
-- **Model matching:** exact name, ignoring upper and lower case. If there is
-  no exact match, the name after the last `/` is compared, so
-  `gpt-4o-mini` finds `openai/gpt-4o-mini`. This is used only if exactly one
-  entry matches.
-- **Units** (owner decision, October 2026):
-  - a unit stated in the list is used;
-  - a stated unit the app does not recognize makes the price unknown;
-  - with no stated unit, the layout's known convention applies: dollars per
-    token for the `pricing` layout (OpenRouter's convention) and dollars per
-    million tokens for Venice's `model_spec.pricing`;
-  - the size of a number is never used to decide its unit, and the reported
-    bill is never used to infer or correct a unit.
-- **Safety check:** after conversion, any price above $0.001 per token, any
-  negative price, or a currency other than US dollars rejects the whole
-  entry. The cost then shows "Not Reported" rather than a wrong number.
-- **Not verified live:** Venice's cache-price field names (`cache_input`,
-  `cache_write`) come from secondary sources, not Venice's own page. If Venice
-  uses other names, its cached costs show "Not Reported" when cached tokens
-  exist.
-- **Venice long-prompt rates:** Venice charges a higher rate for a whole
-  request once its input passes a threshold on some models. The layout of
-  those extended rates in the list was not confirmed, so the app uses the
-  base rate. For very long prompts on those models, Venice costs will read
-  low unless Venice reports its real charge.
+- a stated `unit` of `per_token`, `per_thousand_tokens` or
+  `per_million_tokens` is applied; any other stated unit makes the price
+  unknown;
+- with no stated unit, OpenRouter's convention (US dollars per token)
+  applies;
+- a stated `currency` other than `USD` makes the price unknown.
 
 ### Timing limits
 
-- A normal finished reply waits up to 2 seconds for the price list. If the
-  reported model differs from the requested one, it fetches prices for the
-  reported model, again waiting up to 2 seconds.
+- A normal finished reply waits up to 2 seconds for prices. If the reported
+  model differs from the requested one, it fetches prices for the reported
+  model, again waiting up to 2 seconds.
 - A stopped or failed request waits only 0.5 seconds for prices.
 - If prices are not ready in time, that request is saved without prices.
 
@@ -184,42 +203,31 @@ Rules that apply to every list:
 
 ### When the service reports the actual charge
 
-This currently applies to:
-
-- **Any service** that puts `cost`, `total_cost` or `cost_usd` in its usage
-  report, in dollars. This includes OpenRouter.
-- **xAI**, through `usage.cost_in_usd_ticks`. There are 10,000,000,000 ticks
-  per dollar.
-- **NanoGPT**, through its `x_nanogpt_pricing.cost` receipt, used when its
-  `currency` is USD.
+| Service | Where the charge comes from |
+| --- | --- |
+| OpenRouter, and any service using these names | `usage.cost` or `usage.total_cost`, in dollars |
+| xAI | `usage.cost_in_usd_ticks`; 10,000,000,000 ticks per dollar |
+| NanoGPT | `x_nanogpt_pricing`: `amount` when `currency` is `USD`, otherwise `cost` when `currency` or `paymentSource` is `USD`. A charge in XNO, or with no stated currency, is not used. |
+| Venice | Top-level `cost`: `usd` is used only when `diem` is 0. If any part was billed in DIEM, the charge is not used. |
 
 - **Total** is the reported charge, exactly.
-- **Cached and Output costs** use the service's own breakdown when it sends
-  one. Otherwise they are calculated from tokens × the saved prices.
-- **Input cost** is always calculated from tokens × the saved prices.
-- **The rows may not add up to the Total, and that is allowed** (owner
-  decision, October 2026). The Total is the provider-reported charge and stays
-  authoritative. The rows are the app's own calculation from the reported
-  token counts and published prices; they are not provider-reported values.
-  The app never changes the rows or the prices to force them to match the
-  Total, and never uses the Total to guess at price units. Discounts, fees,
-  subscription coverage and long-prompt rates can all cause a difference, and
-  the service does not say which.
+- **Cached and Output costs** use the service's own itemized figures when it
+  sends them. Otherwise they are calculated from tokens × the saved prices.
+- **Input cost** is always calculated.
+- **The calculated parts may not add up to the Total, and that is allowed.**
+  The service does not say why they differ (discounts, fees, subscription
+  coverage, long-prompt rates).
 
 ### When the service does not report a charge
-
-This applies to OpenAI and Anthropic direct, and any service that sends no
-charge.
 
 - **Input cost:** (input − cached − cache writes) × input price, plus
   cache writes × cache-write price.
 - **Cached cost:** cached tokens × cached price. Zero cached tokens cost $0,
   even if no cached price is published.
 - **Output cost:** output tokens × output price.
-- **Total:** input cost + cached cost + output cost. If the service reported
-  no cache information, the Total is all input × input price + output cost.
-- **Missing pieces:** if a needed price is missing, that piece is unknown,
-  and the Total is unknown too.
+- **Total:** input cost + cached cost + output cost.
+- **Missing pieces:** if a needed price or the cache split is unknown, that
+  piece is unknown, and the Total is unknown too.
 
 ## 4. What the screen adds up
 
@@ -242,12 +250,7 @@ saved request records at the moment it opens.
 ### "Not Reported" rule
 
 A sum shows "Not Reported" if any request in it is missing that value. A
-partial sum is never shown as if it were complete. In particular:
-
-- **Input, Cached and Cache Hit Rate** need the service to report cached
-  input. A request without cache information makes them "Not Reported" for
-  its whole group.
-- **Costs** need saved prices, or a reported charge for the Total.
+partial sum is never shown as if it were complete.
 
 ## 5. Which requests are counted
 
@@ -265,37 +268,39 @@ partial sum is never shown as if it were complete. In particular:
 Usage records are saved inside the chat's messages, in the
 `tokenUsageRecords` field of each message and of each reply version.
 
-## 6. Known gaps (October 2026)
+### Backup and restore
 
-These are known and not yet decided or fixed.
+Chat backups copy each chat's stored messages unchanged, so usage records
+(and their copies inside reply versions) are exported and restored with
+them. A backup made before usage records existed restores normally; its
+replies fall back to the old-reply estimate described in section 1.
 
-1. **Labeling calculated rows:** the screen does not yet mark the row costs
-   as calculated rather than provider-reported. Wording to be approved.
-2. **Reasoning without a reported total:** if a service reports reasoning
-   separately but sends no total, the app cannot tell whether reasoning is
-   already in the output count, so it adds nothing.
-3. **Old and estimated records:** these have no cache information, so Input,
-   Cached and Cache Hit Rate show "Not Reported" for any group containing
-   them. The screen does not mark estimated counts as estimated.
-4. **Backups:** not checked whether backup and restore carry the usage
-   records.
-5. **Subscription services** (such as OpenCode Go, or models included in a
-   NanoGPT subscription): what the screen should show for a flat monthly plan
-   is not decided. A NanoGPT receipt for an included model may report $0,
-   while the rows still show list prices.
-6. **Unrecognized layouts:** a service whose price list uses none of the
-   layouts above, and reports no charge, shows "Not Reported" costs. Its
-   token counts still work.
+## 6. Open items (October 2026)
+
+1. **Screen wording on hold:** labels for calculated costs, estimates, and
+   the OpenRouter price source.
+2. **Input row when the cache split is unreported:** the Input row is defined
+   as input minus cached, so it shows "Not Reported" when the split is
+   unknown, even though the total input count is stored. Display decision
+   pending.
+3. **NanoGPT subscription coverage:** NanoGPT's documentation does not say
+   how a reply marks subscription-covered usage. A $0 USD receipt is shown as
+   a $0 charge; the calculated parts still show list prices. Distinct
+   handling is pending a documented signal or an owner decision.
+4. **Dated first-party names:** see section 2. OpenAI and Anthropic dated
+   model names usually have no exact OpenRouter entry, so they show
+   "Not Reported" costs.
+5. **Old and estimated records:** wording and display on hold with item 1.
+6. **Subscription services in general** (such as OpenCode Go): not decided.
 
 ## Where the code lives
 
 | Part | File |
 | --- | --- |
-| Reasoning counted as output | `app/src/main/java/org/teslasoft/assistant/usage/ProviderUsageAttempt.kt` (`outputIncludingReasoning`) |
-| Reading usage from the reply stream | `app/src/main/java/org/teslasoft/assistant/providers/ReportedProviderParser.kt` (`RawSseInspector`) |
-| Per-request capture | `app/src/main/java/org/teslasoft/assistant/usage/ProviderUsageAttempt.kt` |
-| Price fetching and name matching | `app/src/main/java/org/teslasoft/assistant/usage/TokenPricingCatalog.kt` (`TokenPricingCatalogClient`, `FirstPartyPricing`, including `matchXai`; `GenericPricing` for other services) |
-| Cost math, grouping, "Not Reported" formatting | `app/src/main/java/org/teslasoft/assistant/usage/TokenUsageAccounting.kt` |
+| Reading usage and charges from the reply stream | `app/src/main/java/org/teslasoft/assistant/providers/ReportedProviderParser.kt` (`RawSseInspector`) |
+| Per-request capture, reasoning as output | `app/src/main/java/org/teslasoft/assistant/usage/ProviderUsageAttempt.kt` (`outputIncludingReasoning`) |
+| Price fetching and matching | `app/src/main/java/org/teslasoft/assistant/usage/TokenPricingCatalog.kt` (`TokenPricingCatalogClient`, `PricingSource`, `FirstPartyPricing`, `NanoGptPricing`, `VenicePricing`, `GenericPricing`) |
+| Cost math, long-context tier, grouping, "Not Reported" formatting | `app/src/main/java/org/teslasoft/assistant/usage/TokenUsageAccounting.kt` |
 | When records are created and attached | `app/src/main/java/org/teslasoft/assistant/ui/activities/ChatActivity.kt` (`completePendingUsageRecord`, `completeTerminalUsageRecord`, `attachUsageRecords`, `openUsageAndCost`) |
 | The screen | `app/src/main/java/org/teslasoft/assistant/ui/activities/TokenPricingDetailsActivity.kt` |
-| Tests | `app/src/test/java/org/teslasoft/assistant/usage/` |
+| Tests | `app/src/test/java/org/teslasoft/assistant/usage/`, `app/src/test/java/org/teslasoft/assistant/providers/ReportedProviderParserTest.kt`, `app/src/test/java/org/teslasoft/assistant/preferences/backup/portable/PortableChatRestorePlanTest.kt` |

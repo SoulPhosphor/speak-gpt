@@ -190,6 +190,35 @@ class ReportedProviderParserTest {
         assertEquals(25, usage.cacheWriteInputTokens)
     }
 
+    @Test fun nanoGptReceiptIsUsedOnlyWhenStatedInUsd() {
+        fun chargeFor(receipt: String): Double? {
+            val inspector = RawSseInspector()
+            inspector.acceptLine(
+                "{\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":5}," +
+                    "\"x_nanogpt_pricing\":$receipt}"
+            )
+            return inspector.finishNormally().totalCost
+        }
+        assertEquals(0.000021, chargeFor("{\"amount\":0.000021,\"currency\":\"USD\"}")!!, 1e-12)
+        assertEquals(0.000169, chargeFor("{\"cost\":0.000169,\"paymentSource\":\"USD\"}")!!, 1e-12)
+        assertNull(chargeFor("{\"cost\":0.5,\"paymentSource\":\"XNO\"}"))
+        assertNull(chargeFor("{\"cost\":0.5}"))
+    }
+
+    @Test fun veniceChargeIsUsedOnlyWhenNothingWasBilledInDiem() {
+        fun chargeFor(cost: String): Double? {
+            val inspector = RawSseInspector()
+            inspector.acceptLine(
+                "{\"usage\":{\"prompt_tokens\":612,\"completion_tokens\":146," +
+                    "\"total_tokens\":758},\"cost\":$cost}"
+            )
+            return inspector.finishNormally().totalCost
+        }
+        assertEquals(0.00042, chargeFor("{\"diem\":0,\"usd\":0.00042}")!!, 1e-12)
+        assertNull(chargeFor("{\"diem\":0.003,\"usd\":0}"))
+        assertNull(chargeFor("{\"usd\":0.00042}"))
+    }
+
     @Test fun laterUsageWithoutInputNeverErasesReportedInput() {
         val inspector = RawSseInspector()
         inspector.acceptLine("{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":1}}")

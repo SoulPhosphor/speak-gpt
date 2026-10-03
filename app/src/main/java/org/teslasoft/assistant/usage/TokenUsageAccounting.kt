@@ -66,15 +66,43 @@ data class TokenPricingSnapshot(
     val inputPricePerToken: Double? = null,
     val outputPricePerToken: Double? = null,
     val cachedInputPricePerToken: Double? = null,
-    val cacheWriteInputPricePerToken: Double? = null
+    val cacheWriteInputPricePerToken: Double? = null,
+    /** A provider's long-context rates, when it publishes them (Venice). */
+    val extended: ExtendedPricingTier? = null,
+    /** False only when the provider documents that this model offers no
+     * prompt caching, so its cached and cache-write usage is zero. Null when
+     * that is not known. */
+    val cachingOffered: Boolean? = null
 ) {
     fun scaled(factor: Double): TokenPricingSnapshot = copy(
         inputPricePerToken = inputPricePerToken?.times(factor),
         outputPricePerToken = outputPricePerToken?.times(factor),
         cachedInputPricePerToken = cachedInputPricePerToken?.times(factor),
-        cacheWriteInputPricePerToken = cacheWriteInputPricePerToken?.times(factor)
+        cacheWriteInputPricePerToken = cacheWriteInputPricePerToken?.times(factor),
+        extended = extended?.let { it.copy(pricing = it.pricing.scaled(factor)) }
     )
+
+    /** The rates that apply to a request with [inputTokens] total input. When
+     * the input exceeds the provider's threshold, its extended rates apply to
+     * the whole request. If a tier exists but the input count is unknown, the
+     * applicable rates are unknown. */
+    fun forInputTokens(inputTokens: Int?): TokenPricingSnapshot {
+        val tier = extended ?: return this
+        return when {
+            inputTokens == null -> TokenPricingSnapshot()
+            inputTokens > tier.inputTokenThreshold ->
+                tier.pricing.copy(extended = null, cachingOffered = cachingOffered)
+            else -> copy(extended = null)
+        }
+    }
 }
+
+/** Rates a provider applies to an entire request once its input tokens exceed
+ * [inputTokenThreshold]. */
+data class ExtendedPricingTier(
+    val inputTokenThreshold: Long,
+    val pricing: TokenPricingSnapshot
+)
 
 /** Exact monetary values returned by the serving API. A reported total does
  * not imply that the provider supplied an input/output split. */
@@ -305,11 +333,30 @@ object TokenUsageAccounting {
         source: TokenCountSource,
         pricing: TokenPricingSnapshot,
         providerCost: ProviderReportedCost? = null
+    ): TurnUsageRecord = createRecordFromReported(
+        model, provider, apiEndpoint, counts, source, pricing, providerCost
+    )
+
+    private fun createRecordFromReported(
+        model: String,
+        provider: String,
+        apiEndpoint: String?,
+        reportedCounts: TokenCounts,
+        source: TokenCountSource,
+        pricing: TokenPricingSnapshot,
+        providerCost: ProviderReportedCost?
     ): TurnUsageRecord {
         val exactCost = providerCost?.takeIf { it.hasAnyValue() }?.withDerivedTotal()
-        val calculatedInputCost = counts.inputTokens
-            ?.takeIf { counts.cachedInputTokens == null || counts.cachedInputTokens == 0 }
-            ?.let { count -> pricing.inputPricePerToken?.let { count * it } }
+        val applied = pricing.forInputTokens(reportedCounts.inputTokens)
+        // A model the provider documents as having no caching has zero cached
+        // usage. Otherwise an unreported cache split stays unknown; it is never
+        // assumed to be zero in order to price the input.
+        val counts = if (applied.cachingOffered == false && reportedCounts.cachedInputTokens == null) {
+            reportedCounts.copy(
+                cachedInputTokens = 0,
+                cacheWriteInputTokens = reportedCounts.cacheWriteInputTokens ?: 0
+            )
+        } else reportedCounts
         val uncachedInputTokens = if (
             counts.inputTokens != null && counts.cachedInputTokens != null &&
             counts.inputTokens >= counts.cachedInputTokens
@@ -318,24 +365,24 @@ object TokenUsageAccounting {
             val writeTokens = counts.cacheWriteInputTokens
             when {
                 writeTokens == null || writeTokens > count -> null
-                writeTokens == 0 -> pricing.inputPricePerToken?.let { count * it }
+                writeTokens == 0 -> applied.inputPricePerToken?.let { count * it }
                 else -> {
-                    val regularCost = pricing.inputPricePerToken
+                    val regularCost = applied.inputPricePerToken
                         ?.let { (count - writeTokens) * it }
-                    val writeCost = pricing.cacheWriteInputPricePerToken
+                    val writeCost = applied.cacheWriteInputPricePerToken
                         ?.let { writeTokens * it }
                     if (regularCost != null && writeCost != null) regularCost + writeCost else null
                 }
             }
         }
         val calculatedCachedInputCost = counts.cachedInputTokens?.let { count ->
-            if (count == 0) 0.0 else pricing.cachedInputPricePerToken?.let { count * it }
+            if (count == 0) 0.0 else applied.cachedInputPricePerToken?.let { count * it }
         }
         val calculatedSplitInputCost = if (
             calculatedUncachedInputCost != null && calculatedCachedInputCost != null
         ) calculatedUncachedInputCost + calculatedCachedInputCost else null
         val calculatedOutputCost = counts.outputTokens?.let { count ->
-            pricing.outputPricePerToken?.let { count * it }
+            applied.outputPricePerToken?.let { count * it }
         }
         val inputCost: Double?
         val outputCost: Double?
@@ -349,14 +396,14 @@ object TokenUsageAccounting {
             // per-request prices and token breakdown captured with this record.
             cachedInputCost = exactCost.cachedInputCost ?: calculatedCachedInputCost
             uncachedInputCost = calculatedUncachedInputCost
-            inputCost = exactCost.inputCost ?: calculatedSplitInputCost ?: calculatedInputCost
+            inputCost = exactCost.inputCost ?: calculatedSplitInputCost
             outputCost = exactCost.outputCost ?: calculatedOutputCost
             totalCost = exactCost.totalCost
             costSource = CostSource.PROVIDER_REPORTED
         } else {
             uncachedInputCost = calculatedUncachedInputCost
             cachedInputCost = calculatedCachedInputCost
-            inputCost = calculatedSplitInputCost ?: calculatedInputCost
+            inputCost = calculatedSplitInputCost
             outputCost = calculatedOutputCost
             totalCost = if (inputCost != null && outputCost != null) inputCost + outputCost else null
             costSource = if (inputCost != null || outputCost != null || totalCost != null) {
@@ -375,10 +422,10 @@ object TokenUsageAccounting {
             cachedInputTokens = counts.cachedInputTokens,
             cacheWriteInputTokens = counts.cacheWriteInputTokens,
             source = source.storedValue,
-            inputPricePerToken = pricing.inputPricePerToken,
-            outputPricePerToken = pricing.outputPricePerToken,
-            cachedInputPricePerToken = pricing.cachedInputPricePerToken,
-            cacheWriteInputPricePerToken = pricing.cacheWriteInputPricePerToken,
+            inputPricePerToken = applied.inputPricePerToken,
+            outputPricePerToken = applied.outputPricePerToken,
+            cachedInputPricePerToken = applied.cachedInputPricePerToken,
+            cacheWriteInputPricePerToken = applied.cacheWriteInputPricePerToken,
             inputCost = inputCost,
             outputCost = outputCost,
             uncachedInputCost = uncachedInputCost,

@@ -34,9 +34,12 @@ class ProviderUsageAttemptTest {
         assertEquals(50, attempt.snapshot().counts.outputTokens)
     }
 
-    @Test fun reasoningAlreadyInsideCompletionIsNotCountedTwice() {
-        assertEquals(50, outputIncludingReasoning(100, 50, 150, 30))
-        assertEquals(50, outputIncludingReasoning(100, 50, null, 30))
-        assertEquals(50, outputIncludingReasoning(100, 50, 150, null))
+    @Test fun reasoningIsAddedOnlyWhereTheProviderDocumentsItAsSeparate() {
+        assertEquals(80, outputIncludingReasoning("https://api.x.ai/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://api.openai.com/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://nano-gpt.com/api/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://api.venice.ai/api/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://openrouter.ai/api/v1/", 50, 30))
+        assertEquals(50, outputIncludingReasoning("https://api.x.ai/v1/", 50, null))
     }
 }

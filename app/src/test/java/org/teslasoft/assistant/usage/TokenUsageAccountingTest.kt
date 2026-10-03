@@ -73,7 +73,7 @@ class TokenUsageAccountingTest {
 
     @Test fun providerReportedTotalStaysAuthoritativeWhileFrozenPricesFillCategories() {
         val record = TokenUsageAccounting.createRecord(
-            "glm-5", "DeepInfra", null, TokenCounts(1_000, 100, 1_100),
+            "glm-5", "DeepInfra", null, TokenCounts(1_000, 100, 1_100, cachedInputTokens = 0, cacheWriteInputTokens = 0),
             TokenCountSource.PROVIDER_REPORTED,
             TokenPricingSnapshot(0.001, 0.002),
             ProviderReportedCost(totalCost = 0.25)
@@ -91,7 +91,7 @@ class TokenUsageAccountingTest {
 
     @Test fun frozenPricingCalculatesCostWhenProviderCostIsUnavailable() {
         val record = TokenUsageAccounting.createRecord(
-            "glm-5", "DeepInfra", null, TokenCounts(100, 10, 110),
+            "glm-5", "DeepInfra", null, TokenCounts(100, 10, 110, cachedInputTokens = 0, cacheWriteInputTokens = 0),
             TokenCountSource.PROVIDER_REPORTED, pricing
         )
         assertEquals(0.0001, record.inputCost!!, 0.000000001)
@@ -133,9 +133,10 @@ class TokenUsageAccountingTest {
     }
 
     @Test fun missingCacheBreakdownNeverPretendsCachedUsageWasZero() {
-        val group = TokenUsageAccounting.aggregate(
-            listOf(record("glm-5", "DeepInfra", 10, 2))
-        ).groups.single()
+        val group = TokenUsageAccounting.aggregate(listOf(TokenUsageAccounting.createRecord(
+            "glm-5", "DeepInfra", null, TokenCounts(10, 2, 12),
+            TokenCountSource.PROVIDER_REPORTED, pricing
+        ))).groups.single()
         assertTrue(group.hasUnknownCachedInputTokens)
         assertTrue(group.hasUnknownUncachedInputTokens)
         assertEquals(UsageValueFormatter.NOT_REPORTED, UsageValueFormatter.percentage(
@@ -223,7 +224,7 @@ class TokenUsageAccountingTest {
 
     @Test fun knownZeroFreeModelCostStaysARealZero() {
         val free = TokenUsageAccounting.createRecord(
-            "free-model", "Provider", null, TokenCounts(10, 2, 12),
+            "free-model", "Provider", null, TokenCounts(10, 2, 12, cachedInputTokens = 0, cacheWriteInputTokens = 0),
             TokenCountSource.PROVIDER_REPORTED, TokenPricingSnapshot(0.0, 0.0)
         )
         val group = TokenUsageAccounting.aggregate(listOf(free)).groups.single()
@@ -381,11 +382,11 @@ class TokenUsageAccountingTest {
 
     @Test fun historicalPricingIsSummedFromRecordsNotAReplacementCurrentPrice() {
         val old = TokenUsageAccounting.createRecord(
-            "glm-5", "DeepInfra", null, TokenCounts(100, 10, 110),
+            "glm-5", "DeepInfra", null, TokenCounts(100, 10, 110, cachedInputTokens = 0, cacheWriteInputTokens = 0),
             TokenCountSource.PROVIDER_REPORTED, TokenPricingSnapshot(0.000001, 0.000002)
         )
         val newer = TokenUsageAccounting.createRecord(
-            "glm-5", "DeepInfra", null, TokenCounts(100, 10, 110),
+            "glm-5", "DeepInfra", null, TokenCounts(100, 10, 110, cachedInputTokens = 0, cacheWriteInputTokens = 0),
             TokenCountSource.PROVIDER_REPORTED, TokenPricingSnapshot(0.000003, 0.000004)
         )
         val group = TokenUsageAccounting.aggregate(listOf(old, newer)).groups.single()
@@ -433,7 +434,8 @@ class TokenUsageAccountingTest {
 
     private fun record(model: String, provider: String, input: Int, output: Int) =
         TokenUsageAccounting.createRecord(
-            model, provider, null, TokenCounts(input, output, input + output),
+            model, provider, null,
+            TokenCounts(input, output, input + output, cachedInputTokens = 0, cacheWriteInputTokens = 0),
             TokenCountSource.PROVIDER_REPORTED, pricing
         )
 
@@ -482,5 +484,53 @@ class TokenUsageAccountingTest {
         assertEquals(0.000001, record.inputCost!!, 1e-15)
         assertEquals(0.0000002, record.outputCost!!, 1e-15)
         assertEquals(0.0012, record.totalCost!!, 1e-12)
+    }
+
+    @Test fun unreportedCacheSplitLeavesInputCostUnknownInsteadOfAssumingNoCache() {
+        val record = TokenUsageAccounting.createRecord(
+            "m", "Provider", null, TokenCounts(1_000, 100, 1_100),
+            TokenCountSource.PROVIDER_REPORTED, TokenPricingSnapshot(0.000001, 0.000002)
+        )
+        assertEquals(1_000, record.inputTokens)
+        assertNull(record.cachedInputTokens)
+        assertNull(record.inputCost)
+        assertEquals(0.0002, record.outputCost!!, 1e-12)
+        assertNull(record.totalCost)
+    }
+
+    @Test fun modelDocumentedWithoutCachingHasZeroCachedUsage() {
+        val record = TokenUsageAccounting.createRecord(
+            "venice-uncensored", "Venice", null, TokenCounts(1_000, 100, 1_100),
+            TokenCountSource.PROVIDER_REPORTED,
+            TokenPricingSnapshot(0.000001, 0.000002, cachingOffered = false)
+        )
+        assertEquals(0, record.cachedInputTokens)
+        assertEquals(0.0, record.cachedInputCost!!, 0.0)
+        assertEquals(0.001, record.inputCost!!, 1e-12)
+        assertEquals(0.0012, record.totalCost!!, 1e-12)
+    }
+
+    @Test fun extendedRatesApplyToTheWholeRequestOnlyAboveTheThreshold() {
+        val pricing = TokenPricingSnapshot(
+            0.000001, 0.000002,
+            extended = ExtendedPricingTier(1_000, TokenPricingSnapshot(0.000003, 0.000004))
+        )
+        fun recordFor(input: Int) = TokenUsageAccounting.createRecord(
+            "m", "Venice", null,
+            TokenCounts(input, 100, input + 100, cachedInputTokens = 0, cacheWriteInputTokens = 0),
+            TokenCountSource.PROVIDER_REPORTED, pricing
+        )
+        val atThreshold = recordFor(1_000)
+        assertEquals(0.000001, atThreshold.inputPricePerToken!!, 1e-15)
+        assertEquals(0.0012, atThreshold.totalCost!!, 1e-12)
+        val above = recordFor(1_001)
+        assertEquals(0.000003, above.inputPricePerToken!!, 1e-15)
+        assertEquals(0.000004, above.outputPricePerToken!!, 1e-15)
+        assertEquals(1_001 * 0.000003 + 100 * 0.000004, above.totalCost!!, 1e-12)
+        val unknownInput = TokenUsageAccounting.createRecord(
+            "m", "Venice", null, TokenCounts(null, 100, null),
+            TokenCountSource.PROVIDER_REPORTED, pricing
+        )
+        assertNull(unknownInput.outputCost)
     }
 }

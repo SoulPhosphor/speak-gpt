@@ -128,9 +128,7 @@ class ProviderUsageAttempt(
                 apiEndpoint = apiEndpoint,
                 counts = TokenCounts(
                     promptTokens,
-                    outputIncludingReasoning(
-                        promptTokens, completionTokens, totalTokens, reasoningOutputTokens
-                    ),
+                    outputIncludingReasoning(apiEndpoint, completionTokens, reasoningOutputTokens),
                     totalTokens, cachedInputTokens, cacheWriteInputTokens
                 ),
                 providerCost = ProviderReportedCost(
@@ -180,17 +178,16 @@ data class ProviderUsageSnapshot(
     val providerCost: ProviderReportedCost
 )
 
-/** Reasoning is billed output. Most APIs already include it in completion
- * tokens; some (xAI) report it only separately. The API's own total is the
- * evidence: when input + completion + reasoning equals the total, reasoning
- * was left out of completion and is added back. Otherwise completion stands. */
+/** Reasoning is billed output. Whether a provider's completion count already
+ * includes it is a documented, provider-specific fact: xAI reports reasoning
+ * only in `completion_tokens_details.reasoning_tokens`, outside
+ * `completion_tokens`, so it is added for xAI. Every other provider's
+ * completion count is used as reported, so reasoning is never counted twice. */
 internal fun outputIncludingReasoning(
-    input: Int?,
+    apiEndpoint: String?,
     output: Int?,
-    total: Int?,
     reasoning: Int?
 ): Int? {
-    if (input == null || output == null || total == null || reasoning == null) return output
-    if (reasoning <= 0 || input + output + reasoning != total) return output
-    return output + reasoning
+    if (output == null || reasoning == null || reasoning <= 0) return output
+    return if (PricingSource.forUrl(apiEndpoint) == PricingSource.XAI) output + reasoning else output
 }

@@ -288,7 +288,7 @@ internal class RawSseInspector {
                 ?.intOrNull("reasoning_tokens")
                 ?.let { reasoningOutputTokens = it }
                 ?: usage.intOrNull("reasoning_tokens")?.let { reasoningOutputTokens = it }
-            usage.firstDoubleOrNull("cost", "total_cost", "cost_usd")?.let { totalCost = it }
+            usage.firstDoubleOrNull("cost", "total_cost")?.let { totalCost = it }
             // xAI reports the charged amount in ticks: 10^10 ticks per dollar.
             if (totalCost == null) {
                 usage.firstDoubleOrNull("cost_in_usd_ticks")?.let { totalCost = it / 1e10 }
@@ -313,13 +313,24 @@ internal class RawSseInspector {
                 }
         }
 
-        // NanoGPT puts its charged-cost receipt beside usage, not inside it.
-        root.get("x_nanogpt_pricing")?.takeIf { it.isJsonObject }?.asJsonObject
-            ?.takeIf { receipt ->
-                receipt.stringOrNull("currency")?.equals("USD", ignoreCase = true) != false
-            }
-            ?.doubleOrNull("cost")
-            ?.let { if (totalCost == null) totalCost = it }
+        // NanoGPT's receipt sits beside usage. Its core fields are `amount` with
+        // `currency`; `cost` with `paymentSource` (USD or XNO) is the common
+        // optional form. Only a charge stated in USD is used.
+        root.get("x_nanogpt_pricing")?.takeIf { it.isJsonObject }?.asJsonObject?.let { receipt ->
+            val charged = receipt.doubleOrNull("amount")
+                ?.takeIf { receipt.stringOrNull("currency") == "USD" }
+                ?: receipt.doubleOrNull("cost")?.takeIf {
+                    (receipt.stringOrNull("currency") ?: receipt.stringOrNull("paymentSource")) == "USD"
+                }
+            if (charged != null && totalCost == null) totalCost = charged
+        }
+        // Venice reports the charge split by billing currency. It is a USD
+        // charge only when no part of it was billed in DIEM.
+        root.get("cost")?.takeIf { it.isJsonObject }?.asJsonObject?.let { cost ->
+            val usd = cost.doubleOrNull("usd")
+            val diem = cost.doubleOrNull("diem")
+            if (usd != null && diem == 0.0 && totalCost == null) totalCost = usd
+        }
 
         root.stringOrNull("type")?.let { type ->
             if (type.equals("response.done", ignoreCase = true)) {
