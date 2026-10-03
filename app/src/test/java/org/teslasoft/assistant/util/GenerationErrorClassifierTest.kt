@@ -178,6 +178,30 @@ class GenerationErrorClassifierTest {
         assertEquals(GenErrorCode.S1, code(RuntimeException("404 Not Found")))
     }
 
+    @Test fun explicitImageRejectionOutranksGeneric400Or404Presentation() {
+        for (message in listOf(
+            "400 Bad Request: This model does not support image input",
+            "404 Not Found: image_input_not_supported"
+        )) {
+            val result = GenerationErrorClassifier.classify(RuntimeException(message))
+            assertEquals(GenErrorCode.M4, result.code)
+            assertEquals(true, result.isVisionRejection)
+        }
+    }
+
+    @Test fun ambiguous400Or404IsNeverLearnedAsImageUnsupported() {
+        for (message in listOf(
+            "400 Bad Request",
+            "404 Not Found",
+            "400 Bad Request: content type is not supported"
+        )) {
+            assertEquals(
+                false,
+                GenerationErrorClassifier.classify(RuntimeException(message)).isVisionRejection
+            )
+        }
+    }
+
     @Test fun explicit400StatusPreventsRateLimitClassGuess() {
         // The exception class says rate limit; the concrete 400 says otherwise.
         // It must not become Q1 or carry a provider limit. A client-error status

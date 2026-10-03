@@ -3474,15 +3474,18 @@
 
     <!-- Capability warning shown at Send when the model attached to this chat
          is text-only or unknown for images. Wording never names the app. -->
-    <string name="image_model_unsupported_title">This model can\'t view images</string>
-    <string name="image_model_unsupported_body">The selected model does not accept image input, so the image was not sent. Choose another model or change its image support setting.</string>
+    <string name="image_model_unsupported_title">Model Doesn\'t Accept Images</string>
+    <string name="image_model_unsupported_body">Choose a different model to continue.</string>
+    <string name="image_provider_unsupported_title">Provider Doesn\'t Accept Images</string>
+    <string name="image_provider_unsupported_body">Change provider to continue.</string>
     <string name="image_model_unknown_title">This model may not view images</string>
     <string name="image_model_unknown_body">The app can\'t confirm whether the selected model accepts images. The provider may reject the request.</string>
+    <string name="image_model_unknown_dont_show_again">Don\'t show again for this model and route</string>
 
     <!-- Endpoint editor: manual override for image capability. Collapsed by
          default; expands to show only models with a recorded value. -->
     <string name="image_capability_section_title">Image capability by model</string>
-    <string name="image_capability_section_desc">Recorded automatically from image responses. Change or clear the recorded value here if a model behaves differently at this endpoint.</string>
+    <string name="image_capability_section_desc">Recorded from provider metadata and definitive image responses. Change or clear a value here if a model behaves differently at this endpoint.</string>
     <string name="image_capability_empty">No image capabilities have been recorded for this endpoint yet.</string>
     <string name="image_capability_state_unknown">Unknown</string>
     <string name="image_capability_state_supported">Supported</string>

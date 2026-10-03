@@ -111,4 +111,41 @@ class ImageCapabilityStoreTest {
         )
         assertFalse(ImageCapabilityStore.isEmpty(one))
     }
+
+    @Test fun metadataAndLearnedRoutesDoNotOverwriteEachOther() {
+        var json = ImageCapabilityStore.setMetadata(
+            ImageCapabilityStore.EMPTY,
+            "shared-model",
+            ImageCapability.SUPPORTED
+        )
+        json = ImageCapabilityStore.setLearned(
+            json,
+            "v2|openrouter|/chat/completions|shared-model|only:alpha|image",
+            ImageCapability.UNSUPPORTED
+        )
+        assertEquals(
+            ImageCapability.SUPPORTED,
+            ImageCapabilityStore.getMetadata(json, "shared-model")
+        )
+        assertEquals(
+            ImageCapability.UNSUPPORTED,
+            ImageCapabilityStore.getLearned(
+                json,
+                "v2|openrouter|/chat/completions|shared-model|only:alpha|image"
+            )
+        )
+    }
+
+    @Test fun inconclusiveRefreshPreservesRicherMetadata() {
+        val original = ImageCapabilityStore.setMetadata(
+            ImageCapabilityStore.EMPTY,
+            "model",
+            ImageCapability.SUPPORTED
+        )
+        val refreshed = ImageCapabilityStore.refreshMetadata(
+            original,
+            mapOf("model" to ImageCapability.UNKNOWN)
+        )
+        assertEquals(ImageCapability.SUPPORTED, ImageCapabilityStore.getMetadata(refreshed, "model"))
+    }
 }

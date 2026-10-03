@@ -197,8 +197,15 @@ import org.teslasoft.assistant.preferences.includes.ChatInclude
 import org.teslasoft.assistant.preferences.includes.CanonicalConversationMessage
 import org.teslasoft.assistant.preferences.includes.DocumentImporter
 import org.teslasoft.assistant.preferences.includes.ImageCapability
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityBlocker
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityDecision
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityMetadataClient
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityResolver
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityScope
 import org.teslasoft.assistant.preferences.includes.ImageCapabilityStore
+import org.teslasoft.assistant.preferences.includes.ImageCapabilityWarningStore
 import org.teslasoft.assistant.preferences.includes.ImageImporter
+import org.teslasoft.assistant.preferences.includes.ImageRoutingConfig
 import org.teslasoft.assistant.preferences.includes.IncludeAuxiliaryRequestPolicy
 import org.teslasoft.assistant.preferences.includes.IncludeForm
 import org.teslasoft.assistant.preferences.includes.IncludeKind
@@ -9372,65 +9379,225 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
         hasFullImages: Boolean
     ) {
         if (!hasFullImages) {
+            activeImageCapabilityScope = null
             commitPreparedTurn(prepared)
             return
         }
-        val capJson = apiEndpointObject?.imageCapabilityByModel.orEmpty()
-        when (ImageCapabilityStore.get(capJson, prepared.selectedModel)) {
-            ImageCapability.SUPPORTED -> commitPreparedTurn(prepared)
-            ImageCapability.UNSUPPORTED -> showRequestHardBlock(
-                R.string.image_model_unsupported_title,
-                getString(R.string.image_model_unsupported_body)
-            )
-            ImageCapability.UNKNOWN -> {
-                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                    .setTitle(R.string.image_model_unknown_title)
-                    .setMessage(R.string.image_model_unknown_body)
-                    .setPositiveButton(R.string.send_anyway) { _, _ ->
+        lifecycleScope.launch {
+            val check = resolveImageCapability(prepared.selectedModel)
+            when (check.decision.capability) {
+                ImageCapability.SUPPORTED -> {
+                    rememberImageCapabilityScope(check)
+                    commitPreparedTurn(prepared)
+                }
+                ImageCapability.UNSUPPORTED -> {
+                    requestPreparationInProgress = false
+                    restoreUIState()
+                    showImageCapabilityBlock(check.decision)
+                }
+                ImageCapability.UNKNOWN -> {
+                    requestPreparationInProgress = false
+                    restoreUIState()
+                    showUnknownImageCapabilityWarning(check) {
+                        rememberImageCapabilityScope(check)
                         commitPreparedTurn(prepared)
                     }
-                    .setNegativeButton(R.string.btn_cancel, null)
-                    .show()
+                }
             }
         }
     }
 
     private suspend fun awaitVisionCapabilityCheck(): Boolean {
-        if (!conversationHasFullImages(chatMessageIncludes)) return true
-        val capJson = apiEndpointObject?.imageCapabilityByModel.orEmpty()
-        return when (ImageCapabilityStore.get(capJson, model)) {
-            ImageCapability.SUPPORTED -> true
+        if (!conversationHasFullImages(chatMessageIncludes)) {
+            activeImageCapabilityScope = null
+            return true
+        }
+        val check = resolveImageCapability(model)
+        return when (check.decision.capability) {
+            ImageCapability.SUPPORTED -> {
+                rememberImageCapabilityScope(check)
+                true
+            }
             ImageCapability.UNSUPPORTED -> {
                 withContext(Dispatchers.Main) {
-                    showRequestHardBlock(
-                        R.string.image_model_unsupported_title,
-                        getString(R.string.image_model_unsupported_body)
-                    )
+                    showImageCapabilityBlock(check.decision)
                 }
                 false
             }
-            ImageCapability.UNKNOWN -> suspendCancellableCoroutine { cont ->
-                MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
-                    .setTitle(R.string.image_model_unknown_title)
-                    .setMessage(R.string.image_model_unknown_body)
-                    .setPositiveButton(R.string.send_anyway) { _, _ -> cont.resume(true) }
-                    .setNegativeButton(R.string.btn_cancel) { _, _ -> cont.resume(false) }
-                    .setOnCancelListener { cont.resume(false) }
-                    .show()
+            ImageCapability.UNKNOWN -> {
+                if (isImageWarningSuppressed(check)) {
+                    rememberImageCapabilityScope(check)
+                    true
+                }
+                else suspendCancellableCoroutine { cont ->
+                    showUnknownImageCapabilityWarning(
+                        check,
+                        onSend = {
+                            rememberImageCapabilityScope(check)
+                            if (cont.isActive) cont.resume(true)
+                        },
+                        onCancel = { if (cont.isActive) cont.resume(false) }
+                    )
+                }
             }
         }
     }
 
-    private fun recordVisionCapability(capability: ImageCapability) {
+    private data class ResolvedImageCapabilityCheck(
+        val endpoint: ApiEndpointObject,
+        val modelId: String,
+        val routing: ImageRoutingConfig,
+        val decision: ImageCapabilityDecision
+    )
+
+    @Volatile
+    private var activeImageCapabilityScope: String? = null
+
+    private fun rememberImageCapabilityScope(check: ResolvedImageCapabilityCheck) {
+        activeImageCapabilityScope = ImageCapabilityScope.key(
+            check.endpoint,
+            check.modelId,
+            check.routing
+        )
+    }
+
+    /** Provider adapters gather evidence; this is the single shared lookup used
+     * by typed sends, regeneration, and every other full-image request path. */
+    private suspend fun resolveImageCapability(modelId: String): ResolvedImageCapabilityCheck {
+        val endpoint = apiEndpointObject
+            ?: ApiEndpointObject("", "", "")
+        val routing = ImageRoutingConfig.from(endpoint, favoriteForActiveEndpoint(modelId))
+        var decision = ImageCapabilityResolver.resolve(endpoint, modelId, routing)
+        val definitiveStoredModelMetadata =
+            ImageCapabilityStore.getMetadata(endpoint.imageCapabilityByModel, modelId) !=
+                ImageCapability.UNKNOWN ||
+                ImageCapabilityStore.get(endpoint.imageCapabilityByModel, modelId) !=
+                ImageCapability.UNKNOWN
+        if (decision.capability == ImageCapability.UNKNOWN ||
+            (decision.capability == ImageCapability.UNSUPPORTED && !definitiveStoredModelMetadata)
+        ) {
+            val live = ImageCapabilityMetadataClient.resolve(endpoint, modelId, routing)
+            if (live.refreshedModelCapability != ImageCapability.UNKNOWN) {
+                val updated = ImageCapabilityStore.setMetadata(
+                    endpoint.imageCapabilityByModel,
+                    modelId,
+                    live.refreshedModelCapability
+                )
+                if (updated != endpoint.imageCapabilityByModel && endpoint.id.isNotBlank()) {
+                    endpoint.imageCapabilityByModel = updated
+                    ApiEndpointPreferences.getApiEndpointPreferences(this)
+                        .setApiEndpoint(this, endpoint)
+                    apiEndpointObject?.imageCapabilityByModel = updated
+                }
+            }
+            decision = ImageCapabilityResolver.resolve(
+                endpoint = endpoint,
+                modelId = modelId,
+                routing = routing,
+                liveModelCapability = live.model,
+                livePinnedProviderCapability = live.pinnedProvider
+            )
+        }
+        return ResolvedImageCapabilityCheck(endpoint, modelId, routing, decision)
+    }
+
+    private fun showImageCapabilityBlock(decision: ImageCapabilityDecision) {
+        val providerBlocked = decision.blocker == ImageCapabilityBlocker.PROVIDER
+        showRequestHardBlock(
+            if (providerBlocked) R.string.image_provider_unsupported_title
+            else R.string.image_model_unsupported_title,
+            getString(
+                if (providerBlocked) R.string.image_provider_unsupported_body
+                else R.string.image_model_unsupported_body
+            )
+        )
+    }
+
+    private fun isImageWarningSuppressed(check: ResolvedImageCapabilityCheck): Boolean =
+        check.endpoint.id.isNotBlank() && ImageCapabilityWarningStore.isSuppressed(
+            this,
+            check.endpoint,
+            check.modelId,
+            check.routing
+        )
+
+    private fun showUnknownImageCapabilityWarning(
+        check: ResolvedImageCapabilityCheck,
+        onSend: () -> Unit,
+        onCancel: () -> Unit = {}
+    ) {
+        if (isImageWarningSuppressed(check)) {
+            onSend()
+            return
+        }
+        val suppress = MaterialCheckBox(this).apply {
+            setText(R.string.image_model_unknown_dont_show_again)
+            setPadding(dpToPx(20), 0, dpToPx(20), 0)
+        }
+        val dialog = MaterialAlertDialogBuilder(this, R.style.App_MaterialAlertDialog)
+            .setTitle(R.string.image_model_unknown_title)
+            .setMessage(R.string.image_model_unknown_body)
+            .setView(suppress)
+            .setPositiveButton(R.string.send_anyway) { _, _ ->
+                if (suppress.isChecked && check.endpoint.id.isNotBlank()) {
+                    ImageCapabilityWarningStore.suppress(
+                        this,
+                        check.endpoint,
+                        check.modelId,
+                        check.routing
+                    )
+                }
+                onSend()
+            }
+            .setNegativeButton(R.string.btn_cancel) { _, _ -> onCancel() }
+            .create()
+        dialog.setOnCancelListener { onCancel() }
+        dialog.show()
+    }
+
+    private fun recordVisionCapability(
+        capability: ImageCapability,
+        actualServingProvider: String? = null
+    ) {
         val endpoint = apiEndpointObject ?: return
         val currentModel = model.ifBlank { preferences?.getModel() ?: "" }
         if (currentModel.isBlank()) return
-        val updated = ImageCapabilityStore.set(
-            endpoint.imageCapabilityByModel, currentModel, capability
+        val routing = ImageRoutingConfig.from(endpoint, favoriteForActiveEndpoint(currentModel))
+        val learnedRouting = if (
+            capability == ImageCapability.UNSUPPORTED &&
+            routing.provider.isAggregator &&
+            !routing.pinned
+        ) {
+            val exactProvider = actualServingProvider?.trim()?.ifBlank { null }
+                ?: run {
+                    // An automatic/fallback aggregator rejection with no
+                    // response-derived downstream identity is not exact enough
+                    // to poison the model's routable path.
+                    activeImageCapabilityScope = null
+                    return
+                }
+            routing.copy(
+                routingType = FavoriteModelObject.ROUTING_ONLY,
+                pinnedProvider = exactProvider,
+                allowFallbacks = false
+            )
+        } else {
+            routing
+        }
+        val updated = ImageCapabilityStore.setLearned(
+            endpoint.imageCapabilityByModel,
+            if (learnedRouting == routing) {
+                activeImageCapabilityScope
+                    ?: ImageCapabilityScope.key(endpoint, currentModel, learnedRouting)
+            } else {
+                ImageCapabilityScope.key(endpoint, currentModel, learnedRouting)
+            },
+            capability
         )
         endpoint.imageCapabilityByModel = updated
         val prefs = ApiEndpointPreferences.getApiEndpointPreferences(this)
         prefs.setApiEndpoint(this, endpoint)
+        activeImageCapabilityScope = null
     }
 
     /**
@@ -10585,7 +10752,10 @@ class ChatActivity : FragmentActivity(), ChatAdapter.OnUpdateListener,
             logGenerationError(genError, e, "message", failureDiagnostics, providerEvidence)
 
             if (genError.isVisionRejection && conversationHasFullImages(chatMessageIncludes)) {
-                recordVisionCapability(ImageCapability.UNSUPPORTED)
+                recordVisionCapability(
+                    ImageCapability.UNSUPPORTED,
+                    providerEvidence?.actualServingProvider
+                )
             }
 
             // Owner ruling (July 31 2026): beneath the app's own explanation,

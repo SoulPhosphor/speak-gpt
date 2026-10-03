@@ -23,9 +23,9 @@ import org.json.JSONObject
  * Whether a specific model at a specific endpoint accepts image input.
  *
  * The store never claims to be a global capability database. It records what
- * this endpoint has DEMONSTRATED so far — a successful vision reply marks the
- * model Supported, an unambiguous provider rejection marks it Unsupported —
- * plus any manual override the user has entered in the endpoint editor. Every
+ * the provider has stated or this exact route has DEMONSTRATED so far — live
+ * catalog metadata, a successful vision reply, or an unambiguous provider
+ * rejection — plus any manual override entered in the endpoint editor. Every
  * other model reads as [UNKNOWN] and the caller decides whether to warn.
  */
 enum class ImageCapability(val key: String) {
@@ -47,7 +47,8 @@ enum class ImageCapability(val key: String) {
 }
 
 /**
- * Pure model-id → capability map, encoded as a compact JSON object.
+ * Compact capability map encoded as JSON. Legacy/manual rows use model ids;
+ * provider metadata and learned route results use reserved internal prefixes.
  *
  * Kept as pure functions so behaviour is unit-tested without Android. Only
  * [ImageCapability.SUPPORTED] and [ImageCapability.UNSUPPORTED] entries
@@ -55,6 +56,9 @@ enum class ImageCapability(val key: String) {
  * the store's serialized form only carries proven-or-overridden classifications.
  */
 object ImageCapabilityStore {
+
+    private const val METADATA_PREFIX = "@metadata:"
+    private const val LEARNED_PREFIX = "@learned:"
 
     /** Empty JSON string is the canonical "nothing recorded" form. */
     const val EMPTY: String = "{}"
@@ -81,6 +85,55 @@ object ImageCapabilityStore {
         }
         return if (obj.length() == 0) EMPTY else obj.toString()
     }
+
+    /** Provider catalog evidence is kept separate from observed request
+     * failures. A refreshed catalog can therefore replace stale metadata while
+     * a route-specific rejection remains available as lower-priority evidence. */
+    fun getMetadata(json: String?, modelId: String): ImageCapability =
+        get(json, metadataKey(modelId))
+
+    fun setMetadata(
+        json: String?,
+        modelId: String,
+        capability: ImageCapability
+    ): String = set(json, metadataKey(modelId), capability)
+
+    /** A definitive request result belongs to one exact outgoing route, not to
+     * every endpoint/provider that happens to expose the same model id. */
+    fun getLearned(json: String?, scopeKey: String): ImageCapability =
+        get(json, learnedKey(scopeKey))
+
+    fun setLearned(
+        json: String?,
+        scopeKey: String,
+        capability: ImageCapability
+    ): String = set(json, learnedKey(scopeKey), capability)
+
+    /** Replace every definitive capability supplied by a successful catalog
+     * refresh. An entry with no usable capability fields is not evidence that
+     * richer metadata learned earlier became false. Manual legacy rows and
+     * route-scoped learned results are untouched. */
+    fun refreshMetadata(
+        json: String?,
+        capabilities: Map<String, ImageCapability>
+    ): String {
+        var current = json.orEmpty().ifBlank { EMPTY }
+        for ((modelId, capability) in capabilities) {
+            if (capability == ImageCapability.UNKNOWN) continue
+            current = setMetadata(current, modelId, capability)
+        }
+        return current
+    }
+
+    fun metadataEntries(json: String?): Map<String, ImageCapability> =
+        entries(json).mapNotNull { (key, capability) ->
+            key.removePrefix(METADATA_PREFIX)
+                .takeIf { key.startsWith(METADATA_PREFIX) }
+                ?.let { it to capability }
+        }.toMap()
+
+    private fun metadataKey(modelId: String): String = METADATA_PREFIX + modelId.trim()
+    private fun learnedKey(scopeKey: String): String = LEARNED_PREFIX + scopeKey
 
     /** Every recorded model-id + capability pair, in deterministic order. */
     fun entries(json: String?): List<Pair<String, ImageCapability>> {
