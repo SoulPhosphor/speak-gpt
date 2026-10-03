@@ -78,6 +78,7 @@ object TokenPricingCatalogClient {
                             loadXai(endpoint, model) ?: loadFirstParty("x-ai", model)
                         PricingSource.NANOGPT -> loadNanoGpt(endpoint, model)
                         PricingSource.VENICE -> loadVenice(endpoint, model)
+                        PricingSource.FEATHERLESS -> loadFeatherless(endpoint, model)
                         null -> loadGeneric(endpoint, model)
                     }
                 }
@@ -154,6 +155,12 @@ object TokenPricingCatalogClient {
         return TokenPricingCatalog(model, modelPricing = pricing)
     }
 
+    private fun loadFeatherless(endpoint: ApiEndpointObject, model: String): TokenPricingCatalog? {
+        val pricing = FeatherlessPricing.load(endpoint.host, model) { url -> fetch(endpoint, url) }
+            ?: return null
+        return TokenPricingCatalog(model, modelPricing = pricing)
+    }
+
     private fun loadOpenRouter(endpoint: ApiEndpointObject, model: String): TokenPricingCatalog? {
         val base = endpoint.host.trimEnd('/')
         if (base.isBlank()) return null
@@ -201,7 +208,8 @@ internal enum class PricingSource(val hosts: Set<String>) {
     ANTHROPIC(setOf("api.anthropic.com")),
     XAI(setOf("api.x.ai")),
     NANOGPT(setOf("nano-gpt.com", "api.nano-gpt.com")),
-    VENICE(setOf("api.venice.ai"));
+    VENICE(setOf("api.venice.ai")),
+    FEATHERLESS(setOf("api.featherless.ai"));
 
     companion object {
         fun forEndpoint(endpoint: ApiEndpointObject): PricingSource? = forUrl(endpoint.host)
@@ -383,6 +391,51 @@ internal object VenicePricing {
             usd("cache_input"),
             usd("cache_write")
         )
+    }
+}
+
+/** Featherless model detail: pricing.prompt/completion are decimal USD per
+ * token, not the per-million rates displayed on model web pages.
+ * https://featherless.ai/docs/api-reference-models
+ *
+ * The ordinary completion response has no documented billing receipt or mode.
+ * /v1/plan is accessible with a normal key; only the exact plan id documented
+ * alongside billing_mode=request_pricing in /usage/activity is recognized.
+ * Other plans (including the documented feather_pro_plus subscription), unknown
+ * plans, and failed plan reads cannot acquire a calculated request charge.
+ * https://featherless.ai/docs/api-reference-plan
+ * https://featherless.ai/docs/api-reference-usage-activity
+ *
+ * No admin billing calls or matching by time/model/token counts. The activity
+ * request_id is not documented as equal to a completion id. Cached rates and
+ * absence-of-caching semantics are not documented for the model-detail layout;
+ * neither is inferred from missing fields. */
+internal object FeatherlessPricing {
+    fun load(baseUrl: String, model: String, fetchBody: (String) -> String?): TokenPricingSnapshot? {
+        val base = baseUrl.toHttpUrlOrNull() ?: return null
+        val detailUrl = base.newBuilder().addPathSegment("models")
+            .addPathSegment(model).build().toString()
+        val pricing = fetchBody(detailUrl)?.let { match(it, model) } ?: return null
+        // A permission/network/parse failure must retain model prices and token
+        // accounting while leaving the billing applicability unknown.
+        val plan = try {
+            fetchBody(base.newBuilder().addPathSegment("plan").build().toString())
+        } catch (_: Exception) { null }
+        return pricing.copy(featherlessRequestPricingConfirmed =
+            plan?.let { parseObject(it)?.textOrNull("id") } == "feather_request_pricing")
+    }
+
+    fun match(detailJson: String, model: String): TokenPricingSnapshot? {
+        val item = parseObject(detailJson) ?: return null
+        if (item.textOrNull("id") != model) return null
+        val pricing = item.objectOrNull("pricing") ?: return null
+        // Ignore image/request prices: they are not token rates. No invented
+        // alias for a cached-input rate or assumption of zero cache usage.
+        return TokenPricingSnapshot(
+            inputPricePerToken = pricing.get("prompt").priceOrNull(),
+            outputPricePerToken = pricing.get("completion").priceOrNull(),
+            featherlessRequestPricingConfirmed = false
+        ).takeIf { it.inputPricePerToken != null || it.outputPricePerToken != null }
     }
 }
 

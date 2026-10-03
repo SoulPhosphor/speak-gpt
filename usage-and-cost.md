@@ -113,6 +113,7 @@ never changes an old record.
 | xAI direct (`api.x.ai`) | xAI's own price list (`/language-models`, with the user's xAI key). If that fails or has no match, the public OpenRouter list, entry `x-ai/<model>`. |
 | NanoGPT (`nano-gpt.com`, `api.nano-gpt.com`) | NanoGPT's detailed model list (`/models?detailed=true`, with the user's key). |
 | Venice (`api.venice.ai`) | Venice's text model list (`/models?type=text`), with Venice's compatibility mapping for aliases. |
+| Featherless (`api.featherless.ai`) | Exact model detail (`/v1/models/{model-id}`); decimal USD per-token `pricing.prompt` and `pricing.completion`. |
 | Any other service | That service's own `/models` list, if it uses OpenRouter's `pricing` layout. Otherwise no prices. |
 
 The built-in OpenAI price table that existed before has been removed. Its
@@ -313,37 +314,68 @@ On hold until the owner reviews the finished screen:
 3. Display of old and estimated records.
 4. Subscription services in general (such as OpenCode Go).
 
-## 7. Featherless: not yet implemented
+## 7. Featherless
 
-Requested by the owner (October 2026). Not implemented because Featherless's
-documentation could not be read from the environment this work was done in.
-Featherless connections currently get token counts through the standard
-fields and show "Not Reported" costs; nothing is guessed.
+Implemented using official documentation verified October 3, 2026:
 
-Requirements, all from Featherless's official documentation:
+- https://featherless.ai/docs/api-reference-models
+- https://featherless.ai/docs/completions
+- https://featherless.ai/docs/api-reference-plan
+- https://featherless.ai/docs/api-reference-usage-activity
+- https://featherless.ai/docs/billing
+- https://featherless.ai/docs/request-pricing-and-credits
 
-- Recognize `https://api.featherless.ai/v1` (add a `PricingSource` entry).
-- Match models by exact Featherless model ID only.
-- Read current prices from the official model or model-detail API, in the
-  documented fields and units. No hard-coded prices.
-- Keep reported prompt/input, completion/output and total token counts.
-  Featherless documents cached input as part of input: Input is the uncached
-  portion and Cached the cached portion, when reported.
-- Use Featherless's actual billed cost when available as the Total.
-- Respect billing modes: a flat-rate request whose cost is documented as not
-  applicable must not receive a calculated charge.
-- Investigate `/usage/activity/requests` (applied input/output/cache rates,
-  component costs, total cost, billing mode, cost status). Use it only if the
-  user's API key is permitted to read it and a record can be tied reliably to
-  the exact request. No fragile matching by time or token counts.
-- Add tests using Featherless's documented response shapes and sample prices.
-- No screen or wording changes.
+`https://api.featherless.ai/v1` is recognized by its exact official host.
+Each request fetches `/v1/models/{model-id}` with the exact model ID (including
+its owner prefix). The returned ID must match exactly. `pricing.prompt` and
+`pricing.completion` are decimal strings in USD per token. Zero is valid;
+negative, non-finite, malformed, and missing prices are unavailable. No
+production prices or model aliases are hard-coded.
 
-Integration points: `PricingSource` and a `FeatherlessPricing` reader in
-`TokenPricingCatalog.kt`, loaded from `TokenPricingCatalogClient.load`; reply
-fields in `RawSseInspector` (`ReportedProviderParser.kt`); cost rules in
-`TokenUsageAccounting.createRecord`. Follow the owner rules at the top of this
-file.
+The normal completion response documents `usage.prompt_tokens`,
+`completion_tokens`, and `total_tokens`. These remain provider-reported.
+There is no documented completion billing receipt. The standard parser also
+preserves any explicitly reported standard cache split; a missing split is
+unknown. Cached input is a subset of input, so the Input row subtracts it
+rather than adding it to the total. Reasoning is not added to output again.
+
+The model-detail documentation does not identify a cached-input price field
+or guarantee that missing cache pricing means no caching. No such field or
+zero-cache assumption is invented. A positive reported cache count therefore
+has no calculated cached cost until an official cache price can be read.
+Without a reported split, input costs remain unavailable; output can still be
+calculated when billing applicability is established.
+
+### Billing applicability and calculated costs
+
+The ordinary `/v1/plan` API accepts a normal API key. The exact plan ID
+`feather_request_pricing` is documented together with
+`billing_mode: request_pricing` in the official usage activity example.
+Only that known ID enables calculated component costs from the live model
+prices. This is a conservative plan-ID association, not a per-request billing
+receipt. Future/unknown IDs, the documented `feather_pro_plus` subscription,
+and failed or malformed plan reads retain prices and tokens but leave every
+request cost unavailable. No subscription usage receives an invented $0 or
+per-token charge. Prices and resulting costs are frozen in the existing usage
+records; backup and restore are unchanged.
+
+### Why exact activity billing is not integrated
+
+`/usage/activity/requests` requires an organization Admin key with
+`manage_billing`. It exposes applied rates and costs in nano USD, cache
+counts, `billing_mode`, `cost_status` (`final`, `not_applicable`, or
+`unavailable`), and pricing-source information. Its `request_id` is not
+documented as the ordinary completion `id`; there is no documented exact
+join or single-completion lookup. Time/model/token-count matching and polling
+would not establish an exact association. No activity or credits calls are
+made, even with an Admin key. Thus unavailable optional billing-detail access
+cannot break normal usage tracking. Actual billed totals and billing statuses
+are not fabricated from these inaccessible records.
+
+Tests: `FeatherlessUsageTest.kt` covers exact host/model matching, detail URL
+encoding, normal responses, cache subset accounting, calculated components,
+zero and invalid rates, unavailable detail/plan information, flat/unknown
+plans, absence of admin calls, reasoning, and frozen-record serialization.
 
 ## Where the code lives
 

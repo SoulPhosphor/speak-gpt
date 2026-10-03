@@ -72,7 +72,11 @@ data class TokenPricingSnapshot(
     /** False only when the provider documents that this model offers no
      * prompt caching, so its cached and cache-write usage is zero. Null when
      * that is not known. */
-    val cachingOffered: Boolean? = null
+    val cachingOffered: Boolean? = null,
+    /** Featherless alone: true only for the documented request-pricing plan
+     * returned by its ordinary /v1/plan API. Unknown/flat-rate plans do not
+     * acquire calculated per-request charges. Frozen prices remain available. */
+    val featherlessRequestPricingConfirmed: Boolean? = null
 ) {
     fun scaled(factor: Double): TokenPricingSnapshot = copy(
         inputPricePerToken = inputPricePerToken?.times(factor),
@@ -352,7 +356,13 @@ object TokenUsageAccounting {
         pricing: TokenPricingSnapshot,
         providerCost: ProviderReportedCost?
     ): TurnUsageRecord {
-        val exactCost = providerCost?.takeIf { it.hasAnyValue() }?.withDerivedTotal()
+        val costsApplicable = PricingSource.forUrl(apiEndpoint) != PricingSource.FEATHERLESS ||
+            pricing.featherlessRequestPricingConfirmed == true
+        // Featherless does not document receipt fields in ordinary completions.
+        // Do not mistake generic-looking fields for a billed charge, especially
+        // when the plan is flat-rate or its billing applicability is unknown.
+        val exactCost = providerCost?.takeIf { costsApplicable && it.hasAnyValue() }
+            ?.withDerivedTotal()
         val applied = pricing.forInputTokens(reportedCounts.inputTokens)
         // A model the provider documents as having no caching has zero cached
         // usage. Otherwise an unreported cache split stays unknown; it is never
@@ -367,7 +377,7 @@ object TokenUsageAccounting {
             counts.inputTokens != null && counts.cachedInputTokens != null &&
             counts.inputTokens >= counts.cachedInputTokens
         ) counts.inputTokens - counts.cachedInputTokens else null
-        val calculatedUncachedInputCost = uncachedInputTokens?.let { count ->
+        val calculatedUncachedInputCost = uncachedInputTokens?.takeIf { costsApplicable }?.let { count ->
             val writeTokens = counts.cacheWriteInputTokens
             when {
                 writeTokens == null || writeTokens > count -> null
@@ -381,13 +391,13 @@ object TokenUsageAccounting {
                 }
             }
         }
-        val calculatedCachedInputCost = counts.cachedInputTokens?.let { count ->
+        val calculatedCachedInputCost = counts.cachedInputTokens?.takeIf { costsApplicable }?.let { count ->
             if (count == 0) 0.0 else applied.cachedInputPricePerToken?.let { count * it }
         }
         val calculatedSplitInputCost = if (
             calculatedUncachedInputCost != null && calculatedCachedInputCost != null
         ) calculatedUncachedInputCost + calculatedCachedInputCost else null
-        val calculatedOutputCost = counts.outputTokens?.let { count ->
+        val calculatedOutputCost = counts.outputTokens?.takeIf { costsApplicable }?.let { count ->
             applied.outputPricePerToken?.let { count * it }
         }
         val inputCost: Double?
